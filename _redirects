@@ -1,0 +1,18 @@
+# ============================================================================
+# SoyMutDB Portal (apps/web) — Cloudflare Pages redirects
+# Docs: https://developers.cloudflare.com/pages/configuration/redirects/
+#
+# SPA fallback: any request that does NOT match a real static file is served
+# index.html so client-side (TanStack Router) routes work with a hard reload.
+#
+# Real static files always win in practice: Pages serves an existing file
+# (including SSG HTML such as /about -> about.html and /assets/* hashed
+# files) before applying this catch-all — this mirrors Pages' built-in SPA
+# behavior when no top-level 404.html exists. Verified post-deploy with:
+#   curl -sI https://<site>/about          (expect 200, text/html, NOT index fallback)
+#   curl -sI https://<site>/assets/<hash>.js (expect 200, immutable cache)
+#
+# SSG output (ssg:build + generate-samples): index + 10 content pages +
+# 51 sample detail pages + sitemap.xml — none are shadowed by this rule.
+# ============================================================================
+/* /index.html 200
