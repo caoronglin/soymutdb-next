@@ -132,7 +132,7 @@ class TestLogin:
         # Login
         response = await client.post(
             f"{AUTH_PREFIX}/login",
-            json={"email": "login@example.com", "password": "TestPass123!"},
+            json={"username": "login@example.com", "password": "TestPass123!"},
         )
         assert response.status_code == 200
         data = response.json()
@@ -159,7 +159,7 @@ class TestLogin:
 
         response = await client.post(
             f"{AUTH_PREFIX}/login",
-            json={"email": "wrongpw@example.com", "password": "WrongPass456!"},
+            json={"username": "wrongpw@example.com", "password": "WrongPass456!"},
         )
         assert response.status_code == 401
 
@@ -167,7 +167,7 @@ class TestLogin:
         """Login with non-existent email returns 401."""
         response = await client.post(
             f"{AUTH_PREFIX}/login",
-            json={"email": "nobody@example.com", "password": "TestPass123!"},
+            json={"username": "nobody@example.com", "password": "TestPass123!"},
         )
         assert response.status_code == 401
 
@@ -175,7 +175,7 @@ class TestLogin:
         """Login with missing fields returns 422."""
         response = await client.post(
             f"{AUTH_PREFIX}/login",
-            json={"email": "test@example.com"},
+            json={"username": "test@example.com"},
         )
         assert response.status_code == 422
 
@@ -192,7 +192,7 @@ class TestRefresh:
         await cookie_client.post(f"{AUTH_PREFIX}/register", json=payload)
         login_resp = await cookie_client.post(
             f"{AUTH_PREFIX}/login",
-            json={"email": email, "password": "TestPass123!"},
+            json={"username": email, "password": "TestPass123!"},
         )
         assert login_resp.status_code == 200
         return login_resp
@@ -300,7 +300,7 @@ class TestMe:
         await client.post(f"{AUTH_PREFIX}/register", json=payload)
         login_resp = await client.post(
             f"{AUTH_PREFIX}/login",
-            json={"email": "me@example.com", "password": "TestPass123!"},
+            json={"username": "me@example.com", "password": "TestPass123!"},
         )
         token = login_resp.json()["access_token"]
 
@@ -327,7 +327,7 @@ class TestChangePassword:
         await client.post(f"{AUTH_PREFIX}/register", json=payload)
         login_resp = await client.post(
             f"{AUTH_PREFIX}/login",
-            json={"email": "changepw@example.com", "password": "TestPass123!"},
+            json={"username": "changepw@example.com", "password": "TestPass123!"},
         )
         token = login_resp.json()["access_token"]
 
@@ -350,7 +350,7 @@ class TestChangePassword:
         await client.post(f"{AUTH_PREFIX}/register", json=payload)
         login_resp = await client.post(
             f"{AUTH_PREFIX}/login",
-            json={"email": "wrongcur@example.com", "password": "TestPass123!"},
+            json={"username": "wrongcur@example.com", "password": "TestPass123!"},
         )
         token = login_resp.json()["access_token"]
 
@@ -389,7 +389,7 @@ class TestLogout:
         await cookie_client.post(f"{AUTH_PREFIX}/register", json=payload)
         login_resp = await cookie_client.post(
             f"{AUTH_PREFIX}/login",
-            json={"email": "logout@example.com", "password": "TestPass123!"},
+            json={"username": "logout@example.com", "password": "TestPass123!"},
         )
         token = login_resp.json()["access_token"]
         assert login_resp.cookies.get(REFRESH_COOKIE) is not None
@@ -417,7 +417,7 @@ class TestLogout:
         await cookie_client.post(f"{AUTH_PREFIX}/register", json=payload)
         login_resp = await cookie_client.post(
             f"{AUTH_PREFIX}/login",
-            json={"email": "logoutorigin@example.com", "password": "TestPass123!"},
+            json={"username": "logoutorigin@example.com", "password": "TestPass123!"},
         )
         token = login_resp.json()["access_token"]
         response = await cookie_client.post(

@@ -52,7 +52,6 @@ ENV PYTHONUNBUFFERED=1 \
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
     libgomp1 \
-    htslib \
     bcftools \
     tabix \
     ncbi-blast+ \
