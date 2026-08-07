@@ -8,9 +8,11 @@
 #                 upload dist artifacts for deployment
 #   api-tests   — Python 3.14 venv + pytest (hard gate, runs testcontainers
 #                 integration tests on the runner's docker daemon), ruff
-#                 (non-blocking, baseline has 303 findings)
-#   docker-build— build api / worker / jbrowse images (hard gates) + optional
-#                 trivy vulnerability scan (non-blocking) + api image smoke test
+#                 (non-blocking, baseline has 303 findings), worker analysis
+#                 deps install + import verification (hard gate)
+#   docker-build— build api / worker / jbrowse images (hard gates) + trivy
+#                 vulnerability scan (hard gate, CRITICAL/HIGH fails) + api
+#                 image smoke test
 #
 # Baseline facts (recorded 2026-08-07, git 3cf4718):
 #   * pnpm turbo run build → 3/3 apps green   → hard gate
@@ -170,6 +172,15 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
         run: .venv/bin/python -m pytest tests -q --ignore=tests/a0
 
+      # --- worker analysis deps gate -----------------------------------------
+      # scanpy/leidenalg/anndata must install on the same Python the API tests
+      # use. louvain was dropped (no cp314 wheels, unmaintained). Fails the
+      # job if any of the analysis imports break.
+      - name: Install worker deps + verify analysis imports (hard gate)
+        run: |
+          apps/api/.venv/bin/pip install --quiet -e apps/worker
+          apps/api/.venv/bin/python -c "import scanpy, anndata, leidenalg, igraph, matplotlib; print('analysis deps OK:', scanpy.__version__)"
+
   # ---------------------------------------------------------------------------
   # Job 3 — Docker images: api / worker / jbrowse
   # ---------------------------------------------------------------------------
@@ -213,9 +224,10 @@ jobs:
         continue-on-error: true
         run: docker run --rm soymutdb-api:ci python -c "import fastapi, sqlalchemy, app; print('API imports OK')"
 
-      # --- optional security scan (non-blocking) -----------------------------
-      - name: Trivy scan API image (non-blocking)
-        continue-on-error: true
+      # --- security scan (hard gate) -----------------------------------------
+      # CRITICAL/HIGH vulnerabilities in the API image fail the workflow
+      # (exit-code: 1). Unfixed knowns may be triaged by adding .trivyignore.
+      - name: Trivy scan API image (hard gate)
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: soymutdb-api:ci
@@ -223,6 +235,7 @@ jobs:
           output: trivy-api.sarif
           severity: CRITICAL,HIGH
           ignore-unfixed: true
+          exit-code: 1
 
       - name: Upload Trivy SARIF report
         if: always()

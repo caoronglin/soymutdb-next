@@ -32,7 +32,6 @@ dependencies = [
     "anndata>=0.10,<0.13",
     "leidenalg>=0.10,<0.11",
     "python-igraph>=0.11,<0.13",
-    "louvain>=0.8,<0.9",
     "matplotlib>=3.8",
     "prometheus-client>=0.21.0",
 ]
