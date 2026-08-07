@@ -9,12 +9,18 @@ Validation notes:
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from ..core.compat import StrEnum
+
+#: Allowed characters for a BLAST database *name* — matches the worker-side
+#: whitelist (alphanumeric / ``-`` / ``_``) so identifiers can never carry
+#: path separators or traversal sequences.
+_DATABASE_NAME_RE = re.compile(r"[A-Za-z0-9_-]+")
 
 
 class BlastProgram(StrEnum):
@@ -102,9 +108,32 @@ class BlastParameters(BaseModel):
 
 class BlastSubmitRequest(BaseModel):
     program: BlastProgram
-    database_id: int
+    #: Numeric id of an active database from ``GET /blast/databases``.
+    database_id: int | None = Field(default=None, gt=0)
+    #: Database *name* alias (e.g. ``"williams82_cds"``); must match an active
+    #: entry in the database whitelist (``blast_databases`` table).  ``database``
+    #: and ``database_id`` are interchangeable — when both are given they must
+    #: resolve to the same row (the service enforces that).  When neither is
+    #: given, the configured default database is used.
+    database: str | None = Field(default=None, max_length=256)
     query_sequence: str = Field(..., min_length=10, max_length=100_000)
     parameters: BlastParameters = Field(default_factory=BlastParameters)
+
+    @field_validator("database")
+    @classmethod
+    def _validate_database_name(cls, v: str | None) -> str | None:
+        """Reject names that could carry path separators / traversal.
+
+        Defense at the API boundary: the service re-checks existence against
+        the database whitelist before the job is created.
+        """
+        if v is None:
+            return None
+        if not _DATABASE_NAME_RE.fullmatch(v):
+            raise ValueError(
+                "database must be a plain identifier (letters, digits, '-', '_')"
+            )
+        return v
 
     @field_validator("query_sequence")
     @classmethod
@@ -206,5 +235,10 @@ class BlastDatabaseResponse(BaseModel):
     assembly_id: int
     is_active: bool
     created_at: datetime
+    #: Human-readable assembly identifier resolved from ``assemblies`` —
+    #: lets clients group/search databases per genome assembly.
+    assembly_name: str | None = None
+    assembly_version: str | None = None
+    assembly_is_default: bool | None = None
 
     model_config = {"from_attributes": True}

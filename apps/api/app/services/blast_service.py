@@ -18,13 +18,14 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.config import get_settings
 from ..core.exceptions import NotFoundError, ValidationError
 from ..core.task_contract import BLAST_RUN_TASK
 from ..models.blast import BlastDatabase, BlastDbType, BlastHit, BlastJob, BlastJobStatus
+from ..models.genomic import Assembly
 from ..schemas.blast import (
     BlastDatabaseResponse,
     BlastJobResponse,
@@ -106,17 +107,105 @@ class BlastService:
         result = await db.execute(
             select(BlastDatabase).where(BlastDatabase.is_active.is_(True))
         )
-        return [
-            BlastDatabaseResponse(
-                id=bd.id,
-                name=bd.name,
-                db_type=bd.db_type,
-                assembly_id=bd.assembly_id,
-                is_active=bd.is_active,
-                created_at=bd.created_at,
+        rows: list[BlastDatabaseResponse] = []
+        for bd in result.scalars().all():
+            # ``BlastDatabase.assembly`` is lazy="joined", so it is loaded
+            # together with each row (guard with getattr for detached rows).
+            assembly = getattr(bd, "assembly", None)
+            rows.append(
+                BlastDatabaseResponse(
+                    id=bd.id,
+                    name=bd.name,
+                    db_type=bd.db_type,
+                    assembly_id=bd.assembly_id,
+                    is_active=bd.is_active,
+                    created_at=bd.created_at,
+                    assembly_name=assembly.name if assembly is not None else None,
+                    assembly_version=(
+                        assembly.version if assembly is not None else None
+                    ),
+                    assembly_is_default=(
+                        assembly.is_default if assembly is not None else None
+                    ),
+                )
             )
-            for bd in result.scalars().all()
-        ]
+        return rows
+
+    @staticmethod
+    async def _get_active_database(
+        db: AsyncSession, *conditions: ColumnElement[bool]
+    ) -> BlastDatabase | None:
+        """Fetch a single active database row matching *conditions*.
+
+        The active ``blast_databases`` rows are the database whitelist:
+        anything not matching is refused here (defense in depth on top of
+        the schema-level name format check).
+        """
+        result = await db.execute(
+            select(BlastDatabase).where(
+                BlastDatabase.is_active.is_(True), *conditions
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def _resolve_database(
+        self, db: AsyncSession, request: BlastSubmitRequest
+    ) -> BlastDatabase:
+        """Resolve the target database from the request.
+
+        Priority: ``database_id`` → ``database`` (name) → configured default
+        (``settings.blast_default_db``) → default assembly (``is_default``).
+        Both ``database_id`` and ``database`` may be given; they must agree.
+        """
+        if request.database_id is not None:
+            blast_db = await self._get_active_database(
+                db, BlastDatabase.id == request.database_id
+            )
+            if blast_db is None:
+                raise NotFoundError(
+                    f"BLAST database id {request.database_id} not found or inactive"
+                )
+            if request.database is not None and blast_db.name != request.database:
+                raise ValidationError(
+                    f"database_id {request.database_id} and database "
+                    f"{request.database!r} do not match"
+                )
+            return blast_db
+
+        if request.database is not None:
+            blast_db = await self._get_active_database(
+                db, BlastDatabase.name == request.database
+            )
+            if blast_db is None:
+                raise NotFoundError(
+                    f"BLAST database {request.database!r} not found or inactive"
+                )
+            return blast_db
+
+        # Neither identifier given: fall back to the configured default
+        # database, then to the default assembly (multi-genome deployments).
+        if settings.blast_default_db:
+            blast_db = await self._get_active_database(
+                db, BlastDatabase.name == settings.blast_default_db
+            )
+            if blast_db is not None:
+                return blast_db
+
+        assembly_result = await db.execute(
+            select(Assembly).where(Assembly.is_default.is_(True))
+        )
+        assembly = assembly_result.scalars().first()
+        if assembly is not None:
+            blast_db = await self._get_active_database(
+                db, BlastDatabase.assembly_id == assembly.id
+            )
+            if blast_db is not None:
+                return blast_db
+
+        raise NotFoundError(
+            "No BLAST database selected and no default database configured; "
+            "pass database/database_id or configure blast_default_db"
+        )
 
     async def submit_job(
         self,
@@ -131,17 +220,7 @@ class BlastService:
         """
         # Validate the database exists and is active (the active-DB table is
         # the database whitelist).
-        bd_result = await db.execute(
-            select(BlastDatabase).where(
-                BlastDatabase.id == request.database_id,
-                BlastDatabase.is_active.is_(True),
-            )
-        )
-        blast_db = bd_result.scalar_one_or_none()
-        if blast_db is None:
-            raise NotFoundError(
-                f"BLAST database {request.database_id} not found or inactive"
-            )
+        blast_db = await self._resolve_database(db, request)
 
         # Program ↔ database-type compatibility.
         allowed_types = _PROGRAM_DB_TYPES.get(request.program)
@@ -165,7 +244,7 @@ class BlastService:
             id=uuid.uuid4(),
             user_id=user_id,
             program=request.program.value,
-            database_id=request.database_id,
+            database_id=blast_db.id,
             query_sequence=request.query_sequence,
             parameters=worker_params,
             status=BlastJobStatus.PENDING,

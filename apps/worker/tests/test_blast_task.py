@@ -480,3 +480,100 @@ def test_error_message_scrubs_query_sequence() -> None:
     # Long errors are truncated.
     long_msg = blast_module.sanitize_error_message("x" * 5000)
     assert len(long_msg) <= blast_module.MAX_ERROR_LENGTH
+
+
+# ---------------------------------------------------------------------------
+# Multi-genome database whitelist / path mapping (Wave 2-D)
+# ---------------------------------------------------------------------------
+
+
+def test_get_blast_db_path_uses_whitelist_mapping(monkeypatch) -> None:
+    """With BLAST_DATABASE_PATHS configured the mapped index path is used."""
+    monkeypatch.setattr(
+        blast_module,
+        "BLAST_DATABASE_PATHS",
+        {"wm82.a2.v1": "/data/genomes/wm82.a2.v1/wm82.a2.v1"},
+    )
+    path = blast_module.get_blast_db_path("wm82.a2.v1")
+    assert path == Path("/data/genomes/wm82.a2.v1/wm82.a2.v1")
+
+
+def test_get_blast_db_path_rejects_unlisted_database_when_whitelist_configured(
+    monkeypatch,
+) -> None:
+    """Unlisted names — including traversal payloads — are refused outright."""
+    monkeypatch.setattr(
+        blast_module,
+        "BLAST_DATABASE_PATHS",
+        {"wm82.a2.v1": "/data/genomes/wm82.a2.v1/wm82.a2.v1"},
+    )
+    with pytest.raises(ValueError, match="whitelist"):
+        blast_module.get_blast_db_path("hacked_db")
+    with pytest.raises(ValueError, match="whitelist"):
+        blast_module.get_blast_db_path("../../etc/passwd")
+    with pytest.raises(ValueError, match="empty"):
+        blast_module.get_blast_db_path("")
+
+
+def test_get_blast_db_path_legacy_fallback_uses_cache(monkeypatch, tmp_path) -> None:
+    """Empty whitelist keeps the legacy cache behaviour for valid names."""
+    monkeypatch.setattr(blast_module, "BLAST_DATABASE_PATHS", {})
+    monkeypatch.setattr(blast_module, "BLAST_CACHE_DIR", tmp_path)
+    (tmp_path / "williams82_cds.nin").touch()
+
+    assert blast_module.get_blast_db_path("williams82_cds") == tmp_path / "williams82_cds"
+
+
+def test_get_blast_db_path_legacy_still_rejects_traversal(monkeypatch) -> None:
+    monkeypatch.setattr(blast_module, "BLAST_DATABASE_PATHS", {})
+    with pytest.raises(ValueError, match="Invalid BLAST database name"):
+        blast_module.get_blast_db_path("../../etc/passwd")
+
+
+def test_run_blast_forwards_payload_database_to_path_resolver(monkeypatch) -> None:
+    """The payload ``database`` (name) reaches get_blast_db_path unchanged."""
+    payload = _payload()
+    payload["payload"]["database"] = "wm82.a2.v1"
+    session = FakeSession(status="pending")
+    monkeypatch.setattr(blast_module, "get_db", lambda: _fake_db(session))
+    captured: dict[str, str] = {}
+    monkeypatch.setattr(
+        blast_module,
+        "get_blast_db_path",
+        lambda db: captured.setdefault("db", db) or "/tmp/db",
+    )
+    monkeypatch.setattr(blast_module, "run_blast_command", lambda **kw: None)
+    monkeypatch.setattr(
+        blast_module,
+        "parse_blast_json",
+        lambda path: {"hits": [], "total_hits": 0, "query_len": 0},
+    )
+    monkeypatch.setattr(blast_module, "_result_file_metadata", lambda p: ("abc", 1))
+    monkeypatch.setattr(blast_module, "upload_file", lambda *a, **k: None)
+    monkeypatch.setattr(
+        blast_module, "generate_presigned_url", lambda *a, **k: "https://s3.example/x"
+    )
+
+    result = _call_task(blast_module.run_blast, FakeTask(), payload=payload)
+
+    assert captured["db"] == "wm82.a2.v1"
+    assert result["total_hits"] == 0
+
+
+def test_run_blast_with_unlisted_database_fails_job(monkeypatch) -> None:
+    """The worker refuses unwhitelisted databases and marks the job failed."""
+    payload = _payload()
+    payload["payload"]["database"] = "not_whitelisted"
+    session = FakeSession(status="pending")
+    monkeypatch.setattr(blast_module, "get_db", lambda: _fake_db(session))
+    monkeypatch.setattr(
+        blast_module,
+        "BLAST_DATABASE_PATHS",
+        {"williams82_cds": "/data/dbs/williams82_cds"},
+    )
+    # get_blast_db_path is NOT mocked: the real whitelist check must reject.
+
+    with pytest.raises(ValueError, match="whitelist"):
+        _call_task(blast_module.run_blast, FakeTask(), payload=payload)
+
+    assert session.status == "failed"

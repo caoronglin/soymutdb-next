@@ -57,6 +57,38 @@ logger = logging.getLogger(__name__)
 BLAST_CACHE_DIR = Path(get_setting("BLAST_CACHE_DIR", "/tmp/blast_cache"))
 BLAST_BIN_DIR = Path(get_setting("BLAST_BIN_DIR", "/usr/bin"))
 
+#: Multi-genome BLAST database whitelist / path mapping (assembly → index path).
+#: Populated from the ``BLAST_DATABASE_PATHS`` setting — a JSON object mapping
+#: database name (as stored in ``blast_databases.name``) to the local BLAST
+#: index directory on the worker host, e.g.::
+#:
+#:     {"wm82.a2.v1": "/data/genomes/wm82.a2.v1/wm82.a2.v1",
+#:      "zh13.a1.v1": "/data/genomes/zh13.a1.v1/zh13.a1.v1"}
+#:
+#: This supports ``{assembly}/{assembly}.fasta``-style layouts: the value is
+#: the ``makeblastdb`` output basename (``-db`` expects the index basename,
+#: not the ``.fasta`` file).  **Data preparation is an ops-side step** — one
+#: entry per genome assembly, indexes built with ``makeblastdb`` and present
+#: on the worker host (or in the S3 ``blast-dbs/`` prefix for legacy
+#: downloads).
+#:
+#: When configured, this mapping is the authoritative whitelist: database
+#: names outside it are rejected before any filesystem/S3 access.  When empty
+#: (legacy single-genome deployments) the legacy cache + S3-download path is
+#: used with the strict alphanumeric name check.
+_BLAST_DATABASE_PATHS_RAW = get_setting("BLAST_DATABASE_PATHS", "{}")
+try:
+    BLAST_DATABASE_PATHS: dict[str, str] = json.loads(_BLAST_DATABASE_PATHS_RAW)
+    if not isinstance(BLAST_DATABASE_PATHS, dict):
+        raise ValueError("expected a JSON object")
+except (ValueError, TypeError) as _cfg_err:
+    logger.warning(
+        "BLAST_DATABASE_PATHS is not a valid JSON object (%s); "
+        "falling back to legacy single-database mode",
+        _cfg_err,
+    )
+    BLAST_DATABASE_PATHS = {}
+
 # Whitelist of allowed BLAST programs.
 ALLOWED_PROGRAMS = frozenset(
     {"blastn", "blastp", "blastx", "tblastn", "tblastx"}
@@ -192,11 +224,33 @@ def validate_sequence(sequence: str) -> str:
 
 
 def get_blast_db_path(db_name: str) -> Path:
-    """Return the local path for a BLAST database, downloading from S3 if needed.
+    """Return the local path for a BLAST database.
 
-    Only allows alphanumeric, underscore, and hyphen in *db_name* to prevent
-    path traversal.
+    With :data:`BLAST_DATABASE_PATHS` configured (multi-genome deployments)
+    *db_name* must be a whitelisted key and the mapped index path is returned
+    directly (indexes are prepared on the worker host by the deployment).
+    Any unlisted name — including path-traversal payloads — is rejected.
+
+    Without the mapping (legacy single-genome deployments) the database is
+    resolved via the local cache, downloading from S3 when needed.  In both
+    modes the name is strictly validated to prevent path traversal.
     """
+    if not db_name:
+        raise ValueError("BLAST database name is empty")
+
+    if db_name in BLAST_DATABASE_PATHS:
+        return Path(BLAST_DATABASE_PATHS[db_name])
+
+    if BLAST_DATABASE_PATHS:
+        # A whitelist is configured: refuse anything unlisted (the whitelist
+        # itself is the injection defence — no filesystem/S3 access happens).
+        raise ValueError(
+            f"BLAST database {db_name!r} is not in the allowed database "
+            f"whitelist: {sorted(BLAST_DATABASE_PATHS)}"
+        )
+
+    # Legacy mode: only alphanumeric, underscore, and hyphen in *db_name* to
+    # prevent path traversal.
     if not db_name.replace("-", "").replace("_", "").isalnum():
         raise ValueError(f"Invalid BLAST database name: {db_name!r}")
 

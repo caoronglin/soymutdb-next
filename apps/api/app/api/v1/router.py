@@ -29,8 +29,11 @@ from . import (
     seeds,
     sra,
     stats,
+    tools_exppattern,
     tracks,
     variants,
+    tools_seqfetch,
+    tools_enrichment,
 )
 from ...widgets.router import router as widgets_router
 
@@ -41,6 +44,7 @@ api_router.include_router(health.router)
 api_router.include_router(auth.router)
 api_router.include_router(genes.router)
 api_router.include_router(variants.router)
+api_router.include_router(tools_seqfetch.router)
 api_router.include_router(search.router)
 api_router.include_router(stats.router)
 api_router.include_router(blast.router)
@@ -59,6 +63,8 @@ api_router.include_router(expression.router)
 api_router.include_router(homolog.router)
 api_router.include_router(analytics.router)
 api_router.include_router(sra.router)
+api_router.include_router(tools_enrichment.router)
+api_router.include_router(tools_exppattern.router)
 api_router.include_router(widgets_router)
 
 __all__ = ["api_router"]
