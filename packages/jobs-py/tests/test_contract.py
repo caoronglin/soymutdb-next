@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from soymutdb_jobs.contract import (
+    ANALYSIS_FASTP_TASK,
+    ANALYSIS_SCANPY_TASK,
     BLAST_RUN_TASK,
     BUILD_STATIC_PAGES_TASK,
     EXPORT_VARIANTS_TASK,
     IMPORT_EXPRESSION_TASK,
     IMPORT_HOMOLOG_TASK,
     PAYLOAD_VERSION,
+    QUEUE_ANALYSES,
     TASK_QUEUE_MAP,
 )
 
@@ -19,6 +22,8 @@ def test_task_names_match_worker_module_layout() -> None:
     assert EXPORT_VARIANTS_TASK == "soymutdb_worker.tasks.export.export_variants"
     assert IMPORT_EXPRESSION_TASK == "soymutdb_worker.tasks.expression.import_expression_csv"
     assert IMPORT_HOMOLOG_TASK == "soymutdb_worker.tasks.homolog.import_homolog_csv"
+    assert ANALYSIS_FASTP_TASK == "soymutdb_worker.tasks.analyses.run_fastp"
+    assert ANALYSIS_SCANPY_TASK == "soymutdb_worker.tasks.analyses.run_scanpy"
 
 
 def test_every_task_has_a_queue_route() -> None:
@@ -28,6 +33,8 @@ def test_every_task_has_a_queue_route() -> None:
         EXPORT_VARIANTS_TASK,
         IMPORT_EXPRESSION_TASK,
         IMPORT_HOMOLOG_TASK,
+        ANALYSIS_FASTP_TASK,
+        ANALYSIS_SCANPY_TASK,
     ):
         assert task_name in TASK_QUEUE_MAP
 
@@ -38,6 +45,13 @@ def test_queue_routes_match_worker_routing() -> None:
     assert TASK_QUEUE_MAP[EXPORT_VARIANTS_TASK] == "export"
     assert TASK_QUEUE_MAP[IMPORT_EXPRESSION_TASK] == "ingest"
     assert TASK_QUEUE_MAP[IMPORT_HOMOLOG_TASK] == "ingest"
+    assert TASK_QUEUE_MAP[ANALYSIS_FASTP_TASK] == "analyses"
+    assert TASK_QUEUE_MAP[ANALYSIS_SCANPY_TASK] == "analyses"
+
+
+def test_analyses_queue_constant() -> None:
+    assert QUEUE_ANALYSES == "analyses"
+    assert QUEUE_ANALYSES not in ("ingest", "export", "stats", "cleanup", "blast", "default")
 
 
 def test_payload_version_is_positive_and_current() -> None:

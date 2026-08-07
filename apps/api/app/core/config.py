@@ -114,6 +114,8 @@ class Settings(BaseSettings):
     s3_private_bucket: str = "user-tracks"
     s3_blast_bucket: str = "blast-dbs"
     s3_export_bucket: str = "exports"
+    #: Bucket for user-uploaded analysis inputs / results (fastp, scanpy).
+    s3_analyses_bucket: str = "analyses"
     s3_public_url: str = "http://localhost:8080/files"
 
     # ------------------------------------------------------------------ JWT

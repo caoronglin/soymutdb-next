@@ -14,6 +14,7 @@ from . import (
     admin_imports,
     admin_settings,
     admin_static,
+    analyses,
     analytics,
     auth,
     blast,
@@ -43,6 +44,7 @@ api_router.include_router(variants.router)
 api_router.include_router(search.router)
 api_router.include_router(stats.router)
 api_router.include_router(blast.router)
+api_router.include_router(analyses.router)
 api_router.include_router(tracks.router)
 api_router.include_router(releases.router)
 api_router.include_router(mutants.router)

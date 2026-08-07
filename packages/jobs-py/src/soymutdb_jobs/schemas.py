@@ -14,14 +14,51 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .contract import PAYLOAD_VERSION
 from .status import JobStatus
 
-__all__ = ["JobPayload", "JobStatusUpdate", "JobRecordStore", "PAYLOAD_VERSION"]
+__all__ = [
+    "AnalysisJobPayload",
+    "JobPayload",
+    "JobStatusUpdate",
+    "JobRecordStore",
+    "PAYLOAD_VERSION",
+]
+
+
+class AnalysisJobPayload(BaseModel):
+    """Task-specific payload for online analyses (fastp / scanpy).
+
+    This schema is carried inside ``JobPayload.payload`` for tasks on the
+    ``analyses`` queue.  ``input_objects`` are MinIO object keys in processing
+    order; ``params`` may contain only parameters whitelisted by the analysis
+    backend that runs the task (unknown keys are rejected by the task
+    implementation, not here — fastp and scanpy have different whitelists).
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    job_id: uuid.UUID = Field(description="Identifier of the analysis job record.")
+    analysis_type: Literal["fastp", "scanpy"] = Field(
+        description="Which analysis backend to run."
+    )
+    input_objects: list[str] = Field(
+        description="MinIO object keys of the input files, in processing order."
+    )
+    params: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Whitelisted parameters for the analysis backend.",
+    )
+    idempotency_key: str = Field(
+        description="Stable key identifying one logical execution; the worker "
+        "must not apply a job twice for the same key."
+    )
+    max_attempts: int = Field(default=1, ge=1)
+    created_at: datetime = Field(description="UTC creation time.")
 
 
 class JobPayload(BaseModel):

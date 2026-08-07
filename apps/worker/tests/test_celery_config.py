@@ -79,3 +79,31 @@ def test_default_result_expires_is_seven_days(monkeypatch) -> None:
 
     assert worker_main.RESULT_EXPIRES == 604800
     assert 86400 <= mod.celery_app.conf.result_expires <= 7 * 86400
+
+
+def test_analyses_tasks_route_to_dedicated_queue(monkeypatch) -> None:
+    """fastp/scanpy analyses tasks must route to the ``analyses`` queue."""
+    mod = _reload_worker()
+
+    assert mod.celery_app.conf.task_routes["soymutdb_worker.tasks.analyses.*"] == {
+        "queue": "analyses"
+    }
+    assert mod._queue_of_task("soymutdb_worker.tasks.analyses.run_fastp") == "analyses"
+    assert mod._queue_of_task("soymutdb_worker.tasks.analyses.run_scanpy") == "analyses"
+
+
+def test_analyses_queue_is_distinct_from_existing_queues(monkeypatch) -> None:
+    """The analyses route must not shadow any previously registered queue."""
+    mod = _reload_worker()
+
+    route = mod.celery_app.conf.task_routes["soymutdb_worker.tasks.analyses.*"]
+    queue = route["queue"]
+    assert queue == "analyses"
+    existing = {
+        mod.celery_app.conf.task_routes["soymutdb_worker.tasks.ingest.*"]["queue"],
+        mod.celery_app.conf.task_routes["soymutdb_worker.tasks.blast.*"]["queue"],
+        mod.celery_app.conf.task_routes["soymutdb_worker.tasks.export.*"]["queue"],
+        mod.celery_app.conf.task_routes["soymutdb_worker.tasks.stats.*"]["queue"],
+        mod.celery_app.conf.task_routes["soymutdb_worker.tasks.cleanup.*"]["queue"],
+    }
+    assert queue not in existing

@@ -12,12 +12,15 @@ import sys
 from pathlib import Path
 
 __all__ = [
+    "ANALYSIS_FASTP_TASK",
+    "ANALYSIS_SCANPY_TASK",
     "BLAST_RUN_TASK",
     "BUILD_STATIC_PAGES_TASK",
     "EXPORT_VARIANTS_TASK",
     "IMPORT_EXPRESSION_TASK",
     "IMPORT_HOMOLOG_TASK",
     "PAYLOAD_VERSION",
+    "QUEUE_ANALYSES",
     "QUEUE_BLAST",
     "QUEUE_CLEANUP",
     "QUEUE_DEFAULT",
@@ -47,12 +50,15 @@ def _ensure_jobs_package() -> None:
 _ensure_jobs_package()
 
 from soymutdb_jobs.contract import (  # noqa: E402
+    ANALYSIS_FASTP_TASK,
+    ANALYSIS_SCANPY_TASK,
     BLAST_RUN_TASK,
     BUILD_STATIC_PAGES_TASK,
     EXPORT_VARIANTS_TASK,
     IMPORT_EXPRESSION_TASK,
     IMPORT_HOMOLOG_TASK,
     PAYLOAD_VERSION,
+    QUEUE_ANALYSES,
     QUEUE_BLAST,
     QUEUE_CLEANUP,
     QUEUE_DEFAULT,

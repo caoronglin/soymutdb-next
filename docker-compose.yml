@@ -232,6 +232,14 @@ services:
   #   - worker-default / worker-ingest 消费非 BLAST 队列
   #     （ingest,export,stats,cleanup,default），两个实例并行分摊负载；
   #   - worker-blast 独占 blast 队列（CPU 密集，低并发隔离）。
+  # ------------------------------------------------------------------
+  # Celery workers.  Each service listens on a subset of queues; the
+  # ``analyses`` queue (fastp/scanpy online analysis, see
+  # soymutdb_worker.tasks.analyses) is intentionally NOT wired into any
+  # worker service yet — it will get a dedicated ``worker-analyses``
+  # service (dedicated concurrency, memory budget for scanpy) in a follow-up
+  # wave.  Until then no production traffic is routed there.
+  # ------------------------------------------------------------------
   worker-default:
     image: ${WORKER_IMAGE_TAG:?WORKER_IMAGE_TAG is required (e.g. ghcr.io/soymutdb/worker:2026.08.07-1) - see deploy/.env.example}
     build:

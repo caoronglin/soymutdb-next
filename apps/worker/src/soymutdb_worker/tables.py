@@ -110,6 +110,22 @@ blast_jobs = Table(
     Column("hit_count", Integer),
 )
 
+#: Online-analysis jobs (fastp, scanpy).  The API side (W1-B) owns the
+#: migration (:mod:`app.models.analysis_job`); the worker only reads/writes
+#: the columns declared below.  ``status`` mirrors the shared state machine
+#: and is persisted with its canonical spelling (``succeeded``, not
+#: ``completed``), matching the PostgreSQL enum ``analysis_job_status_enum``.
+analysis_jobs = Table(
+    "analysis_jobs",
+    metadata,
+    Column("id", UUID(as_uuid=True), primary_key=True),
+    Column("status", String(32)),
+    Column("started_at", DateTime(timezone=True)),
+    Column("completed_at", DateTime(timezone=True)),
+    Column("error_message", Text),
+    Column("result_summary", JSON),
+)
+
 blast_hits = Table(
     "blast_hits",
     metadata,
@@ -140,6 +156,7 @@ def utcnow() -> datetime:
 
 
 __all__ = [
+    "analysis_jobs",
     "blast_hits",
     "blast_jobs",
     "chromosomes",

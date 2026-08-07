@@ -14,7 +14,13 @@ from typing import Any
 from sqlalchemy import delete, insert, text, update
 
 from soymutdb_worker.shared import JobStatus, JobStatusUpdate, transition_allowed
-from soymutdb_worker.tables import blast_hits, blast_jobs, import_tasks, utcnow
+from soymutdb_worker.tables import (
+    analysis_jobs,
+    blast_hits,
+    blast_jobs,
+    import_tasks,
+    utcnow,
+)
 
 # ---------------------------------------------------------------------------
 # DB status value ↔ shared JobStatus mapping
@@ -41,6 +47,22 @@ _IMPORT_DB_TO_SHARED: dict[str, JobStatus] = {
 }
 _IMPORT_SHARED_TO_DB: dict[JobStatus, str] = {
     value: key for key, value in _IMPORT_DB_TO_SHARED.items()
+}
+
+#: DB status vocabulary of ``analysis_jobs``: statuses are persisted with the
+#: canonical shared spelling (``succeeded`` / ``failed`` / ...), matching the
+#: PostgreSQL enum ``analysis_job_status_enum`` created by the API migration.
+_ANALYSES_DB_TO_SHARED: dict[str, JobStatus] = {
+    "pending": JobStatus.PENDING,
+    "queued": JobStatus.QUEUED,
+    "running": JobStatus.RUNNING,
+    "succeeded": JobStatus.SUCCEEDED,
+    "failed": JobStatus.FAILED,
+    "cancel_requested": JobStatus.CANCEL_REQUESTED,
+    "cancelled": JobStatus.CANCELLED,
+}
+_ANALYSES_SHARED_TO_DB: dict[JobStatus, str] = {
+    value: key for key, value in _ANALYSES_DB_TO_SHARED.items()
 }
 
 #: Decision returned by ``BlastJobStore.begin_run``.
@@ -211,6 +233,138 @@ class BlastHitStore:
         return len(hits)
 
 
+class AnalysisJobStore:
+    """Narrow repository over ``analysis_jobs`` (fastp and friends).
+
+    Same guarded-status pattern as :class:`BlastJobStore`: every write is a
+    conditional UPDATE keyed on the current status and validated with the
+    shared transition matrix, so concurrent or re-delivered events never
+    double-apply.  ``result_summary`` is a JSON document (parsed fastp
+    statistics + output object keys) written by the worker on success.
+    """
+
+    def __init__(self, session) -> None:
+        self._session = session
+
+    # -- JobRecordStore protocol -------------------------------------------
+
+    def get_status(self, job_id: str | uuid.UUID) -> JobStatus | None:
+        row = self._session.execute(
+            text("SELECT status FROM analysis_jobs WHERE id = :jid"),
+            {"jid": str(job_id)},
+        ).first()
+        if row is None:
+            return None
+        return _ANALYSES_DB_TO_SHARED.get(row[0])
+
+    def update_status(
+        self,
+        job_id: str | uuid.UUID,
+        update_: JobStatusUpdate,
+        *,
+        expected: JobStatus | None,
+    ) -> bool:
+        """Validate with the shared transition matrix, then apply a guarded UPDATE."""
+        current = self.get_status(job_id)
+        if current is None or current != expected:
+            return False
+        if not transition_allowed(current, update_.status):
+            return False
+        db_target = _ANALYSES_SHARED_TO_DB.get(update_.status)
+        db_expected = _ANALYSES_SHARED_TO_DB.get(expected)
+        if db_target is None or db_expected is None:
+            return False
+        values: dict[str, Any] = {"status": db_target}
+        if update_.last_error is not None:
+            values["error_message"] = update_.last_error
+        if update_.started_at is not None:
+            values["started_at"] = update_.started_at
+        if update_.completed_at is not None:
+            values["completed_at"] = update_.completed_at
+        result = self._session.execute(
+            update(analysis_jobs)
+            .where(
+                analysis_jobs.c.id == str(job_id),
+                analysis_jobs.c.status == db_expected,
+            )
+            .values(**values)
+        )
+        return bool(getattr(result, "rowcount", 0))
+
+    # -- Analyses-specific helpers -----------------------------------------
+
+    def begin_run(self, job_id: str | uuid.UUID) -> str:
+        """Idempotently claim the job for execution.
+
+        Returns ``run`` (transition applied), ``resume`` (a previous delivery
+        already set ``running`` — the worker was lost, re-run safely) or
+        ``skip`` (terminal/unknown job — never execute).
+        """
+        current = self.get_status(job_id)
+        if current is None or current in (JobStatus.SUCCEEDED, JobStatus.CANCELLED):
+            return _SKIP
+        if current == JobStatus.RUNNING:
+            return _RESUME
+        if not transition_allowed(current, JobStatus.RUNNING):
+            return _SKIP
+        applied = self.update_status(
+            job_id,
+            JobStatusUpdate(status=JobStatus.RUNNING, started_at=utcnow()),
+            expected=current,
+        )
+        return _RUN if applied else _SKIP
+
+    def mark_succeeded(
+        self,
+        job_id: str | uuid.UUID,
+        *,
+        result_summary: dict[str, Any],
+    ) -> bool:
+        """Mark the job completed and store the parsed result summary.
+
+        ``result_summary`` is a plain-JSON dict (fastp statistics + output
+        object keys); it lands in the ``result_summary`` column and backs the
+        API's results endpoint.
+        """
+        current = self.get_status(job_id)
+        if current != JobStatus.RUNNING:
+            return False
+        if not transition_allowed(current, JobStatus.SUCCEEDED):
+            return False
+        result = self._session.execute(
+            update(analysis_jobs)
+            .where(
+                analysis_jobs.c.id == str(job_id),
+                analysis_jobs.c.status == "running",
+            )
+            .values(
+                status="succeeded",
+                completed_at=utcnow(),
+                result_summary=result_summary,
+            )
+        )
+        return bool(getattr(result, "rowcount", 0))
+
+    def mark_failed(self, job_id: str | uuid.UUID, *, error: str) -> bool:
+        """Record a scrubbed failure message on the job record."""
+        current = self.get_status(job_id)
+        if current is None or not transition_allowed(current, JobStatus.FAILED):
+            return False
+        result = self._session.execute(
+            update(analysis_jobs)
+            .where(
+                analysis_jobs.c.id == str(job_id),
+                analysis_jobs.c.status == _ANALYSES_SHARED_TO_DB[current],
+            )
+            .values(
+                status="failed",
+                error_message=error[:4000],
+                completed_at=utcnow(),
+            )
+        )
+        return bool(getattr(result, "rowcount", 0))
+
+
 class ImportTaskStore:
     """Narrow repository over ``import_tasks`` with shared transition checks."""
 
@@ -262,4 +416,4 @@ class ImportTaskStore:
         )
 
 
-__all__ = ["BlastHitStore", "BlastJobStore", "ImportTaskStore"]
+__all__ = ["AnalysisJobStore", "BlastHitStore", "BlastJobStore", "ImportTaskStore"]

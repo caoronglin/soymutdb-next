@@ -26,6 +26,14 @@ dependencies = [
     "biopython>=1.84",
     "polars>=1.16.0",
     "pyarrow>=18.0.0",
+    # Online analysis libraries (analyses queue; fastp is a CLI binary
+    # installed in the Docker image, not a pip package)
+    "scanpy>=1.10,<1.13",
+    "anndata>=0.10,<0.13",
+    "leidenalg>=0.10,<0.11",
+    "python-igraph>=0.11,<0.13",
+    "louvain>=0.8,<0.9",
+    "matplotlib>=3.8",
     "prometheus-client>=0.21.0",
 ]
 

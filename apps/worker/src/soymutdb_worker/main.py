@@ -6,8 +6,8 @@ Fixes vs. quartz reference:
   not ``exports``).
 - autodiscover: removed non-existent ``indexing`` and ``notifications``
   modules; added ``cleanup``.
-- task_routes: expanded to the six runtime queues (ingest, export, stats,
-  cleanup, blast, default).
+- task_routes: expanded to the seven runtime queues (ingest, export, stats,
+  cleanup, blast, analyses, default).
 """
 
 from __future__ import annotations
@@ -44,6 +44,7 @@ celery_app = Celery(
         "soymutdb_worker.tasks.expression",
         "soymutdb_worker.tasks.homolog",
         "soymutdb_worker.tasks.static_pages",
+        "soymutdb_worker.tasks.analyses",
     ],
 )
 
@@ -88,7 +89,7 @@ celery_app.conf.update(
             "schedule": 3600 * 6,  # every 6 hours
         },
     },
-    # 7 queue routes
+    # 8 queue routes
     task_routes={
         "soymutdb_worker.tasks.ingest.*": {"queue": "ingest"},
         "soymutdb_worker.tasks.expression.*": {"queue": "ingest"},
@@ -98,6 +99,7 @@ celery_app.conf.update(
         "soymutdb_worker.tasks.stats.*": {"queue": "stats"},
         "soymutdb_worker.tasks.static_pages.*": {"queue": "stats"},
         "soymutdb_worker.tasks.cleanup.*": {"queue": "cleanup"},
+        "soymutdb_worker.tasks.analyses.*": {"queue": "analyses"},
     },
     task_default_queue="default",
 )

@@ -2,6 +2,7 @@
 
 from app.widgets.models import PageLayout, Widget, WidgetCategory, WidgetPermission
 
+from .analysis_job import AnalysisJob, AnalysisJobStatus, AnalysisType
 from .auth import (
     AuditLog,
     Organization,
@@ -26,6 +27,9 @@ from .tracks import Track, TrackCategory
 from .variant import MutantLine, Phenotype, VariantSummary
 
 __all__ = [
+    "AnalysisJob",
+    "AnalysisJobStatus",
+    "AnalysisType",
     "Assembly",
     "AuditLog",
     "AuditMixin",

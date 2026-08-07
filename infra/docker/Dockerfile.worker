@@ -11,6 +11,9 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     UV_LINK_MODE=copy
 
+# build-essential/gcc cover the rare source-build path for the analyses
+# stack (leidenalg / python-igraph / louvain); on CPython 3.13 linux-x86_64
+# manylinux wheels are used and no compilation happens.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
@@ -45,8 +48,10 @@ ENV PYTHONUNBUFFERED=1 \
     SOYMUTDB_API_APP_PATH=/app/apps/api/app
 
 # Bioinformatics tools: htslib, bcftools, ncbi-blast+
+# libgomp1: OpenMP runtime needed by leidenalg / python-igraph wheels.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
+    libgomp1 \
     htslib \
     bcftools \
     tabix \
