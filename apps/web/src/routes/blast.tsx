@@ -15,6 +15,23 @@ export const Route = createFileRoute("/blast")({
   component: BlastComponent,
 });
 
+/**
+ * BlastDatabase response from the backend (GET /blast/databases) carries
+ * assembly metadata — see apps/api/app/schemas/blast.py:
+ * BlastDatabaseResponse { id, name, db_type, assembly_id, is_active,
+ * assembly_name, assembly_version, assembly_is_default }.
+ * The api-client type does not include these fields yet (Wave 2-D backend
+ * change), so we extend it locally instead of touching packages/*.
+ */
+type BlastDatabaseWithAssembly = {
+  id: number | string;
+  name: string;
+  is_active: boolean;
+  assembly_name?: string | null;
+  assembly_version?: string | null;
+  assembly_is_default?: boolean | null;
+};
+
 const blastSchema = z.object({
   program: z.string().min(1),
   database: z.string().min(1),
@@ -40,6 +57,19 @@ function BlastComponent() {
     queryFn: getBlastDatabases,
     staleTime: 30 * 60 * 1000,
   });
+
+  const databases = (databasesQuery.data ?? []) as unknown as BlastDatabaseWithAssembly[];
+  const activeDatabases = databases.filter((d) => d.is_active);
+
+  // Default to the database flagged as the assembly default (fallback: first active).
+  React.useEffect(() => {
+    if (form.database) return;
+    const active = (databasesQuery.data ?? []).filter((d) => d.is_active) as unknown as BlastDatabaseWithAssembly[];
+    if (active.length === 0) return;
+    const def = active.find((d) => d.assembly_is_default) ?? active[0];
+    if (def) setForm((f) => ({ ...f, database: String(def.id) }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [databasesQuery.data]);
 
   const jobsQuery = useQuery({
     queryKey: ["blast-jobs"],
@@ -73,7 +103,14 @@ function BlastComponent() {
       return;
     }
     setErrors({});
-    submitMutation.mutate(parsed.data);
+    // The select stores the database id; the backend accepts the database
+    // *name* (or numeric database_id) — map back so the job carries a
+    // plain identifier that resolves to an active whitelist entry.
+    const selected = activeDatabases.find((d) => String(d.id) === parsed.data.database);
+    submitMutation.mutate({
+      ...parsed.data,
+      database: selected?.name ?? parsed.data.database,
+    });
   };
 
   return (
@@ -111,9 +148,25 @@ function BlastComponent() {
                   <Select value={form.database} onValueChange={(v) => setForm((f) => ({ ...f, database: v }))}>
                     <SelectTrigger id="database"><SelectValue placeholder="Select database" /></SelectTrigger>
                     <SelectContent>
-                      {databasesQuery.data?.filter((d) => d.is_active).map((d) => (
-                        <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                      ))}
+                      {databasesQuery.isLoading ? (
+                        <SelectItem value="__loading__" disabled>{t("common.loading")}</SelectItem>
+                      ) : activeDatabases.length === 0 ? (
+                        <SelectItem value="__empty__" disabled>No databases available</SelectItem>
+                      ) : (
+                        activeDatabases.map((d) => (
+                          <SelectItem key={String(d.id)} value={String(d.id)}>
+                            <span className="flex items-center gap-2">
+                              <span>{d.name}</span>
+                              {d.assembly_name ? (
+                                <span className="text-xs text-muted-foreground">· {d.assembly_name}</span>
+                              ) : null}
+                              {d.assembly_is_default ? (
+                                <Badge variant="secondary" className="text-[9px] uppercase">Default</Badge>
+                              ) : null}
+                            </span>
+                          </SelectItem>
+                        ))
+                      )}
                     </SelectContent>
                   </Select>
                   {errors.database ? <p className="text-xs text-destructive">{errors.database}</p> : null}

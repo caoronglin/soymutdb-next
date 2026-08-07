@@ -108,8 +108,15 @@ class AnalysesDownloadResponse(BaseModel):
     expires_in: int
 
 
+class AnalysesJobListResponse(BaseModel):
+    """Recent analysis jobs for the current user (newest first)."""
+
+    items: list[AnalysesJobResponse] = Field(default_factory=list)
+
+
 __all__ = [
     "AnalysesDownloadResponse",
+    "AnalysesJobListResponse",
     "AnalysesJobResponse",
     "AnalysesSubmitRequest",
     "AnalysesSubmitResponse",

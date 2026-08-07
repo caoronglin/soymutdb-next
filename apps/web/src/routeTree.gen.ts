@@ -22,11 +22,19 @@ import { Route as PublicationsRouteImport } from './routes/publications'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as SeedRequestRouteImport } from './routes/seed-request'
 import { Route as SraRouteImport } from './routes/sra'
+import { Route as ToolsIndexRouteImport } from './routes/tools/index'
+import { Route as ToolsSeqfetchRouteImport } from './routes/tools/seqfetch'
+import { Route as ToolsEnrichmentRouteImport } from './routes/tools/enrichment'
+import { Route as ToolsExppatternRouteImport } from './routes/tools/exppattern'
 import { Route as GenesIndexRouteImport } from './routes/genes/index'
 import { Route as GenesGeneIdRouteImport } from './routes/genes/$geneId'
 import { Route as NewsIndexRouteImport } from './routes/news/index'
 import { Route as NewsSlugRouteImport } from './routes/news/$slug'
 import { Route as VariantsIndexRouteImport } from './routes/variants/index'
+import { Route as AnalysesIndexRouteImport } from './routes/analyses/index'
+import { Route as AnalysesFastpRouteImport } from './routes/analyses/fastp'
+import { Route as AnalysesScanpyRouteImport } from './routes/analyses/scanpy'
+import { Route as AnalysesJobIdRouteImport } from './routes/analyses/$jobId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -93,6 +101,26 @@ const SraRoute = SraRouteImport.update({
   path: '/sra',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ToolsIndexRoute = ToolsIndexRouteImport.update({
+  id: '/tools/',
+  path: '/tools',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ToolsSeqfetchRoute = ToolsSeqfetchRouteImport.update({
+  id: '/tools/seqfetch',
+  path: '/tools/seqfetch',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ToolsEnrichmentRoute = ToolsEnrichmentRouteImport.update({
+  id: '/tools/enrichment',
+  path: '/tools/enrichment',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ToolsExppatternRoute = ToolsExppatternRouteImport.update({
+  id: '/tools/exppattern',
+  path: '/tools/exppattern',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const GenesIndexRoute = GenesIndexRouteImport.update({
   id: '/genes/',
   path: '/genes/',
@@ -118,6 +146,26 @@ const VariantsIndexRoute = VariantsIndexRouteImport.update({
   path: '/variants/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AnalysesIndexRoute = AnalysesIndexRouteImport.update({
+  id: '/analyses/',
+  path: '/analyses',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AnalysesFastpRoute = AnalysesFastpRouteImport.update({
+  id: '/analyses/fastp',
+  path: '/analyses/fastp',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AnalysesScanpyRoute = AnalysesScanpyRouteImport.update({
+  id: '/analyses/scanpy',
+  path: '/analyses/scanpy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AnalysesJobIdRoute = AnalysesJobIdRouteImport.update({
+  id: '/analyses/$jobId',
+  path: '/analyses/$jobId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -133,11 +181,19 @@ export interface FileRoutesByFullPath {
   '/search': typeof SearchRoute
   '/seed-request': typeof SeedRequestRoute
   '/sra': typeof SraRoute
+  '/tools/seqfetch': typeof ToolsSeqfetchRoute
+  '/tools/enrichment': typeof ToolsEnrichmentRoute
+  '/tools/exppattern': typeof ToolsExppatternRoute
   '/genes/$geneId': typeof GenesGeneIdRoute
   '/news/$slug': typeof NewsSlugRoute
+  '/tools/': typeof ToolsIndexRoute
   '/genes/': typeof GenesIndexRoute
   '/news/': typeof NewsIndexRoute
   '/variants/': typeof VariantsIndexRoute
+  '/analyses/': typeof AnalysesIndexRoute
+  '/analyses/fastp': typeof AnalysesFastpRoute
+  '/analyses/scanpy': typeof AnalysesScanpyRoute
+  '/analyses/$jobId': typeof AnalysesJobIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -153,11 +209,19 @@ export interface FileRoutesByTo {
   '/search': typeof SearchRoute
   '/seed-request': typeof SeedRequestRoute
   '/sra': typeof SraRoute
+  '/tools': typeof ToolsIndexRoute
+  '/tools/seqfetch': typeof ToolsSeqfetchRoute
+  '/tools/enrichment': typeof ToolsEnrichmentRoute
+  '/tools/exppattern': typeof ToolsExppatternRoute
   '/genes/$geneId': typeof GenesGeneIdRoute
   '/news/$slug': typeof NewsSlugRoute
   '/genes': typeof GenesIndexRoute
   '/news': typeof NewsIndexRoute
   '/variants': typeof VariantsIndexRoute
+  '/analyses': typeof AnalysesIndexRoute
+  '/analyses/fastp': typeof AnalysesFastpRoute
+  '/analyses/scanpy': typeof AnalysesScanpyRoute
+  '/analyses/$jobId': typeof AnalysesJobIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -174,11 +238,19 @@ export interface FileRoutesById {
   '/search': typeof SearchRoute
   '/seed-request': typeof SeedRequestRoute
   '/sra': typeof SraRoute
+  '/tools/seqfetch': typeof ToolsSeqfetchRoute
+  '/tools/enrichment': typeof ToolsEnrichmentRoute
+  '/tools/exppattern': typeof ToolsExppatternRoute
   '/genes/$geneId': typeof GenesGeneIdRoute
   '/news/$slug': typeof NewsSlugRoute
+  '/tools/': typeof ToolsIndexRoute
   '/genes/': typeof GenesIndexRoute
   '/news/': typeof NewsIndexRoute
   '/variants/': typeof VariantsIndexRoute
+  '/analyses/': typeof AnalysesIndexRoute
+  '/analyses/fastp': typeof AnalysesFastpRoute
+  '/analyses/scanpy': typeof AnalysesScanpyRoute
+  '/analyses/$jobId': typeof AnalysesJobIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -196,11 +268,19 @@ export interface FileRouteTypes {
     | '/search'
     | '/seed-request'
     | '/sra'
+    | '/tools/seqfetch'
+    | '/tools/enrichment'
+    | '/tools/exppattern'
     | '/genes/$geneId'
     | '/news/$slug'
+    | '/tools/'
     | '/genes/'
     | '/news/'
     | '/variants/'
+    | '/analyses/'
+    | '/analyses/fastp'
+    | '/analyses/scanpy'
+    | '/analyses/$jobId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -216,11 +296,19 @@ export interface FileRouteTypes {
     | '/search'
     | '/seed-request'
     | '/sra'
+    | '/tools'
+    | '/tools/seqfetch'
+    | '/tools/enrichment'
+    | '/tools/exppattern'
     | '/genes/$geneId'
     | '/news/$slug'
     | '/genes'
     | '/news'
     | '/variants'
+    | '/analyses'
+    | '/analyses/fastp'
+    | '/analyses/scanpy'
+    | '/analyses/$jobId'
   id:
     | '__root__'
     | '/'
@@ -236,11 +324,19 @@ export interface FileRouteTypes {
     | '/search'
     | '/seed-request'
     | '/sra'
+    | '/tools/seqfetch'
+    | '/tools/enrichment'
+    | '/tools/exppattern'
     | '/genes/$geneId'
     | '/news/$slug'
+    | '/tools/'
     | '/genes/'
     | '/news/'
     | '/variants/'
+    | '/analyses/'
+    | '/analyses/fastp'
+    | '/analyses/scanpy'
+    | '/analyses/$jobId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -257,11 +353,19 @@ export interface RootRouteChildren {
   SearchRoute: typeof SearchRoute
   SeedRequestRoute: typeof SeedRequestRoute
   SraRoute: typeof SraRoute
+  ToolsIndexRoute: typeof ToolsIndexRoute
+  ToolsSeqfetchRoute: typeof ToolsSeqfetchRoute
+  ToolsEnrichmentRoute: typeof ToolsEnrichmentRoute
+  ToolsExppatternRoute: typeof ToolsExppatternRoute
   GenesGeneIdRoute: typeof GenesGeneIdRoute
   NewsSlugRoute: typeof NewsSlugRoute
   GenesIndexRoute: typeof GenesIndexRoute
   NewsIndexRoute: typeof NewsIndexRoute
   VariantsIndexRoute: typeof VariantsIndexRoute
+  AnalysesIndexRoute: typeof AnalysesIndexRoute
+  AnalysesFastpRoute: typeof AnalysesFastpRoute
+  AnalysesScanpyRoute: typeof AnalysesScanpyRoute
+  AnalysesJobIdRoute: typeof AnalysesJobIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -392,6 +496,62 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VariantsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/analyses/': {
+      id: '/analyses/'
+      path: '/analyses'
+      fullPath: '/analyses/'
+      preLoaderRoute: typeof AnalysesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/analyses/fastp': {
+      id: '/analyses/fastp'
+      path: '/analyses/fastp'
+      fullPath: '/analyses/fastp'
+      preLoaderRoute: typeof AnalysesFastpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/analyses/scanpy': {
+      id: '/analyses/scanpy'
+      path: '/analyses/scanpy'
+      fullPath: '/analyses/scanpy'
+      preLoaderRoute: typeof AnalysesScanpyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/analyses/$jobId': {
+      id: '/analyses/$jobId'
+      path: '/analyses/$jobId'
+      fullPath: '/analyses/$jobId'
+      preLoaderRoute: typeof AnalysesJobIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tools/': {
+      id: '/tools/'
+      path: '/tools'
+      fullPath: '/tools/'
+      preLoaderRoute: typeof ToolsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tools/seqfetch': {
+      id: '/tools/seqfetch'
+      path: '/tools/seqfetch'
+      fullPath: '/tools/seqfetch'
+      preLoaderRoute: typeof ToolsSeqfetchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tools/enrichment': {
+      id: '/tools/enrichment'
+      path: '/tools/enrichment'
+      fullPath: '/tools/enrichment'
+      preLoaderRoute: typeof ToolsEnrichmentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tools/exppattern': {
+      id: '/tools/exppattern'
+      path: '/tools/exppattern'
+      fullPath: '/tools/exppattern'
+      preLoaderRoute: typeof ToolsExppatternRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -409,11 +569,19 @@ const rootRouteChildren: RootRouteChildren = {
   SearchRoute: SearchRoute,
   SeedRequestRoute: SeedRequestRoute,
   SraRoute: SraRoute,
+  ToolsIndexRoute: ToolsIndexRoute,
+  ToolsSeqfetchRoute: ToolsSeqfetchRoute,
+  ToolsEnrichmentRoute: ToolsEnrichmentRoute,
+  ToolsExppatternRoute: ToolsExppatternRoute,
   GenesGeneIdRoute: GenesGeneIdRoute,
   NewsSlugRoute: NewsSlugRoute,
   GenesIndexRoute: GenesIndexRoute,
   NewsIndexRoute: NewsIndexRoute,
   VariantsIndexRoute: VariantsIndexRoute,
+  AnalysesIndexRoute: AnalysesIndexRoute,
+  AnalysesFastpRoute: AnalysesFastpRoute,
+  AnalysesScanpyRoute: AnalysesScanpyRoute,
+  AnalysesJobIdRoute: AnalysesJobIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

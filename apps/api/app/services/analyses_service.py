@@ -27,6 +27,7 @@ from ..core.task_contract import ANALYSIS_FASTP_TASK, ANALYSIS_SCANPY_TASK
 from ..models.analysis_job import AnalysisJob, AnalysisJobStatus, AnalysisType
 from ..schemas.analyses import (
     AnalysesDownloadResponse,
+    AnalysesJobListResponse,
     AnalysesJobResponse,
     AnalysesSubmitRequest,
     AnalysesSubmitResponse,
@@ -175,6 +176,25 @@ class AnalysesService:
         if job is None:
             raise NotFoundError(f"Analysis job {job_id} not found")
         return self._job_to_response(job)
+
+    async def list_jobs(
+        self, db: AsyncSession, user_id: uuid.UUID, limit: int
+    ) -> AnalysesJobListResponse:
+        """Return the current user's most recent jobs, newest first.
+
+        Only the caller's own jobs are visible (``user_id`` filter); the
+        public list endpoint never exposes other users' analyses.
+        """
+        result = await db.execute(
+            select(AnalysisJob)
+            .where(AnalysisJob.user_id == user_id)
+            .order_by(AnalysisJob.created_at.desc())
+            .limit(limit)
+        )
+        jobs = result.scalars().all()
+        return AnalysesJobListResponse(
+            items=[self._job_to_response(job) for job in jobs]
+        )
 
     async def get_download_url(
         self,

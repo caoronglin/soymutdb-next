@@ -23,6 +23,7 @@ from ...models.analysis_job import AnalysisType as ModelAnalysisType
 from ...models.auth import User
 from ...schemas.analyses import (
     AnalysesDownloadResponse,
+    AnalysesJobListResponse,
     AnalysesJobResponse,
     AnalysesSubmitRequest,
     AnalysesSubmitResponse,
@@ -45,6 +46,24 @@ service = AnalysesService()
 
 #: All analyses endpoints require researcher (or higher; admin included).
 _RESEARCHER_OR_HIGHER = [Depends(require_role(RoleName.RESEARCHER))]
+
+
+@router.get(
+    "",
+    response_model=AnalysesJobListResponse,
+    dependencies=_RESEARCHER_OR_HIGHER,
+)
+async def list_analysis_jobs(
+    limit: int = Query(default=50, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> AnalysesJobListResponse:
+    """List the current user's most recent analysis jobs (newest first).
+
+    Only jobs owned by the caller are returned; anonymous/lower-role callers
+    get 401/403 through the unified error envelope.
+    """
+    return await service.list_jobs(db, current_user.id, limit)
 
 
 @router.post(

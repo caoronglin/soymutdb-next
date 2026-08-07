@@ -27,6 +27,7 @@ import { routeTree } from "./routeTree.gen";
 import { createQueryClient } from "./lib/query-client";
 import { ThemeProvider } from "./lib/theme-provider";
 import { AnimationProvider } from "./lib/animation-context";
+import { ToastProvider } from "@soymutdb/ui";
 import { initI18nOnce } from "./lib/i18n";
 import { initWidgetLoader } from "./lib/widget-loader";
 import { registry, SERVICES } from "./lib/di";
@@ -138,8 +139,10 @@ createRoot(rootEl).render(
         <QueryClientProvider client={queryClient}>
             <ThemeProvider>
                 <AnimationProvider>
-                    <RouterProvider router={router} />
-                    {import.meta.env.DEV ? <TanStackRouterDevtools router={router} position="bottom-right" /> : null}
+                    <ToastProvider>
+                        <RouterProvider router={router} />
+                        {import.meta.env.DEV ? <TanStackRouterDevtools router={router} position="bottom-right" /> : null}
+                    </ToastProvider>
                 </AnimationProvider>
             </ThemeProvider>
         </QueryClientProvider>

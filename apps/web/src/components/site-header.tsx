@@ -38,6 +38,7 @@ const PRIMARY_NAV: NavItem[] = [
   { to: "/browser", labelKey: "nav.browser" },
   { to: "/blast", labelKey: "nav.blast" },
   { to: "/analytics", labelKey: "nav.analytics" },
+  { to: "/analyses", labelKey: "nav.analyses" },
   { to: "/downloads", labelKey: "nav.downloads" },
 ];
 

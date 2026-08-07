@@ -362,6 +362,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tools/seqfetch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Seqfetch
+         * @description Extract sequences for up to 200 gene IDs, or one chromosome interval.
+         *
+         *     - ``{"genes": ["Glyma.01G000100", ...]}`` – batch mode; unknown IDs are
+         *       skipped and reported in ``missing`` (never 404).
+         *     - ``{"assembly": "GmWm82.a2.v1", "region": "chr1:1000-2000"}`` – single
+         *       region mode.
+         *
+         *     Results larger than 10 MiB are stored in S3 and returned with a
+         *     pre-signed ``download_url`` (600 s) instead of inline FASTA.
+         */
+        post: operations["seqfetch_api_v1_tools_seqfetch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/search": {
         parameters: {
             query?: never;
@@ -689,6 +717,121 @@ export interface paths {
          *     jobs carry a hit list (empty means a genuine zero-hit result).
          */
         get: operations["get_blast_results_api_v1_blast_jobs__job_id__results_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/analyses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Analysis Jobs
+         * @description List the current user's most recent analysis jobs (newest first).
+         *
+         *     Only jobs owned by the caller are returned; anonymous/lower-role callers
+         *     get 401/403 through the unified error envelope.
+         */
+        get: operations["list_analysis_jobs_api_v1_analyses_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/analyses/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Upload
+         * @description Request a pre-signed upload URL for an analysis input file.
+         *
+         *     Returns a PUT URL valid for 1 hour plus the object key the client must
+         *     send back at submit time.  Nothing is persisted yet.
+         */
+        post: operations["create_upload_api_v1_analyses_uploads_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/analyses/{analysis_type}/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit Analysis
+         * @description Submit an analysis job for the uploaded objects.
+         *
+         *     Validates the ``analyses/`` key prefix and the parameter whitelist, then
+         *     creates the job row + outbox event in one transaction (queued).
+         */
+        post: operations["submit_analysis_api_v1_analyses__analysis_type__submit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/analyses/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Analysis Job
+         * @description Return the current status of an analysis job.
+         *
+         *     ``result`` is ``null`` until the job completes; completed jobs carry the
+         *     worker-written summary.
+         */
+        get: operations["get_analysis_job_api_v1_analyses__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/analyses/{job_id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download Analysis Object
+         * @description Return a pre-signed GET URL for one of the job's own objects.
+         *
+         *     The key must live under ``analyses/{job_id}/``; anything outside that
+         *     prefix (including other jobs' objects) is rejected.
+         */
+        get: operations["download_analysis_object_api_v1_analyses__job_id__download_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1881,6 +2024,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tools/enrichment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * GO/KEGG enrichment analysis
+         * @description Hypergeometric enrichment test (right-tail) with Benjamini-Hochberg multiple-testing correction.  The background set is the full set of genes annotated for the requested ontology.  Terms are filtered by the raw p-value threshold, sorted by q-value ascending, and limited to ``max_terms``.
+         */
+        post: operations["run_enrichment_api_v1_tools_enrichment_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tools/exppattern": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Exppattern
+         * @description Return a gene × condition expression matrix, optionally scaled/clustered.
+         *
+         *     Response: ``genes`` (row ids), ``conditions`` (column ids), ``matrix``
+         *     (row-major, ``None`` for missing expression), ``row_order`` (row index
+         *     permutation), ``clustering`` (method used), ``value_range`` ``[min, max]``
+         *     over non-null cells, plus ``missing_genes`` / ``scale`` annotations.
+         */
+        post: operations["exppattern_api_v1_tools_exppattern_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/layout/{page}": {
         parameters: {
             query?: never;
@@ -2120,6 +2308,93 @@ export interface components {
              */
             queryP95Change: number;
         };
+        /** AnalysesDownloadResponse */
+        AnalysesDownloadResponse: {
+            /** Download Url */
+            download_url: string;
+            /** Expires In */
+            expires_in: number;
+        };
+        /**
+         * AnalysesJobListResponse
+         * @description Recent analysis jobs for the current user (newest first).
+         */
+        AnalysesJobListResponse: {
+            /** Items */
+            items?: components["schemas"]["AnalysesJobResponse"][];
+        };
+        /** AnalysesJobResponse */
+        AnalysesJobResponse: {
+            /** Job Id */
+            job_id: string;
+            analysis_type: components["schemas"]["AnalysisType"];
+            status: components["schemas"]["AnalysisJobStatus"];
+            /** Error Message */
+            error_message?: string | null;
+            /** Result */
+            result?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** AnalysesSubmitRequest */
+        AnalysesSubmitRequest: {
+            /** Input Objects */
+            input_objects: string[];
+            /** Params */
+            params?: {
+                [key: string]: unknown;
+            };
+        };
+        /** AnalysesSubmitResponse */
+        AnalysesSubmitResponse: {
+            /** Job Id */
+            job_id: string;
+            /**
+             * Status
+             * @constant
+             */
+            status: "queued";
+        };
+        /** AnalysesUploadRequest */
+        AnalysesUploadRequest: {
+            /** Filename */
+            filename: string;
+            /** Size */
+            size: number;
+            /** Content Type */
+            content_type?: string | null;
+        };
+        /** AnalysesUploadResponse */
+        AnalysesUploadResponse: {
+            /** Upload Url */
+            upload_url: string;
+            /** Object Key */
+            object_key: string;
+            /** Expires In */
+            expires_in: number;
+        };
+        /**
+         * AnalysisJobStatus
+         * @description Job status values – aligned with the shared Job state machine.
+         * @enum {string}
+         */
+        AnalysisJobStatus: "pending" | "queued" | "running" | "succeeded" | "failed" | "cancel_requested" | "cancelled";
+        /**
+         * AnalysisType
+         * @description Supported analysis pipelines (path parameter of the submit endpoint).
+         * @enum {string}
+         */
+        AnalysisType: "fastp" | "scanpy";
         /** AssemblyResponse */
         AssemblyResponse: {
             /** Id */
@@ -2165,6 +2440,12 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Assembly Name */
+            assembly_name?: string | null;
+            /** Assembly Version */
+            assembly_version?: string | null;
+            /** Assembly Is Default */
+            assembly_is_default?: boolean | null;
         };
         /** BlastHit */
         BlastHit: {
@@ -2311,7 +2592,9 @@ export interface components {
         BlastSubmitRequest: {
             program: components["schemas"]["BlastProgram"];
             /** Database Id */
-            database_id: number;
+            database_id?: number | null;
+            /** Database */
+            database?: string | null;
             /** Query Sequence */
             query_sequence: string;
             parameters?: components["schemas"]["BlastParameters"];
@@ -2482,6 +2765,106 @@ export interface components {
              */
             created_at: string;
         };
+        /**
+         * EnrichmentRequest
+         * @description POST /api/v1/tools/enrichment payload.
+         *
+         *     ``genes`` are gene ids (e.g. ``Glyma.01G000100``); duplicates are
+         *     tolerated and deduplicated server-side.
+         */
+        EnrichmentRequest: {
+            /**
+             * Genes
+             * @description Gene ids to test for GO/KEGG enrichment (1-500)
+             */
+            genes: string[];
+            /**
+             * Ontology
+             * @description Annotation source: 'go' or 'kegg'
+             * @default go
+             * @enum {string}
+             */
+            ontology: "go" | "kegg";
+            /**
+             * P Threshold
+             * @description Raw p-value significance cutoff
+             * @default 0.05
+             */
+            p_threshold: number;
+            /**
+             * Max Terms
+             * @description Maximum number of enriched terms to return (sorted by q-value)
+             * @default 20
+             */
+            max_terms: number;
+        };
+        /**
+         * EnrichmentResponse
+         * @description Enrichment analysis result.
+         */
+        EnrichmentResponse: {
+            /**
+             * Ontology
+             * @enum {string}
+             */
+            ontology: "go" | "kegg";
+            /**
+             * Input Genes
+             * @description Number of unique input genes
+             */
+            input_genes: number;
+            /**
+             * Background Genes
+             * @description Number of annotated genes in the background set (all genes with annotations for the requested ontology)
+             */
+            background_genes: number;
+            /**
+             * Terms
+             * @description Enriched terms sorted by q-value (asc)
+             */
+            terms?: components["schemas"]["EnrichmentTerm"][];
+            /**
+             * Message
+             * @description Explanatory note, e.g. when no input gene has annotations
+             */
+            message?: string | null;
+        };
+        /**
+         * EnrichmentTerm
+         * @description A single enriched term.
+         */
+        EnrichmentTerm: {
+            /**
+             * Id
+             * @description Term id, e.g. GO:0008150 or ko00010
+             */
+            id: string;
+            /**
+             * Name
+             * @description Term name (falls back to the term id)
+             */
+            name: string;
+            /**
+             * P Value
+             * @description Hypergeometric right-tail p-value
+             */
+            p_value: number;
+            /**
+             * Q Value
+             * @description Benjamini-Hochberg adjusted p-value
+             */
+            q_value: number;
+            /**
+             * Gene Count
+             * @description Input genes annotated to this term
+             */
+            gene_count: number;
+            /**
+             * Genes
+             * @description Member input genes (first 20)
+             */
+            genes: string[];
+        };
         /** ExonResponse */
         ExonResponse: {
             /** Id */
@@ -2492,6 +2875,35 @@ export interface components {
             end: number;
             /** Order */
             order: number;
+        };
+        /**
+         * ExpPatternRequest
+         * @description Request body for ``POST /api/v1/tools/exppattern``.
+         */
+        ExpPatternRequest: {
+            /**
+             * Genes
+             * @description Gene IDs to include in the matrix (1–50).
+             */
+            genes: string[];
+            /**
+             * Conditions
+             * @description Expression library names to use as matrix columns; defaults to all libraries (max 200).
+             */
+            conditions?: string[] | null;
+            /**
+             * Cluster Rows
+             * @description Reorder matrix rows by clustering (hierarchical when SciPy is available, otherwise mean-expression sort).
+             * @default false
+             */
+            cluster_rows: boolean;
+            /**
+             * Scale
+             * @description Row scaling: 'zscore' (default) or 'none' for raw fpkm.
+             * @default zscore
+             * @enum {string}
+             */
+            scale: "zscore" | "none";
         };
         /**
          * ExportRequest
@@ -3137,6 +3549,75 @@ export interface components {
             tracking_number?: string | null;
             /** Notes */
             notes?: string | null;
+        };
+        /**
+         * SeqFetchRequest
+         * @description Request body – exactly one of the two modes must be provided.
+         */
+        SeqFetchRequest: {
+            /**
+             * Genes
+             * @description Gene IDs to extract (≤200).
+             */
+            genes?: string[] | null;
+            /**
+             * Assembly
+             * @description Assembly name (see /genes/assemblies) for region mode.
+             */
+            assembly?: string | null;
+            /**
+             * Region
+             * @description 1-based interval, e.g. 'chr1:1000-2000'.
+             */
+            region?: string | null;
+        };
+        /**
+         * SeqFetchResponse
+         * @description Extraction result.
+         *
+         *     Small results return inline FASTA (``sequence``); results larger than
+         *     10 MiB are stored in S3 and returned as a pre-signed ``download_url``
+         *     instead (``sequence`` is ``None`` and ``truncated`` is ``False`` – the
+         *     payload is complete, just delivered out-of-band).
+         */
+        SeqFetchResponse: {
+            /**
+             * Format
+             * @default fasta
+             */
+            format: string;
+            /**
+             * Sequence
+             * @description Inline FASTA text when under the size cap.
+             */
+            sequence?: string | null;
+            /**
+             * Count
+             * @description Number of extracted sequences.
+             * @default 0
+             */
+            count: number;
+            /**
+             * Truncated
+             * @description True when the result was capped and delivered as a file.
+             * @default false
+             */
+            truncated: boolean;
+            /**
+             * Missing
+             * @description Requested gene IDs that were not found.
+             */
+            missing?: string[];
+            /**
+             * Download Url
+             * @description Pre-signed download URL for large results.
+             */
+            download_url?: string | null;
+            /**
+             * Expires In
+             * @description download_url lifetime in seconds.
+             */
+            expires_in?: number | null;
         };
         /**
          * SignedUrlResponse
@@ -4616,6 +5097,48 @@ export interface operations {
             };
         };
     };
+    seqfetch_api_v1_tools_seqfetch_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SeqFetchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeqFetchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     global_search_api_v1_search_get: {
         parameters: {
             query: {
@@ -5248,6 +5771,214 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BlastResultResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_analysis_jobs_api_v1_analyses_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysesJobListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_upload_api_v1_analyses_uploads_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnalysesUploadRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysesUploadResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    submit_analysis_api_v1_analyses__analysis_type__submit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                analysis_type: components["schemas"]["AnalysisType"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnalysesSubmitRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysesSubmitResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_analysis_job_api_v1_analyses__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysesJobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    download_analysis_object_api_v1_analyses__job_id__download_get: {
+        parameters: {
+            query: {
+                object_key: string;
+            };
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysesDownloadResponse"];
                 };
             };
             /** @description Validation Error */
@@ -7859,6 +8590,92 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    run_enrichment_api_v1_tools_enrichment_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EnrichmentRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnrichmentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    exppattern_api_v1_tools_exppattern_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExpPatternRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
             /** @description Internal Server Error */

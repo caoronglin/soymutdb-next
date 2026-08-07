@@ -25,7 +25,8 @@
     "admin": "管理后台",
     "sra": "SRA 浏览器",
     "compare": "变异比较",
-    "more": "更多"
+    "more": "更多",
+    "analyses": "分析"
   },
   "home": {
     "newRelease": "新版本可用",

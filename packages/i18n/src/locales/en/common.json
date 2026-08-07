@@ -25,7 +25,8 @@
     "admin": "Admin",
     "sra": "SRA Browser",
     "compare": "Compare",
-    "more": "More"
+    "more": "More",
+    "analyses": "Analyze"
   },
   "home": {
     "newRelease": "New Release Available",

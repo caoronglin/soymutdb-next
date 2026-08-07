@@ -1122,6 +1122,58 @@
         ]
       }
     },
+    "/api/v1/tools/seqfetch": {
+      "post": {
+        "tags": [
+          "tools"
+        ],
+        "summary": "Seqfetch",
+        "description": "Extract sequences for up to 200 gene IDs, or one chromosome interval.\n\n- ``{\"genes\": [\"Glyma.01G000100\", ...]}`` \u2013 batch mode; unknown IDs are\n  skipped and reported in ``missing`` (never 404).\n- ``{\"assembly\": \"GmWm82.a2.v1\", \"region\": \"chr1:1000-2000\"}`` \u2013 single\n  region mode.\n\nResults larger than 10 MiB are stored in S3 and returned with a\npre-signed ``download_url`` (600 s) instead of inline FASTA.",
+        "operationId": "seqfetch_api_v1_tools_seqfetch_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SeqFetchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeqFetchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/search": {
       "get": {
         "tags": [
@@ -2151,6 +2203,319 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/BlastResultResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/analyses": {
+      "get": {
+        "tags": [
+          "analyses"
+        ],
+        "summary": "List Analysis Jobs",
+        "description": "List the current user's most recent analysis jobs (newest first).\n\nOnly jobs owned by the caller are returned; anonymous/lower-role callers\nget 401/403 through the unified error envelope.",
+        "operationId": "list_analysis_jobs_api_v1_analyses_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalysesJobListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/analyses/uploads": {
+      "post": {
+        "tags": [
+          "analyses"
+        ],
+        "summary": "Create Upload",
+        "description": "Request a pre-signed upload URL for an analysis input file.\n\nReturns a PUT URL valid for 1 hour plus the object key the client must\nsend back at submit time.  Nothing is persisted yet.",
+        "operationId": "create_upload_api_v1_analyses_uploads_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnalysesUploadRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalysesUploadResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/analyses/{analysis_type}/submit": {
+      "post": {
+        "tags": [
+          "analyses"
+        ],
+        "summary": "Submit Analysis",
+        "description": "Submit an analysis job for the uploaded objects.\n\nValidates the ``analyses/`` key prefix and the parameter whitelist, then\ncreates the job row + outbox event in one transaction (queued).",
+        "operationId": "submit_analysis_api_v1_analyses__analysis_type__submit_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "analysis_type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/AnalysisType"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnalysesSubmitRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalysesSubmitResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/analyses/{job_id}": {
+      "get": {
+        "tags": [
+          "analyses"
+        ],
+        "summary": "Get Analysis Job",
+        "description": "Return the current status of an analysis job.\n\n``result`` is ``null`` until the job completes; completed jobs carry the\nworker-written summary.",
+        "operationId": "get_analysis_job_api_v1_analyses__job_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalysesJobResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/analyses/{job_id}/download": {
+      "get": {
+        "tags": [
+          "analyses"
+        ],
+        "summary": "Download Analysis Object",
+        "description": "Return a pre-signed GET URL for one of the job's own objects.\n\nThe key must live under ``analyses/{job_id}/``; anything outside that\nprefix (including other jobs' objects) is rejected.",
+        "operationId": "download_analysis_object_api_v1_analyses__job_id__download_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "object_key",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "title": "Object Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalysesDownloadResponse"
                 }
               }
             }
@@ -6523,6 +6888,112 @@
         }
       }
     },
+    "/api/v1/tools/enrichment": {
+      "post": {
+        "tags": [
+          "tools"
+        ],
+        "summary": "GO/KEGG enrichment analysis",
+        "description": "Hypergeometric enrichment test (right-tail) with Benjamini-Hochberg multiple-testing correction.  The background set is the full set of genes annotated for the requested ontology.  Terms are filtered by the raw p-value threshold, sorted by q-value ascending, and limited to ``max_terms``.",
+        "operationId": "run_enrichment_api_v1_tools_enrichment_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrichmentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnrichmentResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tools/exppattern": {
+      "post": {
+        "tags": [
+          "tools"
+        ],
+        "summary": "Exppattern",
+        "description": "Return a gene \u00d7 condition expression matrix, optionally scaled/clustered.\n\nResponse: ``genes`` (row ids), ``conditions`` (column ids), ``matrix``\n(row-major, ``None`` for missing expression), ``row_order`` (row index\npermutation), ``clustering`` (method used), ``value_range`` ``[min, max]``\nover non-null cells, plus ``missing_genes`` / ``scale`` annotations.",
+        "operationId": "exppattern_api_v1_tools_exppattern_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExpPatternRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Exppattern Api V1 Tools Exppattern Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/layout/{page}": {
       "get": {
         "tags": [
@@ -7235,6 +7706,216 @@
         "title": "AdminDashboardStats",
         "description": "System overview numbers for the admin dashboard.\n\nSerialised with camelCase keys (``totalUsers``, ``activeReleases``, \u2026)\nto match the admin frontend contract."
       },
+      "AnalysesDownloadResponse": {
+        "properties": {
+          "download_url": {
+            "type": "string",
+            "title": "Download Url"
+          },
+          "expires_in": {
+            "type": "integer",
+            "title": "Expires In"
+          }
+        },
+        "type": "object",
+        "required": [
+          "download_url",
+          "expires_in"
+        ],
+        "title": "AnalysesDownloadResponse"
+      },
+      "AnalysesJobListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AnalysesJobResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "title": "AnalysesJobListResponse",
+        "description": "Recent analysis jobs for the current user (newest first)."
+      },
+      "AnalysesJobResponse": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "analysis_type": {
+            "$ref": "#/components/schemas/AnalysisType"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AnalysisJobStatus"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "analysis_type",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AnalysesJobResponse"
+      },
+      "AnalysesSubmitRequest": {
+        "properties": {
+          "input_objects": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Input Objects"
+          },
+          "params": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Params"
+          }
+        },
+        "type": "object",
+        "required": [
+          "input_objects"
+        ],
+        "title": "AnalysesSubmitRequest"
+      },
+      "AnalysesSubmitResponse": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "status": {
+            "type": "string",
+            "const": "queued",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "status"
+        ],
+        "title": "AnalysesSubmitResponse"
+      },
+      "AnalysesUploadRequest": {
+        "properties": {
+          "filename": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Filename"
+          },
+          "size": {
+            "type": "integer",
+            "maximum": 524288000.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Size"
+          },
+          "content_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "filename",
+          "size"
+        ],
+        "title": "AnalysesUploadRequest"
+      },
+      "AnalysesUploadResponse": {
+        "properties": {
+          "upload_url": {
+            "type": "string",
+            "title": "Upload Url"
+          },
+          "object_key": {
+            "type": "string",
+            "title": "Object Key"
+          },
+          "expires_in": {
+            "type": "integer",
+            "title": "Expires In"
+          }
+        },
+        "type": "object",
+        "required": [
+          "upload_url",
+          "object_key",
+          "expires_in"
+        ],
+        "title": "AnalysesUploadResponse"
+      },
+      "AnalysisJobStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "queued",
+          "running",
+          "succeeded",
+          "failed",
+          "cancel_requested",
+          "cancelled"
+        ],
+        "title": "AnalysisJobStatus",
+        "description": "Job status values \u2013 aligned with the shared Job state machine."
+      },
+      "AnalysisType": {
+        "type": "string",
+        "enum": [
+          "fastp",
+          "scanpy"
+        ],
+        "title": "AnalysisType",
+        "description": "Supported analysis pipelines (path parameter of the submit endpoint)."
+      },
       "AssemblyResponse": {
         "properties": {
           "id": {
@@ -7317,6 +7998,39 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "assembly_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assembly Name"
+          },
+          "assembly_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assembly Version"
+          },
+          "assembly_is_default": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assembly Is Default"
           }
         },
         "type": "object",
@@ -7741,8 +8455,28 @@
             "$ref": "#/components/schemas/BlastProgram"
           },
           "database_id": {
-            "type": "integer",
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Database Id"
+          },
+          "database": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 256
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Database"
           },
           "query_sequence": {
             "type": "string",
@@ -7757,7 +8491,6 @@
         "type": "object",
         "required": [
           "program",
-          "database_id",
           "query_sequence"
         ],
         "title": "BlastSubmitRequest"
@@ -8175,6 +8908,150 @@
         ],
         "title": "DownloadFileResponse"
       },
+      "EnrichmentRequest": {
+        "properties": {
+          "genes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Genes",
+            "description": "Gene ids to test for GO/KEGG enrichment (1-500)"
+          },
+          "ontology": {
+            "type": "string",
+            "enum": [
+              "go",
+              "kegg"
+            ],
+            "title": "Ontology",
+            "description": "Annotation source: 'go' or 'kegg'",
+            "default": "go"
+          },
+          "p_threshold": {
+            "type": "number",
+            "maximum": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "P Threshold",
+            "description": "Raw p-value significance cutoff",
+            "default": 0.05
+          },
+          "max_terms": {
+            "type": "integer",
+            "maximum": 200.0,
+            "minimum": 1.0,
+            "title": "Max Terms",
+            "description": "Maximum number of enriched terms to return (sorted by q-value)",
+            "default": 20
+          }
+        },
+        "type": "object",
+        "required": [
+          "genes"
+        ],
+        "title": "EnrichmentRequest",
+        "description": "POST /api/v1/tools/enrichment payload.\n\n``genes`` are gene ids (e.g. ``Glyma.01G000100``); duplicates are\ntolerated and deduplicated server-side."
+      },
+      "EnrichmentResponse": {
+        "properties": {
+          "ontology": {
+            "type": "string",
+            "enum": [
+              "go",
+              "kegg"
+            ],
+            "title": "Ontology"
+          },
+          "input_genes": {
+            "type": "integer",
+            "title": "Input Genes",
+            "description": "Number of unique input genes"
+          },
+          "background_genes": {
+            "type": "integer",
+            "title": "Background Genes",
+            "description": "Number of annotated genes in the background set (all genes with annotations for the requested ontology)"
+          },
+          "terms": {
+            "items": {
+              "$ref": "#/components/schemas/EnrichmentTerm"
+            },
+            "type": "array",
+            "title": "Terms",
+            "description": "Enriched terms sorted by q-value (asc)"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message",
+            "description": "Explanatory note, e.g. when no input gene has annotations"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ontology",
+          "input_genes",
+          "background_genes"
+        ],
+        "title": "EnrichmentResponse",
+        "description": "Enrichment analysis result."
+      },
+      "EnrichmentTerm": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Term id, e.g. GO:0008150 or ko00010"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Term name (falls back to the term id)"
+          },
+          "p_value": {
+            "type": "number",
+            "title": "P Value",
+            "description": "Hypergeometric right-tail p-value"
+          },
+          "q_value": {
+            "type": "number",
+            "title": "Q Value",
+            "description": "Benjamini-Hochberg adjusted p-value"
+          },
+          "gene_count": {
+            "type": "integer",
+            "title": "Gene Count",
+            "description": "Input genes annotated to this term"
+          },
+          "genes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Genes",
+            "description": "Member input genes (first 20)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "p_value",
+          "q_value",
+          "gene_count",
+          "genes"
+        ],
+        "title": "EnrichmentTerm",
+        "description": "A single enriched term."
+      },
       "ExonResponse": {
         "properties": {
           "id": {
@@ -8205,6 +9082,58 @@
           "order"
         ],
         "title": "ExonResponse"
+      },
+      "ExpPatternRequest": {
+        "properties": {
+          "genes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Genes",
+            "description": "Gene IDs to include in the matrix (1\u201350)."
+          },
+          "conditions": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array",
+                "maxItems": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conditions",
+            "description": "Expression library names to use as matrix columns; defaults to all libraries (max 200)."
+          },
+          "cluster_rows": {
+            "type": "boolean",
+            "title": "Cluster Rows",
+            "description": "Reorder matrix rows by clustering (hierarchical when SciPy is available, otherwise mean-expression sort).",
+            "default": false
+          },
+          "scale": {
+            "type": "string",
+            "enum": [
+              "zscore",
+              "none"
+            ],
+            "title": "Scale",
+            "description": "Row scaling: 'zscore' (default) or 'none' for raw fpkm.",
+            "default": "zscore"
+          }
+        },
+        "type": "object",
+        "required": [
+          "genes"
+        ],
+        "title": "ExpPatternRequest",
+        "description": "Request body for ``POST /api/v1/tools/exppattern``."
       },
       "ExportRequest": {
         "properties": {
@@ -9701,6 +10630,124 @@
           "status"
         ],
         "title": "SeedRequestUpdate"
+      },
+      "SeqFetchRequest": {
+        "properties": {
+          "genes": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array",
+                "maxItems": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Genes",
+            "description": "Gene IDs to extract (\u2264200)."
+          },
+          "assembly": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assembly",
+            "description": "Assembly name (see /genes/assemblies) for region mode."
+          },
+          "region": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 256
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Region",
+            "description": "1-based interval, e.g. 'chr1:1000-2000'."
+          }
+        },
+        "type": "object",
+        "title": "SeqFetchRequest",
+        "description": "Request body \u2013 exactly one of the two modes must be provided."
+      },
+      "SeqFetchResponse": {
+        "properties": {
+          "format": {
+            "type": "string",
+            "title": "Format",
+            "default": "fasta"
+          },
+          "sequence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sequence",
+            "description": "Inline FASTA text when under the size cap."
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Count",
+            "description": "Number of extracted sequences.",
+            "default": 0
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated",
+            "description": "True when the result was capped and delivered as a file.",
+            "default": false
+          },
+          "missing": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Missing",
+            "description": "Requested gene IDs that were not found."
+          },
+          "download_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Download Url",
+            "description": "Pre-signed download URL for large results."
+          },
+          "expires_in": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires In",
+            "description": "download_url lifetime in seconds."
+          }
+        },
+        "type": "object",
+        "title": "SeqFetchResponse",
+        "description": "Extraction result.\n\nSmall results return inline FASTA (``sequence``); results larger than\n10 MiB are stored in S3 and returned as a pre-signed ``download_url``\ninstead (``sequence`` is ``None`` and ``truncated`` is ``False`` \u2013 the\npayload is complete, just delivered out-of-band)."
       },
       "SignedUrlResponse": {
         "properties": {

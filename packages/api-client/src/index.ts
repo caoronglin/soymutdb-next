@@ -41,3 +41,5 @@ export * from "./downloads";
 export * from "./expression";
 export * from "./homolog";
 export * from "./sra";
+export * from "./analyses";
+export * from "./tools";
