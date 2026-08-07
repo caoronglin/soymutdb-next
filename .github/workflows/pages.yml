@@ -63,10 +63,14 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout --orphan pages
           git rm -rf --quiet . >/dev/null 2>&1 || true
+          # Wipe untracked leftovers too (node_modules, pnpm symlinks) so the
+          # pages branch carries only static files.
+          git clean -fdx >/dev/null 2>&1 || true
           cp -r apps/web/dist/. .
-          # SPA fallback is handled by _redirects inside dist (Cloudflare-style);
-          # GitHub Pages serves index.html for 404 on custom 404 handling below.
+          # SPA fallback: GitHub Pages serves 404.html for unknown paths.
           cp apps/web/dist/index.html ./404.html
+          # Pure static hosting — skip Jekyll processing.
+          touch .nojekyll
           git add -A
           git commit -m "deploy(web): $(date -u +%Y-%m-%dT%H:%M:%SZ)"
           git push origin pages --force
