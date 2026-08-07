@@ -1,14 +1,14 @@
-import { defineConfig, type PluginOption } from "vite";
+import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import tailwindcss from "@tailwindcss/postcss";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
 // JBrowse 2 standalone genome browser — port 5175.
+// Tailwind v4 is wired via postcss.config.mjs (not as a Vite plugin).
 export default defineConfig({
-    plugins: [react(), tailwindcss() as unknown as PluginOption],
+    plugins: [react()],
     resolve: {
         alias: {
             "@": resolve(__dirname, "src"),

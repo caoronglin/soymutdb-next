@@ -3,30 +3,6 @@
 @import "@fontsource/jetbrains-mono/latin-400.css";
 @import "@fontsource/jetbrains-mono/latin-500.css";
 
-/* HarmonyOS Sans SC — local fonts (public/fonts/harmonyos), Latin + CJK.
-   Replaces Fraunces (display) and Inter (body) since the 2026-08 redesign. */
-@font-face {
-    font-family: "HarmonyOS Sans SC";
-    src: url("/fonts/harmonyos/HarmonyOS-Sans-SC-Regular.woff2") format("woff2");
-    font-weight: 400;
-    font-style: normal;
-    font-display: swap;
-}
-@font-face {
-    font-family: "HarmonyOS Sans SC";
-    src: url("/fonts/harmonyos/HarmonyOS-Sans-SC-Medium.woff2") format("woff2");
-    font-weight: 500;
-    font-style: normal;
-    font-display: swap;
-}
-@font-face {
-    font-family: "HarmonyOS Sans SC";
-    src: url("/fonts/harmonyos/HarmonyOS-Sans-SC-Bold.woff2") format("woff2");
-    font-weight: 700;
-    font-style: normal;
-    font-display: swap;
-}
-
 @theme {
     --font-sans: "HarmonyOS Sans SC", ui-sans-serif, system-ui, sans-serif;
     --font-serif: "HarmonyOS Sans SC", ui-sans-serif, system-ui, sans-serif;
@@ -143,4 +119,28 @@ pre,
 
 .jbrowse-fade-in {
     animation: jbrowse-fade-in 0.3s ease-out;
+}
+
+/* HarmonyOS Sans SC — local fonts (public/fonts/harmonyos), Latin + CJK.
+   Placed after @theme: Tailwind 4 requires @theme to follow @import directly. */
+@font-face {
+    font-family: "HarmonyOS Sans SC";
+    src: url("/fonts/harmonyos/HarmonyOS-Sans-SC-Regular.woff2") format("woff2");
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
+@font-face {
+    font-family: "HarmonyOS Sans SC";
+    src: url("/fonts/harmonyos/HarmonyOS-Sans-SC-Medium.woff2") format("woff2");
+    font-weight: 500;
+    font-style: normal;
+    font-display: swap;
+}
+@font-face {
+    font-family: "HarmonyOS Sans SC";
+    src: url("/fonts/harmonyos/HarmonyOS-Sans-SC-Bold.woff2") format("woff2");
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
 }
