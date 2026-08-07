@@ -13,7 +13,7 @@ from sqlalchemy import Enum, Integer, String, Text, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from ..models.base import Base, TimestampMixin
+from ..models.base import Base, TimestampMixin, enum_values
 
 
 class WidgetCategory(str, enum.Enum):
@@ -58,7 +58,7 @@ class Widget(Base, TimestampMixin):
     display_name: Mapped[str] = mapped_column(String(256), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     category: Mapped[str] = mapped_column(
-        Enum(WidgetCategory, name="widget_category_enum", create_constraint=True),
+        Enum(WidgetCategory, name="widget_category_enum", create_constraint=True, values_callable=enum_values),
         default=WidgetCategory.CUSTOM,
         server_default=WidgetCategory.CUSTOM.value,
         nullable=False,
@@ -81,7 +81,7 @@ class Widget(Base, TimestampMixin):
         nullable=False,
     )
     permissions: Mapped[str] = mapped_column(
-        Enum(WidgetPermission, name="widget_permission_enum", create_constraint=True),
+        Enum(WidgetPermission, name="widget_permission_enum", create_constraint=True, values_callable=enum_values),
         default=WidgetPermission.PUBLIC,
         server_default=WidgetPermission.PUBLIC.value,
         nullable=False,

@@ -22,7 +22,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from .base import Base, TimestampMixin
+from .base import Base, TimestampMixin, enum_values
 
 
 class SeedRequestStatus(str, enum.Enum):
@@ -83,6 +83,7 @@ class SeedRequest(Base):
             SeedRequestStatus,
             name="seed_request_status_enum",
             create_constraint=True,
+            values_callable=enum_values,
         ),
         default=SeedRequestStatus.PENDING,
         server_default="pending",

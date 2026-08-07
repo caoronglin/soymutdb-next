@@ -22,7 +22,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from .base import Base, TimestampMixin
+from .base import Base, TimestampMixin, enum_values
 
 
 class BlastDbType(str, enum.Enum):
@@ -53,7 +53,7 @@ class BlastDatabase(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(256), unique=True, nullable=False)
     db_type: Mapped[str] = mapped_column(
-        Enum(BlastDbType, name="blast_db_type_enum", create_constraint=True),
+        Enum(BlastDbType, name="blast_db_type_enum", create_constraint=True, values_callable=enum_values),
         nullable=False,
     )
     assembly_id: Mapped[int] = mapped_column(
@@ -88,7 +88,7 @@ class BlastJob(Base):
         nullable=True,
     )
     program: Mapped[str] = mapped_column(
-        Enum(BlastProgram, name="blast_program_enum", create_constraint=True),
+        Enum(BlastProgram, name="blast_program_enum", create_constraint=True, values_callable=enum_values),
         nullable=False,
     )
     database_id: Mapped[int] = mapped_column(
@@ -97,7 +97,7 @@ class BlastJob(Base):
     query_sequence: Mapped[str] = mapped_column(Text, nullable=False)
     parameters: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     status: Mapped[str] = mapped_column(
-        Enum(BlastJobStatus, name="blast_job_status_enum", create_constraint=True),
+        Enum(BlastJobStatus, name="blast_job_status_enum", create_constraint=True, values_callable=enum_values),
         default=BlastJobStatus.PENDING,
         server_default="pending",
         nullable=False,

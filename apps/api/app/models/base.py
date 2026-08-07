@@ -6,6 +6,7 @@ All model modules import ``Base`` and the mixin classes from here so that
 
 from __future__ import annotations
 
+import enum
 import uuid
 from datetime import datetime
 from typing import Any
@@ -13,6 +14,16 @@ from typing import Any
 from sqlalchemy import DateTime, String, func, text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+
+def enum_values(enum_class: type[enum.Enum]) -> list[Any]:
+    """Return enum member *values* for ``Enum(values_callable=...)``.
+
+    SQLAlchemy 2.0 defaults to member *names* for ``str, enum.Enum``
+    subclasses; our models and migrations store lowercase ``.value``
+    strings, so ``create_all`` and Alembic autogen must use values too.
+    """
+    return [member.value for member in enum_class]
 
 
 class Base(DeclarativeBase):

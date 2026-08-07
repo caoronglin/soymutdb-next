@@ -18,7 +18,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from .base import Base, TimestampMixin
+from .base import Base, TimestampMixin, enum_values
 
 if TYPE_CHECKING:
     from .genomic import Assembly, Gene
@@ -58,11 +58,11 @@ class ExpressionLibrary(Base, TimestampMixin):
     sample_id: Mapped[str] = mapped_column(String(128), nullable=False)
     library_name: Mapped[str] = mapped_column(String(256), nullable=False)
     tissue: Mapped[str] = mapped_column(
-        Enum(TissueType, name="expression_tissue_enum", create_constraint=True),
+        Enum(TissueType, name="expression_tissue_enum", create_constraint=True, values_callable=enum_values),
         nullable=False,
     )
     treatment: Mapped[str] = mapped_column(
-        Enum(TreatmentType, name="expression_treatment_enum", create_constraint=True),
+        Enum(TreatmentType, name="expression_treatment_enum", create_constraint=True, values_callable=enum_values),
         nullable=False,
     )
     developmental_stage: Mapped[Optional[str]] = mapped_column(

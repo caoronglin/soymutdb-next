@@ -26,7 +26,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from .base import Base, SoftDeleteMixin, TimestampMixin
+from .base import Base, SoftDeleteMixin, TimestampMixin, enum_values
 
 if TYPE_CHECKING:
     from .content import Release
@@ -89,7 +89,7 @@ class VariantSummary(Base):
     ref: Mapped[str] = mapped_column(String(4096), nullable=False)
     alt: Mapped[str] = mapped_column(String(4096), nullable=False)
     variant_type: Mapped[str] = mapped_column(
-        Enum(VariantType, name="variant_type_enum", create_constraint=True),
+        Enum(VariantType, name="variant_type_enum", create_constraint=True, values_callable=enum_values),
         nullable=False,
     )
     gene_id: Mapped[Optional[str]] = mapped_column(
@@ -97,7 +97,7 @@ class VariantSummary(Base):
     )
     consequence: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     impact: Mapped[Optional[str]] = mapped_column(
-        Enum(Impact, name="impact_enum", create_constraint=True), nullable=True
+        Enum(Impact, name="impact_enum", create_constraint=True, values_callable=enum_values), nullable=True
     )
     mutant_line_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("mutant_lines.id", ondelete="SET NULL"), nullable=True

@@ -10,7 +10,7 @@ from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from .base import Base, TimestampMixin
+from .base import Base, TimestampMixin, enum_values
 
 if TYPE_CHECKING:
     pass
@@ -43,11 +43,11 @@ class ImportTask(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     filename: Mapped[str] = mapped_column(String(256), nullable=False)
     type: Mapped[str] = mapped_column(
-        Enum(ImportTaskType, name="import_task_type_enum", create_constraint=True),
+        Enum(ImportTaskType, name="import_task_type_enum", create_constraint=True, values_callable=enum_values),
         nullable=False,
     )
     status: Mapped[str] = mapped_column(
-        Enum(ImportTaskStatus, name="import_task_status_enum", create_constraint=True),
+        Enum(ImportTaskStatus, name="import_task_status_enum", create_constraint=True, values_callable=enum_values),
         nullable=False,
         default=ImportTaskStatus.QUEUED,
         server_default="queued",

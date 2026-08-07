@@ -15,7 +15,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from .base import Base, TimestampMixin
+from .base import Base, TimestampMixin, enum_values
 
 if TYPE_CHECKING:
     from .genomic import Gene
@@ -38,7 +38,7 @@ class GeneHomolog(Base, TimestampMixin):
     homolog_species: Mapped[str] = mapped_column(String(128), nullable=False)
     homolog_gene_id: Mapped[str] = mapped_column(String(64), nullable=False)
     homolog_type: Mapped[str] = mapped_column(
-        Enum(HomologType, name="homolog_type_enum", create_constraint=True),
+        Enum(HomologType, name="homolog_type_enum", create_constraint=True, values_callable=enum_values),
         nullable=False,
     )
     source: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)

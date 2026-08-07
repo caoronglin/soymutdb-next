@@ -26,7 +26,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from .base import Base
+from .base import Base, enum_values
 
 
 class OutboxEventStatus(enum.StrEnum):
@@ -53,7 +53,7 @@ class OutboxEvent(Base):
     event_type: Mapped[str] = mapped_column(String(64), nullable=False)
     payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
     status: Mapped[str] = mapped_column(
-        Enum(OutboxEventStatus, name="outbox_event_status_enum", create_constraint=True),
+        Enum(OutboxEventStatus, name="outbox_event_status_enum", create_constraint=True, values_callable=enum_values),
         default=OutboxEventStatus.PENDING,
         server_default="pending",
         nullable=False,

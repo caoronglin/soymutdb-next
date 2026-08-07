@@ -21,7 +21,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from .base import Base, TimestampMixin
+from .base import Base, TimestampMixin, enum_values
 
 if TYPE_CHECKING:
     from .auth import User
@@ -48,7 +48,7 @@ class Release(Base, TimestampMixin):
     gene_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     mutant_line_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     status: Mapped[str] = mapped_column(
-        Enum(ReleaseStatus, name="release_status_enum", create_constraint=True),
+        Enum(ReleaseStatus, name="release_status_enum", create_constraint=True, values_callable=enum_values),
         default=ReleaseStatus.DRAFT,
         server_default="draft",
         nullable=False,

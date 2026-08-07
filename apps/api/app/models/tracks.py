@@ -18,7 +18,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from .base import Base, SoftDeleteMixin, TimestampMixin
+from .base import Base, SoftDeleteMixin, TimestampMixin, enum_values
 
 if TYPE_CHECKING:
     from .auth import User
@@ -82,11 +82,11 @@ class Track(Base, TimestampMixin, SoftDeleteMixin):
     name: Mapped[str] = mapped_column(String(256), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     track_type: Mapped[str] = mapped_column(
-        Enum(TrackType, name="track_type_enum", create_constraint=True),
+        Enum(TrackType, name="track_type_enum", create_constraint=True, values_callable=enum_values),
         nullable=False,
     )
     file_format: Mapped[str] = mapped_column(
-        Enum(FileFormat, name="file_format_enum", create_constraint=True),
+        Enum(FileFormat, name="file_format_enum", create_constraint=True, values_callable=enum_values),
         nullable=False,
     )
     assembly_id: Mapped[int] = mapped_column(
@@ -106,13 +106,13 @@ class Track(Base, TimestampMixin, SoftDeleteMixin):
         ForeignKey("projects.id", ondelete="SET NULL"), nullable=True
     )
     visibility: Mapped[str] = mapped_column(
-        Enum(TrackVisibility, name="track_visibility_enum", create_constraint=True),
+        Enum(TrackVisibility, name="track_visibility_enum", create_constraint=True, values_callable=enum_values),
         default=TrackVisibility.PUBLIC,
         server_default="public",
         nullable=False,
     )
     status: Mapped[str] = mapped_column(
-        Enum(TrackStatus, name="track_status_enum", create_constraint=True),
+        Enum(TrackStatus, name="track_status_enum", create_constraint=True, values_callable=enum_values),
         default=TrackStatus.PENDING,
         server_default="pending",
         nullable=False,
