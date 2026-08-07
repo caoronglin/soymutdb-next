@@ -45,12 +45,20 @@ class SearchSuggestion(BaseModel):
     description: str | None = None
 
 
+class SearchResultItem(BaseModel):
+    """A single global-search hit (stable public contract)."""
+
+    type: SearchResultType
+    id: str
+    name: str | None = None
+    description: str | None = None
+    score: float = Field(default=0.0, ge=0.0)
+
+
 class GlobalSearchResponse(BaseModel):
     query: str
-    total_hits: int = Field(..., ge=0)
-    hits: list[SearchHit] = Field(default_factory=list)
-    elapsed_ms: float = Field(..., ge=0.0)
-    suggestions: list[SearchSuggestion] = Field(default_factory=list)
+    results: list[SearchResultItem] = Field(default_factory=list)
+    total: int = Field(default=0, ge=0)
 
 
 class SortSpec(BaseModel):

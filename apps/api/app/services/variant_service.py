@@ -122,6 +122,7 @@ class VariantService:
     def _row_to_response(row: dict[str, Any]) -> VariantResponse:
         return VariantResponse(
             id=str(row.get("variant_id", "")),
+            variant_id=row.get("variant_id"),
             assembly_id="",
             chromosome=str(row.get("chromosome", "")),
             position=int(row.get("position", 0)),
@@ -140,6 +141,7 @@ class VariantService:
         now = datetime.now(timezone.utc)
         return VariantDetail(
             id=str(row.get("variant_id", "")),
+            variant_id=row.get("variant_id"),
             assembly_id="",
             chromosome=str(row.get("chromosome", "")),
             position=int(row.get("position", 0)),

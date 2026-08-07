@@ -6,7 +6,6 @@ invalid ``func.cast(type_=None)`` expression).
 
 from __future__ import annotations
 
-import time
 from typing import Any
 
 from sqlalchemy import or_, select
@@ -18,6 +17,7 @@ from ..models.variant import MutantLine
 from ..schemas.search import (
     GlobalSearchResponse,
     SearchHit,
+    SearchResultItem,
     SearchResultType,
     SearchSuggestion,
 )
@@ -34,7 +34,6 @@ class SearchService:
         limit: int = 20,
     ) -> GlobalSearchResponse:
         """Search across multiple entity types."""
-        start = time.perf_counter()
         pattern = f"%{query}%"
         hits: list[SearchHit] = []
         active_types = types or list(SearchResultType)
@@ -53,13 +52,19 @@ class SearchService:
         hits.sort(key=lambda h: h.score, reverse=True)
         hits = hits[:limit]
 
-        elapsed_ms = (time.perf_counter() - start) * 1000.0
         return GlobalSearchResponse(
             query=query,
-            total_hits=len(hits),
-            hits=hits,
-            elapsed_ms=round(elapsed_ms, 3),
-            suggestions=[],
+            results=[
+                SearchResultItem(
+                    type=h.type,
+                    id=h.id,
+                    name=h.title,
+                    description=h.subtitle,
+                    score=h.score,
+                )
+                for h in hits
+            ],
+            total=len(hits),
         )
 
     async def _search_genes(

@@ -23,31 +23,32 @@ class GeneFeatureType(StrEnum):
 
 
 class AssemblyResponse(BaseModel):
-    id: str
+    id: int | str
     name: str
     species: str
     version: str
     description: str | None = None
     is_default: bool = False
-    created_at: datetime
-    updated_at: datetime
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
     model_config = {"from_attributes": True}
 
 
 class ChromosomeResponse(BaseModel):
-    id: str
-    assembly_id: str
+    id: int | str
+    assembly_id: int | str
     name: str
     length: int = Field(..., ge=1)
-    order: int = Field(..., ge=0)
+    order: int = Field(default=0, ge=0)
 
     model_config = {"from_attributes": True}
 
 
 class GeneResponse(BaseModel):
-    id: str
-    assembly_id: str
+    id: str | None = None
+    gene_id: str | None = None
+    assembly_id: str | None = None
     chromosome: str
     name: str | None = None
     biotype: str = "protein_coding"
@@ -71,8 +72,8 @@ class GeneDetail(GeneResponse):
     transcripts: list["TranscriptResponse"] = Field(default_factory=list)
     aliases: list[str] = Field(default_factory=list)
     variant_count: int = Field(default=0, ge=0)
-    created_at: datetime
-    updated_at: datetime
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
 
 class ExonResponse(BaseModel):

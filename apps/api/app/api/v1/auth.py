@@ -211,6 +211,10 @@ async def login(
 
     _set_refresh_cookie(response, refresh_token)
 
+    # Persist the refresh-token session record (issue_refresh_token does not
+    # commit; without this the rotation lookup would never find the token).
+    await db.commit()
+
     return TokenResponse(
         access_token=access_token,
         token_type="bearer",

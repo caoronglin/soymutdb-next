@@ -43,9 +43,14 @@ def _want_json(accept: str | None, fmt: str | None) -> bool:
         return True
     if fmt == "html":
         return False
-    if accept and "application/json" in accept.lower():
-        return True
-    return False
+    if accept:
+        lowered = accept.lower()
+        if "application/json" in lowered:
+            return True
+        if "text/html" in lowered:
+            return False
+    # No Accept header (or ``*/*``) — default to the JSON API.
+    return True
 
 
 def _parse_sources(raw: list[str] | None) -> list[SearchSource]:
@@ -99,7 +104,8 @@ async def global_search(
     if _want_json(accept, format):
         # ---- Internal DB search (legacy / programmatic clients) ------------
         resp = await service.global_search(db, query=q, types=types, limit=limit)
-        return JSONResponse(content=resp.model_dump())
+        payload = resp if isinstance(resp, dict) else resp.model_dump()
+        return JSONResponse(content=payload)
 
     # ---- External federated search -> HTML fragment -----------------------
     selected_sources = _parse_sources(sources)
@@ -147,4 +153,4 @@ async def suggest(
 ) -> list[dict]:
     """Autocomplete suggestions (internal DB only)."""
     suggestions = await service.suggest(db, query=q, limit=limit)
-    return [s.model_dump() for s in suggestions]
+    return [s if isinstance(s, dict) else s.model_dump() for s in suggestions]

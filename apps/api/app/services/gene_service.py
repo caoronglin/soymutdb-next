@@ -97,6 +97,7 @@ class GeneService:
 
         return GeneDetail(
             id=str(gene.id),
+            gene_id=str(gene.id),
             assembly_id=str(gene.assembly_id),
             chromosome=str(gene.chromosome_id),
             name=gene.name,
@@ -155,6 +156,7 @@ class GeneService:
     def _gene_to_response(gene: Gene) -> GeneResponse:
         return GeneResponse(
             id=str(gene.id),
+            gene_id=str(gene.id),
             assembly_id=str(gene.assembly_id),
             chromosome=str(gene.chromosome_id),
             name=gene.name,

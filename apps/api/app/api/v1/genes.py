@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.database import get_db
+from ...core.exceptions import SoyMutDBError
 from ...schemas.genomic import (
     AssemblyResponse,
     ChromosomeResponse,
@@ -17,6 +18,27 @@ from ...services.gene_service import GeneService
 
 router = APIRouter(prefix="/genes", tags=["genes"])
 service = GeneService()
+
+
+@router.get("/assemblies", response_model=list[AssemblyResponse], tags=["assemblies"])
+async def list_assemblies(
+    db: AsyncSession = Depends(get_db),
+) -> list[AssemblyResponse]:
+    """List all genome assemblies."""
+    return await service.list_assemblies(db)
+
+
+@router.get(
+    "/assemblies/{assembly_id}/chromosomes",
+    response_model=list[ChromosomeResponse],
+    tags=["assemblies"],
+)
+async def list_chromosomes(
+    assembly_id: int,
+    db: AsyncSession = Depends(get_db),
+) -> list[ChromosomeResponse]:
+    """List chromosomes for an assembly."""
+    return await service.list_chromosomes(db, assembly_id)
 
 
 @router.get("", response_model=GeneListResponse)
@@ -46,26 +68,17 @@ async def get_gene(
     gene_id: str,
     db: AsyncSession = Depends(get_db),
 ) -> GeneDetail:
-    """Get gene detail with transcripts and aliases."""
-    return await service.get_gene(db, gene_id)
+    """Get gene detail with transcripts and aliases.
 
-
-@router.get("/assemblies", response_model=list[AssemblyResponse], tags=["assemblies"])
-async def list_assemblies(
-    db: AsyncSession = Depends(get_db),
-) -> list[AssemblyResponse]:
-    """List all genome assemblies."""
-    return await service.list_assemblies(db)
-
-
-@router.get(
-    "/assemblies/{assembly_id}/chromosomes",
-    response_model=list[ChromosomeResponse],
-    tags=["assemblies"],
-)
-async def list_chromosomes(
-    assembly_id: int,
-    db: AsyncSession = Depends(get_db),
-) -> list[ChromosomeResponse]:
-    """List chromosomes for an assembly."""
-    return await service.list_chromosomes(db, assembly_id)
+    Domain errors (e.g. ``NotFoundError``) propagate to the error envelope;
+    unexpected exceptions are converted to a 500 HTTP error so the client
+    always receives a structured response.
+    """
+    try:
+        return await service.get_gene(db, gene_id)
+    except SoyMutDBError:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500, detail="An unexpected error occurred"
+        ) from exc

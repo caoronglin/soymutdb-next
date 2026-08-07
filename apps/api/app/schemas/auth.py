@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 
 def _validate_password_complexity(v: str) -> str:
@@ -93,14 +93,31 @@ class UserListResponse(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    """Credentials for logging in — accepts email or username."""
+    """Credentials for logging in — accepts email or username.
 
-    username: str = Field(
-        ...,
+    Both ``username`` and ``email`` keys are accepted; ``email`` is treated
+    as an alias for ``username`` so API clients may send either field.
+    """
+
+    username: str | None = Field(
+        default=None,
         description="Email address or username",
         examples=["researcher@univ.edu"],
     )
+    email: str | None = Field(
+        default=None,
+        description="Email address (alternative to ``username``)",
+        examples=["researcher@univ.edu"],
+    )
     password: str = Field(..., examples=["S3cureP@ss!"])
+
+    @model_validator(mode="after")
+    def _resolve_username(self) -> LoginRequest:
+        if not self.username and self.email:
+            self.username = self.email
+        if not self.username:
+            raise ValueError("username or email is required")
+        return self
 
 
 class TokenResponse(BaseModel):

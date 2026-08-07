@@ -50,8 +50,9 @@ class ImpactLevel(StrEnum):
 class VariantResponse(BaseModel):
     """Compact variant representation for list endpoints."""
 
-    id: str
-    assembly_id: str
+    id: str | None = None
+    assembly_id: str | None = None
+    variant_id: str | None = None
     chromosome: str
     position: int = Field(..., ge=0)
     ref_allele: str = Field(..., min_length=1)
@@ -78,8 +79,8 @@ class VariantDetail(VariantResponse):
     sift_prediction: str | None = None
     depth: int | None = Field(default=None, ge=0)
     genotype: str | None = None
-    created_at: datetime
-    updated_at: datetime
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
 
 class VariantFilterParams(BaseModel):
