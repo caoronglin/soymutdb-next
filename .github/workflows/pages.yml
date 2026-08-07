@@ -61,14 +61,18 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Stage dist BEFORE the orphan checkout: git clean -fdx would wipe
+          # the untracked (gitignored) dist folder.
+          mkdir -p /tmp/pages-dist
+          cp -r apps/web/dist/. /tmp/pages-dist/
           git checkout --orphan pages
           git rm -rf --quiet . >/dev/null 2>&1 || true
           # Wipe untracked leftovers too (node_modules, pnpm symlinks) so the
           # pages branch carries only static files.
           git clean -fdx >/dev/null 2>&1 || true
-          cp -r apps/web/dist/. .
+          cp -r /tmp/pages-dist/. .
           # SPA fallback: GitHub Pages serves 404.html for unknown paths.
-          cp apps/web/dist/index.html ./404.html
+          cp /tmp/pages-dist/index.html ./404.html
           # Pure static hosting — skip Jekyll processing.
           touch .nojekyll
           git add -A
