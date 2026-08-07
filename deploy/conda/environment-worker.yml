@@ -1,0 +1,26 @@
+name: soymutdb-worker
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - python=3.13.8
+  - pip>=24.0
+  - uv>=0.4.0
+  # Bioinformatics tools
+  - blast>=2.16.0
+  - samtools>=1.20
+  - bcftools>=1.20
+  - htslib>=1.20
+  - tabix>=1.20
+  - bedtools>=2.31
+  # Compression
+  - pigz>=2.8
+  - zstd>=1.5
+  # PostgreSQL driver
+  - libpq>=16.0
+  # OpenSSL
+  - openssl>=3.0
+  - ca-certificates
+  - pip:
+      - -e ../../apps/worker

@@ -1,0 +1,30 @@
+{# Stats cards widget – displays key numerical metrics #}
+<div class="widget widget-stats" data-widget="stats">
+  <section class="stats-grid">
+    {% if stats %}
+      {% for stat in stats %}
+      <div class="stat-card">
+        <div class="stat-value">{{ stat.value | default("0") }}</div>
+        <div class="stat-label">{{ stat.label | default("") }}</div>
+      </div>
+      {% endfor %}
+    {% else %}
+    <div class="stat-card">
+      <div class="stat-value">{{ variant_count | default("0") }}</div>
+      <div class="stat-label">Variants</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">{{ gene_count | default("0") }}</div>
+      <div class="stat-label">Genes</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">{{ mutant_count | default("0") }}</div>
+      <div class="stat-label">Mutant Lines</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">{{ release | default("—") }}</div>
+      <div class="stat-label">Current Release</div>
+    </div>
+    {% endif %}
+  </section>
+</div>

@@ -1,0 +1,18 @@
+{# Quick stats widget – compact inline stats bar, often used in headers or sidebars #}
+<div class="widget widget-quick-stats" data-widget="quick_stats">
+  <div class="quick-stats-bar">
+    {% if items %}
+      {% for item in items %}
+      <div class="quick-stat-item">
+        <span class="quick-stat-value">{{ item.value | default("—") }}</span>
+        <span class="quick-stat-label">{{ item.label | default("") }}</span>
+      </div>
+      {% endfor %}
+    {% else %}
+    <div class="quick-stat-item">
+      <span class="quick-stat-value">{{ items | default("—") if items is defined else "—" }}</span>
+      <span class="quick-stat-label">Data</span>
+    </div>
+    {% endif %}
+  </div>
+</div>

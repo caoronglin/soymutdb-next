@@ -1,0 +1,101 @@
+<div class="widget widget-sra-run widget-detail" data-widget="sra_run" data-run="{{ run.Run }}">
+  <div class="widget-sra-run__header">
+    <span class="widget-sra-run__badge">SRA</span>
+    <h3 class="widget-sra-run__title">
+      <a href="{{ run.sra_url }}" target="_blank" rel="noopener noreferrer">
+        {{ run.Run }}
+      </a>
+    </h3>
+    <span class="widget-sra-run__org">{{ run.ScientificName }}</span>
+  </div>
+
+  {% if fetch_error %}
+  <div class="widget-notice widget-notice--warning">
+    {{ fetch_error }}
+  </div>
+  {% endif %}
+
+  <div class="widget-sra-run__body">
+    <div class="widget-sra-run__meta-grid">
+      <div class="widget-sra-run__meta-item">
+        <span class="widget-sra-run__label">Experiment</span>
+        <span class="widget-sra-run__value">{{ run.Experiment }}</span>
+      </div>
+      <div class="widget-sra-run__meta-item">
+        <span class="widget-sra-run__label">BioProject</span>
+        <span class="widget-sra-run__value">
+          <a href="https://www.ncbi.nlm.nih.gov/bioproject/{{ run.BioProject }}" target="_blank" rel="noopener noreferrer">
+            {{ run.BioProject }}
+          </a>
+        </span>
+      </div>
+      <div class="widget-sra-run__meta-item">
+        <span class="widget-sra-run__label">BioSample</span>
+        <span class="widget-sra-run__value">
+          <a href="https://www.ncbi.nlm.nih.gov/biosample/{{ run.BioSample }}" target="_blank" rel="noopener noreferrer">
+            {{ run.BioSample }}
+          </a>
+        </span>
+      </div>
+      <div class="widget-sra-run__meta-item">
+        <span class="widget-sra-run__label">Platform</span>
+        <span class="widget-sra-run__value">{{ run.Model or run.Platform }}</span>
+      </div>
+      <div class="widget-sra-run__meta-item">
+        <span class="widget-sra-run__label">Library Strategy</span>
+        <span class="widget-sra-run__value">{{ run.LibraryStrategy }}</span>
+      </div>
+      <div class="widget-sra-run__meta-item">
+        <span class="widget-sra-run__label">Library Source</span>
+        <span class="widget-sra-run__value">{{ run.LibrarySource }}</span>
+      </div>
+      <div class="widget-sra-run__meta-item">
+        <span class="widget-sra-run__label">Layout</span>
+        <span class="widget-sra-run__value">{{ run.LibraryLayout }}</span>
+      </div>
+      <div class="widget-sra-run__meta-item">
+        <span class="widget-sra-run__label">Total Spots</span>
+        <span class="widget-sra-run__value widget-sra-run__value--num">{{ run.spots }}</span>
+      </div>
+      <div class="widget-sra-run__meta-item">
+        <span class="widget-sra-run__label">Total Bases</span>
+        <span class="widget-sra-run__value widget-sra-run__value--num">{{ run.bases }}</span>
+      </div>
+      <div class="widget-sra-run__meta-item">
+        <span class="widget-sra-run__label">Size</span>
+        <span class="widget-sra-run__value widget-sra-run__value--num">{{ run.size_MB }} MB</span>
+      </div>
+      <div class="widget-sra-run__meta-item">
+        <span class="widget-sra-run__label">Avg Read Length</span>
+        <span class="widget-sra-run__value widget-sra-run__value--num">{{ run.avgLength }} bp</span>
+      </div>
+      <div class="widget-sra-run__meta-item">
+        <span class="widget-sra-run__label">Released</span>
+        <span class="widget-sra-run__value">{{ run.ReleaseDate[:10] }}</span>
+      </div>
+      <div class="widget-sra-run__meta-item">
+        <span class="widget-sra-run__label">Center</span>
+        <span class="widget-sra-run__value">{{ run.CenterName }}</span>
+      </div>
+      <div class="widget-sra-run__meta-item">
+        <span class="widget-sra-run__label">Access</span>
+        <span class="widget-sra-run__value">
+          <span class="widget-badge widget-badge--{{ 'public' if run.Consent == 'public' else 'restricted' }}">
+            {{ run.Consent }}
+          </span>
+        </span>
+      </div>
+    </div>
+
+    {% if run.download_path %}
+    <div class="widget-sra-run__footer">
+      <a href="{{ run.download_path }}" class="widget-btn widget-btn--primary" target="_blank" rel="noopener noreferrer">
+        Download SRA
+      </a>
+      <a href="{{ run.sra_url }}" class="widget-btn" target="_blank" rel="noopener noreferrer">
+        View in SRA Browser
+      </a>
+    </div>
+    {% endif %}
+  </div>
+</div>

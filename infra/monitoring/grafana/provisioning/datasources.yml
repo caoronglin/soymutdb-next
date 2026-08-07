@@ -1,0 +1,37 @@
+# =====================================================================
+# Grafana Datasources Provisioning
+# =====================================================================
+apiVersion: 1
+
+datasources:
+  # ------------------------------------------------------------------
+  # Prometheus - primary metrics source
+  # ------------------------------------------------------------------
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      timeInterval: "15s"
+      httpMethod: POST
+
+  # ------------------------------------------------------------------
+  # ClickHouse - for variant analytics queries
+  # ------------------------------------------------------------------
+  - name: ClickHouse
+    type: clickhouse
+    access: proxy
+    url: http://clickhouse:8123
+    isDefault: false
+    editable: false
+    database: soymutdb
+    jsonData:
+      port: 8123
+      protocol: http
+      defaultDatabase: soymutdb
+      usePOST: true
+    secureJsonData:
+      username: soymutdb
+      password: ${CLICKHOUSE_PASSWORD}

@@ -1,0 +1,23 @@
+{# Error widget – displays an error message within the widget framework #}
+<div class="widget widget-error-display" data-widget="error">
+  <section class="error-container">
+    <div class="error-icon">
+      <svg viewBox="0 0 24 24" width="48" height="48" fill="none">
+        <circle cx="12" cy="12" r="10" fill="#fee" stroke="#c00" stroke-width="2"/>
+        <path d="M12 7v6M12 16v0.5" stroke="#c00" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    </div>
+    {% if heading %}
+    <h2 class="error-heading">{{ heading }}</h2>
+    {% endif %}
+    {% if message %}
+    <p class="error-message">{{ message }}</p>
+    {% endif %}
+    {% if details %}
+    <pre class="error-details"><code>{{ details }}</code></pre>
+    {% endif %}
+    {% if retry_url %}
+    <a href="{{ retry_url }}" class="button error-retry">Try Again</a>
+    {% endif %}
+  </section>
+</div>

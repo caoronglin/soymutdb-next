@@ -1,0 +1,18 @@
+name: soymutdb-api
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.14.6
+  - pip>=24.0
+  - uv>=0.4.0
+  # PostgreSQL driver dependencies
+  - libpq>=16.0
+  - psycopg2>=2.9
+  # OpenSSL for TLS
+  - openssl>=3.0
+  # System utilities
+  - curl>=8.0
+  - ca-certificates
+  - pip:
+      - -e ../../apps/api

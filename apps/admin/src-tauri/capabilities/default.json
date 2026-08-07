@@ -1,0 +1,23 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Default capability for the SoyMutDB Admin main window",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-close",
+    "shell:allow-open",
+    "dialog:allow-open",
+    "dialog:allow-save",
+    "dialog:allow-message",
+    "fs:allow-read-text-file",
+    "fs:scope-appdata",
+    "fs:scope-desktop",
+    "fs:scope-documents",
+    "fs:scope-downloads",
+    "fs:scope-home"
+  ]
+}

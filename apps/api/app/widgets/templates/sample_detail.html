@@ -1,0 +1,69 @@
+{# Sample detail widget – detailed view of a mutant/seed sample #}
+<div class="widget widget-sample-detail" data-widget="sample_detail">
+  <article class="sample-detail">
+    {% if sample %}
+    <header class="sample-header">
+      <h1 class="sample-name">{{ sample.name | default("Unknown Sample") }}</h1>
+      {% if sample.line_id %}
+      <span class="sample-line">Line: <a href="/mutant/{{ sample.line_id }}">{{ sample.line_id }}</a></span>
+      {% endif %}
+    </header>
+
+    <section class="sample-info">
+      <table class="data-table">
+        <tbody>
+          {% if sample.species %}
+          <tr><th>Species</th><td>{{ sample.species }}</td></tr>
+          {% endif %}
+          {% if sample.mutagen %}
+          <tr><th>Mutagen</th><td>{{ sample.mutagen }}</td></tr>
+          {% endif %}
+          {% if sample.generation %}
+          <tr><th>Generation</th><td>{{ sample.generation }}</td></tr>
+          {% endif %}
+          {% if sample.phenotype %}
+          <tr><th>Phenotype</th><td>{{ sample.phenotype }}</td></tr>
+          {% endif %}
+          {% if sample.availability is defined %}
+          <tr><th>Availability</th>
+            <td><span class="availability availability-{{ sample.availability | default('unknown') | lower }}">
+              {{ sample.availability | default("Unknown") }}
+            </span></td>
+          </tr>
+          {% endif %}
+          {% if sample.source %}
+          <tr><th>Source</th><td>{{ sample.source }}</td></tr>
+          {% endif %}
+          {% if sample.notes %}
+          <tr><th>Notes</th><td>{{ sample.notes }}</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </section>
+
+    {% if sample.variants is defined and sample.variants %}
+    <section class="sample-variants">
+      <h3>Causative Variants</h3>
+      <ul class="variant-list">
+        {% for v in sample.variants %}
+        <li>
+          <a href="/variant/{{ v.id | default('#') }}">{{ v.id | default("?") }}</a>
+          {% if v.gene %} in <em>{{ v.gene }}</em>{% endif %}
+          {% if v.consequence %} ({{ v.consequence }}){% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+
+    {% if request_seed is defined and request_seed %}
+    <section class="sample-actions">
+      <a href="/seeds/request?sample={{ sample.name | default('') }}" class="button">Request Seeds</a>
+    </section>
+    {% endif %}
+
+    {% else %}
+    <p class="no-data">Sample information not available.</p>
+    {% endif %}
+  </article>
+</div>

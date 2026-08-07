@@ -1,0 +1,1 @@
+"""SoyMutDB API application package."""

@@ -1,0 +1,14 @@
+<section class="sra-run-widget" data-run="{{ run | default(value='unknown') }}">
+  <header class="sra-header">
+    <h3>SRA Run <code>{{ run }}</code></h3>
+    <span class="badge">SRA</span>
+  </header>
+  <p class="sra-fallback">
+    SRA metadata is being loaded. This widget is rendered by the Rust hotpath service.
+  </p>
+  <p>
+    <a href="https://trace.ncbi.nlm.nih.gov/Traces/sra?run={{ run }}" target="_blank" rel="noopener noreferrer">
+      View in NCBI SRA →
+    </a>
+  </p>
+</section>

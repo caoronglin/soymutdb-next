@@ -1,0 +1,43 @@
+{# Chromosome view widget – SVG-based chromosome ideogram with variant density #}
+<div class="widget widget-chromosome-view" data-widget="chromosome_view">
+  <section class="chromosome-view-container">
+    {% if title %}
+    <h2 class="widget-title">{{ title }}</h2>
+    {% endif %}
+
+    {% if chromosomes %}
+    <div class="chromosome-list">
+      {% for chrom in chromosomes %}
+      <div class="chromosome-item" data-chromosome="{{ chrom.name | default('') }}">
+        <a href="/browse?chrom={{ chrom.name | default('') }}">
+          <svg viewBox="0 0 60 200" class="chromosome-svg" width="40" height="120">
+            <rect x="15" y="5" width="30" height="190" rx="15" ry="15"
+                  fill="#e0e0e0" stroke="#999" stroke-width="1"/>
+            {% if chrom.density %}
+            {% set max_d = chrom.max_density | default(1) %}
+            {% for bin in chrom.density %}
+            {% set bin_h = 190 / (chrom.density | length) %}
+            {% set bin_y = 5 + loop.index0 * bin_h %}
+            {% set intensity = (bin.v / max_d) if max_d > 0 else 0 %}
+            {% set gray = 224 - (intensity * 180) | int %}
+            <rect x="15" y="{{ bin_y | round(1) }}" width="30" height="{{ bin_h | round(1) }}"
+                  fill="rgb({{ gray }}, {{ (gray * 0.7) | int }}, {{ (gray * 0.5) | int }})"/>
+            {% endfor %}
+            {% endif %}
+            {% if chrom.centromere %}
+            <circle cx="30" cy="{{ 5 + 190 * (chrom.centromere | float) }}" r="8" fill="#666"/>
+            {% endif %}
+          </svg>
+          <span class="chromosome-label">{{ chrom.name | default("?") }}</span>
+          {% if chrom.variant_count is defined %}
+          <small class="chromosome-count">{{ chrom.variant_count }}</small>
+          {% endif %}
+        </a>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="no-data">Chromosome data not available.</p>
+    {% endif %}
+  </section>
+</div>

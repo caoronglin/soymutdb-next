@@ -1,0 +1,16 @@
+[Unit]
+Description=SoyMutDB - All Services (docker compose project)
+Documentation=https://github.com/soymutdb/soymutdb
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+# 全部服务由 soymutdb-api.service 统一编排 docker compose 项目
+# （api / worker-default / worker-blast / worker-ingest / beat /
+#  postgres / clickhouse / redis / minio / nginx / prometheus / grafana）。
+# 历史独立单元 soymutdb-worker.service / soymutdb-beat.service 已废弃。
+Requires=soymutdb-api.service
+After=soymutdb-api.service
+
+[Install]
+WantedBy=multi-user.target

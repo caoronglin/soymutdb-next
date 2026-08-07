@@ -1,0 +1,47 @@
+{# Variant table widget – tabular display of variant results #}
+<div class="widget widget-variant-table" data-widget="variant_table">
+  <section class="variant-table-container">
+    {% if title %}
+    <h2 class="widget-title">{{ title }}</h2>
+    {% endif %}
+    {% if variants %}
+    <div class="table-responsive">
+      <table class="data-table variant-table">
+        <thead>
+          <tr>
+            <th>Variant ID</th>
+            <th>Chromosome</th>
+            <th>Position</th>
+            <th>Ref</th>
+            <th>Alt</th>
+            <th>Gene</th>
+            <th>Impact</th>
+            <th>Consequence</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for v in variants %}
+          <tr>
+            <td><a href="/variant/{{ v.id | default('#') }}">{{ v.id | default("—") }}</a></td>
+            <td>{{ v.chromosome | default("—") }}</td>
+            <td>{{ v.position | default("—") }}</td>
+            <td>{{ v.ref | default("—") }}</td>
+            <td>{{ v.alt | default("—") }}</td>
+            <td>{% if v.gene %}<a href="/gene/{{ v.gene }}">{{ v.gene }}</a>{% else %}—{% endif %}</td>
+            <td><span class="impact impact-{{ v.impact | default('modifier') | lower }}">{{ v.impact | default("—") }}</span></td>
+            <td>{{ v.consequence | default("—") }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if total_count is defined and total_count > (variants | length) %}
+    <div class="table-footer">
+      <small>Showing {{ variants | length }} of {{ total_count }} results</small>
+    </div>
+    {% endif %}
+    {% else %}
+    <p class="no-data">No variants to display.</p>
+    {% endif %}
+  </section>
+</div>

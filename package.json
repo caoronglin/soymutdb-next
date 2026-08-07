@@ -1,0 +1,34 @@
+{
+  "name": "soymutdb",
+  "version": "2.0.0",
+  "private": true,
+  "description": "SoyMutDB Next — comprehensive soybean mutant database with SSG public portal, native desktop admin console, and Rust-accelerated hotpaths",
+  "packageManager": "pnpm@10.0.0",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=10.0.0"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "dev:web": "pnpm --filter @soymutdb/web dev",
+    "dev:admin": "pnpm --filter @soymutdb/admin dev:web",
+    "dev:admin-desktop": "pnpm --filter @soymutdb/admin dev:desktop",
+    "build:web": "pnpm --filter @soymutdb/web build",
+    "build:admin": "pnpm --filter @soymutdb/admin build:web",
+    "build:admin-desktop": "pnpm --filter @soymutdb/admin build:desktop",
+    "build:ssg": "pnpm --filter @soymutdb/web ssg",
+    "build:core": "cargo build --release --manifest-path apps/core-rs/Cargo.toml",
+    "dev:core": "cargo run --manifest-path apps/core-rs/Cargo.toml",
+    "review": "python3 tools/code-review/review.py --project apps --output tools/code-review/reports/manual",
+    "clean": "turbo run clean && rimraf node_modules"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.0",
+    "typescript": "^5.6.0",
+    "rimraf": "^6.0.0"
+  }
+}

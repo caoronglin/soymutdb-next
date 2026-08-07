@@ -1,0 +1,17 @@
+node_modules
+**/node_modules
+.venv
+**/dist
+.trash
+.slim
+artifacts
+reports
+**/.cache
+**/coverage
+*.log
+.env
+.env.*
+.ruff_cache
+__pycache__
+.pytest_cache
+.pip

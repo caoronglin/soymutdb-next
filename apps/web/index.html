@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#2F6F4F" />
+    <meta
+      name="description"
+      content="SoyMutDB — a comprehensive soybean mutant database providing massive variant data, gene information, mutant resources, and a genome browser to advance soybean functional genomics research."
+    />
+    <meta name="author" content="SoyMutDB Consortium" />
+
+    <!-- Content Security Policy: restrict sources to self + inline styles for Tailwind -->
+    <!-- When VITE_CDN_ENABLED=true, add CDN domains to script-src (e.g. cdnjs.cloudflare.com, cdn.jsdelivr.net) -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https:; base-uri 'self'; form-action 'self'; frame-ancestors 'self';"
+    />
+
+    <!-- Preconnect to font origins for faster font load -->
+
+    <title>SoyMutDB — Soybean Mutant Database</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

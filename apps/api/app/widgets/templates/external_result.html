@@ -1,0 +1,51 @@
+{# External result widget – display results from external data sources (BLAST, InterPro, etc.) #}
+<div class="widget widget-external-result" data-widget="external_result">
+  <section class="external-result">
+    {% if title %}
+    <h3 class="widget-title">{{ title }}</h3>
+    {% endif %}
+
+    {% if source %}
+    <div class="external-source">
+      <small>Source: <strong>{{ source }}</strong>
+        {% if status %}
+        <span class="status status-{{ status | lower }}">{{ status }}</span>
+        {% endif %}
+      </small>
+    </div>
+    {% endif %}
+
+    {% if results %}
+    <div class="external-results-list">
+      <table class="data-table">
+        <thead>
+          <tr>
+            {% for col in columns | default([{"key": "id", "label": "ID"}, {"key": "description", "label": "Description"}, {"key": "score", "label": "Score"}]) %}
+            <th>{{ col.label | default(col.key) }}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in results %}
+          <tr>
+            {% for col in columns | default([{"key": "id"}, {"key": "description"}, {"key": "score"}]) %}
+            <td>{{ row[col.key] | default("—") }}</td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% elif message %}
+    <p class="external-message">{{ message }}</p>
+    {% else %}
+    <p class="no-data">No external results available.</p>
+    {% endif %}
+
+    {% if link_url and link_text %}
+    <div class="external-link">
+      <a href="{{ link_url }}" target="_blank" rel="noopener">{{ link_text }}</a>
+    </div>
+    {% endif %}
+  </section>
+</div>

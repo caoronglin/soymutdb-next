@@ -1,0 +1,217 @@
+{
+  "cases": [
+    {
+      "case_id": "typical-incomplete-public-release",
+      "input": {
+        "legacy_id": "legacy-2024-01",
+        "legacy_version": "2024.01",
+        "is_public": true,
+        "published_at": "2024-01-20T10:00:00Z",
+        "approved_by": "admin-user-1",
+        "page_accessible": true,
+        "owner_role": "data-owner",
+        "reviewer_role": "release-reviewer",
+        "source_relation_ref": "relations/legacy-incomplete.json",
+        "evidence": {
+          "content_revision": {
+            "ref": "evidence/incomplete/content-revision.json",
+            "content_revision_id": "content-revision-2024-01",
+            "source_revision": "source-2024-01"
+          },
+          "frozen_build_input": null,
+          "immutable_manifest": null,
+          "publication_approval": null,
+          "deployment": null,
+          "digest_linkage": null
+        }
+      }
+    },
+    {
+      "case_id": "complete-evidence-release",
+      "input": {
+        "legacy_id": "legacy-2024-02",
+        "legacy_version": "2024.02",
+        "is_public": true,
+        "published_at": "2024-02-20T10:00:00Z",
+        "approved_by": "approval-record-2024-02",
+        "page_accessible": true,
+        "owner_role": "data-owner",
+        "reviewer_role": "release-reviewer",
+        "source_relation_ref": "relations/legacy-complete.json",
+        "evidence": {
+          "content_revision": {
+            "ref": "evidence/complete/content-revision.json",
+            "content_revision_id": "content-revision-2024-02",
+            "source_revision": "source-2024-02",
+            "digest": "sha256:0000000000000000000000000000000000000000000000000000000000000001"
+          },
+          "frozen_build_input": {
+            "ref": "evidence/complete/build-input.json",
+            "build_input_id": "build-input-2024-02",
+            "digest": "sha256:0000000000000000000000000000000000000000000000000000000000000002"
+          },
+          "immutable_manifest": {
+            "ref": "evidence/complete/manifest.json",
+            "manifest_id": "manifest-2024-02",
+            "digest": "sha256:0000000000000000000000000000000000000000000000000000000000000003"
+          },
+          "publication_approval": {
+            "ref": "evidence/complete/publication-approval.json",
+            "approval_id": "approval-2024-02",
+            "approver_role": "independent-publication-reviewer",
+            "digest": "sha256:0000000000000000000000000000000000000000000000000000000000000004"
+          },
+          "deployment": {
+            "ref": "evidence/complete/deployment.json",
+            "deployment_id": "deployment-2024-02",
+            "outcome": "success",
+            "digest": "sha256:0000000000000000000000000000000000000000000000000000000000000005"
+          },
+          "digest_linkage": {
+            "version": "1",
+            "ref": "evidence/complete/digest-linkage.json",
+            "legacy_id": "legacy-2024-02",
+            "legacy_version": "2024.02",
+            "content_revision_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000001",
+            "frozen_build_input_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000002",
+            "immutable_manifest_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000003",
+            "publication_approval_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000004",
+            "deployment_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000005"
+          }
+        }
+      }
+    },
+    {
+      "case_id": "is-public-only-false-positive",
+      "input": {
+        "legacy_id": "legacy-2024-03",
+        "legacy_version": "2024.03",
+        "is_public": true,
+        "published_at": "2024-03-20T10:00:00Z",
+        "approved_by": "legacy-admin-user",
+        "page_accessible": true,
+        "owner_role": "data-owner",
+        "reviewer_role": "release-reviewer",
+        "source_relation_ref": "relations/legacy-public-only.json",
+        "evidence": {
+          "content_revision": null,
+          "frozen_build_input": null,
+          "immutable_manifest": null,
+          "publication_approval": null,
+          "deployment": null,
+          "digest_linkage": null
+        }
+      }
+    },
+    {
+      "case_id": "missing-source-relation",
+      "input": {
+        "legacy_id": "legacy-2024-04",
+        "legacy_version": "2024.04",
+        "is_public": false,
+        "published_at": null,
+        "approved_by": null,
+        "page_accessible": true,
+        "owner_role": "data-owner",
+        "reviewer_role": "release-reviewer",
+        "source_relation_ref": null,
+        "evidence": {
+          "content_revision": {
+            "ref": "evidence/no-relation/content-revision.json",
+            "content_revision_id": "content-revision-2024-04",
+            "source_revision": "source-2024-04",
+            "digest": "sha256:1000000000000000000000000000000000000000000000000000000000000001"
+          },
+          "frozen_build_input": {
+            "ref": "evidence/no-relation/build-input.json",
+            "build_input_id": "build-input-2024-04",
+            "digest": "sha256:1000000000000000000000000000000000000000000000000000000000000002"
+          },
+          "immutable_manifest": {
+            "ref": "evidence/no-relation/manifest.json",
+            "manifest_id": "manifest-2024-04",
+            "digest": "sha256:1000000000000000000000000000000000000000000000000000000000000003"
+          },
+          "publication_approval": {
+            "ref": "evidence/no-relation/publication-approval.json",
+            "approval_id": "approval-2024-04",
+            "approver_role": "independent-publication-reviewer",
+            "digest": "sha256:1000000000000000000000000000000000000000000000000000000000000004"
+          },
+          "deployment": {
+            "ref": "evidence/no-relation/deployment.json",
+            "deployment_id": "deployment-2024-04",
+            "outcome": "active",
+            "digest": "sha256:1000000000000000000000000000000000000000000000000000000000000005"
+          },
+          "digest_linkage": {
+            "version": "1",
+            "ref": "evidence/no-relation/digest-linkage.json",
+            "legacy_id": "legacy-2024-04",
+            "legacy_version": "2024.04",
+            "content_revision_digest": "sha256:1000000000000000000000000000000000000000000000000000000000000001",
+            "frozen_build_input_digest": "sha256:1000000000000000000000000000000000000000000000000000000000000002",
+            "immutable_manifest_digest": "sha256:1000000000000000000000000000000000000000000000000000000000000003",
+            "publication_approval_digest": "sha256:1000000000000000000000000000000000000000000000000000000000000004",
+            "deployment_digest": "sha256:1000000000000000000000000000000000000000000000000000000000000005"
+          }
+        }
+      }
+    },
+    {
+      "case_id": "digest-mismatch",
+      "input": {
+        "legacy_id": "legacy-2024-05",
+        "legacy_version": "2024.05",
+        "is_public": true,
+        "published_at": "2024-05-20T10:00:00Z",
+        "approved_by": "approval-record-2024-05",
+        "page_accessible": true,
+        "owner_role": "data-owner",
+        "reviewer_role": "release-reviewer",
+        "source_relation_ref": "relations/legacy-mismatch.json",
+        "evidence": {
+          "content_revision": {
+            "ref": "evidence/mismatch/content-revision.json",
+            "content_revision_id": "content-revision-2024-05",
+            "source_revision": "source-2024-05",
+            "digest": "sha256:2000000000000000000000000000000000000000000000000000000000000001"
+          },
+          "frozen_build_input": {
+            "ref": "evidence/mismatch/build-input.json",
+            "build_input_id": "build-input-2024-05",
+            "digest": "sha256:2000000000000000000000000000000000000000000000000000000000000002"
+          },
+          "immutable_manifest": {
+            "ref": "evidence/mismatch/manifest.json",
+            "manifest_id": "manifest-2024-05",
+            "digest": "sha256:2000000000000000000000000000000000000000000000000000000000000003"
+          },
+          "publication_approval": {
+            "ref": "evidence/mismatch/publication-approval.json",
+            "approval_id": "approval-2024-05",
+            "approver_role": "independent-publication-reviewer",
+            "digest": "sha256:2000000000000000000000000000000000000000000000000000000000000004"
+          },
+          "deployment": {
+            "ref": "evidence/mismatch/deployment.json",
+            "deployment_id": "deployment-2024-05",
+            "outcome": "success",
+            "digest": "sha256:2000000000000000000000000000000000000000000000000000000000000005"
+          },
+          "digest_linkage": {
+            "version": "1",
+            "ref": "evidence/mismatch/digest-linkage.json",
+            "legacy_id": "legacy-2024-05",
+            "legacy_version": "2024.05",
+            "content_revision_digest": "sha256:2000000000000000000000000000000000000000000000000000000000000001",
+            "frozen_build_input_digest": "sha256:2000000000000000000000000000000000000000000000000000000000000002",
+            "immutable_manifest_digest": "sha256:2000000000000000000000000000000000000000000000000000000000000003",
+            "publication_approval_digest": "sha256:2000000000000000000000000000000000000000000000000000000000000004",
+            "deployment_digest": "sha256:3000000000000000000000000000000000000000000000000000000000000005"
+          }
+        }
+      }
+    }
+  ]
+}

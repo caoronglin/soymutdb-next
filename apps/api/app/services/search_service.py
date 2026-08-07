@@ -1,0 +1,179 @@
+"""Global search service across genes, variants, mutant lines, publications.
+
+Fix vs. reference: uses proper ``ilike()`` calls (the reference used an
+invalid ``func.cast(type_=None)`` expression).
+"""
+
+from __future__ import annotations
+
+import time
+from typing import Any
+
+from sqlalchemy import or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from ..models.content import Publication
+from ..models.genomic import Gene
+from ..models.variant import MutantLine
+from ..schemas.search import (
+    GlobalSearchResponse,
+    SearchHit,
+    SearchResultType,
+    SearchSuggestion,
+)
+
+
+class SearchService:
+    """Cross-entity search service."""
+
+    async def global_search(
+        self,
+        db: AsyncSession,
+        query: str,
+        types: list[SearchResultType] | None = None,
+        limit: int = 20,
+    ) -> GlobalSearchResponse:
+        """Search across multiple entity types."""
+        start = time.perf_counter()
+        pattern = f"%{query}%"
+        hits: list[SearchHit] = []
+        active_types = types or list(SearchResultType)
+        per_type = max(1, limit // max(1, len(active_types)))
+
+        if SearchResultType.GENE in active_types:
+            hits.extend(await self._search_genes(db, pattern, per_type))
+
+        if SearchResultType.MUTANT_LINE in active_types:
+            hits.extend(await self._search_mutant_lines(db, pattern, per_type))
+
+        if SearchResultType.PUBLICATION in active_types:
+            hits.extend(await self._search_publications(db, pattern, per_type))
+
+        # Sort by score descending and truncate.
+        hits.sort(key=lambda h: h.score, reverse=True)
+        hits = hits[:limit]
+
+        elapsed_ms = (time.perf_counter() - start) * 1000.0
+        return GlobalSearchResponse(
+            query=query,
+            total_hits=len(hits),
+            hits=hits,
+            elapsed_ms=round(elapsed_ms, 3),
+            suggestions=[],
+        )
+
+    async def _search_genes(
+        self, db: AsyncSession, pattern: str, limit: int
+    ) -> list[SearchHit]:
+        """Search genes by id, name, description using proper ilike."""
+        stmt = (
+            select(Gene)
+            .where(
+                or_(
+                    Gene.id.ilike(pattern),
+                    Gene.name.ilike(pattern),
+                    Gene.description.ilike(pattern),
+                )
+            )
+            .limit(limit)
+        )
+        result = await db.execute(stmt)
+        hits: list[SearchHit] = []
+        for gene in result.scalars().all():
+            hits.append(
+                SearchHit(
+                    id=str(gene.id),
+                    type=SearchResultType.GENE,
+                    title=gene.name or str(gene.id),
+                    subtitle=gene.description,
+                    highlight=None,
+                    score=1.0,
+                    url=f"/api/v1/genes/{gene.id}",
+                    metadata={"biotype": gene.biotype},
+                )
+            )
+        return hits
+
+    async def _search_mutant_lines(
+        self, db: AsyncSession, pattern: str, limit: int
+    ) -> list[SearchHit]:
+        stmt = (
+            select(MutantLine)
+            .where(
+                or_(
+                    MutantLine.name.ilike(pattern),
+                    MutantLine.cultivar.ilike(pattern),
+                    MutantLine.mutagen.ilike(pattern),
+                    MutantLine.description.ilike(pattern),
+                )
+            )
+            .limit(limit)
+        )
+        result = await db.execute(stmt)
+        hits: list[SearchHit] = []
+        for ml in result.scalars().all():
+            hits.append(
+                SearchHit(
+                    id=str(ml.id),
+                    type=SearchResultType.MUTANT_LINE,
+                    title=ml.name,
+                    subtitle=ml.description,
+                    score=1.0,
+                    url=f"/api/v1/mutants/{ml.id}",
+                    metadata={"mutagen": ml.mutagen, "cultivar": ml.cultivar},
+                )
+            )
+        return hits
+
+    async def _search_publications(
+        self, db: AsyncSession, pattern: str, limit: int
+    ) -> list[SearchHit]:
+        stmt = (
+            select(Publication)
+            .where(
+                or_(
+                    Publication.title.ilike(pattern),
+                    Publication.authors.ilike(pattern),
+                    Publication.abstract.ilike(pattern),
+                )
+            )
+            .limit(limit)
+        )
+        result = await db.execute(stmt)
+        hits: list[SearchHit] = []
+        for pub in result.scalars().all():
+            hits.append(
+                SearchHit(
+                    id=str(pub.id),
+                    type=SearchResultType.PUBLICATION,
+                    title=pub.title,
+                    subtitle=pub.journal,
+                    score=1.0,
+                    url=f"/api/v1/content/publications/{pub.id}",
+                    metadata={"year": pub.year, "doi": pub.doi},
+                )
+            )
+        return hits
+
+    async def suggest(
+        self, db: AsyncSession, query: str, limit: int = 5
+    ) -> list[SearchSuggestion]:
+        """Return autocomplete suggestions."""
+        pattern = f"{query}%"
+        stmt = (
+            select(Gene.id, Gene.name)
+            .where(or_(Gene.id.ilike(pattern), Gene.name.ilike(pattern)))
+            .limit(limit)
+        )
+        result = await db.execute(stmt)
+        suggestions: list[SearchSuggestion] = []
+        for gene_id, gene_name in result.all():
+            suggestions.append(
+                SearchSuggestion(
+                    text=gene_name or str(gene_id),
+                    type=SearchResultType.GENE,
+                    score=1.0,
+                    description=f"Gene: {gene_name or gene_id}",
+                )
+            )
+        return suggestions

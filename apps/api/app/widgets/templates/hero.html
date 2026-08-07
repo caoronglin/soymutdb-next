@@ -1,0 +1,12 @@
+{# Hero banner widget – large landing section with title, subtitle, CTA #}
+<div class="widget widget-hero" data-widget="hero">
+  <section class="hero-section">
+    <h1 class="hero-title">{{ title | default("SoyMutDB") }}</h1>
+    {% if subtitle %}
+    <p class="hero-subtitle">{{ subtitle }}</p>
+    {% endif %}
+    {% if cta_text and cta_href %}
+    <a href="{{ cta_href }}" class="hero-cta button">{{ cta_text }}</a>
+    {% endif %}
+  </section>
+</div>

@@ -1,0 +1,85 @@
+# =====================================================================
+# SoyMutDB Pre-commit Configuration
+# =====================================================================
+# Hooks:
+#   - ruff (Python linting + formatting)
+#   - mypy (Python type checking)
+#   - prettier (TypeScript/JavaScript/CSS formatting)
+#   - eslint (TypeScript/JavaScript linting)
+# =====================================================================
+
+repos:
+  # ----------------------------------------------------------------
+  # Python: ruff (lint + format)
+  # ----------------------------------------------------------------
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.0
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+        files: ^(apps/api/src|apps/worker/src)/.+\.py$
+      - id: ruff-format
+        files: ^(apps/api/src|apps/worker/src)/.+\.py$
+
+  # ----------------------------------------------------------------
+  # Python: mypy (type checking)
+  # ----------------------------------------------------------------
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.13.0
+    hooks:
+      - id: mypy
+        files: ^apps/api/src/.+\.py$
+        args: [--config-file=apps/api/pyproject.toml]
+        additional_dependencies:
+          - pydantic>=2.0
+          - sqlalchemy>=2.0
+          - fastapi>=0.115
+
+  # ----------------------------------------------------------------
+  # TypeScript/JavaScript: prettier
+  # ----------------------------------------------------------------
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v4.0.0-alpha.8
+    hooks:
+      - id: prettier
+        files: \.(ts|tsx|js|jsx|css|json|md|yml|yaml)$
+        exclude: ^(package-lock\.json|pnpm-lock\.yaml|dist/|build/)
+
+  # ----------------------------------------------------------------
+  # TypeScript/JavaScript: eslint
+  # ----------------------------------------------------------------
+  - repo: https://github.com/pre-commit/mirrors-eslint
+    rev: v9.15.0
+    hooks:
+      - id: eslint
+        files: \.(ts|tsx|js|jsx)$
+        exclude: ^(dist/|build/|node_modules/|\.next/)
+        types: [file]
+
+  # ----------------------------------------------------------------
+  # General: trailing whitespace, end-of-file, large files
+  # ----------------------------------------------------------------
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: check-added-large-files
+        args: [--maxkb=500]
+      - id: detect-private-key
+      - id: mixed-line-ending
+        args: [--fix=lf]
+
+  # ----------------------------------------------------------------
+  # Docker: hadolint (Dockerfile linting)
+  # ----------------------------------------------------------------
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.12.0
+    hooks:
+      - id: hadolint
+        files: ^infra/docker/Dockerfile\..*$

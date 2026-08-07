@@ -1,0 +1,183 @@
+"""Pydantic v2 schemas for CMS-style content: releases, news, publications, static pages."""
+
+from __future__ import annotations
+
+from datetime import date, datetime
+from ..core.compat import StrEnum
+
+from pydantic import BaseModel, Field, field_validator
+
+
+class ReleaseStatus(StrEnum):
+    DRAFT = "draft"
+    STAGING = "staging"
+    ACTIVE = "active"
+    ARCHIVED = "archived"
+
+
+class ReleaseResponse(BaseModel):
+    id: str
+    version: str
+    name: str
+    description: str | None = None
+    variant_count: int = Field(default=0, ge=0)
+    gene_count: int = Field(default=0, ge=0)
+    mutant_line_count: int = Field(default=0, ge=0)
+    status: ReleaseStatus
+    published_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ReleaseCreate(BaseModel):
+    version: str = Field(..., pattern=r"^\d+\.\d+(\.\d+)?$")
+    name: str = Field(..., min_length=1, max_length=255)
+    description: str | None = None
+    notes: str | None = None
+
+    @field_validator("version")
+    @classmethod
+    def _validate_version(cls, v: str) -> str:
+        if not v:
+            raise ValueError("version must not be empty")
+        return v
+
+
+class NewsResponse(BaseModel):
+    id: str
+    title_en: str
+    title_zh: str | None = None
+    slug: str
+    category: str | None = None
+    is_published: bool
+    published_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class NewsCreate(BaseModel):
+    title_en: str = Field(..., min_length=1, max_length=512)
+    title_zh: str | None = Field(default=None, max_length=512)
+    content_en: str = Field(..., min_length=1)
+    content_zh: str | None = None
+    slug: str = Field(..., pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+    category: str | None = None
+    is_published: bool = False
+
+
+class PublicationResponse(BaseModel):
+    id: str
+    title: str
+    authors: str
+    journal: str | None = None
+    year: int | None = None
+    doi: str | None = None
+    pmid: str | None = None
+    abstract: str | None = None
+    is_featured: bool = False
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+    @field_validator("doi")
+    @classmethod
+    def _validate_doi_format(cls, v: str | None) -> str | None:
+        if v is not None and not v.startswith("10."):
+            raise ValueError("DOI must start with '10.'")
+        return v
+
+
+class PageStatus(StrEnum):
+    DRAFT = "draft"
+    PUBLISHED = "published"
+    ARCHIVED = "archived"
+
+
+class StaticPageResponse(BaseModel):
+    id: str
+    slug: str
+    title_en: str
+    title_zh: str | None = None
+    content_en: str
+    content_zh: str | None = None
+    status: PageStatus = PageStatus.DRAFT
+    category: str | None = None
+    summary: str | None = None
+    sort_order: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class StaticPageCreate(BaseModel):
+    slug: str = Field(..., pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+    title_en: str = Field(..., min_length=1, max_length=512)
+    title_zh: str | None = Field(default=None, max_length=512)
+    content_en: str = Field(..., min_length=1)
+    content_zh: str | None = None
+    summary: str | None = None
+    category: str | None = Field(default=None, max_length=64)
+    sort_order: int = Field(default=0, ge=0)
+    status: PageStatus = PageStatus.DRAFT
+    edit_comment: str | None = None
+
+
+class StaticPageUpdate(BaseModel):
+    title_en: str | None = Field(default=None, min_length=1, max_length=512)
+    title_zh: str | None = None
+    content_en: str | None = None
+    content_zh: str | None = None
+    summary: str | None = None
+    category: str | None = None
+    sort_order: int | None = Field(default=None, ge=0)
+    edit_comment: str | None = None
+
+
+class StaticPageDetailResponse(StaticPageResponse):
+    """Extended response with summary, category, status, author, version info."""
+
+    author_name: str | None = None
+    published_at: datetime | None = None
+    current_version: int = 1
+
+
+class ContentVersionResponse(BaseModel):
+    id: str
+    page_id: str
+    version: int
+    title_en: str
+    title_zh: str | None = None
+    content_en: str
+    content_zh: str | None = None
+    summary: str | None = None
+    edited_by: str | None = None
+    edit_comment: str | None = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class DownloadFileResponse(BaseModel):
+    id: str
+    name: str
+    description: str | None = None
+    file_url: str
+    file_size: int | None = None
+    category: str | None = None
+    download_count: int = 0
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class SignedUrlResponse(BaseModel):
+    """Pre-signed URL response with RBAC-validated access."""
+
+    url: str
+    expires_in: int = Field(..., description="URL validity in seconds.")
+    request_id: str | None = None

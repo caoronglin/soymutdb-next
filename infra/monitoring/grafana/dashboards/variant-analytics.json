@@ -1,0 +1,397 @@
+{
+    "annotations": {
+        "list": [
+            {
+                "builtIn": 1,
+                "datasource": "Prometheus",
+                "enable": true,
+                "hide": true,
+                "iconColor": "rgba(0, 211, 255, 1)",
+                "name": "Annotations & Alerts",
+                "type": "dashboard"
+            }
+        ]
+    },
+    "description": "SoyMutDB variant analytics - ClickHouse query performance, storage, and data distribution",
+    "editable": true,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 1,
+    "id": null,
+    "links": [],
+    "liveNow": false,
+    "panels": [
+        {
+            "datasource": "ClickHouse",
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "blue",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "unit": "short"
+                }
+            },
+            "gridPos": {
+                "h": 6,
+                "w": 6,
+                "x": 0,
+                "y": 0
+            },
+            "id": 1,
+            "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                },
+                "textMode": "auto"
+            },
+            "pluginVersion": "11.4.0",
+            "targets": [
+                {
+                    "query": "SELECT sum(cnt) FROM soymutdb.release_dashboard",
+                    "refId": "A",
+                    "format": "table"
+                }
+            ],
+            "title": "Total Variants",
+            "type": "stat"
+        },
+        {
+            "datasource": "ClickHouse",
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "unit": "short"
+                }
+            },
+            "gridPos": {
+                "h": 6,
+                "w": 6,
+                "x": 6,
+                "y": 0
+            },
+            "id": 2,
+            "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                },
+                "textMode": "auto"
+            },
+            "targets": [
+                {
+                    "query": "SELECT count(DISTINCT gene_id) FROM soymutdb.variant_facts",
+                    "refId": "A",
+                    "format": "table"
+                }
+            ],
+            "title": "Genes with Variants",
+            "type": "stat"
+        },
+        {
+            "datasource": "ClickHouse",
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "purple",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "unit": "short"
+                }
+            },
+            "gridPos": {
+                "h": 6,
+                "w": 6,
+                "x": 12,
+                "y": 0
+            },
+            "id": 3,
+            "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                },
+                "textMode": "auto"
+            },
+            "targets": [
+                {
+                    "query": "SELECT count(DISTINCT mutant_line_id) FROM soymutdb.variant_facts",
+                    "refId": "A",
+                    "format": "table"
+                }
+            ],
+            "title": "Mutant Lines",
+            "type": "stat"
+        },
+        {
+            "datasource": "Prometheus",
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            },
+                            {
+                                "color": "yellow",
+                                "value": 50000000000
+                            },
+                            {
+                                "color": "red",
+                                "value": 100000000000
+                            }
+                        ]
+                    },
+                    "unit": "bytes"
+                }
+            },
+            "gridPos": {
+                "h": 6,
+                "w": 6,
+                "x": 18,
+                "y": 0
+            },
+            "id": 4,
+            "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                },
+                "textMode": "auto"
+            },
+            "targets": [
+                {
+                    "expr": "clickhouse_async_metrics_disk_data_used_bytes{database=\"soymutdb\"}",
+                    "refId": "A"
+                }
+            ],
+            "title": "ClickHouse Data Size",
+            "type": "stat"
+        },
+        {
+            "datasource": "ClickHouse",
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {
+                        "drawStyle": "bars",
+                        "lineWidth": 1,
+                        "fillOpacity": 80,
+                        "showPoints": "never"
+                    },
+                    "unit": "short"
+                }
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 6
+            },
+            "id": 5,
+            "options": {
+                "legend": {
+                    "displayMode": "list",
+                    "placement": "bottom"
+                }
+            },
+            "targets": [
+                {
+                    "query": "SELECT impact, sum(cnt) as count FROM soymutdb.release_dashboard GROUP BY impact ORDER BY impact",
+                    "refId": "A",
+                    "format": "table"
+                }
+            ],
+            "title": "Variants by Impact",
+            "type": "barchart"
+        },
+        {
+            "datasource": "ClickHouse",
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {
+                        "drawStyle": "bars",
+                        "lineWidth": 1,
+                        "fillOpacity": 80,
+                        "showPoints": "never"
+                    },
+                    "unit": "short"
+                }
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 6
+            },
+            "id": 6,
+            "options": {
+                "legend": {
+                    "displayMode": "list",
+                    "placement": "bottom"
+                }
+            },
+            "targets": [
+                {
+                    "query": "SELECT variant_type, sum(cnt) as count FROM soymutdb.release_dashboard GROUP BY variant_type ORDER BY variant_type",
+                    "refId": "A",
+                    "format": "table"
+                }
+            ],
+            "title": "Variants by Type",
+            "type": "barchart"
+        },
+        {
+            "datasource": "ClickHouse",
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {
+                        "drawStyle": "line",
+                        "lineInterpolation": "linear",
+                        "lineWidth": 2,
+                        "fillOpacity": 20,
+                        "showPoints": "never"
+                    },
+                    "unit": "short"
+                }
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 24,
+                "x": 0,
+                "y": 14
+            },
+            "id": 7,
+            "options": {
+                "legend": {
+                    "calcs": [
+                        "sum"
+                    ],
+                    "displayMode": "table",
+                    "placement": "bottom"
+                }
+            },
+            "targets": [
+                {
+                    "query": "SELECT chromosome, bin_start, cnt FROM soymutdb.density_1mb WHERE release_id = (SELECT max(release_id) FROM soymutdb.variant_facts) ORDER BY chromosome, bin_start",
+                    "refId": "A",
+                    "format": "table"
+                }
+            ],
+            "title": "Variant Density (1Mb bins) by Chromosome",
+            "type": "timeseries"
+        },
+        {
+            "datasource": "Prometheus",
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {
+                        "drawStyle": "line",
+                        "lineInterpolation": "linear",
+                        "lineWidth": 2,
+                        "fillOpacity": 10,
+                        "showPoints": "never"
+                    },
+                    "unit": "s"
+                }
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 24,
+                "x": 0,
+                "y": 22
+            },
+            "id": 8,
+            "options": {
+                "legend": {
+                    "calcs": [
+                        "mean",
+                        "max"
+                    ],
+                    "displayMode": "table",
+                    "placement": "bottom"
+                }
+            },
+            "targets": [
+                {
+                    "expr": "rate(clickhouse_query_duration_seconds_sum[5m]) / rate(clickhouse_query_duration_seconds_count[5m])",
+                    "legendFormat": "avg query duration",
+                    "refId": "A"
+                }
+            ],
+            "title": "ClickHouse Average Query Duration",
+            "type": "timeseries"
+        }
+    ],
+    "refresh": "1m",
+    "schemaVersion": 39,
+    "tags": [
+        "soymutdb",
+        "clickhouse",
+        "variants"
+    ],
+    "templating": {
+        "list": []
+    },
+    "time": {
+        "from": "now-6h",
+        "to": "now"
+    },
+    "timepicker": {},
+    "timezone": "browser",
+    "title": "Variant Analytics",
+    "uid": "soymutdb-variant-analytics",
+    "version": 1,
+    "weekStart": ""
+}

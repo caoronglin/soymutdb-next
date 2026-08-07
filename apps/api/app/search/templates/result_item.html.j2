@@ -1,0 +1,14 @@
+{#- Single result item. Expects `hit: SearchHit` in context. -#}
+<li class="ext-result" data-source="{{ hit.source.value|e }}" data-id="{{ hit.id|e }}">
+  <a class="ext-result__title" href="{{ hit.url|e }}" target="_blank" rel="noopener noreferrer">
+    {{ hit.title|e }}
+  </a>
+  {% if hit.snippet %}
+    <p class="ext-result__snippet">{{ hit.snippet|e }}</p>
+  {% endif %}
+  {% if hit.id %}
+    <small class="ext-result__id">
+      <code>{{ hit.id|e }}</code>
+    </small>
+  {% endif %}
+</li>

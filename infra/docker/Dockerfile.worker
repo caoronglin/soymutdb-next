@@ -1,0 +1,74 @@
+# =====================================================================
+# SoyMutDB Worker Dockerfile
+# Python 3.13 for bioinformatics compatibility (htslib/bcftools/ncbi-blast+)
+# =====================================================================
+
+# ---------- Stage 1: Builder ----------
+FROM python:3.13-slim AS builder
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    UV_LINK_MODE=copy
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libpq-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=ghcr.io/astral-sh/uv:0.5.11 /uv /usr/local/bin/uv
+
+WORKDIR /app
+
+COPY apps/worker/pyproject.toml apps/worker/uv.lock* ./apps/worker/
+COPY apps/api/pyproject.toml ./apps/api/pyproject.toml
+
+RUN uv venv /opt/venv && \
+    VIRTUAL_ENV=/opt/venv uv pip install --no-cache-dir \
+    --index-strategy unsafe-best-match \
+    -r apps/worker/pyproject.toml
+
+COPY apps/worker ./apps/worker
+COPY apps/api/app ./apps/api/app
+
+RUN VIRTUAL_ENV=/opt/venv uv pip install --no-cache-dir ./apps/worker
+
+# ---------- Stage 2: Runtime ----------
+FROM python:3.13-slim AS runtime
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PATH="/opt/venv/bin:$PATH" \
+    SOYMUTDB_APP_ENV=prod \
+    PYTHONPATH="/app/apps/api:/app/apps/worker/src:$PYTHONPATH" \
+    SOYMUTDB_API_APP_PATH=/app/apps/api/app
+
+# Bioinformatics tools: htslib, bcftools, ncbi-blast+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    htslib \
+    bcftools \
+    tabix \
+    ncbi-blast+ \
+    samtools \
+    bedtools \
+    pigz \
+    zstd \
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid 1000 soymutdb \
+    && useradd --uid 1000 --gid soymutdb --shell /bin/bash --create-home soymutdb
+
+COPY --from=builder /opt/venv /opt/venv
+COPY --from=builder --chown=soymutdb:soymutdb /app /app
+# Temporary coupling: worker tasks currently use the API ORM domain models.
+
+WORKDIR /app/apps/worker
+
+USER soymutdb
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD celery -A soymutdb_worker.main:celery_app inspect ping 2>/dev/null || exit 1
+
+CMD ["celery", "-A", "soymutdb_worker.main:celery_app", "worker", "--loglevel=info", "--concurrency=4"]

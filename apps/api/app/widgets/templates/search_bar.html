@@ -1,0 +1,37 @@
+{# Search bar widget – main search input with optional type selector #}
+<div class="widget widget-search-bar" data-widget="search_bar">
+  <section class="search-bar-container">
+    <form class="search-form" action="{{ action | default('/search') }}" method="get">
+      <div class="search-input-group">
+        {% if show_type_selector | default(true) %}
+        <select name="type" class="search-type-select" title="Search type">
+          <option value="all" {% if selected_type | default("all") == "all" %}selected{% endif %}>All</option>
+          <option value="variant" {% if selected_type | default("") == "variant" %}selected{% endif %}>Variant</option>
+          <option value="gene" {% if selected_type | default("") == "gene" %}selected{% endif %}>Gene</option>
+          <option value="mutant" {% if selected_type | default("") == "mutant" %}selected{% endif %}>Mutant</option>
+        </select>
+        {% endif %}
+        <input
+          type="text"
+          name="q"
+          class="search-input"
+          placeholder="{{ placeholder | default('Search genes, variants, mutant lines…') }}"
+          value="{{ query | default('') }}"
+          autocomplete="off"
+        />
+        <button type="submit" class="search-submit-button">
+          Search
+        </button>
+      </div>
+      {% if examples %}
+      <div class="search-examples">
+        <small>Examples:
+          {% for ex in examples %}
+          <a href="/search?q={{ ex }}">{{ ex }}</a>{% if not loop.last %}, {% endif %}
+          {% endfor %}
+        </small>
+      </div>
+      {% endif %}
+    </form>
+  </section>
+</div>

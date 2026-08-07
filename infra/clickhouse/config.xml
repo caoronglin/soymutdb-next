@@ -1,0 +1,76 @@
+<!-- ===================================================================== -->
+<!-- SoyMutDB ClickHouse Custom Configuration                               -->
+<!-- ===================================================================== -->
+<!-- Key settings:                                                          -->
+<!--   - max_concurrent_queries = 100                                       -->
+<!--   - mark_cache = 512MB                                                 -->
+<!--   - Prometheus metrics on port 9363                                    -->
+<!-- ===================================================================== -->
+
+<clickhouse>
+    <logger>
+        <level>information</level>
+        <log>/var/log/clickhouse-server/clickhouse-server.log</log>
+        <errorlog>/var/log/clickhouse-server/clickhouse-server.err.log</errorlog>
+        <size>100M</size>
+        <count>3</count>
+    </logger>
+
+    <!-- Connection pool -->
+    <max_concurrent_queries>100</max_concurrent_queries>
+
+    <!-- Memory and cache settings -->
+    <max_memory_usage>10000000000</max_memory_usage>
+    <max_memory_usage_for_user>8000000000</max_memory_usage_for_user>
+    <max_bytes_before_external_group_by>5000000000</max_bytes_before_external_group_by>
+    <max_bytes_before_external_sort>5000000000</max_bytes_before_external_sort>
+
+    <!-- Cache sizes -->
+    <mark_cache_size>536870912</mark_cache_size>
+    <uncompressed_cache_size>268435456</uncompressed_cache_size>
+    <mmap_cache_size>134217728</mmap_cache_size>
+
+    <!-- Background processing -->
+    <background_pool_size>16</background_pool_size>
+    <background_schedule_pool_size>16</background_schedule_pool_size>
+
+    <!-- Merge settings -->
+    <merge_tree>
+        <max_suspicious_broken_parts>5</max_suspicious_broken_parts>
+        <max_bytes_to_merge_at_max_space_in_pool>161061273600</max_bytes_to_merge_at_max_space_in_pool>
+        <parts_to_delay_insert>300</parts_to_delay_insert>
+        <parts_to_throw_insert>600</parts_to_throw_insert>
+    </merge_tree>
+
+    <!-- Compression -->
+    <compression>
+        <case>
+            <min_part_size>10000000000</min_part_size>
+            <min_part_size_ratio>0.01</min_part_size_ratio>
+            <method>zstd</method>
+            <level>3</level>
+        </case>
+    </compression>
+
+    <!-- Prometheus metrics exporter -->
+    <prometheus>
+        <endpoint>/metrics</endpoint>
+        <port>9363</port>
+        <metrics>true</metrics>
+        <events>true</events>
+        <asynchronous_metrics>true</asynchronous_metrics>
+        <status_info>true</status_info>
+    </prometheus>
+
+    <!-- Network -->
+    <listen_host>0.0.0.0</listen_host>
+    <http_port>8123</http_port>
+    <tcp_port>9000</tcp_port>
+
+    <!-- Users -->
+    <default_profile>default</default_profile>
+    <default_database>soymutdb</default_database>
+
+    <!-- Timezone -->
+    <timezone>Asia/Shanghai</timezone>
+</clickhouse>

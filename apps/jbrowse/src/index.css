@@ -1,0 +1,130 @@
+@import "@soymutdb/ui/styles.css";
+@import "tailwindcss";
+@import "@fontsource/fraunces/latin-400.css";
+@import "@fontsource/fraunces/latin-500.css";
+@import "@fontsource/fraunces/latin-600.css";
+@import "@fontsource/fraunces/latin-700.css";
+@import "@fontsource/inter/latin-400.css";
+@import "@fontsource/inter/latin-500.css";
+@import "@fontsource/inter/latin-600.css";
+@import "@fontsource/inter/latin-700.css";
+@import "@fontsource/jetbrains-mono/latin-400.css";
+@import "@fontsource/jetbrains-mono/latin-500.css";
+
+@theme {
+    --font-sans: "Inter", "Noto Sans SC", ui-sans-serif, system-ui, sans-serif;
+    --font-serif: "Fraunces", "Noto Serif SC", ui-serif, Georgia, serif;
+    --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
+
+    --radius: 0.55rem;
+
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+    --color-popover: var(--popover);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-secondary: var(--secondary);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-border: var(--border);
+    --color-input: var(--input);
+    --color-ring: var(--ring);
+    --color-destructive: var(--destructive);
+    --color-destructive-foreground: var(--destructive-foreground);
+}
+
+:root {
+    color-scheme: light;
+}
+
+[data-theme="dark"],
+.dark {
+    color-scheme: dark;
+}
+
+html,
+body {
+    height: 100%;
+}
+
+body {
+    margin: 0;
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "cv11", "ss01";
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--font-serif);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+code,
+kbd,
+samp,
+pre,
+.font-mono {
+    font-family: var(--font-mono);
+}
+
+/* Focus-visible ring for keyboard navigation (WCAG 2.1 AA) */
+:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+}
+
+/* Reduced-motion: disable non-essential animations */
+@media (prefers-reduced-motion: reduce) {
+
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+/* JBrowse container theming hooks */
+.jbrowse-container {
+    --jbrowse-primary: var(--primary);
+    --jbrowse-background: var(--background);
+    --jbrowse-foreground: var(--foreground);
+}
+
+.jbrowse-container [data-testid="lgv_header"] {
+    font-family: var(--font-sans);
+}
+
+/* Smooth fade-in for lazy-loaded JBrowse */
+@keyframes jbrowse-fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.jbrowse-fade-in {
+    animation: jbrowse-fade-in 0.3s ease-out;
+}

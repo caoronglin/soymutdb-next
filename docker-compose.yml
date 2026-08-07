@@ -1,0 +1,425 @@
+# =====================================================================
+# SoyMutDB - Docker Compose (Production)
+# =====================================================================
+# 主发布路径（与 deploy/scripts/upgrade.sh、deploy/linux/*.service 配套）：
+#
+#   - 所有传给 api/worker/beat/migrate 的配置变量使用 SOYMUTDB_ 前缀，
+#     字段名与 apps/api/app/core/config.py 的 pydantic-settings 对齐
+#     （APP_ENV 取值仅 dev|staging|prod，生产用 prod）。
+#   - 镜像 tag 必须显式注入，禁止裸 latest：
+#       API_IMAGE_TAG / WORKER_IMAGE_TAG（模板见 deploy/.env.example）
+#   - 一次性数据库迁移由 migrate 服务负责（alembic upgrade head），
+#     api/worker 依赖其成功完成（service_completed_successfully）。
+#   - 前端静态站点（web/admin/jbrowse）已移出本 compose，由 Cloudflare
+#     Pages 托管（后续任务）。nginx 仅反代 API 与 MinIO。
+#   - 数据存储镜像均固定版本（无 :latest）。
+#   - 端口冲突已解决：MinIO 数据 9001:9000、控制台 9002:9001。
+# =====================================================================
+
+# ------------------------------------------------------------------
+# 应用服务共享环境（SOYMUTDB_ 前缀，与 config.py 字段一一对应）。
+# 生产 fail-fast：JWT_SECRET / CORS 等缺失时 API 拒绝启动
+# （config.py validate_security_configuration），upgrade.sh 会在发布前预检。
+# ------------------------------------------------------------------
+x-app-env: &app-env
+  SOYMUTDB_APP_ENV: prod
+  SOYMUTDB_CLICKHOUSE_HOST: clickhouse
+  SOYMUTDB_CLICKHOUSE_PORT: "8123"
+  SOYMUTDB_CLICKHOUSE_USER: soymutdb
+  SOYMUTDB_CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-soymutdb_dev_password}
+  SOYMUTDB_CLICKHOUSE_DATABASE: soymutdb
+  # 缓存 Redis（服务名 redis，redis-cache 角色，allkeys-lru 可驱逐）
+  SOYMUTDB_REDIS_URL: redis://:${REDIS_PASSWORD:-soymutdb_dev_password}@redis:6379/0
+  # Celery broker/result 使用独立实例 redis-celery（noeviction + AOF，
+  # 禁止驱逐策略，防止消息/结果丢失）；broker DB 0、result DB 1。
+  SOYMUTDB_CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-soymutdb_dev_password}@redis-celery:6379/0
+  SOYMUTDB_CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-soymutdb_dev_password}@redis-celery:6379/1
+  # Celery result TTL（秒，默认 7 天，1-7 天范围内）
+  SOYMUTDB_CELERY_RESULT_EXPIRES: ${SOYMUTDB_CELERY_RESULT_EXPIRES:-604800}
+  # worker 同步 engine 连接池（每个 worker 进程 2+4；API 忽略此变量）
+  SOYMUTDB_WORKER_DB_POOL_SIZE: ${SOYMUTDB_WORKER_DB_POOL_SIZE:-2}
+  SOYMUTDB_WORKER_DB_MAX_OVERFLOW: ${SOYMUTDB_WORKER_DB_MAX_OVERFLOW:-4}
+  SOYMUTDB_S3_ENDPOINT: http://minio:9000
+  SOYMUTDB_S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+  SOYMUTDB_S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+  SOYMUTDB_S3_PUBLIC_BUCKET: genomic-data
+  SOYMUTDB_S3_PRIVATE_BUCKET: user-tracks
+  SOYMUTDB_S3_BLAST_BUCKET: blast-dbs
+  SOYMUTDB_S3_EXPORT_BUCKET: exports
+  # 生产必填（此处无默认值：缺失时 prod 校验失败、API 拒绝启动）：
+  SOYMUTDB_JWT_SECRET: ${SOYMUTDB_JWT_SECRET:-}
+  SOYMUTDB_CORS_ORIGINS: ${SOYMUTDB_CORS_ORIGINS:-}
+
+services:
+  # ------------------------------------------------------------------
+  # Data stores
+  # ------------------------------------------------------------------
+  # PostgreSQL 连接预算（默认 max_connections=100，应用总预算 <= 80 连接）：
+  #   api (1 container)        pool 5 + overflow 5   = 10  （默认 4 进程理论上限，
+  #                                                        但 gunicorn 按需借用）
+  #   worker-default           pool 2 + overflow 4   =  6
+  #   worker-blast             pool 2 + overflow 4   =  6
+  #   worker-ingest            pool 2 + overflow 4   =  6
+  #   migrate (one-shot)       单连接                =  1
+  #   beat                     （无 DB 访问）        =  0
+  #   monitoring / 运维余量                          ≈ 11
+  #   ----------------------------------------------------------------
+  #   小计                                        = 40  <= 80（80% of 100）
+  # 调大 pool 时需同步调大 postgres max_connections（默认 100，未显式覆盖，
+  # 保持官方默认；如需覆盖可加 command: postgres -c max_connections=200）。
+  # PgBouncer 暂不引入（本任务只做池预算；如需接入见 infra/ 后续任务）。
+  postgres:
+    image: postgres:18.4-alpine
+    environment:
+      POSTGRES_DB: soymutdb
+      POSTGRES_USER: soymutdb
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-soymutdb_dev_password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U soymutdb -d soymutdb" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8-alpine
+    environment:
+      CLICKHOUSE_DB: soymutdb
+      CLICKHOUSE_USER: soymutdb
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-soymutdb_dev_password}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - chdata:/var/lib/clickhouse
+      - ./infra/clickhouse/config.xml:/etc/clickhouse-server/config.d/custom.xml:ro
+      - ./infra/clickhouse/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:8123/ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+  # 缓存 Redis（redis-cache 角色）：allkeys-lru 允许驱逐，仅服务 API 缓存/
+  # 限流/会话；Celery 绝不使用本实例（防止消息被驱逐丢失）。
+  redis:
+    image: redis:7.4-alpine
+    command: >
+      redis-server --appendonly yes --maxmemory ${REDIS_CACHE_MAXMEMORY:-512mb} --maxmemory-policy allkeys-lru --requirepass ${REDIS_PASSWORD:-soymutdb_dev_password}
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-soymutdb_dev_password}", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Celery broker/result Redis：noeviction（禁止任何驱逐——消息/结果不可丢），
+  # 开 AOF 持久化；broker 用 DB 0、result 用 DB 1。仅暴露给容器网络。
+  redis-celery:
+    image: redis:7.4-alpine
+    command: >
+      redis-server --appendonly yes --maxmemory ${REDIS_CELERY_MAXMEMORY:-512mb} --maxmemory-policy noeviction --requirepass ${REDIS_PASSWORD:-soymutdb_dev_password}
+    volumes:
+      - redis-celerydata:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-soymutdb_dev_password}", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:RELEASE.2024-01-01T00-00-00Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    ports:
+      - "9001:9000" # S3 API (host 9001 -> container 9000)
+      - "9002:9001" # Web console (host 9002 -> container 9001)
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  minio-init:
+    image: minio/mc:RELEASE.2024-01-01T00-00-00Z
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c " /usr/bin/mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin}; /usr/bin/mc mb --ignore-existing local/genomic-data; /usr/bin/mc mb --ignore-existing local/user-tracks; /usr/bin/mc mb --ignore-existing local/blast-dbs; /usr/bin/mc mb --ignore-existing local/exports; /usr/bin/mc policy set public local/genomic-data; /usr/bin/mc version enable local/user-tracks; exit 0; "
+    restart: "no"
+
+  # ------------------------------------------------------------------
+  # One-shot database migration (alembic upgrade head, idempotent)
+  # API/worker 在 migrate 成功完成后才启动（service_completed_successfully）。
+  # 注意：migrations/env.py 会调用 get_settings()（prod fail-fast 校验），
+  # 因此 migrate 必须注入与 api 相同的完整 SOYMUTDB_* 环境。
+  # ------------------------------------------------------------------
+  migrate:
+    image: ${API_IMAGE_TAG:?API_IMAGE_TAG is required (e.g. ghcr.io/soymutdb/api:2026.08.07-1) - see deploy/.env.example}
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.api
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *app-env
+      SOYMUTDB_DATABASE_URL: postgresql+asyncpg://soymutdb:${POSTGRES_PASSWORD:-soymutdb_dev_password}@postgres:5432/soymutdb
+    command: [ "alembic", "upgrade", "head" ]
+    restart: "no"
+
+  # ------------------------------------------------------------------
+  # Application services
+  # ------------------------------------------------------------------
+  api:
+    image: ${API_IMAGE_TAG:?API_IMAGE_TAG is required (e.g. ghcr.io/soymutdb/api:2026.08.07-1) - see deploy/.env.example}
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.api
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      redis-celery:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      <<: *app-env
+      SOYMUTDB_DATABASE_URL: postgresql+asyncpg://soymutdb:${POSTGRES_PASSWORD:-soymutdb_dev_password}@postgres:5432/soymutdb
+    ports:
+      - "8000:8000"
+    healthcheck:
+      # Liveness（readiness 由发布脚本轮询 /api/v1/health/ready）
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/api/v1/health/live" ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  # 队列契约（六队列）：ingest / export / stats / cleanup / blast / default
+  # 分工（按资源合理性）：
+  #   - worker-default / worker-ingest 消费非 BLAST 队列
+  #     （ingest,export,stats,cleanup,default），两个实例并行分摊负载；
+  #   - worker-blast 独占 blast 队列（CPU 密集，低并发隔离）。
+  worker-default:
+    image: ${WORKER_IMAGE_TAG:?WORKER_IMAGE_TAG is required (e.g. ghcr.io/soymutdb/worker:2026.08.07-1) - see deploy/.env.example}
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      redis-celery:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      <<: *app-env
+      SOYMUTDB_DATABASE_URL: postgresql+psycopg://soymutdb:${POSTGRES_PASSWORD:-soymutdb_dev_password}@postgres:5432/soymutdb
+    command: >
+      celery -A soymutdb_worker.main:celery_app worker --loglevel=info --queues=ingest,export,stats,cleanup,default --concurrency=${WORKER_DEFAULT_CONCURRENCY:-4} --max-tasks-per-child=100 --hostname=worker-default@%h
+    healthcheck:
+      test: [ "CMD-SHELL", "celery -A soymutdb_worker.main:celery_app inspect ping -d worker-default@$$HOSTNAME || exit 1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
+  worker-blast:
+    image: ${WORKER_IMAGE_TAG:?WORKER_IMAGE_TAG is required (e.g. ghcr.io/soymutdb/worker:2026.08.07-1) - see deploy/.env.example}
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      redis-celery:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      <<: *app-env
+      SOYMUTDB_DATABASE_URL: postgresql+psycopg://soymutdb:${POSTGRES_PASSWORD:-soymutdb_dev_password}@postgres:5432/soymutdb
+    command: >
+      celery -A soymutdb_worker.main:celery_app worker --loglevel=info --queues=blast --concurrency=${WORKER_BLAST_CONCURRENCY:-2} --max-tasks-per-child=50 --hostname=worker-blast@%h
+    healthcheck:
+      test: [ "CMD-SHELL", "celery -A soymutdb_worker.main:celery_app inspect ping -d worker-blast@$$HOSTNAME || exit 1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
+  worker-ingest:
+    image: ${WORKER_IMAGE_TAG:?WORKER_IMAGE_TAG is required (e.g. ghcr.io/soymutdb/worker:2026.08.07-1) - see deploy/.env.example}
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      redis-celery:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      <<: *app-env
+      SOYMUTDB_DATABASE_URL: postgresql+psycopg://soymutdb:${POSTGRES_PASSWORD:-soymutdb_dev_password}@postgres:5432/soymutdb
+    command: >
+      celery -A soymutdb_worker.main:celery_app worker --loglevel=info --queues=ingest,export,stats,cleanup,default --concurrency=${WORKER_INGESTION_CONCURRENCY:-2} --max-tasks-per-child=20 --hostname=worker-ingest@%h
+    healthcheck:
+      test: [ "CMD-SHELL", "celery -A soymutdb_worker.main:celery_app inspect ping -d worker-ingest@$$HOSTNAME || exit 1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
+  beat:
+    image: ${WORKER_IMAGE_TAG:?WORKER_IMAGE_TAG is required (e.g. ghcr.io/soymutdb/worker:2026.08.07-1) - see deploy/.env.example}
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.worker
+    depends_on:
+      redis-celery:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      SOYMUTDB_APP_ENV: prod
+      SOYMUTDB_CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-soymutdb_dev_password}@redis-celery:6379/0
+      SOYMUTDB_CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-soymutdb_dev_password}@redis-celery:6379/1
+    command: >
+      celery -A soymutdb_worker.main:celery_app beat --loglevel=info --schedule=/tmp/celerybeat-schedule
+    healthcheck:
+      test: [ "CMD-SHELL", "test -f /tmp/celerybeat-schedule || exit 1" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
+  # ------------------------------------------------------------------
+  # Reverse proxy（仅反代 API 与 MinIO；前端静态由 Cloudflare Pages 托管）
+  # infra/nginx 中 web/admin/jbrowse 上游定义保留（禁止改动），但对应
+  # 容器已移除；若直接解析会因主机不存在导致 nginx 启动失败（emerg），
+  # 故用 extra_hosts 将三个名字钉到 127.0.0.1——相关 location 将返回
+  # 502/504，直到 Cloudflare 域名层接管。
+  # ------------------------------------------------------------------
+  nginx:
+    image: nginx:1.27-alpine
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "8080:80"
+    volumes:
+      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./infra/nginx/conf.d:/etc/nginx/conf.d:ro
+    extra_hosts:
+      - "web:127.0.0.1"
+      - "admin:127.0.0.1"
+      - "jbrowse:127.0.0.1"
+    healthcheck:
+      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:80/health" ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  # ------------------------------------------------------------------
+  # Monitoring
+  # ------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v3.0.0
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infra/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - promdata:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=30d"
+      - "--web.enable-lifecycle"
+    healthcheck:
+      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy" ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafanadata:/var/lib/grafana
+      - ./infra/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+    healthcheck:
+      test: [ "CMD-SHELL", "wget --spider -q http://localhost:3000/api/health || exit 1" ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  chdata:
+  redisdata:
+  redis-celerydata:
+  miniodata:
+  promdata:
+  grafanadata:

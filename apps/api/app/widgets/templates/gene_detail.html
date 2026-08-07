@@ -1,0 +1,66 @@
+{# Gene detail widget – detailed view of a gene with structure, homologs, variants #}
+<div class="widget widget-gene-detail" data-widget="gene_detail">
+  <article class="gene-detail">
+    {% if gene %}
+    <header class="gene-header">
+      <h1 class="gene-name">{{ gene.id | default("Unknown") }}</h1>
+      {% if gene.name %}<span class="gene-symbol">{{ gene.name }}</span>{% endif %}
+    </header>
+
+    <section class="gene-info">
+      <table class="data-table">
+        <tbody>
+          {% if gene.chromosome %}
+          <tr><th>Chromosome</th><td>{{ gene.chromosome }}</td></tr>
+          {% endif %}
+          {% if gene.start %}
+          <tr><th>Start</th><td>{{ gene.start }}</td></tr>
+          {% endif %}
+          {% if gene.end %}
+          <tr><th>End</th><td>{{ gene.end }}</td></tr>
+          {% endif %}
+          {% if gene.strand %}
+          <tr><th>Strand</th><td>{{ gene.strand }}</td></tr>
+          {% endif %}
+          {% if gene.description %}
+          <tr><th>Description</th><td>{{ gene.description }}</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </section>
+
+    {% if gene.homologs %}
+    <section class="gene-homologs">
+      <h3>Homologs</h3>
+      <ul class="homolog-list">
+        {% for h in gene.homologs %}
+        <li>{{ h.species | default("") }}: <strong>{{ h.gene_id | default("") }}</strong> <span class="homolog-type">{{ h.type | default("") }}</span></li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+
+    {% if gene.variants is defined and gene.variants %}
+    <section class="gene-variants">
+      <h3>Variants ({{ gene.variants | length }})</h3>
+      <table class="data-table">
+        <thead><tr><th>ID</th><th>Position</th><th>Ref/Alt</th><th>Impact</th></tr></thead>
+        <tbody>
+          {% for v in gene.variants %}
+          <tr>
+            <td>{{ v.id | default("—") }}</td>
+            <td>{{ v.position | default("—") }}</td>
+            <td>{{ v.ref | default("") }} / {{ v.alt | default("") }}</td>
+            <td><span class="impact impact-{{ v.impact | default('modifier') | lower }}">{{ v.impact | default("—") }}</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+    {% endif %}
+
+    {% else %}
+    <p class="no-data">Gene information not available.</p>
+    {% endif %}
+  </article>
+</div>

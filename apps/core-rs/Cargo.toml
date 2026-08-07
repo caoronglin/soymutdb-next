@@ -1,0 +1,43 @@
+[package]
+name = "soymutdb-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "SoyMutDB Rust hotpath — internal Axum service for widget rendering, search aggregation, analytics"
+
+[[bin]]
+name = "soymutdb-core"
+path = "src/main.rs"
+
+[lib]
+name = "soymutdb_core"
+path = "src/lib.rs"
+
+[dependencies]
+axum = { version = "0.7", features = ["json"] }
+tokio = { version = "1", features = ["full"] }
+tera = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", features = ["json", "rustls-tls", "gzip"], default-features = false }
+redis = { version = "0.27", features = ["tokio-comp", "connection-manager", "serde-json"] }
+ammonia = "4"
+tower-http = { version = "0.6", features = ["trace", "compression-gzip", "compression-br"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+anyhow = "1"
+thiserror = "2"
+lru = "0.12"
+dashmap = "6"
+clap = { version = "4", features = ["derive"] }
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["async_tokio"] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true

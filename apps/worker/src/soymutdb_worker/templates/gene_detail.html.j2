@@ -1,0 +1,135 @@
+{% extends "base.html.j2" %}
+{% block title %}{{ gene.gene_id }} — {{ gene.gene_name or "No name" }} — SoyMutDB{% endblock %}
+{% block og_title %}{{ gene.gene_id }} — {{ gene.gene_name or "Gene" }} — SoyMutDB{% endblock %}
+{% block og_description %}Browse genomic information, expression data, homologs and variant summary for {{ gene.gene_id }} ({{ gene.biotype }}).{% endblock %}
+{% block meta_description %}SoyMutDB gene detail for {{ gene.gene_id }} — {{ gene.gene_name or "unknown" }}: location, expression, homologs and variants.{% endblock %}
+
+{% block content %}
+{# ── Gene Header Card ───────────────────────────────────────────── #}
+<div class="card">
+    <h2>{{ gene.gene_id }}</h2>
+    <table>
+        <tbody>
+            <tr><th>Name</th><td>{{ gene.gene_name or "—" }}</td></tr>
+            <tr><th>Biotype</th><td>{{ gene.biotype }}</td></tr>
+            <tr>
+                <th>Position</th>
+                <td class="position">
+                    {% if gene.chromosome %}
+                        {{ gene.chromosome }}:{{ gene.start | comma_or_none }}-{{ gene.end | comma_or_none }}
+                        ({{ gene.strand }})
+                    {% else %}—{% endif %}
+                </td>
+            </tr>
+            <tr>
+                <th>Description</th>
+                <td>{{ gene.description or "—" }}</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+{# ── Expression Summary ─────────────────────────────────────────── #}
+<div class="card">
+    <h2>Expression Data <span style="font-weight:400;color:#666;font-size:0.85rem;">(top {{ expressions | length }} of {{ total_expression_count }})</span></h2>
+    {% if expressions %}
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Library</th>
+                    <th>Tissue</th>
+                    <th>Treatment</th>
+                    <th>FPKM</th>
+                    <th>TPM</th>
+                    <th>Raw Count</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for exp in expressions %}
+                <tr>
+                    <td>{{ exp.library_name }}</td>
+                    <td>{{ exp.tissue | default("—") }}</td>
+                    <td>{{ exp.treatment | default("—") }}</td>
+                    <td>{{ exp.fpkm | fmt_number }}</td>
+                    <td>{{ exp.tpm | fmt_number }}</td>
+                    <td>{{ exp.raw_count | default("—") }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="empty-state">No expression data available for this gene.</p>
+    {% endif %}
+</div>
+
+{# ── Homologs ───────────────────────────────────────────────────── #}
+<div class="card">
+    <h2>Homologs</h2>
+    {% if homologs %}
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Species</th>
+                    <th>Gene ID</th>
+                    <th>Type</th>
+                    <th>Source</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for hom in homologs %}
+                <tr>
+                    <td><em>{{ hom.homolog_species }}</em></td>
+                    <td class="position">{{ hom.homolog_gene_id }}</td>
+                    <td>{{ hom.homolog_type }}</td>
+                    <td>{{ hom.source | default("—") }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="empty-state">No homolog data available for this gene.</p>
+    {% endif %}
+</div>
+
+{# ── Variant Summary ────────────────────────────────────────────── #}
+<div class="card">
+    <h2>Variant Summary</h2>
+    {% if variants %}
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Type</th>
+                    <th>Count</th>
+                    <th>High Impact</th>
+                    <th>Moderate Impact</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for v in variants %}
+                <tr>
+                    <td>{{ v.type }}</td>
+                    <td>{{ v.count }}</td>
+                    <td>{{ v.high_impact | default("—") }}</td>
+                    <td>{{ v.moderate_impact | default("—") }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="empty-state">No variant data included in this pre-generated page.</p>
+    {% endif %}
+</div>
+
+{# ── Footer Note ────────────────────────────────────────────────── #}
+<p class="note">
+    This page was pre-generated on <strong>{{ generated_at }}</strong>.
+    For real-time data, visit the
+    <a href="https://soymutdb.com/genes/{{ gene.gene_id }}">live gene detail page</a>.
+</p>
+{% endblock %}

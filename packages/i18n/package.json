@@ -1,0 +1,34 @@
+{
+  "name": "@soymutdb/i18n",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Internationalization (i18next) resources and config for SoyMutDB",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    },
+    "./locales/en/common.json": "./src/locales/en/common.json",
+    "./locales/zh/common.json": "./src/locales/zh/common.json"
+  },
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "files": ["src"],
+  "scripts": {
+    "lint": "eslint src --ext .ts",
+    "typecheck": "tsc --noEmit",
+    "clean": "rimraf dist .turbo"
+  },
+  "dependencies": {
+    "i18next": "^24.2.0",
+    "react-i18next": "^15.4.0"
+  },
+  "peerDependencies": {
+    "react": "^19.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.0",
+    "typescript": "^5.6.0"
+  }
+}

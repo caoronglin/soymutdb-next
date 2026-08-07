@@ -1,0 +1,191 @@
+"""OpenAPI contract and unified error-envelope tests.
+
+No database / testcontainers required:
+
+- OpenAPI export: expected paths, error schemas, security schemes, and the
+  422/500 responses attached to every operation.
+- Runtime envelope: 500 responses never leak internals, 422 responses carry
+  sanitised field-level errors, every error carries ``request_id``.
+"""
+
+from __future__ import annotations
+
+import pytest
+from httpx import ASGITransport, AsyncClient
+from starlette.middleware.base import BaseHTTPMiddleware
+
+from app.main import app
+
+EXPECTED_PATHS = [
+    "/api/v1/stats/homepage",
+    "/api/v1/stats/summary/impact",
+    "/api/v1/stats/summary/variant-types",
+    "/api/v1/stats/chromosome-density",
+    "/api/v1/stats/discovery-trend",
+    "/api/v1/stats/releases",
+    "/api/v1/stats/mutagens",
+    "/api/v1/admin/dashboard-stats",
+    "/api/v1/admin/dashboard-series",
+    "/api/v1/health/ready",
+]
+
+SCHEMA = app.openapi()
+
+
+class _RequestIdMiddleware(BaseHTTPMiddleware):
+    """Mirror of the production middleware so request_id is set in tests."""
+
+    async def dispatch(self, request, call_next):
+        import uuid
+
+        request.state.request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = request.state.request_id
+        return response
+
+
+@pytest.fixture(scope="module")
+def error_app():
+    """A minimal FastAPI app with the production exception handlers."""
+    from fastapi import FastAPI, HTTPException
+
+    from app.core.exceptions import (
+        SoyMutDBError,
+        http_exception_handler,
+        soy_mut_db_exception_handler,
+        unhandled_exception_handler,
+        validation_exception_handler,
+    )
+    from fastapi.exceptions import RequestValidationError
+
+    test_app = FastAPI()
+    test_app.add_middleware(_RequestIdMiddleware)
+    test_app.add_exception_handler(SoyMutDBError, soy_mut_db_exception_handler)
+    test_app.add_exception_handler(HTTPException, http_exception_handler)
+    test_app.add_exception_handler(
+        RequestValidationError, validation_exception_handler
+    )
+    test_app.add_exception_handler(Exception, unhandled_exception_handler)
+
+    @test_app.get("/boom")
+    async def boom() -> None:
+        raise RuntimeError(
+            "secret db password: hunter2 -- /var/lib/postgresql/data/pg_hba.conf"
+        )
+
+    @test_app.get("/not-found")
+    async def not_found() -> None:
+        raise HTTPException(status_code=404, detail="No such resource")
+
+    @test_app.get("/need-int")
+    async def need_int(x: int) -> dict[str, int]:
+        return {"x": x}
+
+    return test_app
+
+
+@pytest.fixture
+async def error_client(error_app):
+    transport = ASGITransport(app=error_app, raise_app_exceptions=False)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        yield client
+
+
+# ---------------------------------------------------------------------------
+# OpenAPI export contract
+# ---------------------------------------------------------------------------
+
+
+class TestOpenApiContract:
+    def test_expected_paths_present(self):
+        paths = set(SCHEMA["paths"])
+        for expected in EXPECTED_PATHS:
+            assert expected in paths, f"missing path {expected}"
+
+    def test_error_schemas_registered(self):
+        schemas = set(SCHEMA["components"]["schemas"])
+        for name in ("ErrorDetail", "ErrorResponse", "FieldError", "ValidationErrorResponse"):
+            assert name in schemas, f"missing schema {name}"
+
+    def test_security_schemes_documented(self):
+        schemes = SCHEMA["components"]["securitySchemes"]
+        assert "HTTPBearer" in schemes
+        assert "refreshCookie" in schemes
+        assert schemes["refreshCookie"]["in"] == "cookie"
+
+    def test_every_operation_documents_error_responses(self):
+        for path, path_item in SCHEMA["paths"].items():
+            for method, operation in path_item.items():
+                if method not in ("get", "post", "put", "patch", "delete"):
+                    continue
+                responses = operation.get("responses", {})
+                assert "422" in responses, f"{method.upper()} {path} missing 422"
+                assert "500" in responses, f"{method.upper()} {path} missing 500"
+
+    def test_stats_paths_are_public(self):
+        for path in ("/api/v1/stats/homepage", "/api/v1/stats/summary/impact"):
+            assert "security" not in SCHEMA["paths"][path]["get"] or not SCHEMA["paths"][path]["get"]["security"]
+
+    def test_admin_dashboard_requires_auth(self):
+        op = SCHEMA["paths"]["/api/v1/admin/dashboard-stats"]["get"]
+        security = op.get("security")
+        assert security, "dashboard-stats must require authentication"
+
+    def test_admin_dashboard_stats_uses_camel_case(self):
+        props = SCHEMA["components"]["schemas"]["AdminDashboardStats"]["properties"]
+        assert set(props) == {
+            "totalUsers",
+            "activeReleases",
+            "totalVariants",
+            "queryP95Ms",
+            "usersChange",
+            "releasesChange",
+            "variantsChange",
+            "queryP95Change",
+        }
+
+
+# ---------------------------------------------------------------------------
+# Runtime error envelope
+# ---------------------------------------------------------------------------
+
+
+class TestErrorEnvelope:
+    async def test_500_never_leaks_internals(self, error_client):
+        response = await error_client.get("/boom")
+        assert response.status_code == 500
+        body = response.json()
+        assert body["error"]["code"] == "internal_error"
+        assert body["status_code"] == 500
+        assert body["request_id"]
+        raw = response.text
+        assert "hunter2" not in raw
+        assert "RuntimeError" not in raw
+        assert "pg_hba.conf" not in raw
+        assert "Traceback" not in raw
+
+    async def test_422_has_field_level_errors(self, error_client):
+        response = await error_client.get("/need-int")
+        assert response.status_code == 422
+        body = response.json()
+        assert body["error"]["code"] == "validation_error"
+        assert body["request_id"]
+        errors = body["errors"]
+        assert isinstance(errors, list) and errors
+        error = errors[0]
+        # Only sanitised fields — no pydantic internals (loc tuples, ctx, url).
+        assert set(error.keys()) == {"field", "message", "type"}
+        assert error["field"] == "query.x"
+
+    async def test_http_exception_uses_envelope(self, error_client):
+        response = await error_client.get("/not-found")
+        assert response.status_code == 404
+        body = response.json()
+        assert body["error"]["code"] == "not_found"
+        assert body["error"]["message"] == "No such resource"
+        assert body["request_id"]
+
+    async def test_request_id_echoed_in_header(self, error_client):
+        response = await error_client.get("/not-found", headers={"X-Request-ID": "req-123"})
+        assert response.json()["request_id"] == "req-123"
+        assert response.headers["X-Request-ID"] == "req-123"

@@ -1,0 +1,307 @@
+/**
+ * Downloads route — data file catalog fetched from API, grouped by category.
+ *
+ * Features:
+ * - API-driven file list (no hardcoded data)
+ * - Grouped display by category (variants, genes, assemblies, tracks)
+ * - Download via pre-signed URLs
+ * - Preview button opening file-viewer-dialog
+ * - Size badges with "too large" indicator
+ */
+import { useState } from "react";
+import { createFileRoute } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
+import { Database, Dna, Layers, FileText, Download, Eye, FileCheck2 } from "lucide-react";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  Button,
+  Badge,
+  Skeleton,
+} from "@soymutdb/ui";
+import { FadeUp, Stagger } from "../components/route-motion";
+import { getDownloadFiles, getDownloadUrl } from "@soymutdb/api-client";
+import type { DownloadFile } from "@soymutdb/api-client";
+import { FileViewerDialog } from "../components/file-viewer/file-viewer-dialog";
+
+export const Route = createFileRoute("/downloads")({
+  component: DownloadsComponent,
+});
+
+const CATEGORY_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  variants: Dna,
+  genes: Layers,
+  assemblies: Database,
+  tracks: FileText,
+};
+
+const CATEGORY_LABEL_KEYS: Record<string, string> = {
+  variants: "downloads.variants",
+  genes: "downloads.genes",
+  assemblies: "downloads.assemblies",
+  tracks: "downloads.tracks",
+};
+
+const MAX_PREVIEW_SIZE = 10 * 1024 * 1024; // 10 MB
+
+function formatFileSize(bytes: number | null): string {
+  if (bytes === null || bytes === 0) return "N/A";
+  const units = ["B", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  const size = bytes / Math.pow(1024, i);
+  return `${size.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+}
+
+function formatDate(dateStr: string): string {
+  try {
+    return new Date(dateStr).toISOString().slice(0, 10);
+  } catch {
+    return dateStr;
+  }
+}
+
+function getFileFormat(name: string): string {
+  const parts = name.toLowerCase().split(".");
+  if (parts.length < 2) return "Unknown";
+  const last = parts[parts.length - 1];
+  if (last === "gz" || last === "bz2" || last === "zip") {
+    return parts.length > 2 ? parts[parts.length - 2].toUpperCase() : last.toUpperCase();
+  }
+  return last.toUpperCase();
+}
+
+function DownloadsComponent() {
+  const { t } = useTranslation();
+  const [previewFile, setPreviewFile] = useState<DownloadFile | null>(null);
+
+  const { data: files, isLoading, error } = useQuery({
+    queryKey: ["downloads"],
+    queryFn: () => getDownloadFiles(),
+    staleTime: 60_000,
+  });
+
+  const handleDownload = async (file: DownloadFile) => {
+    try {
+      const { url } = await getDownloadUrl(file.id);
+      window.open(url, "_blank");
+    } catch {
+      // Fallback: open file_url directly
+      window.open(file.file_url, "_blank");
+    }
+  };
+
+  const handlePreview = (file: DownloadFile) => {
+    setPreviewFile(file);
+  };
+
+  // Group files by category
+  const groups = groupByCategory(files ?? []);
+
+  return (
+    <div className="container-prose section-rhythm">
+      <FadeUp>
+        <p className="eyebrow">{t("downloads.title")}</p>
+        <h1 className="mt-2 font-display text-4xl font-semibold tracking-tight">
+          {t("downloads.subtitle")}
+        </h1>
+      </FadeUp>
+
+      {isLoading && (
+        <div className="mt-10 space-y-4">
+          <Skeleton className="h-32 w-full rounded-xl" />
+          <Skeleton className="h-32 w-full rounded-xl" />
+          <Skeleton className="h-32 w-full rounded-xl" />
+        </div>
+      )}
+
+      {error && (
+        <div className="mt-10 rounded-md border border-destructive/30 bg-destructive/5 p-6 text-center text-sm text-destructive">
+          {t("common.errorDescription")}
+        </div>
+      )}
+
+      {!isLoading && !error && groups.length === 0 && (
+        <div className="mt-10 text-center text-sm text-muted-foreground">
+          {t("common.noData")}
+        </div>
+      )}
+
+      <Stagger className="mt-10 grid gap-4">
+        {groups.map((group) => {
+          const Icon = group.icon;
+          return (
+            <Card key={group.id}>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <span className="flex size-10 items-center justify-center rounded-lg bg-accent text-accent-foreground">
+                    <Icon className="size-5" aria-hidden />
+                  </span>
+                  {t(group.titleKey)}
+                </CardTitle>
+                <CardDescription>
+                  {group.files.length} {t("common.items")}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b text-left text-xs text-muted-foreground">
+                        <th className="py-2 pr-4 font-medium">{t("downloads.fileName")}</th>
+                        <th className="py-2 pr-4 font-medium">{t("downloads.format")}</th>
+                        <th className="py-2 pr-4 font-medium">{t("downloads.fileSize")}</th>
+                        <th className="py-2 pr-4 font-medium">{t("downloads.lastUpdated")}</th>
+                        <th className="py-2 font-medium text-right">{t("common.actions")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {group.files.map((file) => {
+                        const format = getFileFormat(file.name);
+                        const isTooLarge = file.file_size !== null && file.file_size > MAX_PREVIEW_SIZE;
+                        return (
+                          <tr
+                            key={file.id}
+                            className="border-b last:border-0 hover:bg-accent/30"
+                          >
+                            <td className="py-3 pr-4 font-mono text-xs">{file.name}</td>
+                            <td className="py-3 pr-4">
+                              <Badge variant="outline" className="font-mono text-[10px]">
+                                {format}
+                              </Badge>
+                            </td>
+                            <td className="py-3 pr-4 font-mono text-xs tabular-nums">
+                              {file.file_size !== null && file.file_size > 1024 * 1024 * 1024 ? (
+                                <span className="text-warning-foreground">
+                                  {formatFileSize(file.file_size)}
+                                </span>
+                              ) : (
+                                formatFileSize(file.file_size)
+                              )}
+                            </td>
+                            <td className="py-3 pr-4 font-mono text-xs">
+                              {formatDate(file.created_at)}
+                            </td>
+                            <td className="py-3 text-right">
+                              <div className="flex items-center justify-end gap-1">
+                                {isTooLarge ? (
+                                  <Badge variant="secondary" className="text-[10px]">
+                                    {t("downloads.too_large")}
+                                  </Badge>
+                                ) : (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-8 px-2 text-xs"
+                                    onClick={() => handlePreview(file)}
+                                  >
+                                    <Eye className="size-3.5" aria-hidden />
+                                    <span className="hidden sm:inline">{t("downloads.preview")}</span>
+                                  </Button>
+                                )}
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  aria-label={t("downloads.download")}
+                                  onClick={() => handleDownload(file)}
+                                >
+                                  <Download className="size-4" aria-hidden />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </Stagger>
+
+      <Card className="mt-6 border-dashed">
+        <CardContent className="flex items-center gap-4 p-6">
+          <div className="flex size-10 items-center justify-center rounded-lg bg-accent text-accent-foreground">
+            <FileCheck2 className="size-5" aria-hidden />
+          </div>
+          <div className="flex-1">
+            <p className="font-medium">Need a custom export?</p>
+            <p className="text-sm text-muted-foreground">
+              Submit an async export job for filtered variant sets up to 10M records.
+            </p>
+          </div>
+          <Button variant="outline">{t("common.submit")}</Button>
+        </CardContent>
+      </Card>
+
+      {previewFile && (
+        <FileViewerDialog
+          file={{
+            name: previewFile.name,
+            url: previewFile.file_url,
+            size: previewFile.file_size ?? 0,
+            format: getFileFormat(previewFile.name),
+          }}
+          open={Boolean(previewFile)}
+          onOpenChange={(open) => {
+            if (!open) setPreviewFile(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+interface DownloadGroup {
+  id: string;
+  titleKey: string;
+  icon: React.ComponentType<{ className?: string }>;
+  files: DownloadFile[];
+}
+
+function groupByCategory(files: DownloadFile[]): DownloadGroup[] {
+  const grouped = new Map<string, DownloadFile[]>();
+
+  for (const file of files) {
+    const cat = file.category ?? "other";
+    if (!grouped.has(cat)) {
+      grouped.set(cat, []);
+    }
+    grouped.get(cat)!.push(file);
+  }
+
+  // Order: variants, genes, assemblies, tracks, then others
+  const order = ["variants", "genes", "assemblies", "tracks"];
+  const ordered: DownloadGroup[] = [];
+
+  for (const cat of order) {
+    const catFiles = grouped.get(cat);
+    if (catFiles) {
+      ordered.push({
+        id: cat,
+        titleKey: CATEGORY_LABEL_KEYS[cat] ?? `downloads.${cat}`,
+        icon: CATEGORY_ICONS[cat] ?? FileText,
+        files: catFiles,
+      });
+      grouped.delete(cat);
+    }
+  }
+
+  // Remaining categories
+  for (const [cat, catFiles] of grouped) {
+    ordered.push({
+      id: cat,
+      titleKey: `downloads.${cat}`,
+      icon: FileText,
+      files: catFiles,
+    });
+  }
+
+  return ordered;
+}
