@@ -23,7 +23,7 @@ const buttonVariants = cva(
           "bg-gradient-to-br from-[var(--primary-gradient-start)] to-[var(--primary-gradient-end)] text-primary-foreground shadow-md hover:shadow-[0_0_0_1px_var(--primary-glow),0_12px_32px_-8px_var(--primary-glow)] hover:-translate-y-1 hover:scale-[1.02]",
       },
       size: {
-        default: "h-9 px-4 py-2",
+        default: "h-11 md:h-9 px-4 py-2",
         sm: "h-8 rounded-md px-3 text-xs",
         lg: "h-11 rounded-lg px-6 text-base",
         xl: "h-12 rounded-xl px-8 text-base",
