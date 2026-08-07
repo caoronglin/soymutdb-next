@@ -29,9 +29,9 @@
   },
   "home": {
     "newRelease": "新版本可用",
-    "title": "大豆突变体",
+    "title": "多物种突变体",
     "titleHighlight": "数据库",
-    "subtitle": "SoyMutDB 是一个综合性大豆突变体数据库，提供海量变异数据、基因信息、突变体资源和基因组浏览器，推动大豆功能基因组学研究。",
+    "subtitle": "SoyMutDB 是一个综合性多物种突变体数据库（当前以大豆为首个/默认物种），提供海量变异数据、基因信息、突变体资源和基因组浏览器，推动植物功能基因组学研究。",
     "searchPlaceholder": "搜索基因、变异、突变系...",
     "search": "搜索",
     "searchExamples": "例如：Glyma.01G001000、Gm01:12345、EMS 突变体",
@@ -44,7 +44,7 @@
     "blastSearch": "BLAST 搜索",
     "downloads": "下载数据",
     "statsTitle": "数据统计",
-    "statsSubtitle": "全面的大豆基因组变异资源",
+    "statsSubtitle": "全面的多物种基因组变异资源",
     "totalVariants": "变异总数",
     "genes": "基因数",
     "mutantLines": "突变系数",
@@ -53,7 +53,7 @@
     "indels": "Indel 数",
     "svs": "结构变异数",
     "featuresTitle": "核心功能",
-    "featuresSubtitle": "为大豆研究提供全面的生物信息学工具",
+    "featuresSubtitle": "为多物种植物研究提供全面的生物信息学工具",
     "featureGenomeBrowser": "基因组浏览器",
     "featureGenomeBrowserDesc": "基于 JBrowse 2 的交互式基因组浏览器，支持多轨道可视化和深链接。",
     "featureVariantSearch": "变异搜索",
@@ -87,7 +87,7 @@
   },
   "genes": {
     "title": "基因搜索",
-    "subtitle": "搜索和浏览大豆基因信息",
+    "subtitle": "跨物种搜索和浏览基因信息（默认大豆）",
     "searchPlaceholder": "搜索基因名称、ID 或符号...",
     "search": "搜索",
     "filters": "筛选",
@@ -240,7 +240,7 @@
   },
   "mutantLines": {
     "title": "突变系",
-    "subtitle": "浏览和搜索大豆突变体资源",
+    "subtitle": "浏览和搜索突变体资源（当前默认物种为大豆）",
     "searchPlaceholder": "搜索突变系名称或 ID...",
     "search": "搜索",
     "filters": "筛选",
@@ -400,7 +400,7 @@
   "loginPage": {
     "title": "登录",
     "subtitle": "访问您的 SoyMutDB 账户",
-    "brandTitle": "大豆突变体数据库",
+    "brandTitle": "多物种突变体数据库",
     "brandTagline": "为功能基因组学研究而生的综合性数据资源",
     "brandBullets": {
       "variants": "海量变异与基因数据",
@@ -471,7 +471,7 @@
   },
   "seeds": {
     "title": "种子资源",
-    "subtitle": "浏览和申请大豆突变体种子",
+    "subtitle": "浏览和申请突变体种子（当前默认物种为大豆）",
     "search": "搜索种子",
     "searchPlaceholder": "搜索系名称或 ID...",
     "filters": "筛选",
@@ -558,7 +558,7 @@
     "readMore": "阅读更多"
   },
   "footer": {
-    "description": "用于功能基因组学研究的综合性大豆突变体数据库",
+    "description": "用于功能基因组学研究的综合性多物种突变体数据库",
     "resources": "资源",
     "documentation": "文档",
     "help": "帮助中心",
@@ -575,11 +575,11 @@
     "privacy": "隐私政策",
     "terms": "服务条款",
     "copyright": "© {{year}} SoyMutDB. 保留所有权利。",
-    "builtWithCare": "为大豆研究而生"
+    "builtWithCare": "为多物种植物研究而生"
   },
   "analytics": {
     "title": "可视化分析",
-    "subtitle": "深入探索大豆基因组变异数据",
+    "subtitle": "深入探索跨物种基因组变异数据",
     "chromosomeDensity": "染色体密度",
     "variantTypes": "变异类型分布",
     "impactSummary": "影响摘要",

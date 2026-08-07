@@ -683,7 +683,10 @@ export interface paths {
         };
         /**
          * Get Blast Results
-         * @description Retrieve BLAST results for a completed job.
+         * @description Retrieve BLAST results for a job (status-aware envelope).
+         *
+         *     Returns ``hits=None`` for pending/running/failed jobs; only completed
+         *     jobs carry a hit list (empty means a genuine zero-hit result).
          */
         get: operations["get_blast_results_api_v1_blast_jobs__job_id__results_get"];
         put?: never;
@@ -1864,9 +1867,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List curated soybean SRA samples
-         * @description Return a small curated list of soybean (Glycine max) SRA runs for demo /
-         *     quick-load purposes.  This is static data bundled with the backend.
+         * List curated SRA samples (default species: soybean)
+         * @description Return a small curated list of SRA runs for the current default species
+         *     (soybean, Glycine max) for demo / quick-load purposes.  This is static data
+         *     bundled with the backend.
          */
         get: operations["list_soybean_samples_api_v1_sra_samples_get"];
         put?: never;
@@ -2164,57 +2168,45 @@ export interface components {
         };
         /** BlastHit */
         BlastHit: {
-            /** Hit Num */
-            hit_num: number;
-            /** Hit Id */
-            hit_id: string;
-            /**
-             * Hit Def
-             * @default
-             */
-            hit_def: string;
-            /** Hit Accession */
-            hit_accession: string;
-            /** Hit Len */
-            hit_len: number;
-            /** Hsps */
-            hsps?: components["schemas"]["BlastHsp"][];
-            /** Best Evalue */
-            best_evalue?: number | null;
-            /** Best Bit Score */
-            best_bit_score?: number | null;
-            /** Gene Id */
-            gene_id?: string | null;
-            /** Chromosome */
-            chromosome?: string | null;
-        };
-        /** BlastHsp */
-        BlastHsp: {
             /** Hsp Num */
             hsp_num: number;
-            /** Bit Score */
-            bit_score: number;
-            /** Evalue */
-            evalue: number;
-            /** Identity */
-            identity: number;
+            /** Subject Id */
+            subject_id: string;
             /**
-             * Gaps
-             * @default 0
+             * Subject Title
+             * @default
              */
-            gaps: number;
-            /** Align Len */
-            align_len: number;
-            /** Query From */
-            query_from: number;
-            /** Query To */
-            query_to: number;
-            /** Hit From */
-            hit_from: number;
-            /** Hit To */
-            hit_to: number;
+            subject_title: string;
             /** Percent Identity */
             percent_identity: number;
+            /** Alignment Length */
+            alignment_length: number;
+            /** Mismatches */
+            mismatches: number;
+            /** Gap Opens */
+            gap_opens: number;
+            /** Query Start */
+            query_start: number;
+            /** Query End */
+            query_end: number;
+            /** Subject Start */
+            subject_start: number;
+            /** Subject End */
+            subject_end: number;
+            /** Evalue */
+            evalue: number;
+            /** Bit Score */
+            bit_score: number;
+            /**
+             * Query Strand
+             * @default plus
+             */
+            query_strand: string;
+            /**
+             * Subject Strand
+             * @default plus
+             */
+            subject_strand: string;
         };
         /** BlastJobResponse */
         BlastJobResponse: {
@@ -2242,7 +2234,7 @@ export interface components {
          * BlastJobStatus
          * @enum {string}
          */
-        BlastJobStatus: "pending" | "running" | "completed" | "failed" | "expired";
+        BlastJobStatus: "pending" | "running" | "completed" | "failed" | "cancelled" | "expired";
         /** BlastParameters */
         BlastParameters: {
             /**
@@ -2281,33 +2273,39 @@ export interface components {
          * @enum {string}
          */
         BlastProgram: "blastn" | "blastp" | "blastx" | "tblastn" | "tblastx";
-        /** BlastResultResponse */
+        /**
+         * BlastResultResponse
+         * @description Status-aware result envelope.
+         *
+         *     ``status`` disambiguates states: for pending/running/failed/cancelled jobs
+         *     ``hits`` is ``None`` (never a placeholder); for completed jobs it holds
+         *     the real hit list (possibly empty when BLAST genuinely found no hits).
+         */
         BlastResultResponse: {
             /** Job Id */
             job_id: string;
+            status: components["schemas"]["BlastJobStatus"];
             program: components["schemas"]["BlastProgram"];
             /** Database Id */
             database_id: number;
             /** Query Id */
-            query_id: string;
+            query_id?: string | null;
             /** Query Len */
-            query_len: number;
+            query_len?: number | null;
             /** Hits */
-            hits?: components["schemas"]["BlastHit"][];
-            /**
-             * Total Hits
-             * @default 0
-             */
-            total_hits: number;
+            hits?: components["schemas"]["BlastHit"][] | null;
+            /** Total Hits */
+            total_hits?: number | null;
             /** Search Stats */
             search_stats?: {
                 [key: string]: unknown;
-            };
-            /**
-             * Completed At
-             * Format: date-time
-             */
-            completed_at: string;
+            } | null;
+            /** Error Message */
+            error_message?: string | null;
+            /** Completed At */
+            completed_at?: string | null;
+            /** Download Url */
+            download_url?: string | null;
         };
         /** BlastSubmitRequest */
         BlastSubmitRequest: {
@@ -5231,7 +5229,10 @@ export interface operations {
     };
     get_blast_results_api_v1_blast_jobs__job_id__results_get: {
         parameters: {
-            query?: never;
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
             header?: never;
             path: {
                 job_id: string;

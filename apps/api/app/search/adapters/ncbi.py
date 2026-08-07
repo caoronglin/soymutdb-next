@@ -1,6 +1,7 @@
 """NCBI E-utilities adapter (ESearch + ESummary).
 
-Targets the Gene database (with ``glycine max`` OR taxid 3847 scoped) plus
+Targets the Gene database (currently scoped to the default species
+``glycine max`` OR taxid 3847 — extendable to further organisms) plus
 PubMed when the query looks like a literature term.  Kept conservative on
 rate (3 req/s without an API key is the documented limit).
 """
@@ -27,7 +28,7 @@ class NCBIAdapter(BaseAdapter):
 
     async def do_search(self, client: httpx.AsyncClient, query: str, limit: int) -> list[SearchHit]:
         hits: list[SearchHit] = []
-        # 1. Gene search (soybean-scoped).
+        # 1. Gene search (default species: soybean).
         gene_term = f"({query}) AND (glycine max[organism] OR txid3847[Organism:noexp])"
         gene_hits = await self._search_gene(client, gene_term, limit=min(limit, 6))
         hits.extend(gene_hits)

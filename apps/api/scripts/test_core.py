@@ -47,7 +47,7 @@ def main():
     print("5. Error fragment OK:", len(err_html), "bytes")
 
     # 6. Hero render
-    html = engine.render('hero.html', {'title': 'SoyMutDB', 'subtitle': 'Soybean Mutant Database'}, widget_name='hero')
+    html = engine.render('hero.html', {'title': 'SoyMutDB', 'subtitle': 'Multi-Species Mutant Database'}, widget_name='hero')
     assert 'SoyMutDB' in html
     assert '<script>' not in html
     print("6. Hero render OK:", len(html), "bytes")

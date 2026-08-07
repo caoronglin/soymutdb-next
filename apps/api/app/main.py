@@ -45,7 +45,7 @@ settings = get_settings()
 # ---------------------------------------------------------------------------
 
 OPENAPI_DESCRIPTION = """
-SoyMutDB API — high-performance soybean genomic variant platform.
+SoyMutDB API — high-performance multi-species genomic variant platform (soybean currently the default species).
 
 ## Error contract
 

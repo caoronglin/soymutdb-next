@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "soymutdb-api"
 version = "2.0.0"
-description = "SoyMutDB REST API — FastAPI application for soybean mutation database"
+description = "SoyMutDB REST API — FastAPI application for a multi-species mutation database (soybean as the first/default species)"
 requires-python = ">=3.14"
 license = { text = "MIT" }
 dependencies = [

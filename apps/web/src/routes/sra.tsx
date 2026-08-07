@@ -1,6 +1,6 @@
 /**
  * SRA Run Browser — query NCBI Sequence Read Archive metadata by
- * accession number, visualise run stats, browse curated soybean runs.
+ * accession number, visualise run stats, browse curated runs for the default species (soybean).
  */
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
@@ -261,16 +261,16 @@ function SraBrowser() {
             </Card>
           </FadeUp>
 
-          {/* Curated soybean runs */}
+          {/* Curated runs — current default species (soybean) */}
           <FadeUp delay={0.2}>
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm flex items-center gap-2">
                   <Dna className="size-4" />
-                  Soybean SRA Runs
+                  Curated SRA Runs
                 </CardTitle>
                 <CardDescription className="text-xs">
-                  Curated Glycine max sequencing runs
+                  Glycine max (soybean) sequencing runs — current default species
                 </CardDescription>
               </CardHeader>
               <CardContent className="pt-0">

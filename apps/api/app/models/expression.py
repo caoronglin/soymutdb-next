@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
 
 class TissueType(str, enum.Enum):
-    """Soybean tissue types for expression data."""
+    """Tissue types for expression data (currently modelled on soybean)."""
 
     LEAF = "leaf"
     ROOT = "root"

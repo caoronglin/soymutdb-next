@@ -2,7 +2,7 @@
  * Embedded comparison dataset for the /compare page.
  *
  * A small curated subset of well-characterised soybean mutant variants
- * that works offline and during SSG. The live API is preferred when
+ * (current default species) that works offline and during SSG. The live API is preferred when
  * available; this file is the graceful-degradation fallback.
  */
 

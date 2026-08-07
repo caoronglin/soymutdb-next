@@ -29,9 +29,9 @@
   },
   "home": {
     "newRelease": "New Release Available",
-    "title": "Soybean Mutant",
+    "title": "Multi-Species Mutant",
     "titleHighlight": "Database",
-    "subtitle": "SoyMutDB is a comprehensive soybean mutant database providing massive variant data, gene information, mutant resources, and a genome browser to advance soybean functional genomics research.",
+    "subtitle": "SoyMutDB is a comprehensive multi-species mutant database (soybean as the first/default species) providing massive variant data, gene information, mutant resources, and a genome browser to advance plant functional genomics research.",
     "searchPlaceholder": "Search genes, variants, mutant lines...",
     "search": "Search",
     "searchExamples": "e.g., Glyma.01G001000, Gm01:12345, EMS mutant",
@@ -44,7 +44,7 @@
     "blastSearch": "BLAST Search",
     "downloads": "Downloads",
     "statsTitle": "Data Statistics",
-    "statsSubtitle": "Comprehensive soybean genome variant resources",
+    "statsSubtitle": "Comprehensive multi-species genome variant resources",
     "totalVariants": "Total Variants",
     "genes": "Genes",
     "mutantLines": "Mutant Lines",
@@ -53,7 +53,7 @@
     "indels": "Indels",
     "svs": "SVs",
     "featuresTitle": "Core Features",
-    "featuresSubtitle": "Comprehensive bioinformatics tools for soybean research",
+    "featuresSubtitle": "Comprehensive bioinformatics tools for multi-species plant research",
     "featureGenomeBrowser": "Genome Browser",
     "featureGenomeBrowserDesc": "Interactive genome browser based on JBrowse 2 with multi-track visualization and deep linking.",
     "featureVariantSearch": "Variant Search",
@@ -87,7 +87,7 @@
   },
   "genes": {
     "title": "Gene Search",
-    "subtitle": "Search and explore soybean gene information",
+    "subtitle": "Search and explore gene information across species (soybean by default)",
     "searchPlaceholder": "Search gene name, ID or symbol...",
     "search": "Search",
     "filters": "Filters",
@@ -240,7 +240,7 @@
   },
   "mutantLines": {
     "title": "Mutant Lines",
-    "subtitle": "Browse and search soybean mutant resources",
+    "subtitle": "Browse and search mutant resources (soybean as the current default species)",
     "searchPlaceholder": "Search mutant line name or ID...",
     "search": "Search",
     "filters": "Filters",
@@ -400,7 +400,7 @@
   "loginPage": {
     "title": "Sign In",
     "subtitle": "Access your SoyMutDB account",
-    "brandTitle": "Soybean Mutant Database",
+    "brandTitle": "Multi-Species Mutant Database",
     "brandTagline": "A comprehensive data resource for functional genomics research",
     "brandBullets": {
       "variants": "Massive variant & gene data",
@@ -471,7 +471,7 @@
   },
   "seeds": {
     "title": "Seed Resources",
-    "subtitle": "Browse and request soybean mutant seeds",
+    "subtitle": "Browse and request mutant seeds (soybean as the current default species)",
     "search": "Search Seeds",
     "searchPlaceholder": "Search line name or ID...",
     "filters": "Filters",
@@ -558,7 +558,7 @@
     "readMore": "Read More"
   },
   "footer": {
-    "description": "Comprehensive soybean mutant database for functional genomics research",
+    "description": "Comprehensive multi-species mutant database for functional genomics research",
     "resources": "Resources",
     "documentation": "Documentation",
     "help": "Help Center",
@@ -575,11 +575,11 @@
     "privacy": "Privacy Policy",
     "terms": "Terms of Service",
     "copyright": "© {{year}} SoyMutDB. All rights reserved.",
-    "builtWithCare": "Built for soybean research"
+    "builtWithCare": "Built for multi-species plant research"
   },
   "analytics": {
     "title": "Visual Analytics",
-    "subtitle": "Deep exploration of soybean genome variant data",
+    "subtitle": "Deep exploration of genome variant data across species",
     "chromosomeDensity": "Chromosome Density",
     "variantTypes": "Variant Type Distribution",
     "impactSummary": "Impact Summary",

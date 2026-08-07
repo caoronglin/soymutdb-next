@@ -18,7 +18,7 @@ const ARTICLES: Record<string, { title: string; date: string; category: string; 
     date: "2025-06-15",
     category: "Release",
     body: [
-      "We are excited to announce SoyMutDB v2.0, a major update to the soybean mutant database. This release brings 32.6 million variants across 1,247 mutant lines, a redesigned genome browser based on JBrowse 2, and a new visual analytics center.",
+      "We are excited to announce SoyMutDB v2.0, a major update to the multi-species mutant database (soybean as the current default species). This release brings 32.6 million variants across 1,247 mutant lines, a redesigned genome browser based on JBrowse 2, and a new visual analytics center.",
       "The v2.0 release introduces a new API with cursor-based pagination for efficient traversal of large variant sets, BLAST sequence homology search, and an integrated seed request system for germplasm distribution.",
       "All data is available for download in VCF, GFF3, and FASTA formats. The genome browser supports deep linking from gene and variant detail pages, enabling seamless integration into research workflows.",
     ],

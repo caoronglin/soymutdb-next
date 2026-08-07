@@ -166,7 +166,7 @@ async function generate() {
     // Index page
     const indexHtml = renderBaseTemplate({
         title: "Sample Variants — SoyMutDB",
-        description: `Browse ${variants.length} pre-rendered soybean variant pages.`,
+        description: `Browse ${variants.length} pre-rendered soybean variant pages (current default species).`,
         widgetsHtml: renderSampleIndex(variants),
         canonical: `${SITE_URL}/samples/`,
         assets,

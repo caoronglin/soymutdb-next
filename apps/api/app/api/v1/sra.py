@@ -151,10 +151,11 @@ async def get_sra_run(accession: str) -> dict[str, Any]:
     }
 
 
-@router.get("/samples", summary="List curated soybean SRA samples")
+@router.get("/samples", summary="List curated SRA samples (default species: soybean)")
 async def list_soybean_samples() -> dict[str, Any]:
-    """Return a small curated list of soybean (Glycine max) SRA runs for demo /
-    quick-load purposes.  This is static data bundled with the backend."""
+    """Return a small curated list of SRA runs for the current default species
+    (soybean, Glycine max) for demo / quick-load purposes.  This is static data
+    bundled with the backend."""
     enriched = []
     for s in SOYBEAN_SRA_SAMPLES:
         r = dict(s)

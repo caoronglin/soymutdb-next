@@ -45,7 +45,7 @@ SRA_SRR30334525: dict[str, str] = {
     "sra_url": "https://trace.ncbi.nlm.nih.gov/Traces/sra?run=SRR30334525",
 }
 
-# Soybean (Glycine max) exemplar SRA entries for demo / seed data.
+# Soybean (Glycine max) exemplar SRA entries — current default species — for demo / seed data.
 SOYBEAN_SRA_SAMPLES: list[dict[str, str]] = [
     {
         "Run": "SRR29196978",

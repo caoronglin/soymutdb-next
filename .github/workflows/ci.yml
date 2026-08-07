@@ -1,0 +1,232 @@
+# =============================================================================
+# SoyMutDB Next — CI/CD (build & verify pipeline)
+#
+# Trigger  : push to main + all pull requests
+# Jobs     :
+#   frontend    — pnpm install + turbo build (hard gate), contract check
+#                 (hard gate), lint/typecheck (non-blocking, baseline failing),
+#                 upload dist artifacts for deployment
+#   api-tests   — Python 3.14 venv + pytest (hard gate, runs testcontainers
+#                 integration tests on the runner's docker daemon), ruff
+#                 (non-blocking, baseline has 303 findings)
+#   docker-build— build api / worker / jbrowse images (hard gates) + optional
+#                 trivy vulnerability scan (non-blocking) + api image smoke test
+#
+# Baseline facts (recorded 2026-08-07, git 3cf4718):
+#   * pnpm turbo run build → 3/3 apps green   → hard gate
+#   * check:contract       → green (needs apps/api/.venv + node_modules)
+#   * lint  (admin#lint)   → failing        → continue-on-error
+#   * typecheck (api-client#typecheck) → failing → continue-on-error
+#   * test  (ui#test)      → failing        → continue-on-error (not run here)
+#   * ruff check app       → 303 findings   → continue-on-error
+#   * tests/a0 (rl_ subsystem) fails even at collection → always excluded
+#
+# NOTE: the repo's .npmrc points at npmmirror; CI explicitly overrides the
+# registry to https://registry.npmjs.org/ (official) before installing.
+# =============================================================================
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  # actions: write needed for actions/upload-artifact v4 (dist bundles, SARIF)
+  actions: write
+
+env:
+  TURBO_TELEMETRY_DISABLED: "1"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Job 1 — Frontend: install, build, contract check, artifacts
+  # ---------------------------------------------------------------------------
+  frontend:
+    name: Frontend build + contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install pnpm 10
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          # Cache the pnpm store; key is derived from pnpm-lock.yaml.
+          cache: pnpm
+
+      # .npmrc at repo root forces npmmirror — override to the official registry.
+      - name: Use official npm registry
+        run: pnpm config set registry https://registry.npmjs.org/
+
+      - name: Install dependencies (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      - name: Build all apps (hard gate)
+        run: pnpm turbo run build
+
+      # --- non-blocking quality gates (baseline failing, see header) ----------
+      - name: Lint (baseline failing — non-blocking)
+        if: always()
+        continue-on-error: true
+        run: pnpm turbo run lint
+
+      - name: Typecheck (baseline failing — non-blocking)
+        if: always()
+        continue-on-error: true
+        run: pnpm turbo run typecheck
+
+      # --- OpenAPI contract check -------------------------------------------
+      # check-contract.sh exports the backend OpenAPI document using
+      # apps/api/.venv/bin/python, so the venv must exist before running it.
+      - name: Setup Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Prepare API venv (for OpenAPI export)
+        run: |
+          python -m venv apps/api/.venv
+          apps/api/.venv/bin/pip install --quiet -e apps/api
+
+      - name: API client contract check (hard gate)
+        run: pnpm --filter @soymutdb/api-client check:contract
+
+      # --- dist artifacts for deployment ------------------------------------
+      - name: Upload web dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-web
+          path: apps/web/dist
+          if-no-files-found: error
+
+      - name: Upload admin dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-admin
+          path: apps/admin/dist
+          if-no-files-found: error
+
+      - name: Upload jbrowse dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-jbrowse
+          path: apps/jbrowse/dist
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # Job 2 — API: Python venv + pytest (testcontainers on runner docker)
+  # ---------------------------------------------------------------------------
+  api-tests:
+    name: API tests (pytest + testcontainers)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: apps/api/pyproject.toml
+
+      - name: Install API dependencies (official PyPI)
+        run: |
+          python -m venv apps/api/.venv
+          apps/api/.venv/bin/pip install --upgrade pip
+          apps/api/.venv/bin/pip install -e "apps/api[dev]"
+
+      - name: Ruff (baseline failing — non-blocking)
+        continue-on-error: true
+        working-directory: apps/api
+        run: .venv/bin/ruff check app
+
+      # testcontainers-postgres boots a real postgres:16-alpine container on the
+      # runner's docker daemon (ubuntu-latest ships docker). tests/a0 is a
+      # known-broken rl_ subsystem that fails at collection — always excluded.
+      - name: Pytest (hard gate, excludes tests/a0)
+        working-directory: apps/api
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: .venv/bin/python -m pytest tests -q --ignore=tests/a0
+
+  # ---------------------------------------------------------------------------
+  # Job 3 — Docker images: api / worker / jbrowse
+  # ---------------------------------------------------------------------------
+  # Independent from Job 1: every Dockerfile is self-contained (the jbrowse
+  # image runs its own pnpm install + build inside the container). Runs in
+  # parallel with the other jobs.
+  docker-build:
+    name: Docker image build
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      # Dockerfile.api / Dockerfile.worker COPY a `uv.lock*` glob that matches
+      # nothing (no uv.lock is committed). Docker COPY fails when a glob has no
+      # match, so provide an empty placeholder before building. Harmless once a
+      # real uv.lock exists (`uv pip install` never reads it).
+      - name: Ensure uv.lock placeholders exist (Dockerfile COPY glob)
+        run: touch apps/api/uv.lock apps/worker/uv.lock
+
+      - name: Build API image (hard gate)
+        run: docker build -f infra/docker/Dockerfile.api -t soymutdb-api:ci .
+
+      - name: Build Worker image (hard gate)
+        run: docker build -f infra/docker/Dockerfile.worker -t soymutdb-worker:ci .
+
+      # NOTE: the jbrowse Dockerfile copies the repo .npmrc into the build
+      # context, so its internal pnpm install uses npmmirror (existing repo
+      # behavior, not changed here). Image build is self-contained.
+      - name: Build JBrowse image (hard gate)
+        run: docker build -f apps/jbrowse/Dockerfile -t soymutdb-jbrowse:ci .
+
+      # Smoke test: confirm the API runtime image actually has its deps.
+      # Non-blocking: the Dockerfile never sets VIRTUAL_ENV, so `uv pip install`
+      # may fall back to the system Python and leave /opt/venv empty — a
+      # pre-existing repo issue. The step reports it without failing CI.
+      - name: Smoke test API image (non-blocking)
+        continue-on-error: true
+        run: docker run --rm soymutdb-api:ci python -c "import fastapi, sqlalchemy, app; print('API imports OK')"
+
+      # --- optional security scan (non-blocking) -----------------------------
+      - name: Trivy scan API image (non-blocking)
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: soymutdb-api:ci
+          format: sarif
+          output: trivy-api.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+
+      - name: Upload Trivy SARIF report
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-sarif
+          path: trivy-api.sarif
+          if-no-files-found: ignore

@@ -1,6 +1,30 @@
 @import "tailwindcss";
 @import "@soymutdb/ui/styles.css";
 
+/* HarmonyOS Sans SC — local fonts (public/fonts/harmonyos), covers Latin + CJK.
+   Replaces Fraunces (display) and Inter (body) since the 2026-08 redesign. */
+@font-face {
+    font-family: "HarmonyOS Sans SC";
+    src: url("/fonts/harmonyos/HarmonyOS-Sans-SC-Regular.woff2") format("woff2");
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
+@font-face {
+    font-family: "HarmonyOS Sans SC";
+    src: url("/fonts/harmonyos/HarmonyOS-Sans-SC-Medium.woff2") format("woff2");
+    font-weight: 500;
+    font-style: normal;
+    font-display: swap;
+}
+@font-face {
+    font-family: "HarmonyOS Sans SC";
+    src: url("/fonts/harmonyos/HarmonyOS-Sans-SC-Bold.woff2") format("woff2");
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+}
+
 /* NOTE: @fontsource/* 字体 CSS 已移至 src/main.tsx 以 JS import 方式引入。
    Tailwind v4 postcss 内联 node_modules CSS 时会错误改写其内部
    url(./files/...) 相对路径（字体文件无法解析、不进入 dist），
@@ -9,15 +33,15 @@
 /**
  * SoyMutDB — Design tokens & animation system
  *
- * Theme: rich scientific green (soybean/plant science), OKLCH color space.
+ * Theme: rich scientific green (plant science), OKLCH color space.
  * Type scale: display 3.5rem / h1 2.5rem / h2 1.875rem / h3 1.5rem / body 1rem.
- * Fonts: Fraunces (display serif), Inter (body), JetBrains Mono (code).
+ * Fonts: HarmonyOS Sans SC (display + body), JetBrains Mono (code).
  * Layout: max-width 1400px, section spacing 6-8rem, hairline borders.
  */
 
 @theme {
-    --font-display: "Fraunces", ui-serif, Georgia, serif;
-    --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+    --font-display: "HarmonyOS Sans SC", ui-sans-serif, system-ui, sans-serif;
+    --font-sans: "HarmonyOS Sans SC", ui-sans-serif, system-ui, sans-serif;
     --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
 
     /* Re-export OKLCH tokens from @soymutdb/ui so Tailwind utilities resolve. */

@@ -5,9 +5,9 @@ REST endpoint: https://plants.ensembl.org/rest/
 
 We use ``/lookup/symbol`` and ``/xrefs/symbol`` for gene lookups and a
 simple ``/search`` endpoint-style query against the ``/lookup/symbol``
-for exact-ish matches on Glycine max.  Ensembl REST requires a
-``Content-Type: application/json`` header and limits anonymous clients to
-15 req/s — we stay well below that.
+for exact-ish matches on the default species Glycine max.  Ensembl REST
+requires a ``Content-Type: application/json`` header and limits anonymous
+clients to 15 req/s — we stay well below that.
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ from ..models import SearchHit, SearchSource
 from .base import BaseAdapter
 
 ENSEMBL_BASE = "https://plants.ensembl.org/rest"
+# Default species for Ensembl lookups — extend by adding more species constants.
 SOYBEAN_SPECIES = "glycine_max"
 
 

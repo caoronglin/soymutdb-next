@@ -3,7 +3,7 @@
   "version": "2.0.0",
   "private": true,
   "type": "module",
-  "description": "SoyMutDB public portal \u2014 Awwwards-grade frontend for the soybean mutant database",
+  "description": "SoyMutDB public portal \u2014 Awwwards-grade frontend for the multi-species mutant database (soybean as the first/default species)",
   "scripts": {
     "dev": "vite",
     "build": "vite build && tsx scripts/ssg-build.ts && tsx scripts/generate-samples.ts && tsx scripts/gzip-compress.ts",

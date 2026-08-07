@@ -103,7 +103,7 @@ const JBROWSE_DATA_URL =
     (import.meta.env?.VITE_JBROWSE_DATA_URL as string | undefined) ??
     "/jbrowse-data";
 
-/** Default soybean reference assembly (Williams 82 v4.0). */
+/** Default reference assembly — soybean Williams 82 v4.0 (first/default species; more species can be added). */
 export const DEFAULT_ASSEMBLY: JBrowseAssembly = {
     name: "Wm82v4.0",
     aliases: ["Glycine max v4.0", "Wm82 v4.0"],

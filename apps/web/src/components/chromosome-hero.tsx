@@ -1,7 +1,7 @@
 /**
  * ChromosomeHero — the signature visual element of SoyMutDB.
  *
- * Renders soybean's 20 chromosomes as SVG-based interactive ideograms with
+ * Renders the default species' (soybean) 20 chromosomes as SVG-based interactive ideograms with
  * mini density sparklines below each label. Subtle scroll-linked parallax
  * applied via IntersectionObserver + RAF.
  *
@@ -186,7 +186,7 @@ export function ChromosomeHero({ data, onSelectChromosome, className }: Chromoso
         <div
           className="grid grid-cols-5 gap-x-6 gap-y-6 sm:grid-cols-10 md:grid-cols-[repeat(20,minmax(0,1fr))]"
           role="group"
-          aria-label="Soybean chromosomes — click to open in genome browser"
+          aria-label="Soybean chromosomes (default species) — click to open in genome browser"
         >
           {points.map((point) => {
             const lengthBp = point.lengthBp ?? CHROMOSOME_LENGTHS_BP[point.chromosome] ?? 50_000_000;

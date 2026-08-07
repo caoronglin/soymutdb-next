@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "SoyMutDB",
-    "description": "\nSoyMutDB API \u2014 high-performance soybean genomic variant platform.\n\n## Error contract\n\nEvery error response uses the unified envelope (see `ErrorResponse`):\n\n```json\n{\n  \"error\": {\"code\": \"not_found\", \"message\": \"...\", \"details\": {}},\n  \"request_id\": \"\u2026\",\n  \"status_code\": 404\n}\n```\n\n- `request_id` is always present and echoed in the `X-Request-ID` header.\n- Validation failures (422) additionally return a field-level `errors` array\n  (`ValidationErrorResponse`); internal framework structures are never\n  exposed.\n- 500 responses never include stack traces, SQL, paths, or exception text.\n\n## Authentication\n\n- **Bearer**: JWT access tokens via `Authorization: Bearer <token>`\n  (obtained from `POST /api/v1/auth/login`).\n- **Cookie**: refresh sessions use the HttpOnly `soymutdb_refresh` cookie\n  (path-scoped to `/api/v1/auth`) for `POST /api/v1/auth/refresh` and\n  `POST /api/v1/auth/logout`.\n",
+    "description": "\nSoyMutDB API \u2014 high-performance multi-species genomic variant platform (soybean currently the default species).\n\n## Error contract\n\nEvery error response uses the unified envelope (see `ErrorResponse`):\n\n```json\n{\n  \"error\": {\"code\": \"not_found\", \"message\": \"...\", \"details\": {}},\n  \"request_id\": \"\u2026\",\n  \"status_code\": 404\n}\n```\n\n- `request_id` is always present and echoed in the `X-Request-ID` header.\n- Validation failures (422) additionally return a field-level `errors` array\n  (`ValidationErrorResponse`); internal framework structures are never\n  exposed.\n- 500 responses never include stack traces, SQL, paths, or exception text.\n\n## Authentication\n\n- **Bearer**: JWT access tokens via `Authorization: Bearer <token>`\n  (obtained from `POST /api/v1/auth/login`).\n- **Cookie**: refresh sessions use the HttpOnly `soymutdb_refresh` cookie\n  (path-scoped to `/api/v1/auth`) for `POST /api/v1/auth/refresh` and\n  `POST /api/v1/auth/logout`.\n",
     "version": "2.0.0"
   },
   "paths": {
@@ -2107,7 +2107,7 @@
           "blast"
         ],
         "summary": "Get Blast Results",
-        "description": "Retrieve BLAST results for a completed job.",
+        "description": "Retrieve BLAST results for a job (status-aware envelope).\n\nReturns ``hits=None`` for pending/running/failed jobs; only completed\njobs carry a hit list (empty means a genuine zero-hit result).",
         "operationId": "get_blast_results_api_v1_blast_jobs__job_id__results_get",
         "parameters": [
           {
@@ -2118,6 +2118,29 @@
               "type": "string",
               "format": "uuid",
               "title": "Job Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
             }
           }
         ],
@@ -6461,8 +6484,8 @@
         "tags": [
           "sra"
         ],
-        "summary": "List curated soybean SRA samples",
-        "description": "Return a small curated list of soybean (Glycine max) SRA runs for demo /\nquick-load purposes.  This is static data bundled with the backend.",
+        "summary": "List curated SRA samples (default species: soybean)",
+        "description": "Return a small curated list of SRA runs for the current default species\n(soybean, Glycine max) for demo / quick-load purposes.  This is static data\nbundled with the backend.",
         "operationId": "list_soybean_samples_api_v1_sra_samples_get",
         "responses": {
           "200": {
@@ -7309,162 +7332,97 @@
       },
       "BlastHit": {
         "properties": {
-          "hit_num": {
-            "type": "integer",
-            "minimum": 1.0,
-            "title": "Hit Num"
-          },
-          "hit_id": {
-            "type": "string",
-            "title": "Hit Id"
-          },
-          "hit_def": {
-            "type": "string",
-            "title": "Hit Def",
-            "default": ""
-          },
-          "hit_accession": {
-            "type": "string",
-            "title": "Hit Accession"
-          },
-          "hit_len": {
-            "type": "integer",
-            "minimum": 1.0,
-            "title": "Hit Len"
-          },
-          "hsps": {
-            "items": {
-              "$ref": "#/components/schemas/BlastHsp"
-            },
-            "type": "array",
-            "title": "Hsps"
-          },
-          "best_evalue": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Best Evalue"
-          },
-          "best_bit_score": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Best Bit Score"
-          },
-          "gene_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Gene Id"
-          },
-          "chromosome": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Chromosome"
-          }
-        },
-        "type": "object",
-        "required": [
-          "hit_num",
-          "hit_id",
-          "hit_accession",
-          "hit_len"
-        ],
-        "title": "BlastHit"
-      },
-      "BlastHsp": {
-        "properties": {
           "hsp_num": {
             "type": "integer",
             "minimum": 1.0,
             "title": "Hsp Num"
           },
-          "bit_score": {
-            "type": "number",
-            "title": "Bit Score"
+          "subject_id": {
+            "type": "string",
+            "title": "Subject Id"
           },
-          "evalue": {
-            "type": "number",
-            "title": "Evalue"
-          },
-          "identity": {
-            "type": "integer",
-            "minimum": 0.0,
-            "title": "Identity"
-          },
-          "gaps": {
-            "type": "integer",
-            "minimum": 0.0,
-            "title": "Gaps",
-            "default": 0
-          },
-          "align_len": {
-            "type": "integer",
-            "minimum": 1.0,
-            "title": "Align Len"
-          },
-          "query_from": {
-            "type": "integer",
-            "minimum": 1.0,
-            "title": "Query From"
-          },
-          "query_to": {
-            "type": "integer",
-            "minimum": 1.0,
-            "title": "Query To"
-          },
-          "hit_from": {
-            "type": "integer",
-            "minimum": 1.0,
-            "title": "Hit From"
-          },
-          "hit_to": {
-            "type": "integer",
-            "minimum": 1.0,
-            "title": "Hit To"
+          "subject_title": {
+            "type": "string",
+            "title": "Subject Title",
+            "default": ""
           },
           "percent_identity": {
             "type": "number",
             "maximum": 100.0,
             "minimum": 0.0,
             "title": "Percent Identity"
+          },
+          "alignment_length": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Alignment Length"
+          },
+          "mismatches": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Mismatches"
+          },
+          "gap_opens": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Gap Opens"
+          },
+          "query_start": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Query Start"
+          },
+          "query_end": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Query End"
+          },
+          "subject_start": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Subject Start"
+          },
+          "subject_end": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Subject End"
+          },
+          "evalue": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Evalue"
+          },
+          "bit_score": {
+            "type": "number",
+            "title": "Bit Score"
+          },
+          "query_strand": {
+            "type": "string",
+            "title": "Query Strand",
+            "default": "plus"
+          },
+          "subject_strand": {
+            "type": "string",
+            "title": "Subject Strand",
+            "default": "plus"
           }
         },
         "type": "object",
         "required": [
           "hsp_num",
-          "bit_score",
+          "subject_id",
+          "percent_identity",
+          "alignment_length",
+          "mismatches",
+          "gap_opens",
+          "query_start",
+          "query_end",
+          "subject_start",
+          "subject_end",
           "evalue",
-          "identity",
-          "align_len",
-          "query_from",
-          "query_to",
-          "hit_from",
-          "hit_to",
-          "percent_identity"
+          "bit_score"
         ],
-        "title": "BlastHsp"
+        "title": "BlastHit"
       },
       "BlastJobResponse": {
         "properties": {
@@ -7551,6 +7509,7 @@
           "running",
           "completed",
           "failed",
+          "cancelled",
           "expired"
         ],
         "title": "BlastJobStatus"
@@ -7586,7 +7545,8 @@
           "gap_open": {
             "anyOf": [
               {
-                "type": "integer"
+                "type": "integer",
+                "minimum": 0.0
               },
               {
                 "type": "null"
@@ -7597,7 +7557,8 @@
           "gap_extend": {
             "anyOf": [
               {
-                "type": "integer"
+                "type": "integer",
+                "minimum": 0.0
               },
               {
                 "type": "null"
@@ -7660,6 +7621,9 @@
             "type": "string",
             "title": "Job Id"
           },
+          "status": {
+            "$ref": "#/components/schemas/BlastJobStatus"
+          },
           "program": {
             "$ref": "#/components/schemas/BlastProgram"
           },
@@ -7668,48 +7632,108 @@
             "title": "Database Id"
           },
           "query_id": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Query Id"
           },
           "query_len": {
-            "type": "integer",
-            "minimum": 1.0,
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Query Len"
           },
           "hits": {
-            "items": {
-              "$ref": "#/components/schemas/BlastHit"
-            },
-            "type": "array",
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/BlastHit"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Hits"
           },
           "total_hits": {
-            "type": "integer",
-            "minimum": 0.0,
-            "title": "Total Hits",
-            "default": 0
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Hits"
           },
           "search_stats": {
-            "additionalProperties": true,
-            "type": "object",
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Search Stats"
           },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          },
           "completed_at": {
-            "type": "string",
-            "format": "date-time",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Completed At"
+          },
+          "download_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Download Url"
           }
         },
         "type": "object",
         "required": [
           "job_id",
+          "status",
           "program",
-          "database_id",
-          "query_id",
-          "query_len",
-          "completed_at"
+          "database_id"
         ],
-        "title": "BlastResultResponse"
+        "title": "BlastResultResponse",
+        "description": "Status-aware result envelope.\n\n``status`` disambiguates states: for pending/running/failed/cancelled jobs\n``hits`` is ``None`` (never a placeholder); for completed jobs it holds\nthe real hit list (possibly empty when BLAST genuinely found no hits)."
       },
       "BlastSubmitRequest": {
         "properties": {

@@ -4,7 +4,7 @@ Docs: https://www.ebi.ac.uk/ebisearch/documentation/rest-api
 Endpoint: https://www.ebi.ac.uk/ebisearch/ws/rest/
 
 We target the ``embl-cds`` (coding sequences) and ``ensemblPlants``
-domains and accept soy / glycine max queries.
+domains and accept soy / glycine max queries (default species).
 """
 
 from __future__ import annotations
@@ -45,7 +45,7 @@ class EBIAdapter(BaseAdapter):
     async def _search_domain(
         self, client: httpx.AsyncClient, domain: str, query: str, limit: int
     ) -> list[SearchHit]:
-        # Boost soybean hits when possible by appending glycine max.
+        # Boost default-species (soybean) hits when possible by appending glycine max.
         q = f"({query}) AND glycine max"
         params: dict[str, Any] = {
             "query": q,

@@ -1,6 +1,6 @@
 # SoyMutDB Next
 
-> Comprehensive soybean mutant database — public SSG portal, native desktop admin, Rust-accelerated hotpaths.
+> Comprehensive multi-species mutant database (soybean as the first/default species) — public SSG portal, native desktop admin, Rust-accelerated hotpaths.
 
 ## Architecture (three-tier isolation)
 

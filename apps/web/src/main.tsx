@@ -16,17 +16,8 @@ import { RouterProvider, createRouter } from "@tanstack/react-router";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { TanStackRouterDevtools } from "@tanstack/router-devtools";
 
-// Fonts (Fontsource) — imported as JS modules so Vite resolves each CSS
-// file's internal url(./files/...) relative to the package itself.
-// (Tailwind v4 postcss inlining breaks those relative paths; see index.css.)
-import "@fontsource/fraunces/latin-400.css";
-import "@fontsource/fraunces/latin-500.css";
-import "@fontsource/fraunces/latin-600.css";
-import "@fontsource/fraunces/latin-700.css";
-import "@fontsource/inter/latin-400.css";
-import "@fontsource/inter/latin-500.css";
-import "@fontsource/inter/latin-600.css";
-import "@fontsource/inter/latin-700.css";
+// Fonts — HarmonyOS Sans SC (local, covers Latin + CJK), JetBrains Mono (code).
+// Fraunces/Inter replaced by HarmonyOS Sans SC (2026-08 redesign).
 import "@fontsource/jetbrains-mono/latin-400.css";
 import "@fontsource/jetbrains-mono/latin-500.css";
 

@@ -30,7 +30,7 @@ export default function SettingsPage() {
 
   const [general, setGeneral] = useState({
     siteName: "SoyMutDB",
-    siteDescription: "Comprehensive soybean mutant database for functional genomics research",
+    siteDescription: "Comprehensive multi-species mutant database for functional genomics research (soybean as the first/default species)",
     defaultLanguage: "en",
     defaultTheme: "light",
   });

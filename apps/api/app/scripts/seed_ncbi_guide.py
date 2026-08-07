@@ -88,9 +88,9 @@ databases that together form the largest genomic and bibliographic resource in
 the world. SoyMutDB integrates with several of these resources — BLAST for
 sequence similarity search, the Entrez search system for cross-database
 queries, JBrowse for genome visualization, and the E-utilities API for
-programmatic access — to help soybean researchers move from a mutation of
-interest to published knowledge, functional annotation, and raw sequencing
-evidence.
+programmatic access — to help researchers (with soybean as the current
+default species) move from a mutation of interest to published knowledge,
+functional annotation, and raw sequencing evidence.
 
 This guide explains, step by step, how to retrieve information from NCBI
 effectively. It is written for wet-lab biologists, bioinformaticians, and
@@ -103,7 +103,7 @@ After reading this guide you will be able to: (1) choose the right NCBI
 database for a given question; (2) construct precise Entrez queries using
 field qualifiers and Boolean operators; (3) run and tune BLAST searches,
 including selecting the correct program, task mode, and parameters; (4) browse
-soybean genomes in JBrowse 2 and overlay SoyMutDB tracks; (5) call the
+genomes in JBrowse 2 (soybean by default) and overlay SoyMutDB tracks; (5) call the
 E-utilities API from Python scripts; and (6) interpret alignment scores,
 E-values, gene records, and publication records critically.
 
@@ -270,8 +270,8 @@ database.
    "Enter Query Sequence" box. You may also upload a file or enter a BLAST
    name.
 2. **Select the database.** Choose a pre-built database (e.g., `nr`,
-   `core_nt`) or a custom database. For SoyMutDB, use the built-in soybean
-   CDS or genome databases.
+   `core_nt`) or a custom database. For SoyMutDB, use the built-in species
+   databases (soybean CDS / genome by default).
 3. **Choose the program.** The web interface auto-suggests a program based on
    the query type; confirm it matches your intent.
 4. **Set parameters.** Expand "Algorithm parameters" to adjust word size,
@@ -341,8 +341,9 @@ The BLAST report contains several sections:
 - **Taxonomy report** — the organisms producing hits; useful to detect
   contamination or horizontal transfer.
 
-### Soybean-specific BLAST recommendations
-When searching against the soybean genome or transcriptome, use the
+### BLAST recommendations for the current default species (soybean)
+When searching against the soybean (Glycine max, current default) genome or
+transcriptome, use the
 following parameter guidelines:
 
 - **Validating EMS mutations** — run megablast with `word_size=28`,
@@ -551,10 +552,11 @@ then page through `EFetch` with `WebEnv` and `query_key`.
   Electronic Annotation (IEA) is automated; seek records with IDA, IMP, or
   IPI evidence codes when biological confidence matters.
 
-## 9. Soybean Mutation Research Strategies
+## 9. Mutation Research Strategies (soybean example)
 
-This section provides specific search strategies for soybean mutation
-research, complementing SoyMutDB with external NCBI resources.
+This section provides specific search strategies for mutation research in
+the current default species (soybean), complementing SoyMutDB with external
+NCBI resources.
 
 ### Finding EMS-induced mutations in NCBI
 Ethyl methanesulfonate (EMS) mutagenesis creates predominantly G/C-to-A/T
@@ -604,7 +606,7 @@ variant of interest:
 | 5 | SRA / GEO | Check expression data availability | Contextualise impact |
 | 6 | BLAST | Confirm sequence specificity | Avoid mapping errors |
 
-### Example queries for soybean researchers
+### Example queries (soybean examples)
 
 **Find all soybean nucleotide sequences submitted in 2023–2024:**
 ```
@@ -641,11 +643,11 @@ CONTENT_ZH = """\
 
 ## 1. 引言
 
-美国国家生物技术信息中心（NCBI）隶属于美国国家医学图书馆（NLM），托管数十个相互关联的公共数据库，共同构成了全球规模最大的基因组与文献资源。SoyMutDB 与其中多项资源集成——使用 BLAST 进行序列相似性检索，使用 Entrez 检索系统进行跨库查询，使用 JBrowse 进行基因组可视化，并通过 E-utilities API 实现程序化访问——帮助大豆研究人员从感兴趣的突变出发，追溯到已发表的知识、功能注释和原始测序证据。
+美国国家生物技术信息中心（NCBI）隶属于美国国家医学图书馆（NLM），托管数十个相互关联的公共数据库，共同构成了全球规模最大的基因组与文献资源。SoyMutDB 与其中多项资源集成——使用 BLAST 进行序列相似性检索，使用 Entrez 检索系统进行跨库查询，使用 JBrowse 进行基因组可视化，并通过 E-utilities API 实现程序化访问——帮助研究人员（当前默认物种为大豆）从感兴趣的突变出发，追溯到已发表的知识、功能注释和原始测序证据。
 
 本指南逐步讲解如何高效地从 NCBI 检索信息，面向使用 SoyMutDB 的湿实验生物学家、生物信息学分析人员和数据策展人，适用于需要验证变异、注释基因或将表型追溯到原始文献的场景。每一节都结合概念性概述与具体参数、表格和实例，既可作为教程，也可作为日常参考。
 
-阅读本指南后，您将能够：（1）针对不同问题选择合适的 NCBI 数据库；（2）使用字段限定符和布尔运算符构建精确的 Entrez 查询；（3）运行并调优 BLAST 检索，包括选择正确的程序、任务模式和参数；（4）在 JBrowse 2 中浏览大豆基因组并叠加 SoyMutDB 轨道；（5）从 Python 脚本调用 E-utilities API；（6）批判性地解读比对得分、E 值、基因记录和文献记录。
+阅读本指南后，您将能够：（1）针对不同问题选择合适的 NCBI 数据库；（2）使用字段限定符和布尔运算符构建精确的 Entrez 查询；（3）运行并调优 BLAST 检索，包括选择正确的程序、任务模式和参数；（4）在 JBrowse 2 中浏览基因组（目前默认大豆）并叠加 SoyMutDB 轨道；（5）从 Python 脚本调用 E-utilities API；（6）批判性地解读比对得分、E 值、基因记录和文献记录。
 
 ## 2. NCBI 核心数据库
 
@@ -747,7 +749,7 @@ Entrez 支持三个布尔运算符，**必须大写**：
 
 ### 操作步骤
 1. **输入查询序列。** 将 FASTA 序列或登录号粘贴到“Enter Query Sequence”框中，也可上传文件或输入 BLAST 名称。
-2. **选择数据库。** 选择预构建数据库（如 `nr`、`core_nt`）或自定义数据库。SoyMutDB 中请使用内置的大豆 CDS 或基因组数据库。
+2. **选择数据库。** 选择预构建数据库（如 `nr`、`core_nt`）或自定义数据库。SoyMutDB 中请使用内置的物种数据库（目前默认大豆 CDS/基因组）。
 3. **选择程序。** 网页界面会根据查询类型自动建议程序，请确认其符合您的意图。
 4. **设置参数。** 展开“Algorithm parameters”调整 word size、期望阈值、打分、过滤器和任务模式（见下）。
 5. **提交并查看。** 点击 BLAST，等待结果页，其中包含图形化概览、命中表和两两比对。
@@ -800,8 +802,8 @@ BLAST 报告包含若干部分：
 - **Coverage（查询覆盖度）** — 与查询序列比对上的长度比例。高一致性但低覆盖可能仅是结构域匹配，而非全长同源。
 - **Taxonomy report（分类报告）** — 产生命中的物种列表，可用于检测污染或水平转移。
 
-### 大豆特异性 BLAST 推荐
-针对大豆基因组或转录组进行检索时，请参考以下参数指南：
+### 针对当前默认物种（大豆）的 BLAST 推荐
+针对大豆（Glycine max，当前默认物种）基因组或转录组进行检索时，请参考以下参数指南：
 
 - **验证 EMS 突变** — 使用 megablast，设置 `word_size=28`、`expect=1e-10`、`perc_identity=99`，以仅接受与参考 CDS 或基因组的近乎完美匹配。
 - **基因家族发现** — 从 blastn（`word_size=11`、`expect=1e-5`）开始；若无命中，切换至 dc-megablast 查找更远缘的同源。
@@ -810,7 +812,7 @@ BLAST 报告包含若干部分：
 
 ## 5. JBrowse 基因组浏览器
 
-JBrowse 2 是新一代基因组浏览器，具有快速、模块化的架构。SoyMutDB 嵌入 JBrowse 2，让用户在大豆参考基因组上可视化变异、基因和用户上传的轨道。
+JBrowse 2 是新一代基因组浏览器，具有快速、模块化的架构。SoyMutDB 嵌入 JBrowse 2，让用户在当前参考基因组（默认大豆）上可视化变异、基因和用户上传的轨道。
 
 ### 概述
 JBrowse 2 支持四种视图类型：
@@ -955,9 +957,9 @@ for uid, doc in summ.json()["result"].items():
 - **忘记屏蔽低复杂度区域：** 未屏蔽的检索可能返回由重复序列或卷曲螺旋区域驱动的命中，而非真实同源。
 - **将 IEA 注释当作实验证据：** IEA（电子注释）为自动推断；当生物学可信度重要时，应寻找带 IDA、IMP 或 IPI 证据代码的记录。
 
-## 9. 大豆突变研究策略
+## 9. 突变研究策略（以大豆为例）
 
-本节提供针对大豆突变研究的具体检索策略，将 SoyMutDB 与外部 NCBI 资源相结合。
+本节以当前默认物种大豆为例，提供针对突变研究的具体检索策略，将 SoyMutDB 与外部 NCBI 资源相结合。
 
 ### 在 NCBI 中查找 EMS 诱导突变
 甲磺酸乙酯（EMS）诱变主要产生 G/C-to-A/T 转换。要在 NCBI 中查找已记录的 EMS 诱导突变：
@@ -993,7 +995,7 @@ SoyMutDB 汇集了来自多个来源的变异。当您遇到感兴趣的变异�
 | 5 | SRA / GEO | 检查表达数据可用性 | 评估影响背景 |
 | 6 | BLAST | 确认序列特异性 | 避免映射错误 |
 
-### 大豆研究人员示例查询
+### 示例查询（大豆示例）
 
 **查找 2023–2024 年提交的所有大豆核苷酸序列：**
 ```

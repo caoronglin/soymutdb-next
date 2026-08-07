@@ -508,9 +508,9 @@ export const FALLBACK_VARIANTS: SampleVariant[] = [
 export const FALLBACK_PAGES: PageLayout[] = [
     {
         page: "index",
-        title: "SoyMutDB — Soybean Mutant Database",
+        title: "SoyMutDB — Multi-Species Mutant Database",
         description:
-            "A comprehensive soybean mutant database providing massive variant data, gene information, mutant resources, and a genome browser.",
+            "A comprehensive multi-species mutant database (soybean as the first/default species) providing massive variant data, gene information, mutant resources, and a genome browser.",
         widgets: [
             {
                 name: "hero_stats",
@@ -522,8 +522,8 @@ export const FALLBACK_PAGES: PageLayout[] = [
     SoyMutDB Next
   </h1>
   <p style="font-size:1.125rem;color:#555;max-width:640px;margin:0 auto 2rem">
-    A comprehensive soybean mutant database providing variant data, gene
-    information, mutant resources, and a genome browser for functional
+    A comprehensive multi-species mutant database providing variant data, gene
+    information, mutant resources, and a genome browser for plant functional
     genomics research.
   </p>
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1rem;max-width:800px;margin:0 auto">
@@ -580,10 +580,11 @@ export const FALLBACK_PAGES: PageLayout[] = [
                 fallback_html: `
 <article style="max-width:768px;margin:2rem auto;padding:0 1rem;line-height:1.7">
   <h1 style="font-family:'Fraunces',serif;color:#2F6F4F">About SoyMutDB</h1>
-  <p>SoyMutDB (Soybean Mutant Database) is a curated, open-access resource
-     for chemically- and radiation-induced mutations in <em>Glycine max</em>.</p>
+  <p>SoyMutDB (Multi-Species Mutant Database) is a curated, open-access resource
+     for chemically- and radiation-induced mutations, currently covering
+     <em>Glycine max</em> (soybean) as the first/default species.</p>
   <h2>Consortium</h2>
-  <p>The database is maintained by an international consortium of soybean
+  <p>The database is maintained by an international consortium of plant
      genetics laboratories and is released under a CC-BY 4.0 license.</p>
   <h2>Methodology</h2>
   <p>Variants are called from whole-genome sequencing of M3 mutant pools,
@@ -595,7 +596,7 @@ export const FALLBACK_PAGES: PageLayout[] = [
     {
         page: "browse",
         title: "Browse Variants — SoyMutDB",
-        description: "Browse soybean variants by chromosome, gene, or phenotype.",
+        description: "Browse variants (soybean as the current default species) by chromosome, gene, or phenotype.",
         widgets: [
             {
                 name: "variant_browser",
@@ -711,7 +712,7 @@ export const FALLBACK_PAGES: PageLayout[] = [
     {
         page: "sra",
         title: "SRA Run Browser — SoyMutDB",
-        description: "Look up NCBI SRA run metadata for soybean and related plant sequencing runs.",
+        description: "Look up NCBI SRA run metadata for plant sequencing runs (soybean as the current default species).",
         widgets: [
             {
                 name: "sra_run",

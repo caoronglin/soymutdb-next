@@ -3,7 +3,7 @@
  */
 export { formatNumber, formatPercent, formatFileSize, truncate } from "@soymutdb/ui";
 
-/** Soybean has 20 chromosomes — canonical names used across the UI. */
+/** Default species (soybean) has 20 chromosomes — canonical names used across the UI. */
 export const SOYBEAN_CHROMOSOMES = Array.from({ length: 20 }, (_, i) => `chr${String(i + 1).padStart(2, "0")}`) as readonly string[];
 
 /** Approximate chromosome lengths (bp) for the Wm82.a4.v1 assembly. Used for hero visualization. */

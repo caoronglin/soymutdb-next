@@ -1,9 +1,9 @@
 """UniProt REST API adapter.
 
 Docs: https://rest.uniprot.org/
-We search against ``uniprotkb`` and prefer reviewed (Swiss-Prot) soybean
-entries (taxonomy 3847).  The REST endpoint returns JSON with a ``results``
-array.
+We search against ``uniprotkb`` and prefer reviewed (Swiss-Prot) entries for
+the default species, soybean (taxonomy 3847).  The REST endpoint returns JSON
+with a ``results`` array.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ class UniProtAdapter(BaseAdapter):
     rate_burst: int = 10
 
     async def do_search(self, client: httpx.AsyncClient, query: str, limit: int) -> list[SearchHit]:
-        # Boost soybean (taxonomy 3847) results first, then fall back to any.
+        # Boost default-species (soybean, taxonomy 3847) results first, then fall back to any.
         tax_query = f"({query}) AND (taxonomy_id:3847)"
         hits = await self._search(client, tax_query, limit=limit)
         if not hits:

@@ -75,7 +75,7 @@ export function fetchSraRun(accession: string): Promise<SraRunResponse> {
   return http.get<SraRunResponse>(`/sra/run/${encodeURIComponent(accession)}`);
 }
 
-/** Fetch the curated list of soybean SRA samples + demo run. */
+/** Fetch the curated list of SRA samples (default species: soybean) + demo run. */
 export function fetchSraSamples(): Promise<SraSamplesResponse> {
   return http.get<SraSamplesResponse>("/sra/samples");
 }
