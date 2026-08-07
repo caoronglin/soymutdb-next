@@ -1,0 +1,72 @@
+# =============================================================================
+# SoyMutDB Next — Deploy public web to GitHub Pages (pages branch)
+#
+# Trigger: push to main + manual dispatch. Builds apps/web and force-pushes
+# the static dist to the `pages` branch (Pages source = pages branch, /).
+# Only static hosting — no API proxying (API stays on the self-hosted backend).
+#
+# NOTE: set the production API origin as a repository secret named
+# API_BASE_URL (e.g. https://api.example.com). If unset, the app falls back
+# to its compiled-in default.
+# =============================================================================
+name: Deploy Web to Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Build web + publish pages branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install pnpm 10
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.0.0
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Use official npm registry
+        run: pnpm config set registry https://registry.npmjs.org/
+
+      - name: Install dependencies (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      - name: Build web (SSG + assets)
+        env:
+          VITE_API_BASE_URL: ${{ secrets.API_BASE_URL }}
+          VITE_CDN_ENABLED: "false"
+        run: pnpm --filter @soymutdb/web build
+
+      - name: Deploy dist to pages branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan pages
+          git rm -rf --quiet . >/dev/null 2>&1 || true
+          cp -r apps/web/dist/. .
+          # SPA fallback is handled by _redirects inside dist (Cloudflare-style);
+          # GitHub Pages serves index.html for 404 on custom 404 handling below.
+          cp apps/web/dist/index.html ./404.html
+          git add -A
+          git commit -m "deploy(web): $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          git push origin pages --force

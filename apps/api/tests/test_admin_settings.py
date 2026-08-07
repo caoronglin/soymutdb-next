@@ -242,10 +242,11 @@ class TestUpdateSettings:
 
     async def test_update_settings_existing_key(self, client, mock_session):
         """Existing key-value pairs are updated."""
-        # First execute: existing row found
+        # The endpoint batch-fetches existing rows via `.scalars().all()`.
+        existing_row = MagicMock()
+        existing_row.key = "cdn.url"
         existing = MagicMock()
-        existing.scalar_one_or_none.return_value = MagicMock()
-        existing_row = existing.scalar_one_or_none.return_value
+        existing.scalars.return_value.all.return_value = [existing_row]
 
         # Second execute: get_settings return
         setting = MagicMock()
@@ -271,9 +272,9 @@ class TestUpdateSettings:
 
     async def test_update_settings_multiple_keys(self, client, mock_session):
         """Multiple keys are upserted in a single request."""
-        # For each key, an execute call to check existence (all new)
+        # One batch-fetch for existing rows under the section (none exist).
         not_found = MagicMock()
-        not_found.scalar_one_or_none.return_value = None
+        not_found.scalars.return_value.all.return_value = []
 
         # Final: get_settings return
         s1 = MagicMock()
@@ -286,8 +287,7 @@ class TestUpdateSettings:
         settings_result.scalars.return_value.all.return_value = [s1, s2]
 
         mock_session.execute.side_effect = [
-            not_found,  # key1 lookup
-            not_found,  # key2 lookup
+            not_found,  # batch existing lookup
             settings_result,  # get_settings return
         ]
 

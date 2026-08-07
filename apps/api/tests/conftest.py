@@ -71,12 +71,10 @@ def postgres_container():
         yield async_url
 
 
-@pytest.fixture(scope="session")
-def event_loop():
-    """Create a session-scoped event loop for async tests."""
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
+# NOTE: no custom `event_loop` fixture. pytest-asyncio >= 1.0 manages its own
+# loops; the shared engine must live on the same loop as the tests, so
+# pyproject.toml sets asyncio_default_fixture_loop_scope/test_loop_scope =
+# "session" (single loop for the whole session).
 
 
 # ---------------------------------------------------------------------------
@@ -127,8 +125,13 @@ async def db_session(test_engine) -> AsyncGenerator[AsyncSession, None]:
 
 
 @pytest_asyncio.fixture
-async def app(db_session: AsyncSession):
-    """Create a test FastAPI app with overridden dependencies."""
+async def app(test_engine):
+    """Create a test FastAPI app with overridden dependencies.
+
+    Each request gets its own AsyncSession (never share one connection
+    across concurrent in-test requests — asyncpg raises "another operation
+    is in progress" on a shared connection).
+    """
     from fastapi import FastAPI
 
     from app.api.v1.router import api_router
@@ -153,9 +156,16 @@ async def app(db_session: AsyncSession):
     )
     application.add_exception_handler(Exception, unhandled_exception_handler)
 
-    # Override the database dependency
+    # Override the database dependency: fresh session per request
+    session_factory = async_sessionmaker(
+        bind=test_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+
     async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
-        yield db_session
+        async with session_factory() as session:
+            yield session
 
     application.dependency_overrides[get_db] = override_get_db
 

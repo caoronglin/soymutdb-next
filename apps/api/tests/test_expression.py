@@ -157,9 +157,10 @@ class TestListLibraries:
         """Listing libraries returns paginated results."""
         mock_session.scalar.return_value = 1  # total count
 
-        # First execute: libraries list, Second: count per library
+        # First execute: libraries list, Second: batch count rows
         lib_result = _make_exec_result(scalars_list=[mock_library])
-        count_result = _make_exec_result(scalar_val=5)
+        count_result = MagicMock()
+        count_result.all.return_value = [(1, 5)]  # (library_id, count)
         mock_session.execute.side_effect = [lib_result, count_result]
 
         response = await client.get("/api/v1/expression/libraries")
