@@ -9,13 +9,18 @@ Security and reliability fixes vs. quartz reference:
   output file size cap, and query sequence length cap.
 - Results are uploaded to S3 and a pre-signed URL is returned.
 - Supports cancellation and expired-job cleanup.
+- Job status is tracked through the shared contract (``soymutdb_jobs``) via
+  the narrow :class:`BlastJobStore` repository — the worker never imports API
+  models.  Transitions are validated by the shared state machine and every
+  status write is idempotent (conditional UPDATE keyed on the current status),
+  so crash-restart re-deliveries of the same outbox event (same ``task_id``
+  and ``idempotency_key``) never double-apply.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-import os
 import resource
 import subprocess
 import tempfile
@@ -23,11 +28,12 @@ from pathlib import Path
 
 from celery import Task
 
-from app.core.task_contract import BLAST_RUN_TASK
 from soymutdb_worker.config import get_setting
 from soymutdb_worker.main import celery_app
+from soymutdb_worker.repositories import BlastJobStore
+from soymutdb_worker.shared import BLAST_RUN_TASK, JobPayload
+from soymutdb_worker.utils.db import get_db
 from soymutdb_worker.utils.s3 import (
-    download_file,
     generate_presigned_url,
     get_s3_client,
     upload_file,
@@ -129,7 +135,7 @@ def validate_sequence(sequence: str) -> str:
         raise ValueError("Query sequence is empty")
     # Strip FASTA headers for length check
     lines = sequence.strip().splitlines()
-    seq_body = "".join(l for l in lines if not l.startswith(">"))
+    seq_body = "".join(part for part in lines if not part.startswith(">"))
     if len(seq_body) > MAX_QUERY_LENGTH:
         raise ValueError(
             f"Query sequence too long: {len(seq_body)} > {MAX_QUERY_LENGTH}"
@@ -328,10 +334,12 @@ def parse_blast_json(output_path: Path) -> dict:
 )
 def run_blast(
     self: Task,
-    job_id: str,
-    program: str,
-    database: str,
-    sequence: str,
+    payload: dict | None = None,
+    *,
+    job_id: str | None = None,
+    program: str | None = None,
+    database: str | None = None,
+    sequence: str | None = None,
     evalue: float = 0.001,
     word_size: int | None = None,
     max_target_seqs: int = 100,
@@ -340,26 +348,64 @@ def run_blast(
 ) -> dict:
     """Execute a BLAST search asynchronously.
 
-    Args:
-        job_id: BLAST job ID for status tracking.
-        program: BLAST program (validated against whitelist).
-        database: BLAST database name.
-        sequence: Query sequence (FASTA or raw).
-        evalue: E-value threshold.
-        word_size: Word size parameter.
-        max_target_seqs: Maximum target sequences.
-        parameters: Additional BLAST parameters (validated against whitelist).
-        num_threads: Number of CPU threads.
+    Two call styles are accepted:
 
-    Returns:
-        dict with job results summary and S3 pre-signed download URL.
+    1. **Outbox contract** (canonical): ``payload`` is a serialized
+       :class:`soymutdb_jobs.schemas.JobPayload` (versioned, idempotent).
+    2. **Legacy kwargs** (compat for direct dispatches): the individual
+       ``job_id`` / ``program`` / ``database`` / ``sequence`` / ... kwargs.
+
+    Job status is advanced through the shared state machine and the narrow
+    :class:`BlastJobStore` repository: pending -> running -> succeeded /
+    failed.  Re-deliveries of the same event (same ``idempotency_key`` /
+    ``task_id``) are detected via the job's current status and skipped, so
+    the worker never applies one job twice.
     """
-    logger.info("Starting BLAST job %s: %s vs %s", job_id, program, database)
+    # ── Resolve payload (outbox contract) or legacy kwargs ────────────────
+    if payload is not None:
+        job_payload = JobPayload.model_validate(payload)
+        if job_payload.task_name != BLAST_RUN_TASK:
+            raise ValueError(
+                f"Payload task_name {job_payload.task_name!r} does not match "
+                f"task {BLAST_RUN_TASK!r}"
+            )
+        job_id = str(job_payload.job_id)
+        idempotency_key = job_payload.idempotency_key
+        p = job_payload.payload
+        program = str(p["program"])
+        database = str(p["database"])
+        sequence = str(p["sequence"])
+        evalue = float(p.get("evalue", 0.001))
+        word_size = int(p["word_size"]) if p.get("word_size") is not None else None
+        max_target_seqs = int(p.get("max_target_seqs", 100))
+        parameters = p.get("parameters")
+        num_threads = int(p.get("num_threads", 1))
+    else:
+        if job_id is None:
+            raise TypeError("run_blast requires a JobPayload or a legacy job_id kwarg")
+        if program is None or database is None or sequence is None:
+            raise TypeError("legacy dispatch requires program, database and sequence")
+        idempotency_key = f"blast:{job_id}"
+
+    logger.info(
+        "Starting BLAST job %s (idempotency_key=%s): %s vs %s",
+        job_id,
+        idempotency_key,
+        program,
+        database,
+    )
 
     # Validate inputs before doing any work
     validate_program(program)
     validate_sequence(sequence)
     validate_parameters(parameters)
+
+    # ── Idempotent job claim (shared transition validation) ──────────────
+    with get_db() as session:
+        decision = BlastJobStore(session).begin_run(job_id)
+    if decision == "skip":
+        logger.info("BLAST job %s skipped (terminal/unknown status)", job_id)
+        return {"job_id": job_id, "skipped": True, "idempotency_key": idempotency_key}
 
     self.update_state(state="STARTED", meta={"progress": 5})
 
@@ -414,6 +460,10 @@ def run_blast(
                 "BLAST job %s completed: %d hits", job_id, parsed["total_hits"]
             )
 
+            # Mark the job succeeded (idempotent: only a running row wins).
+            with get_db() as session:
+                BlastJobStore(session).mark_succeeded(job_id, result_path=s3_key)
+
             return {
                 "job_id": job_id,
                 "hits": parsed["hits"][:100],
@@ -428,4 +478,9 @@ def run_blast(
         raise
     except Exception as e:
         logger.error("BLAST job %s failed: %s", job_id, e)
+        try:
+            with get_db() as session:
+                BlastJobStore(session).mark_failed(job_id, error=str(e))
+        except Exception as db_err:
+            logger.error("Failed to update BLAST job status: %s", db_err)
         raise

@@ -12,6 +12,9 @@ import {
   ApiError,
   isTimeoutError,
   withRetry,
+  setAuthTokens,
+  clearAuth,
+  getAccessToken,
 } from "./client";
 
 // ---------------------------------------------------------------------------
@@ -262,6 +265,42 @@ describe("request()", () => {
       status: 502,
     });
   });
+
+  it("parses the unified error envelope (code/message/request_id)", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          error: { code: "token_expired", message: "Access token has expired" },
+          request_id: "req-abc-123",
+          status_code: 401,
+        }),
+        {
+          status: 401,
+          headers: { "content-type": "application/json" },
+        },
+      ),
+    );
+    await expect(request("/secured")).rejects.toMatchObject({
+      status: 401,
+      code: "token_expired",
+      message: "Access token has expired",
+      request_id: "req-abc-123",
+    });
+  });
+
+  it("falls back to flat code/message payloads", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({ code: "BAD_REQ", message: "bad request" }), {
+        status: 400,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    await expect(request("/bad")).rejects.toMatchObject({
+      status: 400,
+      code: "BAD_REQ",
+      message: "bad request",
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -309,79 +348,110 @@ describe("request timeout", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 401 handling
+// Auth header attachment
+// ---------------------------------------------------------------------------
+describe("auth header", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    clearAuth();
+  });
+
+  it("does not attach Authorization for anonymous requests", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    await request("/public");
+
+    const [, init] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit];
+    const headers = init.headers as Headers;
+    expect(headers.has("Authorization")).toBe(false);
+  });
+
+  it("attaches Authorization from the in-memory token", async () => {
+    setAuthTokens("my-token");
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    await request("/secured");
+
+    const [, init] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit];
+    const headers = init.headers as Headers;
+    expect(headers.get("Authorization")).toBe("Bearer my-token");
+  });
+
+  it("omits Authorization when auth option is false", async () => {
+    setAuthTokens("my-token");
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    await request("/public", { auth: false });
+
+    const [, init] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit];
+    const headers = init.headers as Headers;
+    expect(headers.has("Authorization")).toBe(false);
+  });
+
+  it("uses credentials include when withCredentials is set", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    await request("/cookie", { withCredentials: true });
+
+    const [, init] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit];
+    expect(init.credentials).toBe("include");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 401 handling (pure transport — no side effects)
 // ---------------------------------------------------------------------------
 describe("401 handling", () => {
-  let store: Record<string, string>;
-  let location: { pathname: string; search: string; href: string };
+  afterEach(() => {
+    vi.restoreAllMocks();
+    clearAuth();
+  });
 
-  beforeEach(() => {
-    store = {};
-    location = { pathname: "/dashboard", search: "?tab=1", href: "" };
+  it("throws a structured ApiError and does not clear the in-memory token", async () => {
+    setAuthTokens("my-token");
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 401 }));
 
-    Object.defineProperty(globalThis, "localStorage", {
-      value: {
-        getItem: (k: string) => store[k] ?? null,
-        setItem: (k: string, v: string) => {
-          store[k] = v;
-        },
-        removeItem: (k: string) => {
-          delete store[k];
-        },
-        clear: () => {
-          store = {};
-        },
-        length: 0,
-        key: () => null,
-      },
-      configurable: true,
-      writable: true,
+    await expect(request("/secured")).rejects.toMatchObject({
+      status: 401,
     });
 
+    // The transport must not clear auth, redirect, or refresh.
+    expect(getAccessToken()).toBe("my-token");
+  });
+
+  it("does not touch window.location on 401", async () => {
+    const location = { href: "" };
     Object.defineProperty(globalThis, "window", {
       value: { location },
       configurable: true,
       writable: true,
     });
-
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(null, { status: 401 }),
-    );
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-    delete (globalThis as any).localStorage;
-    delete (globalThis as any).window;
-  });
-
-  it("clears auth tokens on 401", async () => {
-    store["soymutdb_token"] = "my-token";
-    store["soymutdb_refresh_token"] = "my-refresh";
-
-    await expect(request("/secured")).rejects.toMatchObject({
-      status: 401,
-      code: "UNAUTHORIZED",
-    });
-
-    expect(store["soymutdb_token"]).toBeUndefined();
-    expect(store["soymutdb_refresh_token"]).toBeUndefined();
-  });
-
-  it("redirects to /login with current path as redirect param", async () => {
-    store["soymutdb_token"] = "t";
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 401 }));
 
     await expect(request("/secured")).rejects.toThrow();
 
-    expect(location.href).toBe("/login?redirect=%2Fdashboard%3Ftab%3D1");
-  });
+    expect(location.href).toBe("");
 
-  it("does not redirect when already on /login page", async () => {
-    location.pathname = "/login";
-    store["soymutdb_token"] = "t";
-
-    await expect(request("/login")).rejects.toThrow();
-
-    expect(location.href).toBe(""); // unchanged
+    delete (globalThis as any).window;
   });
 });

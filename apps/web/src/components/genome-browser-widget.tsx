@@ -434,7 +434,7 @@ export function GenomeBrowserWidget({
                       height={h}
                       fill="oklch(0.55 0.13 151)"
                       className="transition-opacity hover:opacity-80"
-                      onMouseEnter={(e) => {
+                      onMouseEnter={() => {
                         const svg = histogramRef.current;
                         if (!svg) return;
                         const rect = svg.getBoundingClientRect();

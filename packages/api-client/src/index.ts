@@ -1,21 +1,33 @@
 /**
  * @soymutdb/api-client — Typed API client for SoyMutDB.
  *
- * Fetch-based with auth interceptors. Reads VITE_API_BASE_URL.
+ * Fetch-based. `request` is the pure transport; `http` is the coordinated
+ * variant (refresh-on-401, retry, logout events). Reads VITE_API_BASE_URL.
  */
 
 export {
   request,
-  http,
   apiBaseUrl,
   setAuthTokens,
   clearAuth,
+  getAccessToken,
   ApiError,
   TimeoutPresets,
   isTimeoutError,
   withRetry,
   type RequestOptions,
 } from "./client";
+
+export {
+  http,
+  authRequest,
+  refreshAccessToken,
+  restoreSession,
+  onAuthLogout,
+  clearLegacyTokens,
+  setAccessToken,
+  AUTH_REFRESH_PATH,
+} from "./auth";
 
 export * from "./genes";
 export * from "./variants";

@@ -1,4 +1,4 @@
-import { http } from "./client";
+import { http } from "./auth";
 
 export interface VariantSummary {
   variant_id: string;

@@ -9,66 +9,28 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as SeedRequestRouteImport } from './routes/seed-request'
-import { Route as SearchRouteImport } from './routes/search'
-import { Route as PublicationsRouteImport } from './routes/publications'
-import { Route as LoginRouteImport } from './routes/login'
-import { Route as HelpRouteImport } from './routes/help'
-import { Route as GuideRouteImport } from './routes/guide'
-import { Route as DownloadsRouteImport } from './routes/downloads'
-import { Route as BrowserRouteImport } from './routes/browser'
-import { Route as BlastRouteImport } from './routes/blast'
-import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as VariantsIndexRouteImport } from './routes/variants/index'
-import { Route as NewsIndexRouteImport } from './routes/news/index'
+import { Route as AnalyticsRouteImport } from './routes/analytics'
+import { Route as BlastRouteImport } from './routes/blast'
+import { Route as BrowserRouteImport } from './routes/browser'
+import { Route as CompareRouteImport } from './routes/compare'
+import { Route as DownloadsRouteImport } from './routes/downloads'
+import { Route as GuideRouteImport } from './routes/guide'
+import { Route as HelpRouteImport } from './routes/help'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as PublicationsRouteImport } from './routes/publications'
+import { Route as SearchRouteImport } from './routes/search'
+import { Route as SeedRequestRouteImport } from './routes/seed-request'
+import { Route as SraRouteImport } from './routes/sra'
 import { Route as GenesIndexRouteImport } from './routes/genes/index'
-import { Route as NewsSlugRouteImport } from './routes/news/$slug'
 import { Route as GenesGeneIdRouteImport } from './routes/genes/$geneId'
+import { Route as NewsIndexRouteImport } from './routes/news/index'
+import { Route as NewsSlugRouteImport } from './routes/news/$slug'
+import { Route as VariantsIndexRouteImport } from './routes/variants/index'
 
-const SeedRequestRoute = SeedRequestRouteImport.update({
-  id: '/seed-request',
-  path: '/seed-request',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SearchRoute = SearchRouteImport.update({
-  id: '/search',
-  path: '/search',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PublicationsRoute = PublicationsRouteImport.update({
-  id: '/publications',
-  path: '/publications',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LoginRoute = LoginRouteImport.update({
-  id: '/login',
-  path: '/login',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const HelpRoute = HelpRouteImport.update({
-  id: '/help',
-  path: '/help',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const GuideRoute = GuideRouteImport.update({
-  id: '/guide',
-  path: '/guide',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DownloadsRoute = DownloadsRouteImport.update({
-  id: '/downloads',
-  path: '/downloads',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const BrowserRoute = BrowserRouteImport.update({
-  id: '/browser',
-  path: '/browser',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const BlastRoute = BlastRouteImport.update({
-  id: '/blast',
-  path: '/blast',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AnalyticsRoute = AnalyticsRouteImport.update({
@@ -76,19 +38,59 @@ const AnalyticsRoute = AnalyticsRouteImport.update({
   path: '/analytics',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const BlastRoute = BlastRouteImport.update({
+  id: '/blast',
+  path: '/blast',
   getParentRoute: () => rootRouteImport,
 } as any)
-const VariantsIndexRoute = VariantsIndexRouteImport.update({
-  id: '/variants/',
-  path: '/variants/',
+const BrowserRoute = BrowserRouteImport.update({
+  id: '/browser',
+  path: '/browser',
   getParentRoute: () => rootRouteImport,
 } as any)
-const NewsIndexRoute = NewsIndexRouteImport.update({
-  id: '/news/',
-  path: '/news/',
+const CompareRoute = CompareRouteImport.update({
+  id: '/compare',
+  path: '/compare',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DownloadsRoute = DownloadsRouteImport.update({
+  id: '/downloads',
+  path: '/downloads',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GuideRoute = GuideRouteImport.update({
+  id: '/guide',
+  path: '/guide',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HelpRoute = HelpRouteImport.update({
+  id: '/help',
+  path: '/help',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PublicationsRoute = PublicationsRouteImport.update({
+  id: '/publications',
+  path: '/publications',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SearchRoute = SearchRouteImport.update({
+  id: '/search',
+  path: '/search',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SeedRequestRoute = SeedRequestRouteImport.update({
+  id: '/seed-request',
+  path: '/seed-request',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SraRoute = SraRouteImport.update({
+  id: '/sra',
+  path: '/sra',
   getParentRoute: () => rootRouteImport,
 } as any)
 const GenesIndexRoute = GenesIndexRouteImport.update({
@@ -96,14 +98,24 @@ const GenesIndexRoute = GenesIndexRouteImport.update({
   path: '/genes/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const GenesGeneIdRoute = GenesGeneIdRouteImport.update({
+  id: '/genes/$geneId',
+  path: '/genes/$geneId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NewsIndexRoute = NewsIndexRouteImport.update({
+  id: '/news/',
+  path: '/news/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const NewsSlugRoute = NewsSlugRouteImport.update({
   id: '/news/$slug',
   path: '/news/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
-const GenesGeneIdRoute = GenesGeneIdRouteImport.update({
-  id: '/genes/$geneId',
-  path: '/genes/$geneId',
+const VariantsIndexRoute = VariantsIndexRouteImport.update({
+  id: '/variants/',
+  path: '/variants/',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -112,6 +124,7 @@ export interface FileRoutesByFullPath {
   '/analytics': typeof AnalyticsRoute
   '/blast': typeof BlastRoute
   '/browser': typeof BrowserRoute
+  '/compare': typeof CompareRoute
   '/downloads': typeof DownloadsRoute
   '/guide': typeof GuideRoute
   '/help': typeof HelpRoute
@@ -119,6 +132,7 @@ export interface FileRoutesByFullPath {
   '/publications': typeof PublicationsRoute
   '/search': typeof SearchRoute
   '/seed-request': typeof SeedRequestRoute
+  '/sra': typeof SraRoute
   '/genes/$geneId': typeof GenesGeneIdRoute
   '/news/$slug': typeof NewsSlugRoute
   '/genes/': typeof GenesIndexRoute
@@ -130,6 +144,7 @@ export interface FileRoutesByTo {
   '/analytics': typeof AnalyticsRoute
   '/blast': typeof BlastRoute
   '/browser': typeof BrowserRoute
+  '/compare': typeof CompareRoute
   '/downloads': typeof DownloadsRoute
   '/guide': typeof GuideRoute
   '/help': typeof HelpRoute
@@ -137,6 +152,7 @@ export interface FileRoutesByTo {
   '/publications': typeof PublicationsRoute
   '/search': typeof SearchRoute
   '/seed-request': typeof SeedRequestRoute
+  '/sra': typeof SraRoute
   '/genes/$geneId': typeof GenesGeneIdRoute
   '/news/$slug': typeof NewsSlugRoute
   '/genes': typeof GenesIndexRoute
@@ -149,6 +165,7 @@ export interface FileRoutesById {
   '/analytics': typeof AnalyticsRoute
   '/blast': typeof BlastRoute
   '/browser': typeof BrowserRoute
+  '/compare': typeof CompareRoute
   '/downloads': typeof DownloadsRoute
   '/guide': typeof GuideRoute
   '/help': typeof HelpRoute
@@ -156,6 +173,7 @@ export interface FileRoutesById {
   '/publications': typeof PublicationsRoute
   '/search': typeof SearchRoute
   '/seed-request': typeof SeedRequestRoute
+  '/sra': typeof SraRoute
   '/genes/$geneId': typeof GenesGeneIdRoute
   '/news/$slug': typeof NewsSlugRoute
   '/genes/': typeof GenesIndexRoute
@@ -169,6 +187,7 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/blast'
     | '/browser'
+    | '/compare'
     | '/downloads'
     | '/guide'
     | '/help'
@@ -176,6 +195,7 @@ export interface FileRouteTypes {
     | '/publications'
     | '/search'
     | '/seed-request'
+    | '/sra'
     | '/genes/$geneId'
     | '/news/$slug'
     | '/genes/'
@@ -187,6 +207,7 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/blast'
     | '/browser'
+    | '/compare'
     | '/downloads'
     | '/guide'
     | '/help'
@@ -194,6 +215,7 @@ export interface FileRouteTypes {
     | '/publications'
     | '/search'
     | '/seed-request'
+    | '/sra'
     | '/genes/$geneId'
     | '/news/$slug'
     | '/genes'
@@ -205,6 +227,7 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/blast'
     | '/browser'
+    | '/compare'
     | '/downloads'
     | '/guide'
     | '/help'
@@ -212,6 +235,7 @@ export interface FileRouteTypes {
     | '/publications'
     | '/search'
     | '/seed-request'
+    | '/sra'
     | '/genes/$geneId'
     | '/news/$slug'
     | '/genes/'
@@ -224,6 +248,7 @@ export interface RootRouteChildren {
   AnalyticsRoute: typeof AnalyticsRoute
   BlastRoute: typeof BlastRoute
   BrowserRoute: typeof BrowserRoute
+  CompareRoute: typeof CompareRoute
   DownloadsRoute: typeof DownloadsRoute
   GuideRoute: typeof GuideRoute
   HelpRoute: typeof HelpRoute
@@ -231,6 +256,7 @@ export interface RootRouteChildren {
   PublicationsRoute: typeof PublicationsRoute
   SearchRoute: typeof SearchRoute
   SeedRequestRoute: typeof SeedRequestRoute
+  SraRoute: typeof SraRoute
   GenesGeneIdRoute: typeof GenesGeneIdRoute
   NewsSlugRoute: typeof NewsSlugRoute
   GenesIndexRoute: typeof GenesIndexRoute
@@ -240,67 +266,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/seed-request': {
-      id: '/seed-request'
-      path: '/seed-request'
-      fullPath: '/seed-request'
-      preLoaderRoute: typeof SeedRequestRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/search': {
-      id: '/search'
-      path: '/search'
-      fullPath: '/search'
-      preLoaderRoute: typeof SearchRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/publications': {
-      id: '/publications'
-      path: '/publications'
-      fullPath: '/publications'
-      preLoaderRoute: typeof PublicationsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/login': {
-      id: '/login'
-      path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof LoginRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/help': {
-      id: '/help'
-      path: '/help'
-      fullPath: '/help'
-      preLoaderRoute: typeof HelpRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/guide': {
-      id: '/guide'
-      path: '/guide'
-      fullPath: '/guide'
-      preLoaderRoute: typeof GuideRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/downloads': {
-      id: '/downloads'
-      path: '/downloads'
-      fullPath: '/downloads'
-      preLoaderRoute: typeof DownloadsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/browser': {
-      id: '/browser'
-      path: '/browser'
-      fullPath: '/browser'
-      preLoaderRoute: typeof BrowserRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/blast': {
-      id: '/blast'
-      path: '/blast'
-      fullPath: '/blast'
-      preLoaderRoute: typeof BlastRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/analytics': {
@@ -310,25 +280,81 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AnalyticsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/blast': {
+      id: '/blast'
+      path: '/blast'
+      fullPath: '/blast'
+      preLoaderRoute: typeof BlastRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/variants/': {
-      id: '/variants/'
-      path: '/variants'
-      fullPath: '/variants/'
-      preLoaderRoute: typeof VariantsIndexRouteImport
+    '/browser': {
+      id: '/browser'
+      path: '/browser'
+      fullPath: '/browser'
+      preLoaderRoute: typeof BrowserRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/news/': {
-      id: '/news/'
-      path: '/news'
-      fullPath: '/news/'
-      preLoaderRoute: typeof NewsIndexRouteImport
+    '/compare': {
+      id: '/compare'
+      path: '/compare'
+      fullPath: '/compare'
+      preLoaderRoute: typeof CompareRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/downloads': {
+      id: '/downloads'
+      path: '/downloads'
+      fullPath: '/downloads'
+      preLoaderRoute: typeof DownloadsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/guide': {
+      id: '/guide'
+      path: '/guide'
+      fullPath: '/guide'
+      preLoaderRoute: typeof GuideRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/help': {
+      id: '/help'
+      path: '/help'
+      fullPath: '/help'
+      preLoaderRoute: typeof HelpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/publications': {
+      id: '/publications'
+      path: '/publications'
+      fullPath: '/publications'
+      preLoaderRoute: typeof PublicationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/search': {
+      id: '/search'
+      path: '/search'
+      fullPath: '/search'
+      preLoaderRoute: typeof SearchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/seed-request': {
+      id: '/seed-request'
+      path: '/seed-request'
+      fullPath: '/seed-request'
+      preLoaderRoute: typeof SeedRequestRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sra': {
+      id: '/sra'
+      path: '/sra'
+      fullPath: '/sra'
+      preLoaderRoute: typeof SraRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/genes/': {
@@ -338,6 +364,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof GenesIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/genes/$geneId': {
+      id: '/genes/$geneId'
+      path: '/genes/$geneId'
+      fullPath: '/genes/$geneId'
+      preLoaderRoute: typeof GenesGeneIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/news/': {
+      id: '/news/'
+      path: '/news'
+      fullPath: '/news/'
+      preLoaderRoute: typeof NewsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/news/$slug': {
       id: '/news/$slug'
       path: '/news/$slug'
@@ -345,11 +385,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof NewsSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/genes/$geneId': {
-      id: '/genes/$geneId'
-      path: '/genes/$geneId'
-      fullPath: '/genes/$geneId'
-      preLoaderRoute: typeof GenesGeneIdRouteImport
+    '/variants/': {
+      id: '/variants/'
+      path: '/variants'
+      fullPath: '/variants/'
+      preLoaderRoute: typeof VariantsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -360,6 +400,7 @@ const rootRouteChildren: RootRouteChildren = {
   AnalyticsRoute: AnalyticsRoute,
   BlastRoute: BlastRoute,
   BrowserRoute: BrowserRoute,
+  CompareRoute: CompareRoute,
   DownloadsRoute: DownloadsRoute,
   GuideRoute: GuideRoute,
   HelpRoute: HelpRoute,
@@ -367,6 +408,7 @@ const rootRouteChildren: RootRouteChildren = {
   PublicationsRoute: PublicationsRoute,
   SearchRoute: SearchRoute,
   SeedRequestRoute: SeedRequestRoute,
+  SraRoute: SraRoute,
   GenesGeneIdRoute: GenesGeneIdRoute,
   NewsSlugRoute: NewsSlugRoute,
   GenesIndexRoute: GenesIndexRoute,

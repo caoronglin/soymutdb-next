@@ -4,10 +4,10 @@
  * Mocks the http client and verifies correct path/params for each function.
  */
 
-import { http } from "./client";
+import { http } from "./auth";
 import { getDownloadFiles, getDownloadUrl } from "./downloads";
 
-vi.mock("./client", () => ({
+vi.mock("./auth", () => ({
   http: {
     get: vi.fn(),
   },

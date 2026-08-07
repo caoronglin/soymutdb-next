@@ -27,14 +27,21 @@ def dispatch_task(
     args: list[Any] | None = None,
     kwargs: dict[str, Any] | None = None,
     queue: str,
+    task_id: str | None = None,
 ) -> Any:
-    """Dispatch a task and raise a traceable error when the broker rejects it."""
+    """Dispatch a task and raise a traceable error when the broker rejects it.
+
+    ``task_id`` pins the Celery message id (the outbox dispatcher passes the
+    outbox ``event_id`` so crash-restart re-sends reuse the same task id and
+    the idempotent worker can safely ignore duplicates).
+    """
     try:
         return get_celery_client().send_task(
             task_name,
             args=args,
             kwargs=kwargs,
             queue=queue,
+            task_id=task_id,
         )
     except Exception as exc:
         raise TaskDispatchError(
@@ -43,6 +50,7 @@ def dispatch_task(
                 "identifier": str(identifier),
                 "task_name": task_name,
                 "queue": queue,
+                "task_id": task_id,
             },
         ) from exc
 

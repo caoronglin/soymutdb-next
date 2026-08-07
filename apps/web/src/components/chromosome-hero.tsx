@@ -11,7 +11,7 @@ import * as React from "react";
 import { ArrowUpRight } from "lucide-react";
 import { cn } from "@soymutdb/ui";
 import { useAnimation } from "../lib/animation-context";
-import { SOYBEAN_CHROMOSOMES, CHROMOSOME_LENGTHS_BP, formatMb, jbrowseUrl } from "../lib/format";
+import { CHROMOSOME_LENGTHS_BP, formatMb, jbrowseUrl } from "../lib/format";
 import { getMotionPrefs } from "../lib/motion-prefs";
 
 export interface ChromosomeDensityPoint {

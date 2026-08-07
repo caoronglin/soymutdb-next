@@ -159,6 +159,22 @@ class Settings(BaseSettings):
     blast_default_db: str = "williams82_cds"
     blast_bin_dir: str = "/usr/bin"
     blast_cache_dir: str = "/tmp/blast_cache"
+    #: Maximum delivery attempts per BLAST job (broker-level retries only;
+    #: the worker itself is idempotent on top of this).
+    blast_max_attempts: int = 3
+
+    # --------------------------------------------------------------- Outbox
+    # Transactional outbox: API writes events inside business transactions;
+    # a background dispatcher forwards them to Celery.  Disable only for
+    # single-instance debugging (SOYMUTDB_OUTBOX_DISPATCHER_ENABLED=false).
+    outbox_dispatcher_enabled: bool = True
+    outbox_poll_interval_seconds: float = 1.0
+    outbox_batch_size: int = 50
+    #: Max send attempts per event before the row is left ``failed``.
+    outbox_max_attempts: int = 5
+    #: Sent events older than this many days are archived/deleted.
+    outbox_retention_days: int = 30
+    outbox_cleanup_interval_seconds: float = 3600.0
 
     # ----------------------------------------------------- OpenTelemetry
     otel_enabled: bool = False

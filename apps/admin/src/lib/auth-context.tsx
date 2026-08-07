@@ -1,18 +1,24 @@
 import * as React from "react";
-import { http, setAuthTokens, clearAuth } from "@soymutdb/api-client";
-
-/** localStorage key used by the API client to persist the access token. */
-const TOKEN_KEY = "soymutdb_token";
+import {
+  http,
+  getAccessToken,
+  setAccessToken,
+  clearAuth,
+  restoreSession,
+  onAuthLogout,
+} from "@soymutdb/api-client";
 
 /** Authenticated admin user. */
 export interface AuthUser {
   username: string;
 }
 
-/** Shape of the `POST /auth/login` response. */
+/**
+ * Shape of the `POST /auth/login` response. The refresh token is delivered
+ * exclusively via the HttpOnly refresh cookie and never appears in JSON.
+ */
 interface LoginResponse {
   access_token: string;
-  refresh_token: string;
   token_type: string;
   expires_in: number;
 }
@@ -51,30 +57,54 @@ function usernameFromToken(token: string): string | null {
 }
 
 /**
- * Auth provider: checks for a stored JWT on mount, exposes login/logout and
- * the current authentication state. AuthProvider sits outside the router, so
- * logout navigates via `window.location` (full reload) rather than the router.
+ * Auth provider: restores a session from the HttpOnly refresh cookie on
+ * mount, exposes login/logout and the current authentication state.
+ *
+ * AuthProvider sits outside the router, so logout navigates via
+ * `window.location` (full reload) rather than the router. The shared
+ * transport owns the access token (module memory only) and fires the logout
+ * event when a mid-session refresh fails — this provider listens and drops
+ * back to the login screen.
  */
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [isAuthenticated, setIsAuthenticated] = React.useState<boolean>(() => {
-    if (typeof localStorage === "undefined") return false;
-    return localStorage.getItem(TOKEN_KEY) !== null;
-  });
+  const [isAuthenticated, setIsAuthenticated] = React.useState<boolean>(false);
+  const [user, setUser] = React.useState<AuthUser | null>(null);
 
-  const [user, setUser] = React.useState<AuthUser | null>(() => {
-    if (typeof localStorage === "undefined") return null;
-    const token = localStorage.getItem(TOKEN_KEY);
-    if (!token) return null;
-    const username = usernameFromToken(token);
-    return username ? { username } : null;
-  });
+  // Restore a session from the HttpOnly refresh cookie (single-flight with
+  // any in-flight refresh triggered by requests). Failure → anonymous state.
+  React.useEffect(() => {
+    let cancelled = false;
+    void restoreSession().then((ok) => {
+      if (cancelled || !ok) return;
+      const token = getAccessToken();
+      const username = token ? usernameFromToken(token) : null;
+      setIsAuthenticated(true);
+      setUser(username ? { username } : null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Hard session death (refresh failed while handling a 401) → login page.
+  React.useEffect(
+    () =>
+      onAuthLogout(() => {
+        setIsAuthenticated(false);
+        setUser(null);
+        if (typeof window !== "undefined") {
+          window.location.href = "/login";
+        }
+      }),
+    [],
+  );
 
   const login = React.useCallback(
     async (username: string, password: string): Promise<AuthUser> => {
       const res = await http.post<LoginResponse>("/auth/login", {
         json: { username, password },
       });
-      setAuthTokens(res.access_token, res.refresh_token);
+      setAccessToken(res.access_token);
       const resolved = usernameFromToken(res.access_token) ?? username;
       const authedUser: AuthUser = { username: resolved };
       setIsAuthenticated(true);
@@ -85,6 +115,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const logout = React.useCallback(() => {
+    // Best-effort server-side family revocation (clears the refresh cookie).
+    void http
+      .post("/auth/logout", { withCredentials: true })
+      .catch(() => {
+        /* local logout proceeds regardless */
+      });
     clearAuth();
     setIsAuthenticated(false);
     setUser(null);

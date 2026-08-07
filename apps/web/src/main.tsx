@@ -40,6 +40,24 @@ import { initI18nOnce } from "./lib/i18n";
 import { initWidgetLoader } from "./lib/widget-loader";
 import { registry, SERVICES } from "./lib/di";
 import { bus } from "./lib/event-bus";
+import { clearLegacyTokens, restoreSession, onAuthLogout } from "@soymutdb/api-client";
+
+// One-time migration: drop legacy persisted access/refresh tokens from
+// localStorage/sessionStorage (sessions now live in memory + HttpOnly cookie).
+clearLegacyTokens();
+
+// Try to restore a session from the HttpOnly refresh cookie. Failure is
+// silent — the public site degrades to anonymous state.
+void restoreSession();
+
+// Hard session death (refresh failed mid-session): return to the login page.
+// The redirect lives here (app layer) — the transport never hardcodes it.
+onAuthLogout(() => {
+    if (typeof window === "undefined") return;
+    const { pathname } = window.location;
+    if (pathname.startsWith("/login")) return;
+    window.location.href = "/login";
+});
 
 // Register the <soymutdb-widget> custom element (side-effect import).
 // This is a standalone Custom Element — no React dependency.

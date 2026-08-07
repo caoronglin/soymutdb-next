@@ -44,7 +44,8 @@ export function useReveal<T extends HTMLElement = HTMLDivElement>(
   rootOrOptions?: React.RefObject<T | null> | Record<string, unknown>,
   _options?: Record<string, unknown>,
 ): React.RefObject<T | null> {
+  const internalRef = React.useRef<T | null>(null);
   return (rootOrOptions && "current" in rootOrOptions
-    ? rootOrOptions
-    : React.useRef<T | null>(null)) as React.RefObject<T | null>;
+    ? (rootOrOptions as React.RefObject<T | null>)
+    : internalRef) as React.RefObject<T | null>;
 }

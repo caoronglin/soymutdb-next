@@ -1,4 +1,4 @@
-import { http } from "./client";
+import { http } from "./auth";
 
 export interface MutantLineSummary {
   id: string;

@@ -1,5 +1,5 @@
 import type { components } from "./generated/openapi";
-import { http } from "./client";
+import { http } from "./auth";
 
 /**
  * Typed stats endpoints.

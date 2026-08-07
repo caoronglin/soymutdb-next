@@ -233,7 +233,7 @@ export function TrackViewer({
       const ric: typeof window.requestIdleCallback =
         window.requestIdleCallback ??
         ((cb: IdleRequestCallback) => setTimeout(cb, 200) as unknown as number);
-      idleCallbackRef.current = ric(async (deadline) => {
+      idleCallbackRef.current = ric(async () => {
         try {
           const data = await dataLoader(region);
           dataRef.current = data;
@@ -267,7 +267,6 @@ export function TrackViewer({
     const { reduced: reducedMotion } = getMotionPrefs();
 
     const draw = (time: number) => {
-      const dt = Math.min(0.05, (time - v.lastFrameTime) / 1000 || 0.016);
       v.lastFrameTime = time;
 
       // Interpolate view toward target for smooth pan/zoom
@@ -285,8 +284,6 @@ export function TrackViewer({
 
       const viewStart = v.animStart;
       const viewEnd = v.animEnd;
-      const viewWidth = viewEnd - viewStart;
-      const bpPerPx = viewWidth / w;
 
       // Layout: ruler at top (24px), features middle (h/2), density bottom (h/2 - 24)
       const rulerH = 24;

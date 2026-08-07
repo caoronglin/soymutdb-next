@@ -6,6 +6,7 @@ middleware, exception handlers, and lifespan startup/shutdown.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -32,6 +33,7 @@ from .core.exceptions import (
 )
 from .core.metrics import get_metrics_app
 from .core.middleware import RequestIdMiddleware
+from .core.outbox_dispatcher import start_dispatcher
 from .schemas.error import ErrorDetail, ErrorResponse, FieldError, ValidationErrorResponse
 
 logger = structlog.get_logger(__name__)
@@ -189,11 +191,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     Database connections (PostgreSQL, ClickHouse, Redis) are lazily
     initialised on first use; we only need to dispose them on shutdown.
+    The transactional-outbox dispatcher runs as a background task and is
+    cancelled on shutdown.
     """
     logger.info("api.startup", env=settings.app_env, debug=settings.debug)
-    yield
-    await close_db()
-    logger.info("api.shutdown")
+    outbox_task = await start_dispatcher()
+    try:
+        yield
+    finally:
+        if outbox_task is not None:
+            outbox_task.cancel()
+            try:
+                await outbox_task
+            except asyncio.CancelledError:
+                pass
+        await close_db()
+        logger.info("api.shutdown")
 
 
 # ---------------------------------------------------------------------------

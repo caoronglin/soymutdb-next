@@ -1,0 +1,49 @@
+"""SoyMutDB shared job contract package.
+
+Versioned, idempotent job payloads plus the canonical status state machine,
+task names, and queue names shared by the API and the Celery worker.
+"""
+
+from __future__ import annotations
+
+from .contract import (
+    BLAST_RUN_TASK,
+    BUILD_STATIC_PAGES_TASK,
+    EXPORT_VARIANTS_TASK,
+    IMPORT_EXPRESSION_TASK,
+    IMPORT_HOMOLOG_TASK,
+    PAYLOAD_VERSION,
+    QUEUE_BLAST,
+    QUEUE_CLEANUP,
+    QUEUE_DEFAULT,
+    QUEUE_EXPORT,
+    QUEUE_INGEST,
+    QUEUE_STATS,
+    TASK_QUEUE_MAP,
+)
+from .schemas import JobPayload, JobRecordStore, JobStatusUpdate
+from .status import TRANSITION_MATRIX, JobStatus, transition_allowed
+
+__version__ = "0.1.0"
+
+__all__ = [
+    "BLAST_RUN_TASK",
+    "BUILD_STATIC_PAGES_TASK",
+    "EXPORT_VARIANTS_TASK",
+    "IMPORT_EXPRESSION_TASK",
+    "IMPORT_HOMOLOG_TASK",
+    "JobPayload",
+    "JobRecordStore",
+    "JobStatus",
+    "JobStatusUpdate",
+    "PAYLOAD_VERSION",
+    "QUEUE_BLAST",
+    "QUEUE_CLEANUP",
+    "QUEUE_DEFAULT",
+    "QUEUE_EXPORT",
+    "QUEUE_INGEST",
+    "QUEUE_STATS",
+    "TASK_QUEUE_MAP",
+    "TRANSITION_MATRIX",
+    "transition_allowed",
+]

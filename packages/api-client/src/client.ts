@@ -1,13 +1,21 @@
 /**
- * SoyMutDB API client — fetch-based with request/response interceptors and auth.
+ * SoyMutDB API client — pure fetch transport.
  *
  * Reads the base URL from the VITE_API_BASE_URL environment variable, falling
- * back to "/api/v1". Auth tokens are attached from localStorage; 401 responses
- * clear the token and redirect to the login page.
+ * back to "/api/v1".
+ *
+ * The transport is deliberately side-effect free:
+ *   - the access token lives in module memory only (never persisted to
+ *     localStorage/sessionStorage/URL; sessions are restored via the HttpOnly
+ *     refresh cookie — see ./auth.ts)
+ *   - failures are thrown as structured ApiError (status / code / request_id)
+ *   - it does NOT clear auth, redirect, or refresh on 401 — the coordinating
+ *     layer in ./auth.ts owns refresh-on-401, single-flight refresh, retries
+ *     and logout events.
  */
 
-const TOKEN_KEY = "soymutdb_token";
-const REFRESH_TOKEN_KEY = "soymutdb_refresh_token";
+/** In-memory access token (module singleton; never written to storage). */
+let accessToken: string | null = null;
 
 /** Resolved API base URL. */
 export const apiBaseUrl =
@@ -67,6 +75,10 @@ export interface RequestOptions extends Omit<RequestInit, "body"> {
     params?: Record<string, unknown> | object;
     /** Abort timeout in milliseconds (default 30000). */
     timeoutMs?: number;
+    /** Attach the in-memory Bearer token (default true). */
+    auth?: boolean;
+    /** Send cookies with the request via `credentials: "include"` (e.g. refresh). */
+    withCredentials?: boolean;
 }
 
 /** Typed API error with status code and optional response body. */
@@ -74,13 +86,21 @@ export class ApiError extends Error {
     status: number;
     code?: string;
     details?: unknown;
+    request_id?: string;
 
-    constructor(message: string, status: number, code?: string, details?: unknown) {
+    constructor(
+        message: string,
+        status: number,
+        code?: string,
+        details?: unknown,
+        request_id?: string,
+    ) {
         super(message);
         this.name = "ApiError";
         this.status = status;
         this.code = code;
         this.details = details;
+        this.request_id = request_id;
     }
 }
 
@@ -100,49 +120,56 @@ function buildUrl(path: string, params?: Record<string, unknown> | object): stri
     return qs ? `${base}?${qs}` : base;
 }
 
-function getAuthToken(): string | null {
-    if (typeof localStorage === "undefined") return null;
-    return localStorage.getItem(TOKEN_KEY);
+/** Current in-memory access token, if any. */
+export function getAccessToken(): string | null {
+    return accessToken;
 }
 
-/** Clear stored auth credentials (called on 401). */
+/**
+ * Store the access token in module memory only.
+ *
+ * Never persists to localStorage/sessionStorage/URL. The refresh token is
+ * delivered exclusively via the HttpOnly refresh cookie, so a `refreshToken`
+ * argument (legacy callers) is accepted but ignored.
+ */
+export function setAuthTokens(accessTokenValue: string, _refreshToken?: string): void {
+    accessToken = accessTokenValue || null;
+}
+
+/** Clear the in-memory access token. */
 export function clearAuth(): void {
-    if (typeof localStorage === "undefined") return;
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(REFRESH_TOKEN_KEY);
-}
-
-/** Persist auth tokens after a successful login. */
-export function setAuthTokens(accessToken: string, refreshToken?: string): void {
-    if (typeof localStorage === "undefined") return;
-    localStorage.setItem(TOKEN_KEY, accessToken);
-    if (refreshToken) localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
-}
-
-function redirectToLogin(): void {
-    if (typeof window === "undefined") return;
-    const { pathname, search } = window.location;
-    if (pathname.startsWith("/login")) return;
-    const redirect = encodeURIComponent(`${pathname}${search}`);
-    window.location.href = `/login?redirect=${redirect}`;
+    accessToken = null;
 }
 
 /**
  * Core request function. Merges auth headers, serializes JSON bodies, applies
  * a timeout via AbortController, and normalizes errors.
+ *
+ * Side-effect free: no auth clearing, no redirects, no refresh on 401 — see
+ * ./auth.ts for the coordinating layer.
  */
 export async function request<T>(
     path: string,
     options: RequestOptions = {},
 ): Promise<T> {
-    const { json, params, timeoutMs = DEFAULT_TIMEOUT, headers, ...rest } = options;
+    const {
+        json,
+        params,
+        timeoutMs = DEFAULT_TIMEOUT,
+        headers,
+        auth = true,
+        withCredentials = false,
+        ...rest
+    } = options;
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
     const requestHeaders = new Headers(headers);
-    const token = getAuthToken();
-    if (token) requestHeaders.set("Authorization", `Bearer ${token}`);
+    if (auth) {
+        const token = getAccessToken();
+        if (token) requestHeaders.set("Authorization", `Bearer ${token}`);
+    }
 
     let body: BodyInit | undefined;
     if (json !== undefined) {
@@ -159,6 +186,7 @@ export async function request<T>(
             headers: requestHeaders,
             body,
             signal: controller.signal,
+            credentials: withCredentials ? "include" : rest.credentials,
         });
     } catch (err) {
         clearTimeout(timer);
@@ -173,27 +201,39 @@ export async function request<T>(
     }
     clearTimeout(timer);
 
-    // Handle 401 by clearing auth and redirecting to login.
-    if (response.status === 401) {
-        clearAuth();
-        redirectToLogin();
-        throw new ApiError("Unauthorized", 401, "UNAUTHORIZED");
-    }
-
     const contentType = response.headers.get("content-type") ?? "";
     const isJson = contentType.includes("application/json");
     const payload = isJson ? await response.json().catch(() => null) : null;
 
     if (!response.ok) {
+        // Unified error envelope: { error: { code, message, details? }, request_id, status_code }
+        // Fall back to a flat { code, message } payload for legacy servers.
+        const envelope =
+            payload && typeof payload === "object"
+                ? (payload as Record<string, unknown>)
+                : null;
+        const errDetail =
+            envelope && typeof envelope.error === "object" && envelope.error !== null
+                ? (envelope.error as Record<string, unknown>)
+                : null;
         const message =
-            (payload && typeof payload === "object" && "message" in payload
-                ? String((payload as { message: unknown }).message)
-                : null) ?? response.statusText ?? "Request failed";
+            (typeof errDetail?.message === "string"
+                ? errDetail.message
+                : typeof envelope?.message === "string"
+                  ? envelope.message
+                  : null) ??
+            response.statusText ??
+            "Request failed";
         const code =
-            payload && typeof payload === "object" && "code" in payload
-                ? String((payload as { code: unknown }).code)
-                : undefined;
-        throw new ApiError(message, response.status, code, payload);
+            (typeof errDetail?.code === "string"
+                ? errDetail.code
+                : typeof envelope?.code === "string"
+                  ? envelope.code
+                  : undefined) ?? undefined;
+        const requestId =
+            (typeof envelope?.request_id === "string" ? envelope.request_id : undefined) ??
+            undefined;
+        throw new ApiError(message, response.status, code, payload, requestId);
     }
 
     // Some endpoints (DELETE) return no content.
@@ -204,7 +244,7 @@ export async function request<T>(
 }
 
 /**
- * Convenience HTTP method helpers.
+ * Convenience HTTP method helpers (pure transport).
  *
  * GET requests default to NON_CRITICAL timeout (5s) since they are typically
  * data-fetching operations. POST/PUT/PATCH/DELETE default to CRITICAL timeout
@@ -250,6 +290,7 @@ export default {
     apiBaseUrl,
     setAuthTokens,
     clearAuth,
+    getAccessToken,
     ApiError,
     TimeoutPresets,
     isTimeoutError,

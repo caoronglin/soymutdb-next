@@ -19,6 +19,7 @@ from .gene_data_cache import GeneDataCache
 from .genomic import Assembly, Chromosome, Exon, Gene, GeneAlias, Transcript
 from .homolog import GeneHomolog
 from .import_task import ImportTask
+from .outbox import OutboxEvent
 from .seed import SeedInventory, SeedRequest
 from .system_settings import SystemSetting
 from .tracks import Track, TrackCategory
@@ -44,6 +45,7 @@ __all__ = [
     "MutantLine",
     "NewsArticle",
     "Organization",
+    "OutboxEvent",
     "PageLayout",
     "Phenotype",
     "Project",

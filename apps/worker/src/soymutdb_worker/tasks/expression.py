@@ -5,6 +5,11 @@ CSV format (header required)::
     gene_id,library_id,fpkm,tpm,raw_count
 
 Lines starting with ``#`` are ignored.
+
+The worker never imports API models: data writes go through narrow SQLAlchemy
+Core tables (:mod:`soymutdb_worker.tables`) and the import-task status through
+:class:`ImportTaskStore`, which validates every transition with the shared
+``soymutdb_jobs`` state machine.
 """
 
 from __future__ import annotations
@@ -13,15 +18,15 @@ import csv
 import gzip as gz
 import io
 import logging
-from datetime import datetime, timezone
 from typing import Any
 
 from celery import Task
+from sqlalchemy import insert, select
 
-from app.models.expression import ExpressionData, ExpressionLibrary
-from app.models.genomic import Gene
-from app.models.import_task import ImportTask, ImportTaskStatus
 from soymutdb_worker.main import celery_app
+from soymutdb_worker.repositories import ImportTaskStore
+from soymutdb_worker.shared import JobStatus
+from soymutdb_worker.tables import expression_data, expression_libraries, genes, utcnow
 from soymutdb_worker.tasks.ingest import BATCH_SIZE
 from soymutdb_worker.utils.db import get_db
 from soymutdb_worker.utils.s3 import stream_s3_file
@@ -79,27 +84,29 @@ def import_expression_csv(
 
     if total_rows == 0:
         with get_db() as session:
-            task = session.get(ImportTask, import_task_id)
-            if task:
-                task.status = ImportTaskStatus.COMPLETED.value
-                task.processed_records = 0
-                task.total_records = 0
-                task.progress = 100
+            ImportTaskStore(session).update(
+                import_task_id,
+                JobStatus.SUCCEEDED,
+                fields={"processed_records": 0, "total_records": 0, "progress": 100},
+            )
         return {"imported": 0, "skipped": 0, "total": 0}
 
     # ── Mark task as running ────────────────────────────────────────────
     with get_db() as session:
-        task = session.get(ImportTask, import_task_id)
-        if task:
-            task.status = ImportTaskStatus.RUNNING.value
-            task.total_records = total_rows
-            task.processed_records = 0
-            task.progress = 0
+        ImportTaskStore(session).update(
+            import_task_id,
+            JobStatus.RUNNING,
+            fields={"total_records": total_rows, "processed_records": 0, "progress": 0},
+        )
 
     # ── Pre-load valid reference sets ───────────────────────────────────
     with get_db() as session:
-        existing_gene_ids: set[str] = {gid for gid, in session.query(Gene.id).all()}
-        existing_lib_ids: set[int] = {lid for lid, in session.query(ExpressionLibrary.id).all()}
+        existing_gene_ids: set[str] = set(
+            session.execute(select(genes.c.id)).scalars().all()
+        )
+        existing_lib_ids: set[int] = set(
+            session.execute(select(expression_libraries.c.id)).scalars().all()
+        )
     logger.info(
         "Reference sets loaded: %d genes, %d expression libraries",
         len(existing_gene_ids),
@@ -116,35 +123,27 @@ def import_expression_csv(
         if not batch:
             return
         with get_db() as session:
-            for row_data in batch:
-                gid = row_data["gene_id"]
-                lid = row_data["library_id"]
-                if gid not in existing_gene_ids:
-                    logger.warning("Skipping: gene_id %r not found", gid)
-                    continue
-                if lid not in existing_lib_ids:
-                    logger.warning("Skipping: library_id %s not found", lid)
-                    continue
-                session.add(
-                    ExpressionData(
-                        gene_id=gid,
-                        library_id=lid,
-                        fpkm=row_data.get("fpkm"),
-                        tpm=row_data.get("tpm"),
-                        raw_count=row_data.get("raw_count"),
-                    )
-                )
-                imported += 1
+            rows = [
+                row
+                for row in batch
+                if row["gene_id"] in existing_gene_ids
+                and row["library_id"] in existing_lib_ids
+            ]
+            for row in batch:
+                if row["gene_id"] not in existing_gene_ids:
+                    logger.warning("Skipping: gene_id %r not found", row["gene_id"])
+                elif row["library_id"] not in existing_lib_ids:
+                    logger.warning("Skipping: library_id %s not found", row["library_id"])
+            if rows:
+                session.execute(insert(expression_data), rows)
+                imported += len(rows)
             session.commit()
         batch.clear()
 
         # Update task progress
         pct = int(imported * 100 / total_rows) if total_rows else 0
         with get_db() as session:
-            task = session.get(ImportTask, import_task_id)
-            if task:
-                task.processed_records = imported
-                task.progress = pct
+            ImportTaskStore(session).set_progress(import_task_id, imported, pct)
 
         self.update_state(
             state="PROGRESS",
@@ -192,11 +191,15 @@ def import_expression_csv(
 
         # Mark task as completed
         with get_db() as session:
-            task = session.get(ImportTask, import_task_id)
-            if task:
-                task.status = ImportTaskStatus.COMPLETED.value
-                task.processed_records = imported
-                task.progress = 100
+            ImportTaskStore(session).update(
+                import_task_id,
+                JobStatus.SUCCEEDED,
+                fields={
+                    "processed_records": imported,
+                    "progress": 100,
+                    "completed_at": utcnow(),
+                },
+            )
 
         logger.info(
             "Expression CSV import complete: %d imported, %d skipped",
@@ -209,10 +212,11 @@ def import_expression_csv(
         logger.error("Expression CSV import failed: %s", e)
         try:
             with get_db() as session:
-                task = session.get(ImportTask, import_task_id)
-                if task:
-                    task.status = ImportTaskStatus.FAILED.value
-                    task.error_message = str(e)
+                ImportTaskStore(session).update(
+                    import_task_id,
+                    JobStatus.FAILED,
+                    fields={"error_message": str(e)},
+                )
         except Exception as db_err:
             logger.error("Failed to update import task status: %s", db_err)
         raise

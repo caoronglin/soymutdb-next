@@ -7,7 +7,6 @@ import { useTranslation } from "react-i18next";
 import * as React from "react";
 import {
   GitCompareArrows,
-  Check,
   X,
   Dna,
   FlaskConical,
@@ -23,10 +22,7 @@ import {
   CardTitle,
   CardDescription,
   Badge,
-  Button,
   EmptyState,
-  Checkbox,
-  Label,
 } from "@soymutdb/ui";
 import { FadeUp, useReveal } from "../components/route-motion";
 import { startViewTransition } from "../lib/view-transitions";
@@ -49,7 +45,7 @@ export const Route = createFileRoute("/compare")({
 });
 
 function ComparePage() {
-  const { t } = useTranslation();
+  useTranslation();
   const { ids } = Route.useSearch();
   const navigate = Route.useNavigate();
   const rootRef = React.useRef<HTMLDivElement>(null);
@@ -124,11 +120,12 @@ function ComparePage() {
                       disabled ? "opacity-40 cursor-not-allowed" : "hover:bg-muted"
                     } ${isSelected ? "bg-primary/10" : ""}`}
                   >
-                    <Checkbox
+                    <input
+                      type="checkbox"
                       checked={isSelected}
                       disabled={disabled}
-                      onCheckedChange={() => toggle(v.id)}
-                      className="mt-0.5"
+                      onChange={() => toggle(v.id)}
+                      className="mt-0.5 size-4 accent-[var(--primary)]"
                       aria-label={`Select ${v.id}`}
                     />
                     <div className="min-w-0 flex-1">

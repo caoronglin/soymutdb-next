@@ -3,6 +3,9 @@
 Builds a JSON blob and a prerendered HTML page for each gene (expression
 summary, homologs, variant stats).  Stores the JSON in ``gene_data_cache``
 and optionally uploads both ``.json.gz`` and ``.html.gz`` to S3 for CDN.
+
+The worker never imports API models: all reads/writes use the narrow
+SQLAlchemy Core tables from :mod:`soymutdb_worker.tables`.
 """
 
 from __future__ import annotations
@@ -11,20 +14,25 @@ import gzip
 import io
 import json
 import logging
-import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from celery import Task
-from jinja2 import Environment, FileSystemLoader, filters
+from jinja2 import Environment, FileSystemLoader
+from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from app.models.expression import ExpressionData, ExpressionLibrary
-from app.models.gene_data_cache import GeneDataCache
-from app.models.genomic import Chromosome, Gene
-from app.models.homolog import GeneHomolog
 from soymutdb_worker.config import get_setting
 from soymutdb_worker.main import celery_app
+from soymutdb_worker.tables import (
+    chromosomes,
+    expression_data,
+    expression_libraries,
+    gene_data_cache,
+    gene_homologs,
+    genes,
+)
 from soymutdb_worker.utils.db import get_db
 from soymutdb_worker.utils.s3 import get_s3_client
 
@@ -121,28 +129,27 @@ def _build_expression_summary(session, gene_id: str) -> tuple[list[dict[str, Any
     Returns (top_N_list, total_count).
     """
     # First get total count
-    total_count = (
-        session.query(ExpressionData.id)
-        .filter(ExpressionData.gene_id == gene_id)
-        .count()
-    )
+    total_count = session.execute(
+        select(func.count())
+        .select_from(expression_data)
+        .where(expression_data.c.gene_id == gene_id)
+    ).scalar_one()
 
     # Get top N ordered by fpkm desc
-    rows = (
-        session.query(
-            ExpressionLibrary.library_name,
-            ExpressionLibrary.tissue,
-            ExpressionLibrary.treatment,
-            ExpressionData.fpkm,
-            ExpressionData.tpm,
-            ExpressionData.raw_count,
+    rows = session.execute(
+        select(
+            expression_libraries.c.library_name,
+            expression_libraries.c.tissue,
+            expression_libraries.c.treatment,
+            expression_data.c.fpkm,
+            expression_data.c.tpm,
+            expression_data.c.raw_count,
         )
-        .join(ExpressionData, ExpressionData.library_id == ExpressionLibrary.id)
-        .filter(ExpressionData.gene_id == gene_id)
-        .order_by(ExpressionData.fpkm.desc().nullslast())
+        .join(expression_data, expression_data.c.library_id == expression_libraries.c.id)
+        .where(expression_data.c.gene_id == gene_id)
+        .order_by(expression_data.c.fpkm.desc().nullslast())
         .limit(_MAX_EXPRESSION_ROWS)
-        .all()
-    )
+    ).all()
     return [
         {
             "library_name": r.library_name,
@@ -158,11 +165,15 @@ def _build_expression_summary(session, gene_id: str) -> tuple[list[dict[str, Any
 
 def _build_homolog_summary(session, gene_id: str) -> list[dict[str, Any]]:
     """Query homolog data for a gene."""
-    rows = (
-        session.query(GeneHomolog)
-        .filter(GeneHomolog.gene_id == gene_id)
-        .all()
-    )
+    rows = session.execute(
+        select(
+            gene_homologs.c.homolog_species,
+            gene_homologs.c.homolog_gene_id,
+            gene_homologs.c.homolog_type,
+            gene_homologs.c.source,
+        )
+        .where(gene_homologs.c.gene_id == gene_id)
+    ).all()
     return [
         {
             "homolog_species": r.homolog_species,
@@ -258,21 +269,24 @@ def build_static_pages(
 
     # ── Resolve gene list ───────────────────────────────────────────────
     with get_db() as session:
+        stmt = (
+            select(
+                genes.c.id,
+                genes.c.name,
+                genes.c.biotype,
+                genes.c.start,
+                genes.c.end,
+                genes.c.strand,
+                genes.c.description,
+                chromosomes.c.name.label("chromosome_name"),
+            )
+            .outerjoin(chromosomes, genes.c.chromosome_id == chromosomes.c.id)
+        )
         if gene_ids is not None:
-            genes = (
-                session.query(Gene, Chromosome.name.label("chromosome_name"))
-                .outerjoin(Chromosome, Gene.chromosome_id == Chromosome.id)
-                .filter(Gene.id.in_(gene_ids))
-                .all()
-            )
-        else:
-            genes = (
-                session.query(Gene, Chromosome.name.label("chromosome_name"))
-                .outerjoin(Chromosome, Gene.chromosome_id == Chromosome.id)
-                .all()
-            )
+            stmt = stmt.where(genes.c.id.in_(gene_ids))
+        gene_rows = session.execute(stmt).all()
 
-    total = len(genes)
+    total = len(gene_rows)
     logger.info("Processing %d genes for cache build", total)
 
     if total == 0:
@@ -283,50 +297,49 @@ def build_static_pages(
     failed = 0
 
     for idx in range(0, total, _GENE_CHUNK):
-        chunk = genes[idx : idx + _GENE_CHUNK]
+        chunk = gene_rows[idx : idx + _GENE_CHUNK]
 
-        for gene, chromosome_name in chunk:
+        for row in chunk:
             try:
-                now = datetime.now(timezone.utc)
+                now = datetime.now(UTC)
                 generated_at = now.isoformat()
 
                 gene_info = _build_gene_data(
-                    gene_id=gene.id,
-                    gene_name=gene.name,
-                    biotype=gene.biotype,
-                    chromosome_name=chromosome_name,
-                    start=gene.start,
-                    end=gene.end,
-                    strand=gene.strand,
-                    description=gene.description,
+                    gene_id=row.id,
+                    gene_name=row.name,
+                    biotype=row.biotype,
+                    chromosome_name=row.chromosome_name,
+                    start=row.start,
+                    end=row.end,
+                    strand=row.strand,
+                    description=row.description,
                 )
 
                 with get_db() as session:
-                    expression_data, total_expression_count = _build_expression_summary(
-                        session, gene.id
+                    expression_data_rows, total_expression_count = _build_expression_summary(
+                        session, row.id
                     )
-                    homolog_data = _build_homolog_summary(session, gene.id)
+                    homolog_data = _build_homolog_summary(session, row.id)
 
                 cache_data: dict[str, Any] = {
                     "gene": gene_info,
-                    "expression": expression_data,
+                    "expression": expression_data_rows,
                     "homologs": homolog_data,
                     "built_at": generated_at,
                 }
 
                 # ── Upsert into GeneDataCache ──────────────────────────────
                 with get_db() as session:
-                    existing = session.get(GeneDataCache, gene.id)
-                    if existing:
-                        existing.data = cache_data
-                        existing.updated_at = now
-                    else:
-                        session.add(
-                            GeneDataCache(
-                                gene_id=gene.id,
-                                data=cache_data,
-                            )
-                        )
+                    upsert_stmt = pg_insert(gene_data_cache).values(
+                        gene_id=row.id,
+                        data=cache_data,
+                        updated_at=now,
+                    )
+                    upsert_stmt = upsert_stmt.on_conflict_do_update(
+                        index_elements=[gene_data_cache.c.gene_id],
+                        set_={"data": cache_data, "updated_at": now},
+                    )
+                    session.execute(upsert_stmt)
                     session.commit()
 
                 # ── Upload to S3 (if enabled) ──────────────────────────────
@@ -338,7 +351,7 @@ def build_static_pages(
                     _upload_gzipped(
                         s3_client,
                         bucket,
-                        f"genes/{gene.id}.json.gz",
+                        f"genes/{row.id}.json.gz",
                         json_bytes,
                         content_type="application/json",
                     )
@@ -346,7 +359,7 @@ def build_static_pages(
                     # --- HTML ---
                     html_str = _render_gene_html(
                         gene_info=gene_info,
-                        expressions=expression_data,
+                        expressions=expression_data_rows,
                         total_expression_count=total_expression_count,
                         homologs=homolog_data,
                         generated_at=generated_at,
@@ -354,7 +367,7 @@ def build_static_pages(
                     _upload_gzipped(
                         s3_client,
                         bucket,
-                        f"genes/{gene.id}.html.gz",
+                        f"genes/{row.id}.html.gz",
                         html_str.encode("utf-8"),
                         content_type="text/html",
                     )
@@ -362,7 +375,7 @@ def build_static_pages(
                 processed += 1
 
             except Exception as e:
-                logger.error("Failed to build cache for gene %s: %s", gene.id, e)
+                logger.error("Failed to build cache for gene %s: %s", row.id, e)
                 failed += 1
 
         # Report progress for this chunk

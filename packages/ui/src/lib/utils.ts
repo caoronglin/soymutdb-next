@@ -91,13 +91,14 @@ export function validatePasswordStrength(password: string): PasswordValidationRe
 
   // Score: 0 (empty) → 4 (strong). Based on length + type diversity.
   let score: 0 | 1 | 2 | 3 | 4 = 0;
-  if (password.length === 0) score = 0;
-  else if (password.length < 8) score = 1;
-  else if (typeCount < 2) score = 1;
-  else if (typeCount === 2) score = 2;
-  else if (typeCount === 3 && password.length >= 10) score = 3;
-  else if (typeCount >= 3 && password.length >= 12) score = 4;
-  else score = 3;
+  if (password.length > 0) {
+    if (password.length < 8) score = 1;
+    else if (typeCount < 2) score = 1;
+    else if (typeCount === 2) score = 2;
+    else if (typeCount === 3 && password.length >= 10) score = 3;
+    else if (typeCount >= 3 && password.length >= 12) score = 4;
+    else score = 3;
+  }
 
   return { valid, typeCount, hasUppercase, hasLowercase, hasDigit, hasSpecial, hasMinLength, score };
 }

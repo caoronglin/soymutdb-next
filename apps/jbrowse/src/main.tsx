@@ -2,11 +2,13 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { initI18n, detectLanguage } from "@soymutdb/i18n";
+import { addJbrowseI18nResources } from "./i18n-extra";
 import App from "./App";
 import "./index.css";
 
-// Initialise i18next before rendering.
+// Initialise i18next before rendering, then merge in app-only resources.
 initI18n(detectLanguage());
+addJbrowseI18nResources();
 
 // React Query client with sensible defaults for the genome browser.
 const queryClient = new QueryClient({

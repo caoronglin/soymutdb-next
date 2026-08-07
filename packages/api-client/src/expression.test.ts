@@ -5,14 +5,14 @@
  * passed for each exported function.
  */
 
-import { http } from "./client";
+import { http } from "./auth";
 import {
   getGeneExpression,
   getExpressionLibraries,
   searchExpression,
 } from "./expression";
 
-vi.mock("./client", () => ({
+vi.mock("./auth", () => ({
   http: {
     get: vi.fn(),
   },

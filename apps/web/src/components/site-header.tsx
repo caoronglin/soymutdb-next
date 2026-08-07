@@ -20,7 +20,6 @@ import {
   Globe,
   ChevronDown,
   Dna,
-  Command as CmdIcon,
 } from "lucide-react";
 import { Button, cn } from "@soymutdb/ui";
 import { useTheme } from "../lib/theme-provider";

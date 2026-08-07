@@ -309,7 +309,7 @@ export function DataTable<T>({
         e.preventDefault();
         const rows = refs.current;
         if (rows.length === 0) return;
-        let next = index;
+        let next: number;
         if (e.key === "ArrowDown") next = Math.min(index + 1, rows.length - 1);
         else if (e.key === "ArrowUp") next = Math.max(index - 1, 0);
         else if (e.key === "Home") next = 0;

@@ -1,9 +1,15 @@
-"""BLAST service – job submission and result retrieval."""
+"""BLAST service – job submission and result retrieval.
+
+Job submission writes the BLAST job row and a transactional-outbox event in
+the **same database transaction**, so submission no longer depends on the
+Celery broker being reachable.  A background dispatcher forwards the event
+to the worker afterwards.
+"""
 
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,16 +17,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..core.config import get_settings
 from ..core.exceptions import NotFoundError, ValidationError
 from ..core.task_contract import BLAST_RUN_TASK
-from ..core.task_dispatch import dispatch_task
 from ..models.blast import BlastDatabase, BlastJob, BlastJobStatus
 from ..schemas.blast import (
-    BlastProgram,
-    BlastJobStatus as BlastSchemaJobStatus,
     BlastDatabaseResponse,
     BlastJobResponse,
+    BlastProgram,
     BlastResultResponse,
     BlastSubmitRequest,
 )
+from ..schemas.blast import (
+    BlastJobStatus as BlastSchemaJobStatus,
+)
+from .job_service import build_job_payload
+from .outbox_service import create_outbox_event
 
 settings = get_settings()
 
@@ -50,7 +59,11 @@ class BlastService:
         user_id: uuid.UUID,
         request: BlastSubmitRequest,
     ) -> BlastJobResponse:
-        """Create a BLAST job record and dispatch it to the Celery worker."""
+        """Create a BLAST job and queue its dispatch via the transactional outbox.
+
+        Business record + outbox event are committed atomically; no Celery
+        broker round-trip happens inside this transaction.
+        """
         # Validate the database exists and is active.
         bd_result = await db.execute(
             select(BlastDatabase).where(
@@ -77,17 +90,18 @@ class BlastService:
             query_sequence=request.query_sequence,
             parameters=request.parameters.model_dump(exclude_none=True),
             status=BlastJobStatus.PENDING,
-            submitted_at=datetime.now(timezone.utc),
-            expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+            submitted_at=datetime.now(UTC),
+            expires_at=datetime.now(UTC) + timedelta(days=7),
         )
         db.add(job)
-        await db.commit()
-        await db.refresh(job)
+        await db.flush()
 
-        dispatch_task(
-            BLAST_RUN_TASK,
-            identifier=job.id,
-            kwargs={
+        # The outbox event carries the full versioned JobPayload; the worker
+        # validates it with the shared schema before doing any work.
+        job_payload = build_job_payload(
+            job_id=job.id,
+            task_name=BLAST_RUN_TASK,
+            payload={
                 "job_id": str(job.id),
                 "program": job.program,
                 "database": blast_db.name,
@@ -97,8 +111,19 @@ class BlastService:
                 "max_target_seqs": request.parameters.max_target_seqs,
                 "parameters": job.parameters,
             },
-            queue="blast",
+            idempotency_key=f"blast:{job.id}",
+            max_attempts=settings.blast_max_attempts,
         )
+        await create_outbox_event(
+            db,
+            aggregate_type="blast_job",
+            aggregate_id=str(job.id),
+            event_type="blast_job.run",
+            payload=job_payload.model_dump(mode="json"),
+        )
+
+        await db.commit()
+        await db.refresh(job)
 
         return self._job_to_response(job)
 
@@ -130,7 +155,7 @@ class BlastService:
             hits=[],
             total_hits=0,
             search_stats={},
-            completed_at=job.completed_at or datetime.now(timezone.utc),
+            completed_at=job.completed_at or datetime.now(UTC),
         )
 
     @staticmethod

@@ -149,7 +149,7 @@ function HomeComponent() {
               </form>
               <div className="mt-8 flex flex-wrap gap-3">
                 <Button asChild size="lg" variant="hero" className="btn-glow">
-                  <Link to="/browser" search={{ assembly: "Wm82.a4.v1", loc: "chr01" }}><Microscope className="size-4" aria-hidden />{t("home.browseGenome")}</Link>
+                  <Link to="/browser" search={{ assembly: "Wm82.a4.v1", locus: "chr01" }}><Microscope className="size-4" aria-hidden />{t("home.browseGenome")}</Link>
                 </Button>
                 <Button variant="outline" size="lg" asChild><Link to="/blast"><FlaskConical className="size-4" aria-hidden />{t("home.blastSearch")}</Link></Button>
                 <Button variant="ghost" size="lg" asChild><Link to="/downloads"><Download className="size-4" aria-hidden />{t("home.downloads")}</Link></Button>

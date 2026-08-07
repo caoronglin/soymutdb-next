@@ -18,6 +18,7 @@ import {
 import { Button, Skeleton, Input } from "@soymutdb/ui";
 import { cn, formatNumber } from "@soymutdb/ui";
 import { http } from "@soymutdb/api-client";
+import { useTranslation } from "react-i18next";
 import {
     Maximize2,
     Minimize2,
@@ -26,6 +27,7 @@ import {
     AlertTriangle,
     Loader2,
     Search,
+    ArrowLeft,
 } from "lucide-react";
 import {
     buildJBrowseConfig,
@@ -44,6 +46,11 @@ import {
     formatLocus,
     type DeepLinkParams,
 } from "./deep-link";
+import {
+    postToParent,
+    parsePortalMessage,
+    type InitPayload,
+} from "./bridge";
 
 // ---------------------------------------------------------------------------
 // Lazy-load the heavy JBrowse React component (code-splitting).
@@ -106,6 +113,7 @@ function useTheme(): "light" | "dark" {
 // ---------------------------------------------------------------------------
 
 function JBrowseApp() {
+    const { t } = useTranslation();
     const theme = useTheme();
 
     // Parse initial deep-link params from the URL.
@@ -113,6 +121,12 @@ function JBrowseApp() {
         if (typeof window === "undefined") return {};
         return parseDeepLink(window.location.search);
     }, []);
+
+    // Embedded mode: the portal appends ?portalOrigin=<origin> when loading us
+    // in an iframe. Without it we stay fully standalone (default behaviour).
+    const isEmbedded = Boolean(initialParams.portalOrigin);
+    const parentOrigin =
+        initialParams.portalOrigin ?? (typeof window !== "undefined" ? window.location.origin : "*");
 
     const [currentLocus, setCurrentLocus] = useState<string | undefined>(
         initialParams.locus,
@@ -123,12 +137,19 @@ function JBrowseApp() {
     const [assemblyName, setAssemblyName] = useState<string>(
         initialParams.assembly ?? DEFAULT_ASSEMBLY.name,
     );
+    const [release, setRelease] = useState<string | undefined>(initialParams.release);
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [shareCopied, setShareCopied] = useState(false);
     const [locusInput, setLocusInput] = useState(initialParams.locus ?? "");
     const [viewState, setViewState] = useState<JBrowseViewState | null>(null);
     const [initError, setInitError] = useState<string | null>(null);
+    // Bumped by applyInit() when an init message must rebuild the view state
+    // (assembly/tracks changes). Locus-only updates navigate instead.
+    const [sessionNonce, setSessionNonce] = useState(0);
     const containerRef = useRef<HTMLDivElement>(null);
+
+    const readySentViewRef = useRef<JBrowseViewState | null>(null);
+    const locusDebounceRef = useRef<number | null>(null);
 
     // Fetch JBrowse config from the API.
     // When the backend is unavailable, we fall back to the built-in default
@@ -159,6 +180,22 @@ function JBrowseApp() {
         () => createJBrowseTheme(buildJBrowseTheme(theme)),
         [theme],
     );
+
+    // Latest state snapshot for stable bridge callbacks (avoids stale closures).
+    const stateRef = useRef({
+        assembly: assemblyName,
+        tracks: activeTracks,
+        locus: currentLocus,
+        view: viewState as JBrowseViewState | null,
+        config,
+    });
+    stateRef.current = {
+        assembly: assemblyName,
+        tracks: activeTracks,
+        locus: currentLocus,
+        view: viewState,
+        config,
+    };
 
     // Safe track types supported by @jbrowse/react-linear-genome-view corePlugins.
     // This is a runtime safety net complementing validateTrackTypes() in config.ts.
@@ -232,9 +269,136 @@ function JBrowseApp() {
                 err instanceof Error ? err.message : "Failed to initialise genome browser",
             );
         }
-        // Only re-init when the assembly changes; track/locus updates are handled below.
+        // Only re-init when the assembly changes (or the bridge asks for a
+        // full re-init via sessionNonce); track/locus updates are handled below.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [config, assemblyName]);
+    }, [config, assemblyName, sessionNonce]);
+
+    // -----------------------------------------------------------------------
+    // postMessage bridge with the embedding portal
+    // -----------------------------------------------------------------------
+
+    // Apply an `init` message from the portal: assembly/tracks changes rebuild
+    // the view state (sessionNonce), locus-only changes navigate in place.
+    const applyInit = useCallback((payload: InitPayload | undefined) => {
+        if (!payload || typeof payload !== "object") return;
+        const s = stateRef.current;
+
+        const tracks = Array.isArray(payload.tracks)
+            ? payload.tracks.filter((x): x is string => typeof x === "string" && x.length > 0)
+            : undefined;
+        const assembly =
+            typeof payload.assembly === "string" && payload.assembly.length > 0
+                ? payload.assembly
+                : undefined;
+        const locus =
+            typeof payload.locus === "string" && payload.locus.length > 0
+                ? payload.locus
+                : undefined;
+
+        if (typeof payload.release === "string" && payload.release) {
+            setRelease(payload.release);
+        }
+
+        // Filter track ids against what the current config actually provides.
+        const knownTrackIds = new Set<string>();
+        for (const tr of s.config.tracks) knownTrackIds.add(tr.trackId);
+        const refTrackId = s.config.assemblies[0]?.sequence.trackId;
+        if (refTrackId) knownTrackIds.add(refTrackId);
+        const usableTracks = tracks?.filter((id) => knownTrackIds.has(id));
+
+        const sameAssembly = !assembly || assembly === s.assembly;
+        const sameTracks =
+            !usableTracks ||
+            usableTracks.length === 0 ||
+            (usableTracks.length === s.tracks.length &&
+                [...usableTracks].sort().join(",") === [...s.tracks].sort().join(","));
+
+        if (sameAssembly && sameTracks) {
+            // Locus-only update — navigate the existing view.
+            if (locus && locus !== s.locus) {
+                const parsed = parseLocus(locus);
+                const view = s.view?.session?.views?.[0];
+                if (parsed && view?.navTo) {
+                    view.navTo({ refName: parsed.refName, start: parsed.start, end: parsed.end });
+                } else if (view?.navToSearchResults) {
+                    view.navToSearchResults({ input: locus });
+                }
+                setCurrentLocus(locus);
+                setLocusInput(locus);
+            }
+            return;
+        }
+
+        // Full re-init (assembly and/or tracks changed).
+        if (assembly) setAssemblyName(assembly);
+        if (usableTracks && usableTracks.length > 0) setActiveTracks(usableTracks);
+        if (locus) {
+            setCurrentLocus(locus);
+            setLocusInput(locus);
+        }
+        setSessionNonce((n) => n + 1);
+    }, []);
+
+    // Listen for `init` messages from the portal. Active only when embedded.
+    useEffect(() => {
+        if (!isEmbedded) return;
+        const handleMessage = (event: MessageEvent) => {
+            const msg = parsePortalMessage(event, parentOrigin);
+            if (!msg) return; // already warned inside the validator
+            if (msg.type === "init") {
+                applyInit(msg.payload as InitPayload | undefined);
+            } else if (msg.type === "selection-change") {
+                // Optional — reserved for future use; nothing to do.
+            } else {
+                console.warn(`[JBrowse] Ignoring unexpected bridge message type: ${String(msg.type)}`);
+            }
+        };
+        window.addEventListener("message", handleMessage);
+        return () => window.removeEventListener("message", handleMessage);
+    }, [isEmbedded, parentOrigin, applyInit]);
+
+    // Announce readiness (or failure) to the portal.
+    useEffect(() => {
+        if (!isEmbedded) return;
+        if (initError) {
+            postToParent({ type: "error", payload: { message: initError } }, parentOrigin);
+            return;
+        }
+        if (viewState && readySentViewRef.current !== viewState) {
+            readySentViewRef.current = viewState;
+            postToParent(
+                { type: "ready", payload: { assembly: assemblyName, locus: currentLocus } },
+                parentOrigin,
+            );
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [viewState, initError, isEmbedded, parentOrigin]);
+
+    // Notify the portal about viewport changes (debounced 300ms).
+    useEffect(() => {
+        if (!isEmbedded || !currentLocus) return;
+        if (!stateRef.current.view) return; // wait until the view actually exists
+        if (locusDebounceRef.current !== null) {
+            window.clearTimeout(locusDebounceRef.current);
+        }
+        locusDebounceRef.current = window.setTimeout(() => {
+            const s = stateRef.current;
+            postToParent(
+                {
+                    type: "locus-change",
+                    payload: { assembly: s.assembly, locus: s.locus, tracks: s.tracks },
+                },
+                parentOrigin,
+            );
+        }, 300);
+        return () => {
+            if (locusDebounceRef.current !== null) {
+                window.clearTimeout(locusDebounceRef.current);
+                locusDebounceRef.current = null;
+            }
+        };
+    }, [currentLocus, isEmbedded, parentOrigin]);
 
     // Subscribe to view changes to keep URL and state in sync.
     useEffect(() => {
@@ -262,16 +426,18 @@ function JBrowseApp() {
         };
     }, [viewState, currentLocus]);
 
-    // Update the URL when locus or tracks change (replaceState to avoid history spam).
+    // Update the URL when locus, tracks, assembly or release change
+    // (replaceState to avoid history spam).
     useEffect(() => {
         if (typeof window === "undefined") return;
         const url = buildDeepLink({
             locus: currentLocus,
             tracks: activeTracks,
             assembly: assemblyName,
+            release,
         });
         window.history.replaceState(null, "", url);
-    }, [currentLocus, activeTracks, assemblyName]);
+    }, [currentLocus, activeTracks, assemblyName, release]);
 
     // Fullscreen toggle.
     const toggleFullscreen = useCallback(async () => {
@@ -301,6 +467,7 @@ function JBrowseApp() {
             locus: currentLocus,
             tracks: activeTracks,
             assembly: assemblyName,
+            release,
         });
         try {
             await navigator.clipboard.writeText(url);
@@ -310,7 +477,7 @@ function JBrowseApp() {
             // Fallback: select the URL in the address bar.
             window.prompt("Copy this link to share:", url);
         }
-    }, [currentLocus, activeTracks, assemblyName]);
+    }, [currentLocus, activeTracks, assemblyName, release]);
 
     // Navigate to a typed locus.
     const handleNavigate = useCallback(
@@ -338,9 +505,30 @@ function JBrowseApp() {
 
     return (
         <div className="flex min-h-screen flex-col bg-background text-foreground">
-            {/* Header bar */}
+            {/* Header bar — wraps into two rows on narrow screens so the back
+                button, locus input and track actions stay usable. */}
             <header className="sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
-                <div className="flex h-14 items-center gap-3 px-4">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2">
+                    {isEmbedded && (
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            asChild
+                            className="-ml-2 shrink-0"
+                        >
+                            <a
+                                href={parentOrigin}
+                                target="_top"
+                                rel="noopener noreferrer"
+                                aria-label={t("browser.backToPortal")}
+                                title={t("browser.backToPortal")}
+                            >
+                                <ArrowLeft className="size-4" aria-hidden />
+                                <span className="hidden md:inline">{t("browser.backToPortal")}</span>
+                            </a>
+                        </Button>
+                    )}
+
                     <div className="flex items-center gap-2">
                         <span className="font-serif text-lg font-semibold text-primary">
                             SoyMutDB
@@ -354,7 +542,7 @@ function JBrowseApp() {
                     <select
                         value={assemblyName}
                         onChange={(e) => setAssemblyName(e.target.value)}
-                        className="h-9 rounded-md border border-border bg-card px-3 text-sm font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                        className="h-9 shrink-0 rounded-md border border-border bg-card px-3 text-sm font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                         aria-label="Select reference assembly"
                     >
                         <option value="Wm82v4.0">Wm82 v4.0</option>
@@ -362,24 +550,27 @@ function JBrowseApp() {
                         <option value="Wm82.a2.v1">Wm82.a2.v1</option>
                     </select>
 
-                    <form onSubmit={handleNavigate} className="ml-auto flex items-center gap-2">
-                        <div className="relative">
+                    <form
+                        onSubmit={handleNavigate}
+                        className="flex min-w-0 flex-1 basis-full items-center gap-2 sm:ml-auto sm:basis-auto"
+                    >
+                        <div className="relative min-w-0 flex-1">
                             <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                             <Input
                                 type="text"
                                 value={locusInput}
                                 onChange={(e) => setLocusInput(e.target.value)}
                                 placeholder="chr01:1-1000000 or gene ID"
-                                className="h-9 w-56 pl-8 font-mono text-sm md:w-80"
+                                className="h-9 w-full min-w-0 pl-8 font-mono text-sm"
                                 aria-label="Genomic location or gene search"
                             />
                         </div>
-                        <Button type="submit" size="sm" variant="default">
+                        <Button type="submit" size="sm" variant="default" className="shrink-0">
                             Go
                         </Button>
                     </form>
 
-                    <div className="flex items-center gap-1">
+                    <div className="ml-auto flex shrink-0 items-center gap-1 sm:ml-0">
                         <Button
                             variant="ghost"
                             size="icon"
@@ -465,6 +656,7 @@ function JBrowseApp() {
 // ---------------------------------------------------------------------------
 
 function LoadingPlaceholder() {
+    const { t } = useTranslation();
     return (
         <div
             className="flex h-full w-full flex-col items-center justify-center gap-4 bg-muted/20 p-8"
@@ -474,7 +666,7 @@ function LoadingPlaceholder() {
             <Loader2 className="size-8 animate-spin text-primary" aria-hidden />
             <Skeleton className="h-64 w-full max-w-3xl rounded-lg" />
             <p className="text-sm text-muted-foreground">
-                Loading genome browser…
+                {t("browser.loading")}
             </p>
         </div>
     );

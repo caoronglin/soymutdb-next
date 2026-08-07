@@ -202,12 +202,13 @@ function getWcTrustedPolicy(): { createHTML: (s: string) => string } | null {
         return null;
     }
     try {
-        wcTrustedPolicy = tt.createPolicy('soymutdb-wc', { createHTML: (s: string) => s });
+        const policy: { createHTML: (s: string) => string } = tt.createPolicy('soymutdb-wc', { createHTML: (s: string) => s });
+        wcTrustedPolicy = policy;
     } catch {
         // Policy already created — fall back to null (raw HTML assignment)
         wcTrustedPolicy = null;
     }
-    return wcTrustedPolicy;
+    return wcTrustedPolicy ?? null;
 }
 
 class SoyMutDBWidget extends HTMLElement {

@@ -44,12 +44,32 @@ def _build_engine_pool(settings: Settings):
 
 def test_engine_is_lazy_no_connection_on_import() -> None:
     """Importing the database module must not create an engine."""
-    assert database._engine is None
-    assert database._redis is None
+    # Earlier tests in the same session may have built the engine/redis and
+    # left the module globals set; snapshot and reset so this assertion is
+    # order-independent (it only verifies import does not create them).
+    engine, session_factory, redis = (
+        database._engine,
+        database._session_factory,
+        database._redis,
+    )
+    database._engine = None
+    database._session_factory = None
+    database._redis = None
+    try:
+        assert database._engine is None
+        assert database._redis is None
+    finally:
+        database._engine = engine
+        database._session_factory = session_factory
+        database._redis = redis
 
 
-def test_pool_parameters_follow_default_settings() -> None:
+def test_pool_parameters_follow_default_settings(monkeypatch) -> None:
     """Default settings map to the connection-budget pool values."""
+    # conftest.py sets SOYMUTDB_DATABASE_URL="" so the session-scoped
+    # testcontainers URL applies to fixtures; drop it here so the class
+    # default DSN is used and the engine URL parses.
+    monkeypatch.delenv("SOYMUTDB_DATABASE_URL", raising=False)
     pool = _build_engine_pool(Settings(_env_file=None, app_env="dev"))
     attrs = _pool_attrs(pool)
 
@@ -62,8 +82,9 @@ def test_pool_parameters_follow_default_settings() -> None:
     }
 
 
-def test_pool_parameters_follow_custom_settings() -> None:
+def test_pool_parameters_follow_custom_settings(monkeypatch) -> None:
     """Custom ``SOYMUTDB_DB_POOL_*`` values reach the engine pool."""
+    monkeypatch.delenv("SOYMUTDB_DATABASE_URL", raising=False)
     settings = Settings(
         _env_file=None,
         app_env="dev",

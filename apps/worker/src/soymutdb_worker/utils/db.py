@@ -3,62 +3,20 @@
 Celery tasks run in sync threads, so we use a plain (non-async) engine.
 The ``DATABASE_URL`` environment variable is read at first use.
 
-The API's ``app`` package (containing ORM models) is resolved via
-``PYTHONPATH`` or by searching relative to the project root, so that
-``from app.models import …`` works from worker code.
+The worker no longer imports the API's ``app`` package: task payloads come
+from the shared ``soymutdb_jobs`` contract and all table access goes through
+the narrow repositories in :mod:`soymutdb_worker.repositories`.
 """
 
 from __future__ import annotations
 
-import os
-import sys
+from collections.abc import Iterator
 from contextlib import contextmanager
-from pathlib import Path
-from typing import Iterator
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from soymutdb_worker.config import get_setting
-
-# ---------------------------------------------------------------------------
-# Ensure the API's ``app`` package is importable
-# ---------------------------------------------------------------------------
-
-_API_APP_RESOLVED = False
-
-
-def _resolve_api_app() -> None:
-    """Add the API ``app`` directory to ``sys.path`` if not already present."""
-    global _API_APP_RESOLVED
-    if _API_APP_RESOLVED:
-        return
-    _API_APP_RESOLVED = True
-
-    # Allow explicit env override (e.g. from Docker Compose)
-    api_path = get_setting("API_APP_PATH", "")
-    if api_path and Path(api_path).is_dir():
-        sys.path.insert(0, str(Path(api_path).parent))
-        return
-
-    # Try to find it relative to the worker's known location.
-    # Expected layout:
-    #   <project_root>/apps/worker/src/soymutdb_worker/utils/db.py
-    #   <project_root>/apps/api/app/
-    try:
-        this_file = Path(__file__).resolve()
-        # Walk up to find the project root (has both apps/api and apps/worker)
-        for parent in this_file.parents:
-            if (parent / "apps" / "api" / "app").is_dir():
-                sys.path.insert(0, str(parent / "apps" / "api"))
-                return
-            # Also check if we are already at the project root
-            if (parent / "apps" / "worker").is_dir() and (parent / "apps" / "api").is_dir():
-                sys.path.insert(0, str(parent / "apps" / "api"))
-                return
-    except Exception:
-        pass
-
 
 # ---------------------------------------------------------------------------
 # Engine / session factory (lazy, singleton)
@@ -117,9 +75,8 @@ def get_db() -> Iterator[Session]:
     Usage::
 
         with get_db() as session:
-            session.query(...)
+            session.execute(...)
     """
-    _resolve_api_app()
     factory = get_session_factory()
     session: Session = factory()
     try:

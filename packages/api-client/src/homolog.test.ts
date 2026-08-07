@@ -4,10 +4,10 @@
  * Mocks the http client and verifies correct path/params for each function.
  */
 
-import { http } from "./client";
+import { http } from "./auth";
 import { getGeneHomologs, searchHomologs } from "./homolog";
 
-vi.mock("./client", () => ({
+vi.mock("./auth", () => ({
   http: {
     get: vi.fn(),
   },

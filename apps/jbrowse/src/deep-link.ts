@@ -1,8 +1,12 @@
 /**
  * JBrowse 2 deep-link utilities for the standalone SoyMutDB genome browser.
  *
- * Supports URL parameters:
- *   ?loc=chr01:1-1000000&tracks=genes,variants&assembly=Wm82v4.0
+ * Supports URL parameters (shared with the portal at /browser):
+ *   ?locus=chr01:1-1000000&tracks=genes,variants&assembly=Wm82v4.0&release=v4.0
+ *
+ * `loc` is still accepted as a legacy alias for `locus`. `portalOrigin` is an
+ * internal parameter appended by the portal when embedding this app in an
+ * iframe — it is never emitted by buildDeepLink().
  *
  * Coordinate conventions:
  *   - Deep links use 1-based inclusive coordinates (e.g. chr01:1-1000).
@@ -18,12 +22,16 @@ export interface DeepLinkParams {
     tracks?: string[];
     /** Assembly name. */
     assembly?: string;
+    /** Data release tag (carried through, e.g. "v4.0"). */
+    release?: string;
     /** Highlight region string. */
     highlight?: string;
     /** Gene ID to navigate to. */
     gene?: string;
     /** Variant ID to highlight. */
     variant?: string;
+    /** Internal: origin of the embedding portal frame (if any). */
+    portalOrigin?: string;
 }
 
 /** Parsed genomic location. */
@@ -53,19 +61,23 @@ export function parseDeepLink(
                 ? input
                 : toURLSearchParams(input);
 
-    const loc = search.get("loc");
+    // `locus` is the canonical param; `loc` remains a legacy alias.
+    const loc = search.get("locus") ?? search.get("loc");
     if (loc) params.locus = loc;
 
-    const tracks = search.get("tracks");
-    if (tracks) {
-        params.tracks = tracks
-            .split(",")
-            .map((t) => t.trim())
-            .filter(Boolean);
-    }
+    // Accept both comma-separated and repeated `tracks` params.
+    const tracksRaw = search.getAll("tracks");
+    const tracks = tracksRaw
+        .flatMap((t) => t.split(","))
+        .map((t) => t.trim())
+        .filter(Boolean);
+    if (tracks.length > 0) params.tracks = tracks;
 
     const assembly = search.get("assembly");
     if (assembly) params.assembly = assembly;
+
+    const release = search.get("release");
+    if (release) params.release = release;
 
     const highlight = search.get("highlight");
     if (highlight) params.highlight = highlight;
@@ -75,6 +87,9 @@ export function parseDeepLink(
 
     const variant = search.get("variant");
     if (variant) params.variant = variant;
+
+    const portalOrigin = search.get("portalOrigin");
+    if (portalOrigin) params.portalOrigin = portalOrigin;
 
     return params;
 }
@@ -93,14 +108,17 @@ export function buildDeepLink(
 ): string {
     const search = new URLSearchParams();
 
-    if (params.locus) search.set("loc", params.locus);
+    if (params.locus) search.set("locus", params.locus);
     if (params.assembly) search.set("assembly", params.assembly);
+    if (params.release) search.set("release", params.release);
     if (params.gene) search.set("gene", params.gene);
     if (params.variant) search.set("variant", params.variant);
     if (params.tracks && params.tracks.length > 0) {
         search.set("tracks", params.tracks.join(","));
     }
     if (params.highlight) search.set("highlight", params.highlight);
+
+    // portalOrigin is intentionally never emitted in share/restore URLs.
 
     const query = search.toString();
     return query ? `${baseUrl}?${query}` : baseUrl;

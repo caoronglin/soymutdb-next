@@ -1,4 +1,4 @@
-import { http } from "./client";
+import { http } from "./auth";
 
 /** Metadata for a single SRA run (from NCBI runinfo CSV). */
 export interface SraRunInfo {
