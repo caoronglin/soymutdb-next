@@ -26,7 +26,10 @@
     "sra": "SRA Browser",
     "compare": "Compare",
     "more": "More",
-    "analyses": "Analyze"
+    "analyses": "Analyze",
+    "explore": "Explore",
+    "resources": "Resources",
+    "allTools": "All tools"
   },
   "home": {
     "newRelease": "New Release Available",

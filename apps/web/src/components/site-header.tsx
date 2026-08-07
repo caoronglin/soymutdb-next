@@ -1,9 +1,10 @@
 /**
- * SiteHeader — sticky top navigation with logo, primary nav, search trigger,
+ * SiteHeader — sticky top navigation with logo, grouped nav, search trigger,
  * language switch, theme toggle, animation control, and auth menu.
  *
  * Features:
  * - Scroll-reactive backdrop blur / shadow (RAF-throttled)
+ * - Four nav groups (Explore / Tools / Downloads / Resources) with dropdowns
  * - Animated underline on active nav links
  * - Cmd+K quick search trigger
  * - Smooth mobile drawer with slide-down animation
@@ -19,7 +20,6 @@ import {
   Moon,
   Globe,
   ChevronDown,
-  ChevronRight,
   Dna,
 } from "lucide-react";
 import { Button, cn } from "@soymutdb/ui";
@@ -28,28 +28,59 @@ import { useI18n, type SupportedLanguage } from "../lib/i18n";
 import { AnimationControl } from "./animation-control";
 
 interface NavItem {
-  to: string;
-  labelKey: string;
+  to?: string;
+  labelKey?: string;
+  divider?: boolean;
 }
 
-const PRIMARY_NAV: NavItem[] = [
-  { to: "/genes", labelKey: "nav.genes" },
-  { to: "/variants", labelKey: "nav.variants" },
-  { to: "/browser", labelKey: "nav.browser" },
-  { to: "/blast", labelKey: "nav.blast" },
-  { to: "/analytics", labelKey: "nav.analytics" },
-  { to: "/analyses", labelKey: "nav.analyses" },
-  { to: "/downloads", labelKey: "nav.downloads" },
+interface NavGroup {
+  labelKey: string;
+  items: NavItem[];
+}
+
+const NAV_GROUPS: NavGroup[] = [
+  {
+    labelKey: "nav.explore",
+    items: [
+      { to: "/genes", labelKey: "nav.genes" },
+      { to: "/variants", labelKey: "nav.variants" },
+      { to: "/browser", labelKey: "nav.browser" },
+      { to: "/sra", labelKey: "nav.sra" },
+      { to: "/compare", labelKey: "nav.compare" },
+      { to: "/analytics", labelKey: "nav.analytics" },
+    ],
+  },
+  {
+    labelKey: "nav.tools",
+    items: [
+      { to: "/blast", labelKey: "nav.blast" },
+      { to: "/analyses", labelKey: "nav.analyses" },
+      { divider: true },
+      { to: "/tools/seqfetch", labelKey: "tools.seqfetch.title" },
+      { to: "/tools/enrichment", labelKey: "tools.enrichment.title" },
+      { to: "/tools/exppattern", labelKey: "tools.exppattern.title" },
+      { divider: true },
+      { to: "/tools", labelKey: "nav.allTools" },
+    ],
+  },
+  {
+    labelKey: "nav.resources",
+    items: [
+      { to: "/guide", labelKey: "nav.guide" },
+      { to: "/help", labelKey: "nav.help" },
+      { to: "/news", labelKey: "nav.news" },
+      { to: "/publications", labelKey: "nav.publications" },
+      { to: "/seed-request", labelKey: "nav.seedRequest" },
+    ],
+  },
 ];
 
-const SECONDARY_NAV: NavItem[] = [
-  { to: "/sra", labelKey: "nav.sra" },
-  { to: "/compare", labelKey: "nav.compare" },
-  { to: "/news", labelKey: "nav.news" },
-  { to: "/publications", labelKey: "nav.publications" },
-  { to: "/seed-request", labelKey: "nav.seedRequest" },
-  { to: "/guide", labelKey: "nav.guide" },
-  { to: "/help", labelKey: "nav.help" },
+/** Mobile menu sections — 4 flat blocks in order. */
+const MOBILE_SECTIONS: ReadonlyArray<{ labelKey: string; items: NavItem[] }> = [
+  { labelKey: "nav.explore", items: NAV_GROUPS[0].items },
+  { labelKey: "nav.tools", items: NAV_GROUPS[1].items },
+  { labelKey: "nav.downloads", items: [{ to: "/downloads", labelKey: "nav.downloads" }] },
+  { labelKey: "nav.resources", items: NAV_GROUPS[2].items },
 ];
 
 export function SiteHeader() {
@@ -60,10 +91,13 @@ export function SiteHeader() {
   const { theme, toggleTheme } = useTheme();
   const { currentLanguage, changeLanguage } = useI18n();
   const [mobileOpen, setMobileOpen] = React.useState(false);
+  const [openMenu, setOpenMenu] = React.useState<string | null>(null);
   const [langOpen, setLangOpen] = React.useState(false);
   const [scrolled, setScrolled] = React.useState(false);
   const [searchValue, setSearchValue] = React.useState("");
   const headerRef = React.useRef<HTMLElement | null>(null);
+  const menuButtonRef = React.useRef<HTMLButtonElement | null>(null);
+  const firstMobileLinkRef = React.useRef<HTMLAnchorElement | null>(null);
 
   // Scroll-reactive header: RAF-throttled for 60fps
   React.useEffect(() => {
@@ -83,10 +117,30 @@ export function SiteHeader() {
     };
   }, []);
 
-  // Close mobile menu on route change
+  // Close mobile menu and dropdowns on route change
   React.useEffect(() => {
     setMobileOpen(false);
+    setOpenMenu(null);
   }, [currentPath]);
+
+  // Escape closes dropdowns; closes the mobile menu and returns focus to the toggle
+  React.useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (mobileOpen) {
+        setMobileOpen(false);
+        menuButtonRef.current?.focus();
+      }
+      setOpenMenu(null);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [mobileOpen]);
+
+  // Focus the first link when the mobile menu opens
+  React.useEffect(() => {
+    if (mobileOpen) firstMobileLinkRef.current?.focus();
+  }, [mobileOpen]);
 
   const onSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -136,23 +190,44 @@ export function SiteHeader() {
           </span>
         </Link>
 
-        {/* Desktop primary nav */}
+        {/* Desktop grouped nav */}
         <nav className="hidden items-center gap-1 lg:flex" aria-label="Primary">
-          {PRIMARY_NAV.map((item) => (
-            <Link
-              key={item.to}
-              to={item.to}
-              data-active={isActive(item.to)}
-              className={cn(
-                "nav-link rounded-md px-3 py-2 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
-                isActive(item.to)
-                  ? "text-foreground"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {t(item.labelKey)}
-            </Link>
-          ))}
+          <NavDropdown
+            menuId="nav.explore"
+            labelKey="nav.explore"
+            items={NAV_GROUPS[0].items}
+            currentPath={currentPath}
+            open={openMenu === "nav.explore"}
+            onOpenChange={(open) => setOpenMenu(open ? "nav.explore" : null)}
+          />
+          <NavDropdown
+            menuId="nav.tools"
+            labelKey="nav.tools"
+            items={NAV_GROUPS[1].items}
+            currentPath={currentPath}
+            open={openMenu === "nav.tools"}
+            onOpenChange={(open) => setOpenMenu(open ? "nav.tools" : null)}
+          />
+          <Link
+            to="/downloads"
+            data-active={isActive("/downloads")}
+            className={cn(
+              "nav-link rounded-md px-3 py-2 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+              isActive("/downloads")
+                ? "text-foreground"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {t("nav.downloads")}
+          </Link>
+          <NavDropdown
+            menuId="nav.resources"
+            labelKey="nav.resources"
+            items={NAV_GROUPS[2].items}
+            currentPath={currentPath}
+            open={openMenu === "nav.resources"}
+            onOpenChange={(open) => setOpenMenu(open ? "nav.resources" : null)}
+          />
         </nav>
 
         {/* Search (desktop) — triggers command palette */}
@@ -204,6 +279,7 @@ export function SiteHeader() {
 
           {/* Mobile menu toggle */}
           <Button
+            ref={menuButtonRef}
             variant="ghost"
             size="icon"
             className="lg:hidden"
@@ -217,14 +293,14 @@ export function SiteHeader() {
         </div>
       </div>
 
-      {/* Mobile drawer — smooth slide-down with staggered items */}
+      {/* Mobile drawer — smooth slide-down with flat grouped sections */}
       {mobileOpen ? (
         <div
           id="mobile-nav"
           className="mobile-menu-enter max-h-[calc(100dvh-4rem)] overflow-y-auto overscroll-contain border-t bg-background/95 backdrop-blur-xl lg:hidden"
         >
-          <div className="container-prose flex flex-col gap-5 py-5">
-            <form onSubmit={onSearchSubmit} role="search" className="md:hidden">
+          <div className="container-prose flex flex-col py-5">
+            <form onSubmit={onSearchSubmit} role="search" className="mb-5 md:hidden">
               <div className="relative">
                 <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
                 <input
@@ -238,57 +314,114 @@ export function SiteHeader() {
               </div>
             </form>
 
-            {/* Primary destinations — large touch targets */}
-            <nav aria-label="Mobile primary" className="flex flex-col gap-1">
-              {PRIMARY_NAV.map((item, i) => (
-                <Link
-                  key={item.to}
-                  to={item.to}
-                  onClick={() => setMobileOpen(false)}
-                  style={{ animationDelay: `${i * 35}ms` }}
-                  className={cn(
-                    "mobile-menu-item flex items-center justify-between rounded-xl px-4 py-3 text-[15px] font-medium transition-colors",
-                    isActive(item.to)
-                      ? "bg-primary/10 text-primary shadow-[inset_3px_0_0_var(--primary)]"
-                      : "text-foreground/80 hover:bg-accent hover:text-foreground",
+            {MOBILE_SECTIONS.map((section, sectionIndex) => (
+              <div key={section.labelKey} className={cn(sectionIndex > 0 && "mt-5")}>
+                <h2 className="px-1 pb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/70">
+                  {t(section.labelKey)}
+                </h2>
+                <nav aria-label={t(section.labelKey)} className="flex flex-col gap-1">
+                  {section.items.map((item, itemIndex) =>
+                    item.divider || !item.to || !item.labelKey ? null : (
+                      <Link
+                        key={item.to}
+                        to={item.to}
+                        onClick={() => setMobileOpen(false)}
+                        ref={sectionIndex === 0 && itemIndex === 0 ? firstMobileLinkRef : undefined}
+                        className={cn(
+                          "flex items-center rounded-xl px-4 py-3 text-[15px] font-medium transition-colors",
+                          isActive(item.to)
+                            ? "bg-primary/10 text-primary"
+                            : "text-foreground/80 hover:bg-accent",
+                        )}
+                      >
+                        {t(item.labelKey)}
+                      </Link>
+                    ),
                   )}
-                >
-                  {t(item.labelKey)}
-                  <ChevronRight className={cn("size-4", isActive(item.to) ? "text-primary/70" : "text-muted-foreground/40")} aria-hidden />
-                </Link>
-              ))}
-            </nav>
-
-            {/* Secondary destinations — compact grid */}
-            <div>
-              <div className="mb-2 flex items-center gap-3">
-                <span className="h-px flex-1 bg-border/70" aria-hidden />
-                <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/70">{t("nav.more")}</span>
-                <span className="h-px flex-1 bg-border/70" aria-hidden />
+                </nav>
               </div>
-              <nav aria-label="Mobile secondary" className="grid grid-cols-2 gap-1.5">
-                {SECONDARY_NAV.map((item, i) => (
-                  <Link
-                    key={item.to}
-                    to={item.to}
-                    onClick={() => setMobileOpen(false)}
-                    style={{ animationDelay: `${(PRIMARY_NAV.length + i) * 35}ms` }}
-                    className={cn(
-                      "mobile-menu-item rounded-lg border border-border/60 px-3 py-2.5 text-sm transition-colors",
-                      isActive(item.to)
-                        ? "border-primary/30 bg-primary/5 font-medium text-primary"
-                        : "text-muted-foreground hover:bg-accent hover:text-foreground",
-                    )}
-                  >
-                    {t(item.labelKey)}
-                  </Link>
-                ))}
-              </nav>
-            </div>
+            ))}
           </div>
         </div>
       ) : null}
     </header>
+  );
+}
+
+function NavDropdown({
+  menuId,
+  labelKey,
+  items,
+  currentPath,
+  open,
+  onOpenChange,
+}: {
+  menuId: string;
+  labelKey: string;
+  items: NavItem[];
+  currentPath: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const { t } = useTranslation();
+  const ref = React.useRef<HTMLDivElement | null>(null);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const onPointer = (e: PointerEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onOpenChange(false);
+    };
+    document.addEventListener("pointerdown", onPointer);
+    return () => document.removeEventListener("pointerdown", onPointer);
+  }, [open, onOpenChange]);
+
+  const isActive = (to: string): boolean =>
+    currentPath === to || (to !== "/" && currentPath.startsWith(to));
+  const groupActive = items.some((item) => item.to && isActive(item.to));
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        data-active={groupActive}
+        onClick={() => onOpenChange(!open)}
+        className={cn(
+          "nav-link flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+          groupActive ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+        )}
+      >
+        {t(labelKey)}
+        <ChevronDown className={cn("size-3.5 transition-transform", open && "rotate-180")} aria-hidden />
+      </button>
+      {open ? (
+        <div
+          role="menu"
+          className="absolute left-1/2 top-full z-50 mt-2 w-60 -translate-x-1/2 rounded-xl border bg-popover p-1.5 shadow-lg"
+          style={{ animation: "fade-down 160ms cubic-bezier(0.16,1,0.3,1)" }}
+        >
+          {items.map((item, i) =>
+            item.divider || !item.to || !item.labelKey ? (
+              <div key={`${menuId}-divider-${i}`} className="my-1 h-px bg-border" aria-hidden />
+            ) : (
+              <Link
+                key={item.to}
+                to={item.to}
+                role="menuitem"
+                onClick={() => onOpenChange(false)}
+                className={cn(
+                  "flex items-center rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
+                  isActive(item.to) && "bg-accent/60 font-medium text-foreground",
+                )}
+              >
+                {t(item.labelKey)}
+              </Link>
+            ),
+          )}
+        </div>
+      ) : null}
+    </div>
   );
 }
 

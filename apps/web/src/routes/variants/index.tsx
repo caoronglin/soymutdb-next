@@ -5,10 +5,9 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Download } from "lucide-react";
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem, Button, Badge } from "@soymutdb/ui";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem, Button, Badge, PageHeader, FilterBar } from "@soymutdb/ui";
 import { searchVariants } from "@soymutdb/api-client";
 import { DataTable, type DataTableColumn } from "../../components/data-table";
-import { FilterPanel } from "../../components/filter-panel";
 import { FadeUp } from "../../components/route-motion";
 import { SOYBEAN_CHROMOSOMES, formatPosition } from "../../lib/format";
 
@@ -86,29 +85,31 @@ function VariantsComponent() {
   const activeFilters = [search.chromosome, search.variant_type, search.impact].filter(Boolean).length;
 
   return (
-    <div className="container-prose section-rhythm">
-      <FadeUp>
-        <div className="flex items-end justify-between gap-4">
-          <div>
-            <p className="eyebrow">{t("variants.title")}</p>
-            <h1 className="mt-2 font-display text-4xl font-semibold tracking-tight">{t("variants.subtitle")}</h1>
-          </div>
-          <Button variant="outline" size="sm">
-            <Download className="size-4" aria-hidden />
-            {t("variants.export")}
-          </Button>
-        </div>
-      </FadeUp>
+    <FadeUp>
+      <div className="container-prose py-10 md:py-14">
+        <PageHeader
+          title={t("variants.title")}
+          description={t("variants.subtitle")}
+          breadcrumb={[{ label: t("nav.home"), href: "/" }, { label: t("variants.title") }]}
+          actions={
+            <Button variant="outline" size="sm">
+              <Download className="size-4" aria-hidden />
+              {t("variants.export")}
+            </Button>
+          }
+        />
 
-      <div className="mt-10 flex gap-6">
-        <FilterPanel
-          activeCount={activeFilters}
-          onReset={() => navigate({ to: "/variants", search: { chromosome: "", variant_type: "", impact: "", page: 1, sort_by: "position", sort_dir: "asc" } })}
-          groups={[
+        <FilterBar
+          className="mt-8"
+          columns={3}
+          active={activeFilters > 0}
+          onClearAll={() => navigate({ to: "/variants", search: { chromosome: "", variant_type: "", impact: "", page: 1, sort_by: "position", sort_dir: "asc" } })}
+          items={[
             {
-              id: "chromosome",
+              key: "chromosome",
               label: t("variants.chromosome"),
-              children: (
+              active: search.chromosome.length > 0,
+              control: (
                 <Select
                   value={search.chromosome || "all"}
                   onValueChange={(v) => navigate({ to: "/variants", search: { ...search, chromosome: v === "all" ? "" : v, page: 1 } })}
@@ -122,9 +123,10 @@ function VariantsComponent() {
               ),
             },
             {
-              id: "variant_type",
+              key: "variant_type",
               label: t("variants.variantType"),
-              children: (
+              active: search.variant_type.length > 0,
+              control: (
                 <Select
                   value={search.variant_type || "all"}
                   onValueChange={(v) => navigate({ to: "/variants", search: { ...search, variant_type: v === "all" ? "" : v, page: 1 } })}
@@ -138,9 +140,10 @@ function VariantsComponent() {
               ),
             },
             {
-              id: "impact",
+              key: "impact",
               label: t("variants.impact"),
-              children: (
+              active: search.impact.length > 0,
+              control: (
                 <Select
                   value={search.impact || "all"}
                   onValueChange={(v) => navigate({ to: "/variants", search: { ...search, impact: v === "all" ? "" : v, page: 1 } })}
@@ -156,7 +159,7 @@ function VariantsComponent() {
           ]}
         />
 
-        <div className="min-w-0 flex-1">
+        <div className="mt-4">
           <DataTable
             columns={columns}
             data={data}
@@ -181,7 +184,7 @@ function VariantsComponent() {
           />
         </div>
       </div>
-    </div>
+    </FadeUp>
   );
 }
 

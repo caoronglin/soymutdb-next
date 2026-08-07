@@ -26,7 +26,10 @@
     "sra": "SRA 浏览器",
     "compare": "变异比较",
     "more": "更多",
-    "analyses": "分析"
+    "analyses": "分析",
+    "explore": "浏览",
+    "resources": "资源",
+    "allTools": "全部工具"
   },
   "home": {
     "newRelease": "新版本可用",

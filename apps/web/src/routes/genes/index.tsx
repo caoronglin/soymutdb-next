@@ -6,10 +6,9 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import * as React from "react";
 import { Search, ArrowRight } from "lucide-react";
-import { Input, Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@soymutdb/ui";
+import { Input, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, PageHeader, FilterBar } from "@soymutdb/ui";
 import { searchGenes } from "@soymutdb/api-client";
 import { DataTable, type DataTableColumn } from "../../components/data-table";
-import { FilterPanel } from "../../components/filter-panel";
 import { FadeUp } from "../../components/route-motion";
 import { SOYBEAN_CHROMOSOMES, formatPosition, compactGeneId } from "../../lib/format";
 
@@ -112,45 +111,58 @@ function GenesComponent() {
     },
   ];
 
-  const activeFilters = [search.chromosome, search.biotype].filter(Boolean).length;
+  const activeFilters = [search.q, search.chromosome, search.biotype].filter(Boolean).length;
+  const reset = () => {
+    setQ("");
+    navigate({ to: "/genes", search: { ...search, q: "", chromosome: "", biotype: "", page: 1 } });
+  };
 
   return (
-    <div className="container-prose section-rhythm">
-      <FadeUp>
-        <p className="eyebrow">{t("genes.title")}</p>
-        <h1 className="mt-2 font-display text-4xl font-semibold tracking-tight">{t("genes.subtitle")}</h1>
-      </FadeUp>
+    <FadeUp>
+      <div className="container-prose py-10 md:py-14">
+        <PageHeader
+          title={t("genes.title")}
+          description={t("genes.subtitle")}
+          breadcrumb={[{ label: t("nav.home"), href: "/" }, { label: t("genes.title") }]}
+        />
 
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          navigate({ to: "/genes", search: { ...search, q: q.trim(), page: 1 } });
-        }}
-        className="mt-10"
-        role="search"
-      >
-        <div className="group relative">
-          <Search className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-muted-foreground transition-colors group-focus-within:text-primary" aria-hidden />
-          <Input
-            type="search"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder={t("genes.searchPlaceholder")}
-            aria-label={t("genes.search")}
-            className="h-12 rounded-xl bg-card pl-12 shadow-sm transition-all hover:border-ring/40 focus-visible:shadow-[var(--shadow-glow)]"
-          />
-        </div>
-      </form>
-
-      <div className="mt-10 flex gap-6">
-        <FilterPanel
-          activeCount={activeFilters}
-          onReset={() => navigate({ to: "/genes", search: { ...search, chromosome: "", biotype: "", page: 1 } })}
-          groups={[
+        <FilterBar
+          className="mt-8"
+          columns={3}
+          active={activeFilters > 0}
+          onClearAll={reset}
+          items={[
             {
-              id: "chromosome",
+              key: "q",
+              label: t("genes.search"),
+              active: search.q.length > 0,
+              control: (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    navigate({ to: "/genes", search: { ...search, q: q.trim(), page: 1 } });
+                  }}
+                  role="search"
+                >
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+                    <Input
+                      type="search"
+                      value={q}
+                      onChange={(e) => setQ(e.target.value)}
+                      placeholder={t("genes.searchPlaceholder")}
+                      aria-label={t("genes.search")}
+                      className="h-9 pl-9"
+                    />
+                  </div>
+                </form>
+              ),
+            },
+            {
+              key: "chromosome",
               label: t("genes.chromosome"),
-              children: (
+              active: search.chromosome.length > 0,
+              control: (
                 <Select
                   value={search.chromosome || "all"}
                   onValueChange={(v) =>
@@ -168,9 +180,10 @@ function GenesComponent() {
               ),
             },
             {
-              id: "biotype",
+              key: "biotype",
               label: t("genes.biotype"),
-              children: (
+              active: search.biotype.length > 0,
+              control: (
                 <Select
                   value={search.biotype || "all"}
                   onValueChange={(v) =>
@@ -190,7 +203,7 @@ function GenesComponent() {
           ]}
         />
 
-        <div className="min-w-0 flex-1">
+        <div className="mt-4">
           <DataTable
             columns={columns}
             data={data}
@@ -215,6 +228,6 @@ function GenesComponent() {
           />
         </div>
       </div>
-    </div>
+    </FadeUp>
   );
 }

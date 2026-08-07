@@ -6,7 +6,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import * as React from "react";
 import { FlaskConical, Play, Loader2 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, Textarea, Button, Label, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, Input, Badge } from "@soymutdb/ui";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, Textarea, Button, Label, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, Input, Badge, PageHeader } from "@soymutdb/ui";
 import { getBlastDatabases, submitBlastJob, getBlastJobs, BLAST_PROGRAMS } from "@soymutdb/api-client";
 import { FadeUp } from "../components/route-motion";
 import { z } from "zod";
@@ -114,14 +114,15 @@ function BlastComponent() {
   };
 
   return (
-    <div className="container-prose section-rhythm">
-      <FadeUp>
-        <p className="eyebrow">{t("blast.title")}</p>
-        <h1 className="mt-2 font-display text-4xl font-semibold tracking-tight">{t("blast.subtitle")}</h1>
-      </FadeUp>
+    <FadeUp>
+      <div className="container-prose py-10 md:py-14">
+        <PageHeader
+          title={t("blast.title")}
+          description={t("blast.subtitle")}
+          breadcrumb={[{ label: t("nav.home"), href: "/" }, { label: t("blast.title") }]}
+        />
 
-      <div className="mt-10 grid gap-6 lg:grid-cols-[1.5fr_1fr]">
-        <Card>
+        <Card className="mt-8 max-w-3xl">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <FlaskConical className="size-5 text-primary" aria-hidden />
@@ -213,7 +214,7 @@ function BlastComponent() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="mt-6">
           <CardHeader>
             <CardTitle>{t("blast.myJobs")}</CardTitle>
             <CardDescription>{t("blast.jobHistory")}</CardDescription>
@@ -241,6 +242,6 @@ function BlastComponent() {
           </CardContent>
         </Card>
       </div>
-    </div>
+    </FadeUp>
   );
 }
