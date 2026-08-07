@@ -63,7 +63,7 @@ function HomeComponent() {
                   onClick={() =>
                     navigate({ to: "/search", search: { q: example, tissue: "", treatment: "", min_fpkm: undefined } })
                   }
-                  className="rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+                  className="inline-flex h-11 items-center rounded-full border border-border bg-card px-4 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
                 >
                   {example}
                 </button>
