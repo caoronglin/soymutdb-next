@@ -14,7 +14,6 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { RouterProvider, createRouter } from "@tanstack/react-router";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { TanStackRouterDevtools } from "@tanstack/router-devtools";
 
 // Fonts — HarmonyOS Sans SC (local, covers Latin + CJK), JetBrains Mono (code).
 // Fraunces/Inter replaced by HarmonyOS Sans SC (2026-08 redesign).
@@ -141,7 +140,7 @@ createRoot(rootEl).render(
                 <AnimationProvider>
                     <ToastProvider>
                         <RouterProvider router={router} />
-                        {import.meta.env.DEV ? <TanStackRouterDevtools router={router} position="bottom-right" /> : null}
+                        {null /* devtools hidden */}
                     </ToastProvider>
                 </AnimationProvider>
             </ThemeProvider>

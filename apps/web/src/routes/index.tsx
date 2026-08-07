@@ -63,7 +63,7 @@ function HomeComponent() {
                   onClick={() =>
                     navigate({ to: "/search", search: { q: example, tissue: "", treatment: "", min_fpkm: undefined } })
                   }
-                  className="rounded-full border border-border bg-card px-3 py-1 font-mono text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+                  className="rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
                 >
                   {example}
                 </button>
@@ -86,7 +86,7 @@ function HomeComponent() {
                   </span>
                   <span className="min-w-0">
                     <span className="block text-sm font-semibold tracking-tight">{t(entry.titleKey)}</span>
-                    <span className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{t(entry.descKey)}</span>
+                    <span className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{t(entry.descKey)}</span>
                   </span>
                 </Link>
               );
@@ -98,7 +98,16 @@ function HomeComponent() {
       <section className="border-b bg-muted/20">
         <div className="container-prose py-6">
           {statsQuery.isError ? (
-            <DataErrorState message="Database statistics unavailable." onRetry={() => void statsQuery.refetch()} />
+            <p className="text-center text-xs text-muted-foreground">
+              {t("home.statsUnavailable")}
+              <button
+                type="button"
+                onClick={() => void statsQuery.refetch()}
+                className="ml-2 text-primary underline-offset-2 hover:underline"
+              >
+                {t("common.retry")}
+              </button>
+            </p>
           ) : (
             <>
               <dl className="flex flex-wrap items-center justify-center gap-x-10 gap-y-3">
@@ -142,10 +151,6 @@ function HomeComponent() {
 
 function formatStat(value: number | null | undefined): string {
   return value == null ? "—" : value.toLocaleString();
-}
-
-function DataErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
-  return <div className="flex min-h-64 flex-col items-center justify-center gap-3 rounded-lg border border-dashed text-center"><p className="text-sm text-destructive">{message}</p><Button type="button" variant="outline" size="sm" onClick={onRetry}>Retry</Button></div>;
 }
 
 /** Locale-neutral example queries shown as suggestion chips under the hero search. */
