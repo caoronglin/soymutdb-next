@@ -19,6 +19,7 @@ import {
   Moon,
   Globe,
   ChevronDown,
+  ChevronRight,
   Dna,
 } from "lucide-react";
 import { Button, cn } from "@soymutdb/ui";
@@ -157,13 +158,15 @@ export function SiteHeader() {
         <button
           type="button"
           onClick={openPalette}
-          className="ml-auto hidden items-center gap-2 rounded-lg border border-input bg-background/50 px-3 py-1.5 text-sm text-muted-foreground transition-all hover:border-ring/50 hover:bg-accent/40 md:flex"
+          className="ml-auto hidden h-9 items-center gap-2.5 rounded-lg border border-input/70 bg-muted/40 px-3 text-sm text-muted-foreground shadow-sm transition-all hover:border-border hover:bg-muted/70 hover:text-foreground md:flex md:w-44 lg:w-56"
           aria-label="Quick search (Cmd+K)"
         >
-          <Search className="size-4" aria-hidden />
-          <span className="hidden lg:inline">{t("home.searchPlaceholder")}</span>
-          <span className="lg:hidden">Search…</span>
-          <span className="ml-auto flex items-center gap-1" aria-hidden>
+          <Search className="size-4 shrink-0" aria-hidden />
+          <span className="min-w-0 flex-1 truncate text-left">
+            <span className="hidden lg:inline">{t("home.searchPlaceholder")}</span>
+            <span className="lg:hidden">Search…</span>
+          </span>
+          <span className="ml-auto flex shrink-0 items-center gap-1" aria-hidden>
             <kbd className="hidden sm:inline-flex">⌘</kbd>
             <kbd className="hidden sm:inline-flex">K</kbd>
           </span>
@@ -213,43 +216,74 @@ export function SiteHeader() {
         </div>
       </div>
 
-      {/* Mobile drawer — smooth slide-down */}
+      {/* Mobile drawer — smooth slide-down with staggered items */}
       {mobileOpen ? (
         <div
           id="mobile-nav"
-          className="mobile-menu-enter border-t bg-background/95 backdrop-blur-xl lg:hidden"
+          className="mobile-menu-enter max-h-[calc(100dvh-4rem)] overflow-y-auto overscroll-contain border-t bg-background/95 backdrop-blur-xl lg:hidden"
         >
-          <div className="container-prose flex flex-col gap-4 py-4">
+          <div className="container-prose flex flex-col gap-5 py-5">
             <form onSubmit={onSearchSubmit} role="search" className="md:hidden">
               <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+                <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
                 <input
                   type="search"
                   value={searchValue}
                   onChange={(e) => setSearchValue(e.target.value)}
                   placeholder={t("home.searchPlaceholder")}
                   aria-label={t("nav.search")}
-                  className="h-10 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring"
+                  className="h-11 w-full rounded-xl border border-input bg-background pl-10 pr-3 text-sm shadow-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring"
                 />
               </div>
             </form>
-            <nav aria-label="Mobile" className="grid grid-cols-2 gap-1">
-              {[...PRIMARY_NAV, ...SECONDARY_NAV].map((item) => (
+
+            {/* Primary destinations — large touch targets */}
+            <nav aria-label="Mobile primary" className="flex flex-col gap-1">
+              {PRIMARY_NAV.map((item, i) => (
                 <Link
                   key={item.to}
                   to={item.to}
                   onClick={() => setMobileOpen(false)}
+                  style={{ animationDelay: `${i * 35}ms` }}
                   className={cn(
-                    "rounded-lg px-3 py-2.5 text-sm font-medium transition-all hover:bg-accent",
+                    "mobile-menu-item flex items-center justify-between rounded-xl px-4 py-3 text-[15px] font-medium transition-colors",
                     isActive(item.to)
-                      ? "bg-accent text-accent-foreground"
-                      : "text-muted-foreground hover:text-foreground",
+                      ? "bg-primary/10 text-primary shadow-[inset_3px_0_0_var(--primary)]"
+                      : "text-foreground/80 hover:bg-accent hover:text-foreground",
                   )}
                 >
                   {t(item.labelKey)}
+                  <ChevronRight className={cn("size-4", isActive(item.to) ? "text-primary/70" : "text-muted-foreground/40")} aria-hidden />
                 </Link>
               ))}
             </nav>
+
+            {/* Secondary destinations — compact grid */}
+            <div>
+              <div className="mb-2 flex items-center gap-3">
+                <span className="h-px flex-1 bg-border/70" aria-hidden />
+                <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/70">{t("nav.more")}</span>
+                <span className="h-px flex-1 bg-border/70" aria-hidden />
+              </div>
+              <nav aria-label="Mobile secondary" className="grid grid-cols-2 gap-1.5">
+                {SECONDARY_NAV.map((item, i) => (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    onClick={() => setMobileOpen(false)}
+                    style={{ animationDelay: `${(PRIMARY_NAV.length + i) * 35}ms` }}
+                    className={cn(
+                      "mobile-menu-item rounded-lg border border-border/60 px-3 py-2.5 text-sm transition-colors",
+                      isActive(item.to)
+                        ? "border-primary/30 bg-primary/5 font-medium text-primary"
+                        : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                    )}
+                  >
+                    {t(item.labelKey)}
+                  </Link>
+                ))}
+              </nav>
+            </div>
           </div>
         </div>
       ) : null}

@@ -253,6 +253,9 @@ services:
       SOYMUTDB_DATABASE_URL: postgresql+psycopg://soymutdb:${POSTGRES_PASSWORD:-soymutdb_dev_password}@postgres:5432/soymutdb
     command: >
       celery -A soymutdb_worker.main:celery_app worker --loglevel=info --queues=ingest,export,stats,cleanup,default --concurrency=${WORKER_DEFAULT_CONCURRENCY:-4} --max-tasks-per-child=100 --hostname=worker-default@%h
+    # Prometheus /metrics (container network only, never published to host)
+    expose:
+      - "9808"
     healthcheck:
       test: [ "CMD-SHELL", "celery -A soymutdb_worker.main:celery_app inspect ping -d worker-default@$$HOSTNAME || exit 1" ]
       interval: 30s
@@ -282,6 +285,9 @@ services:
       SOYMUTDB_DATABASE_URL: postgresql+psycopg://soymutdb:${POSTGRES_PASSWORD:-soymutdb_dev_password}@postgres:5432/soymutdb
     command: >
       celery -A soymutdb_worker.main:celery_app worker --loglevel=info --queues=blast --concurrency=${WORKER_BLAST_CONCURRENCY:-2} --max-tasks-per-child=50 --hostname=worker-blast@%h
+    # Prometheus /metrics (container network only, never published to host)
+    expose:
+      - "9808"
     healthcheck:
       test: [ "CMD-SHELL", "celery -A soymutdb_worker.main:celery_app inspect ping -d worker-blast@$$HOSTNAME || exit 1" ]
       interval: 30s
@@ -311,6 +317,9 @@ services:
       SOYMUTDB_DATABASE_URL: postgresql+psycopg://soymutdb:${POSTGRES_PASSWORD:-soymutdb_dev_password}@postgres:5432/soymutdb
     command: >
       celery -A soymutdb_worker.main:celery_app worker --loglevel=info --queues=ingest,export,stats,cleanup,default --concurrency=${WORKER_INGESTION_CONCURRENCY:-2} --max-tasks-per-child=20 --hostname=worker-ingest@%h
+    # Prometheus /metrics (container network only, never published to host)
+    expose:
+      - "9808"
     healthcheck:
       test: [ "CMD-SHELL", "celery -A soymutdb_worker.main:celery_app inspect ping -d worker-ingest@$$HOSTNAME || exit 1" ]
       interval: 30s
@@ -335,6 +344,9 @@ services:
       SOYMUTDB_CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-soymutdb_dev_password}@redis-celery:6379/1
     command: >
       celery -A soymutdb_worker.main:celery_app beat --loglevel=info --schedule=/tmp/celerybeat-schedule
+    # Prometheus /metrics (container network only, never published to host)
+    expose:
+      - "9808"
     healthcheck:
       test: [ "CMD-SHELL", "test -f /tmp/celerybeat-schedule || exit 1" ]
       interval: 30s
@@ -374,12 +386,73 @@ services:
   # ------------------------------------------------------------------
   # Monitoring
   # ------------------------------------------------------------------
+  # Prometheus exporters（仅容器网络内可见，expose 不映射到宿主机）。
+  # 数据存储镜像均固定版本；exporter 同样固定稳定版，禁止裸 latest。
+  # ------------------------------------------------------------------
+
+  # PostgreSQL exporter：凭据与 api/migrate 同源（SOYMUTDB_DATABASE_URL 同款
+  # 用户名/密码/库名，仅 host 指向 postgres 服务名）。
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    environment:
+      DATA_SOURCE_NAME: "postgresql://soymutdb:${POSTGRES_PASSWORD:-soymutdb_dev_password}@postgres:5432/soymutdb?sslmode=disable"
+    expose:
+      - "9187"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -q -O /dev/null http://localhost:9187/ || exit 1" ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  # Redis exporter：单实例抓取缓存 redis 与 celery broker/result 双实例
+  # （REDIS_ADDR 逗号分隔；两实例共用同一密码）。指标带 redis_instance 标签。
+  redis-exporter:
+    image: oliver006/redis-exporter:v1.60.0
+    environment:
+      REDIS_ADDR: "redis://redis:6379,redis://redis-celery:6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-soymutdb_dev_password}
+    expose:
+      - "9121"
+    depends_on:
+      redis:
+        condition: service_healthy
+      redis-celery:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -q -O /dev/null http://localhost:9121/ || exit 1" ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  # node-exporter：宿主磁盘/CPU/内存监控（磁盘 >85% 告警依赖）。
+  # 只读挂载宿主根文件系统到 /host，经 --path.rootfs 报告 host 指标。
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    command:
+      - "--path.rootfs=/host"
+    volumes:
+      - /:/host:ro,rslave
+    expose:
+      - "9100"
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -q -O /dev/null http://localhost:9100/metrics || exit 1" ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
   prometheus:
     image: prom/prometheus:v3.0.0
     ports:
       - "9090:9090"
     volumes:
       - ./infra/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/monitoring/rules:/etc/prometheus/rules:ro
       - promdata:/prometheus
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"

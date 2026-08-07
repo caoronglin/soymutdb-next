@@ -1,8 +1,8 @@
 import { useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, RotateCcw, CheckCircle2, Archive } from "lucide-react";
+import { Plus, RotateCcw, CheckCircle2, Archive, ChevronRight } from "lucide-react";
 import { http, getReleases, type ReleaseSummary } from "@soymutdb/api-client";
-import { Button, Card, CardContent, CardHeader, CardTitle, Input, Badge } from "@soymutdb/ui";
+import { Button, Card, CardContent, CardHeader, CardTitle, Input, Badge, PageHeader } from "@soymutdb/ui";
 import { DataTable, type DataTableColumn } from "../components/data-table";
 import { StatusBadge, type ReleaseStatus, canTransition } from "../components/status-badge";
 import { ConfirmDialog } from "../components/confirm-dialog";
@@ -188,18 +188,16 @@ export default function ReleasesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="font-serif text-2xl font-semibold">Release Management</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Manage data releases through the lifecycle: Draft → Importing → Validating → Active → Archived.
-          </p>
-        </div>
-        <Button>
-          <Plus className="size-4" />
-          New Release
-        </Button>
-      </div>
+      <PageHeader
+        title="Release Management"
+        description="Manage data releases through the lifecycle: Draft → Importing → Validating → Active → Archived."
+        actions={
+          <Button>
+            <Plus className="size-4" />
+            New Release
+          </Button>
+        }
+      />
 
       {/* State machine diagram */}
       <Card>
@@ -207,18 +205,18 @@ export default function ReleasesPage() {
           <CardTitle className="text-base">Release Lifecycle</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-wrap items-center gap-2 text-sm">
+          <ol className="flex flex-wrap items-center gap-x-1 gap-y-3 text-sm">
             {(["draft", "importing", "validating", "active", "archived"] as ReleaseStatus[]).map(
               (status, i, arr) => (
-                <div key={status} className="flex items-center gap-2">
+                <li key={status} className="flex items-center gap-1">
                   <StatusBadge status={status} type="release" />
                   {i < arr.length - 1 && (
-                    <span className="text-muted-foreground">→</span>
+                    <ChevronRight className="size-4 text-muted-foreground/50" aria-hidden />
                   )}
-                </div>
+                </li>
               ),
             )}
-          </div>
+          </ol>
         </CardContent>
       </Card>
 

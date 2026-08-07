@@ -24,7 +24,8 @@
     "register": "Register",
     "admin": "Admin",
     "sra": "SRA Browser",
-    "compare": "Compare"
+    "compare": "Compare",
+    "more": "More"
   },
   "home": {
     "newRelease": "New Release Available",
@@ -34,6 +35,11 @@
     "searchPlaceholder": "Search genes, variants, mutant lines...",
     "search": "Search",
     "searchExamples": "e.g., Glyma.01G001000, Gm01:12345, EMS mutant",
+    "tryExamples": "Try:",
+    "taskGenes": "Browse genes",
+    "taskVariants": "Explore variants",
+    "taskBlast": "Run BLAST",
+    "statsSource": "Source: SoyMutDB API",
     "browseGenome": "Genome Browser",
     "blastSearch": "BLAST Search",
     "downloads": "Downloads",

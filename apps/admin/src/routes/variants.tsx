@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Download } from "lucide-react";
 import { http } from "@soymutdb/api-client";
-import { Button, Input, Badge } from "@soymutdb/ui";
+import { Button, Input, Badge, PageHeader } from "@soymutdb/ui";
 import { DataTable, type DataTableColumn } from "../components/data-table";
 
 interface AdminVariant {
@@ -122,18 +122,16 @@ export default function VariantsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="font-serif text-2xl font-semibold">Variant Management</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Browse and manage genomic variants across all releases.
-          </p>
-        </div>
-        <Button variant="outline">
-          <Download className="size-4" />
-          Export
-        </Button>
-      </div>
+      <PageHeader
+        title="Variant Management"
+        description="Browse and manage genomic variants across all releases."
+        actions={
+          <Button variant="outline">
+            <Download className="size-4" />
+            Export
+          </Button>
+        }
+      />
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">

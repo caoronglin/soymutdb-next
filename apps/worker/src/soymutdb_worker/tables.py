@@ -106,6 +106,30 @@ blast_jobs = Table(
     Column("completed_at", DateTime(timezone=True)),
     Column("error_message", Text),
     Column("result_path", String(2048)),
+    Column("query_len", Integer),
+    Column("hit_count", Integer),
+)
+
+blast_hits = Table(
+    "blast_hits",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("job_id", UUID(as_uuid=True)),
+    Column("hsp_num", Integer),
+    Column("subject_id", String(256)),
+    Column("subject_title", String(1024)),
+    Column("percent_identity", Float),
+    Column("alignment_length", Integer),
+    Column("mismatches", Integer),
+    Column("gap_opens", Integer),
+    Column("query_start", Integer),
+    Column("query_end", Integer),
+    Column("subject_start", Integer),
+    Column("subject_end", Integer),
+    Column("evalue", Float),
+    Column("bit_score", Float),
+    Column("query_strand", String(8)),
+    Column("subject_strand", String(8)),
 )
 
 
@@ -116,6 +140,7 @@ def utcnow() -> datetime:
 
 
 __all__ = [
+    "blast_hits",
     "blast_jobs",
     "chromosomes",
     "expression_data",

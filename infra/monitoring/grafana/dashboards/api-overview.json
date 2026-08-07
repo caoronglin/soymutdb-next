@@ -70,7 +70,7 @@
             "pluginVersion": "11.4.0",
             "targets": [
                 {
-                    "expr": "sum(rate(http_requests_total{status=~\"5..\"}[5m])) / sum(rate(http_requests_total[5m]))",
+                    "expr": "sum(rate(soymutdb_http_requests_total{status=~\"5..\"}[5m])) / sum(rate(soymutdb_http_requests_total[5m]))",
                     "refId": "A"
                 }
             ],
@@ -125,7 +125,7 @@
             },
             "targets": [
                 {
-                    "expr": "sum(rate(http_requests_total[5m]))",
+                    "expr": "sum(rate(soymutdb_http_requests_total[5m]))",
                     "refId": "A"
                 }
             ],
@@ -180,7 +180,7 @@
             },
             "targets": [
                 {
-                    "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
+                    "expr": "histogram_quantile(0.95, sum(rate(soymutdb_http_request_duration_seconds_bucket[5m])) by (le))",
                     "refId": "A"
                 }
             ],
@@ -278,7 +278,7 @@
             },
             "targets": [
                 {
-                    "expr": "sum(rate(http_requests_total[5m])) by (endpoint)",
+                    "expr": "sum(rate(soymutdb_http_requests_total[5m])) by (endpoint)",
                     "legendFormat": "{{endpoint}}",
                     "refId": "A"
                 }
@@ -319,7 +319,7 @@
             },
             "targets": [
                 {
-                    "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, endpoint))",
+                    "expr": "histogram_quantile(0.95, sum(rate(soymutdb_http_request_duration_seconds_bucket[5m])) by (le, endpoint))",
                     "legendFormat": "{{endpoint}}",
                     "refId": "A"
                 }
@@ -355,7 +355,7 @@
             },
             "targets": [
                 {
-                    "expr": "sum(rate(http_requests_total[5m])) by (status)",
+                    "expr": "sum(rate(soymutdb_http_requests_total[5m])) by (status)",
                     "legendFormat": "{{status}}",
                     "refId": "A"
                 }

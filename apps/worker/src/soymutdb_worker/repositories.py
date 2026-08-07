@@ -11,10 +11,10 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from sqlalchemy import text, update
+from sqlalchemy import delete, insert, text, update
 
 from soymutdb_worker.shared import JobStatus, JobStatusUpdate, transition_allowed
-from soymutdb_worker.tables import blast_jobs, import_tasks, utcnow
+from soymutdb_worker.tables import blast_hits, blast_jobs, import_tasks, utcnow
 
 # ---------------------------------------------------------------------------
 # DB status value ↔ shared JobStatus mapping
@@ -127,24 +127,40 @@ class BlastJobStore:
         )
         return _RUN if applied else _SKIP
 
-    def mark_succeeded(self, job_id: str | uuid.UUID, *, result_path: str) -> bool:
-        """Mark the job completed and record the S3 result path."""
+    def mark_succeeded(
+        self,
+        job_id: str | uuid.UUID,
+        *,
+        result_path: str,
+        query_len: int | None = None,
+        hit_count: int | None = None,
+    ) -> bool:
+        """Mark the job completed and record the S3 result path.
+
+        ``query_len`` / ``hit_count`` come from the parsed BLAST report and
+        back the results endpoint's statistics.
+        """
         current = self.get_status(job_id)
         if current != JobStatus.RUNNING:
             return False
         if not transition_allowed(current, JobStatus.SUCCEEDED):
             return False
+        values: dict[str, Any] = {
+            "status": "completed",
+            "completed_at": utcnow(),
+            "result_path": result_path,
+        }
+        if query_len is not None:
+            values["query_len"] = int(query_len)
+        if hit_count is not None:
+            values["hit_count"] = int(hit_count)
         result = self._session.execute(
             update(blast_jobs)
             .where(
                 blast_jobs.c.id == str(job_id),
                 blast_jobs.c.status == "running",
             )
-            .values(
-                status="completed",
-                completed_at=utcnow(),
-                result_path=result_path,
-            )
+            .values(**values)
         )
         return bool(getattr(result, "rowcount", 0))
 
@@ -166,6 +182,33 @@ class BlastJobStore:
             )
         )
         return bool(getattr(result, "rowcount", 0))
+
+
+class BlastHitStore:
+    """Narrow repository over ``blast_hits`` (idempotent replace).
+
+    Parsed HSP rows are stored with a delete-then-insert per job, all inside
+    the caller's transaction: a redelivered event (same ``job_id``) can never
+    leave two result sets behind.
+    """
+
+    def __init__(self, session) -> None:
+        self._session = session
+
+    def replace_hits(self, job_id: str | uuid.UUID, hits: list[dict]) -> int:
+        """Delete existing rows for the job, then insert *hits*.
+
+        ``hits`` must be plain dicts with the column names of ``blast_hits``
+        (``job_id`` is added by this method).
+        """
+        jid = str(job_id)
+        self._session.execute(
+            delete(blast_hits).where(blast_hits.c.job_id == jid)
+        )
+        if hits:
+            rows = [{**hit, "job_id": jid} for hit in hits]
+            self._session.execute(insert(blast_hits), rows)
+        return len(hits)
 
 
 class ImportTaskStore:
@@ -219,4 +262,4 @@ class ImportTaskStore:
         )
 
 
-__all__ = ["BlastJobStore", "ImportTaskStore"]
+__all__ = ["BlastHitStore", "BlastJobStore", "ImportTaskStore"]

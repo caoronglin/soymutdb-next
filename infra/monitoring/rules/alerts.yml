@@ -1,0 +1,137 @@
+# =====================================================================
+# SoyMutDB Alerting Rules
+# =====================================================================
+# 指标来源与依赖：
+#   - API 层    soymutdb_http_requests_total / soymutdb_http_request_duration_seconds
+#               （apps/api MetricsMiddleware，本任务补齐）
+#   - Worker 层 soymutdb_worker_up / tasks_total / task_failures_total / queue_depth
+#               （apps/worker/src/soymutdb_worker/metrics.py，端口 9808）
+#   - PG        pg_stat_database_numbackends（postgres-exporter）
+#   - Redis     redis_memory_used_bytes / redis_memory_max_bytes（redis-exporter）
+#   - 磁盘      node_filesystem_*（node-exporter，--path.rootfs=/host）
+#
+# 明确未实现 / 依赖外部条件（待后续任务补齐后取消注释）：
+#   - 备份过期：deploy/scripts/backup.sh 目前不写任何 metric（无 pushgateway、
+#     无 node textfile collector）。待备份任务将最近成功备份时间写入
+#     node-exporter textfile 目录或 pushgateway 后，再启用：
+#       - alert: BackupStale
+#         expr: time() - soymutdb_last_backup_success_timestamp_seconds > 172800
+#         for: 0m
+#         annotations: { summary: "Backup is older than 48h" }
+# =====================================================================
+groups:
+  # ------------------------------------------------------------------
+  # API availability & performance
+  # ------------------------------------------------------------------
+  - name: soymutdb-api
+    rules:
+      - alert: ApiHigh5xxRate
+        expr: >
+          sum(rate(soymutdb_http_requests_total{status=~"5.."}[5m]))
+          / clamp_min(sum(rate(soymutdb_http_requests_total[5m])), 0.001)
+          > 0.02
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API 5xx rate above 2%"
+          description: "API 5xx ratio is {{ $value | humanizePercentage }} over the last 5 minutes (threshold 2%)."
+
+      - alert: ApiHighP95Latency
+        # 依赖 API latency histogram（soymutdb_http_request_duration_seconds，
+        # 由 MetricsMiddleware 记录；本任务已补齐）。
+        expr: >
+          histogram_quantile(
+            0.95,
+            sum(rate(soymutdb_http_request_duration_seconds_bucket[5m])) by (le)
+          ) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API p95 latency above 1s"
+          description: "API p95 latency is {{ $value }}s over the last 5 minutes (threshold 1s)."
+
+  # ------------------------------------------------------------------
+  # Celery workers, beat & queue backlog
+  # ------------------------------------------------------------------
+  - name: soymutdb-workers
+    rules:
+      - alert: WorkerOffline
+        # up==0 同时覆盖 readiness 失败与进程死亡（job 与 compose 服务一一对应）。
+        expr: up{job=~"worker-(default|blast|ingest)"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Worker {{ $labels.job }} is offline"
+          description: "Prometheus cannot scrape {{ $labels.instance }} for 2 minutes."
+
+      - alert: BeatOffline
+        expr: up{job="beat"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Celery beat is offline"
+          description: "Scheduled tasks (stats/cleanup) are not being dispatched."
+
+      - alert: TaskBacklog
+        # 依赖 worker 队列深度指标（metrics.py 每 15s 收集 LLEN；-1 表示
+        # 收集失败，不会触发本规则）。阈值按队列独立评估。
+        expr: soymutdb_worker_queue_depth > 500
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Queue {{ $labels.queue }} backlog above 500"
+          description: "Queue {{ $labels.queue }} has {{ $value }} pending messages for 10 minutes."
+
+      - alert: TaskFailuresSpike
+        expr: rate(soymutdb_worker_task_failures_total[15m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Elevated worker task failures"
+          description: "Queue {{ $labels.queue }} is failing more than 5 tasks/min over the last 15 minutes."
+
+  # ------------------------------------------------------------------
+  # Data stores & host
+  # ------------------------------------------------------------------
+  - name: soymutdb-infrastructure
+    rules:
+      - alert: PostgresConnectionsHigh
+        # 假设 postgres max_connections=100（compose 未覆盖，官方默认）；
+        # 80% = 80 连接。若未来调大 max_connections 需同步调整此阈值。
+        expr: sum(pg_stat_database_numbackends) > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL connections above 80"
+          description: "PostgreSQL is using {{ $value }} connections (80% of the default 100 budget)."
+
+      - alert: DiskSpaceLow
+        # 依赖 node-exporter（本任务新增服务，--path.rootfs=/host）。
+        expr: >
+          (1 - node_filesystem_avail_bytes{mountpoint="/"}
+            / node_filesystem_size_bytes{mountpoint="/"})
+          > 0.85
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Root filesystem above 85%"
+          description: "Host root filesystem is {{ $value | humanizePercentage }} full (threshold 85%)."
+
+      - alert: RedisMemoryHigh
+        # redis-celery 为 noeviction：内存打满会导致消息/结果写入失败，
+        # 比缓存 redis（allkeys-lru 可驱逐）更危险，两条序列独立评估。
+        expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis memory above 85%"
+          description: "Redis instance {{ $labels.redis_instance }} is using {{ $value | humanizePercentage }} of its maxmemory."

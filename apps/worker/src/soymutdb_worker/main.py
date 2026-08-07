@@ -12,8 +12,12 @@ Fixes vs. quartz reference:
 
 from __future__ import annotations
 
-from celery import Celery
+import fnmatch
 
+from celery import Celery
+from celery.signals import beat_init, task_failure, task_success, worker_ready
+
+from soymutdb_worker import metrics as worker_metrics
 from soymutdb_worker.config import get_setting
 
 # ---------------------------------------------------------------------------
@@ -115,6 +119,46 @@ celery_app.autodiscover_tasks(
         "soymutdb_worker.tasks.static_pages",
     ]
 )
+
+
+# ---------------------------------------------------------------------------
+# Prometheus metrics hooks
+# ---------------------------------------------------------------------------
+# Signal handlers live in the main process.  ``task_success`` / ``task_failure``
+# fire inside the prefork child that ran the task; thanks to
+# ``PROMETHEUS_MULTIPROC_DIR`` (set in soymutdb_worker.metrics at import time)
+# their counters land in per-pid files aggregated by the /metrics endpoint.
+# ---------------------------------------------------------------------------
+
+
+def _queue_of_task(task_name: str) -> str:
+    """Resolve the routing queue of a task from ``task_routes``."""
+    if not task_name:
+        return "unknown"
+    for pattern, opts in celery_app.conf.task_routes.items():
+        if fnmatch.fnmatch(task_name, pattern):
+            return opts.get("queue", "default")
+    return "default"
+
+
+@worker_ready.connect
+def _start_metrics_on_worker_ready(**kwargs: object) -> None:
+    worker_metrics.start_metrics_server(broker_url=BROKER_URL)
+
+
+@beat_init.connect
+def _start_metrics_on_beat_init(**kwargs: object) -> None:
+    worker_metrics.start_metrics_server(broker_url=BROKER_URL)
+
+
+@task_success.connect
+def _observe_task_success(sender: str | None = None, **kwargs: object) -> None:
+    worker_metrics.TASKS_TOTAL.labels(queue=_queue_of_task(sender or "")).inc()
+
+
+@task_failure.connect
+def _observe_task_failure(sender: str | None = None, **kwargs: object) -> None:
+    worker_metrics.TASK_FAILURES_TOTAL.labels(queue=_queue_of_task(sender or "")).inc()
 
 
 if __name__ == "__main__":

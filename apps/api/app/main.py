@@ -32,7 +32,7 @@ from .core.exceptions import (
     validation_exception_handler,
 )
 from .core.metrics import get_metrics_app
-from .core.middleware import RequestIdMiddleware
+from .core.middleware import MetricsMiddleware, RequestIdMiddleware
 from .core.outbox_dispatcher import start_dispatcher
 from .schemas.error import ErrorDetail, ErrorResponse, FieldError, ValidationErrorResponse
 
@@ -268,6 +268,8 @@ def create_app() -> FastAPI:
     app.add_middleware(GZipMiddleware, minimum_size=1024)
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(RequestIdMiddleware)
+    # Outermost: records every request (incl. rejected ones) for Prometheus.
+    app.add_middleware(MetricsMiddleware)
 
     # --- Exception handlers ---
     app.add_exception_handler(SoyMutDBError, soy_mut_db_exception_handler)

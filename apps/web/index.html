@@ -11,11 +11,16 @@
     />
     <meta name="author" content="SoyMutDB Consortium" />
 
-    <!-- Content Security Policy: restrict sources to self + inline styles for Tailwind -->
-    <!-- When VITE_CDN_ENABLED=true, add CDN domains to script-src (e.g. cdnjs.cloudflare.com, cdn.jsdelivr.net) -->
+    <!-- Content Security Policy: keep in sync with apps/web/public/_headers and
+         apps/web/scripts/base-template.ts (SSG pages). REPLACE the placeholder
+         domains before going live: https://api.example.com -> production API
+         origin, https://jbrowse.example.com -> deployed JBrowse origin (iframe
+         on /browse). Preview deployments: use the STAGING origins instead.
+         When VITE_CDN_ENABLED=true, add CDN domains to script-src in BOTH this
+         meta tag and the _headers CSP (e.g. cdnjs.cloudflare.com, cdn.jsdelivr.net). -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https:; base-uri 'self'; form-action 'self'; frame-ancestors 'self';"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://api.example.com; frame-src 'self' https://jbrowse.example.com; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; object-src 'none'"
     />
 
     <!-- Preconnect to font origins for faster font load -->

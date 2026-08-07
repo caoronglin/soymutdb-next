@@ -1,12 +1,17 @@
 # =====================================================================
 # SoyMutDB Prometheus Configuration
 # =====================================================================
-# Scrapes only existing services with metrics endpoints:
-#   - api (FastAPI /metrics on port 8000)
-#   - clickhouse (built-in /metrics on port 9363)
-#   - postgres (postgres-exporter on port 9187)
-#   - redis (redis-exporter on port 9121)
-# Removed: nginx-exporter, worker:9808 (no metrics endpoints)
+# Scrapes only existing services with metrics endpoints (all exporters are
+# defined in docker-compose.yml):
+#   - api                FastAPI /metrics on port 8000
+#   - clickhouse         built-in /metrics on port 9363
+#   - postgres-exporter  port 9187 (service: postgres-exporter)
+#   - redis-exporter     port 9121 (service: redis-exporter; scrapes both
+#                         redis and redis-celery instances)
+#   - node-exporter      port 9100 (service: node-exporter)
+#   - worker-default / worker-blast / worker-ingest / beat
+#                        worker /metrics on port 9808 (container network only)
+# Alert rules: infra/monitoring/rules/*.yml
 # =====================================================================
 
 global:
@@ -15,6 +20,9 @@ global:
   external_labels:
     cluster: soymutdb
     environment: production
+
+rule_files:
+  - "/etc/prometheus/rules/*.yml"
 
 scrape_configs:
   # ------------------------------------------------------------------
@@ -45,9 +53,41 @@ scrape_configs:
     scrape_interval: 15s
 
   # ------------------------------------------------------------------
-  # Redis - redis-exporter
+  # Redis - redis-exporter (redis + redis-celery instances, redis_instance
+  # label distinguishes them)
   # ------------------------------------------------------------------
   - job_name: "redis"
     static_configs:
       - targets: ["redis-exporter:9121"]
+    scrape_interval: 15s
+
+  # ------------------------------------------------------------------
+  # Host - node-exporter (disk / CPU / memory)
+  # ------------------------------------------------------------------
+  - job_name: "node"
+    static_configs:
+      - targets: ["node-exporter:9100"]
+    scrape_interval: 15s
+
+  # ------------------------------------------------------------------
+  # Celery workers & beat - soymutdb_worker metrics (port 9808)
+  # ------------------------------------------------------------------
+  - job_name: "worker-default"
+    static_configs:
+      - targets: ["worker-default:9808"]
+    scrape_interval: 15s
+
+  - job_name: "worker-blast"
+    static_configs:
+      - targets: ["worker-blast:9808"]
+    scrape_interval: 15s
+
+  - job_name: "worker-ingest"
+    static_configs:
+      - targets: ["worker-ingest:9808"]
+    scrape_interval: 15s
+
+  - job_name: "beat"
+    static_configs:
+      - targets: ["beat:9808"]
     scrape_interval: 15s

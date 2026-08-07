@@ -7,7 +7,7 @@
  */
 import * as React from "react";
 import { cn, Skeleton, Pagination } from "@soymutdb/ui";
-import { ArrowUpDown, Inbox } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Inbox } from "lucide-react";
 
 export interface DataTableColumn<T> {
   id: string;
@@ -80,9 +80,9 @@ export function DataTable<T>({
 
   return (
     <div className={cn("flex flex-col gap-4", className)}>
-      <div className="overflow-x-auto rounded-xl border">
+      <div className="overflow-x-auto rounded-xl border bg-card shadow-sm">
         <table className="w-full border-collapse text-sm" aria-label={ariaLabel}>
-          <thead className="sticky top-0 z-10 bg-muted/60 backdrop-blur">
+          <thead className="sticky top-0 z-10 bg-muted/50 backdrop-blur">
             <tr className="border-b">
               {columns.map((col) => {
                 const isSorted = sort?.key === col.sortKey;
@@ -91,9 +91,9 @@ export function DataTable<T>({
                     key={col.id}
                     scope="col"
                     className={cn(
-                      "px-4 py-3 text-left font-medium text-muted-foreground",
+                      "px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground",
                       col.numeric && "text-right",
-                      col.frozen && "sticky left-0 z-20 bg-muted/60 backdrop-blur",
+                      col.frozen && "sticky left-0 z-20 bg-muted/50 backdrop-blur",
                       col.sortKey && "cursor-pointer select-none",
                       col.className,
                     )}
@@ -104,14 +104,22 @@ export function DataTable<T>({
                       <button
                         type="button"
                         className={cn(
-                          "inline-flex items-center gap-1 transition-colors hover:text-foreground",
+                          "inline-flex items-center gap-1 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                           col.numeric && "flex-row-reverse",
                           isSorted && "text-foreground",
                         )}
                         onClick={() => handleSort(col)}
                       >
                         {col.header}
-                        <ArrowUpDown className="size-3 opacity-60" aria-hidden />
+                        {isSorted ? (
+                          sort?.dir === "asc" ? (
+                            <ArrowUp className="size-3.5" aria-hidden />
+                          ) : (
+                            <ArrowDown className="size-3.5" aria-hidden />
+                          )
+                        ) : (
+                          <ArrowUpDown className="size-3.5 opacity-40" aria-hidden />
+                        )}
                       </button>
                     ) : (
                       col.header
@@ -156,7 +164,7 @@ export function DataTable<T>({
                 <tr
                   key={ri}
                   className={cn(
-                    "border-b last:border-0 transition-colors hover:bg-accent/40",
+                    "group/row border-b last:border-0 transition-colors hover:bg-muted/50",
                     onRowClick && "cursor-pointer",
                   )}
                   onClick={onRowClick ? () => onRowClick(row) : undefined}
@@ -178,7 +186,7 @@ export function DataTable<T>({
                       className={cn(
                         "px-4 py-3 align-middle",
                         col.numeric && "text-right font-mono tabular-nums",
-                        col.frozen && "sticky left-0 z-10 bg-card",
+                        col.frozen && "sticky left-0 z-10 bg-card transition-colors group-hover/row:bg-muted/50",
                         col.className,
                       )}
                     >

@@ -4,6 +4,13 @@ Job submission writes the BLAST job row and a transactional-outbox event in
 the **same database transaction**, so submission no longer depends on the
 Celery broker being reachable.  A background dispatcher forwards the event
 to the worker afterwards.
+
+Results are stored by the worker in two places: the parsed hits land in the
+``blast_hits`` table (via migration 0008) and the raw output file goes to
+MinIO under ``blast-results/{job_id}.json``.  :meth:`get_result` returns a
+status-aware envelope: pending/running/failed jobs carry no hit list (never a
+placeholder), completed jobs carry the real hits plus a pre-signed download
+URL for the raw output.
 """
 
 from __future__ import annotations
@@ -11,27 +18,85 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.config import get_settings
 from ..core.exceptions import NotFoundError, ValidationError
 from ..core.task_contract import BLAST_RUN_TASK
-from ..models.blast import BlastDatabase, BlastJob, BlastJobStatus
+from ..models.blast import BlastDatabase, BlastDbType, BlastHit, BlastJob, BlastJobStatus
 from ..schemas.blast import (
     BlastDatabaseResponse,
     BlastJobResponse,
+    BlastParameters,
     BlastProgram,
     BlastResultResponse,
     BlastSubmitRequest,
+    validate_sequence_charset,
+)
+from ..schemas.blast import (
+    BlastHit as BlastHitSchema,
 )
 from ..schemas.blast import (
     BlastJobStatus as BlastSchemaJobStatus,
 )
+from ..utils.s3 import generate_presigned_url
 from .job_service import build_job_payload
 from .outbox_service import create_outbox_event
 
 settings = get_settings()
+
+#: Which database types each program may search against (db_type whitelist).
+_PROGRAM_DB_TYPES: dict[BlastProgram, frozenset[str]] = {
+    BlastProgram.BLASTN: frozenset({BlastDbType.NUCL.value}),
+    BlastProgram.BLASTP: frozenset({BlastDbType.PROT.value}),
+    BlastProgram.BLASTX: frozenset({BlastDbType.PROT.value}),
+    BlastProgram.TBLASTN: frozenset({BlastDbType.NUCL.value}),
+    BlastProgram.TBLASTX: frozenset({BlastDbType.NUCL.value}),
+}
+
+#: Client-facing parameter names → worker whitelisted CLI names.  ``evalue``,
+#: ``word_size`` and ``max_target_seqs`` travel as top-level payload keys (the
+#: worker reads them directly), so they are intentionally absent here.
+_PARAMETER_NAME_MAP: dict[str, str] = {
+    "gap_open": "gapopen",
+    "gap_extend": "gapextend",
+    "matrix": "matrix",
+    "dust": "dust",
+    "soft_masking": "soft_masking",
+}
+
+#: Maximum characters of error text exposed to clients.
+_MAX_ERROR_LEN = 2000
+
+
+def _sanitize_error(message: str | None) -> str | None:
+    """Trim error text for client responses (printable chars only)."""
+    if not message:
+        return None
+    clean = "".join(ch for ch in message if ch.isprintable() or ch in "\n\t")
+    return clean.strip()[:_MAX_ERROR_LEN] or None
+
+
+def _worker_parameters(params: BlastParameters) -> dict:
+    """Map validated request parameters to worker-whitelisted CLI parameters.
+
+    ``percent_identity`` is a client-side filter only and is intentionally
+    dropped (the worker rejects unknown parameter keys).  Boolean flags are
+    rendered as ``yes``/``no`` for the BLAST CLI.
+    """
+    out: dict = {}
+    if params.gap_open is not None:
+        out["gapopen"] = params.gap_open
+    if params.gap_extend is not None:
+        out["gapextend"] = params.gap_extend
+    if params.matrix:
+        out["matrix"] = params.matrix
+    if params.dust is not None:
+        out["dust"] = "yes" if params.dust else "no"
+    if params.soft_masking is not None:
+        out["soft_masking"] = "yes" if params.soft_masking else "no"
+    return out
 
 
 class BlastService:
@@ -64,7 +129,8 @@ class BlastService:
         Business record + outbox event are committed atomically; no Celery
         broker round-trip happens inside this transaction.
         """
-        # Validate the database exists and is active.
+        # Validate the database exists and is active (the active-DB table is
+        # the database whitelist).
         bd_result = await db.execute(
             select(BlastDatabase).where(
                 BlastDatabase.id == request.database_id,
@@ -77,18 +143,31 @@ class BlastService:
                 f"BLAST database {request.database_id} not found or inactive"
             )
 
+        # Program ↔ database-type compatibility.
+        allowed_types = _PROGRAM_DB_TYPES.get(request.program)
+        db_type = getattr(blast_db.db_type, "value", blast_db.db_type)
+        if allowed_types is not None and db_type not in allowed_types:
+            raise ValidationError(
+                f"Program {request.program.value} cannot search a "
+                f"'{db_type}' database"
+            )
+
         if len(request.query_sequence) > settings.blast_max_length:
             raise ValidationError(
                 f"Query sequence exceeds max length {settings.blast_max_length}"
             )
+        # Defense in depth: the schema validates the alphabet at the API
+        # boundary; re-check here for programmatic callers.
+        validate_sequence_charset(request.query_sequence, request.program.value)
 
+        worker_params = _worker_parameters(request.parameters)
         job = BlastJob(
             id=uuid.uuid4(),
             user_id=user_id,
             program=request.program.value,
             database_id=request.database_id,
             query_sequence=request.query_sequence,
-            parameters=request.parameters.model_dump(exclude_none=True),
+            parameters=worker_params,
             status=BlastJobStatus.PENDING,
             submitted_at=datetime.now(UTC),
             expires_at=datetime.now(UTC) + timedelta(days=7),
@@ -109,7 +188,7 @@ class BlastService:
                 "evalue": request.parameters.evalue,
                 "word_size": request.parameters.word_size,
                 "max_target_seqs": request.parameters.max_target_seqs,
-                "parameters": job.parameters,
+                "parameters": worker_params,
             },
             idempotency_key=f"blast:{job.id}",
             max_attempts=settings.blast_max_attempts,
@@ -135,27 +214,103 @@ class BlastService:
         return self._job_to_response(job)
 
     async def get_result(
-        self, db: AsyncSession, job_id: uuid.UUID
+        self,
+        db: AsyncSession,
+        job_id: uuid.UUID,
+        *,
+        limit: int = 50,
+        offset: int = 0,
     ) -> BlastResultResponse:
-        """Retrieve parsed BLAST results for a completed job."""
+        """Retrieve the status-aware result envelope for a BLAST job.
+
+        Non-completed jobs return ``hits=None`` (never a placeholder); only
+        completed jobs carry a real hit list — an empty list means BLAST
+        genuinely produced zero hits.
+        """
         result = await db.execute(select(BlastJob).where(BlastJob.id == job_id))
         job = result.scalar_one_or_none()
         if job is None:
             raise NotFoundError(f"BLAST job {job_id} not found")
-        if job.status != BlastJobStatus.COMPLETED:
-            raise ValidationError(f"Job {job_id} is not completed (status={job.status})")
 
-        # In production, fetch the result file from S3 and parse it.
-        return BlastResultResponse(
+        base = BlastResultResponse(
             job_id=str(job.id),
+            status=BlastSchemaJobStatus(job.status),
             program=BlastProgram(job.program),
             database_id=job.database_id,
             query_id="query",
-            query_len=0,
-            hits=[],
-            total_hits=0,
-            search_stats={},
-            completed_at=job.completed_at or datetime.now(UTC),
+            query_len=job.query_len,
+            error_message=_sanitize_error(job.error_message),
+            completed_at=job.completed_at,
+        )
+
+        if job.status != BlastJobStatus.COMPLETED:
+            return base
+
+        # Completed: real hits from the database, ordered by significance.
+        hits_stmt = (
+            select(BlastHit)
+            .where(BlastHit.job_id == job.id)
+            .order_by(BlastHit.evalue.asc(), BlastHit.bit_score.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        hits_result = await db.execute(hits_stmt)
+        page = list(hits_result.scalars().all())
+
+        stats_stmt = select(
+            func.min(BlastHit.evalue), func.max(BlastHit.bit_score)
+        ).where(BlastHit.job_id == job.id)
+        best_evalue, best_bit_score = (await db.execute(stats_stmt)).first() or (
+            None,
+            None,
+        )
+
+        total_hits = job.hit_count if job.hit_count is not None else len(page)
+
+        download_url = None
+        if job.result_path:
+            download_url = generate_presigned_url(
+                f"{settings.s3_blast_bucket}/{job.result_path}",
+                expires_in=3600,
+            )
+
+        return BlastResultResponse(
+            job_id=str(job.id),
+            status=BlastSchemaJobStatus(job.status),
+            program=BlastProgram(job.program),
+            database_id=job.database_id,
+            query_id="query",
+            query_len=job.query_len,
+            hits=[
+                BlastHitSchema(
+                    hsp_num=h.hsp_num,
+                    subject_id=h.subject_id,
+                    subject_title=h.subject_title or "",
+                    percent_identity=h.percent_identity,
+                    alignment_length=h.alignment_length,
+                    mismatches=h.mismatches,
+                    gap_opens=h.gap_opens,
+                    query_start=h.query_start,
+                    query_end=h.query_end,
+                    subject_start=h.subject_start,
+                    subject_end=h.subject_end,
+                    evalue=h.evalue,
+                    bit_score=h.bit_score,
+                    query_strand=h.query_strand,
+                    subject_strand=h.subject_strand,
+                )
+                for h in page
+            ],
+            total_hits=total_hits,
+            search_stats={
+                "total_hits": total_hits,
+                "hits_returned": len(page),
+                "best_evalue": best_evalue,
+                "best_bitscore": best_bit_score,
+            },
+            error_message=None,
+            completed_at=job.completed_at,
+            download_url=download_url,
         )
 
     @staticmethod

@@ -2,7 +2,7 @@ import { useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { UserPlus, Shield, Building2, Eye } from "lucide-react";
 import { http } from "@soymutdb/api-client";
-import { Button, Input, Badge, Card, CardContent, CardHeader, CardTitle, Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@soymutdb/ui";
+import { Button, Input, Badge, Card, CardContent, CardHeader, CardTitle, PageHeader, Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@soymutdb/ui";
 import { DataTable, type DataTableColumn } from "../components/data-table";
 import { ConfirmDialog } from "../components/confirm-dialog";
 
@@ -163,18 +163,16 @@ export default function UsersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="font-serif text-2xl font-semibold">Users & Roles</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            10-role permission system. Role escalations require four-eyes approval.
-          </p>
-        </div>
-        <Button>
-          <UserPlus className="size-4" />
-          Invite User
-        </Button>
-      </div>
+      <PageHeader
+        title="Users & Roles"
+        description="10-role permission system. Role escalations require four-eyes approval."
+        actions={
+          <Button>
+            <UserPlus className="size-4" />
+            Invite User
+          </Button>
+        }
+      />
 
       {/* Role overview cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

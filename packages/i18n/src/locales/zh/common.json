@@ -24,7 +24,8 @@
     "register": "注册",
     "admin": "管理后台",
     "sra": "SRA 浏览器",
-    "compare": "变异比较"
+    "compare": "变异比较",
+    "more": "更多"
   },
   "home": {
     "newRelease": "新版本可用",
@@ -34,6 +35,11 @@
     "searchPlaceholder": "搜索基因、变异、突变系...",
     "search": "搜索",
     "searchExamples": "例如：Glyma.01G001000、Gm01:12345、EMS 突变体",
+    "tryExamples": "试试：",
+    "taskGenes": "浏览基因",
+    "taskVariants": "探索变异",
+    "taskBlast": "运行 BLAST",
+    "statsSource": "数据来源：SoyMutDB API",
     "browseGenome": "基因组浏览器",
     "blastSearch": "BLAST 搜索",
     "downloads": "下载数据",

@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
-import { Users, GitBranch, Microscope, Clock } from "lucide-react";
+import { Users, GitBranch, Microscope, Clock, Dna, FlaskConical, Sprout } from "lucide-react";
 import { http } from "@soymutdb/api-client";
 import { fetchHomepageStats } from "@soymutdb/api-client";
-import { StatCard, formatNumber } from "@soymutdb/ui";
+import { PageHeader, StatCard, formatNumber } from "@soymutdb/ui";
 import { lazy, Suspense } from "react";
 
 const ImportThroughputChart = lazy(() => import("../components/charts/import-throughput").then((m) => ({ default: m.ImportThroughputChart })));
@@ -67,12 +67,10 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="font-serif text-2xl font-semibold">System Overview</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Real-time metrics for the SoyMutDB platform.
-        </p>
-      </div>
+      <PageHeader
+        title="System Overview"
+        description="Real-time metrics for the SoyMutDB platform."
+      />
 
       {/* Stat cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -121,30 +119,21 @@ export default function DashboardPage() {
 
       {/* Quick stats footer */}
       <div className="grid gap-4 sm:grid-cols-3">
-        <div className="rounded-xl border border-border bg-card p-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Genes
-          </p>
-          <p className="mt-1 font-serif text-xl font-semibold">
-            {(homepageStats?.gene_count ?? 0).toLocaleString()}
-          </p>
-        </div>
-        <div className="rounded-xl border border-border bg-card p-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Mutant Lines
-          </p>
-          <p className="mt-1 font-serif text-xl font-semibold">
-            {(homepageStats?.mutant_line_count ?? 0).toLocaleString()}
-          </p>
-        </div>
-        <div className="rounded-xl border border-border bg-card p-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Seed Accessions
-          </p>
-          <p className="mt-1 font-serif text-xl font-semibold">
-            {(homepageStats?.seed_accessions ?? 0).toLocaleString()}
-          </p>
-        </div>
+        <StatCard
+          label="Genes"
+          value={(homepageStats?.gene_count ?? 0).toLocaleString()}
+          icon={<Dna className="size-5" />}
+        />
+        <StatCard
+          label="Mutant Lines"
+          value={(homepageStats?.mutant_line_count ?? 0).toLocaleString()}
+          icon={<FlaskConical className="size-5" />}
+        />
+        <StatCard
+          label="Seed Accessions"
+          value={(homepageStats?.seed_accessions ?? 0).toLocaleString()}
+          icon={<Sprout className="size-5" />}
+        />
       </div>
     </div>
   );

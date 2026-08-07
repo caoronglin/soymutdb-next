@@ -30,6 +30,7 @@ import {
   DialogTitle,
   Input,
   Label,
+  PageHeader,
   Select,
   SelectContent,
   SelectItem,
@@ -193,13 +194,10 @@ export default function ContentPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="font-serif text-2xl font-semibold">Content Management</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Manage static pages, news articles, and publications with full version
-          history.
-        </p>
-      </div>
+      <PageHeader
+        title="Content Management"
+        description="Manage static pages, news articles, and publications with full version history."
+      />
 
       {/* Tabs */}
       <div className="flex items-center gap-1 border-b border-border">

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Search, Database, Server, Activity } from "lucide-react";
 import { http } from "@soymutdb/api-client";
-import { Badge, Card, CardContent } from "@soymutdb/ui";
+import { Badge, Card, CardContent, PageHeader, StatCard } from "@soymutdb/ui";
 import { DataTable, type DataTableColumn } from "../components/data-table";
 import { StatusBadge, type TaskStatus } from "../components/status-badge";
 
@@ -166,32 +166,20 @@ export default function BlastPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="font-serif text-2xl font-semibold">BLAST Management</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Manage BLAST databases and monitor search jobs.
-        </p>
-      </div>
+      <PageHeader
+        title="BLAST Management"
+        description="Manage BLAST databases and monitor search jobs."
+      />
 
       {/* Stats */}
-      <div className="grid gap-4 sm:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[
           { label: "Databases", value: dbData?.total ?? 0, icon: Database },
           { label: "Active Jobs", value: jobData?.items.filter((j) => j.status === "running").length ?? 0, icon: Activity },
           { label: "Total Jobs", value: jobData?.total ?? 0, icon: Search },
           { label: "Avg Duration", value: "—", icon: Server },
         ].map((s) => (
-          <Card key={s.label}>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  {s.label}
-                </p>
-                <s.icon className="size-4 text-muted-foreground" />
-              </div>
-              <p className="mt-2 font-serif text-2xl font-semibold">{s.value}</p>
-            </CardContent>
-          </Card>
+          <StatCard key={s.label} label={s.label} value={s.value} icon={<s.icon className="size-5" />} />
         ))}
       </div>
 

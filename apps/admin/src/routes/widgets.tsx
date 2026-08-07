@@ -10,7 +10,7 @@ import {
   Activity,
   LayoutTemplate,
 } from "lucide-react";
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@soymutdb/ui";
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, PageHeader } from "@soymutdb/ui";
 import { DataTable, type DataTableColumn } from "../components/data-table";
 import { ConfirmDialog } from "../components/confirm-dialog";
 import { widgetApi, type WidgetDefinition } from "../lib/widget-api";
@@ -169,34 +169,32 @@ export default function WidgetsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="font-serif text-2xl font-semibold">Widget Manager</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Create, edit, and manage reusable UI widgets across the site.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Link to="/widget-health">
-            <Button variant="outline" size="sm">
-              <Activity className="size-4" />
-              Health
-            </Button>
-          </Link>
-          <Link to="/layout">
-            <Button variant="outline" size="sm">
-              <LayoutTemplate className="size-4" />
-              Layout Editor
-            </Button>
-          </Link>
-          <Link to="/widgets/$name" params={{ name: "new" }}>
-            <Button size="sm">
-              <Plus className="size-4" />
-              New Widget
-            </Button>
-          </Link>
-        </div>
-      </div>
+      <PageHeader
+        title="Widget Manager"
+        description="Create, edit, and manage reusable UI widgets across the site."
+        actions={
+          <>
+            <Link to="/widget-health">
+              <Button variant="outline" size="sm">
+                <Activity className="size-4" />
+                Health
+              </Button>
+            </Link>
+            <Link to="/layout">
+              <Button variant="outline" size="sm">
+                <LayoutTemplate className="size-4" />
+                Layout Editor
+              </Button>
+            </Link>
+            <Link to="/widgets/$name" params={{ name: "new" }}>
+              <Button size="sm">
+                <Plus className="size-4" />
+                New Widget
+              </Button>
+            </Link>
+          </>
+        }
+      />
 
       <Card>
         <CardHeader className="pb-3">

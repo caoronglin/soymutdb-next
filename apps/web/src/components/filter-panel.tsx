@@ -35,13 +35,13 @@ export function FilterPanel({
 
   return (
     <aside className={cn("w-full lg:w-64 lg:shrink-0", className)} aria-label="Filters">
-      <div className="rounded-xl border bg-card">
-        <div className="flex items-center justify-between gap-2 border-b p-4">
+      <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
+        <div className="flex items-center justify-between gap-2 border-b bg-muted/30 p-4">
           <div className="flex items-center gap-2">
             <SlidersHorizontal className="size-4 text-muted-foreground" aria-hidden />
             <h2 className="font-display text-sm font-semibold">Filters</h2>
             {activeCount > 0 ? (
-              <span className="inline-flex size-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-medium text-primary-foreground">
+              <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary/10 px-1.5 font-mono text-[10px] font-semibold text-primary">
                 {activeCount}
               </span>
             ) : null}
@@ -73,9 +73,9 @@ export function FilterPanel({
           </div>
         </div>
         <div className={cn("p-4", collapsible && !open && "hidden lg:block")}>
-          <div className="flex flex-col gap-5">
+          <div className="flex flex-col divide-y divide-border/60">
             {groups.map((g) => (
-              <div key={g.id} className="flex flex-col gap-2">
+              <div key={g.id} className="flex flex-col gap-2 py-4 first:pt-0 last:pb-0">
                 <label className="eyebrow" htmlFor={g.id}>
                   {g.label}
                 </label>

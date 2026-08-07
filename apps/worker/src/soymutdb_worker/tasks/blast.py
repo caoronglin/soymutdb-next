@@ -1,13 +1,20 @@
 """BLAST search tasks.
 
 Security and reliability fixes vs. quartz reference:
-- ``subprocess.run`` is always called **without** ``shell=True``.
+- ``subprocess.run`` is always called **without** ``shell=True`` and with a
+  minimal environment (no ambient secrets leak into the child).
 - BLAST program name is validated against a whitelist before execution.
 - All BLAST parameters are validated against a whitelist; unknown parameters
   are rejected (never passed through to the shell).
 - Resource limits: CPU affinity, memory (``ulimit``), wall-clock timeout,
   output file size cap, and query sequence length cap.
-- Results are uploaded to S3 and a pre-signed URL is returned.
+- Raw results are uploaded to MinIO (key contains the job id, metadata
+  carries sha256 checksum + size) and a pre-signed URL is returned.
+- Parsed hits are persisted to the ``blast_hits`` table (delete-then-insert
+  per job, so redeliveries never duplicate results); ``query_len`` /
+  ``hit_count`` are recorded on the job row.
+- Errors are scrubbed (query sequence removed, truncated) before they are
+  stored in ``job.last_error``; no secrets or full sequences are logged.
 - Supports cancellation and expired-job cleanup.
 - Job status is tracked through the shared contract (``soymutdb_jobs``) via
   the narrow :class:`BlastJobStore` repository — the worker never imports API
@@ -19,8 +26,10 @@ Security and reliability fixes vs. quartz reference:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
+import os
 import resource
 import subprocess
 import tempfile
@@ -30,7 +39,7 @@ from celery import Task
 
 from soymutdb_worker.config import get_setting
 from soymutdb_worker.main import celery_app
-from soymutdb_worker.repositories import BlastJobStore
+from soymutdb_worker.repositories import BlastHitStore, BlastJobStore
 from soymutdb_worker.shared import BLAST_RUN_TASK, JobPayload
 from soymutdb_worker.utils.db import get_db
 from soymutdb_worker.utils.s3 import (
@@ -96,6 +105,40 @@ MAX_QUERY_LENGTH = int(get_setting("BLAST_MAX_QUERY_LENGTH", "100000"))
 MAX_OUTPUT_SIZE = int(get_setting("BLAST_MAX_OUTPUT_SIZE", str(512 * 1024 * 1024)))  # 512 MB
 MAX_RUNTIME_SECONDS = int(get_setting("BLAST_MAX_RUNTIME", "3600"))  # 1 hour
 MAX_MEMORY_MB = int(get_setting("BLAST_MAX_MEMORY_MB", "4096"))  # 4 GB
+
+#: Minimal environment for the BLAST child process: the binary only needs a
+#: PATH; anything else from the worker's environment (tokens, keys, …) must
+#: not leak into the child.
+BLAST_SUBPROCESS_ENV = {
+    "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+    "HOME": "/tmp",
+    "TMPDIR": "/tmp",
+    "LANG": "C",
+}
+
+#: Maximum characters of error text persisted to ``blast_jobs.error_message``.
+MAX_ERROR_LENGTH = 4000
+
+
+def sanitize_error_message(
+    message: str,
+    *,
+    query_sequence: str | None = None,
+    max_len: int = MAX_ERROR_LENGTH,
+) -> str:
+    """Scrub and truncate an error message before it is persisted/logged.
+
+    Removes the full query sequence (if embedded), drops control characters,
+    collapses whitespace and caps the length so ``job.last_error`` never
+    echoes user payloads or secrets verbatim.
+    """
+    if query_sequence:
+        body = query_sequence.strip()
+        if body and body in message:
+            message = message.replace(body, "<query-sequence>")
+    message = "".join(ch for ch in message if ch.isprintable() or ch in "\n\t")
+    message = " ".join(message.split())
+    return message[:max_len]
 
 
 # ---------------------------------------------------------------------------
@@ -219,7 +262,8 @@ def run_blast_command(
 ) -> None:
     """Run a BLAST command with ``subprocess.run`` (no shell).
 
-    All arguments are passed as a list — never through a shell string.
+    All arguments are passed as a list — never through a shell string — and
+    the child runs with a minimal environment (:data:`BLAST_SUBPROCESS_ENV`).
     """
     program = validate_program(program)
     blast_bin = BLAST_BIN_DIR / program
@@ -255,21 +299,34 @@ def run_blast_command(
         text=True,
         timeout=MAX_RUNTIME_SECONDS,
         preexec_fn=_set_subprocess_limits,
+        env=BLAST_SUBPROCESS_ENV,
         # Explicitly no shell
         shell=False,
     )
 
     if result.returncode != 0:
-        logger.error("BLAST failed (rc=%d): %s", result.returncode, result.stderr[:500])
+        # Sanitize before logging: stderr may echo the query sequence.
+        stderr_scrubbed = sanitize_error_message(
+            result.stderr or f"exit code {result.returncode}"
+        )
+        logger.error("BLAST failed (rc=%d): %s", result.returncode, stderr_scrubbed)
         raise RuntimeError(
-            f"BLAST execution failed (rc={result.returncode}): "
-            f"{result.stderr[:500]}"
+            f"BLAST execution failed (rc={result.returncode}): {stderr_scrubbed}"
         )
 
 
 # ---------------------------------------------------------------------------
 # Output parsing
 # ---------------------------------------------------------------------------
+
+
+def _result_file_metadata(output_path: Path) -> tuple[str, int]:
+    """Return ``(sha256_hex, size_bytes)`` of the raw BLAST output file."""
+    digest = hashlib.sha256()
+    with open(output_path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest(), output_path.stat().st_size
 
 
 def parse_blast_json(output_path: Path) -> dict:
@@ -304,8 +361,12 @@ def parse_blast_json(output_path: Path) -> dict:
                     "subject_end": hsp.get("hit_to", 0),
                     "evalue": hsp.get("evalue", 0),
                     "bit_score": hsp.get("bit_score", 0),
-                    "query_strand": "plus" if hsp.get("query_strand", "Plus") == "Plus" else "minus",
-                    "subject_strand": "plus" if hsp.get("hit_strand", "Plus") == "Plus" else "minus",
+                    "query_strand": (
+                        "plus" if hsp.get("query_strand", "Plus") == "Plus" else "minus"
+                    ),
+                    "subject_strand": (
+                        "plus" if hsp.get("hit_strand", "Plus") == "Plus" else "minus"
+                    ),
                 }
             )
 
@@ -444,10 +505,16 @@ def run_blast(
             parsed = parse_blast_json(output_path)
             self.update_state(state="STARTED", meta={"progress": 90})
 
-            # Upload results to S3
+            # Upload raw results to MinIO (key contains job_id; metadata
+            # carries sha256 checksum + size for integrity verification).
             s3_bucket = get_setting("S3_BLAST_BUCKET", "blast-dbs")
             s3_key = f"blast-results/{job_id}.json"
-            upload_file(str(output_path), f"{s3_bucket}/{s3_key}")
+            checksum, size = _result_file_metadata(output_path)
+            upload_file(
+                str(output_path),
+                f"{s3_bucket}/{s3_key}",
+                metadata={"checksum": checksum, "size": str(size)},
+            )
 
             # Generate pre-signed URL (24 h)
             presigned_url = generate_presigned_url(
@@ -460,27 +527,35 @@ def run_blast(
                 "BLAST job %s completed: %d hits", job_id, parsed["total_hits"]
             )
 
-            # Mark the job succeeded (idempotent: only a running row wins).
+            # Persist parsed hits (delete-then-insert: idempotent on
+            # redelivery) and mark the job succeeded — one transaction, and
+            # only a running row wins the status update.
             with get_db() as session:
-                BlastJobStore(session).mark_succeeded(job_id, result_path=s3_key)
+                BlastHitStore(session).replace_hits(job_id, parsed["hits"])
+                BlastJobStore(session).mark_succeeded(
+                    job_id,
+                    result_path=s3_key,
+                    query_len=parsed["query_len"],
+                    hit_count=parsed["total_hits"],
+                )
 
             return {
                 "job_id": job_id,
                 "hits": parsed["hits"][:100],
                 "total_hits": parsed["total_hits"],
+                "hits_persisted": parsed["total_hits"],
                 "result_s3_path": s3_key,
                 "download_url": presigned_url,
                 "query_len": parsed["query_len"],
+                "checksum": checksum,
             }
 
-    except subprocess.TimeoutExpired:
-        logger.error("BLAST job %s timed out after %ds", job_id, MAX_RUNTIME_SECONDS)
-        raise
     except Exception as e:
-        logger.error("BLAST job %s failed: %s", job_id, e)
+        error_text = sanitize_error_message(str(e), query_sequence=sequence)
+        logger.error("BLAST job %s failed: %s", job_id, error_text)
         try:
             with get_db() as session:
-                BlastJobStore(session).mark_failed(job_id, error=str(e))
+                BlastJobStore(session).mark_failed(job_id, error=error_text)
         except Exception as db_err:
             logger.error("Failed to update BLAST job status: %s", db_err)
         raise

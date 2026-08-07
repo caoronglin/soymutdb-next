@@ -32,7 +32,7 @@ import {
   TableCell,
 } from "@soymutdb/ui";
 import { DataTable, type DataTableColumn } from "../components/data-table";
-import { StatCard, formatNumber } from "@soymutdb/ui";
+import { PageHeader, StatCard, formatNumber } from "@soymutdb/ui";
 
 interface AuditLog {
   id: string;
@@ -251,24 +251,22 @@ export default function AuditPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="font-serif text-2xl font-semibold">Audit Logs</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Immutable record of all administrative actions. Filter and export for compliance.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={handleExportCsv} disabled={exporting}>
-            <Download className="size-4" />
-            {exporting ? "Exporting…" : "Export CSV"}
-          </Button>
-          <Button variant="outline" onClick={handleExportPdf}>
-            <FileText className="size-4" />
-            Export PDF
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Audit Logs"
+        description="Immutable record of all administrative actions. Filter and export for compliance."
+        actions={
+          <>
+            <Button variant="outline" onClick={handleExportCsv} disabled={exporting}>
+              <Download className="size-4" />
+              {exporting ? "Exporting…" : "Export CSV"}
+            </Button>
+            <Button variant="outline" onClick={handleExportPdf}>
+              <FileText className="size-4" />
+              Export PDF
+            </Button>
+          </>
+        }
+      />
 
       {/* Immutability notice */}
       <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-4 py-2.5 text-sm text-muted-foreground">

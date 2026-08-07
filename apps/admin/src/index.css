@@ -14,6 +14,8 @@
 @theme {
     --font-sans: "Inter", "Noto Sans SC", ui-sans-serif, system-ui, sans-serif;
     --font-serif: "Fraunces", "Noto Serif SC", ui-serif, Georgia, serif;
+    /* Alias so shared components using `font-display` resolve to Fraunces. */
+    --font-display: "Fraunces", "Noto Serif SC", ui-serif, Georgia, serif;
     --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
 
     --radius: 0.55rem;
@@ -132,6 +134,36 @@ pre,
 /* Admin layout helpers */
 .admin-sidebar-scroll {
     scrollbar-width: thin;
+}
+
+/* Sidebar active item — inset accent bar */
+.admin-nav-item[data-active="true"] {
+    box-shadow: inset 2.5px 0 0 var(--primary);
+}
+
+/* Running progress bar — animated stripes (disabled under reduced-motion
+   by the global animation-duration override) */
+@keyframes progress-stripes {
+    from {
+        background-position: 1rem 0;
+    }
+
+    to {
+        background-position: 0 0;
+    }
+}
+
+.progress-running {
+    background-image: linear-gradient(45deg,
+            oklch(1 0 0 / 0.28) 25%,
+            transparent 25%,
+            transparent 50%,
+            oklch(1 0 0 / 0.28) 50%,
+            oklch(1 0 0 / 0.28) 75%,
+            transparent 75%,
+            transparent);
+    background-size: 1rem 1rem;
+    animation: progress-stripes 0.9s linear infinite;
 }
 
 /* Fade-in animation for route transitions */

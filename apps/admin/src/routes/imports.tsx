@@ -6,6 +6,7 @@ import {
   Database,
   RotateCcw,
   XCircle,
+  CheckCircle2,
   Loader2,
 } from "lucide-react";
 import { http } from "@soymutdb/api-client";
@@ -21,11 +22,13 @@ import {
   DialogDescription,
   DialogFooter,
   Label,
+  PageHeader,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
+  StatCard,
 } from "@soymutdb/ui";
 import { DataTable, type DataTableColumn } from "../components/data-table";
 import { StatusBadge, type TaskStatus } from "../components/status-badge";
@@ -308,18 +311,23 @@ export default function ImportsPage() {
       header: "Progress",
       cell: (task) => {
         const t = enrichTask(task);
+        const isRunning = t.status === "running" || t.status === "queued";
         return (
           <div className="w-40">
             <div className="flex items-center justify-between text-xs">
-              <span className="font-mono">
+              <span className="font-mono tabular-nums">
                 {t.processed_records.toLocaleString()} /{" "}
                 {t.total_records.toLocaleString()}
               </span>
-              <span className="text-muted-foreground">{t.progress}%</span>
+              <span className="font-mono tabular-nums text-muted-foreground">{t.progress}%</span>
             </div>
-            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
+            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
               <div
-                className="h-full rounded-full bg-primary transition-all"
+                className={cn(
+                  "h-full rounded-full bg-primary transition-all",
+                  isRunning && "progress-running",
+                  t.status === "failed" && "bg-destructive",
+                )}
                 style={{ width: `${t.progress}%` }}
                 role="progressbar"
                 aria-valuenow={t.progress}
@@ -428,51 +436,27 @@ export default function ImportsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="font-serif text-2xl font-semibold">Data Imports</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Monitor and manage data import tasks (VCF, GFF3, FASTA, BLAST
-            databases, expression data, homologs).
-          </p>
-        </div>
-        <Button onClick={() => setShowUpload(true)}>
-          <Upload className="size-4" />
-          New Import
-        </Button>
-      </div>
+      <PageHeader
+        title="Data Imports"
+        description="Monitor and manage data import tasks (VCF, GFF3, FASTA, BLAST databases, expression data, homologs)."
+        actions={
+          <Button onClick={() => setShowUpload(true)}>
+            <Upload className="size-4" />
+            New Import
+          </Button>
+        }
+      />
 
       {/* Stats */}
-      <div className="grid gap-4 sm:grid-cols-4">
-        {[
-          { label: "Total Tasks", value: stats.total, icon: Database },
-          {
-            label: "Running",
-            value: stats.running,
-            icon: Loader2,
-            iconClass: "animate-spin",
-          },
-          { label: "Completed", value: stats.completed, icon: Upload },
-          { label: "Failed", value: stats.failed, icon: XCircle },
-        ].map((s) => (
-          <div
-            key={s.label}
-            className="rounded-xl border border-border bg-card p-4"
-          >
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                {s.label}
-              </p>
-              <s.icon
-                className={cn(
-                  "size-4 text-muted-foreground",
-                  s.iconClass,
-                )}
-              />
-            </div>
-            <p className="mt-2 font-serif text-2xl font-semibold">{s.value}</p>
-          </div>
-        ))}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard label="Total Tasks" value={stats.total} icon={<Database className="size-5" />} />
+        <StatCard
+          label="Running"
+          value={stats.running}
+          icon={<Loader2 className={cn("size-5", stats.running > 0 && "animate-spin")} />}
+        />
+        <StatCard label="Completed" value={stats.completed} icon={<CheckCircle2 className="size-5" />} />
+        <StatCard label="Failed" value={stats.failed} icon={<XCircle className="size-5" />} />
       </div>
 
       {/* Search */}

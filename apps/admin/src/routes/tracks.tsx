@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Layers, Plus, RefreshCw, Globe, GlobeLock } from "lucide-react";
 import { http } from "@soymutdb/api-client";
-import { Button, Input, Badge } from "@soymutdb/ui";
+import { Button, Input, Badge, PageHeader } from "@soymutdb/ui";
 import { DataTable, type DataTableColumn } from "../components/data-table";
 import { StatusBadge, type TaskStatus } from "../components/status-badge";
 import { ConfirmDialog } from "../components/confirm-dialog";
@@ -143,18 +143,16 @@ export default function TracksPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="font-serif text-2xl font-semibold">Track Management</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Manage JBrowse 2 genome browser tracks and data files.
-          </p>
-        </div>
-        <Button>
-          <Plus className="size-4" />
-          New Track
-        </Button>
-      </div>
+      <PageHeader
+        title="Track Management"
+        description="Manage JBrowse 2 genome browser tracks and data files."
+        actions={
+          <Button>
+            <Plus className="size-4" />
+            New Track
+          </Button>
+        }
+      />
 
       <Input
         placeholder="Search tracks..."

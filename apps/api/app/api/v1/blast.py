@@ -58,7 +58,13 @@ async def get_blast_job(
 @router.get("/jobs/{job_id}/results", response_model=BlastResultResponse)
 async def get_blast_results(
     job_id: uuid.UUID,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
 ) -> BlastResultResponse:
-    """Retrieve BLAST results for a completed job."""
-    return await service.get_result(db, job_id)
+    """Retrieve BLAST results for a job (status-aware envelope).
+
+    Returns ``hits=None`` for pending/running/failed jobs; only completed
+    jobs carry a hit list (empty means a genuine zero-hit result).
+    """
+    return await service.get_result(db, job_id, limit=limit, offset=offset)

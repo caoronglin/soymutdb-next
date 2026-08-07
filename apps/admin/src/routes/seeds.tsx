@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Sprout, Package, Truck, CheckCircle2, XCircle } from "lucide-react";
 import { http } from "@soymutdb/api-client";
-import { Button, Badge, Card, CardContent } from "@soymutdb/ui";
+import { Button, Badge, Card, CardContent, PageHeader, StatCard } from "@soymutdb/ui";
 import { DataTable, type DataTableColumn } from "../components/data-table";
 import { ConfirmDialog } from "../components/confirm-dialog";
 
@@ -221,32 +221,20 @@ export default function SeedsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="font-serif text-2xl font-semibold">Seed Management</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Manage seed stock inventory and process germplasm requests.
-        </p>
-      </div>
+      <PageHeader
+        title="Seed Management"
+        description="Manage seed stock inventory and process germplasm requests."
+      />
 
       {/* Stats */}
-      <div className="grid gap-4 sm:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[
           { label: "Pending Requests", value: reqData?.items.filter((r) => r.status === "pending").length ?? 0, icon: Package },
           { label: "Shipped", value: reqData?.items.filter((r) => r.status === "shipped").length ?? 0, icon: Truck },
           { label: "Total Stock", value: stockData?.total ?? 0, icon: Sprout },
           { label: "Low Stock", value: stockData?.items.filter((s) => s.availability === "limited").length ?? 0, icon: Package },
         ].map((s) => (
-          <Card key={s.label}>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  {s.label}
-                </p>
-                <s.icon className="size-4 text-muted-foreground" />
-              </div>
-              <p className="mt-2 font-serif text-2xl font-semibold">{s.value}</p>
-            </CardContent>
-          </Card>
+          <StatCard key={s.label} label={s.label} value={s.value} icon={<s.icon className="size-5" />} />
         ))}
       </div>
 

@@ -129,15 +129,15 @@ function GenesComponent() {
         className="mt-10"
         role="search"
       >
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" aria-hidden />
+        <div className="group relative">
+          <Search className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-muted-foreground transition-colors group-focus-within:text-primary" aria-hidden />
           <Input
             type="search"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder={t("genes.searchPlaceholder")}
             aria-label={t("genes.search")}
-            className="h-12 pl-12"
+            className="h-12 rounded-xl bg-card pl-12 shadow-sm transition-all hover:border-ring/40 focus-visible:shadow-[var(--shadow-glow)]"
           />
         </div>
       </form>

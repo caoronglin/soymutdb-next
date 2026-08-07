@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Dna, Plus, FileText } from "lucide-react";
 import { http } from "@soymutdb/api-client";
-import { Button, Input, Badge, Card, CardContent, CardHeader, CardTitle } from "@soymutdb/ui";
+import { Button, Input, Badge, Card, CardContent, CardHeader, CardTitle, PageHeader } from "@soymutdb/ui";
 import { DataTable, type DataTableColumn } from "../components/data-table";
 
 interface Assembly {
@@ -111,18 +111,16 @@ export default function AssembliesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="font-serif text-2xl font-semibold">Assemblies & Genes</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Manage reference genome assemblies and gene annotations.
-          </p>
-        </div>
-        <Button>
-          <Plus className="size-4" />
-          New Assembly
-        </Button>
-      </div>
+      <PageHeader
+        title="Assemblies & Genes"
+        description="Manage reference genome assemblies and gene annotations."
+        actions={
+          <Button>
+            <Plus className="size-4" />
+            New Assembly
+          </Button>
+        }
+      />
 
       {/* Summary cards */}
       <div className="grid gap-4 sm:grid-cols-3">

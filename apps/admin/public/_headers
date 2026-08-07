@@ -1,0 +1,47 @@
+# ============================================================================
+# SoyMutDB Admin Console (apps/admin) — Cloudflare Pages custom headers
+# Docs: https://developers.cloudflare.com/pages/configuration/headers/
+#
+# Rules are matched per request path; a request inherits headers from ALL
+# matching rules, and duplicate headers are comma-joined. Therefore `/*`
+# below deliberately carries NO Cache-Control (it would merge with the
+# /assets/* rule). Cache-Control is set only by the specific rules below.
+# ============================================================================
+
+# ---------------------------------------------------------------------------
+# Security headers — applied to every response (browsers ignore CSP on
+# non-HTML responses, so applying it to assets is harmless).
+# HSTS: Cloudflare Pages always serves HTTPS; max-age without
+# includeSubDomains so the header never forces HTTPS on sibling subdomains
+# (e.g. api.example.com, staging) that are not Cloudflare-fronted.
+# frame-ancestors 'none': the admin console must never be embeddable
+# (matches the nginx X-Frame-Options DENY used by the self-managed deploy).
+# ---------------------------------------------------------------------------
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()
+  Strict-Transport-Security: max-age=31536000
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://api.example.com; base-uri 'self'; form-action 'self'; object-src 'none'; frame-ancestors 'none'
+
+# ---------------------------------------------------------------------------
+# Hashed build assets (Vite emits everything under /assets/ with a content
+# hash in the filename) — safe to cache immutable for 1 year.
+# ---------------------------------------------------------------------------
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# ---------------------------------------------------------------------------
+# HTML documents — always revalidate (same policy Cloudflare Pages sends by
+# default; declared explicitly so it survives any future default change).
+# ---------------------------------------------------------------------------
+/
+  Cache-Control: public, max-age=0, must-revalidate
+/*.html
+  Cache-Control: public, max-age=0, must-revalidate
+
+# ---------------------------------------------------------------------------
+# Placeholder domains to replace before going live (see deploy/cloudflare.md):
+#   https://api.example.com -> production API origin
+# Preview deployments: replace with the STAGING API origin.
+# ---------------------------------------------------------------------------

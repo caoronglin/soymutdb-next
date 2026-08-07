@@ -120,11 +120,23 @@ def download_file(s3_path: str, local_path: str | None = None) -> Iterator[str]:
                 pass
 
 
-def upload_file(local_path: str, s3_path: str) -> None:
-    """Upload a local file to S3 (simple put for files < 5 GB)."""
+def upload_file(
+    local_path: str,
+    s3_path: str,
+    *,
+    metadata: dict[str, str] | None = None,
+) -> None:
+    """Upload a local file to S3 (simple put for files < 5 GB).
+
+    ``metadata`` (string values only, e.g. ``{"checksum": …, "size": …}``)
+    is attached to the stored object's metadata.
+    """
     s3 = get_s3_client()
     bucket, key = parse_s3_path(s3_path)
-    s3.upload_file(local_path, bucket, key)
+    if metadata:
+        s3.upload_file(local_path, bucket, key, ExtraArgs={"Metadata": metadata})
+    else:
+        s3.upload_file(local_path, bucket, key)
 
 
 def upload_fileobj(fileobj: Any, s3_path: str) -> None:

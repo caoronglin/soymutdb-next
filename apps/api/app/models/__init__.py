@@ -12,7 +12,7 @@ from .auth import (
     User,
 )
 from .base import AuditMixin, Base, SoftDeleteMixin, TimestampMixin
-from .blast import BlastDatabase, BlastJob
+from .blast import BlastDatabase, BlastHit, BlastJob
 from .content import DownloadFile, NewsArticle, Publication, Release, StaticPage
 from .expression import ExpressionData, ExpressionLibrary
 from .gene_data_cache import GeneDataCache
@@ -31,6 +31,7 @@ __all__ = [
     "AuditMixin",
     "Base",
     "BlastDatabase",
+    "BlastHit",
     "BlastJob",
     "Chromosome",
     "DownloadFile",

@@ -1,0 +1,11 @@
+# ============================================================================
+# SoyMutDB Admin Console (apps/admin) — Cloudflare Pages redirects
+# Docs: https://developers.cloudflare.com/pages/configuration/redirects/
+#
+# SPA fallback: any request that does NOT match a real static file is served
+# index.html so client-side routes work with a hard reload. Real static
+# files (index.html, /assets/* hashed files) are served before this
+# catch-all — mirrors Pages' built-in SPA behavior when no top-level
+# 404.html exists.
+# ============================================================================
+/* /index.html 200

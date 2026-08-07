@@ -12,6 +12,7 @@ import {
   CardDescription,
   Input,
   Label,
+  PageHeader,
   Select,
   SelectTrigger,
   SelectValue,
@@ -135,12 +136,10 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="font-serif text-2xl font-semibold">System Settings</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Configure global platform settings. Changes require administrator approval.
-        </p>
-      </div>
+      <PageHeader
+        title="System Settings"
+        description="Configure global platform settings. Changes require administrator approval."
+      />
 
       {/* General */}
       <Card>
