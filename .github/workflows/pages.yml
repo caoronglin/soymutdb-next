@@ -1,8 +1,8 @@
 # =============================================================================
-# SoyMutDB Next — Deploy public web to GitHub Pages (pages branch)
+# SoyMutDB Next — Deploy public web to GitHub Pages (pages (gh-pages) branch)
 #
 # Trigger: push to main + manual dispatch. Builds apps/web and force-pushes
-# the static dist to the `pages` branch (Pages source = pages branch, /).
+# the static dist to the `pages` branch (Pages source = pages (gh-pages) branch, /).
 # Only static hosting — no API proxying (API stays on the self-hosted backend).
 #
 # NOTE: set the production API origin as a repository secret named
@@ -25,7 +25,7 @@ concurrency:
 
 jobs:
   deploy:
-    name: Build web + publish pages branch
+    name: Build web + publish pages (gh-pages) branch
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -57,7 +57,7 @@ jobs:
           VITE_CDN_ENABLED: "false"
         run: pnpm --filter @soymutdb/web build
 
-      - name: Deploy dist to pages branch
+      - name: Deploy dist to pages (gh-pages) branch
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -65,10 +65,10 @@ jobs:
           # the untracked (gitignored) dist folder.
           mkdir -p /tmp/pages-dist
           cp -r apps/web/dist/. /tmp/pages-dist/
-          git checkout --orphan pages
+          git checkout --orphan gh-pages
           git rm -rf --quiet . >/dev/null 2>&1 || true
           # Wipe untracked leftovers too (node_modules, pnpm symlinks) so the
-          # pages branch carries only static files.
+          # pages (gh-pages) branch carries only static files.
           git clean -fdx >/dev/null 2>&1 || true
           cp -r /tmp/pages-dist/. .
           # SPA fallback: GitHub Pages serves 404.html for unknown paths.
@@ -77,4 +77,4 @@ jobs:
           touch .nojekyll
           git add -A
           git commit -m "deploy(web): $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          git push origin pages --force
+          git push origin gh-pages --force
