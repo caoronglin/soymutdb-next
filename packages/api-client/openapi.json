@@ -379,6 +379,111 @@
         ]
       }
     },
+    "/api/v1/genes/assemblies": {
+      "get": {
+        "tags": [
+          "genes",
+          "assemblies"
+        ],
+        "summary": "List Assemblies",
+        "description": "List all genome assemblies.",
+        "operationId": "list_assemblies_api_v1_genes_assemblies_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AssemblyResponse"
+                  },
+                  "type": "array",
+                  "title": "Response List Assemblies Api V1 Genes Assemblies Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/genes/assemblies/{assembly_id}/chromosomes": {
+      "get": {
+        "tags": [
+          "genes",
+          "assemblies"
+        ],
+        "summary": "List Chromosomes",
+        "description": "List chromosomes for an assembly.",
+        "operationId": "list_chromosomes_api_v1_genes_assemblies__assembly_id__chromosomes_get",
+        "parameters": [
+          {
+            "name": "assembly_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Assembly Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ChromosomeResponse"
+                  },
+                  "title": "Response List Chromosomes Api V1 Genes Assemblies  Assembly Id  Chromosomes Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/genes": {
       "get": {
         "tags": [
@@ -522,7 +627,7 @@
           "genes"
         ],
         "summary": "Get Gene",
-        "description": "Get gene detail with transcripts and aliases.",
+        "description": "Get gene detail with transcripts and aliases.\n\nDomain errors (e.g. ``NotFoundError``) propagate to the error envelope;\nunexpected exceptions are converted to a 500 HTTP error so the client\nalways receives a structured response.",
         "operationId": "get_gene_api_v1_genes__gene_id__get",
         "parameters": [
           {
@@ -542,111 +647,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/GeneDetail"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal Server Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/genes/assemblies": {
-      "get": {
-        "tags": [
-          "genes",
-          "assemblies"
-        ],
-        "summary": "List Assemblies",
-        "description": "List all genome assemblies.",
-        "operationId": "list_assemblies_api_v1_genes_assemblies_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/AssemblyResponse"
-                  },
-                  "type": "array",
-                  "title": "Response List Assemblies Api V1 Genes Assemblies Get"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ValidationErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal Server Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/genes/assemblies/{assembly_id}/chromosomes": {
-      "get": {
-        "tags": [
-          "genes",
-          "assemblies"
-        ],
-        "summary": "List Chromosomes",
-        "description": "List chromosomes for an assembly.",
-        "operationId": "list_chromosomes_api_v1_genes_assemblies__assembly_id__chromosomes_get",
-        "parameters": [
-          {
-            "name": "assembly_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Assembly Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ChromosomeResponse"
-                  },
-                  "title": "Response List Chromosomes Api V1 Genes Assemblies  Assembly Id  Chromosomes Get"
                 }
               }
             }
@@ -7919,7 +7919,14 @@
       "AssemblyResponse": {
         "properties": {
           "id": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              }
+            ],
             "title": "Id"
           },
           "name": {
@@ -7951,13 +7958,27 @@
             "default": false
           },
           "created_at": {
-            "type": "string",
-            "format": "date-time",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Created At"
           },
           "updated_at": {
-            "type": "string",
-            "format": "date-time",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Updated At"
           }
         },
@@ -7966,9 +7987,7 @@
           "id",
           "name",
           "species",
-          "version",
-          "created_at",
-          "updated_at"
+          "version"
         ],
         "title": "AssemblyResponse"
       },
@@ -8606,11 +8625,25 @@
       "ChromosomeResponse": {
         "properties": {
           "id": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              }
+            ],
             "title": "Id"
           },
           "assembly_id": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              }
+            ],
             "title": "Assembly Id"
           },
           "name": {
@@ -8625,7 +8658,8 @@
           "order": {
             "type": "integer",
             "minimum": 0.0,
-            "title": "Order"
+            "title": "Order",
+            "default": 0
           }
         },
         "type": "object",
@@ -8633,8 +8667,7 @@
           "id",
           "assembly_id",
           "name",
-          "length",
-          "order"
+          "length"
         ],
         "title": "ChromosomeResponse"
       },
@@ -9183,11 +9216,36 @@
       "GeneDetail": {
         "properties": {
           "id": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Id"
           },
+          "gene_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gene Id"
+          },
           "assembly_id": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Assembly Id"
           },
           "chromosome": {
@@ -9255,26 +9313,36 @@
             "default": 0
           },
           "created_at": {
-            "type": "string",
-            "format": "date-time",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Created At"
           },
           "updated_at": {
-            "type": "string",
-            "format": "date-time",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Updated At"
           }
         },
         "type": "object",
         "required": [
-          "id",
-          "assembly_id",
           "chromosome",
           "start",
           "end",
-          "strand",
-          "created_at",
-          "updated_at"
+          "strand"
         ],
         "title": "GeneDetail"
       },
@@ -9310,11 +9378,36 @@
       "GeneResponse": {
         "properties": {
           "id": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Id"
           },
+          "gene_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gene Id"
+          },
           "assembly_id": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Assembly Id"
           },
           "chromosome": {
@@ -9364,8 +9457,6 @@
         },
         "type": "object",
         "required": [
-          "id",
-          "assembly_id",
           "chromosome",
           "start",
           "end",
@@ -9379,36 +9470,23 @@
             "type": "string",
             "title": "Query"
           },
-          "total_hits": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/SearchResultItem"
+            },
+            "type": "array",
+            "title": "Results"
+          },
+          "total": {
             "type": "integer",
             "minimum": 0.0,
-            "title": "Total Hits"
-          },
-          "hits": {
-            "items": {
-              "$ref": "#/components/schemas/SearchHit"
-            },
-            "type": "array",
-            "title": "Hits"
-          },
-          "elapsed_ms": {
-            "type": "number",
-            "minimum": 0.0,
-            "title": "Elapsed Ms"
-          },
-          "suggestions": {
-            "items": {
-              "$ref": "#/components/schemas/SearchSuggestion"
-            },
-            "type": "array",
-            "title": "Suggestions"
+            "title": "Total",
+            "default": 0
           }
         },
         "type": "object",
         "required": [
-          "query",
-          "total_hits",
-          "elapsed_ms"
+          "query"
         ],
         "title": "GlobalSearchResponse"
       },
@@ -9634,9 +9712,31 @@
       "LoginRequest": {
         "properties": {
           "username": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Username",
             "description": "Email address or username",
+            "examples": [
+              "researcher@univ.edu"
+            ]
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email",
+            "description": "Email address (alternative to ``username``)",
             "examples": [
               "researcher@univ.edu"
             ]
@@ -9651,11 +9751,10 @@
         },
         "type": "object",
         "required": [
-          "username",
           "password"
         ],
         "title": "LoginRequest",
-        "description": "Credentials for logging in \u2014 accepts email or username."
+        "description": "Credentials for logging in \u2014 accepts email or username.\n\nBoth ``username`` and ``email`` keys are accepted; ``email`` is treated\nas an alias for ``username`` so API clients may send either field."
       },
       "MutagenCount": {
         "properties": {
@@ -10242,20 +10341,16 @@
         ],
         "title": "ReleaseSummary"
       },
-      "SearchHit": {
+      "SearchResultItem": {
         "properties": {
+          "type": {
+            "$ref": "#/components/schemas/SearchResultType"
+          },
           "id": {
             "type": "string",
             "title": "Id"
           },
-          "type": {
-            "$ref": "#/components/schemas/SearchResultType"
-          },
-          "title": {
-            "type": "string",
-            "title": "Title"
-          },
-          "subtitle": {
+          "name": {
             "anyOf": [
               {
                 "type": "string"
@@ -10264,77 +10359,7 @@
                 "type": "null"
               }
             ],
-            "title": "Subtitle"
-          },
-          "highlight": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Highlight"
-          },
-          "score": {
-            "type": "number",
-            "minimum": 0.0,
-            "title": "Score"
-          },
-          "url": {
-            "type": "string",
-            "title": "Url"
-          },
-          "metadata": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Metadata"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "type",
-          "title",
-          "score",
-          "url"
-        ],
-        "title": "SearchHit"
-      },
-      "SearchResultType": {
-        "type": "string",
-        "enum": [
-          "gene",
-          "variant",
-          "mutant_line",
-          "phenotype",
-          "publication"
-        ],
-        "title": "SearchResultType"
-      },
-      "SearchSuggestion": {
-        "properties": {
-          "text": {
-            "type": "string",
-            "title": "Text"
-          },
-          "type": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/SearchResultType"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "score": {
-            "type": "number",
-            "maximum": 1.0,
-            "minimum": 0.0,
-            "title": "Score",
-            "default": 0.0
+            "title": "Name"
           },
           "description": {
             "anyOf": [
@@ -10346,13 +10371,32 @@
               }
             ],
             "title": "Description"
+          },
+          "score": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Score",
+            "default": 0.0
           }
         },
         "type": "object",
         "required": [
-          "text"
+          "type",
+          "id"
         ],
-        "title": "SearchSuggestion"
+        "title": "SearchResultItem",
+        "description": "A single global-search hit (stable public contract)."
+      },
+      "SearchResultType": {
+        "type": "string",
+        "enum": [
+          "gene",
+          "variant",
+          "mutant_line",
+          "phenotype",
+          "publication"
+        ],
+        "title": "SearchResultType"
       },
       "SeedInventoryResponse": {
         "properties": {
@@ -11508,12 +11552,37 @@
       "VariantDetail": {
         "properties": {
           "id": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Id"
           },
           "assembly_id": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Assembly Id"
+          },
+          "variant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Variant Id"
           },
           "chromosome": {
             "type": "string",
@@ -11690,27 +11759,37 @@
             "title": "Genotype"
           },
           "created_at": {
-            "type": "string",
-            "format": "date-time",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Created At"
           },
           "updated_at": {
-            "type": "string",
-            "format": "date-time",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Updated At"
           }
         },
         "type": "object",
         "required": [
-          "id",
-          "assembly_id",
           "chromosome",
           "position",
           "ref_allele",
           "alt_allele",
-          "variant_type",
-          "created_at",
-          "updated_at"
+          "variant_type"
         ],
         "title": "VariantDetail",
         "description": "Extended variant information with annotation and linked entities."
@@ -11911,12 +11990,37 @@
       "VariantResponse": {
         "properties": {
           "id": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Id"
           },
           "assembly_id": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Assembly Id"
+          },
+          "variant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Variant Id"
           },
           "chromosome": {
             "type": "string",
@@ -11973,8 +12077,6 @@
         },
         "type": "object",
         "required": [
-          "id",
-          "assembly_id",
           "chromosome",
           "position",
           "ref_allele",

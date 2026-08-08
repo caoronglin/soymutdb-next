@@ -202,46 +202,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/genes": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Genes
-         * @description List genes with cursor pagination.
-         */
-        get: operations["list_genes_api_v1_genes_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/genes/{gene_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Gene
-         * @description Get gene detail with transcripts and aliases.
-         */
-        get: operations["get_gene_api_v1_genes__gene_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/genes/assemblies": {
         parameters: {
             query?: never;
@@ -274,6 +234,50 @@ export interface paths {
          * @description List chromosomes for an assembly.
          */
         get: operations["list_chromosomes_api_v1_genes_assemblies__assembly_id__chromosomes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/genes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Genes
+         * @description List genes with cursor pagination.
+         */
+        get: operations["list_genes_api_v1_genes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/genes/{gene_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Gene
+         * @description Get gene detail with transcripts and aliases.
+         *
+         *     Domain errors (e.g. ``NotFoundError``) propagate to the error envelope;
+         *     unexpected exceptions are converted to a 500 HTTP error so the client
+         *     always receives a structured response.
+         */
+        get: operations["get_gene_api_v1_genes__gene_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2398,7 +2402,7 @@ export interface components {
         /** AssemblyResponse */
         AssemblyResponse: {
             /** Id */
-            id: string;
+            id: number | string;
             /** Name */
             name: string;
             /** Species */
@@ -2412,16 +2416,10 @@ export interface components {
              * @default false
              */
             is_default: boolean;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
+            /** Created At */
+            created_at?: string | null;
+            /** Updated At */
+            updated_at?: string | null;
         };
         /** BlastDatabaseResponse */
         BlastDatabaseResponse: {
@@ -2657,14 +2655,17 @@ export interface components {
         /** ChromosomeResponse */
         ChromosomeResponse: {
             /** Id */
-            id: string;
+            id: number | string;
             /** Assembly Id */
-            assembly_id: string;
+            assembly_id: number | string;
             /** Name */
             name: string;
             /** Length */
             length: number;
-            /** Order */
+            /**
+             * Order
+             * @default 0
+             */
             order: number;
         };
         /**
@@ -2937,9 +2938,11 @@ export interface components {
         /** GeneDetail */
         GeneDetail: {
             /** Id */
-            id: string;
+            id?: string | null;
+            /** Gene Id */
+            gene_id?: string | null;
             /** Assembly Id */
-            assembly_id: string;
+            assembly_id?: string | null;
             /** Chromosome */
             chromosome: string;
             /** Name */
@@ -2965,16 +2968,10 @@ export interface components {
              * @default 0
              */
             variant_count: number;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
+            /** Created At */
+            created_at?: string | null;
+            /** Updated At */
+            updated_at?: string | null;
         };
         /** GeneListResponse */
         GeneListResponse: {
@@ -2991,9 +2988,11 @@ export interface components {
         /** GeneResponse */
         GeneResponse: {
             /** Id */
-            id: string;
+            id?: string | null;
+            /** Gene Id */
+            gene_id?: string | null;
             /** Assembly Id */
-            assembly_id: string;
+            assembly_id?: string | null;
             /** Chromosome */
             chromosome: string;
             /** Name */
@@ -3015,14 +3014,13 @@ export interface components {
         GlobalSearchResponse: {
             /** Query */
             query: string;
-            /** Total Hits */
-            total_hits: number;
-            /** Hits */
-            hits?: components["schemas"]["SearchHit"][];
-            /** Elapsed Ms */
-            elapsed_ms: number;
-            /** Suggestions */
-            suggestions?: components["schemas"]["SearchSuggestion"][];
+            /** Results */
+            results?: components["schemas"]["SearchResultItem"][];
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -3141,6 +3139,9 @@ export interface components {
         /**
          * LoginRequest
          * @description Credentials for logging in — accepts email or username.
+         *
+         *     Both ``username`` and ``email`` keys are accepted; ``email`` is treated
+         *     as an alias for ``username`` so API clients may send either field.
          */
         LoginRequest: {
             /**
@@ -3148,7 +3149,13 @@ export interface components {
              * @description Email address or username
              * @example researcher@univ.edu
              */
-            username: string;
+            username?: string | null;
+            /**
+             * Email
+             * @description Email address (alternative to ``username``)
+             * @example researcher@univ.edu
+             */
+            email?: string | null;
             /**
              * Password
              * @example S3cureP@ss!
@@ -3421,44 +3428,29 @@ export interface components {
              */
             mutant_line_count: number;
         };
-        /** SearchHit */
-        SearchHit: {
+        /**
+         * SearchResultItem
+         * @description A single global-search hit (stable public contract).
+         */
+        SearchResultItem: {
+            type: components["schemas"]["SearchResultType"];
             /** Id */
             id: string;
-            type: components["schemas"]["SearchResultType"];
-            /** Title */
-            title: string;
-            /** Subtitle */
-            subtitle?: string | null;
-            /** Highlight */
-            highlight?: string | null;
-            /** Score */
+            /** Name */
+            name?: string | null;
+            /** Description */
+            description?: string | null;
+            /**
+             * Score
+             * @default 0
+             */
             score: number;
-            /** Url */
-            url: string;
-            /** Metadata */
-            metadata?: {
-                [key: string]: unknown;
-            };
         };
         /**
          * SearchResultType
          * @enum {string}
          */
         SearchResultType: "gene" | "variant" | "mutant_line" | "phenotype" | "publication";
-        /** SearchSuggestion */
-        SearchSuggestion: {
-            /** Text */
-            text: string;
-            type?: components["schemas"]["SearchResultType"] | null;
-            /**
-             * Score
-             * @default 0
-             */
-            score: number;
-            /** Description */
-            description?: string | null;
-        };
         /** SeedInventoryResponse */
         SeedInventoryResponse: {
             /** Id */
@@ -3920,9 +3912,11 @@ export interface components {
          */
         VariantDetail: {
             /** Id */
-            id: string;
+            id?: string | null;
             /** Assembly Id */
-            assembly_id: string;
+            assembly_id?: string | null;
+            /** Variant Id */
+            variant_id?: string | null;
             /** Chromosome */
             chromosome: string;
             /** Position */
@@ -3961,16 +3955,10 @@ export interface components {
             depth?: number | null;
             /** Genotype */
             genotype?: string | null;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
+            /** Created At */
+            created_at?: string | null;
+            /** Updated At */
+            updated_at?: string | null;
         };
         /**
          * VariantFilterParams
@@ -4039,9 +4027,11 @@ export interface components {
          */
         VariantResponse: {
             /** Id */
-            id: string;
+            id?: string | null;
             /** Assembly Id */
-            assembly_id: string;
+            assembly_id?: string | null;
+            /** Variant Id */
+            variant_id?: string | null;
             /** Chromosome */
             chromosome: string;
             /** Position */
@@ -4756,6 +4746,84 @@ export interface operations {
             };
         };
     };
+    list_assemblies_api_v1_genes_assemblies_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssemblyResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_chromosomes_api_v1_genes_assemblies__assembly_id__chromosomes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assembly_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChromosomeResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     list_genes_api_v1_genes_get: {
         parameters: {
             query?: {
@@ -4819,84 +4887,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GeneDetail"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    list_assemblies_api_v1_genes_assemblies_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AssemblyResponse"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationErrorResponse"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    list_chromosomes_api_v1_genes_assemblies__assembly_id__chromosomes_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                assembly_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ChromosomeResponse"][];
                 };
             };
             /** @description Validation Error */
