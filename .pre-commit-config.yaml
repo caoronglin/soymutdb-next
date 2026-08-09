@@ -83,3 +83,21 @@ repos:
     hooks:
       - id: hadolint
         files: ^infra/docker/Dockerfile\..*$
+
+  # ----------------------------------------------------------------
+  # Repo-local regression guards
+  # ----------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: dockerfile-copy-sources
+        name: dockerfile-copy-sources
+        entry: bash scripts/check-dockerfile-copy.sh
+        language: system
+        files: ^(infra/docker/Dockerfile\..*|apps/jbrowse/Dockerfile|scripts/check-dockerfile-copy\.sh|\.npmrc)$
+
+      - id: api-client-contract
+        name: api-client-contract
+        entry: pnpm --filter @soymutdb/api-client check:contract
+        language: system
+        files: ^(apps/api/|packages/api-client/|packages/jobs-py/|scripts/export_openapi\.py$)
+        pass_filenames: false

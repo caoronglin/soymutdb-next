@@ -170,3 +170,7 @@ clickhouse-data/
 # Review reports & local pip config
 reports/
 .pip/
+
+# Project .npmrc is committed (npmmirror registry, no secrets) so Docker
+# COPY .npmrc works and local installs stay fast.
+!/.npmrc

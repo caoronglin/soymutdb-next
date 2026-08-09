@@ -204,6 +204,11 @@ jobs:
       - name: Ensure uv.lock placeholders exist (Dockerfile COPY glob)
         run: touch apps/api/uv.lock apps/worker/uv.lock
 
+      # Regression guard: every COPY source must exist in the build context
+      # (e.g. .npmrc was gitignored and broke the jbrowse image build).
+      - name: Verify Dockerfile COPY sources exist (hard gate)
+        run: bash scripts/check-dockerfile-copy.sh
+
       - name: Build API image (hard gate)
         run: docker build -f infra/docker/Dockerfile.api -t soymutdb-api:ci .
 
