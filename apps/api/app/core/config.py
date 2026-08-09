@@ -85,6 +85,12 @@ class Settings(BaseSettings):
     db_pool_recycle: int = 1800
     db_pool_pre_ping: bool = True
     db_echo: bool = False
+    #: Per-statement timeout in **seconds** sent to PostgreSQL via asyncpg
+    #: ``server_settings.statement_timeout`` (0 disables).  Prevents a slow
+    #: query from pinning a pooled connection indefinitely.  NOTE: external
+    #: reference (geekblogs) was unavailable, so this follows the general
+    #: PostgreSQL/asyncpg best practice of a bounded statement_timeout.
+    db_statement_timeout: int = 30
 
     # ------------------------------------------------------------ ClickHouse
     clickhouse_host: str = "localhost"
@@ -104,6 +110,13 @@ class Settings(BaseSettings):
     rate_limit_per_minute: int = 60
     login_rate_limit_window: int = Field(default=60, ge=1)
     login_rate_limit_max: int = Field(default=10, ge=1)
+    #: Default TTL (seconds) for the cache-aside read-through helper in
+    #: ``app.services.cache`` (stats / releases hotspots).
+    redis_cache_default_ttl: int = 300
+    #: Bounded socket timeouts so a wedged Redis degrades to a direct query
+    #: instead of hanging the request path.
+    redis_socket_timeout: float = 2.0
+    redis_socket_connect_timeout: float = 2.0
 
     # ----------------------------------------------------------- S3 / MinIO
     s3_endpoint: str = "http://localhost:9000"

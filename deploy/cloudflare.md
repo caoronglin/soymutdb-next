@@ -1,5 +1,14 @@
 # SoyMutDB — Cloudflare Pages 静态部署
 
+> ## ⚠️ 非主路径（已放弃，仅保留参考）
+>
+> 前端静态托管已改用 **GitHub Pages**（`.github/workflows/pages.yml` → gh-pages 分支，站点
+> https://caoronglin.github.io/soymutdb-next/），本文档所述 Cloudflare Pages 方案**未启用**。
+> 保留仅为历史参考；其中 CSP/`_headers` 占位符、preview 隔离等约束对任何静态托管仍适用。
+> 当前部署架构见 **docs/design/deployment-architecture.md**。
+>
+> ---
+
 > 本文档描述将三个前端应用（`apps/web`、`apps/jbrowse`、`apps/admin`）作为**纯静态站点**部署到 Cloudflare Pages 的完整流程。
 > **Cloudflare 只承载静态前端 dist**；API 与数据面保留自管后端（docker-compose）。不使用 Workers / Functions / KV / D1 / Queues。
 
@@ -133,8 +142,31 @@ Content-Security-Policy: <见下>
 | `VITE_API_BASE_URL` | `https://api.example.com` ✅替换 | `https://api-staging.example.com`（**禁止生产**） | API 源；须在对应后端 `SOYMUTDB_CORS_ORIGINS` 白名单内 |
 | `VITE_CDN_ENABLED` | `false` | `false` | 保持 false，CSP 才能收紧 |
 | `VITE_JBROWSE_URL` | `https://jbrowse.example.com` ✅替换 | staging jbrowse origin | /browse 页 iframe 地址；须在门户 CSP `frame-src` 内 |
+| `VITE_CLOUDFLARE_ANALYTICS_TOKEN` | 可选，建议设置 | 可选（预览也可统计） | Cloudflare Web Analytics beacon token（见 §5.5） |
 
 可选：`VITE_DEMO_MODE=false`。
+
+### 5.5 Cloudflare Web Analytics（门户访问统计，beacon 方式）
+
+门户（`apps/web`）的访问统计通过 **Cloudflare Web Analytics 免费 JS beacon** 实现：构建时若设置了 `VITE_CLOUDFLARE_ANALYTICS_TOKEN`，vite 的 `transformIndexHtml` 会把 `index.html` 中的占位符替换为一行静态 `<script>`（`https://static.cloudflareinsights.com/beacon.min.js` + `data-cf-beacon`），同时放宽 `<meta>` CSP 放行 beacon 域名。
+
+- **纯静态、合规**：beacon 是浏览器端静态 JS，不需要 Workers / Functions / KV / D1 —— 与"Cloudflare 只做静态托管"的既定约束一致；隐私优先、无 cookie。
+- **静态托管也能用**：不需要把域名代理进 Cloudflare（gh-pages 等纯静态托管同样适用）。
+- **未设置 token 时构建零影响**：占位符被移除、CSP 保持原样，产物与启用前行为一致。
+
+配置步骤：
+
+1. **创建 Web Analytics 站点**：Cloudflare Dashboard → Analytics & Logs → Web Analytics → **Add a site**，选择门户域名（如 `www.example.com`）。无需修改 DNS/代理。
+2. **复制 token**：创建后打开站点的安装代码片段，从 `data-cf-beacon` 中复制 token（十六进制短字符串）。
+3. **设置 Pages 环境变量**：`soymutdb-web` 项目 → **Settings → Environment variables** → 添加 `VITE_CLOUDFLARE_ANALYTICS_TOKEN`（Production 与 Preview 均设置）。变量值保存后不可回读。
+4. **重新部署**：触发一次新的生产部署，token 才会写入构建出的 `index.html`。
+5. **验证**：见 §6.5。
+
+**CSP 同步要求**（meta 与 `_headers` 取交集）：
+
+- `apps/web/public/_headers` 的 CSP 已**静态**放行 `https://static.cloudflareinsights.com`（`script-src`）与 `https://cloudflareinsights.com`（`connect-src`）——无 token 时页面不加载 beacon，放行本身无副作用。
+- `apps/web/index.html` 的 `<meta>` CSP 与 SSG 模板（`scripts/base-template.ts`）均由构建逻辑在**有 token 时**动态放宽（与 `_headers` 保持同一份文本）。两者交集在启用/未启用 beacon 时均成立，勿只改一处。
+- **SSG 页面同样计入统计**：`ssg-build.ts` 会用 base-template 覆盖 Vite 生成的 `dist/index.html`，因此 beacon 注入逻辑同时存在于 Vite `transformIndexHtml`（dev / 纯 vite build）与 `base-template.ts`（SSG 产物，最终发布版）——两者读取同一个 `VITE_CLOUDFLARE_ANALYTICS_TOKEN`，产出相同标记。所有 SSG 页（`/about` 等）与 SPA 入口 `index.html` 均携带 beacon。
 
 ### 5.2 `apps/jbrowse`（基因组浏览器）
 
@@ -204,6 +236,23 @@ curl -sI https://www.example.com/ | grep -i content-security-policy
 # 确认后端日志中 preview origin 命中 staging SOYMUTDB_CORS_ORIGINS。
 # 用 staging 账号登录成功 = CORS + cookie 链路通。
 ```
+
+### 6.5 Web Analytics beacon 验证
+
+```bash
+# 本地构建验证（无 token → 不注入）：
+grep -c "cloudflareinsights" apps/web/dist/index.html || echo "无 token 未注入（预期）"
+
+# 本地构建验证（有 token → 注入）：
+VITE_CLOUDFLARE_ANALYTICS_TOKEN=testtoken pnpm --filter @soymutdb/web build
+grep -c "cloudflareinsights\|testtoken" apps/web/dist/index.html   # 应 ≥1
+```
+
+线上验证：
+
+1. 打开门户 → 查看网页源代码（Ctrl/Cmd+U）→ 搜索 `cloudflareinsights`：能找到即表示当前部署已注入 beacon。
+2. Cloudflare Dashboard → Web Analytics：部署后短时间内出现该站点流量即表示 beacon 生效（数据延迟数分钟属正常）。
+3. 浏览器控制台无 CSP violation：beacon 加载不报 `Refused to load the script`（CSP 放行与 `_headers`/`<meta>` 交集相关，见 §5.5）。
 
 ---
 

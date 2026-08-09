@@ -2771,7 +2771,10 @@ export interface components {
          * @description POST /api/v1/tools/enrichment payload.
          *
          *     ``genes`` are gene ids (e.g. ``Glyma.01G000100``); duplicates are
-         *     tolerated and deduplicated server-side.
+         *     tolerated and deduplicated server-side.  ``mode`` selects between the
+         *     classic over-representation test (default, backwards compatible) and the
+         *     rank-based GSEA mode.  ``values`` (one per gene, e.g. log2 fold-changes)
+         *     is required in ``gsea`` mode and must align with ``genes`` 1:1.
          */
         EnrichmentRequest: {
             /**
@@ -2779,6 +2782,18 @@ export interface components {
              * @description Gene ids to test for GO/KEGG enrichment (1-500)
              */
             genes: string[];
+            /**
+             * Mode
+             * @description Analysis mode: 'ora' (over-representation, default) or 'gsea' (rank-based gene-set test)
+             * @default ora
+             * @enum {string}
+             */
+            mode: "ora" | "gsea";
+            /**
+             * Values
+             * @description Per-gene numeric values (e.g. log2 fold-changes) used to rank genes in 'gsea' mode; required there and must align with 'genes' 1:1
+             */
+            values?: number[] | null;
             /**
              * Ontology
              * @description Annotation source: 'go' or 'kegg'
@@ -2798,12 +2813,107 @@ export interface components {
              * @default 20
              */
             max_terms: number;
+            /**
+             * Min Genes
+             * @description Minimum term size (member genes present in the ranked input) required for a term to be tested in 'gsea' mode
+             * @default 5
+             */
+            min_genes: number;
+        };
+        /**
+         * EnrichmentGseaTerm
+         * @description A single enriched term (GSEA mode, rank-based test).
+         */
+        EnrichmentGseaTerm: {
+            /**
+             * Id
+             * @description Term id, e.g. GO:0008150 or ko00010
+             */
+            id: string;
+            /**
+             * Name
+             * @description Term name (falls back to the term id)
+             */
+            name: string;
+            /**
+             * Es
+             * @description Enrichment score: signed running-sum statistic over the value-descending ranked list (positive = concentrated at high values, negative = at low values)
+             */
+            es: number;
+            /**
+             * Nes
+             * @description Normalized enrichment score: z-score of ES under the analytic null (ES * sqrt(k(n-k)/n)); a simplification of the permutation normalization used by the reference GSEA implementation
+             */
+            nes: number;
+            /**
+             * P Value
+             * @description Rank-based p-value from the one-sided Smirnov asymptotic exp(-2 * k(n-k)/n * ES^2)
+             */
+            p_value: number;
+            /**
+             * Q Value
+             * @description Benjamini-Hochberg adjusted p-value
+             */
+            q_value: number;
+            /**
+             * Size
+             * @description Term genes present in the ranked input
+             */
+            size: number;
+            /**
+             * Genes
+             * @description Member input genes (first 20)
+             */
+            genes: string[];
+        };
+        /**
+         * EnrichmentGseaResponse
+         * @description Rank-based (GSEA) enrichment analysis result.
+         */
+        EnrichmentGseaResponse: {
+            /**
+             * Mode
+             * @description Analysis mode
+             * @constant
+             */
+            mode: "gsea";
+            /**
+             * Ontology
+             * @enum {string}
+             */
+            ontology: "go" | "kegg";
+            /**
+             * Input Genes
+             * @description Number of unique input genes (the ranked list)
+             */
+            input_genes: number;
+            /**
+             * Background Genes
+             * @description Number of annotated genes in the background set (all genes with annotations for the requested ontology)
+             */
+            background_genes: number;
+            /**
+             * Terms
+             * @description GSEA terms sorted by q-value (asc)
+             */
+            terms?: components["schemas"]["EnrichmentGseaTerm"][];
+            /**
+             * Message
+             * @description Explanatory note, e.g. when no term passes min_genes
+             */
+            message?: string | null;
         };
         /**
          * EnrichmentResponse
-         * @description Enrichment analysis result.
+         * @description ORA enrichment analysis result.
          */
         EnrichmentResponse: {
+            /**
+             * Mode
+             * @description Analysis mode
+             * @constant
+             */
+            mode: "ora";
             /**
              * Ontology
              * @enum {string}
@@ -2832,7 +2942,7 @@ export interface components {
         };
         /**
          * EnrichmentTerm
-         * @description A single enriched term.
+         * @description A single enriched term (ORA mode).
          */
         EnrichmentTerm: {
             /**
@@ -8612,7 +8722,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["EnrichmentResponse"];
+                    "application/json": components["schemas"]["EnrichmentResponse"] | components["schemas"]["EnrichmentGseaResponse"];
                 };
             };
             /** @description Validation Error */

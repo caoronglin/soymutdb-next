@@ -5,7 +5,8 @@
  * - API-driven file list (no hardcoded data)
  * - Grouped display by category (variants, genes, assemblies, tracks)
  * - Download via pre-signed URLs
- * - Preview button opening file-viewer-dialog
+ * - Preview button opening file-preview-dialog (unified viewer with
+ *   same-group file switching)
  * - Size badges with "too large" indicator
  */
 import { useState } from "react";
@@ -26,7 +27,7 @@ import {
 import { FadeUp, Stagger } from "../components/route-motion";
 import { getDownloadFiles, getDownloadUrl } from "@soymutdb/api-client";
 import type { DownloadFile } from "@soymutdb/api-client";
-import { FileViewerDialog } from "../components/file-viewer/file-viewer-dialog";
+import { FilePreviewDialog } from "../components/file-viewer/file-preview-dialog";
 
 export const Route = createFileRoute("/downloads")({
   component: DownloadsComponent,
@@ -76,7 +77,7 @@ function getFileFormat(name: string): string {
 
 function DownloadsComponent() {
   const { t } = useTranslation();
-  const [previewFile, setPreviewFile] = useState<DownloadFile | null>(null);
+  const [preview, setPreview] = useState<{ files: DownloadFile[]; index: number } | null>(null);
 
   const { data: files, isLoading, error } = useQuery({
     queryKey: ["downloads"],
@@ -95,7 +96,10 @@ function DownloadsComponent() {
   };
 
   const handlePreview = (file: DownloadFile) => {
-    setPreviewFile(file);
+    // Offer the whole group for in-dialog switching (same-category files).
+    const group = groups.find((g) => g.files.some((f) => f.id === file.id));
+    const files = group?.files ?? [file];
+    setPreview({ files, index: files.findIndex((f) => f.id === file.id) });
   };
 
   // Group files by category
@@ -240,17 +244,18 @@ function DownloadsComponent() {
         </CardContent>
       </Card>
 
-      {previewFile && (
-        <FileViewerDialog
-          file={{
-            name: previewFile.name,
-            url: previewFile.file_url,
-            size: previewFile.file_size ?? 0,
-            format: getFileFormat(previewFile.name),
-          }}
-          open={Boolean(previewFile)}
-          onOpenChange={(open) => {
-            if (!open) setPreviewFile(null);
+      {preview && (
+        <FilePreviewDialog
+          files={preview.files.map((f) => ({
+            name: f.name,
+            url: f.file_url,
+            size: f.file_size ?? 0,
+            format: getFileFormat(f.name),
+          }))}
+          initialIndex={preview.index}
+          open={Boolean(preview)}
+          onOpenChange={(open: boolean) => {
+            if (!open) setPreview(null);
           }}
         />
       )}

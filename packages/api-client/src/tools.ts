@@ -17,6 +17,8 @@ export type SeqFetchResponse = components["schemas"]["SeqFetchResponse"];
 export type EnrichmentRequest = components["schemas"]["EnrichmentRequest"];
 export type EnrichmentResponse = components["schemas"]["EnrichmentResponse"];
 export type EnrichmentTerm = components["schemas"]["EnrichmentTerm"];
+export type EnrichmentGseaResponse = components["schemas"]["EnrichmentGseaResponse"];
+export type EnrichmentGseaTerm = components["schemas"]["EnrichmentGseaTerm"];
 export type ExpPatternRequest = components["schemas"]["ExpPatternRequest"];
 
 /**

@@ -6,6 +6,9 @@ and optionally uploads both ``.json.gz`` and ``.html.gz`` to S3 for CDN.
 
 The worker never imports API models: all reads/writes use the narrow
 SQLAlchemy Core tables from :mod:`soymutdb_worker.tables`.
+
+The HTML page is rendered with the shared dominate-based builder from
+:mod:`soymutdb_worker.utils.html_report` (previously a Jinja2 template).
 """
 
 from __future__ import annotations
@@ -15,11 +18,10 @@ import io
 import json
 import logging
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any
 
 from celery import Task
-from jinja2 import Environment, FileSystemLoader
+from dominate.tags import div, em, main
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
@@ -34,6 +36,7 @@ from soymutdb_worker.tables import (
     genes,
 )
 from soymutdb_worker.utils.db import get_db
+from soymutdb_worker.utils.html_report import HTMLReport
 from soymutdb_worker.utils.s3 import get_s3_client
 
 logger = logging.getLogger(__name__)
@@ -43,17 +46,6 @@ _GENE_CHUNK = 1000
 
 # Max expression rows shown in the static HTML page
 _MAX_EXPRESSION_ROWS = 50
-
-# ---------------------------------------------------------------------------
-# Jinja2 environment
-# ---------------------------------------------------------------------------
-
-_TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
-
-_jinja_env = Environment(
-    loader=FileSystemLoader(str(_TEMPLATES_DIR)),
-    autoescape=True,
-)
 
 
 def _comma_or_none(value: Any) -> str:
@@ -77,13 +69,6 @@ def _fmt_number(value: Any) -> str:
         return f"{v:.2f}"
     except (ValueError, TypeError):
         return str(value)
-
-
-_jinja_env.filters.setdefault("comma_or_none", _comma_or_none)
-_jinja_env.filters.setdefault("fmt_number", _fmt_number)
-
-# Pre-load templates once
-_gene_detail_template = _jinja_env.get_template("gene_detail.html.j2")
 
 
 # ---------------------------------------------------------------------------
@@ -185,6 +170,17 @@ def _build_homolog_summary(session, gene_id: str) -> list[dict[str, Any]]:
     ]
 
 
+def _position_text(gene_info: dict[str, Any]) -> str:
+    """Format the genomic position line, or '—' when the chromosome is absent."""
+    chromosome = gene_info.get("chromosome")
+    if not chromosome:
+        return "—"
+    return (
+        f"{chromosome}:{_comma_or_none(gene_info.get('start'))}"
+        f"-{_comma_or_none(gene_info.get('end'))} ({gene_info.get('strand')})"
+    )
+
+
 def _render_gene_html(
     gene_info: dict[str, Any],
     expressions: list[dict[str, Any]],
@@ -192,15 +188,84 @@ def _render_gene_html(
     homologs: list[dict[str, Any]],
     generated_at: str,
 ) -> str:
-    """Render the gene detail page HTML from the Jinja2 template."""
-    return _gene_detail_template.render(
-        gene=gene_info,
-        expressions=expressions,
-        total_expression_count=total_expression_count,
-        homologs=homologs,
-        variants=None,
-        generated_at=generated_at,
-    )
+    """Render the gene detail page HTML via the shared dominate builder."""
+    gene_id = gene_info["gene_id"]
+    gene_name = gene_info.get("gene_name")
+    report = HTMLReport(title=f"{gene_id} — {gene_name or 'No name'} — SoyMutDB")
+    report.add_header()
+
+    with report.container(main()):
+        with report.container(div(cls="container")):
+            # ── Gene Header Card ─────────────────────────────────────────
+            with report.container(div(cls="card")):
+                report.add_heading(gene_id)
+                report.add_table(
+                    ["Field", "Value"],
+                    [
+                        ["Name", gene_name or "—"],
+                        ["Biotype", gene_info.get("biotype")],
+                        ["Position", _position_text(gene_info)],
+                        ["Description", gene_info.get("description") or "—"],
+                    ],
+                )
+
+            # ── Expression Summary ───────────────────────────────────────
+            with report.container(div(cls="card")):
+                report.add_heading(
+                    f"Expression Data (top {len(expressions)} of "
+                    f"{total_expression_count})"
+                )
+                report.add_table(
+                    ["Library", "Tissue", "Treatment", "FPKM", "TPM", "Raw Count"],
+                    [
+                        [
+                            exp["library_name"],
+                            exp.get("tissue"),
+                            exp.get("treatment"),
+                            _fmt_number(exp.get("fpkm")),
+                            _fmt_number(exp.get("tpm")),
+                            exp.get("raw_count"),
+                        ]
+                        for exp in expressions
+                    ],
+                    empty_text="No expression data available for this gene.",
+                )
+
+            # ── Homologs ─────────────────────────────────────────────────
+            with report.container(div(cls="card")):
+                report.add_heading("Homologs")
+                report.add_table(
+                    ["Species", "Gene ID", "Type", "Source"],
+                    [
+                        [
+                            em(hom["homolog_species"]),
+                            hom["homolog_gene_id"],
+                            hom["homolog_type"],
+                            hom.get("source"),
+                        ]
+                        for hom in homologs
+                    ],
+                    empty_text="No homolog data available for this gene.",
+                )
+
+            # ── Variant Summary ──────────────────────────────────────────
+            with report.container(div(cls="card")):
+                report.add_heading("Variant Summary")
+                report.add_table(
+                    ["Type", "Count", "High Impact", "Moderate Impact"],
+                    [],
+                    empty_text="No variant data included in this pre-generated page.",
+                )
+
+            # ── Footer Note ──────────────────────────────────────────────
+            report.add_paragraph(
+                f"This page was pre-generated on {generated_at}. "
+                "For real-time data, visit the live gene detail page.",
+                cls="note",
+            )
+
+    report.add_footer()
+    return report.render()
 
 
 def _upload_gzipped(

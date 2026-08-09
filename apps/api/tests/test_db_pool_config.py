@@ -3,9 +3,13 @@
 These tests assert that the async engine is created lazily and that its pool
 parameters (pool_size / max_overflow / timeout / recycle / pre-ping) come
 from ``Settings``, keeping the connection budget contract in one place.
+They also cover the statement-timeout ``connect_args`` and the Redis socket
+timeouts.
 """
 
 from __future__ import annotations
+
+from unittest.mock import MagicMock
 
 from app.core import database
 from app.core.config import Settings
@@ -121,3 +125,70 @@ def test_settings_expose_pool_defaults_and_celery_ttl() -> None:
     assert settings.celery_broker_url != settings.celery_result_backend
     # Result TTL default: 7 days, inside the recommended 1-7 day window.
     assert settings.celery_result_expires == 604800
+
+
+def _capture_engine_kwargs(monkeypatch, settings: Settings) -> dict:
+    """Build the engine via a patched ``create_async_engine`` and return kwargs."""
+    captured: dict = {}
+
+    def _fake_create_async_engine(url, **kwargs):
+        captured["url"] = url
+        captured.update(kwargs)
+        return MagicMock()
+
+    monkeypatch.setattr(database, "create_async_engine", _fake_create_async_engine)
+    original_settings = database.settings
+    database.settings = settings
+    database._engine = None
+    try:
+        database.get_engine()
+    finally:
+        database._engine = None
+        database.settings = original_settings
+    return captured
+
+
+def test_statement_timeout_sent_as_server_setting(monkeypatch) -> None:
+    """Default 30s statement timeout reaches asyncpg ``server_settings``."""
+    monkeypatch.delenv("SOYMUTDB_DATABASE_URL", raising=False)
+    captured = _capture_engine_kwargs(
+        monkeypatch, Settings(_env_file=None, app_env="dev")
+    )
+
+    assert captured["connect_args"] == {
+        "server_settings": {"statement_timeout": "30000"}
+    }
+
+
+def test_statement_timeout_zero_disables_connect_args(monkeypatch) -> None:
+    """``db_statement_timeout=0`` sends no server settings at all."""
+    monkeypatch.delenv("SOYMUTDB_DATABASE_URL", raising=False)
+    captured = _capture_engine_kwargs(
+        monkeypatch,
+        Settings(_env_file=None, app_env="dev", db_statement_timeout=0),
+    )
+
+    assert captured["connect_args"] == {}
+
+
+def test_redis_client_has_bounded_socket_timeouts(monkeypatch) -> None:
+    """Redis socket timeouts keep cache degradation fast and bounded."""
+    from redis.asyncio import Redis
+
+    captured: dict = {}
+    database._redis = None
+
+    def _fake_from_url(url, **kwargs):
+        captured["url"] = url
+        captured.update(kwargs)
+        return MagicMock(spec=Redis)
+
+    monkeypatch.setattr(database, "from_url", _fake_from_url)
+    try:
+        database.get_redis()
+    finally:
+        database._redis = None
+
+    assert captured["socket_timeout"] == 2.0
+    assert captured["socket_connect_timeout"] == 2.0
+    assert captured["decode_responses"] is True

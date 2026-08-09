@@ -202,6 +202,39 @@ const WIDGET_LOADER_SNIPPET = `
 </script>`;
 
 /* ------------------------------------------------------------------ */
+/*  Cloudflare Web Analytics beacon (C3)                              */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Build-time Cloudflare Web Analytics token (VITE_CLOUDFLARE_ANALYTICS_TOKEN).
+ *
+ * The SSG build REWRITES dist/index.html after `vite build` (see
+ * ssg-build.ts), so this template — not the Vite transformIndexHtml — is the
+ * final authority for the shipped HTML. To keep behaviour identical in dev
+ * and production, both places read the same variable and produce the same
+ * markup: a static beacon <script> (no Workers involved) plus a widened CSP.
+ *
+ * NOTE: read from process.env (Cloudflare Pages injects dashboard
+ * environment variables into the build environment; tsx does not load .env
+ * files, which is fine — the variable is set in the Pages dashboard).
+ */
+const CF_ANALYTICS_TOKEN = (process.env.VITE_CLOUDFLARE_ANALYTICS_TOKEN ?? "").trim();
+
+/** Full beacon <script> tag — empty string when no token is configured. */
+const CF_BEACON_HTML = CF_ANALYTICS_TOKEN
+    ? `<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='${JSON.stringify({ token: CF_ANALYTICS_TOKEN })}'></script>`
+    : "";
+
+/**
+ * CSP content, widened with the beacon origins only when a token is
+ * configured (keeps the no-token build byte-identical in behaviour).
+ * Keep in sync with apps/web/public/_headers (browsers intersect both).
+ */
+const CSP_CONTENT = CF_ANALYTICS_TOKEN
+    ? "default-src 'self'; script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://api.example.com https://cloudflareinsights.com; frame-src 'self' https://jbrowse.example.com; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; object-src 'none'"
+    : "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://api.example.com; frame-src 'self' https://jbrowse.example.com; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; object-src 'none'";
+
+/* ------------------------------------------------------------------ */
 /*  Tracking pixel (noscript-friendly analytics)                      */
 /* ------------------------------------------------------------------ */
 
@@ -310,7 +343,7 @@ ${ogHtml}
          meta tag and the _headers CSP (e.g. cdnjs.cloudflare.com, cdn.jsdelivr.net). -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://api.example.com; frame-src 'self' https://jbrowse.example.com; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; object-src 'none'"
+      content="${CSP_CONTENT}"
     />
 
     <!-- Preconnect to font origins -->
@@ -330,6 +363,7 @@ ${ogHtml}
     <script>${THEME_INIT_SCRIPT}</script>
 
     ${jsonLdHtml}
+    ${CF_BEACON_HTML}
     ${headExtra}
 
     <title>${escapeHtml(title)}</title>

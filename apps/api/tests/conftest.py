@@ -242,3 +242,33 @@ def user_factory() -> type[UserFactory]:
 def gene_factory() -> type[GeneFactory]:
     """Provide the GeneFactory class."""
     return GeneFactory
+
+
+# ---------------------------------------------------------------------------
+# Redis isolation for cache-aside paths
+# ---------------------------------------------------------------------------
+
+
+class _UnavailableRedis:
+    """Redis stand-in that fails every call (forces cache degradation)."""
+
+    async def get(self, *args, **kwargs):
+        raise ConnectionError("redis unavailable in tests")
+
+    async def setex(self, *args, **kwargs):
+        raise ConnectionError("redis unavailable in tests")
+
+
+@pytest.fixture(autouse=True)
+def _redis_unavailable(monkeypatch):
+    """Make the global cache-aside helper degrade to direct queries.
+
+    Unit tests never touch a real Redis; ``app.services.cache.get_or_set``
+    swallows Redis failures and falls back to the loader.  The cache helper
+    itself is tested separately with an explicit mock Redis (see
+    ``test_cache.py``), so this only neutralises the global client used by
+    endpoints.
+    """
+    from app.services import cache as cache_module
+
+    monkeypatch.setattr(cache_module, "get_redis", lambda: _UnavailableRedis())

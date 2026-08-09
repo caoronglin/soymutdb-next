@@ -2,6 +2,12 @@
 REM =====================================================================
 REM SoyMutDB Windows Installation Script (4 steps)
 REM =====================================================================
+REM
+REM ⚠️ 非主路径（已废弃）：生产部署以 docker compose 为主路径
+REM （deploy/linux/install.sh + deploy/scripts/upgrade.sh）。本 Windows
+REM 服务安装脚本仅保留作参考，不再维护。当前架构见
+REM docs/design/deployment-architecture.md。
+REM
 REM Run as Administrator!
 REM
 REM This script:

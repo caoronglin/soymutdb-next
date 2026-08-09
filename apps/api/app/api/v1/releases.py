@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...core.database import get_db
 from ...models.content import Release, ReleaseStatus
 from ...schemas.content import ReleaseResponse
+from ...services.cache import get_or_set
 
 router = APIRouter(prefix="/releases", tags=["releases"])
 
@@ -18,12 +19,29 @@ async def list_releases(
     db: AsyncSession = Depends(get_db),
     status: ReleaseStatus | None = Query(default=None),
 ) -> list[ReleaseResponse]:
-    """List database releases."""
+    """List database releases.
+
+    Read-hot query cached in Redis (default TTL) keyed by ``status``; a
+    Redis failure degrades to a direct query.
+    """
+    payload = await get_or_set(
+        "releases:list",
+        ttl=None,
+        params={"status": status.value if status is not None else None},
+        loader=lambda: _load_releases(db, status),
+    )
+    return [ReleaseResponse.model_validate(item) for item in payload]
+
+
+async def _load_releases(
+    db: AsyncSession, status: ReleaseStatus | None
+) -> list[dict]:
+    """Fetch release rows as JSON payloads (loader for the Redis cache)."""
     stmt = select(Release).order_by(Release.published_at.desc())
     if status is not None:
         stmt = stmt.where(Release.status == status)
     result = await db.execute(stmt)
-    return [_to_response(r) for r in result.scalars().all()]
+    return [_to_response(r).model_dump(mode="json") for r in result.scalars().all()]
 
 
 @router.get("/{release_id}", response_model=ReleaseResponse)

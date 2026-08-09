@@ -1,3 +1,5 @@
+# ⚠️ 非主路径（已废弃）：生产部署以 docker compose 为主路径，本 Conda
+# 裸进程部署仅保留作参考（见 deploy/linux/install.sh 头部说明）。
 name: soymutdb-worker
 channels:
   - conda-forge

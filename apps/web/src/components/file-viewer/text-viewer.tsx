@@ -1,51 +1,28 @@
 /**
- * Text viewer — syntax-highlighted read-only display using react-syntax-highlighter.
+ * Text viewer — plain read-only text display (monospace, wraps, scrolls).
+ *
+ * Syntax highlighting lives in code-viewer.tsx (highlight.js, lazy chunk);
+ * FASTA gets its own specialized rendering in fasta-viewer.tsx.
  */
-import { useMemo } from "react";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
-
 interface TextViewerProps {
   content: string;
-  language?: string;
 }
 
-const LANGUAGE_MAP: Record<string, string> = {
-  fasta: "text",
-  gff3: "text",
-  vcf: "text",
-  tsv: "text",
-  csv: "text",
-  txt: "text",
-  py: "python",
-  js: "javascript",
-  ts: "typescript",
-  json: "json",
-  xml: "xml",
-  yaml: "yaml",
-  yml: "yaml",
-  md: "markdown",
-};
-
-export function TextViewer({ content, language = "text" }: TextViewerProps) {
-  const lang = useMemo(() => LANGUAGE_MAP[language] ?? "text", [language]);
-
+export function TextViewer({ content }: TextViewerProps) {
   return (
-    <div className="overflow-auto rounded-md border text-sm">
-      <SyntaxHighlighter
-        style={oneDark}
-        language={lang}
-        showLineNumbers
-        wrapLines
-        customStyle={{
-          margin: 0,
-          borderRadius: "0.375rem",
+    <div className="overflow-auto rounded-md border bg-[var(--background)]">
+      <pre
+        className="p-4"
+        style={{
+          fontFamily: "var(--font-mono)",
           fontSize: "0.8rem",
-          maxHeight: "70vh",
+          lineHeight: 1.6,
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-word",
         }}
       >
         {content}
-      </SyntaxHighlighter>
+      </pre>
     </div>
   );
 }

@@ -21,6 +21,8 @@ export type {
   EnrichmentResponse,
   EnrichmentTerm,
   EnrichmentRequest,
+  EnrichmentGseaResponse,
+  EnrichmentGseaTerm,
   ExpPatternResponse,
   ExpPatternRequest,
 } from "@soymutdb/api-client";

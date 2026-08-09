@@ -6893,8 +6893,8 @@
         "tags": [
           "tools"
         ],
-        "summary": "GO/KEGG enrichment analysis",
-        "description": "Hypergeometric enrichment test (right-tail) with Benjamini-Hochberg multiple-testing correction.  The background set is the full set of genes annotated for the requested ontology.  Terms are filtered by the raw p-value threshold, sorted by q-value ascending, and limited to ``max_terms``.",
+        "summary": "GO/KEGG enrichment analysis (ORA or GSEA)",
+        "description": "Enrichment analysis over the gene_annotations table.  'ora' (default): hypergeometric right-tail test with Benjamini-Hochberg correction; the background set is the full set of genes annotated for the requested ontology.  'gsea': simplified rank-based gene-set test over per-gene values (requires 'values' aligned 1:1 with 'genes' and a minimum term size via 'min_genes').  In both modes terms are filtered by the raw p-value threshold, sorted by q-value ascending, and limited to 'max_terms'.",
         "operationId": "run_enrichment_api_v1_tools_enrichment_post",
         "requestBody": {
           "content": {
@@ -6912,7 +6912,15 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/EnrichmentResponse"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/EnrichmentResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/EnrichmentGseaResponse"
+                    }
+                  ],
+                  "title": "Response Run Enrichment Api V1 Tools Enrichment Post"
                 }
               }
             }
@@ -8953,6 +8961,32 @@
             "title": "Genes",
             "description": "Gene ids to test for GO/KEGG enrichment (1-500)"
           },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "ora",
+              "gsea"
+            ],
+            "title": "Mode",
+            "description": "Analysis mode: 'ora' (over-representation, default) or 'gsea' (rank-based gene-set test)",
+            "default": "ora"
+          },
+          "values": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array",
+                "maxItems": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Values",
+            "description": "Per-gene numeric values (e.g. log2 fold-changes) used to rank genes in 'gsea' mode; required there and must align with 'genes' 1:1"
+          },
           "ontology": {
             "type": "string",
             "enum": [
@@ -8978,6 +9012,14 @@
             "title": "Max Terms",
             "description": "Maximum number of enriched terms to return (sorted by q-value)",
             "default": 20
+          },
+          "min_genes": {
+            "type": "integer",
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Min Genes",
+            "description": "Minimum term size (member genes present in the ranked input) required for a term to be tested in 'gsea' mode",
+            "default": 5
           }
         },
         "type": "object",
@@ -8985,10 +9027,16 @@
           "genes"
         ],
         "title": "EnrichmentRequest",
-        "description": "POST /api/v1/tools/enrichment payload.\n\n``genes`` are gene ids (e.g. ``Glyma.01G000100``); duplicates are\ntolerated and deduplicated server-side."
+        "description": "POST /api/v1/tools/enrichment payload.\n\n``genes`` are gene ids (e.g. ``Glyma.01G000100``); duplicates are\ntolerated and deduplicated server-side.  ``mode`` selects between the\nclassic over-representation test (default, backwards compatible) and the\nrank-based GSEA mode.  ``values`` (one per gene, e.g. log2 fold-changes)\nis required in ``gsea`` mode and must align with ``genes`` 1:1."
       },
       "EnrichmentResponse": {
         "properties": {
+          "mode": {
+            "type": "string",
+            "const": "ora",
+            "title": "Mode",
+            "description": "Analysis mode"
+          },
           "ontology": {
             "type": "string",
             "enum": [
@@ -9030,12 +9078,13 @@
         },
         "type": "object",
         "required": [
+          "mode",
           "ontology",
           "input_genes",
           "background_genes"
         ],
         "title": "EnrichmentResponse",
-        "description": "Enrichment analysis result."
+        "description": "ORA enrichment analysis result."
       },
       "EnrichmentTerm": {
         "properties": {
@@ -9083,7 +9132,7 @@
           "genes"
         ],
         "title": "EnrichmentTerm",
-        "description": "A single enriched term."
+        "description": "A single enriched term (ORA mode)."
       },
       "ExonResponse": {
         "properties": {
@@ -12764,6 +12813,123 @@
         ],
         "title": "ValidationErrorResponse",
         "type": "object"
+      },
+      "EnrichmentGseaTerm": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Term id, e.g. GO:0008150 or ko00010"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Term name (falls back to the term id)"
+          },
+          "es": {
+            "type": "number",
+            "title": "Es",
+            "description": "Enrichment score: signed running-sum statistic over the value-descending ranked list (positive = concentrated at high values, negative = at low values)"
+          },
+          "nes": {
+            "type": "number",
+            "title": "Nes",
+            "description": "Normalized enrichment score: z-score of ES under the analytic null (ES * sqrt(k(n-k)/n)); a simplification of the permutation normalization used by the reference GSEA implementation"
+          },
+          "p_value": {
+            "type": "number",
+            "title": "P Value",
+            "description": "Rank-based p-value from the one-sided Smirnov asymptotic exp(-2 * k(n-k)/n * ES^2)"
+          },
+          "q_value": {
+            "type": "number",
+            "title": "Q Value",
+            "description": "Benjamini-Hochberg adjusted p-value"
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size",
+            "description": "Term genes present in the ranked input"
+          },
+          "genes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Genes",
+            "description": "Member input genes (first 20)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "es",
+          "nes",
+          "p_value",
+          "q_value",
+          "size",
+          "genes"
+        ],
+        "title": "EnrichmentGseaTerm",
+        "description": "A single enriched term (GSEA mode, rank-based test)."
+      },
+      "EnrichmentGseaResponse": {
+        "properties": {
+          "mode": {
+            "type": "string",
+            "const": "gsea",
+            "title": "Mode",
+            "description": "Analysis mode"
+          },
+          "ontology": {
+            "type": "string",
+            "enum": [
+              "go",
+              "kegg"
+            ],
+            "title": "Ontology"
+          },
+          "input_genes": {
+            "type": "integer",
+            "title": "Input Genes",
+            "description": "Number of unique input genes (the ranked list)"
+          },
+          "background_genes": {
+            "type": "integer",
+            "title": "Background Genes",
+            "description": "Number of annotated genes in the background set (all genes with annotations for the requested ontology)"
+          },
+          "terms": {
+            "items": {
+              "$ref": "#/components/schemas/EnrichmentGseaTerm"
+            },
+            "type": "array",
+            "title": "Terms",
+            "description": "GSEA terms sorted by q-value (asc)"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message",
+            "description": "Explanatory note, e.g. when no term passes min_genes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "mode",
+          "ontology",
+          "input_genes",
+          "background_genes"
+        ],
+        "title": "EnrichmentGseaResponse",
+        "description": "Rank-based (GSEA) enrichment analysis result."
       }
     },
     "securitySchemes": {

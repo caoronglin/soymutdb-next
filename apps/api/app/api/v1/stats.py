@@ -33,6 +33,7 @@ from ...schemas.analytics import (
     VariantTypeDistribution,
     VariantTypeSummaryItem,
 )
+from ...services.cache import get_or_set
 from ...services.clickhouse_service import ClickHouseService
 
 logger = get_logger(__name__)
@@ -79,11 +80,8 @@ async def _variant_type_summary_from_ch() -> dict[str, int] | None:
 # ---------------------------------------------------------------------------
 
 
-@router.get("/dashboard", response_model=DashboardStats)
-async def dashboard_stats(
-    db: AsyncSession = Depends(get_db),
-) -> DashboardStats:
-    """High-level database statistics for the dashboard."""
+async def _load_dashboard_stats(db: AsyncSession) -> dict:
+    """Compute dashboard aggregates (loader for the Redis cache)."""
     total_genes = await db.scalar(select(func.count(Gene.id)))
     total_mutant_lines = await db.scalar(select(func.count(MutantLine.id)))
     total_phenotypes = await db.scalar(select(func.count(Phenotype.id)))
@@ -111,7 +109,24 @@ async def dashboard_stats(
         assemblies_count=int(assemblies_count or 0),
         current_release=current_release.version if current_release else None,
         last_updated=datetime.now(timezone.utc),
+    ).model_dump(mode="json")
+
+
+@router.get("/dashboard", response_model=DashboardStats)
+async def dashboard_stats(
+    db: AsyncSession = Depends(get_db),
+) -> DashboardStats:
+    """High-level database statistics for the dashboard.
+
+    Read-hot aggregation cached in Redis (default TTL) via cache-aside;
+    a Redis failure degrades to a direct aggregation.
+    """
+    payload = await get_or_set(
+        "stats:dashboard",
+        ttl=None,
+        loader=lambda: _load_dashboard_stats(db),
     )
+    return DashboardStats(**payload)
 
 
 @router.get(
@@ -128,7 +143,21 @@ async def dashboard_stats(
 async def homepage_stats(
     db: AsyncSession = Depends(get_db),
 ) -> HomepageStats:
-    """Home page statistics (genes, lines, releases, variants, seeds)."""
+    """Home page statistics (genes, lines, releases, variants, seeds).
+
+    Read-hot aggregation cached in Redis (default TTL) via cache-aside;
+    a Redis failure degrades to a direct aggregation.
+    """
+    payload = await get_or_set(
+        "stats:homepage",
+        ttl=None,
+        loader=lambda: _load_homepage_stats(db),
+    )
+    return HomepageStats(**payload)
+
+
+async def _load_homepage_stats(db: AsyncSession) -> dict:
+    """Compute homepage aggregates (loader for the Redis cache)."""
     gene_count = await db.scalar(select(func.count(Gene.id))) or 0
     mutant_line_count = (
         await db.scalar(
@@ -187,7 +216,7 @@ async def homepage_stats(
         seed_accessions=int(seed_accessions),
         last_release_date=current_release.published_at if current_release else None,
         last_release_name=current_release.version if current_release else None,
-    )
+    ).model_dump(mode="json")
 
 
 @router.get("/variant-types", response_model=VariantTypeDistribution)

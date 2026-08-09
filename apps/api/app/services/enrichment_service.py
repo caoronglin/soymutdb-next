@@ -1,18 +1,35 @@
 """GO/KEGG enrichment analysis service.
 
-Implements a hand-written hypergeometric (right-tail) enrichment test with
-Benjamini-Hochberg multiple-testing correction.  SciPy is deliberately **not**
-required (not present in ``pyproject.toml``): all statistics are computed with
-the standard library (``math.lgamma`` / log-space arithmetic), which is
-numerically stable for the soybean genome scale (~56k background genes).
+Implements two analysis modes over the ``gene_annotations`` table
+(``gene_id``, ``term_id``, ``term_name``, ``ontology`` columns):
 
-Annotation source
------------------
-Gene → term mappings are read from the expected ``gene_annotations`` table
-(``gene_id``, ``term_id``, ``term_name``, ``ontology`` columns).  The table is
-probed with ``inspect().has_table()`` first: when it does not exist or holds
-no rows for the requested ontology, the service degrades gracefully to an
-explicit empty result with a human-readable ``message`` — never an error.
+1. **ORA** — hand-written hypergeometric (right-tail) enrichment test with
+   Benjamini-Hochberg multiple-testing correction.  SciPy is deliberately
+   **not** required (not present in ``pyproject.toml``): all statistics are
+   computed with the standard library (``math.lgamma`` / log-space
+   arithmetic), which is numerically stable for the soybean genome scale
+   (~56k background genes).
+
+2. **GSEA** (simplified, numpy) — rank-based gene-set test over a list of
+   per-gene values (e.g. log2 fold-changes).  For every annotated term the
+   signed running-sum enrichment score is computed over the value-descending
+   ranked list; the p-value uses the analytic one-sided Smirnov asymptotic
+   and NES is a z-score of ES under the same null.
+
+Source limitation note
+----------------------
+The external reference material planned for the GSEA implementation could
+not be retrieved (the scraping source was blocked), so the statistics follow
+the standard field definitions as documented in the primary literature:
+running-sum ES (Mootha et al. 2003 / Subramanian et al. 2005), the one-sided
+two-sample Kolmogorov-Smirnov (Smirnov) asymptotic for the p-value, and
+Benjamini-Hochberg FDR.  NES is simplified to a z-score instead of the
+phenotype-permutation normalization of the reference implementation.
+
+The table is probed with ``inspect().has_table()`` first: when it does not
+exist or holds no rows for the requested ontology, the service degrades
+gracefully to an explicit empty result with a human-readable ``message`` —
+never an error.
 """
 
 from __future__ import annotations
@@ -20,11 +37,14 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
+import numpy as np
 from sqlalchemy import inspect, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..schemas.enrichment import (
     MAX_TERM_GENES,
+    EnrichmentGseaResponse,
+    EnrichmentGseaTerm,
     EnrichmentResponse,
     EnrichmentTerm,
     Ontology,
@@ -132,6 +152,37 @@ def benjamini_hochberg(p_values: list[float]) -> list[float]:
     return q_values
 
 
+def gsea_term_stat(hit_positions: list[int], k: int, n: int) -> tuple[float, float, float]:
+    """Enrichment score, simplified NES and p-value for one gene set.
+
+    ``hit_positions`` are the 0-based positions of the set's member genes in
+    the value-descending ranked list (length ``k``); ``n`` is the length of
+    the ranked list.
+
+    ES — signed running-sum statistic (one-sided two-sample KS form): the
+    walk starts at 0, adds ``+1/k`` at member positions and ``-1/(n-k)`` at
+    non-member positions, and ES is the extremum with the largest absolute
+    value (positive when the set concentrates at high values, negative at
+    low values; ties resolve towards the positive extremum).
+
+    NES — z-score normalization ``ES * sqrt(k(n-k)/n)`` under the analytic
+    null; a documented simplification of the phenotype-permutation NES.
+
+    p-value — one-sided Smirnov asymptotic ``exp(-2 * k(n-k)/n * ES^2)``
+    (no permutations are run).
+    """
+    steps = np.full(n, -1.0 / (n - k))
+    steps[hit_positions] = 1.0 / k
+    running = np.cumsum(steps)
+    es_max = float(running.max())
+    es_min = float(running.min())
+    es = es_max if es_max >= -es_min else es_min
+    lam = k * (n - k) / n
+    nes = es * math.sqrt(lam)
+    p_value = math.exp(-2.0 * lam * es * es)
+    return es, nes, p_value
+
+
 # ---------------------------------------------------------------------------
 # Annotation loading
 # ---------------------------------------------------------------------------
@@ -176,7 +227,7 @@ async def fetch_annotations(
 
 
 # ---------------------------------------------------------------------------
-# Core analysis
+# Core analysis — ORA
 # ---------------------------------------------------------------------------
 
 
@@ -228,6 +279,7 @@ def compute_enrichment(
             "the gene_annotations table is empty or missing for this ontology."
         )
         return EnrichmentResponse(
+            mode="ora",
             ontology=ontology,
             input_genes=n,
             background_genes=0,
@@ -242,6 +294,7 @@ def compute_enrichment(
             "no enrichment could be computed."
         )
         return EnrichmentResponse(
+            mode="ora",
             ontology=ontology,
             input_genes=n,
             background_genes=background_genes,
@@ -303,6 +356,158 @@ def compute_enrichment(
         for s, q in significant[:max_terms]
     ]
     return EnrichmentResponse(
+        mode="ora",
+        ontology=ontology,
+        input_genes=n,
+        background_genes=background_genes,
+        terms=terms,
+        message=message,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Core analysis — GSEA (simplified, rank-based)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class _GseaTermStats:
+    """Intermediate per-term rank-based statistics."""
+
+    term_id: str
+    name: str
+    es: float
+    nes: float
+    p_value: float
+    size: int  # member genes present in the ranked input
+    member_genes: list[str]
+
+
+def compute_gsea_enrichment(
+    genes: list[str],
+    values: list[float],
+    gene_to_terms: dict[str, set[str]],
+    term_names: dict[str, str],
+    *,
+    ontology: Ontology,
+    p_threshold: float = 0.05,
+    max_terms: int = 20,
+    min_genes: int = 5,
+) -> EnrichmentGseaResponse:
+    """Run the simplified rank-based (GSEA) test over pre-loaded annotations.
+
+    ``genes``/``values``: input gene ids aligned 1:1 with per-gene values
+    (e.g. log2 fold-changes); duplicates are deduplicated keeping the first
+    value.  The ranked list is the full deduplicated input sorted by value
+    descending (ties broken by gene id for determinism); genes without
+    annotations still rank and contribute background steps only.
+
+    Every annotated term with at least ``min_genes`` members in the ranked
+    list is tested with the running-sum statistic (see ``gsea_term_stat``);
+    p-values are corrected with Benjamini-Hochberg across the tested term
+    set, filtered by ``p_threshold`` on the raw p-value, sorted by q-value
+    ascending, and truncated to ``max_terms``.  Terms that would be
+    degenerate for the statistic (member count >= ranked-list length) are
+    skipped.
+    """
+    # Deduplicate while preserving first-seen order (keep the first value).
+    seen: set[str] = set()
+    pairs: list[tuple[str, float]] = []
+    for gene, value in zip(genes, values):
+        if gene not in seen:
+            seen.add(gene)
+            pairs.append((gene, value))
+
+    background_genes = len(gene_to_terms)
+    n = len(pairs)
+    message: str | None = None
+
+    if background_genes == 0:
+        message = (
+            f"No {ontology.upper()} annotations are available; "
+            "the gene_annotations table is empty or missing for this ontology."
+        )
+        return EnrichmentGseaResponse(
+            mode="gsea",
+            ontology=ontology,
+            input_genes=n,
+            background_genes=0,
+            terms=[],
+            message=message,
+        )
+
+    if n == 0:
+        message = "No input genes with values were provided; no GSEA could be computed."
+        return EnrichmentGseaResponse(
+            mode="gsea",
+            ontology=ontology,
+            input_genes=0,
+            background_genes=background_genes,
+            terms=[],
+            message=message,
+        )
+
+    # Ranked list: value descending, ties broken by gene id for determinism.
+    ranked = sorted(pairs, key=lambda pv: (-pv[1], pv[0]))
+
+    # Term → positions of its member genes within the ranked list.
+    term_positions: dict[str, list[int]] = {}
+    for idx, (gene, _value) in enumerate(ranked):
+        for term_id in gene_to_terms.get(gene, ()):
+            term_positions.setdefault(term_id, []).append(idx)
+
+    n_ranked = len(ranked)
+    stats: list[_GseaTermStats] = []
+    for term_id, positions in term_positions.items():
+        k = len(positions)
+        # k == 0 cannot occur (positions are built from members); k >= n is
+        # degenerate (no background steps) and skipped.
+        if k < min_genes or k >= n_ranked:
+            continue
+        es, nes, p_value = gsea_term_stat(positions, k=k, n=n_ranked)
+        stats.append(
+            _GseaTermStats(
+                term_id=term_id,
+                name=term_names.get(term_id, term_id),
+                es=es,
+                nes=nes,
+                p_value=p_value,
+                size=k,
+                member_genes=[ranked[i][0] for i in positions],
+            )
+        )
+
+    if not stats and message is None:
+        message = (
+            f"No {ontology.upper()} term reached min_genes={min_genes} members "
+            "in the ranked input; no GSEA could be computed."
+        )
+
+    # BH correction across every tested term, then filter by raw p-value.
+    q_values = benjamini_hochberg([s.p_value for s in stats])
+
+    significant = [
+        (s, q)
+        for s, q in zip(stats, q_values)
+        if s.p_value <= p_threshold
+    ]
+    significant.sort(key=lambda sq: (sq[1], sq[0].p_value, sq[0].term_id))
+
+    terms = [
+        EnrichmentGseaTerm(
+            id=s.term_id,
+            name=s.name,
+            es=s.es,
+            nes=s.nes,
+            p_value=s.p_value,
+            q_value=q,
+            size=s.size,
+            genes=s.member_genes[:MAX_TERM_GENES],
+        )
+        for s, q in significant[:max_terms]
+    ]
+    return EnrichmentGseaResponse(
+        mode="gsea",
         ontology=ontology,
         input_genes=n,
         background_genes=background_genes,
@@ -324,7 +529,7 @@ async def run_enrichment(
     p_threshold: float,
     max_terms: int,
 ) -> EnrichmentResponse:
-    """Load annotations for *ontology* and compute the enrichment result.
+    """Load annotations for *ontology* and compute the ORA result.
 
     ``background_genes`` is the number of distinct genes annotated for the
     requested ontology — i.e. the full annotated set, not limited to the
@@ -343,11 +548,39 @@ async def run_enrichment(
     )
 
 
+async def run_gsea_enrichment(
+    db: AsyncSession,
+    *,
+    genes: list[str],
+    values: list[float],
+    ontology: Ontology,
+    p_threshold: float,
+    max_terms: int,
+    min_genes: int,
+) -> EnrichmentGseaResponse:
+    """Load annotations for *ontology* and compute the GSEA result."""
+    gene_to_terms, term_names = await fetch_annotations(db, ontology)
+
+    return compute_gsea_enrichment(
+        genes,
+        values,
+        gene_to_terms,
+        term_names,
+        ontology=ontology,
+        p_threshold=p_threshold,
+        max_terms=max_terms,
+        min_genes=min_genes,
+    )
+
+
 __all__ = [
     "ANNOTATION_TABLE",
     "benjamini_hochberg",
     "compute_enrichment",
+    "compute_gsea_enrichment",
     "fetch_annotations",
+    "gsea_term_stat",
     "hypergeom_sf",
     "run_enrichment",
+    "run_gsea_enrichment",
 ]

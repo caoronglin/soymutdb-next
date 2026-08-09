@@ -13,6 +13,7 @@ import {
   Newspaper,
   ScrollText,
   Settings,
+  BarChart3,
   ChevronLeft,
   ChevronRight,
   Leaf,
@@ -78,6 +79,7 @@ const NAV_SECTIONS: NavSection[] = [
       { path: "/users", label: "Users & Roles", icon: Users },
       { path: "/audit", label: "Audit Logs", icon: ScrollText },
       { path: "/settings", label: "Settings", icon: Settings },
+      { path: "/analytics-settings", label: "Analytics", icon: BarChart3 },
     ],
   },
 ];

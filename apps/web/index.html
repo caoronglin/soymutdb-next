@@ -25,6 +25,12 @@
 
     <!-- Preconnect to font origins for faster font load -->
 
+    <!-- Cloudflare Web Analytics beacon placeholder. Replaced at build time by
+         vite.config.ts (transformIndexHtml) with the full beacon <script> when
+         VITE_CLOUDFLARE_ANALYTICS_TOKEN is set; removed otherwise so builds
+         without a token are unchanged. See deploy/cloudflare.md §Web Analytics. -->
+    <!-- %CLOUDFLARE_ANALYTICS_TOKEN% -->
+
     <title>SoyMutDB — Multi-Species Mutant Database</title>
   </head>
   <body>

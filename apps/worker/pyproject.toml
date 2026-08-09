@@ -37,6 +37,8 @@ dependencies = [
     # GWAS tasks (EMMAX / GEMMA orchestration; Manhattan/QQ aggregation).
     # The engine binaries themselves are ops-installed on the worker host.
     "numpy>=1.26",
+    # HTML report generation (SSG gene pages, GWAS Manhattan/QQ report)
+    "dominate>=2.9.0",
 ]
 
 [project.optional-dependencies]

@@ -110,6 +110,33 @@ pnpm review
 # → tools/code-review/reports/manual/review-report.html
 ```
 
+## Deployment
+
+> 完整部署架构（拓扑图 / 访问入口矩阵 / 环境变量矩阵 / 从零部署步骤 / 故障排查 / 备份恢复）见
+> **[docs/design/deployment-architecture.md](docs/design/deployment-architecture.md)**。
+
+**当前生产部署现状（2026-08）：**
+
+| 面 | 方式 | 入口 |
+| --- | --- | --- |
+| 前端（web 门户） | GitHub Pages 静态托管（push main → CI 自动发布到 gh-pages 分支） | https://caoronglin.github.io/soymutdb-next/ |
+| 后端 + 数据面 | docker compose（api / worker×3 / beat / postgres / clickhouse / redis×2 / minio / mcp-server / nginx / prometheus / grafana） | `http://<HOST>:8080`（nginx）→ `/api/v1/*`、`/mcp/*`（SSE） |
+
+**快速上手（生产服务器）：**
+
+```bash
+sudo bash deploy/linux/install.sh             # 安装布局 /opt/soymutdb + .env 模板
+# 编辑 /opt/soymutdb/.env（模板：deploy/.env.example；必填镜像 tag/JWT/CORS/全部凭据）
+sudo bash deploy/scripts/upgrade.sh           # 预检 → 拉镜像 → 迁移 → 启动 → 健康检查
+bash deploy/scripts/healthcheck.sh            # 服务健康检查
+bash deploy/scripts/backup.sh                 # 数据备份（PG+CH+S3，upgrade 前自动执行）
+```
+
+**非主路径（已废弃/已放弃，仅保留参考）：**
+
+- `deploy/cloudflare.md` — 旧 Cloudflare Pages 静态托管方案（已改为 GitHub Pages）。
+- `deploy/windows/`、`deploy/conda/` — Windows 服务 / Conda 裸进程部署（已废弃，docker compose 为主路径）。
+
 ## Project layout
 
 ```

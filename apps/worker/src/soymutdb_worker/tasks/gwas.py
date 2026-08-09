@@ -47,12 +47,14 @@ from pathlib import Path
 
 import numpy as np
 from celery import Task
+from dominate.tags import script as script_tag
 
 from soymutdb_worker.config import get_setting
 from soymutdb_worker.main import celery_app
 from soymutdb_worker.repositories import GwasJobStore
 from soymutdb_worker.shared import GWAS_RUN_TASK, JobPayload
 from soymutdb_worker.utils.db import get_db
+from soymutdb_worker.utils.html_report import HTMLReport, embed_json
 from soymutdb_worker.utils.s3 import (
     download_file,
     generate_presigned_url,
@@ -523,90 +525,88 @@ def _acklam_z(p: float) -> float:
 # HTML report rendering
 # ---------------------------------------------------------------------------
 
+#: Plotly CDN bundle used by the self-contained report.
+_PLOTLY_CDN = "https://cdn.plot.ly/plotly-2.35.2.min.js"
+
+#: Chart script (Plotly API calls).  Expects ``MANHATTAN`` / ``QQ`` consts
+#: (embedded via :func:`soymutdb_worker.utils.html_report.embed_json`).
+_PLOTLY_JS = """\
+const chrTicks = [];
+let cum = 0;
+MANHATTAN.chromosomes.forEach(chr => {
+  const pts = MANHATTAN.points.filter(pt => pt.chr === chr);
+  const start = pts.length ? pts[0].index : cum;
+  const end = pts.length ? pts[pts.length - 1].index : cum;
+  chrTicks.push({ chr, mid: (start + end) / 2, end });
+  cum = end + 1;
+});
+const colors = ["#2f6f4f", "#9db4a0"];
+const traces = MANHATTAN.chromosomes.map((chr, i) => ({
+  x: MANHATTAN.points.filter(pt => pt.chr === chr).map(pt => pt.index),
+  y: MANHATTAN.points.filter(pt => pt.chr === chr)
+    .map(pt => pt.neglog10p),
+  mode: "markers", type: "scattergl", name: chr,
+  marker: { size: 4, color: colors[i % colors.length] },
+  customdata: MANHATTAN.points.filter(pt => pt.chr === chr)
+    .map(pt => [pt.snp, pt.pos, pt.p]),
+  hovertemplate: "%{customdata[0]}<br>chr %{customdata[1]}:%{customdata[2]}"
+    + "<br>-log10(p)=%{y:.3f}<extra></extra>"
+}));
+traces.push({
+  x: [0, MANHATTAN.n_variants],
+  y: [MANHATTAN.thresholds.genomewide_neglog10,
+      MANHATTAN.thresholds.genomewide_neglog10],
+  mode: "lines", name: "genome-wide",
+  line: { dash: "dash", color: "red" }
+});
+Plotly.newPlot("manhattan", traces, {
+  title: "Manhattan plot",
+  xaxis: {
+    title: "chromosome",
+    tickvals: chrTicks.map(t => t.mid),
+    ticktext: chrTicks.map(t => t.chr),
+  },
+  yaxis: { title: "-log10(p)" }, margin: { t: 60 }
+});
+Plotly.newPlot("qq", [{
+  x: QQ.expected, y: QQ.observed, mode: "markers", type: "scatter",
+  marker: { size: 4, color: "#2f6f4f" }, name: "observed"
+}, {
+  x: [0, Math.max(...QQ.expected, 0.001)],
+  y: [0, Math.max(...QQ.expected, 0.001)],
+  mode: "lines", name: "expected", line: { color: "#999" }
+}], {
+  title: "QQ plot (lambda_GC = " + (QQ.lambda_gc ?? "n/a") + ")",
+  xaxis: { title: "expected -log10(p)" },
+  yaxis: { title: "observed -log10(p)" }, margin: { t: 60 }
+});
+"""
+
 
 def render_report_html(manhattan: dict, qq: dict, method: str) -> str:
-    """Render a self-contained ``Manhattan_QQ.html`` (Plotly via CDN)."""
-    mh_json = json.dumps(manhattan)
-    qq_json = json.dumps(qq)
-    meta_html = (
+    """Render a self-contained ``Manhattan_QQ.html`` (Plotly via CDN).
+
+    Built with the shared dominate-based :class:`HTMLReport`; chart data is
+    embedded via ``embed_json`` so variant/snp strings cannot break out of
+    the ``<script>`` block.
+    """
+    report = HTMLReport(title=f"SoyMutDB GWAS report ({method})")
+    report.head.add(script_tag(src=_PLOTLY_CDN, charset="utf-8"))
+    report.add_heading(f"GWAS — {method}", level=1)
+    report.add_paragraph(
         f"variants: {manhattan['n_variants']} "
-        f"&middot; lambda_GC: {qq.get('lambda_gc', 'n/a')}"
+        f"· lambda_GC: {qq.get('lambda_gc', 'n/a')}",
+        cls="meta",
     )
-    return f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SoyMutDB GWAS report ({method})</title>
-<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
-<style>
-  body {{ font-family: -apple-system, "HarmonyOS Sans SC", sans-serif; margin: 24px; }}
-  h1 {{ font-size: 20px; }}
-  .meta {{ color: #666; font-size: 13px; margin-bottom: 16px; }}
-  .plot {{ width: 100%; height: 480px; }}
-</style>
-</head>
-<body>
-<h1>GWAS — {method}</h1>
-<div class="meta">{meta_html}</div>
-<div id="manhattan" class="plot"></div>
-<div id="qq" class="plot"></div>
-<script>
-  const MANHATTAN = {mh_json};
-  const QQ = {qq_json};
-  const chrTicks = [];
-  let cum = 0;
-  MANHATTAN.chromosomes.forEach(chr => {{
-    const pts = MANHATTAN.points.filter(pt => pt.chr === chr);
-    const start = pts.length ? pts[0].index : cum;
-    const end = pts.length ? pts[pts.length - 1].index : cum;
-    chrTicks.push({{ chr, mid: (start + end) / 2, end }});
-    cum = end + 1;
-  }});
-  const colors = ["#2f6f4f", "#9db4a0"];
-  const traces = MANHATTAN.chromosomes.map((chr, i) => ({{
-    x: MANHATTAN.points.filter(pt => pt.chr === chr).map(pt => pt.index),
-    y: MANHATTAN.points.filter(pt => pt.chr === chr)
-      .map(pt => pt.neglog10p),
-    mode: "markers", type: "scattergl", name: chr,
-    marker: {{ size: 4, color: colors[i % colors.length] }},
-    customdata: MANHATTAN.points.filter(pt => pt.chr === chr)
-      .map(pt => [pt.snp, pt.pos, pt.p]),
-    hovertemplate: "%{{customdata[0]}}<br>chr %{{customdata[1]}}:%{{customdata[2]}}"
-      + "<br>-log10(p)=%{{y:.3f}}<extra></extra>"
-  }}));
-  traces.push({{
-    x: [0, MANHATTAN.n_variants],
-    y: [MANHATTAN.thresholds.genomewide_neglog10,
-        MANHATTAN.thresholds.genomewide_neglog10],
-    mode: "lines", name: "genome-wide",
-    line: {{ dash: "dash", color: "red" }}
-  }});
-  Plotly.newPlot("manhattan", traces, {{
-    title: "Manhattan plot",
-    xaxis: {{
-      title: "chromosome",
-      tickvals: chrTicks.map(t => t.mid),
-      ticktext: chrTicks.map(t => t.chr),
-    }},
-    yaxis: {{ title: "-log10(p)" }}, margin: {{ t: 60 }}
-  }});
-  Plotly.newPlot("qq", [{{
-    x: QQ.expected, y: QQ.observed, mode: "markers", type: "scatter",
-    marker: {{ size: 4, color: "#2f6f4f" }}, name: "observed"
-  }}, {{
-    x: [0, Math.max(...QQ.expected, 0.001)],
-    y: [0, Math.max(...QQ.expected, 0.001)],
-    mode: "lines", name: "expected", line: {{ color: "#999" }}
-  }}], {{
-    title: "QQ plot (lambda_GC = " + (QQ.lambda_gc ?? "n/a") + ")",
-    xaxis: {{ title: "expected -log10(p)" }},
-    yaxis: {{ title: "observed -log10(p)" }}, margin: {{ t: 60 }}
-  }});
-</script>
-</body>
-</html>
-"""
+    report.add_chart_div("manhattan")
+    report.add_chart_div("qq")
+    report.add_script(
+        f"const MANHATTAN = {embed_json(manhattan)};\n"
+        f"const QQ = {embed_json(qq)};\n"
+        + _PLOTLY_JS
+    )
+    report.add_footer()
+    return report.render()
 
 
 def _result_file_metadata(output_path: Path) -> tuple[str, int]:

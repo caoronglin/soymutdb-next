@@ -35,6 +35,13 @@ def get_engine() -> AsyncEngine:
     """Return the global async engine, creating it on first call."""
     global _engine
     if _engine is None:
+        # Statement timeout (asyncpg server_settings) so a slow query cannot
+        # pin a pooled connection forever; pool budget unchanged (5+5 API).
+        connect_args: dict[str, Any] = {}
+        if settings.db_statement_timeout > 0:
+            connect_args["server_settings"] = {
+                "statement_timeout": str(settings.db_statement_timeout * 1000)
+            }
         _engine = create_async_engine(
             settings.database_url,
             pool_size=settings.db_pool_size,
@@ -44,6 +51,7 @@ def get_engine() -> AsyncEngine:
             pool_pre_ping=settings.db_pool_pre_ping,
             echo=settings.db_echo,
             future=True,
+            connect_args=connect_args,
         )
     return _engine
 
@@ -106,11 +114,21 @@ _redis: Redis | None = None
 
 
 def get_redis() -> Redis:
-    """Return the global Redis client (async)."""
+    """Return the global Redis client (async).
+
+    Bounded socket timeouts make cache degradation fast when Redis is down:
+    ``get``/``setex`` failures are swallowed by the cache helper which then
+    falls back to a direct database query.
+    """
     global _redis
     if _redis is None:
         _redis = from_url(
-            settings.redis_url, encoding="utf-8", decode_responses=True
+            settings.redis_url,
+            encoding="utf-8",
+            decode_responses=True,
+            socket_timeout=settings.redis_socket_timeout,
+            socket_connect_timeout=settings.redis_socket_connect_timeout,
+            health_check_interval=30,
         )
     return _redis
 

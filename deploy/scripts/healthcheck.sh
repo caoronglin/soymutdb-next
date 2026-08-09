@@ -105,14 +105,14 @@ echo ""
 
 # ---------------------------------------------------------------------
 # Frontend checks (if nginx is running)
-# 前端静态站点（web/admin/jbrowse）由 Cloudflare Pages 托管，不在
+# 前端静态站点（web）由 GitHub Pages（gh-pages 分支）托管，不在
 # compose 中；nginx 仅反代 API，/health 即 API liveness 透传。
 # ---------------------------------------------------------------------
-echo "Frontend (Cloudflare Pages):"
+echo "Frontend (GitHub Pages):"
 NGINX_HOST="${NGINX_HOST:-localhost}"
 NGINX_PORT="${NGINX_PORT:-8080}"
 check_warn "Nginx /health proxy (API liveness)" "curl -sf http://${NGINX_HOST}:${NGINX_PORT}/health"
-echo "  (web/admin/jbrowse 静态站点由 Cloudflare Pages 托管，不在此检查)"
+echo "  (web 静态站点由 GitHub Pages 托管，不在此检查)"
 echo ""
 
 # ---------------------------------------------------------------------
