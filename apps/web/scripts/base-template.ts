@@ -38,8 +38,8 @@ const ASSETS_DIR = join(DIST_DIR, "assets");
  */
 export function discoverAssets(): DiscoveredAssets {
     const defaults: DiscoveredAssets = {
-        jsEntry: "/assets/index.js",
-        cssEntry: "/assets/index.css",
+        jsEntry: "assets/index.js",
+        cssEntry: "assets/index.css",
         preloads: [],
         fontPreloads: [],
     };
@@ -54,7 +54,7 @@ export function discoverAssets(): DiscoveredAssets {
     try {
         const files = readdirSync(ASSETS_DIR);
         for (const f of files) {
-            const p = posix.join("/assets", f);
+            const p = posix.join("assets", f);
             if (f.startsWith("index-") && f.endsWith(".js")) {
                 jsEntry = p;
             } else if (f.startsWith("index-") && f.endsWith(".css")) {
@@ -241,11 +241,11 @@ const CSP_CONTENT = CF_ANALYTICS_TOKEN
 const TRACKING_PIXEL = `
 <!-- Tracking pixel: server-side analytics via 1x1 GIF. Works without JS. -->
 <noscript>
-  <img src="/track.gif?ns=1&p={{PAGE_PATH}}" alt="" width="1" height="1"
+  <img src="track.gif?ns=1&p={{PAGE_PATH}}" alt="" width="1" height="1"
        style="position:absolute;width:1px;height:1px;overflow:hidden"
        referrerpolicy="no-referrer-when-downgrade" />
 </noscript>
-<img src="/track.gif?p={{PAGE_PATH}}" alt="" width="1" height="1"
+<img src="track.gif?p={{PAGE_PATH}}" alt="" width="1" height="1"
      style="position:absolute;width:1px;height:1px;overflow:hidden"
      referrerpolicy="no-referrer-when-downgrade"
      loading="lazy" aria-hidden="true" />`;
@@ -326,7 +326,7 @@ export function renderBaseTemplate(opts: BaseTemplateOptions): string {
 <html lang="${lang}" data-theme="light">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#2F6F4F" />
     <meta name="description" content="${escapeHtml(description)}" />

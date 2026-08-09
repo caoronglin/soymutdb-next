@@ -58,7 +58,16 @@ export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, __dirname, "");
     const cfAnalyticsToken = env.VITE_CLOUDFLARE_ANALYTICS_TOKEN?.trim() || undefined;
 
+    // Deployment base path (oracle review R1, fixed 2026-08-09):
+    // gh-pages hosts the site under /soymutdb-next/ — without a base the
+    // built index.html references /assets/... which resolves to the
+    // github.io ROOT (404, app JS crashes).  Override per deployment via
+    // VITE_BASE_URL (e.g. "/" for a Cloudflare root domain).
+    const deployBase =
+        env.VITE_BASE_URL?.trim() || (mode === "production" ? "/soymutdb-next/" : "/");
+
     return {
+        base: deployBase,
         plugins: [react(), cloudflareWebAnalytics(cfAnalyticsToken)],
         resolve: {
             alias: {
