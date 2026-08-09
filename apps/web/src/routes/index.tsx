@@ -5,7 +5,10 @@ import { useTranslation } from "react-i18next";
 import * as React from "react";
 import { Search, Microscope, FlaskConical } from "lucide-react";
 import { Button, Skeleton } from "@soymutdb/ui";
-import { fetchHomepageStats } from "@soymutdb/api-client";
+import { fetchHomepageStats, getFeaturedNews } from "@soymutdb/api-client";
+import { Empty } from "antd";
+import { NewsCarousel, NEWS_FEATURED_KEY } from "../components/news-carousel";
+import { NewsCard } from "../components/news-card";
 
 export const Route = createFileRoute("/")({
   component: HomeComponent,
@@ -145,7 +148,78 @@ function HomeComponent() {
           )}
         </div>
       </section>
+
+      {/* News — hero 下方轮播 + 5 摘要卡（B6）。数据来自 /news/featured；
+          轮播与摘要卡共享 news-featured query key（React Query 去重，仅一次请求）。
+          API 失败/空数据 → 空态，不崩溃、无伪数据。 */}
+      <HomeNewsSection />
     </>
+  );
+}
+
+/** Homepage news block: autoplay carousel + 5 featured summary cards. */
+function HomeNewsSection() {
+  const { t } = useTranslation();
+
+  const featuredQuery = useQuery({
+    queryKey: NEWS_FEATURED_KEY,
+    queryFn: getFeaturedNews,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const featured = (featuredQuery.data?.featured ?? []).slice(0, 5);
+
+  return (
+    <section className="border-b bg-card/40" aria-label={t("news.title")}>
+      <div className="container-prose py-10">
+        <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="eyebrow">{t("news.title")}</p>
+            <h2 className="mt-2 font-display text-2xl font-semibold tracking-tight">
+              {t("news.latestNews")}
+            </h2>
+          </div>
+          <Link
+            to="/news"
+            className="link-underline inline-flex items-center gap-1 text-sm font-medium text-primary"
+          >
+            {t("news.viewAll")}
+          </Link>
+        </div>
+
+        <NewsCarousel />
+
+        <div className="mt-8">
+          {featuredQuery.isLoading ? (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5" data-testid="home-news-loading">
+              {Array.from({ length: 5 }, (_, i) => (
+                <div key={i} className="h-56 rounded-xl border border-border bg-muted/30" />
+              ))}
+            </div>
+          ) : featuredQuery.isError ? (
+            <div className="rounded-xl border border-border bg-card py-10">
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description={t("news.homeUnavailable")}
+              />
+            </div>
+          ) : featured.length === 0 ? (
+            <div className="rounded-xl border border-border bg-card py-10">
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description={t("news.noNews")}
+              />
+            </div>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+              {featured.map((item) => (
+                <NewsCard key={item.slug} item={item} coverHeight={110} />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
   );
 }
 

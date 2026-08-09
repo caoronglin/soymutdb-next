@@ -3,6 +3,12 @@
 @import "@fontsource/jetbrains-mono/latin-400.css";
 @import "@fontsource/jetbrains-mono/latin-500.css";
 
+/* AntD 5 layer order (docs/design/upgrade-plan.md §二, oracle R1) — antd
+   styles sit below Tailwind's theme/design/base/components/utilities layers
+   so widget/header styling is not overridden by antd. Must include the
+   `design` layer. */
+@layer antd, theme, design, base, components, utilities;
+
 @theme {
     --font-sans: "HarmonyOS Sans SC", ui-sans-serif, system-ui, sans-serif;
     --font-serif: "HarmonyOS Sans SC", ui-sans-serif, system-ui, sans-serif;

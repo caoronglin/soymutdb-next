@@ -1,14 +1,20 @@
-"""SoyMutDB MCP server manifest (B1): tool inventory, version, auth notes.
+"""SoyMutDB MCP server manifest (B4): tool inventory, schemas, auth, limits.
 
-Consumed by ``server.py`` at startup and by the smoke tests; kept as a plain
+Consumed by ``server.py`` at startup and by the tests; kept as a plain
 module (no build-time codegen) so the MCP server can run without the API
 package installed.
+
+Every tool entry carries:
+- ``type``: read (public data) or write (researcher-grade, bearer token)
+- ``inputs``: MCP parameter name -> shape/notes
+- ``outputs``: shape of the structured dict returned by the tool
+- ``auth`` / ``rate_limit``: enforcement notes
 """
 
 from __future__ import annotations
 
 SERVER_NAME = "soymutdb"
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 
 #: Transport-level and application-level auth notes (oracle-aligned).
 AUTH: dict[str, str] = {
@@ -21,72 +27,239 @@ AUTH: dict[str, str] = {
         "every internal REST call to apps/api."
     ),
     "rate_limit": (
-        "60 req/min per client - placeholder note; real enforcement is "
-        "implemented by the G3 gate (429 + async quota)."
+        "In-memory fixed window: 60 req/min per MCP client across all "
+        "tools, plus a 10 submissions/hour per client quota on "
+        "blast_submit.  Exceeded calls return "
+        "{'error': 'rate_limited', 'retry_after': N}."
+    ),
+    "idor": (
+        "blast_submit returns a random submitter_token bound to the job id "
+        "in the MCP server's in-memory ownership registry; "
+        "blast_job_status / analyses_query require that token and refuse "
+        "cross-token reads (fail closed: unbound jobs are refused)."
     ),
 }
 
-#: Tool inventory (B1 stubs; real implementations land in B4).
-TOOLS: list[dict[str, str]] = [
+#: Tool inventory (B4: implemented; schemas below match server.py).
+TOOLS: list[dict[str, object]] = [
     {
         "name": "gene_by_id",
         "type": "read",
         "description": "Look up a soybean gene by gene id.",
         "endpoint": "GET /api/v1/genes/{gene_id}",
-        "status": "stub",
+        "status": "implemented",
+        "auth": "public (API bearer forwarded when configured)",
+        "rate_limit": "global 60/min per client",
+        "inputs": {
+            "gene_id": "str, required — gene id, e.g. 'Glyma.01G000100'",
+            "assembly_id": "int, optional — restrict to a genome assembly",
+        },
+        "outputs": {
+            "gene_id": "str | None",
+            "assembly_id": "str | int | None",
+            "chromosome": "str",
+            "start": "int",
+            "end": "int",
+            "strand": "str",
+            "name": "str | None",
+            "biotype": "str",
+            "description": "str | None",
+            "variant_count": "int",
+            "transcript_count": "int",
+            "aliases": "list[str]",
+        },
     },
     {
         "name": "variant_by_region",
         "type": "read",
         "description": "List variants in a genomic region.",
         "endpoint": "GET /api/v1/variants/region",
-        "status": "stub",
+        "status": "implemented",
+        "auth": "public (API bearer forwarded when configured)",
+        "rate_limit": "global 60/min per client",
+        "inputs": {
+            "assembly": "str, required — assembly name",
+            "chromosome": "str, required",
+            "start": "int, required (>= 0)",
+            "end": "int, required (>= 0)",
+            "max_results": "int, default 1000, clamped to [1, 10000]",
+        },
+        "outputs": {
+            "count": "int — number of variants returned",
+            "variants": "list of {variant_id, chromosome, position, "
+            "ref_allele, alt_allele, variant_type, quality, "
+            "filter_status, allele_frequency}",
+        },
     },
     {
         "name": "news_list",
         "type": "read",
         "description": "List published news articles (category / pagination).",
         "endpoint": "GET /api/v1/news",
-        "status": "stub",
+        "status": "implemented",
+        "auth": "public (API bearer forwarded when configured)",
+        "rate_limit": "global 60/min per client",
+        "inputs": {
+            "category": "str, optional — filter by category",
+            "page": "int, default 1 (>= 1)",
+            "page_size": "int, default 20, clamped to [1, 200]",
+        },
+        "outputs": {
+            "items": "list of {id, title_en, title_zh, slug, category, "
+            "cover_url, published_at}",
+            "total": "int",
+            "page": "int",
+            "page_size": "int",
+        },
     },
     {
         "name": "stats_summary",
         "type": "read",
         "description": "Homepage statistics summary.",
         "endpoint": "GET /api/v1/stats/dashboard",
-        "status": "stub",
+        "status": "implemented",
+        "auth": "public (API bearer forwarded when configured)",
+        "rate_limit": "global 60/min per client",
+        "inputs": {},
+        "outputs": {
+            "total_variants": "int",
+            "total_genes": "int",
+            "total_mutant_lines": "int",
+            "total_phenotypes": "int",
+            "assemblies_count": "int",
+            "current_release": "str | None",
+            "last_updated": "datetime (ISO string) | None",
+        },
     },
     {
         "name": "seqfetch",
         "type": "read",
         "description": "Extract sequences by gene ids or chromosome interval.",
         "endpoint": "POST /api/v1/tools/seqfetch",
-        "status": "stub",
+        "status": "implemented",
+        "auth": "public (API bearer forwarded when configured)",
+        "rate_limit": "global 60/min per client",
+        "inputs": {
+            "genes": "list[str], optional — batch mode (<= 200 ids)",
+            "assembly": "str, optional — required together with 'region'",
+            "region": "str, optional — 1-based interval 'chr1:1000-2000'",
+        },
+        "outputs": {
+            "format": "str ('fasta')",
+            "sequence": "str | None — inline FASTA when under the size cap",
+            "count": "int",
+            "truncated": "bool",
+            "missing": "list[str] — requested ids not found",
+            "download_url": "str | None — pre-signed URL for large results",
+            "expires_in": "int | None",
+        },
     },
     {
         "name": "blast_submit",
         "type": "write",
         "description": (
-            "Submit a BLAST job. Async submit + poll contract is defined in "
-            "B4; jobs are bound to the submitter token (IDOR protection)."
+            "Submit a BLAST job. Asynchronous: returns a job handle plus a "
+            "submitter_token that proves ownership for later polls."
         ),
         "endpoint": "POST /api/v1/blast/jobs",
-        "status": "stub",
+        "status": "implemented",
+        "auth": "bearer (SOYMUTDB_MCP_API_TOKEN) — API requires researcher+",
+        "rate_limit": "global 60/min + blast_submit quota 10/hour per client",
+        "inputs": {
+            "query_sequence": "str, required (>= 10 chars; FASTA header "
+            "optional; alphabet checked by the API per program)",
+            "program": "str, default 'blastn' — blastn/blastp/blastx/"
+            "tblastn/tblastx",
+            "database": "str, optional — database name alias",
+            "database_id": "int, optional — numeric database id",
+            "params": "dict, optional — BLAST parameters (evalue, word_size, "
+            "max_target_seqs, matrix, ...) sent as 'parameters'",
+        },
+        "outputs": {
+            "job_id": "str",
+            "status": "str ('pending' | ...)",
+            "program": "str",
+            "database_id": "int",
+            "submitted_at": "datetime (ISO string)",
+            "submitter_token": "str — ownership proof for blast_job_status / "
+            "analyses_query; keep private",
+            "poll": "str ('blast_job_status')",
+        },
+    },
+    {
+        "name": "blast_job_status",
+        "type": "write",
+        "description": (
+            "Poll the status of a BLAST job submitted via blast_submit "
+            "(ownership-checked)."
+        ),
+        "endpoint": "GET /api/v1/blast/jobs/{job_id}",
+        "status": "implemented",
+        "auth": "bearer (SOYMUTDB_MCP_API_TOKEN)",
+        "rate_limit": "global 60/min per client",
+        "inputs": {
+            "job_id": "str, required — job handle from blast_submit",
+            "submitter_token": "str, required — token returned by "
+            "blast_submit; cross-token reads are refused (forbidden)",
+        },
+        "outputs": {
+            "job_id": "str",
+            "status": "str ('pending' | 'running' | 'completed' | 'failed' "
+            "| 'cancelled' | 'expired')",
+            "program": "str",
+            "submitted_at": "datetime (ISO string)",
+            "started_at": "datetime (ISO string) | None",
+            "completed_at": "datetime (ISO string) | None",
+            "error_message": "str | None",
+            "result_url": "str | None",
+        },
     },
     {
         "name": "analyses_query",
         "type": "write",
-        "description": "Query analysis job status / results.",
+        "description": (
+            "Query analysis job status / results (ownership-checked)."
+        ),
         "endpoint": "GET /api/v1/analyses/{job_id}",
-        "status": "stub",
+        "status": "implemented",
+        "auth": "bearer (SOYMUTDB_MCP_API_TOKEN)",
+        "rate_limit": "global 60/min per client",
+        "inputs": {
+            "job_id": "str, required — job handle",
+            "submitter_token": "str, required — token returned by "
+            "blast_submit; cross-token reads are refused (forbidden)",
+        },
+        "outputs": {
+            "job_id": "str",
+            "analysis_type": "str ('fastp' | 'scanpy')",
+            "status": "str ('pending' | 'queued' | 'running' | 'succeeded' "
+            "| 'failed' | ...)",
+            "error_message": "str | None",
+            "result": "dict | None — worker-written summary when done",
+            "created_at": "datetime (ISO string)",
+            "updated_at": "datetime (ISO string)",
+        },
     },
 ]
+
+#: Canonical error shapes returned by every tool (dict payloads).
+ERRORS: dict[str, str] = {
+    "not_found": "API 404 — resource does not exist",
+    "validation": "API 422 — invalid input; 'details' carries field errors",
+    "unauthorized": "API 401 — bearer token missing/expired",
+    "forbidden": "API 403, or IDOR rejection — job not owned by this "
+    "submitter_token",
+    "rate_limited": "local or API 429 — retry after 'retry_after' seconds",
+    "upstream_error": "other non-2xx from the API (status_code in body)",
+    "upstream_unavailable": "transport failure reaching the API",
+}
 
 MANIFEST: dict[str, object] = {
     "server": SERVER_NAME,
     "version": VERSION,
     "auth": AUTH,
     "tools": TOOLS,
+    "errors": ERRORS,
 }
 
-__all__ = ["AUTH", "MANIFEST", "SERVER_NAME", "TOOLS", "VERSION"]
+__all__ = ["AUTH", "ERRORS", "MANIFEST", "SERVER_NAME", "TOOLS", "VERSION"]

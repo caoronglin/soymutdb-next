@@ -22,6 +22,9 @@ const TracksPage = lazy(() => import("./routes/tracks"));
 const BlastPage = lazy(() => import("./routes/blast"));
 const SeedsPage = lazy(() => import("./routes/seeds"));
 const ContentPage = lazy(() => import("./routes/content"));
+const NewsListPage = lazy(() => import("./routes/news/index"));
+const NewsNewPage = lazy(() => import("./routes/news/new"));
+const NewsEditPage = lazy(() => import("./routes/news/$id"));
 const AuditPage = lazy(() => import("./routes/audit"));
 const SettingsPage = lazy(() => import("./routes/settings"));
 const WidgetsPage = lazy(() => import("./routes/widgets"));
@@ -156,6 +159,24 @@ const contentRoute = createRoute({
   component: () => withSuspense(ContentPage),
 });
 
+const newsRoute = createRoute({
+  getParentRoute: () => authLayoutRoute,
+  path: "/news",
+  component: () => withSuspense(NewsListPage),
+});
+
+const newsNewRoute = createRoute({
+  getParentRoute: () => authLayoutRoute,
+  path: "/news/new",
+  component: () => withSuspense(NewsNewPage),
+});
+
+const newsEditRoute = createRoute({
+  getParentRoute: () => authLayoutRoute,
+  path: "/news/$id",
+  component: () => withSuspense(NewsEditPage),
+});
+
 const auditRoute = createRoute({
   getParentRoute: () => authLayoutRoute,
   path: "/audit",
@@ -211,6 +232,9 @@ const routeTree = rootRoute.addChildren([
     blastRoute,
     seedsRoute,
     contentRoute,
+    newsRoute,
+    newsNewRoute,
+    newsEditRoute,
     auditRoute,
     settingsRoute,
     widgetsRoute,

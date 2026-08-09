@@ -10,6 +10,7 @@ import {
   Search,
   Sprout,
   FileText,
+  Newspaper,
   ScrollText,
   Settings,
   ChevronLeft,
@@ -58,6 +59,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { path: "/blast", label: "BLAST", icon: Search },
       { path: "/seeds", label: "Seeds", icon: Sprout },
+      { path: "/news", label: "News", icon: Newspaper },
       { path: "/content", label: "Content", icon: FileText },
     ],
   },

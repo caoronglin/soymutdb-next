@@ -1,0 +1,146 @@
+/**
+ * Admin news operations client (B3) — typed wrappers over the B1 admin API.
+ *
+ * Contract (apps/api/app/api/v1/admin_news.py + apps/api/app/schemas/news.py):
+ *
+ *   POST   /api/v1/admin/news                    NewsCreate   -> NewsDetail (201)
+ *   PUT    /api/v1/admin/news/{news_id}          NewsUpdate   -> NewsDetail
+ *   DELETE /api/v1/admin/news/{news_id}          -> 204
+ *   PATCH  /api/v1/admin/news/reorder            NewsReorderRequest -> NewsReorderResponse
+ *   GET    /api/v1/admin/news/{news_id}/preview-token -> PreviewTokenResponse
+ *
+ * All admin calls go through the `http` coordinating layer (refresh-on-401,
+ * retry, logout events) with the in-memory Bearer token attached (auth:
+ * true is the default).
+ *
+ * NOTE — admin list gap: B1 did not ship a `GET /admin/news` list endpoint,
+ * so the admin table currently reads the public `GET /news` (published +
+ * visible only) via `listNews()` from ./news.ts. The ProTable still sends
+ * `status`/`q` search-form params for forward compatibility; until B1 adds
+ * the admin list endpoint, draft/archived rows are not listable.
+ */
+
+import type { NewsDetail, NewsSummary, NewsStatus } from "./news";
+import { getNewsBySlug } from "./news";
+import { http } from "./auth";
+
+export type { NewsStatus };
+
+/** Full article view as returned by admin create/update (bilingual body). */
+export type AdminNewsDetail = NewsDetail;
+
+/** List item with lifecycle status (backend NewsSummaryResponse). */
+export type AdminNewsItem = NewsSummary;
+
+/** Create payload — mirrors backend `NewsCreate`. */
+export interface NewsCreatePayload {
+  title_en: string;
+  title_zh?: string | null;
+  content_en: string;
+  content_zh?: string | null;
+  slug: string;
+  category?: string | null;
+  cover_url?: string | null;
+  featured_sort?: number;
+  carousel_group?: string | null;
+  carousel_sort?: number;
+  status?: NewsStatus;
+  visible_from?: string | null;
+  visible_to?: string | null;
+}
+
+/** Update payload — mirrors backend `NewsUpdate` (partial; all optional). */
+export interface NewsUpdatePayload {
+  title_en?: string | null;
+  title_zh?: string | null;
+  content_en?: string | null;
+  content_zh?: string | null;
+  slug?: string | null;
+  category?: string | null;
+  cover_url?: string | null;
+  featured_sort?: number | null;
+  carousel_group?: string | null;
+  carousel_sort?: number | null;
+  status?: NewsStatus;
+  visible_from?: string | null;
+  visible_to?: string | null;
+}
+
+/** Reorder item — `featured_sort` is 0-based drag order. */
+export interface NewsReorderItem {
+  id: number;
+  featured_sort: number;
+}
+
+/** Reorder payload — mirrors backend `NewsReorderRequest`. */
+export interface NewsReorderRequest {
+  items: NewsReorderItem[];
+}
+
+/** Reorder result — mirrors backend `NewsReorderResponse`. */
+export interface NewsReorderResponse {
+  updated: number;
+}
+
+/** HMAC preview token (15 min, stateless) — mirrors `PreviewTokenResponse`. */
+export interface NewsPreviewToken {
+  preview: string;
+  exp: number;
+  url: string;
+}
+
+/** Create a news article (draft by default; publish via `status`). */
+export function createNews(payload: NewsCreatePayload): Promise<AdminNewsDetail> {
+  return http.post<AdminNewsDetail>("/admin/news", { json: payload });
+}
+
+/** Partial update of a news article (status/is_published double-write). */
+export function updateNews(
+  newsId: number | string,
+  payload: NewsUpdatePayload,
+): Promise<AdminNewsDetail> {
+  return http.put<AdminNewsDetail>(`/admin/news/${newsId}`, { json: payload });
+}
+
+/** Hard-delete a news article (204). */
+export function deleteNews(newsId: number | string): Promise<void> {
+  return http.delete<void>(`/admin/news/${newsId}`);
+}
+
+/** Apply a full drag-and-drop ordering of `featured_sort` values. */
+export function reorderNews(
+  items: NewsReorderItem[],
+): Promise<NewsReorderResponse> {
+  return http.patch<NewsReorderResponse>("/admin/news/reorder", {
+    json: { items } satisfies NewsReorderRequest,
+  });
+}
+
+/** Mint a 15-minute HMAC preview token for a (draft/hidden) article. */
+export function getPreviewToken(
+  newsId: number | string,
+): Promise<NewsPreviewToken> {
+  return http.get<NewsPreviewToken>(`/admin/news/${newsId}/preview-token`);
+}
+
+/**
+ * Fetch the full detail of any article (draft/published/archived) for the
+ * edit page.
+ *
+ * B1 has no `GET /admin/news/{news_id}` endpoint, so this uses the HMAC
+ * preview-token dance: mint a token for the id, derive the slug from the
+ * returned URL, then read the public detail with the token (which unlocks
+ * non-visible articles — see apps/api/app/services/news_service.py
+ * `get_by_slug`).
+ */
+export async function getAdminNewsDetail(
+  newsId: number | string,
+): Promise<NewsDetail> {
+  const token = await getPreviewToken(newsId);
+  // token.url = "/api/v1/news/{slug}?preview=<token>&exp=<ts>"
+  const match = token.url.match(/\/news\/([^/?]+)/);
+  if (!match) {
+    throw new Error(`Cannot derive slug from preview url: ${token.url}`);
+  }
+  return getNewsBySlug(decodeURIComponent(match[1]), token.preview, token.exp);
+}

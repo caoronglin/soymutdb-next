@@ -18,7 +18,7 @@ class TestToolRegistry:
         names = set(_tool_names())
         expected = {t["name"] for t in TOOLS}
         assert expected == names
-        assert len(names) == 7
+        assert len(names) == 8
 
     def test_tool_read_write_split(self):
         from mcp_server.manifest import TOOLS
@@ -26,7 +26,7 @@ class TestToolRegistry:
         read = {t["name"] for t in TOOLS if t["type"] == "read"}
         write = {t["name"] for t in TOOLS if t["type"] == "write"}
         assert read == {"gene_by_id", "variant_by_region", "news_list", "stats_summary", "seqfetch"}
-        assert write == {"blast_submit", "analyses_query"}
+        assert write == {"blast_submit", "blast_job_status", "analyses_query"}
 
 
 class TestManifest:

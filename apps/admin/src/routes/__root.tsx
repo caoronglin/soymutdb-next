@@ -19,6 +19,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/blast": "BLAST Management",
   "/seeds": "Seed Management",
   "/content": "Content Management",
+  "/news": "News Management",
   "/audit": "Audit Logs",
   "/settings": "System Settings",
   "/widgets": "Widget Manager",

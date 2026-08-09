@@ -1,75 +1,219 @@
 /**
  * News detail route — single article view.
+ *
+ * Fetches via getNewsBySlug; preview token (?preview=&exp=) from the URL
+ * query is forwarded to the API so admin preview links work without login.
+ * Drafts without a valid token 404 on the backend → "article not found".
+ * Body HTML is sanitised with DOMPurify before rendering. Prev/next
+ * navigation derives from the same-category published list (cap 200).
  */
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
+import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, Calendar, Tag } from "lucide-react";
-import { Card, CardContent } from "@soymutdb/ui";
-import { FadeUp } from "../../components/route-motion";
+import { Button, Result, Skeleton, Tag } from "antd";
+import {
+  ArrowLeftOutlined,
+  ArrowRightOutlined,
+  CalendarOutlined,
+  EyeInvisibleOutlined,
+  ReloadOutlined,
+} from "@ant-design/icons";
+import DOMPurify from "dompurify";
+import {
+  ApiError,
+  getNewsBySlug,
+  listNews,
+  type NewsSummary,
+} from "@soymutdb/api-client";
 import { formatDate } from "../../lib/format";
 
 export const Route = createFileRoute("/news/$slug")({
   component: NewsDetailComponent,
 });
 
-const ARTICLES: Record<string, { title: string; date: string; category: string; body: string[] }> = {
-  "v2-release": {
-    title: "SoyMutDB v2.0 released",
-    date: "2025-06-15",
-    category: "Release",
-    body: [
-      "We are excited to announce SoyMutDB v2.0, a major update to the multi-species mutant database (soybean as the current default species). This release brings 32.6 million variants across 1,247 mutant lines, a redesigned genome browser based on JBrowse 2, and a new visual analytics center.",
-      "The v2.0 release introduces a new API with cursor-based pagination for efficient traversal of large variant sets, BLAST sequence homology search, and an integrated seed request system for germplasm distribution.",
-      "All data is available for download in VCF, GFF3, and FASTA formats. The genome browser supports deep linking from gene and variant detail pages, enabling seamless integration into research workflows.",
-    ],
-  },
-  "new-crispr-lines": {
-    title: "New CRISPR/Cas9 mutant lines added",
-    date: "2025-05-20",
-    category: "Data update",
-    body: [
-      "120 new CRISPR/Cas9-edited mutant lines targeting flowering time genes have been added to SoyMutDB. These lines were generated in the Williams 82 background and include edits to GmFT2a, GmFT5a, GmE1, and GmE2.",
-      "Each line has been whole-genome sequenced to at least 15× coverage and variants have been called against the Wm82.a4.v1 reference assembly. Phenotypic data for flowering time under long-day and short-day conditions is also available.",
-    ],
-  },
-};
+const SIBLING_PAGE_SIZE = 200;
+
+interface PreviewSearch {
+  preview?: string;
+  exp?: number;
+}
 
 function NewsDetailComponent() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { slug } = Route.useParams();
-  const article = ARTICLES[slug];
+  const { preview, exp } = Route.useSearch({ select: (s) => s as PreviewSearch });
+
+  const detailQuery = useQuery({
+    queryKey: ["news-detail", slug, preview ?? null, exp ?? null],
+    queryFn: () => getNewsBySlug(slug, preview, exp),
+    staleTime: 60_000,
+    retry: false,
+  });
+
+  const article = detailQuery.data;
+  const isZh = i18n.language.toLowerCase().startsWith("zh");
+
+  const title = article
+    ? isZh && article.title_zh
+      ? article.title_zh
+      : article.title_en
+    : "";
+
+  const siblingsQuery = useQuery({
+    queryKey: ["news-siblings", article?.category ?? "all"],
+    queryFn: () =>
+      listNews(article?.category ?? undefined, 1, SIBLING_PAGE_SIZE).then((r) => r.items),
+    enabled: Boolean(article),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const siblings = siblingsQuery.data ?? [];
+  const idx = article ? siblings.findIndex((s) => s.slug === article.slug) : -1;
+  const prevItem: NewsSummary | undefined = idx > 0 ? siblings[idx - 1] : undefined;
+  const nextItem: NewsSummary | undefined =
+    idx >= 0 && idx < siblings.length - 1 ? siblings[idx + 1] : undefined;
+
+  const isNotFound =
+    detailQuery.isError &&
+    detailQuery.error instanceof ApiError &&
+    detailQuery.error.status === 404;
 
   return (
     <div className="container-prose section-rhythm">
-      <Link to="/news" className="link-underline inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="size-4" aria-hidden />
+      <Link
+        to="/news"
+        className="link-underline inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+      >
+        <ArrowLeftOutlined className="text-xs" aria-hidden />
         {t("news.backToList")}
       </Link>
 
-      {article ? (
-        <FadeUp>
-          <article className="mt-8 max-w-3xl">
-            <div className="flex items-center gap-3 text-xs text-muted-foreground">
-              <span className="inline-flex items-center gap-1">
-                <Calendar className="size-3" aria-hidden />
-                <span className="font-mono">{formatDate(article.date)}</span>
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <Tag className="size-3" aria-hidden />
-                {article.category}
-              </span>
-            </div>
-            <h1 className="mt-4 font-display text-4xl font-semibold tracking-tight">{article.title}</h1>
-            <div className="mt-6 space-y-4 text-base leading-relaxed text-foreground/90">
-              {article.body.map((para, i) => (
-                <p key={i}>{para}</p>
-              ))}
-            </div>
-          </article>
-        </FadeUp>
+      {detailQuery.isLoading ? (
+        <div className="mt-8 max-w-3xl" data-testid="news-detail-loading">
+          <Skeleton active paragraph={{ rows: 1 }} title={{ width: 200 }} />
+          <Skeleton.Image active style={{ height: 360, width: "100%", marginTop: 16 }} />
+          <Skeleton active paragraph={{ rows: 6 }} className="mt-6" />
+        </div>
+      ) : isNotFound || !article ? (
+        <Result
+          status="404"
+          title={t("news.articleNotFound")}
+          subTitle={t("news.articleNotFoundHint")}
+          extra={
+            <Link to="/news">
+              <Button type="primary">{t("news.backToList")}</Button>
+            </Link>
+          }
+        />
+      ) : detailQuery.isError ? (
+        <Result
+          status="error"
+          title={t("news.loadErrorTitle")}
+          subTitle={
+            detailQuery.error instanceof ApiError
+              ? detailQuery.error.message
+              : t("news.loadErrorSubtitle")
+          }
+          extra={
+            <Button icon={<ReloadOutlined />} onClick={() => void detailQuery.refetch()}>
+              {t("common.retry")}
+            </Button>
+          }
+        />
       ) : (
-        <Card className="mt-8"><CardContent className="p-8 text-center text-muted-foreground">{t("news.noNews")}</CardContent></Card>
+        <article className="mt-8 max-w-3xl">
+          {article.cover_url ? (
+            <img
+              src={article.cover_url}
+              alt={title}
+              className="mb-8 w-full rounded-xl border border-border object-cover"
+              style={{ maxHeight: 380 }}
+            />
+          ) : null}
+
+          <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+            {article.category ? (
+              <Tag color="green" className="m-0">
+                {article.category}
+              </Tag>
+            ) : null}
+            {article.published_at ? (
+              <span className="inline-flex items-center gap-1 font-mono">
+                <CalendarOutlined aria-hidden />
+                {formatDate(article.published_at)}
+              </span>
+            ) : null}
+            {preview ? (
+              <span className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                <EyeInvisibleOutlined aria-hidden />
+                {t("news.previewMode")}
+              </span>
+            ) : null}
+          </div>
+
+          <h1 className="mt-4 font-display text-4xl font-semibold tracking-tight">
+            {title}
+          </h1>
+
+          <div
+            data-testid="news-content"
+            className="news-content prose-sm mt-6 max-w-none text-base leading-relaxed text-foreground/90"
+            // Body is admin-authored, bleach-sanitised HTML from the backend;
+            // DOMPurify re-sanitises as defence in depth.
+            dangerouslySetInnerHTML={{
+              __html: DOMPurify.sanitize(
+                article.content_zh && isZh ? article.content_zh : article.content_en,
+              ),
+            }}
+          />
+
+          {(prevItem || nextItem) && (
+            <nav className="mt-10 grid gap-4 border-t border-border pt-6 sm:grid-cols-2" aria-label={t("news.siblingsAria")}>
+              {prevItem ? (
+                <NewsSiblingLink item={prevItem} direction="prev" />
+              ) : (
+                <span />
+              )}
+              {nextItem ? (
+                <NewsSiblingLink item={nextItem} direction="next" />
+              ) : (
+                <span />
+              )}
+            </nav>
+          )}
+        </article>
       )}
     </div>
+  );
+}
+
+function NewsSiblingLink({ item, direction }: { item: NewsSummary; direction: "prev" | "next" }) {
+  const { t, i18n } = useTranslation();
+  const isZh = i18n.language.toLowerCase().startsWith("zh");
+  const title = isZh && item.title_zh ? item.title_zh : item.title_en;
+  const label = direction === "prev" ? t("news.prev") : t("news.next");
+
+  return (
+    <Link
+      to="/news/$slug"
+      params={{ slug: item.slug }}
+      className={`group flex flex-col gap-1 rounded-xl border border-border bg-card p-4 transition-colors hover:border-primary/40 ${
+        direction === "next" ? "text-right" : ""
+      }`}
+    >
+      <span className="text-xs text-muted-foreground">
+        {direction === "prev" ? (
+          <ArrowLeftOutlined className="mr-1 text-[10px]" aria-hidden />
+        ) : null}
+        {label}
+        {direction === "next" ? (
+          <ArrowRightOutlined className="ml-1 text-[10px]" aria-hidden />
+        ) : null}
+      </span>
+      <span className="line-clamp-2 text-sm font-medium text-foreground transition-colors group-hover:text-primary">
+        {title}
+      </span>
+    </Link>
   );
 }

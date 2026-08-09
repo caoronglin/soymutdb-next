@@ -43,3 +43,5 @@ export * from "./homolog";
 export * from "./sra";
 export * from "./analyses";
 export * from "./tools";
+export * from "./news";
+export * from "./admin-news";

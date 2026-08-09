@@ -16,6 +16,14 @@
  * 如需运行时兜底，请在 src/** 中实现错误态 UI，而不是回退到本文件的示例数据。
  * ============================================================================
  *
+ * NOTE (B6 — 新闻前端)：本文件不添加 news featured 占位数据。理由：
+ *   - 本文件服务于 ssg-build.ts 的旧 widget 架构（/api/v1/widget/{name} +
+ *     FALLBACK_PAGES 页面清单），该清单（PAGES）不包含 /news 页面；
+ *   - 新闻前端为运行时 React 页面（/news、/news/$slug、首页新闻区），
+ *     SSG 静态产物不覆盖它们，离线构建亦不渲染新闻内容；
+ *   - 若未来 SSG 扩展到新闻页，请届时在此补充 FALLBACK_NEWS 占位并同步
+ *     ssg-build.ts 的 PAGES 清单。
+ *
  * Provides embedded sample variants, page layouts, and widget HTML so
  * that `ssg:build` can produce complete static pages even in an
  * offline / CI environment without a running backend.

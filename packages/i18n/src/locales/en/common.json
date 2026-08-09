@@ -638,7 +638,90 @@
     "totalUsers": "Total Users",
     "totalVariants": "Total Variants",
     "pendingRequests": "Pending Requests",
-    "activeReleases": "Active Releases"
+    "activeReleases": "Active Releases",
+    "news": {
+      "title": "News Management",
+      "createNew": "New Article",
+      "edit": "Edit Article",
+      "backToList": "Back to News",
+      "columns": {
+        "id": "ID",
+        "title": "Title",
+        "category": "Category",
+        "status": "Status",
+        "publishedAt": "Published",
+        "featuredSort": "Featured Sort",
+        "carouselGroup": "Carousel Group",
+        "actions": "Actions"
+      },
+      "status": {
+        "draft": "Draft",
+        "published": "Published",
+        "archived": "Archived"
+      },
+      "actions": {
+        "edit": "Edit",
+        "delete": "Delete",
+        "preview": "Preview",
+        "reorder": "Reorder"
+      },
+      "deleteConfirm": {
+        "title": "Delete article",
+        "content": "Are you sure you want to delete \"{{title}}\"? This cannot be undone.",
+        "okText": "Delete"
+      },
+      "preview": {
+        "title": "Preview article",
+        "note": "This link is valid for 15 minutes. Anyone with the link can view the article.",
+        "copyLink": "Copy Link",
+        "copied": "Link copied",
+        "openPreview": "Open Preview",
+        "loading": "Generating preview link..."
+      },
+      "form": {
+        "titleEn": "Title (EN)",
+        "titleZh": "Title (ZH)",
+        "slug": "Slug",
+        "slugHelp": "Lowercase letters, digits and hyphens. e.g. soybean-2026-field-trial",
+        "contentEn": "Content (EN)",
+        "contentZh": "Content (ZH)",
+        "category": "Category",
+        "categoryPlaceholder": "e.g. news, update, announcement",
+        "coverUrl": "Cover image URL",
+        "coverUrlPlaceholder": "https://...",
+        "status": "Status",
+        "featuredSort": "Featured sort",
+        "featuredSortHelp": "Lower value appears first on the homepage (0 = off).",
+        "carouselGroup": "Carousel group",
+        "carouselGroupPlaceholder": "e.g. homepage",
+        "carouselSort": "Carousel sort",
+        "visibleFrom": "Visible from",
+        "visibleTo": "Visible to",
+        "save": "Save",
+        "cancel": "Cancel"
+      },
+      "messages": {
+        "saveSuccess": "Article saved",
+        "saveError": "Failed to save article",
+        "deleteSuccess": "Article deleted",
+        "deleteError": "Failed to delete article",
+        "reorderSuccess": "Featured order updated",
+        "reorderError": "Failed to update featured order"
+      },
+      "search": {
+        "placeholder": "Search title",
+        "categoryAll": "All categories",
+        "statusAll": "All statuses"
+      },
+      "reorder": {
+        "title": "Reorder featured articles",
+        "hint": "Drag to reorder. Lower position = higher on the homepage.",
+        "save": "Apply order",
+        "empty": "No published articles to reorder"
+      },
+      "loading": "Loading articles...",
+      "empty": "No articles yet. Create the first one."
+    }
   },
   "news": {
     "title": "News & Updates",
@@ -646,7 +729,30 @@
     "readMore": "Read More",
     "publishedOn": "Published on",
     "backToList": "Back to News",
-    "noNews": "No news articles yet"
+    "noNews": "No news articles yet",
+    "latestNews": "Latest news",
+    "viewAll": "View all news",
+    "categories": {
+      "all": "All",
+      "news": "News",
+      "update": "Updates",
+      "announcement": "Announcements"
+    },
+    "searchPlaceholder": "Search news on this page…",
+    "searchNoResults": "No news matching your search",
+    "searchFiltering": "Showing {{count}} result(s) on this page",
+    "total": "{{count}} articles",
+    "loadErrorTitle": "Failed to load news",
+    "loadErrorSubtitle": "The news service is temporarily unavailable. Please try again later.",
+    "articleNotFound": "Article not found",
+    "articleNotFoundHint": "This article does not exist, is unpublished, or the preview link has expired.",
+    "previewMode": "Preview draft",
+    "prev": "Previous article",
+    "next": "Next article",
+    "siblingsAria": "Adjacent articles",
+    "carouselAria": "Featured news carousel",
+    "carouselLoading": "Loading news carousel",
+    "homeUnavailable": "News temporarily unavailable"
   },
   "publications": {
     "title": "Publications",
