@@ -76,6 +76,10 @@ const queryClient = createQueryClient();
 
 const router = createRouter({
     routeTree,
+    // 部署子路径（gh-pages /soymutdb-next/）下必须与 vite base 对齐，
+    // 否则 SPA 路由全部 Not Found（2026-08-09 修复；BASE_URL 由
+    // vite.config.ts 的 base 注入，开发环境为 "/"）。
+    basepath: import.meta.env.BASE_URL.replace(/\/$/, "") || "/",
     defaultPreload: "intent",
     defaultPreloadStaleTime: 0,
     scrollRestoration: true,

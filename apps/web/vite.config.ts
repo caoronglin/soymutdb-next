@@ -110,8 +110,22 @@ export default defineConfig(({ mode }) => {
                             }
                             if (id.includes("echarts")) return "echarts";
                             if (id.includes("gsap") || id.includes("lenis")) return "motion-vendor";
-                            if (id.includes("react") || id.includes("scheduler")) return "react";
+                            // @tanstack 必须先于 react 分支：@tanstack/react-* 的
+                            // 路径含 "react"，若被 react 分支截胡会与 router chunk
+                            // （@tanstack 主体依赖 react）形成循环依赖。
                             if (id.includes("@tanstack")) return "router";
+                            // react 分支必须精确匹配核心包路径 —— 宽泛的
+                            // id.includes("react") 会把 @ant-design/react-slick、
+                            // react-day-picker 等依赖 rc-* 的包也打入 react chunk，
+                            // 形成 react→rc→antd→react 循环（线上表现为 antd chunk
+                            // createContext undefined，2026-08-09 修复）。
+                            if (
+                                /node_modules\/(react|react-dom|react-is|scheduler|use-sync-external-store)(\/|@)/.test(
+                                    id,
+                                )
+                            ) {
+                                return "react";
+                            }
                         }
                     },
                 },

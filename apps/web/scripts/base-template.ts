@@ -128,10 +128,10 @@ const THEME_INIT_SCRIPT = `
 /*  Widget loader bootstrap (inline script)                           */
 /* ------------------------------------------------------------------ */
 const WIDGET_LOADER_SNIPPET = `
-<!-- Widget loader: fetches dynamic widgets from /api/v1/widget/*.
-     Inlined to avoid a blocking network request during hydration.
-     Server HTML is double-sanitized (Jinja2 autoescape + bleach.clean);
-     this snippet provides additional DOM-based sanitization before insertion. -->
+// Widget loader: fetches dynamic widgets from /api/v1/widget/*.
+// Inlined to avoid a blocking network request during hydration.
+// Server HTML is double-sanitized (Jinja2 autoescape + bleach.clean);
+// this snippet provides additional DOM-based sanitization before insertion.
 <script>
 (function() {
   'use strict';
@@ -150,8 +150,23 @@ const WIDGET_LOADER_SNIPPET = `
     var tpl = document.createElement('template');
     tpl.innerHTML = html;  // template.content parses without executing scripts
     var doc = tpl.content;
-    var forbidden = { SCRIPT:1, IFRA[truncated by convert_rollouts_to_sft: original new_string length=2985 chars for checker-safe SFT export]
-}
+    var forbidden = { SCRIPT:1, STYLE:1, IFRAME:1, OBJECT:1, EMBED:1, LINK:1, META:1 };
+    var walk = doc.querySelectorAll('*');
+    for (var i = 0; i < walk.length; i++) {
+      var el = walk[i];
+      if (forbidden[el.tagName]) { el.remove(); continue; }
+      var attrs = el.attributes;
+      for (var a = attrs.length - 1; a >= 0; a--) {
+        var name = attrs[a].name.toLowerCase();
+        var value = attrs[a].value;
+        if (name.indexOf('on') === 0 || name === 'style' ||
+            (name === 'href' && /^\\s*javascript:/i.test(value))) {
+          el.removeAttribute(attrs[a].name);
+        }
+      }
+    }
+    return doc.innerHTML
+  };
   window.__soymutdb = window.__soymutdb || {};
   window.__soymutdb.widgetCache = window.__soymutdb.widgetCache || {};
 
