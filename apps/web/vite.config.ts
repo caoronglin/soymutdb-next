@@ -42,13 +42,11 @@ export default defineConfig({
                     if (id.includes("node_modules")) {
                         // pro-components 及其 @ant-design/pro-* 依赖 → 独立 chunk
                         if (id.includes("@ant-design/pro")) return "pro-components";
-                        // antd + @ant-design/* + rc-*（rc-util/rc-picker/rc-table 等
-                        // 是 antd 运行时依赖）→ 独立 chunk
-                        if (
-                            id.includes("/antd/") ||
-                            id.includes("@ant-design") ||
-                            id.includes("/rc-")
-                        ) {
+                        // rc-*（rc-table/rc-select/rc-pagination 等 antd 运行时
+                        // 依赖）→ 独立 chunk（G2 预算：拆出后 antd 本体 ≤280KB）
+                        if (id.includes("/rc-")) return "rc";
+                        // antd + @ant-design/* → 独立 chunk
+                        if (id.includes("/antd/") || id.includes("@ant-design")) {
                             return "antd";
                         }
                         if (id.includes("echarts")) return "echarts";

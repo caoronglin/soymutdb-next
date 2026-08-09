@@ -1,13 +1,35 @@
 /**
  * BLAST route — sequence homology search form + recent jobs.
+ *
+ * AntD 5 migration (A1): Card/Form/Select/Input/List/Tag/Alert replace the
+ * frozen packages/ui components. TanStack Query data flow and zod
+ * validation logic unchanged.
  */
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import * as React from "react";
-import { FlaskConical, Play, Loader2 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, Textarea, Button, Label, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, Input, Badge, PageHeader } from "@soymutdb/ui";
-import { getBlastDatabases, submitBlastJob, getBlastJobs, BLAST_PROGRAMS } from "@soymutdb/api-client";
+import { FlaskConical, Play } from "lucide-react";
+import {
+  Alert,
+  Button,
+  Card,
+  Empty,
+  Form,
+  Input,
+  List,
+  Select,
+  Skeleton,
+  Tag,
+  Typography,
+} from "antd";
+import {
+  getBlastDatabases,
+  submitBlastJob,
+  getBlastJobs,
+  BLAST_PROGRAMS,
+  type BlastJob,
+} from "@soymutdb/api-client";
 import { FadeUp } from "../components/route-motion";
 import { z } from "zod";
 
@@ -61,6 +83,26 @@ function BlastComponent() {
   const databases = (databasesQuery.data ?? []) as unknown as BlastDatabaseWithAssembly[];
   const activeDatabases = databases.filter((d) => d.is_active);
 
+  const databaseOptions: { value: string; label: React.ReactNode; disabled?: boolean }[] =
+    databasesQuery.isLoading
+      ? [{ value: "__loading__", label: t("common.loading"), disabled: true }]
+      : activeDatabases.length === 0
+        ? [{ value: "__empty__", label: "No databases available", disabled: true }]
+        : activeDatabases.map((d) => ({
+            value: String(d.id),
+            label: (
+              <span className="flex items-center gap-2">
+                <span>{d.name}</span>
+                {d.assembly_name ? (
+                  <span className="text-xs text-muted-foreground">· {d.assembly_name}</span>
+                ) : null}
+                {d.assembly_is_default ? (
+                  <Tag className="m-0 text-[9px] uppercase">Default</Tag>
+                ) : null}
+              </span>
+            ),
+          }));
+
   // Default to the database flagged as the assembly default (fallback: first active).
   React.useEffect(() => {
     if (form.database) return;
@@ -85,8 +127,7 @@ function BlastComponent() {
     },
   });
 
-  const onSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const onSubmit = () => {
     const parsed = blastSchema.safeParse({
       program: form.program,
       database: form.database,
@@ -113,133 +154,147 @@ function BlastComponent() {
     });
   };
 
+  const clearForm = () =>
+    setForm({ program: "blastn", database: "", sequence: "", e_value: "1e-5", max_hits: "50" });
+
+  const jobs = jobsQuery.data?.items ?? [];
+
   return (
     <FadeUp>
       <div className="container-prose py-10 md:py-14">
-        <PageHeader
-          title={t("blast.title")}
-          description={t("blast.subtitle")}
-          breadcrumb={[{ label: t("nav.home"), href: "/" }, { label: t("blast.title") }]}
-        />
+        <p className="eyebrow">{t("blast.title")}</p>
+        <h1 className="mt-2 font-display text-4xl font-semibold tracking-tight">
+          {t("blast.subtitle")}
+        </h1>
 
         <Card className="mt-8 max-w-3xl">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FlaskConical className="size-5 text-primary" aria-hidden />
-              {t("blast.title")}
-            </CardTitle>
-            <CardDescription>Submit a sequence for homology search</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={onSubmit} className="grid gap-4">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="grid gap-2">
-                  <Label htmlFor="program">{t("blast.searchType")}</Label>
-                  <Select value={form.program} onValueChange={(v) => setForm((f) => ({ ...f, program: v }))}>
-                    <SelectTrigger id="program"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {BLAST_PROGRAMS.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>{p.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="database">{t("blast.database")}</Label>
-                  <Select value={form.database} onValueChange={(v) => setForm((f) => ({ ...f, database: v }))}>
-                    <SelectTrigger id="database"><SelectValue placeholder="Select database" /></SelectTrigger>
-                    <SelectContent>
-                      {databasesQuery.isLoading ? (
-                        <SelectItem value="__loading__" disabled>{t("common.loading")}</SelectItem>
-                      ) : activeDatabases.length === 0 ? (
-                        <SelectItem value="__empty__" disabled>No databases available</SelectItem>
-                      ) : (
-                        activeDatabases.map((d) => (
-                          <SelectItem key={String(d.id)} value={String(d.id)}>
-                            <span className="flex items-center gap-2">
-                              <span>{d.name}</span>
-                              {d.assembly_name ? (
-                                <span className="text-xs text-muted-foreground">· {d.assembly_name}</span>
-                              ) : null}
-                              {d.assembly_is_default ? (
-                                <Badge variant="secondary" className="text-[9px] uppercase">Default</Badge>
-                              ) : null}
-                            </span>
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
-                  {errors.database ? <p className="text-xs text-destructive">{errors.database}</p> : null}
-                </div>
-              </div>
-
-              <div className="grid gap-2">
-                <Label htmlFor="sequence">{t("blast.inputSequence")}</Label>
-                <Textarea
-                  id="sequence"
-                  value={form.sequence}
-                  onChange={(e) => setForm((f) => ({ ...f, sequence: e.target.value }))}
-                  placeholder={t("blast.sequencePlaceholder")}
-                  className="min-h-[160px] font-mono text-sm"
-                  aria-invalid={!!errors.sequence}
+          <Card.Meta
+            title={
+              <span className="flex items-center gap-2">
+                <FlaskConical className="size-5 text-primary" aria-hidden />
+                {t("blast.title")}
+              </span>
+            }
+            description={<Typography.Text type="secondary">Submit a sequence for homology search</Typography.Text>}
+          />
+          <Form layout="vertical" onFinish={onSubmit} className="mt-6">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Form.Item
+                label={t("blast.searchType")}
+                htmlFor="program"
+                help={errors.program ?? undefined}
+                validateStatus={errors.program ? "error" : undefined}
+              >
+                <Select
+                  id="program"
+                  value={form.program}
+                  onChange={(v) => setForm((f) => ({ ...f, program: v }))}
+                  options={BLAST_PROGRAMS.map((p) => ({ value: p.id, label: p.label }))}
                 />
-                {errors.sequence ? <p className="text-xs text-destructive">{errors.sequence}</p> : null}
-              </div>
+              </Form.Item>
+              <Form.Item
+                label={t("blast.database")}
+                htmlFor="database"
+                help={errors.database ?? undefined}
+                validateStatus={errors.database ? "error" : undefined}
+              >
+                <Select
+                  id="database"
+                  value={form.database}
+                  onChange={(v) => setForm((f) => ({ ...f, database: v }))}
+                  placeholder="Select database"
+                  options={databaseOptions}
+                />
+              </Form.Item>
+            </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="grid gap-2">
-                  <Label htmlFor="e_value">{t("blast.eValue")}</Label>
-                  <Input id="e_value" value={form.e_value} onChange={(e) => setForm((f) => ({ ...f, e_value: e.target.value }))} className="font-mono" />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="max_hits">{t("blast.maxHits")}</Label>
-                  <Input id="max_hits" type="number" value={form.max_hits} onChange={(e) => setForm((f) => ({ ...f, max_hits: e.target.value }))} className="font-mono" />
-                </div>
-              </div>
+            <Form.Item
+              label={t("blast.inputSequence")}
+              htmlFor="sequence"
+              help={errors.sequence ?? undefined}
+              validateStatus={errors.sequence ? "error" : undefined}
+            >
+              <Input.TextArea
+                id="sequence"
+                value={form.sequence}
+                onChange={(e) => setForm((f) => ({ ...f, sequence: e.target.value }))}
+                placeholder={t("blast.sequencePlaceholder")}
+                className="min-h-[160px] font-mono text-sm"
+              />
+            </Form.Item>
 
-              <div className="flex gap-2">
-                <Button type="submit" disabled={submitMutation.isPending}>
-                  {submitMutation.isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Play className="size-4" aria-hidden />}
-                  {t("blast.submit")}
-                </Button>
-                <Button type="button" variant="outline" onClick={() => setForm({ program: "blastn", database: "", sequence: "", e_value: "1e-5", max_hits: "50" })}>
-                  {t("blast.clear")}
-                </Button>
-              </div>
-              {submitMutation.isError ? (
-                <p className="text-sm text-destructive">Failed to submit: {(submitMutation.error as Error).message}</p>
-              ) : null}
-            </form>
-          </CardContent>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Form.Item label={t("blast.eValue")} htmlFor="e_value">
+                <Input
+                  id="e_value"
+                  value={form.e_value}
+                  onChange={(e) => setForm((f) => ({ ...f, e_value: e.target.value }))}
+                  className="font-mono"
+                />
+              </Form.Item>
+              <Form.Item label={t("blast.maxHits")} htmlFor="max_hits">
+                <Input
+                  id="max_hits"
+                  type="number"
+                  value={form.max_hits}
+                  onChange={(e) => setForm((f) => ({ ...f, max_hits: e.target.value }))}
+                  className="font-mono"
+                />
+              </Form.Item>
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                type="primary"
+                htmlType="submit"
+                loading={submitMutation.isPending}
+                icon={<Play className="size-4" aria-hidden />}
+              >
+                {t("blast.submit")}
+              </Button>
+              <Button onClick={clearForm}>{t("blast.clear")}</Button>
+            </div>
+            {submitMutation.isError ? (
+              <Alert
+                type="error"
+                showIcon
+                className="mt-4"
+                message={`Failed to submit: ${(submitMutation.error as Error).message}`}
+              />
+            ) : null}
+          </Form>
         </Card>
 
-        <Card className="mt-6">
-          <CardHeader>
-            <CardTitle>{t("blast.myJobs")}</CardTitle>
-            <CardDescription>{t("blast.jobHistory")}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {jobsQuery.isLoading ? (
-              <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
-            ) : jobsQuery.data?.items.length === 0 ? (
-              <p className="text-sm text-muted-foreground">{t("blast.noJobs")}</p>
-            ) : (
-              <ul className="flex flex-col gap-2">
-                {jobsQuery.data?.items.map((job) => (
-                  <li key={job.id} className="flex items-center justify-between gap-3 rounded-lg border p-3">
+        <Card
+          className="mt-6"
+          title={<span className="text-base">{t("blast.myJobs")}</span>}
+          extra={<Typography.Text type="secondary">{t("blast.jobHistory")}</Typography.Text>}
+        >
+          {jobsQuery.isLoading ? (
+            <Skeleton active paragraph={{ rows: 3 }} title={false} />
+          ) : jobs.length === 0 ? (
+            <Empty description={t("blast.noJobs")} />
+          ) : (
+            <List<BlastJob>
+              dataSource={jobs}
+              renderItem={(job) => (
+                <List.Item key={job.id}>
+                  <div className="flex w-full items-center justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate font-mono text-xs">{job.id.slice(0, 12)}…</p>
                       <p className="text-xs text-muted-foreground">{job.program} · {job.database}</p>
                     </div>
-                    <Badge variant={job.status === "completed" ? "default" : "secondary"} className="text-[10px] uppercase">
+                    <Tag
+                      color={job.status === "completed" ? "success" : "default"}
+                      className="m-0 text-[10px] uppercase"
+                    >
                       {job.status}
-                    </Badge>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
+                    </Tag>
+                  </div>
+                </List.Item>
+              )}
+            />
+          )}
         </Card>
       </div>
     </FadeUp>

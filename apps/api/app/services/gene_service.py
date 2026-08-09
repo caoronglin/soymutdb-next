@@ -4,13 +4,12 @@ from __future__ import annotations
 
 import base64
 import json
-from typing import Any
 
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.exceptions import NotFoundError, ValidationError
-from ..models.genomic import Assembly, Chromosome, Exon, Gene, GeneAlias, Transcript
+from ..models.genomic import Assembly, Chromosome, Gene, Transcript
 from ..schemas.genomic import (
     AssemblyResponse,
     ChromosomeResponse,
@@ -49,6 +48,16 @@ class GeneService:
 
         if params.assembly_id is not None:
             stmt = stmt.where(Gene.assembly_id == int(params.assembly_id))
+        if params.chromosome is not None:
+            # genes stores a chromosome_id FK; filter via the joined name.
+            stmt = stmt.join(
+                Chromosome, Gene.chromosome_id == Chromosome.id
+            ).where(Chromosome.name == params.chromosome)
+            if params.assembly_id is not None:
+                # same chromosome names exist across assemblies.
+                stmt = stmt.where(
+                    Chromosome.assembly_id == int(params.assembly_id)
+                )
         if params.biotype is not None:
             stmt = stmt.where(Gene.biotype == params.biotype)
         if params.search:

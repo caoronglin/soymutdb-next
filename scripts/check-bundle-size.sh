@@ -11,6 +11,10 @@
 # 未生成的 chunk（如试点期未 import pro-components）打印 SKIP，不计失败。
 # 阈值可用环境变量覆盖（ANTD_MAX_KB / PRO_MAX_KB / ENTRY_MAX_KB）。
 #
+# 注：pro chunk 的产物命名按 manualChunks 返回值为 "pro"（pro-*.js），
+# 与 antd/index 一致，故用 pro-*.js 匹配；web 侧未引用 pro-components
+# 时仍打印 SKIP。
+#
 # 用法: bash scripts/check-bundle-size.sh [dist/assets 目录]
 # =============================================================================
 set -uo pipefail
@@ -61,7 +65,7 @@ echo "  dir = $DIST_DIR"
 echo "  thresholds: antd<=${ANTD_MAX_KB}KB  pro-components<=${PRO_MAX_KB}KB  entry<=${ENTRY_MAX_KB}KB"
 
 check_chunk "antd" "antd-*.js"        "$ANTD_MAX_KB"  "antd"
-check_chunk "pro"  "pro-components-*.js" "$PRO_MAX_KB" "pro-components"
+check_chunk "pro"  "pro-*.js"             "$PRO_MAX_KB" "pro-components"
 check_chunk "entry" "index-*.js"      "$ENTRY_MAX_KB" "index"
 
 if [ "$fail" -ne 0 ]; then

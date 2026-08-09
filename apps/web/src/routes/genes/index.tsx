@@ -1,28 +1,35 @@
 /**
  * Genes index route — server-side paginated gene list with filters.
+ *
+ * AntD 5 migration (A1): DataTable → Table, FilterBar → inline Form,
+ * PageHeader → Typography. TanStack Query data flow and URL search state
+ * (q / chromosome / biotype / page / sort_by / sort_dir) unchanged.
  */
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import * as React from "react";
-import { Search, ArrowRight } from "lucide-react";
-import { Input, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, PageHeader, FilterBar } from "@soymutdb/ui";
-import { searchGenes } from "@soymutdb/api-client";
-import { DataTable, type DataTableColumn } from "../../components/data-table";
+import { ArrowRight } from "lucide-react";
+import {
+  Button,
+  Empty,
+  Form,
+  Input,
+  Select,
+  Table,
+  Typography,
+  type TableColumnsType,
+  type TableProps,
+} from "antd";
+import { ReloadOutlined } from "@ant-design/icons";
+import { searchGenes, type GeneSummary } from "@soymutdb/api-client";
 import { FadeUp } from "../../components/route-motion";
-import { SOYBEAN_CHROMOSOMES, formatPosition, compactGeneId } from "../../lib/format";
-
-interface GeneRow {
-  gene_id: string;
-  symbol: string | null;
-  name: string | null;
-  biotype: string;
-  chromosome: string;
-  start_pos: number;
-  end_pos: number;
-  variant_count?: number;
-  high_impact_variants?: number;
-}
+import {
+  SOYBEAN_CHROMOSOMES,
+  formatPosition,
+  compactGeneId,
+  formatNumber,
+} from "../../lib/format";
 
 export const Route = createFileRoute("/genes/")({
   component: GenesComponent,
@@ -37,6 +44,12 @@ export const Route = createFileRoute("/genes/")({
 });
 
 const BIOTYPES = ["protein_coding", "pseudogene", "tRNA", "rRNA", "miRNA", "lncRNA", "transposable_element"];
+const PAGE_SIZE = 20;
+
+interface SortState {
+  sort_by: string;
+  sort_dir: "asc" | "desc";
+}
 
 function GenesComponent() {
   const { t } = useTranslation();
@@ -54,7 +67,7 @@ function GenesComponent() {
         chromosome: search.chromosome || undefined,
         biotype: search.biotype || undefined,
         page: search.page,
-        page_size: 20,
+        page_size: PAGE_SIZE,
         sort_by: search.sort_by,
         sort_dir: search.sort_dir,
       }),
@@ -63,15 +76,22 @@ function GenesComponent() {
 
   const data = query.data?.items ?? [];
   const total = query.data?.total ?? 0;
-  const totalPages = query.data?.total_pages ?? 1;
 
-  const columns: DataTableColumn<GeneRow>[] = [
+  const currentSort: SortState = { sort_by: search.sort_by, sort_dir: search.sort_dir };
+
+  const columns: TableColumnsType<GeneSummary> = [
     {
-      id: "gene_id",
-      header: t("genes.geneId"),
-      sortKey: "gene_id",
-      frozen: true,
-      cell: (row) => (
+      title: t("genes.geneId"),
+      dataIndex: "gene_id",
+      key: "gene_id",
+      sorter: true,
+      sortOrder:
+        currentSort.sort_by === "gene_id"
+          ? currentSort.sort_dir === "asc"
+            ? "ascend"
+            : "descend"
+          : null,
+      render: (_, row) => (
         <Link
           to="/genes/$geneId"
           params={{ geneId: row.gene_id }}
@@ -81,24 +101,60 @@ function GenesComponent() {
         </Link>
       ),
     },
-    { id: "symbol", header: t("genes.symbol"), sortKey: "symbol", cell: (row) => row.symbol ?? "—" },
-    { id: "biotype", header: t("genes.biotypeLabel"), cell: (row) => <span className="font-mono text-xs">{row.biotype}</span> },
-    { id: "chromosome", header: t("genes.chromosomeLabel"), cell: (row) => <span className="font-mono text-xs">{row.chromosome}</span> },
     {
-      id: "position",
-      header: t("genes.position"),
-      cell: (row) => (
+      title: t("genes.symbol"),
+      dataIndex: "symbol",
+      key: "symbol",
+      sorter: true,
+      sortOrder:
+        currentSort.sort_by === "symbol"
+          ? currentSort.sort_dir === "asc"
+            ? "ascend"
+            : "descend"
+          : null,
+      render: (_, row) => row.symbol ?? "—",
+    },
+    {
+      title: t("genes.biotypeLabel"),
+      dataIndex: "biotype",
+      key: "biotype",
+      render: (_, row) => <span className="font-mono text-xs">{row.biotype}</span>,
+    },
+    {
+      title: t("genes.chromosomeLabel"),
+      dataIndex: "chromosome",
+      key: "chromosome",
+      render: (_, row) => <span className="font-mono text-xs">{row.chromosome}</span>,
+    },
+    {
+      title: t("genes.position"),
+      dataIndex: "start_pos",
+      key: "position",
+      render: (_, row) => (
         <span className="font-mono text-xs text-muted-foreground">
           {formatPosition(row.start_pos)}–{formatPosition(row.end_pos)}
         </span>
       ),
     },
-    { id: "variant_count", header: t("genes.variantCount"), sortKey: "variant_count", numeric: true, cell: (row) => row.variant_count?.toLocaleString() ?? "—" },
     {
-      id: "actions",
-      header: "",
-      width: "48px",
-      cell: (row) => (
+      title: t("genes.variantCount"),
+      dataIndex: "variant_count",
+      key: "variant_count",
+      sorter: true,
+      sortOrder:
+        currentSort.sort_by === "variant_count"
+          ? currentSort.sort_dir === "asc"
+            ? "ascend"
+            : "descend"
+          : null,
+      align: "right",
+      render: (_, row) => row.variant_count?.toLocaleString() ?? "—",
+    },
+    {
+      title: "",
+      key: "actions",
+      width: 48,
+      render: (_, row) => (
         <Link
           to="/genes/$geneId"
           params={{ geneId: row.gene_id }}
@@ -111,6 +167,32 @@ function GenesComponent() {
     },
   ];
 
+  const handleTableChange: TableProps<GeneSummary>["onChange"] = (
+    _pagination,
+    _filters,
+    sorter,
+  ) => {
+    const s = Array.isArray(sorter) ? sorter[0] : sorter;
+    const next: SortState | null =
+      s && s.order
+        ? { sort_by: String(s.field), sort_dir: s.order === "ascend" ? "asc" : "desc" }
+        : null;
+    // Pagination-triggered onChange reports the unchanged sort — ignore it.
+    if (
+      next
+        ? next.sort_by === currentSort.sort_by && next.sort_dir === currentSort.sort_dir
+        : currentSort.sort_by === "gene_id" && currentSort.sort_dir === "asc"
+    ) {
+      return;
+    }
+    navigate({
+      to: "/genes",
+      search: next
+        ? { ...search, ...next, page: 1 }
+        : { ...search, sort_by: "gene_id", sort_dir: "asc", page: 1 },
+    });
+  };
+
   const activeFilters = [search.q, search.chromosome, search.biotype].filter(Boolean).length;
   const reset = () => {
     setQ("");
@@ -120,111 +202,90 @@ function GenesComponent() {
   return (
     <FadeUp>
       <div className="container-prose py-10 md:py-14">
-        <PageHeader
-          title={t("genes.title")}
-          description={t("genes.subtitle")}
-          breadcrumb={[{ label: t("nav.home"), href: "/" }, { label: t("genes.title") }]}
-        />
+        <p className="eyebrow">{t("genes.title")}</p>
+        <h1 className="mt-2 font-display text-4xl font-semibold tracking-tight">
+          {t("genes.subtitle")}
+        </h1>
 
-        <FilterBar
-          className="mt-8"
-          columns={3}
-          active={activeFilters > 0}
-          onClearAll={reset}
-          items={[
-            {
-              key: "q",
-              label: t("genes.search"),
-              active: search.q.length > 0,
-              control: (
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    navigate({ to: "/genes", search: { ...search, q: q.trim(), page: 1 } });
-                  }}
-                  role="search"
-                >
-                  <div className="relative">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-                    <Input
-                      type="search"
-                      value={q}
-                      onChange={(e) => setQ(e.target.value)}
-                      placeholder={t("genes.searchPlaceholder")}
-                      aria-label={t("genes.search")}
-                      className="h-9 pl-9"
-                    />
-                  </div>
-                </form>
-              ),
-            },
-            {
-              key: "chromosome",
-              label: t("genes.chromosome"),
-              active: search.chromosome.length > 0,
-              control: (
-                <Select
-                  value={search.chromosome || "all"}
-                  onValueChange={(v) =>
-                    navigate({ to: "/genes", search: { ...search, chromosome: v === "all" ? "" : v, page: 1 } })
-                  }
-                >
-                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">{t("genes.allChromosomes")}</SelectItem>
-                    {SOYBEAN_CHROMOSOMES.map((c) => (
-                      <SelectItem key={c} value={c}>{c}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ),
-            },
-            {
-              key: "biotype",
-              label: t("genes.biotype"),
-              active: search.biotype.length > 0,
-              control: (
-                <Select
-                  value={search.biotype || "all"}
-                  onValueChange={(v) =>
-                    navigate({ to: "/genes", search: { ...search, biotype: v === "all" ? "" : v, page: 1 } })
-                  }
-                >
-                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">{t("genes.allBiotype")}</SelectItem>
-                    {BIOTYPES.map((b) => (
-                      <SelectItem key={b} value={b}>{b}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ),
-            },
-          ]}
-        />
+        <Form
+          layout="inline"
+          className="mt-8 flex flex-wrap items-end gap-x-4 gap-y-4"
+          onFinish={() => navigate({ to: "/genes", search: { ...search, q: q.trim(), page: 1 } })}
+        >
+          <Form.Item label={t("genes.search")} className="mb-0">
+            <Input.Search
+              data-testid="genes-search"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder={t("genes.searchPlaceholder")}
+              aria-label={t("genes.search")}
+              allowClear
+              enterButton={false}
+              style={{ width: 240 }}
+            />
+          </Form.Item>
+          <Form.Item label={t("genes.chromosome")} className="mb-0">
+            <Select
+              value={search.chromosome || "all"}
+              onChange={(v) =>
+                navigate({ to: "/genes", search: { ...search, chromosome: v === "all" ? "" : v, page: 1 } })
+              }
+              style={{ width: 170 }}
+              options={[
+                { value: "all", label: t("genes.allChromosomes") },
+                ...SOYBEAN_CHROMOSOMES.map((c) => ({ value: c, label: c })),
+              ]}
+            />
+          </Form.Item>
+          <Form.Item label={t("genes.biotype")} className="mb-0">
+            <Select
+              value={search.biotype || "all"}
+              onChange={(v) =>
+                navigate({ to: "/genes", search: { ...search, biotype: v === "all" ? "" : v, page: 1 } })
+              }
+              style={{ width: 170 }}
+              options={[
+                { value: "all", label: t("genes.allBiotype") },
+                ...BIOTYPES.map((b) => ({ value: b, label: b })),
+              ]}
+            />
+          </Form.Item>
+          <Form.Item className="mb-0">
+            <Button icon={<ReloadOutlined />} onClick={reset} disabled={activeFilters === 0}>
+              {t("common.clear")}
+            </Button>
+          </Form.Item>
+        </Form>
 
-        <div className="mt-4">
-          <DataTable
+        <div className="mt-4" role="region" aria-label="Gene search results">
+          <Table<GeneSummary>
+            rowKey="gene_id"
             columns={columns}
-            data={data}
+            dataSource={data}
             loading={query.isLoading}
-            sort={{ key: search.sort_by, dir: search.sort_dir }}
-            onSortChange={(s) =>
-              navigate({
-                to: "/genes",
-                search: s ? { ...search, sort_by: s.key, sort_dir: s.dir, page: 1 } : { ...search, sort_by: "gene_id", sort_dir: "asc", page: 1 },
-              })
-            }
-            emptyTitle={t("genes.noResults")}
-            emptyDescription={t("common.noResults")}
+            onChange={handleTableChange}
             pagination={{
-              page: search.page,
-              totalPages,
+              current: search.page,
+              pageSize: PAGE_SIZE,
               total,
-              pageSize: 20,
-              onPageChange: (page) => navigate({ to: "/genes", search: { ...search, page } }),
+              showSizeChanger: false,
+              showTotal: (n, range) =>
+                `${formatNumber(range[0])}–${formatNumber(range[1])} of ${formatNumber(n)}`,
+              onChange: (page) => navigate({ to: "/genes", search: { ...search, page } }),
             }}
-            ariaLabel="Gene search results"
+            locale={{
+              emptyText: (
+                <Empty
+                  description={
+                    <Typography.Text type="secondary">
+                      {t("genes.noResults")}
+                      <br />
+                      <span className="text-xs">{t("common.noResults")}</span>
+                    </Typography.Text>
+                  }
+                />
+              ),
+            }}
           />
         </div>
       </div>

@@ -7,8 +7,9 @@ to the internal SoyMutDB REST API (apps/api) via httpx:
 - auth      : ``SOYMUTDB_MCP_API_TOKEN`` forwarded as ``Authorization: Bearer``
   on every internal REST call
 - rate limit: global 60 req/min per MCP client (all tools) + 10
-  ``blast_submit`` calls/hr per client — enforced in-memory by
-  ``ratelimit.py`` (fixed window); exceeds return
+  ``blast_submit`` calls/hr per client — enforced by ``ratelimit.py``
+  (Redis fixed window shared across workers, falling back to in-memory
+  when Redis is unavailable); exceeds return
   ``{"error": "rate_limited", "retry_after": N}``
 
 Write-path IDOR protection (oracle R4): ``blast_submit`` generates a random

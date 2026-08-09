@@ -1,6 +1,10 @@
 /**
  * Gene detail route — full gene information with tabbed sections for
  * overview, expression data, and homologs.
+ *
+ * AntD 5 migration (A1): Card/Descriptions/Tabs/Table/Skeleton/Tag/Empty
+ * replace the frozen packages/ui components. TanStack Query data flow
+ * unchanged.
  */
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
@@ -8,24 +12,26 @@ import { useTranslation } from "react-i18next";
 import * as React from "react";
 import { ArrowLeft, Microscope, BarChart3, Dna } from "lucide-react";
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  Skeleton,
-  Badge,
   Button,
+  Card,
+  Descriptions,
+  Empty,
+  Skeleton,
+  Table,
   Tabs,
-  TabsList,
-  TabsTrigger,
-  TabsContent,
-  EmptyState,
-} from "@soymutdb/ui";
-import { getGene, getGeneExpression, getGeneHomologs } from "@soymutdb/api-client";
+  Tag,
+  Typography,
+  type TableColumnsType,
+} from "antd";
+import {
+  getGene,
+  getGeneExpression,
+  getGeneHomologs,
+  type ExpressionRecord,
+  type HomologRecord,
+} from "@soymutdb/api-client";
 import { FadeUp, ScaleIn } from "../../components/route-motion";
 import { formatPosition, formatMb, jbrowseUrl } from "../../lib/format";
-import { DataTable, type DataTableColumn } from "../../components/data-table";
 
 const ExpressionBarChart = React.lazy(
   () => import("../../components/charts/expression-bar-chart"),
@@ -79,59 +85,40 @@ function GeneDetailComponent() {
     });
   }, [expressions]);
 
-  const expressionColumns: DataTableColumn<(typeof expressions)[number]>[] = [
+  const expressionColumns: TableColumnsType<ExpressionRecord> = [
     {
-      id: "library_name",
-      header: t("genes.expression.library"),
-      cell: (row) => row.library_name,
+      title: t("genes.expression.library"),
+      dataIndex: "library_name",
+      key: "library_name",
+    },
+    { title: t("genes.expression.tissue"), dataIndex: "tissue", key: "tissue" },
+    { title: t("genes.expression.treatment"), dataIndex: "treatment", key: "treatment" },
+    {
+      title: t("genes.expression.fpkm"),
+      dataIndex: "fpkm",
+      key: "fpkm",
+      align: "right",
+      render: (_, row) => row.fpkm.toFixed(2),
     },
     {
-      id: "tissue",
-      header: t("genes.expression.tissue"),
-      cell: (row) => row.tissue,
-    },
-    {
-      id: "treatment",
-      header: t("genes.expression.treatment"),
-      cell: (row) => row.treatment,
-    },
-    {
-      id: "fpkm",
-      header: t("genes.expression.fpkm"),
-      cell: (row) => row.fpkm.toFixed(2),
-      numeric: true,
-    },
-    {
-      id: "tpm",
-      header: t("genes.expression.tpm"),
-      cell: (row) => row.tpm.toFixed(2),
-      numeric: true,
+      title: t("genes.expression.tpm"),
+      dataIndex: "tpm",
+      key: "tpm",
+      align: "right",
+      render: (_, row) => row.tpm.toFixed(2),
     },
   ];
 
-  const homologColumns: DataTableColumn<(typeof homologs)[number]>[] = [
+  const homologColumns: TableColumnsType<HomologRecord> = [
+    { title: t("genes.homologs.species"), dataIndex: "species", key: "species" },
     {
-      id: "species",
-      header: t("genes.homologs.species"),
-      cell: (row) => row.species,
+      title: t("genes.homologs.gene_id"),
+      dataIndex: "gene_id",
+      key: "gene_id",
+      render: (_, row) => <span className="font-mono text-xs">{row.gene_id}</span>,
     },
-    {
-      id: "gene_id",
-      header: t("genes.homologs.gene_id"),
-      cell: (row) => (
-        <span className="font-mono text-xs">{row.gene_id}</span>
-      ),
-    },
-    {
-      id: "type",
-      header: t("genes.homologs.type"),
-      cell: (row) => row.type,
-    },
-    {
-      id: "source",
-      header: t("genes.homologs.source"),
-      cell: (row) => row.source,
-    },
+    { title: t("genes.homologs.type"), dataIndex: "type", key: "type" },
+    { title: t("genes.homologs.source"), dataIndex: "source", key: "source" },
   ];
 
   return (
@@ -154,14 +141,12 @@ function GeneDetailComponent() {
 
       {geneQuery.isLoading ? (
         <div className="mt-8 grid gap-4">
-          <Skeleton className="h-12 w-2/3" />
-          <Skeleton className="h-64 w-full" />
+          <Skeleton active paragraph={{ rows: 1 }} title={{ width: "66%" }} />
+          <Skeleton active paragraph={{ rows: 8 }} title={false} />
         </div>
       ) : geneQuery.isError || !gene ? (
         <Card className="mt-8">
-          <CardContent className="p-8 text-center text-muted-foreground">
-            {t("common.noData")}
-          </CardContent>
+          <Empty description={t("common.noData")} className="py-8" />
         </Card>
       ) : (
         <>
@@ -169,12 +154,8 @@ function GeneDetailComponent() {
             <div className="mt-6 flex flex-wrap items-start justify-between gap-4">
               <div>
                 <div className="flex items-center gap-2">
-                  <Badge variant="secondary" className="font-mono text-[10px] uppercase">
-                    {gene.biotype}
-                  </Badge>
-                  <Badge variant="outline" className="font-mono text-[10px]">
-                    {gene.chromosome}
-                  </Badge>
+                  <Tag className="m-0 font-mono text-[10px] uppercase">{gene.biotype}</Tag>
+                  <Tag className="m-0 font-mono text-[10px]">{gene.chromosome}</Tag>
                 </div>
                 <h1 className="mt-3 font-mono text-3xl font-semibold tracking-tight">
                   {gene.gene_id}
@@ -190,246 +171,240 @@ function GeneDetailComponent() {
                   </p>
                 ) : null}
               </div>
-              <Button asChild>
-                <a
-                  href={jbrowseUrl({
-                    chromosome: gene.chromosome,
-                    start: gene.start_pos,
-                    end: gene.end_pos,
-                  })}
-                >
-                  <Microscope className="size-4" aria-hidden />
-                  {t("genes.viewInBrowser")}
-                </a>
+              <Button
+                href={jbrowseUrl({
+                  chromosome: gene.chromosome,
+                  start: gene.start_pos,
+                  end: gene.end_pos,
+                })}
+                icon={<Microscope className="size-4" aria-hidden />}
+              >
+                {t("genes.viewInBrowser")}
               </Button>
             </div>
           </FadeUp>
 
-          <Tabs defaultValue="overview" className="mt-8">
-            <TabsList>
-              <TabsTrigger value="overview">
-                {t("genes.tabs.overview")}
-              </TabsTrigger>
-              <TabsTrigger value="expression">
-                {t("genes.tabs.expression")}
-              </TabsTrigger>
-              <TabsTrigger value="homologs">
-                {t("genes.tabs.homologs")}
-              </TabsTrigger>
-            </TabsList>
+          {(() => {
+            const tabItems = [
+              {
+                key: "overview",
+                label: t("genes.tabs.overview"),
+                children: (
+                  <div className="grid gap-4 lg:grid-cols-3">
+                    <ScaleIn>
+                      <Card title={<span className="text-base">{t("genes.genomicLocation")}</span>}>
+                        <Descriptions
+                          size="small"
+                          column={1}
+                          items={[
+                            {
+                              key: "chromosome",
+                              label: t("genes.chromosomeLabel"),
+                              children: <span className="font-mono">{gene.chromosome}</span>,
+                            },
+                            {
+                              key: "position",
+                              label: t("genes.position"),
+                              children: (
+                                <span className="font-mono">
+                                  {formatPosition(gene.start_pos)}–{formatPosition(gene.end_pos)}
+                                </span>
+                              ),
+                            },
+                            {
+                              key: "length",
+                              label: "Length",
+                              children: (
+                                <span className="font-mono">{formatMb(gene.end_pos - gene.start_pos)}</span>
+                              ),
+                            },
+                            {
+                              key: "strand",
+                              label: t("genes.strand"),
+                              children: <span className="font-mono">{gene.strand}</span>,
+                            },
+                          ]}
+                        />
+                      </Card>
+                    </ScaleIn>
 
-            {/* ── Overview Tab ── */}
-            <TabsContent value="overview">
-              <div className="grid gap-4 lg:grid-cols-3">
-                <ScaleIn>
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-base">
-                        {t("genes.genomicLocation")}
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-2 text-sm">
-                      <DetailRow
-                        label={t("genes.chromosomeLabel")}
-                        value={<span className="font-mono">{gene.chromosome}</span>}
-                      />
-                      <DetailRow
-                        label={t("genes.position")}
-                        value={
-                          <span className="font-mono">
-                            {formatPosition(gene.start_pos)}–{formatPosition(gene.end_pos)}
-                          </span>
-                        }
-                      />
-                      <DetailRow
-                        label="Length"
-                        value={
-                          <span className="font-mono">
-                            {formatMb(gene.end_pos - gene.start_pos)}
-                          </span>
-                        }
-                      />
-                      <DetailRow
-                        label={t("genes.strand")}
-                        value={<span className="font-mono">{gene.strand}</span>}
-                      />
-                    </CardContent>
-                  </Card>
-                </ScaleIn>
+                    <ScaleIn delay={80}>
+                      <Card title={<span className="text-base">{t("genes.variantSummary")}</span>}>
+                        <Descriptions
+                          size="small"
+                          column={1}
+                          items={[
+                            {
+                              key: "variant_count",
+                              label: t("genes.variantCount"),
+                              children: (
+                                <span className="font-mono tabular-nums">
+                                  {(gene.variant_count ?? 0).toLocaleString()}
+                                </span>
+                              ),
+                            },
+                            {
+                              key: "high_impact",
+                              label: t("genes.highImpactVariants"),
+                              children: (
+                                <span className="font-mono tabular-nums text-impact-high">
+                                  {(gene.high_impact_variants ?? 0).toLocaleString()}
+                                </span>
+                              ),
+                            },
+                            {
+                              key: "snp_count",
+                              label: t("genes.snpCount"),
+                              children: (
+                                <span className="font-mono tabular-nums">
+                                  {(gene.snp_count ?? 0).toLocaleString()}
+                                </span>
+                              ),
+                            },
+                            {
+                              key: "indel_count",
+                              label: t("genes.indelCount"),
+                              children: (
+                                <span className="font-mono tabular-nums">
+                                  {(gene.indel_count ?? 0).toLocaleString()}
+                                </span>
+                              ),
+                            },
+                            {
+                              key: "mutant_line_count",
+                              label: t("genes.mutantLineCount"),
+                              children: (
+                                <span className="font-mono tabular-nums">
+                                  {(gene.mutant_line_count ?? 0).toLocaleString()}
+                                </span>
+                              ),
+                            },
+                          ]}
+                        />
+                      </Card>
+                    </ScaleIn>
 
-                <ScaleIn delay={80}>
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-base">
-                        {t("genes.variantSummary")}
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-2 text-sm">
-                      <DetailRow
-                        label={t("genes.variantCount")}
-                        value={
-                          <span className="font-mono tabular-nums">
-                            {(gene.variant_count ?? 0).toLocaleString()}
-                          </span>
-                        }
-                      />
-                      <DetailRow
-                        label={t("genes.highImpactVariants")}
-                        value={
-                          <span className="font-mono tabular-nums text-impact-high">
-                            {(gene.high_impact_variants ?? 0).toLocaleString()}
-                          </span>
-                        }
-                      />
-                      <DetailRow
-                        label={t("genes.snpCount")}
-                        value={
-                          <span className="font-mono tabular-nums">
-                            {(gene.snp_count ?? 0).toLocaleString()}
-                          </span>
-                        }
-                      />
-                      <DetailRow
-                        label={t("genes.indelCount")}
-                        value={
-                          <span className="font-mono tabular-nums">
-                            {(gene.indel_count ?? 0).toLocaleString()}
-                          </span>
-                        }
-                      />
-                      <DetailRow
-                        label={t("genes.mutantLineCount")}
-                        value={
-                          <span className="font-mono tabular-nums">
-                            {(gene.mutant_line_count ?? 0).toLocaleString()}
-                          </span>
-                        }
-                      />
-                    </CardContent>
-                  </Card>
-                </ScaleIn>
-
-                <ScaleIn delay={160}>
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-base">
-                        {t("genes.generalInfo")}
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-2 text-sm">
-                      <DetailRow
-                        label="Biotype"
-                        value={<span className="font-mono">{gene.biotype}</span>}
-                      />
-                      <DetailRow
-                        label="Source"
-                        value={
-                          <span className="font-mono">{gene.source ?? "—"}</span>
-                        }
-                      />
-                      <DetailRow
-                        label="Annotation"
-                        value={<span className="font-mono">Wm82.a4.v1</span>}
-                      />
-                    </CardContent>
-                  </Card>
-                </ScaleIn>
-              </div>
-
-              <Card className="mt-4">
-                <CardHeader>
-                  <CardTitle className="text-base">
-                    {t("genes.geneVariants")}
-                  </CardTitle>
-                  <CardDescription>
-                    Effect breakdown for this gene
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                    <EffectPill
-                      label={t("genes.nonsenseCount")}
-                      value={gene.nonsense_count ?? 0}
-                      tone="high"
-                    />
-                    <EffectPill
-                      label={t("genes.missenseCount")}
-                      value={gene.missense_count ?? 0}
-                      tone="moderate"
-                    />
-                    <EffectPill
-                      label={t("genes.synonymousCount")}
-                      value={gene.synonymous_count ?? 0}
-                      tone="low"
-                    />
-                    <EffectPill
-                      label={t("genes.frameshiftCount")}
-                      value={gene.frameshift_count ?? 0}
-                      tone="high"
-                    />
+                    <ScaleIn delay={160}>
+                      <Card title={<span className="text-base">{t("genes.generalInfo")}</span>}>
+                        <Descriptions
+                          size="small"
+                          column={1}
+                          items={[
+                            {
+                              key: "biotype",
+                              label: "Biotype",
+                              children: <span className="font-mono">{gene.biotype}</span>,
+                            },
+                            {
+                              key: "source",
+                              label: "Source",
+                              children: <span className="font-mono">{gene.source ?? "—"}</span>,
+                            },
+                            {
+                              key: "annotation",
+                              label: "Annotation",
+                              children: <span className="font-mono">Wm82.a4.v1</span>,
+                            },
+                          ]}
+                        />
+                      </Card>
+                    </ScaleIn>
                   </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
+                ),
+              },
+              {
+                key: "expression",
+                label: t("genes.tabs.expression"),
+                children: (
+                  <ScaleIn>
+                    {expressionQuery.isLoading ? (
+                      <Skeleton active paragraph={{ rows: 8 }} title={false} />
+                    ) : expressions.length === 0 ? (
+                      <Empty
+                        image={<BarChart3 className="size-10 text-muted-foreground" aria-hidden />}
+                        description={t("genes.expression.no_data")}
+                        className="py-10"
+                      />
+                    ) : (
+                      <div className="space-y-6">
+                        <React.Suspense fallback={<Skeleton active paragraph={{ rows: 8 }} title={false} />}>
+                          <ExpressionBarChart data={barChartData} />
+                        </React.Suspense>
+                        <Table<ExpressionRecord>
+                          rowKey="library_id"
+                          size="small"
+                          columns={expressionColumns}
+                          dataSource={expressions}
+                          pagination={false}
+                          locale={{ emptyText: t("genes.expression.no_data") }}
+                        />
+                      </div>
+                    )}
+                  </ScaleIn>
+                ),
+              },
+              {
+                key: "homologs",
+                label: t("genes.tabs.homologs"),
+                children: (
+                  <ScaleIn>
+                    {homologQuery.isLoading ? (
+                      <Skeleton active paragraph={{ rows: 6 }} title={false} />
+                    ) : homologs.length === 0 ? (
+                      <Empty
+                        image={<Dna className="size-10 text-muted-foreground" aria-hidden />}
+                        description={t("genes.homologs.no_data")}
+                        className="py-10"
+                      />
+                    ) : (
+                      <Table<HomologRecord>
+                        rowKey={(row) => `${row.species}-${row.gene_id}`}
+                        size="small"
+                        columns={homologColumns}
+                        dataSource={homologs}
+                        pagination={false}
+                        locale={{ emptyText: t("genes.homologs.no_data") }}
+                      />
+                    )}
+                  </ScaleIn>
+                ),
+              },
+            ];
+            return <Tabs defaultActiveKey="overview" className="mt-8" items={tabItems} />;
+          })()}
 
-            {/* ── Expression Tab ── */}
-            <TabsContent value="expression">
-              <ScaleIn>
-                {expressionQuery.isLoading ? (
-                  <Skeleton className="h-72 w-full" />
-                ) : expressions.length === 0 ? (
-                  <EmptyState
-                    icon={BarChart3}
-                    title={t("genes.expression.no_data")}
-                  />
-                ) : (
-                  <div className="space-y-6">
-                    <React.Suspense
-                      fallback={<Skeleton className="h-72 w-full" />}
-                    >
-                      <ExpressionBarChart data={barChartData} />
-                    </React.Suspense>
-                    <DataTable
-                      columns={expressionColumns}
-                      data={expressions}
-                      ariaLabel={t("genes.expression.library")}
-                    />
-                  </div>
-                )}
-              </ScaleIn>
-            </TabsContent>
-
-            {/* ── Homologs Tab ── */}
-            <TabsContent value="homologs">
-              <ScaleIn>
-                {homologQuery.isLoading ? (
-                  <Skeleton className="h-64 w-full" />
-                ) : homologs.length === 0 ? (
-                  <EmptyState
-                    icon={Dna}
-                    title={t("genes.homologs.no_data")}
-                  />
-                ) : (
-                  <DataTable
-                    columns={homologColumns}
-                    data={homologs}
-                    ariaLabel={t("genes.homologs.species")}
-                  />
-                )}
-              </ScaleIn>
-            </TabsContent>
-          </Tabs>
+          <Card className="mt-4">
+            <Card.Meta
+              title={<span className="text-base">{t("genes.geneVariants")}</span>}
+              description={
+                <Typography.Text type="secondary">Effect breakdown for this gene</Typography.Text>
+              }
+            />
+            <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+              <EffectPill
+                label={t("genes.nonsenseCount")}
+                value={gene.nonsense_count ?? 0}
+                tone="high"
+              />
+              <EffectPill
+                label={t("genes.missenseCount")}
+                value={gene.missense_count ?? 0}
+                tone="moderate"
+              />
+              <EffectPill
+                label={t("genes.synonymousCount")}
+                value={gene.synonymous_count ?? 0}
+                tone="low"
+              />
+              <EffectPill
+                label={t("genes.frameshiftCount")}
+                value={gene.frameshift_count ?? 0}
+                tone="high"
+              />
+            </div>
+          </Card>
         </>
       )}
-    </div>
-  );
-}
-
-function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-between gap-4">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="text-right">{value}</span>
     </div>
   );
 }

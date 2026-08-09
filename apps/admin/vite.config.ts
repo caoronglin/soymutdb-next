@@ -44,10 +44,17 @@ export default defineConfig({
                     ) {
                         return "pro";
                     }
+                    // rc-* 基础组件（rc-table / rc-select / rc-pagination / rc-tree /
+                    // rc-picker / rc-virtual-list 等）拆到独立 rc chunk。
+                    // antd 与 pro-components 都依赖它们，合入 antd chunk 曾使
+                    // antd chunk 达 ~397KB gzip（G2 预算 280KB）；拆出后 antd
+                    // chunk 只含 antd 本体 + @ant-design/icons + cssinjs + dayjs。
+                    if (id.includes("node_modules/rc-")) {
+                        return "rc";
+                    }
                     if (
                         id.includes("node_modules/antd") ||
                         id.includes("node_modules/@ant-design") ||
-                        id.includes("node_modules/rc-") ||
                         id.includes("node_modules/dayjs")
                     ) {
                         return "antd";
