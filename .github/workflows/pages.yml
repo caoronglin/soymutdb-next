@@ -55,6 +55,10 @@ jobs:
         env:
           VITE_API_BASE_URL: ${{ secrets.API_BASE_URL }}
           VITE_CDN_ENABLED: "false"
+          # JBrowse app URL (must match CSP frame-src). Set the repository
+          # secret JBROWSE_URL (e.g. https://<site>/soymutdb-jbrowse/).
+          # Unset -> iframe falls back to localhost:5175 (blocked by CSP).
+          VITE_JBROWSE_URL: ${{ secrets.JBROWSE_URL }}
           # Content snapshot for SSG content pages (news/about).
           # Set the repository secret CONTENT_SNAPSHOT_URL to the production
           # API endpoint (e.g. https://api.example.com/api/v1/content/snapshot).

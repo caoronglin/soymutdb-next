@@ -125,3 +125,15 @@ Slow-network / CN-network tips:
   it is tolerated + recorded in the report. Deploying with the
   `API_BASE_URL` / `VITE_JBROWSE_URL` secrets set removes these classes
   entirely — see the workflow's build step in `.github/workflows/pages.yml`.
+
+## 生产 secrets 配置清单（API 就绪后执行）
+
+| Secret | 用途 | 示例 | 设置命令 |
+|---|---|---|---|
+| `API_BASE_URL` | 前端 API 基址（不带路径） | `https://api.soymutdb.org` | `gh secret set API_BASE_URL --repo caoronglin/soymutdb-next` |
+| `JBROWSE_URL` | JBrowse 部署地址（须与 CSP frame-src 一致） | `https://caoronglin.github.io/soymutdb-jbrowse/` | `gh secret set JBROWSE_URL --repo caoronglin/soymutdb-next` |
+| `CONTENT_SNAPSHOT_URL` | 内容快照端点（SSG 内容页） | `https://api.soymutdb.org/api/v1/content/snapshot` | `gh secret set CONTENT_SNAPSHOT_URL --repo caoronglin/soymutdb-next` |
+
+设置后 push main（或手动重跑 pages.yml）→ 部署完成自动触发 E2E Smoke。
+
+**Smoke 语义**：`API_BASE_URL` 未配置时同源 API 404 记为报告不失败（SPA 相对 /api/v1 回退 + GitHub Pages 404）；一旦检测到跨域 API 请求（已配置），API 404 变为硬失败。静态资源（js/css/fonts/images）404 永远是硬失败。
