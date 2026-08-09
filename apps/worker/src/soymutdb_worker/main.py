@@ -4,8 +4,8 @@ Fixes vs. quartz reference:
 - beat_schedule: ``soymutdb_worker.tasks.exports.cleanup_old_exports`` →
   ``soymutdb_worker.tasks.export.cleanup_old_exports`` (module is ``export``,
   not ``exports``).
-- autodiscover: removed non-existent ``indexing`` and ``notifications``
-  modules; added ``cleanup``.
+- autodiscover: removed non-existent ``indexing`` module; ``notifications``
+  was re-added in D2 (notification centre task, queue ``default``).
 - task_routes: expanded to the seven runtime queues (ingest, export, stats,
   cleanup, blast, analyses, default).
 """
@@ -46,6 +46,7 @@ celery_app = Celery(
         "soymutdb_worker.tasks.gwas",
         "soymutdb_worker.tasks.static_pages",
         "soymutdb_worker.tasks.analyses",
+        "soymutdb_worker.tasks.email",
     ],
 )
 
@@ -102,6 +103,7 @@ celery_app.conf.update(
         "soymutdb_worker.tasks.cleanup.*": {"queue": "cleanup"},
         "soymutdb_worker.tasks.analyses.*": {"queue": "analyses"},
         "soymutdb_worker.tasks.gwas.*": {"queue": "analyses"},
+        # Email tasks intentionally have NO route: they run on the default queue.
     },
     task_default_queue="default",
 )
@@ -110,7 +112,8 @@ celery_app.conf.update(
 # Task auto-discovery
 # ---------------------------------------------------------------------------
 
-# Only discover modules that actually exist (removed indexing/notifications).
+# Only discover modules that actually exist (removed indexing; notifications
+# restored in D2).
 celery_app.autodiscover_tasks(
     [
         "soymutdb_worker.tasks.ingest",
@@ -118,9 +121,11 @@ celery_app.autodiscover_tasks(
         "soymutdb_worker.tasks.export",
         "soymutdb_worker.tasks.stats",
         "soymutdb_worker.tasks.cleanup",
+        "soymutdb_worker.tasks.email",
         "soymutdb_worker.tasks.expression",
         "soymutdb_worker.tasks.homolog",
         "soymutdb_worker.tasks.gwas",
+        "soymutdb_worker.tasks.notifications",
         "soymutdb_worker.tasks.static_pages",
     ]
 )

@@ -43,6 +43,9 @@ export interface NewsSummary {
 export interface NewsDetail extends NewsSummary {
   content_en: string;
   content_zh: string | null;
+  /** Visibility window — returned since D4 for the admin edit form. */
+  visible_from: string | null;
+  visible_to: string | null;
 }
 
 /** Paginated public news list. */

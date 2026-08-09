@@ -37,6 +37,22 @@ import { fetchSraRun, fetchSraSamples, type SraRunInfo } from "@soymutdb/api-cli
 import { FadeUp, useReveal } from "../components/route-motion";
 import { startViewTransition } from "../lib/view-transitions";
 
+// <soymutdb-widget> is a custom element registered in main.tsx
+// (side-effect import of ../components/soymutdb-widget). Declare it so
+// JSX usage type-checks under React 19.
+/* eslint-disable @typescript-eslint/no-namespace */
+declare module "react" {
+  namespace JSX {
+    interface IntrinsicElements {
+      "soymutdb-widget": React.DetailedHTMLProps<
+        React.HTMLAttributes<HTMLElement> & { name?: string; params?: string },
+        HTMLElement
+      >;
+    }
+  }
+}
+/* eslint-enable @typescript-eslint/no-namespace */
+
 const HISTORY_KEY = "soymutdb:sra-history";
 const HISTORY_LIMIT = 10;
 const DEFAULT_RUN = "SRR30334525";

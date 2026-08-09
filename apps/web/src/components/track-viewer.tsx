@@ -284,6 +284,7 @@ export function TrackViewer({
 
       const viewStart = v.animStart;
       const viewEnd = v.animEnd;
+      const viewWidth = viewEnd - viewStart;
 
       // Layout: ruler at top (24px), features middle (h/2), density bottom (h/2 - 24)
       const rulerH = 24;

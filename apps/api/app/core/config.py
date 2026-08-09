@@ -206,6 +206,28 @@ class Settings(BaseSettings):
     admin_email: str = "admin@soymutdb.local"
     admin_password: str = "admin123"
 
+    # ---------------------------------------------------------------- SMTP
+    # Email delivery is opt-in: ``smtp_enabled`` defaults to ``False`` so
+    # dev/staging never send real mail.  With SMTP disabled the worker
+    # renders the messages and writes them under ``logs/emails/`` instead
+    # (locally verifiable).  Production sets SOYMUTDB_SMTP_ENABLED=true plus
+    # the SMTP_* credentials (see deploy/.env.example).
+    smtp_enabled: bool = False
+    smtp_host: str = "localhost"
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_from_email: str = "no-reply@soymutdb.local"
+    smtp_use_tls: bool = True
+    #: Admin notification recipient for contact modules (seed requests …);
+    #: falls back to ``admin_email`` when unset.
+    smtp_admin_to: str | None = None
+
+    @property
+    def smtp_admin_to_effective(self) -> str:
+        """Effective admin notification address (``smtp_admin_to`` or ``admin_email``)."""
+        return self.smtp_admin_to or self.admin_email
+
     # --------------------------------------------------------------- CDN
     cdn_enabled: bool = False
     cdn_urls: list[str] = Field(default_factory=lambda: [])

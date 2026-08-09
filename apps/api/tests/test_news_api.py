@@ -427,6 +427,96 @@ class TestAdminCrud:
         assert updated.status == "draft"
         assert updated.is_published is False
 
+    async def test_update_explicit_null_clears_optional_fields(self):
+        """D4 null semantics: explicit ``null`` CLEARS nullable fields."""
+        from datetime import UTC, datetime
+
+        from app.schemas.news import NewsUpdate
+        from app.services.news_service import NewsService
+
+        window = datetime(2026, 1, 1, tzinfo=UTC)
+        article = _make_article(
+            article_id=7,
+            slug="old",
+            category="news",
+            carousel_group="homepage",
+            visible_from=window,
+            visible_to=window,
+        )
+        article.cover_url = "https://cdn.example/x.jpg"
+        article.title_zh = "旧标题"
+        article.content_zh = "旧正文"
+        session = FakeDbSession(articles=[article], user=_make_user())
+        updated = await NewsService().update_article(
+            session,
+            7,
+            NewsUpdate(
+                category=None,
+                cover_url=None,
+                carousel_group=None,
+                visible_from=None,
+                visible_to=None,
+                title_zh=None,
+                content_zh=None,
+            ),
+            uuid.uuid4(),
+        )
+        assert updated.category is None
+        assert updated.cover_url is None
+        assert updated.carousel_group is None
+        assert updated.visible_from is None
+        assert updated.visible_to is None
+        assert updated.title_zh is None
+        assert updated.content_zh is None
+        # Non-nullable fields stay untouched.
+        assert updated.slug == "old"
+        assert updated.title_en == "Test Title"
+
+    async def test_update_missing_fields_are_kept(self):
+        """D4 null semantics: absent fields are left untouched."""
+        from datetime import UTC, datetime
+
+        from app.schemas.news import NewsUpdate
+        from app.services.news_service import NewsService
+
+        window = datetime(2026, 1, 1, tzinfo=UTC)
+        article = _make_article(
+            article_id=7,
+            slug="old",
+            category="news",
+            carousel_group="homepage",
+            visible_from=window,
+            visible_to=window,
+        )
+        article.cover_url = "https://cdn.example/x.jpg"
+        session = FakeDbSession(articles=[article], user=_make_user())
+        updated = await NewsService().update_article(
+            session, 7, NewsUpdate(title_en="Only Title"), uuid.uuid4()
+        )
+        assert updated.title_en == "Only Title"
+        assert updated.category == "news"
+        assert updated.cover_url == "https://cdn.example/x.jpg"
+        assert updated.carousel_group == "homepage"
+        assert updated.visible_from == window
+        assert updated.visible_to == window
+
+    async def test_update_explicit_null_on_non_nullable_ignored(self):
+        """D4 null semantics: ``null`` on a NOT NULL column means "no change"."""
+        from app.schemas.news import NewsUpdate
+        from app.services.news_service import NewsService
+
+        article = _make_article(article_id=7, slug="old")
+        session = FakeDbSession(articles=[article], user=_make_user())
+        updated = await NewsService().update_article(
+            session,
+            7,
+            NewsUpdate(title_en=None, slug=None, featured_sort=None),
+            uuid.uuid4(),
+        )
+        assert updated.title_en == "Test Title"
+        assert updated.slug == "old"
+        assert updated.featured_sort == 0
+
     async def test_update_missing_404(self):
         from app.core.exceptions import NotFoundError
         from app.schemas.news import NewsUpdate
@@ -437,6 +527,26 @@ class TestAdminCrud:
             await NewsService().update_article(
                 session, 99, NewsUpdate(title_en="x"), uuid.uuid4()
             )
+
+    async def test_detail_response_includes_visibility_window(self):
+        """D4: NewsDetailResponse carries visible_from/visible_to for the
+        admin edit form to pre-fill the scheduled visibility window."""
+        from datetime import UTC, datetime
+
+        from app.schemas.news import NewsDetailResponse
+
+        window = datetime(2026, 1, 1, tzinfo=UTC)
+        article = _make_article(
+            article_id=7, slug="old", visible_from=window, visible_to=window
+        )
+        detail = NewsDetailResponse.model_validate(article)
+        assert detail.visible_from == window
+        assert detail.visible_to == window
+        assert detail.content_en == "Test body"
+
+        empty = NewsDetailResponse.model_validate(_make_article(article_id=8))
+        assert empty.visible_from is None
+        assert empty.visible_to is None
 
     async def test_delete_removes_article(self):
         from app.services.news_service import NewsService
@@ -656,6 +766,51 @@ class TestAdminRBAC:
         assert r.status_code == 200
         assert r.json()["title_en"] == "Updated"
 
+    async def test_admin_update_response_includes_visibility_window(
+        self, api_client, api_app
+    ):
+        """D4: PUT response serialises visible_from/visible_to so the edit
+        form can re-fill the scheduled visibility window."""
+        from datetime import UTC, datetime
+
+        user = _make_user(RoleName.RESEARCHER)
+        api_app.state.fake_session.user = user
+        window = datetime(2026, 1, 1, tzinfo=UTC)
+        api_app.state.fake_session.articles = [
+            _make_article(
+                article_id=3, slug="a", visible_from=window, visible_to=window
+            )
+        ]
+        r = await api_client.put(
+            "/api/v1/admin/news/3",
+            json={"cover_url": None},
+            headers=_auth_header(user),
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["visible_from"] == "2026-01-01T00:00:00Z"
+        assert body["visible_to"] == "2026-01-01T00:00:00Z"
+
+    async def test_admin_update_explicit_null_clears_cover_url(
+        self, api_client, api_app
+    ):
+        """D4: PUT with explicit null clears nullable fields (HTTP round-trip)."""
+        user = _make_user(RoleName.RESEARCHER)
+        api_app.state.fake_session.user = user
+        article = _make_article(article_id=3, slug="a")
+        article.cover_url = "https://cdn.example/x.jpg"
+        article.category = "news"
+        api_app.state.fake_session.articles = [article]
+        r = await api_client.put(
+            "/api/v1/admin/news/3",
+            json={"cover_url": None, "category": None},
+            headers=_auth_header(user),
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["cover_url"] is None
+        assert body["category"] is None
+
     async def test_admin_researcher_delete_204(self, api_client, api_app):
         user = _make_user(RoleName.RESEARCHER)
         api_app.state.fake_session.user = user
@@ -784,3 +939,29 @@ class TestAdminRBAC:
         body = r.json()
         assert body["page"] == 2
         assert body["page_size"] == 5
+
+    async def test_admin_list_accepts_category_and_search_params(
+        self, api_client, api_app
+    ):
+        """D4: the admin list endpoint accepts the category + search filters
+        the ProTable sends (backend service already supports them; verify
+        the HTTP wiring accepts the params without error)."""
+        user = _make_user(RoleName.RESEARCHER)
+        api_app.state.fake_session.user = user
+        api_app.state.fake_session.articles = [
+            _make_article(article_id=1, slug="soybean-trial", category="news"),
+            _make_article(article_id=2, slug="release-notes", category="update"),
+        ]
+        r = await api_client.get(
+            "/api/v1/admin/news",
+            params={"category": "news", "search": "soybean"},
+            headers=_auth_header(user),
+        )
+        assert r.status_code == 200
+        body = r.json()
+        # FakeDbSession returns all rows; real DB narrows via the service.
+        assert body["total"] == 2
+        assert {i["slug"] for i in body["items"]} == {
+            "soybean-trial",
+            "release-notes",
+        }

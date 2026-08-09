@@ -1,28 +1,68 @@
-# ⚠️ 非主路径（已废弃）：生产部署以 docker compose 为主路径，本 Conda
-# 裸进程部署仅保留作参考（见 deploy/linux/install.sh 头部说明）。
+# =====================================================================
+# SoyMutDB Worker — conda 环境定义（备选部署路径，D6 重新启用）
+# =====================================================================
+# 用法：
+#   conda env create -f deploy/conda/environment-worker.yml     # 首次创建
+#   conda env update -f deploy/conda/environment-worker.yml     # 依赖更新
+#
+# 定位：
+#   - 主路径是 docker compose；本环境用于无 docker / 离线 / 本地开发
+#     服务器，完整指南见 deploy/conda/README.md。
+#   - 依赖清单与 apps/worker/pyproject.toml [project.dependencies] 对齐，
+#     版本取 pyproject 下限（>= 约束）。
+#   - pyproject 中注释的 ops 依赖（fastp CLI、EMMAX/GEMMA 引擎二进制）
+#     不在 pip 清单内：conda 模式下由 README 说明如何用 bioconda 或
+#     宿主机软件补齐（blast/samtools/bcftools/tabix/bedtools/fastp 等）。
 name: soymutdb-worker
 channels:
   - conda-forge
-  - bioconda
-  - defaults
 dependencies:
-  - python=3.13.8
+  - python=3.13          # pyproject requires-python = ">=3.13"
   - pip>=24.0
-  - uv>=0.4.0
-  # Bioinformatics tools
-  - blast>=2.16.0
-  - samtools>=1.20
-  - bcftools>=1.20
-  - htslib>=1.20
-  - tabix>=1.20
-  - bedtools>=2.31
-  # Compression
-  - pigz>=2.8
-  - zstd>=1.5
-  # PostgreSQL driver
-  - libpq>=16.0
-  # OpenSSL
-  - openssl>=3.0
-  - ca-certificates
+  # 需要 bioconda CLI 工具链（blast/samtools/bcftools/tabix/bedtools）时，
+  # 可取消下面一行并追加：conda install -n soymutdb-worker -c bioconda \
+  #   blast samtools bcftools tabix bedtools
+  # - bioconda
   - pip:
-      - -e ../../apps/worker
+      # ---- 任务框架 / 消息 ----
+      - celery[redis]>=5.4.0
+      - redis>=5.2.0
+      - clickhouse-connect>=0.8.0
+      - boto3>=1.35.0
+      - pydantic>=2.10.0
+      - structlog>=24.4.0
+      # ---- 数据库（PG）----
+      - sqlalchemy>=2.0.36
+      - psycopg2-binary>=2.9.0
+      # ---- 报告 / 清洗 ----
+      - jinja2>=3.1.0
+      - bleach>=6.0.0
+      - dominate>=2.9.0
+      # ---- 生物信息库 ----
+      - cyvcf2>=0.31.0
+      - pysam>=0.22.0
+      - pyfaidx>=0.8.0
+      - biopython>=1.84
+      - polars>=1.16.0
+      - pyarrow>=18.0.0
+      # ---- analyses 队列（在线分析；compose 中该队列尚未接入任何
+      #      worker 服务，生产默认无流量 —— 本组按 pyproject 全量列出，
+      #      磁盘紧张的服务器可自行注释掉 scanpy/anndata/leidenalg/
+      #      python-igraph/matplotlib 一行组）----
+      - scanpy>=1.10,<1.13
+      - anndata>=0.10,<0.13
+      - leidenalg>=0.10,<0.11
+      - python-igraph>=0.11,<0.13
+      - matplotlib>=3.8
+      - prometheus-client>=0.21.0
+      # ---- GWAS / 数值 ----
+      - numpy>=1.26
+      # ---- dev（可选；pyproject [project.optional-dependencies].dev）----
+      - pytest>=8.0.0
+      - pytest-cov>=5.0.0
+      - ruff>=0.8.0
+      # mypy>=1.13.0 未列入（需要时自行添加）
+      # ---- 可选 notify 组（默认不装）----
+      # 任务完成后发桌面通知（如 GNOME/KDE 通知）。pyproject 无此依赖，
+      # 属 conda 部署增强，需要时取消下面一行注释：
+      # - plyer>=2.1.0

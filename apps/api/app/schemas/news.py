@@ -72,6 +72,10 @@ class NewsDetailResponse(NewsSummaryResponse):
 
     content_en: str
     content_zh: str | None = None
+    # Visibility window — required by the admin edit form to re-fill the
+    # scheduled publishing dates (B3 gap fixed in D4).
+    visible_from: datetime | None = None
+    visible_to: datetime | None = None
 
 
 class NewsListResponse(BaseModel):

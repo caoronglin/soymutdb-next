@@ -38,7 +38,7 @@ function isValidJson(s: string): boolean {
 }
 
 export default function WidgetPreviewPage() {
-  const search = useSearch({ from: "/widget-preview" }) as { name?: string };
+  const search = useSearch({ from: "/_auth/widget-preview" }) as { name?: string };
   const [selectedName, setSelectedName] = useState<string>(search.name ?? "");
   const [paramsJson, setParamsJson] = useState<string>("{}");
   const [previewResult, setPreviewResult] = useState<WidgetPreviewResponse | null>(null);

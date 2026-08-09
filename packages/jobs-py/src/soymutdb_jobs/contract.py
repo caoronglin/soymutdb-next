@@ -21,6 +21,11 @@ IMPORT_HOMOLOG_TASK: Final[str] = "soymutdb_worker.tasks.homolog.import_homolog_
 ANALYSIS_FASTP_TASK: Final[str] = "soymutdb_worker.tasks.analyses.run_fastp"
 ANALYSIS_SCANPY_TASK: Final[str] = "soymutdb_worker.tasks.analyses.run_scanpy"
 GWAS_RUN_TASK: Final[str] = "soymutdb_worker.tasks.gwas.run_gwas"
+#: Email dispatch for contact-style modules (seed requests).  Runs on the
+#: ``default`` queue (no task_routes entry needed).
+SEED_REQUEST_EMAIL_TASK: Final[str] = (
+    "soymutdb_worker.tasks.email.send_seed_request_email"
+)
 
 # ---------------------------------------------------------------------------
 # Celery queues (must match ``task_routes`` in the worker application)
@@ -66,6 +71,7 @@ __all__ = [
     "IMPORT_HOMOLOG_TASK",
     "PAYLOAD_VERSION",
     "QUEUE_ANALYSES",
+    "SEED_REQUEST_EMAIL_TASK",
     "QUEUE_BLAST",
     "QUEUE_CLEANUP",
     "QUEUE_DEFAULT",

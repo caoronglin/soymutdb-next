@@ -1,0 +1,37 @@
+{% extends "base.html.j2" %}
+{% block title %}SoyMutDB — New seed request{% endblock %}
+{% block body %}
+<h1>New seed request</h1>
+<p>
+  A new seed request has been submitted by <strong>{{ name }}</strong>
+  ({{ email }}). Please review the application and update its status in the
+  admin panel.
+</p>
+<table role="presentation" class="summary" cellpadding="0" cellspacing="0" border="0">
+  <tr><th>Request ID</th><td>{{ request_id }}</td></tr>
+  <tr><th>Name</th><td>{{ name }}</td></tr>
+  <tr><th>Email</th><td>{{ email }}</td></tr>
+  <tr><th>Institution</th><td>{{ institution }}</td></tr>
+  <tr><th>Country</th><td>{{ country }}</td></tr>
+  <tr><th>Gene IDs</th><td>
+    {{ gene_count }} requested
+    <ul class="gene-list">
+      {% for gene_id in gene_ids %}<li>{{ gene_id }}</li>{% endfor %}
+    </ul>
+  </td></tr>
+  {% if notes %}<tr><th>Notes</th><td>{{ notes }}</td></tr>{% endif %}
+  <tr><th>Submitted</th><td>{{ created_at }}</td></tr>
+</table>
+{% if admin_url %}
+<p>
+  <a class="btn" href="{{ admin_url }}">Manage seed requests →</a>
+</p>
+{% else %}
+<p class="muted">
+  Manage requests at <strong>/admin/seed-requests</strong>.
+</p>
+{% endif %}
+{% endblock %}
+{% block footer_extra %}
+Seed request {{ request_id }} · pending review.
+{% endblock %}

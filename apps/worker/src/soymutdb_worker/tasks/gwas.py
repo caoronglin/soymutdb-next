@@ -53,6 +53,7 @@ from soymutdb_worker.config import get_setting
 from soymutdb_worker.main import celery_app
 from soymutdb_worker.repositories import GwasJobStore
 from soymutdb_worker.shared import GWAS_RUN_TASK, JobPayload
+from soymutdb_worker.tasks.notifications import notify_completed, notify_failed
 from soymutdb_worker.utils.db import get_db
 from soymutdb_worker.utils.html_report import HTMLReport, embed_json
 from soymutdb_worker.utils.s3 import (
@@ -810,6 +811,10 @@ def run_gwas(
                     job_id, result_summary=result_summary
                 )
 
+            # In-app + optional desktop notification (D2); anonymous jobs
+            # (no user_id) are skipped internally.
+            notify_completed(job_id, kind="gwas")
+
             presigned = generate_presigned_url(
                 f"{GWAS_S3_BUCKET}/{prefix}/Manhattan_QQ.html", expires_in=86400
             )
@@ -837,6 +842,7 @@ def run_gwas(
                 GwasJobStore(session).mark_failed(job_id, error=error_text)
         except Exception as db_err:
             logger.error("Failed to update GWAS job status: %s", db_err)
+        notify_failed(job_id, kind="gwas", error=error_text)
         raise
 
 

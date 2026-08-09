@@ -346,33 +346,46 @@ class NewsService:
     async def update_article(
         self, db: AsyncSession, news_id: int, payload: NewsUpdate, user_id
     ) -> NewsArticle:
-        """Partial update with status/is_published double-write."""
-        article = await self._get_by_id(db, news_id)
+        """Partial update with status/is_published double-write.
 
-        if payload.title_en is not None:
+        Null semantics (D4 contract, via ``model_fields_set``):
+
+        - **Field absent from the request** -> left untouched.
+        - **Nullable field explicitly ``null``** (category, cover_url,
+          carousel_group, title_zh, content_zh, visible_from, visible_to)
+          -> cleared to NULL (e.g. removing a cover image).
+        - **Non-nullable field explicitly ``null``** (title_en, content_en,
+          slug, featured_sort, carousel_sort) -> ignored, previous value is
+          kept (the DB columns are NOT NULL; a client sending ``null`` for
+          these means "no change", not "clear").
+        """
+        article = await self._get_by_id(db, news_id)
+        provided = payload.model_fields_set
+
+        # Non-nullable fields: null means "leave unchanged".
+        if "title_en" in provided and payload.title_en is not None:
             article.title_en = payload.title_en
-        if payload.title_zh is not None:
-            article.title_zh = payload.title_zh
-        if payload.content_en is not None:
+        if "content_en" in provided and payload.content_en is not None:
             article.content_en = payload.content_en
-        if payload.content_zh is not None:
-            article.content_zh = payload.content_zh
-        if payload.slug is not None:
+        if "slug" in provided and payload.slug is not None:
             article.slug = payload.slug
-        if payload.category is not None:
-            article.category = payload.category
-        if payload.cover_url is not None:
-            article.cover_url = payload.cover_url
-        if payload.featured_sort is not None:
+        if "featured_sort" in provided and payload.featured_sort is not None:
             article.featured_sort = payload.featured_sort
-        if payload.carousel_group is not None:
-            article.carousel_group = payload.carousel_group
-        if payload.carousel_sort is not None:
+        if "carousel_sort" in provided and payload.carousel_sort is not None:
             article.carousel_sort = payload.carousel_sort
-        if payload.visible_from is not None:
-            article.visible_from = payload.visible_from
-        if payload.visible_to is not None:
-            article.visible_to = payload.visible_to
+
+        # Nullable fields: explicit null clears, absent keeps.
+        for field in (
+            "title_zh",
+            "content_zh",
+            "category",
+            "cover_url",
+            "carousel_group",
+            "visible_from",
+            "visible_to",
+        ):
+            if field in provided:
+                setattr(article, field, getattr(payload, field))
 
         # status wins when both are supplied (status is the source of truth).
         if payload.status is not None:

@@ -14,6 +14,7 @@ from ...schemas.genomic import (
     GeneListParams,
     GeneListResponse,
 )
+from ...services.cache import get_or_set
 from ...services.gene_service import GeneService
 
 router = APIRouter(prefix="/genes", tags=["genes"])
@@ -24,8 +25,28 @@ service = GeneService()
 async def list_assemblies(
     db: AsyncSession = Depends(get_db),
 ) -> list[AssemblyResponse]:
-    """List all genome assemblies."""
-    return await service.list_assemblies(db)
+    """List all genome assemblies.
+
+    Read-hot query cached in Redis (default TTL) via cache-aside; a Redis
+    failure degrades to a direct query.  An empty assembly list is cached as
+    well (short-circuit for a freshly seeded database) — that empty-result
+    caching is the anti-cache-penetration behaviour shared by every
+    ``get_or_set`` call site: once a loader result (even an empty one) is
+    stored, repeated requests no longer hit the database until the TTL
+    expires.
+    """
+    payload = await get_or_set(
+        "genes:assemblies",
+        ttl=None,
+        loader=lambda: _load_assemblies(db),
+    )
+    return [AssemblyResponse.model_validate(item) for item in payload]
+
+
+async def _load_assemblies(db: AsyncSession) -> list[dict]:
+    """Fetch all assemblies as JSON payloads (loader for the Redis cache)."""
+    rows = await service.list_assemblies(db)
+    return [r.model_dump(mode="json") for r in rows]
 
 
 @router.get(

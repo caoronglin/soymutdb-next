@@ -8,6 +8,7 @@ import { useTranslation } from "react-i18next";
 import { App, Button, Card, Space, Spin, Typography } from "antd";
 import { EyeOutlined } from "@ant-design/icons";
 import { useParams, useRouter } from "@tanstack/react-router";
+import dayjs from "dayjs";
 import {
   getAdminNewsDetail,
   updateNews,
@@ -29,8 +30,10 @@ function toFormValues(detail: NewsDetail): Partial<NewsFormValues> {
     featured_sort: detail.featured_sort,
     carousel_group: detail.carousel_group ?? undefined,
     carousel_sort: detail.carousel_sort,
-    // visible_from / visible_to are NOT returned by the backend detail
-    // schema (B1 gap) — cannot prefill; kept empty in the edit form.
+    // visible_from / visible_to are returned by the backend detail schema
+    // since D4 — pre-fill the visibility window in the edit form.
+    visible_from: detail.visible_from ? dayjs(detail.visible_from) : null,
+    visible_to: detail.visible_to ? dayjs(detail.visible_to) : null,
   };
 }
 

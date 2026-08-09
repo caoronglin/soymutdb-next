@@ -1,0 +1,87 @@
+#!/usr/bin/env node
+/**
+ * Service Worker 生成脚本 — 构建链最后一步（apps/web/package.json "build"）
+ *
+ * 流程：
+ *   1. 扫描 dist/assets 下全部构建产物（排除 .gz / .map）→ precache 清单（相对路径）
+ *   2. CACHE_VERSION = 构建时间戳 + 清单内容 hash（产物内容变化 → 版本号轮换）
+ *   3. 读取 public/sw.js 模板，替换 __PRECACHE_MANIFEST__ / __CACHE_VERSION__
+ *   4. 输出 dist/sw.js，并同步刷新 dist/sw.js.gz（gzip-compress 在更早步骤运行，
+ *      它压缩的是未替换占位符的模板版本，这里必须覆盖，避免部署 stale 的 .gz）
+ *
+ * 路径约定：清单使用相对路径（assets/...），SW 运行时以 registration.scope 为
+ * 基准解析，因此 gh-pages 子路径部署（/soymutdb-next/）无需 vite base 配置。
+ *
+ * 使用：pnpm --filter @soymutdb/web build（自动串联）；也可单独
+ *       `node scripts/gen-sw.js`（在 apps/web 目录下）。
+ */
+
+import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { join, posix } from "node:path";
+import { createHash } from "node:crypto";
+import { gzipSync } from "node:zlib";
+
+/* ------------------------------------------------------------------ */
+/*  Configuration                                                     */
+/* ------------------------------------------------------------------ */
+
+const ROOT = process.cwd();
+const TEMPLATE = join(ROOT, "public", "sw.js");
+const DIST_DIR = join(ROOT, "dist");
+const ASSETS_DIR = join(DIST_DIR, "assets");
+const OUT_FILE = join(DIST_DIR, "sw.js");
+const OUT_GZ = `${OUT_FILE}.gz`;
+
+/* ------------------------------------------------------------------ */
+/*  Main                                                              */
+/* ------------------------------------------------------------------ */
+
+function main() {
+    if (!existsSync(TEMPLATE)) {
+        throw new Error(`[gen-sw] template not found: ${TEMPLATE}`);
+    }
+    if (!existsSync(ASSETS_DIR)) {
+        throw new Error(`[gen-sw] ${ASSETS_DIR} does not exist — run "vite build" first`);
+    }
+
+    // 1) precache 清单：dist/assets 下全部文件（Vite hash 产物），相对路径
+    const files = readdirSync(ASSETS_DIR)
+        .filter((f) => !f.endsWith(".gz") && !f.endsWith(".map"))
+        .sort();
+    const manifest = files.map((f) => posix.join("assets", f));
+
+    // 2) CACHE_VERSION：时间戳 + 清单内容 hash（hash 变化 → 版本轮换 → 旧静态缓存被清理）
+    const digest = createHash("sha256").update(manifest.join("\n")).digest("hex").slice(0, 8);
+    const timestamp = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
+    const version = `${timestamp}-${digest}`;
+
+    // 3) 读模板并替换占位符
+    let sw = readFileSync(TEMPLATE, "utf8");
+    const manifestJson = JSON.stringify(manifest, null, 4);
+    if (!sw.includes("__PRECACHE_MANIFEST__") || !sw.includes("__CACHE_VERSION__")) {
+        throw new Error("[gen-sw] template placeholders (__PRECACHE_MANIFEST__ / __CACHE_VERSION__) missing");
+    }
+    sw = sw.replace("__PRECACHE_MANIFEST__", manifestJson);
+    sw = sw.replace("__CACHE_VERSION__", version);
+
+    // 4) 输出 dist/sw.js + 同步 .gz（与 gzip-compress 相同规则：≥1KB 且压缩变小）
+    writeFileSync(OUT_FILE, sw, "utf8");
+    rmSync(OUT_GZ, { force: true }); // 旧 .gz 是模板版本，必须删除/重生成
+    if (Buffer.byteLength(sw) >= 1024) {
+        const gz = gzipSync(sw, { level: 9 });
+        if (gz.length < Buffer.byteLength(sw)) {
+            writeFileSync(OUT_GZ, gz);
+        }
+    }
+
+    console.log(`[gen-sw] wrote ${OUT_FILE} (${(Buffer.byteLength(sw) / 1024).toFixed(1)} KB)`);
+    console.log(`[gen-sw] cache version: ${version}`);
+    console.log(`[gen-sw] precache manifest: ${manifest.length} files (${manifest.slice(0, 3).join(", ")}${manifest.length > 3 ? ", …" : ""})`);
+}
+
+try {
+    main();
+} catch (err) {
+    console.error(String(err?.message ?? err));
+    process.exit(1);
+}

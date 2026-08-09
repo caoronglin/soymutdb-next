@@ -28,14 +28,23 @@ import {
   submitBlastJob,
   getBlastJobs,
   BLAST_PROGRAMS,
+  apiBaseUrl,
+  getAccessToken,
   type BlastJob,
 } from "@soymutdb/api-client";
 import { FadeUp } from "../components/route-motion";
+import { ensurePermission, showNotification } from "../lib/use-browser-notifications";
 import { z } from "zod";
 
 export const Route = createFileRoute("/blast")({
   component: BlastComponent,
 });
+
+// D5 pilot: the job list prefers the server-push stream
+// (GET /api/v1/jobs/events, SSE). Polling at this interval is the fallback
+// that only runs while the stream is unavailable.
+const POLL_INTERVAL_MS = 5_000;
+const ACTIVE_STATUSES = new Set(["pending", "running"]);
 
 /**
  * BlastDatabase response from the backend (GET /blast/databases) carries
@@ -113,11 +122,82 @@ function BlastComponent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [databasesQuery.data]);
 
+  const [sseAvailable, setSseAvailable] = React.useState(false);
+
   const jobsQuery = useQuery({
     queryKey: ["blast-jobs"],
     queryFn: () => getBlastJobs({ page: 1, page_size: 5 }),
     staleTime: 30_000,
+    // D5 pilot: polling is the fallback — it runs only while the SSE stream
+    // (GET /api/v1/jobs/events) is unavailable AND at least one job is still
+    // active. The D2 notification effect below keeps working on refetches.
+    refetchInterval: (query) => {
+      if (sseAvailable) return false;
+      const items = query.state.data?.items ?? [];
+      return items.some((job) => ACTIVE_STATUSES.has(job.status))
+        ? POLL_INTERVAL_MS
+        : false;
+    },
   });
+
+  // D5 pilot: server-push job updates via SSE (GET /api/v1/jobs/events).
+  // EventSource cannot set an Authorization header, so the in-memory access
+  // token travels as a short-lived query parameter (never persisted). Any
+  // stream failure closes the connection and falls back to polling; the
+  // connection is closed again when the component unmounts.
+  React.useEffect(() => {
+    const token = getAccessToken();
+    const url = new URL(`${apiBaseUrl}/jobs/events`, window.location.origin);
+    if (token) url.searchParams.set("access_token", token);
+    const es = new EventSource(url.toString());
+
+    es.addEventListener("open", () => setSseAvailable(true));
+    es.addEventListener("job_update", (event) => {
+      try {
+        const update = JSON.parse((event as MessageEvent).data) as {
+          job_type?: string;
+        };
+        // Only blast updates concern this page; analysis/gwas updates are
+        // ignored (their own pages will subscribe).
+        if (update.job_type === "blast") {
+          // Refresh immediately — covers the completed/failed transitions
+          // this pilot targets.
+          void queryClient.invalidateQueries({ queryKey: ["blast-jobs"] });
+        }
+      } catch {
+        // Malformed frame — ignore; the polling fallback still refreshes.
+      }
+    });
+    es.onerror = () => {
+      // SSE unavailable (proxy, auth expiry, server restart): fall back to
+      // polling and stop EventSource from reconnecting.
+      es.close();
+      setSseAvailable(false);
+    };
+
+    return () => {
+      es.close();
+      setSseAvailable(false);
+    };
+  }, [queryClient]);
+
+  // D2 pilot: fire an OS-level browser notification when a job transitions
+  // to completed while the user is watching (only after the first render,
+  // so pre-existing completed jobs don't re-notify).
+  const prevJobStatus = React.useRef<Map<string, string>>(new Map());
+  React.useEffect(() => {
+    const items = jobsQuery.data?.items ?? [];
+    for (const job of items) {
+      const prev = prevJobStatus.current.get(job.id);
+      prevJobStatus.current.set(job.id, job.status);
+      if (prev && prev !== "completed" && job.status === "completed") {
+        showNotification(
+          t("notifications.blastCompleted"),
+          `${job.program} · ${job.database}`,
+        );
+      }
+    }
+  }, [jobsQuery.data, t]);
 
   const submitMutation = useMutation({
     mutationFn: submitBlastJob,
@@ -128,6 +208,9 @@ function BlastComponent() {
   });
 
   const onSubmit = () => {
+    // Request Notification permission inside this user gesture (browser
+    // requirement) — fire-and-forget; denied is handled by the hook.
+    void ensurePermission();
     const parsed = blastSchema.safeParse({
       program: form.program,
       database: form.database,

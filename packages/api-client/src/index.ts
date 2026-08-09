@@ -45,3 +45,4 @@ export * from "./analyses";
 export * from "./tools";
 export * from "./news";
 export * from "./admin-news";
+export * from "./admin-uploads";

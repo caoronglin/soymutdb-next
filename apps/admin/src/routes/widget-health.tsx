@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import type * as echarts from "echarts";
+import * as echarts from "echarts/core";
+import { BarChart, LineChart } from "echarts/charts";
+import { GridComponent, LegendComponent, TooltipComponent } from "echarts/components";
+import { CanvasRenderer } from "echarts/renderers";
 import {
   Activity,
   AlertTriangle,
@@ -45,6 +48,9 @@ function formatMs(ms: number): string {
 // ---------------------------------------------------------------------------
 // Bar chart: P50 / P95 latency per widget
 // ---------------------------------------------------------------------------
+
+// Lazy one-time registration of the chart modules this file renders.
+let rl_echartsReady = false;
 
 function LatencyBarChart({ widgets }: { widgets: WidgetHealthItem[] }) {
   const chartRef = useRef<HTMLDivElement>(null);

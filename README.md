@@ -132,10 +132,15 @@ bash deploy/scripts/healthcheck.sh            # 服务健康检查
 bash deploy/scripts/backup.sh                 # 数据备份（PG+CH+S3，upgrade 前自动执行）
 ```
 
+**备选路径（conda 裸进程，无 docker / 离线 / 本地开发）：**
+
+- 指南：[`deploy/conda/README.md`](deploy/conda/README.md)；推荐组合：docker 起数据层（postgres/clickhouse/redis/redis-celery/minio）+ conda 跑应用层（api/worker/beat）。
+- 一键准备：`bash deploy/scripts/conda-deploy.sh`（创建/更新 `soymutdb-api`、`soymutdb-worker` 环境 → 装应用代码 → 生成/校验 `.env` → 输出启动命令）。
+
 **非主路径（已废弃/已放弃，仅保留参考）：**
 
 - `deploy/cloudflare.md` — 旧 Cloudflare Pages 静态托管方案（已改为 GitHub Pages）。
-- `deploy/windows/`、`deploy/conda/` — Windows 服务 / Conda 裸进程部署（已废弃，docker compose 为主路径）。
+- `deploy/windows/` — Windows 服务部署（已废弃，docker compose 为主路径）。
 
 ## Project layout
 

@@ -48,6 +48,12 @@ dev = [
     "ruff>=0.8.0",
     "mypy>=1.13.0",
 ]
+# Optional desktop notification channel (D2): OS-native notifications via
+# plyer, gated at runtime by SOYMUTDB_DESKTOP_NOTIFY=true.  Not required for
+# the in-app/browser channels; install with `pip install .[notify]`.
+notify = [
+    "plyer>=2.1",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/soymutdb_worker"]

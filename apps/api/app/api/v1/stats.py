@@ -44,7 +44,12 @@ ch_service = ClickHouseService()
 # Impact classes in canonical display order.
 _IMPACT_ORDER = ("HIGH", "MODERATE", "LOW", "MODIFIER")
 # Variant-type buckets in canonical display order.
-_VARIANT_TYPE_ORDER = (("SNP", ("SNP",)), ("Indel", ("INS", "DEL")), ("MNV", ("MNV",)), ("SV", ("SV",)))
+_VARIANT_TYPE_ORDER = (  # noqa: E501
+    ("SNP", ("SNP",)),
+    ("Indel", ("INS", "DEL")),
+    ("MNV", ("MNV",)),
+    ("SV", ("SV",)),
+)
 
 
 # ---------------------------------------------------------------------------
@@ -108,7 +113,7 @@ async def _load_dashboard_stats(db: AsyncSession) -> dict:
         total_users=0,
         assemblies_count=int(assemblies_count or 0),
         current_release=current_release.version if current_release else None,
-        last_updated=datetime.now(timezone.utc),
+        last_updated=datetime.now(timezone.utc),  # noqa: UP017
     ).model_dump(mode="json")
 
 
@@ -310,7 +315,25 @@ async def chromosome_density_summary(
     """Variant density per chromosome, aggregated from PostgreSQL.
 
     ``density_per_kb`` is computed as ``variant_count / (length_bp / 1000)``.
+    Read-hot aggregation cached in Redis (default TTL) keyed by
+    ``release_id``; a Redis failure degrades to a direct aggregation.  Empty
+    results are cached too (anti-penetration): when no data exists the
+    loader returns ``[]`` which is memoised until the TTL expires instead of
+    re-running the aggregate per request.
     """
+    payload = await get_or_set(
+        "stats:chromosome-density",
+        ttl=None,
+        params={"release_id": release_id},
+        loader=lambda: _load_chromosome_density_summary(db, release_id),
+    )
+    return [ChromosomeDensitySummary.model_validate(item) for item in payload]
+
+
+async def _load_chromosome_density_summary(
+    db: AsyncSession, release_id: int | None
+) -> list[dict]:
+    """Compute per-chromosome density (loader for the Redis cache)."""
     stmt = (
         select(
             Chromosome.name,
@@ -358,7 +381,7 @@ async def chromosome_density_summary(
                 density_per_kb=density_per_kb,
             )
         )
-    return result
+    return [item.model_dump(mode="json") for item in result]
 
 
 @router.get(
@@ -376,7 +399,7 @@ async def discovery_trend(
     Each published release contributes ``new_variants`` (= its recorded
     ``variant_count``) and a running cumulative total.
     """
-    since = datetime.now(timezone.utc) - timedelta(days=days)
+    since = datetime.now(timezone.utc) - timedelta(days=days)  # noqa: UP017
     stmt = (
         select(Release.published_at, Release.variant_count)
         .where(
@@ -414,7 +437,26 @@ async def release_statistics(
     db: AsyncSession = Depends(get_db),
     only_active: bool = Query(default=False),
 ) -> list[ReleaseSummary]:
-    """Statistics per release (version, date, variant/gene/line counts)."""
+    """Statistics per release (version, date, variant/gene/line counts).
+
+    Read-hot query cached in Redis (default TTL) keyed by ``only_active``;
+    a Redis failure degrades to a direct query.  An empty release list is
+    cached as well (anti-penetration) so a freshly seeded database does not
+    re-run the query on every request.
+    """
+    payload = await get_or_set(
+        "stats:releases",
+        ttl=None,
+        params={"only_active": only_active},
+        loader=lambda: _load_release_statistics(db, only_active),
+    )
+    return [ReleaseSummary.model_validate(item) for item in payload]
+
+
+async def _load_release_statistics(
+    db: AsyncSession, only_active: bool
+) -> list[dict]:
+    """Compute per-release statistics (loader for the Redis cache)."""
     stmt = select(Release).where(Release.published_at.is_not(None))
     if only_active:
         stmt = stmt.where(Release.status == ReleaseStatus.ACTIVE.value)
@@ -435,7 +477,7 @@ async def release_statistics(
                 mutant_line_count=int(release.mutant_line_count or 0),
             )
         )
-    return result
+    return [item.model_dump(mode="json") for item in result]
 
 
 @router.get(

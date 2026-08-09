@@ -374,3 +374,65 @@ class TestUpdateSettings:
         assert mock_session.add.called
         added = mock_session.add.call_args[0][0]
         assert added.value == "200"
+
+
+# ---------------------------------------------------------------------------
+# Tests: GET /api/v1/site/about (public, editable About-us content, D4)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+class TestPublicAbout:
+    """``GET /site/about`` serves the ``about.*`` system settings publicly."""
+
+    def _make_client(self, mock_session):
+        from app.api.v1.site import router
+
+        app = FastAPI()
+        app.include_router(router, prefix="/api/v1")
+
+        async def override_get_db():
+            yield mock_session
+
+        app.dependency_overrides[get_db] = override_get_db
+        transport = ASGITransport(app=app)
+        return AsyncClient(transport=transport, base_url="http://test")
+
+    async def test_about_returns_all_fields_when_set(self, mock_session):
+        rows = []
+        for key, value in {
+            "about.title_en": "About SoyMutDB",
+            "about.title_zh": "关于我们",
+            "about.summary_en": "Short intro",
+            "about.content_en": "# Full markdown",
+        }.items():
+            row = MagicMock()
+            row.key = key
+            row.value = value
+            rows.append(row)
+        result = MagicMock()
+        result.scalars.return_value.all.return_value = rows
+        mock_session.execute.return_value = result
+
+        async with self._make_client(mock_session) as client:
+            response = await client.get("/api/v1/site/about")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["title_en"] == "About SoyMutDB"
+        assert body["title_zh"] == "关于我们"
+        assert body["summary_en"] == "Short intro"
+        assert body["content_en"] == "# Full markdown"
+        # unset keys degrade to null
+        assert body["summary_zh"] is None
+        assert body["content_zh"] is None
+
+    async def test_about_empty_db_returns_nulls(self, mock_session):
+        result = MagicMock()
+        result.scalars.return_value.all.return_value = []
+        mock_session.execute.return_value = result
+
+        async with self._make_client(mock_session) as client:
+            response = await client.get("/api/v1/site/about")
+        assert response.status_code == 200
+        body = response.json()
+        assert all(body[k] is None for k in body)

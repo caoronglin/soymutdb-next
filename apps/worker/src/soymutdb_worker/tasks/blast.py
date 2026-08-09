@@ -41,6 +41,7 @@ from soymutdb_worker.config import get_setting
 from soymutdb_worker.main import celery_app
 from soymutdb_worker.repositories import BlastHitStore, BlastJobStore
 from soymutdb_worker.shared import BLAST_RUN_TASK, JobPayload
+from soymutdb_worker.tasks.notifications import notify_completed, notify_failed
 from soymutdb_worker.utils.db import get_db
 from soymutdb_worker.utils.s3 import (
     generate_presigned_url,
@@ -593,6 +594,10 @@ def run_blast(
                     hit_count=parsed["total_hits"],
                 )
 
+            # In-app + optional desktop notification (D2): resolves the job
+            # owner from the job row; anonymous jobs are skipped internally.
+            notify_completed(job_id, kind="blast")
+
             return {
                 "job_id": job_id,
                 "hits": parsed["hits"][:100],
@@ -612,4 +617,9 @@ def run_blast(
                 BlastJobStore(session).mark_failed(job_id, error=error_text)
         except Exception as db_err:
             logger.error("Failed to update BLAST job status: %s", db_err)
+        # Notification is best-effort and must never mask the original error.
+        try:
+            notify_failed(job_id, kind="blast", error=error_text)
+        except Exception:
+            pass
         raise

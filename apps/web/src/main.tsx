@@ -187,3 +187,24 @@ createRoot(rootEl).render(
         </AntdProvider>
     </React.StrictMode>,
 );
+
+// ---------------------------------------------------------------------------
+// Service Worker 注册 — 静态资源缓存（D3，追加段：不改动上方现有逻辑）
+//
+// 仅生产构建（import.meta.env.PROD）+ 开关（VITE_SW_ENABLED !== "false"）时注册；
+// 延迟到 window load 之后，避免与首屏渲染竞争。
+// gh-pages 子路径部署（/soymutdb-next/）下 vite 未配置 base（BASE_URL === "/"），
+// 此时用相对路径 "sw.js" 注册，以当前文档路径解析到实际部署前缀 —— 两种部署都正确。
+// 注册/更新失败一律静默：SW 是渐进增强，绝不阻断应用。
+// SW 策略与构建注入见 docs/design/service-worker.md 与 scripts/gen-sw.js。
+// ---------------------------------------------------------------------------
+if (import.meta.env.PROD && import.meta.env.VITE_SW_ENABLED !== "false") {
+    window.addEventListener("load", () => {
+        if (!("serviceWorker" in navigator)) return;
+        const base = import.meta.env.BASE_URL;
+        const swUrl = base && base !== "/" ? `${base}sw.js` : "sw.js";
+        navigator.serviceWorker.register(swUrl).catch(() => {
+            /* 静默 —— SW 不可用时应用照常运行 */
+        });
+    });
+}

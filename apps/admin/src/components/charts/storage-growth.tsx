@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import type * as echarts from "echarts";
+import * as echarts from "echarts";
 import { Card, CardHeader, CardTitle, CardContent, ChartEmptyState, cn, formatFileSize } from "@soymutdb/ui";
 
 

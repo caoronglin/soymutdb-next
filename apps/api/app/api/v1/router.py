@@ -15,6 +15,7 @@ from . import (
     admin_news,
     admin_settings,
     admin_static,
+    admin_uploads,
     analyses,
     analytics,
     auth,
@@ -25,20 +26,29 @@ from . import (
     gwas,
     health,
     homolog,
+    jobs,
     mutants,
     news,
+    notifications,
     popgen,
     releases,
     search,
+    seed_requests,
     seeds,
+    site,
     sra,
     stats,
+    tools_enrichment,
     tools_exppattern,
+    tools_seqfetch,
     tracks,
     variants,
-    tools_seqfetch,
-    tools_enrichment,
 )
+
+# NOTE: this import must stay AFTER the ``from . import (...)`` block:
+# ``widgets.models`` imports ``app.models.base``, and importing it first
+# would trigger the ``app.models`` package init while ``widgets.models`` is
+# still partially initialized (circular import).
 from ...widgets.router import router as widgets_router
 
 api_router = APIRouter()
@@ -48,6 +58,7 @@ api_router.include_router(health.router)
 api_router.include_router(auth.router)
 api_router.include_router(genes.router)
 api_router.include_router(gwas.router)
+api_router.include_router(jobs.router)
 api_router.include_router(popgen.router)
 api_router.include_router(variants.router)
 api_router.include_router(tools_seqfetch.router)
@@ -59,17 +70,21 @@ api_router.include_router(tracks.router)
 api_router.include_router(releases.router)
 api_router.include_router(mutants.router)
 api_router.include_router(seeds.router)
+api_router.include_router(seed_requests.router)
 api_router.include_router(content.router)
 api_router.include_router(news.router)
+api_router.include_router(notifications.router)
 api_router.include_router(admin.router)
 api_router.include_router(admin_content.router)
 api_router.include_router(admin_news.router)
 api_router.include_router(admin_imports.router)
 api_router.include_router(admin_settings.router)
 api_router.include_router(admin_static.router)
+api_router.include_router(admin_uploads.router)
 api_router.include_router(expression.router)
 api_router.include_router(homolog.router)
 api_router.include_router(analytics.router)
+api_router.include_router(site.router)
 api_router.include_router(sra.router)
 api_router.include_router(tools_enrichment.router)
 api_router.include_router(tools_exppattern.router)

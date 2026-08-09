@@ -28,8 +28,10 @@ from .genomic import Assembly, Chromosome, Exon, Gene, GeneAlias, Transcript
 from .gwas import GwasFileType, GwasJob, GwasJobStatus, GwasMethod
 from .homolog import GeneHomolog
 from .import_task import ImportTask
+from .notification import Notification
 from .outbox import OutboxEvent
 from .seed import SeedInventory, SeedRequest
+from .seed_request import SeedRequestContact, SeedRequestStatus
 from .system_settings import SystemSetting
 from .tracks import Track, TrackCategory
 from .variant import MutantLine, Phenotype, VariantSummary
@@ -62,6 +64,7 @@ __all__ = [
     "MutantLine",
     "NewsArticle",
     "NewsStatus",
+    "Notification",
     "Organization",
     "OutboxEvent",
     "PageLayout",
@@ -74,6 +77,8 @@ __all__ = [
     "Role",
     "SeedInventory",
     "SeedRequest",
+    "SeedRequestContact",
+    "SeedRequestStatus",
     "SoftDeleteMixin",
     "StaticPage",
     "SystemSetting",

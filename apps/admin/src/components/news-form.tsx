@@ -19,6 +19,7 @@ import {
 } from "@ant-design/pro-components";
 import dayjs from "dayjs";
 import type { NewsStatus } from "@soymutdb/api-client";
+import FileUpload from "./file-upload";
 
 /** Form values (Dayjs for the two datetime fields). */
 export interface NewsFormValues {
@@ -122,12 +123,14 @@ export function NewsForm({
         placeholder={t("admin.news.form.categoryPlaceholder")}
         fieldProps={{ maxLength: 64 }}
       />
-      <ProFormText
+      <ProForm.Item
         name="cover_url"
         label={t("admin.news.form.coverUrl")}
-        placeholder={t("admin.news.form.coverUrlPlaceholder")}
-        fieldProps={{ maxLength: 1024 }}
-      />
+        tooltip={t("admin.news.form.coverUrlHelp")}
+        extra={t("admin.news.form.coverUrlUploadHint")}
+      >
+        <FileUpload purpose="news" maxSizeMB={10} accept="image/*" />
+      </ProForm.Item>
       <ProFormSelect
         name="status"
         label={t("admin.news.form.status")}

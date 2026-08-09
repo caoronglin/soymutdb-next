@@ -118,8 +118,10 @@ class TimingMiddleware(BaseHTTPMiddleware):
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """Simple per-IP rate limiter backed by Redis.
 
-    Falls back to allowing all requests if Redis is unavailable so that the
-    API remains available during a Redis outage.
+    ``INCR`` + ``EXPIRE`` are batched into one pipeline round-trip (the key
+    embeds the minute window, so the unconditional EXPIRE is harmless — each
+    window gets its own key).  Falls back to allowing all requests if Redis
+    is unavailable so that the API remains available during a Redis outage.
     """
 
     async def dispatch(
@@ -135,9 +137,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         key = f"ratelimit:{client_ip}:{int(time.time() // 60)}"
         try:
             redis = get_redis()
-            count = await redis.incr(key)
-            if count == 1:
-                await redis.expire(key, 60)
+            async with redis.pipeline(transaction=True) as pipe:
+                pipe.incr(key)
+                pipe.expire(key, 60)
+                results = await pipe.execute()
+            count = int(results[0])
             if count > settings.rate_limit_per_minute:
                 raise RateLimitExceededError(
                     "Rate limit exceeded. Please retry later."

@@ -28,6 +28,7 @@ __all__ = [
     "QUEUE_EXPORT",
     "QUEUE_INGEST",
     "QUEUE_STATS",
+    "SEED_REQUEST_EMAIL_TASK",
     "TASK_QUEUE_MAP",
 ]
 
@@ -67,5 +68,6 @@ from soymutdb_jobs.contract import (  # noqa: E402
     QUEUE_EXPORT,
     QUEUE_INGEST,
     QUEUE_STATS,
+    SEED_REQUEST_EMAIL_TASK,
     TASK_QUEUE_MAP,
 )

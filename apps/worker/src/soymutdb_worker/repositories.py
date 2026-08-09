@@ -11,7 +11,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from sqlalchemy import delete, insert, text, update
+from sqlalchemy import delete, insert, select, text, update
 
 from soymutdb_worker.shared import JobStatus, JobStatusUpdate, transition_allowed
 from soymutdb_worker.tables import (
@@ -20,6 +20,7 @@ from soymutdb_worker.tables import (
     blast_jobs,
     gwas_jobs,
     import_tasks,
+    notifications,
     utcnow,
 )
 
@@ -557,10 +558,92 @@ class GwasJobStore:
         return bool(getattr(result, "rowcount", 0))
 
 
+class NotifyStore:
+    """Narrow repository over ``notifications`` (worker-side writes, D2).
+
+    The worker writes notification rows directly (same pattern as the job
+    stores — never imports API models).  ``create`` is idempotent: when a
+    ``link`` is given (it uniquely identifies the originating job, e.g.
+    ``/blast/jobs/{id}``) an existing row for the same user + link wins and
+    nothing is inserted, so redeliveries of the same job event never
+    produce duplicate notifications.
+
+    ``get_job_user_id`` resolves the owner of a job row so the trigger
+    points can skip notifications for anonymous jobs (no ``user_id``).
+    """
+
+    #: Job table per trigger kind (fastp / scanpy share ``analysis_jobs``).
+    _JOB_TABLES: dict[str, Any] = {
+        "blast": blast_jobs,
+        "fastp": analysis_jobs,
+        "scanpy": analysis_jobs,
+        "gwas": gwas_jobs,
+    }
+
+    def __init__(self, session) -> None:
+        self._session = session
+
+    def get_job_user_id(self, job_id: str | uuid.UUID, kind: str) -> str | None:
+        """Return the owning ``user_id`` of the job, or ``None``.
+
+        ``kind`` selects the job table (``blast`` / ``fastp`` / ``scanpy`` /
+        ``gwas``); unknown kinds raise :class:`ValueError` (programming
+        error, never swallowed silently).
+        """
+        table = self._JOB_TABLES.get(kind)
+        if table is None:
+            raise ValueError(f"Unknown notification job kind: {kind!r}")
+        row = self._session.execute(
+            select(table.c.user_id).where(table.c.id == str(job_id))
+        ).first()
+        if row is None or row[0] is None:
+            return None
+        return str(row[0])
+
+    def create(
+        self,
+        *,
+        user_id: str | uuid.UUID,
+        type: str,
+        title: str,
+        body: str,
+        link: str | None = None,
+    ) -> bool:
+        """Idempotently insert one notification row.
+
+        Returns ``True`` when inserted, ``False`` when skipped (duplicate
+        user + link already present — same job, keep the first entry).
+        """
+        uid = str(user_id)
+        if link:
+            existing = self._session.execute(
+                select(notifications.c.id)
+                .where(
+                    notifications.c.user_id == uid,
+                    notifications.c.link == link,
+                )
+                .limit(1)
+            ).first()
+            if existing is not None:
+                return False
+        self._session.execute(
+            insert(notifications).values(
+                user_id=uid,
+                type=type,
+                title=title,
+                body=body,
+                link=link,
+                created_at=utcnow(),
+            )
+        )
+        return True
+
+
 __all__ = [
     "AnalysisJobStore",
     "BlastHitStore",
     "BlastJobStore",
     "GwasJobStore",
     "ImportTaskStore",
+    "NotifyStore",
 ]

@@ -1,80 +1,126 @@
 /**
- * Seed request route — seed application form with MTA agreement.
+ * Seed request route — public seed request contact form (D1).
+ *
+ * AntD 5 Form: name / email / institution / country / gene IDs (textarea,
+ * parsed client-side, ≤ 200) / notes.  Submit → POST /api/v1/seed-requests;
+ * success shows an AntD Result, failure an AntD Alert.  Layout follows the
+ * tool pages' PageHeader style (eyebrow + h1, Tailwind skeleton).
  */
 import { createFileRoute } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import * as React from "react";
-import { Sprout, Send } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, Input, Textarea, Label, Button, Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@soymutdb/ui";
+import { Alert, Button, Form, Input, Result, Typography, type FormProps } from "antd";
+import { SendOutlined } from "@ant-design/icons";
 import { FadeUp } from "../components/route-motion";
-import { z } from "zod";
+import { secureHttp } from "../lib/api";
 
 export const Route = createFileRoute("/seed-request")({
   component: SeedRequestComponent,
 });
 
-const schema = z.object({
-  lineId: z.string().min(1, "Select a mutant line"),
-  quantity: z.number().int().min(1, "Quantity must be at least 1").max(50, "Max 50 seeds per request"),
-  institution: z.string().min(2, "Institution is required"),
-  purpose: z.string().min(20, "Please describe your research purpose (min 20 chars)"),
-  shippingAddress: z.string().min(10, "Shipping address is required"),
-  mtaAgreed: z.boolean().refine((v) => v === true, { message: "You must agree to the MTA" }),
-});
+/** Max gene IDs per request (mirrors the API's MAX_GENE_IDS). */
+const MAX_GENE_IDS = 200;
+
+interface SeedRequestFormValues {
+  name: string;
+  email: string;
+  institution: string;
+  country: string;
+  geneIds: string;
+  notes?: string;
+}
+
+interface SeedRequestResponse {
+  id: string;
+  status: string;
+}
+
+/** Parse the gene-ID textarea into a trimmed, deduped, capped list. */
+function parseGeneIds(raw: string): string[] {
+  return [
+    ...new Set(
+      raw
+        .split(/[\s,;]+/)
+        .map((g) => g.trim())
+        .filter(Boolean),
+    ),
+  ];
+}
 
 function SeedRequestComponent() {
   const { t } = useTranslation();
-  const [form, setForm] = React.useState({
-    lineId: "",
-    quantity: "10",
-    institution: "",
-    purpose: "",
-    shippingAddress: "",
-    mtaAgreed: false as boolean,
-  });
-  const [errors, setErrors] = React.useState<Record<string, string>>({});
-  const [submitted, setSubmitted] = React.useState(false);
+  const [form] = Form.useForm<SeedRequestFormValues>();
+  const [submitted, setSubmitted] = React.useState<SeedRequestResponse | null>(null);
+  const [submitError, setSubmitError] = React.useState<string | null>(null);
+  const [submitting, setSubmitting] = React.useState(false);
 
-  const onSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const parsed = schema.safeParse({
-      lineId: form.lineId,
-      quantity: Number(form.quantity),
-      institution: form.institution,
-      purpose: form.purpose,
-      shippingAddress: form.shippingAddress,
-      mtaAgreed: form.mtaAgreed,
-    });
-    if (!parsed.success) {
-      const fieldErrors: Record<string, string> = {};
-      for (const issue of parsed.error.issues) {
-        const key = String(issue.path[0] ?? "_");
-        if (!fieldErrors[key]) fieldErrors[key] = issue.message;
-      }
-      setErrors(fieldErrors);
+  const onFinish: FormProps<SeedRequestFormValues>["onFinish"] = async (values) => {
+    setSubmitError(null);
+    const geneIds = parseGeneIds(values.geneIds);
+    if (geneIds.length === 0) {
+      form.setFields([
+        { name: "geneIds", errors: [t("seedRequest.errorNoGenes")] },
+      ]);
       return;
     }
-    setErrors({});
-    setSubmitted(true);
+    if (geneIds.length > MAX_GENE_IDS) {
+      form.setFields([
+        {
+          name: "geneIds",
+          errors: [t("seedRequest.errorTooManyGenes", { max: MAX_GENE_IDS })],
+        },
+      ]);
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const response = await secureHttp.post<SeedRequestResponse>("/seed-requests", {
+        json: {
+          name: values.name,
+          email: values.email,
+          institution: values.institution,
+          country: values.country,
+          gene_ids: geneIds,
+          notes: values.notes?.trim() || null,
+        },
+      });
+      setSubmitted(response);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : String(err);
+      setSubmitError(t("seedRequest.errorSubmit", { message }));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const resetForm = () => {
+    form.resetFields();
+    setSubmitted(null);
+    setSubmitError(null);
   };
 
   if (submitted) {
     return (
       <div className="container-prose section-rhythm">
-        <Card className="mx-auto max-w-lg text-center">
-          <CardContent className="p-10">
-            <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-full bg-primary/10">
-              <Sprout className="size-6 text-primary" aria-hidden />
-            </div>
-            <h2 className="font-display text-2xl font-semibold">Request submitted</h2>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Your seed request has been received. You'll receive a confirmation email shortly with a tracking number.
-            </p>
-            <Button className="mt-6" onClick={() => { setSubmitted(false); setForm({ lineId: "", quantity: "10", institution: "", purpose: "", shippingAddress: "", mtaAgreed: false }); }}>
-              Submit another request
-            </Button>
-          </CardContent>
-        </Card>
+        <FadeUp>
+          <p className="eyebrow">{t("seedRequest.title")}</p>
+          <h1 className="mt-2 font-display text-4xl font-semibold tracking-tight">
+            {t("seedRequest.subtitle")}
+          </h1>
+        </FadeUp>
+        <div className="mt-8 max-w-2xl">
+          <Result
+            status="success"
+            title={t("seedRequest.successTitle")}
+            subTitle={t("seedRequest.successDesc")}
+            extra={[
+              <Button key="again" type="primary" onClick={resetForm}>
+                {t("seedRequest.submitAnother")}
+              </Button>,
+            ]}
+          />
+        </div>
       </div>
     );
   }
@@ -82,77 +128,105 @@ function SeedRequestComponent() {
   return (
     <div className="container-prose section-rhythm">
       <FadeUp>
-        <p className="eyebrow">{t("seeds.requestTitle")}</p>
-        <h1 className="mt-2 font-display text-4xl font-semibold tracking-tight">{t("seeds.requestDesc")}</h1>
+        <p className="eyebrow">{t("seedRequest.title")}</p>
+        <h1 className="mt-2 font-display text-4xl font-semibold tracking-tight">
+          {t("seedRequest.subtitle")}
+        </h1>
+        <p className="mt-3 max-w-2xl text-sm text-muted-foreground">
+          {t("seedRequest.description")}
+        </p>
       </FadeUp>
 
-      <Card className="mt-8 max-w-2xl">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Sprout className="size-5 text-primary" aria-hidden />
-            {t("seeds.requestTitle")}
-          </CardTitle>
-          <CardDescription>{t("seeds.requestDesc")}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={onSubmit} className="grid gap-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="grid gap-2">
-                <Label htmlFor="lineId">Mutant line</Label>
-                <Select value={form.lineId} onValueChange={(v) => setForm((f) => ({ ...f, lineId: v }))}>
-                  <SelectTrigger id="lineId"><SelectValue placeholder="Select line" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="EMS-001">EMS-001</SelectItem>
-                    <SelectItem value="EMS-002">EMS-002</SelectItem>
-                    <SelectItem value="CRISPR-001">CRISPR-001</SelectItem>
-                    <SelectItem value="T-DNA-001">T-DNA-001</SelectItem>
-                  </SelectContent>
-                </Select>
-                {errors.lineId ? <p className="text-xs text-destructive">{errors.lineId}</p> : null}
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="quantity">{t("seeds.quantity")}</Label>
-                <Input id="quantity" type="number" min={1} max={50} value={form.quantity} onChange={(e) => setForm((f) => ({ ...f, quantity: e.target.value }))} className="font-mono" />
-                {errors.quantity ? <p className="text-xs text-destructive">{errors.quantity}</p> : null}
-              </div>
-            </div>
+      <div className="mt-8 max-w-2xl rounded-xl border border-border bg-card p-6">
+        {submitError ? (
+          <Alert
+            type="error"
+            showIcon
+            message={t("seedRequest.errorTitle")}
+            description={submitError}
+            className="mb-4"
+          />
+        ) : null}
 
-            <div className="grid gap-2">
-              <Label htmlFor="institution">{t("seeds.institution")}</Label>
-              <Input id="institution" value={form.institution} onChange={(e) => setForm((f) => ({ ...f, institution: e.target.value }))} />
-              {errors.institution ? <p className="text-xs text-destructive">{errors.institution}</p> : null}
-            </div>
+        <Form<SeedRequestFormValues>
+          form={form}
+          layout="vertical"
+          onFinish={onFinish}
+          requiredMark="optional"
+        >
+          <div className="grid gap-0 sm:grid-cols-2 sm:gap-x-4">
+            <Form.Item
+              name="name"
+              label={t("seedRequest.name")}
+              rules={[{ required: true, message: t("seedRequest.errorName") }]}
+            >
+              <Input placeholder={t("seedRequest.namePlaceholder")} />
+            </Form.Item>
 
-            <div className="grid gap-2">
-              <Label htmlFor="purpose">{t("seeds.purpose")}</Label>
-              <Textarea id="purpose" value={form.purpose} onChange={(e) => setForm((f) => ({ ...f, purpose: e.target.value }))} className="min-h-[100px]" />
-              {errors.purpose ? <p className="text-xs text-destructive">{errors.purpose}</p> : null}
-            </div>
+            <Form.Item
+              name="email"
+              label={t("seedRequest.email")}
+              rules={[
+                { required: true, message: t("seedRequest.errorEmail") },
+                { type: "email", message: t("seedRequest.errorEmailFormat") },
+              ]}
+            >
+              <Input placeholder="you@example.org" />
+            </Form.Item>
+          </div>
 
-            <div className="grid gap-2">
-              <Label htmlFor="shippingAddress">Shipping address</Label>
-              <Textarea id="shippingAddress" value={form.shippingAddress} onChange={(e) => setForm((f) => ({ ...f, shippingAddress: e.target.value }))} className="min-h-[80px]" />
-              {errors.shippingAddress ? <p className="text-xs text-destructive">{errors.shippingAddress}</p> : null}
-            </div>
+          <Form.Item
+            name="institution"
+            label={t("seedRequest.institution")}
+            rules={[{ required: true, message: t("seedRequest.errorInstitution") }]}
+          >
+            <Input placeholder={t("seedRequest.institutionPlaceholder")} />
+          </Form.Item>
 
-            <label className="flex items-start gap-3 rounded-lg border p-3 text-sm">
-              <input
-                type="checkbox"
-                checked={form.mtaAgreed}
-                onChange={(e) => setForm((f) => ({ ...f, mtaAgreed: e.target.checked }))}
-                className="mt-0.5 size-4 rounded border-input"
-              />
-              <span className="text-muted-foreground">{t("seeds.mtaText")}</span>
-            </label>
-            {errors.mtaAgreed ? <p className="text-xs text-destructive">{errors.mtaAgreed}</p> : null}
+          <Form.Item
+            name="country"
+            label={t("seedRequest.country")}
+            rules={[{ required: true, message: t("seedRequest.errorCountry") }]}
+          >
+            <Input placeholder={t("seedRequest.countryPlaceholder")} />
+          </Form.Item>
 
-            <Button type="submit" size="lg">
-              <Send className="size-4" aria-hidden />
-              {t("seeds.submitRequest")}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+          <Form.Item
+            name="geneIds"
+            label={t("seedRequest.geneIds")}
+            rules={[{ required: true, message: t("seedRequest.errorNoGenes") }]}
+            extra={t("seedRequest.geneIdsHint", { max: MAX_GENE_IDS })}
+          >
+            <Input.TextArea
+              rows={5}
+              className="font-mono text-sm"
+              placeholder={t("seedRequest.geneIdsPlaceholder")}
+            />
+          </Form.Item>
+
+          <Form.Item name="notes" label={t("seedRequest.notes")}>
+            <Input.TextArea
+              rows={3}
+              placeholder={t("seedRequest.notesPlaceholder")}
+            />
+          </Form.Item>
+
+          <Button
+            type="primary"
+            htmlType="submit"
+            size="large"
+            loading={submitting}
+            icon={<SendOutlined />}
+            className="mt-2"
+          >
+            {t("seedRequest.submit")}
+          </Button>
+
+          <Typography.Paragraph className="mt-6 mb-0 text-caption text-muted-foreground">
+            {t("seedRequest.privacyNote")}
+          </Typography.Paragraph>
+        </Form>
+      </div>
     </div>
   );
 }

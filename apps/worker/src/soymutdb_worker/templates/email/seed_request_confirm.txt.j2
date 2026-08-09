@@ -1,0 +1,22 @@
+SoyMutDB — Seed request received
+
+Dear {{ name }},
+
+thank you for your seed request. We have received the following application
+and will review it shortly. You will be notified by email once a decision
+has been made.
+
+Request ID : {{ request_id }}
+Name       : {{ name }}
+Email      : {{ email }}
+Institution: {{ institution }}
+Country    : {{ country }}
+Gene IDs   : {{ gene_count }} requested
+{% for gene_id in gene_ids %}             - {{ gene_id }}
+{% endfor %}{% if notes %}Notes      : {{ notes }}
+{% endif %}Status     : {{ status }}
+
+If you did not submit this request, you can simply ignore this email.
+
+— SoyMutDB (Soybean Mutation Database)
+  This is an automated message — please do not reply directly.

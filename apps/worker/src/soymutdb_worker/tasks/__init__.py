@@ -3,7 +3,7 @@
 All tasks are auto-discovered by :mod:`soymutdb_worker.main`.
 """
 
-from . import blast, cleanup, export, expression, homolog, ingest, static_pages, stats
+from . import blast, cleanup, export, expression, homolog, ingest, notifications, static_pages, stats
 
 __all__ = [
     "blast",
@@ -12,6 +12,7 @@ __all__ = [
     "expression",
     "homolog",
     "ingest",
+    "notifications",
     "static_pages",
     "stats",
 ]

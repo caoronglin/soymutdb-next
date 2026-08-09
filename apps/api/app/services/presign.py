@@ -1,4 +1,4 @@
-"""MinIO / S3 pre-signed URL generation for the analyses feature.
+"""MinIO / S3 pre-signed URL generation for the analyses feature + admin uploads.
 
 Reuses the API's existing boto3 client configuration (``app.utils.s3``,
 driven by ``SOYMUTDB_S3_*`` settings) and adds:
@@ -6,6 +6,10 @@ driven by ``SOYMUTDB_S3_*`` settings) and adds:
 - PUT (upload) and GET (download) pre-signed URL generation.
 - Object-key construction and strict prefix validation so clients can never
   reference objects outside ``analyses/`` (or outside their own job).
+- A generic ``uploads/`` namespace for admin uploads (news covers, images,
+  attachments) stored in the PUBLIC bucket: ``build_uploads_key`` /
+  ``validate_uploads_key`` + ``generate_public_url`` (public-facing URL that
+  can be stored directly in DB columns such as ``news_articles.cover_url``).
 
 The upload flow is stateless: the API hands out a pre-signed PUT URL and the
 object key; the job row (and outbox dispatch) is created only at submit time.
@@ -32,6 +36,11 @@ DOWNLOAD_EXPIRES_IN: int = 600
 #: exact segment (a trailing slash boundary is enforced, so ``analyses-evil``
 #: does not match).
 ANALYSES_PREFIX: str = "analyses"
+
+#: Object-key namespace for admin uploads (public resources: news covers,
+#: images, attachments).  Stored in the PUBLIC bucket so the returned
+#: ``public_url`` can be persisted directly (e.g. ``cover_url``).
+UPLOADS_PREFIX: str = "uploads"
 
 #: Sanitized filename charset – keeps generated keys predictable and free of
 #: control characters / whitespace / separators.
@@ -138,6 +147,50 @@ def validate_job_object_key(object_key: str, job_id: str | uuid.UUID) -> str:
     return object_key
 
 
+# ---------------------------------------------------------------------------
+# Generic admin uploads namespace (public bucket)
+# ---------------------------------------------------------------------------
+
+
+def build_uploads_key(purpose: str, filename: str) -> str:
+    """Build the object key for a new admin upload.
+
+    Shape: ``uploads/{purpose}/{uuid}-{sanitized-filename}``.  The random
+    prefix guarantees key uniqueness and makes the filename opaque.  The
+    *purpose* segment must be a single safe word (e.g. ``news``); it is
+    sanitised the same way as the filename.
+    """
+    safe_purpose = sanitize_filename(purpose).lower()
+    name = sanitize_filename(filename)
+    return f"{UPLOADS_PREFIX}/{safe_purpose}/{uuid.uuid4()}-{name}"
+
+
+def validate_uploads_key(object_key: str) -> str:
+    """Validate an object key against the ``uploads/`` namespace.
+
+    Rejects keys outside ``uploads/`` (including look-alike prefixes such as
+    ``uploads-evil/...``), absolute paths, empty segments and traversal
+    segments (``.`` / ``..``).  Returns the key unchanged on success, raises
+    :class:`ValueError` otherwise.
+    """
+    _validate_key_shape(object_key)
+    if not object_key.startswith(f"{UPLOADS_PREFIX}/"):
+        raise ValueError(
+            f"object_key must live under '{UPLOADS_PREFIX}/'"
+        )
+    return object_key
+
+
+def generate_public_url(object_key: str, *, bucket: str | None = None) -> str:
+    """Return the public-facing URL for *object_key* in the public bucket.
+
+    ``{s3_public_url}/{object_key}`` — the URL served by the public static
+    gateway (nginx / MinIO proxy) configured via ``SOYMUTDB_S3_PUBLIC_URL``.
+    Suitable for persisting into columns like ``news_articles.cover_url``.
+    """
+    return f"{settings.s3_public_url.rstrip('/')}/{object_key.lstrip('/')}"
+
+
 def _validate_key_shape(object_key: str) -> None:
     if not object_key or object_key.startswith("/"):
         raise ValueError("object_key must not be empty or absolute")
@@ -153,10 +206,14 @@ __all__ = [
     "DOWNLOAD_EXPIRES_IN",
     "MAX_UPLOAD_SIZE",
     "UPLOAD_EXPIRES_IN",
+    "UPLOADS_PREFIX",
     "build_upload_key",
+    "build_uploads_key",
     "generate_download_url",
+    "generate_public_url",
     "generate_upload_url",
     "sanitize_filename",
     "validate_analyses_key",
     "validate_job_object_key",
+    "validate_uploads_key",
 ]

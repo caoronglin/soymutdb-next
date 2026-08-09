@@ -1,0 +1,29 @@
+{% extends "base.html.j2" %}
+{% block title %}SoyMutDB — Seed request received{% endblock %}
+{% block body %}
+<h1>Seed request received</h1>
+<p>
+  Dear {{ name }},<br>
+  thank you for your seed request. We have received the following application
+  and will review it shortly. You will be notified by email once a decision
+  has been made.
+</p>
+<table role="presentation" class="summary" cellpadding="0" cellspacing="0" border="0">
+  <tr><th>Request ID</th><td>{{ request_id }}</td></tr>
+  <tr><th>Name</th><td>{{ name }}</td></tr>
+  <tr><th>Email</th><td>{{ email }}</td></tr>
+  <tr><th>Institution</th><td>{{ institution }}</td></tr>
+  <tr><th>Country</th><td>{{ country }}</td></tr>
+  <tr><th>Gene IDs</th><td>
+    {{ gene_count }} requested
+    <ul class="gene-list">
+      {% for gene_id in gene_ids %}<li>{{ gene_id }}</li>{% endfor %}
+    </ul>
+  </td></tr>
+  {% if notes %}<tr><th>Notes</th><td>{{ notes }}</td></tr>{% endif %}
+  <tr><th>Status</th><td>{{ status }}</td></tr>
+</table>
+<p class="muted">
+  If you did not submit this request, you can simply ignore this email.
+</p>
+{% endblock %}

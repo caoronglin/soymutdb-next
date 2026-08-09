@@ -101,6 +101,7 @@ blast_jobs = Table(
     "blast_jobs",
     metadata,
     Column("id", UUID(as_uuid=True), primary_key=True),
+    Column("user_id", UUID(as_uuid=True)),
     Column("status", String(32)),
     Column("started_at", DateTime(timezone=True)),
     Column("completed_at", DateTime(timezone=True)),
@@ -119,6 +120,7 @@ analysis_jobs = Table(
     "analysis_jobs",
     metadata,
     Column("id", UUID(as_uuid=True), primary_key=True),
+    Column("user_id", UUID(as_uuid=True)),
     Column("status", String(32)),
     Column("started_at", DateTime(timezone=True)),
     Column("completed_at", DateTime(timezone=True)),
@@ -157,11 +159,31 @@ gwas_jobs = Table(
     "gwas_jobs",
     metadata,
     Column("id", UUID(as_uuid=True), primary_key=True),
+    Column("user_id", UUID(as_uuid=True)),
     Column("status", String(32)),
     Column("started_at", DateTime(timezone=True)),
     Column("completed_at", DateTime(timezone=True)),
     Column("error_message", Text),
     Column("result_summary", JSON),
+)
+
+#: In-app notification centre rows (D2).  The worker writes these directly
+#: via :class:`soymutdb_worker.repositories.NotifyStore`; the API owns the
+#: migration (:mod:`app.models.notification`) and reads them back for the
+#: authenticated notification endpoints.  ``link`` carries the app route
+#: opened on click (e.g. ``/blast/jobs/{job_id}``) and doubles as the
+#: worker-side dedup key (one row per user + job link).
+notifications = Table(
+    "notifications",
+    metadata,
+    Column("id", UUID(as_uuid=True), primary_key=True),
+    Column("user_id", UUID(as_uuid=True)),
+    Column("type", String(64)),
+    Column("title", String(256)),
+    Column("body", Text),
+    Column("link", String(512)),
+    Column("read_at", DateTime(timezone=True)),
+    Column("created_at", DateTime(timezone=True)),
 )
 
 
@@ -184,5 +206,6 @@ __all__ = [
     "gwas_jobs",
     "import_tasks",
     "metadata",
+    "notifications",
     "utcnow",
 ]

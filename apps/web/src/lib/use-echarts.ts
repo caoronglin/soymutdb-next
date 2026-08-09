@@ -102,7 +102,7 @@ function resolveVars(obj: unknown, palette: ChartPalette): unknown {
 
 export function useECharts(option: EChartsOption, deps: React.DependencyList = []): UseEChartsResult {
   const ref = React.useRef<HTMLDivElement | null>(null);
-  const chartRef = React.useRef<import("echarts/core").ECharts | null>(null);
+  const chartRef = React.useRef<import("echarts").EChartsType | null>(null);
   const [loading, setLoading] = React.useState(true);
   const { theme } = useTheme();
   const { reduced, durationSlow, easingSpring } = useAnimation();

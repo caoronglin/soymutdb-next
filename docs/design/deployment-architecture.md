@@ -11,9 +11,10 @@
 | 面 | 方案 | 状态 |
 | --- | --- | --- |
 | 后端 + 数据面 | docker compose（api / worker×3 / beat / postgres / clickhouse / redis×2 / minio / mcp-server / nginx / prometheus / grafana / exporters） | ✅ 主路径，systemd 编排 compose 项目 |
+| 后端 + 数据面（备选） | **conda 裸进程**（api / worker×3 / beat）+ 数据层可仍由 docker compose 提供（推荐组合：docker 起数据层，conda 跑应用层） | ✅ 备选（D6 重新启用），见 `deploy/conda/README.md`，一键脚本 `deploy/scripts/conda-deploy.sh` |
 | 前端静态托管 | **GitHub Pages（gh-pages 分支）**，`push main → CI 自动构建发布` | ✅ 已上线 https://caoronglin.github.io/soymutdb-next/ |
 | 前端静态托管（旧方案） | Cloudflare Pages（web/jbrowse/admin 三个项目） | ⛔ 已放弃，见 `deploy/cloudflare.md` 顶部标注（非主路径） |
-| 旧部署链路 | Windows 服务 / Conda 裸进程 | ⛔ 已废弃（非主路径），`deploy/linux/install.sh` 已有标注 |
+| 旧部署链路 | Windows 服务 | ⛔ 已废弃（非主路径），`deploy/linux/install.sh` 已有标注 |
 
 **关键约束（compose 内已固化，运维需知晓）：**
 
@@ -410,17 +411,17 @@ bash deploy/scripts/verify-restore.sh /opt/soymutdb/backups/<id>.tar.gz
 
 ---
 
-## 9. 遗留项与现状不符点（仅记录，未改动）
+## 9. 遗留项与现状不符点（D7 更新：R3/R4 已完成，状态同步；R1/R2/R5/R6/R7 仍遗留）
 
-| # | 项 | 说明 |
-| --- | --- | --- |
-| R1 | gh-pages 子路径 base | 站点托管在 `https://caoronglin.github.io/soymutdb-next/`（子路径），但 `apps/web/vite.config.ts` 未配置 `base`；如子路径部署生效依赖相对资源路径/当前产物实际状态，需在发布流程中确认（本项目未改动）。若未来换自定义域名根路径托管，需同步调整。 |
-| R2 | 镜像 tag 无自动推送 | `.github/workflows/ci.yml` 的 docker-build 只构建 `:ci` 本地 tag + Trivy 扫描，**未推送 registry**；`deploy/.env.example` 中的 `ghcr.io/...` tag 需发布流程人工/脚本推送并维护版本号。 |
-| R3 | CF beacon token 未实现 | Cloudflare Web Analytics beacon 未注入代码（§4.5）；CSP（meta + `_headers` 两处）需同步放行 `static.cloudflareinsights.com`。 |
-| R4 | MCP 限流为占位 | 60/min 限流为 B1 骨架占位，由 G3 门禁在传输层实现（当前未接）；`SOYMUTDB_MCP_API_TOKEN` 为空时写工具无鉴权。 |
-| R5 | 历史文档过时 | `deploy/cloudflare.md`（CF Pages 方案，已放弃）、`deploy/windows/`、`deploy/conda/` 均为非主路径，仅做标注；`README.md` 顶部架构图仍描述 nginx 托管前端静态（旧三层隔离），本任务只在部署段更新，未重写架构图。 |
-| R6 | CORS 白名单待填 | 生产 `SOYMUTDB_CORS_ORIGINS` 需包含 gh-pages origin（`https://caoronglin.github.io`）；`deploy/.env.example` 中为示例域名。 |
-| R7 | healthcheck.sh 前端段 | 脚本注释仍写「Cloudflare Pages 托管」（已过时），已改为 gh-pages 表述（仅注释）。 |
+| # | 项 | 状态 | 说明 |
+| --- | --- | --- | --- |
+| R1 | gh-pages 子路径 base | ⏳ 遗留 | 站点托管在 `https://caoronglin.github.io/soymutdb-next/`（子路径），但 `apps/web/vite.config.ts` 未配置 `base`；如子路径部署生效依赖相对资源路径/当前产物实际状态，需在发布流程中确认（本项目未改动）。若未来换自定义域名根路径托管，需同步调整。 |
+| R2 | 镜像 tag 无自动推送 | ⏳ 遗留 | `.github/workflows/ci.yml` 的 docker-build 只构建 `:ci` 本地 tag + Trivy 扫描，**未推送 registry**；`deploy/.env.example` 中的 `ghcr.io/...` tag 需发布流程人工/脚本推送并维护版本号。 |
+| R3 | CF beacon token | ✅ 已实现（C3） | `apps/web/vite.config.ts` 的 `transformIndexHtml` 已在构建时按 `VITE_CF_WEB_ANALYTICS_TOKEN` 注入 `static.cloudflareinsights.com/beacon.min.js`；`index.html` 留有占位注释。**注意**：CSP（`index.html` meta 与部署 `_headers`）需在启用 token 时同步放行 `script-src https://static.cloudflareinsights.com` 与 `connect-src https://cloudflareinsights.com`。 |
+| R4 | MCP 限流 | ✅ 已实现（G3） | `apps/mcp-server/src/mcp_server/ratelimit.py` 在传输层实现：全局 60 req/min/客户端 + `blast_submit` 10 次/hr；超限返回 `429 {"error":"rate_limited","retry_after":N}`；`SOYMUTDB_MCP_API_TOKEN` 通过 `Authorization: Bearer` 鉴权（server.py + manifest.py）。 |
+| R5 | 历史文档过时 | ⏳ 遗留（部分跟进） | `deploy/cloudflare.md`（CF Pages 方案，已放弃）、`deploy/windows/` 为非主路径，仅做标注；`deploy/conda/` 已由 D6 重新启用为备选路径（见 `deploy/conda/README.md`）；`README.md` 顶部架构图仍描述 nginx 托管前端静态（旧三层隔离），未重写架构图。 |
+| R6 | CORS 白名单待填 | ⏳ 遗留 | 生产 `SOYMUTDB_CORS_ORIGINS` 需包含 gh-pages origin（`https://caoronglin.github.io`）；`deploy/.env.example` 中为示例域名。 |
+| R7 | healthcheck.sh 前端段 | ⏳ 遗留 | 脚本注释已改为 gh-pages 表述（仅注释），仍待发布流程实测确认。 |
 
 ---
 

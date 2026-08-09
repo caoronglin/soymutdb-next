@@ -161,7 +161,7 @@ describe("NewsListPage component", () => {
 
   it("renders rows from the API response", async () => {
     renderPage();
-    expect(await screen.findByText("Hello SoyMutDB")).toBeInTheDocument();
+    expect(await screen.findByText("Hello SoyMutDB")).toBeTruthy();
   });
 
   it("shows the empty state when the API returns no rows", async () => {
@@ -173,7 +173,7 @@ describe("NewsListPage component", () => {
     });
     renderPage();
     // emptyText is the raw i18n key (t mock) — ProTable renders it.
-    expect(await screen.findByText("admin.news.empty")).toBeInTheDocument();
+    expect(await screen.findByText("admin.news.empty")).toBeTruthy();
   });
 
   it("shows load-error toast and success:false when the request rejects", async () => {
@@ -182,8 +182,8 @@ describe("NewsListPage component", () => {
     // The error toast message is rendered by AntD App message (async).
     expect(
       await screen.findByText(/admin\.news\.messages\.loadError.*boom/s),
-    ).toBeInTheDocument();
+    ).toBeTruthy();
     // Empty state renders after the failed request (success:false).
-    expect(await screen.findByText("admin.news.empty")).toBeInTheDocument();
+    expect(await screen.findByText("admin.news.empty")).toBeTruthy();
   });
 });

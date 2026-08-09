@@ -104,7 +104,7 @@ type WidgetFormValues = z.infer<typeof widgetSchema>;
 // ---------------------------------------------------------------------------
 
 export default function WidgetEditorPage() {
-  const { name: routeName } = useParams({ from: "/widgets/$name" });
+  const { name: routeName } = useParams({ from: "/_auth/widgets/$name" });
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const isNew = routeName === "new";

@@ -241,3 +241,158 @@ class TestEndpointCacheIntegration:
         assert isinstance(result[0], ReleaseResponse)
         assert result[0].version == "v4.0"
         assert called["name"] == "releases:list"
+
+    async def test_list_assemblies_cache_hit_skips_db(self, monkeypatch) -> None:
+        from app.api.v1 import genes as genes_module
+        from app.schemas.genomic import AssemblyResponse
+
+        payload = [
+            {
+                "id": 1,
+                "name": "Wm82.a4.v1",
+                "species": "Glycine max",
+                "version": "v4",
+                "description": None,
+                "is_default": True,
+                "created_at": "2026-07-01T00:00:00+00:00",
+                "updated_at": "2026-07-01T00:00:00+00:00",
+            }
+        ]
+        db = AsyncMock()
+        db.execute = AsyncMock(
+            side_effect=AssertionError("DB must not be queried on cache hit")
+        )
+
+        called: dict = {}
+
+        async def _fake_get_or_set(name, ttl, loader, **kwargs):
+            called["name"] = name
+            called["ttl"] = ttl
+            return payload
+
+        monkeypatch.setattr(genes_module, "get_or_set", _fake_get_or_set)
+
+        result = await genes_module.list_assemblies(db)
+
+        assert isinstance(result, list)
+        assert isinstance(result[0], AssemblyResponse)
+        assert result[0].name == "Wm82.a4.v1"
+        assert called["name"] == "genes:assemblies"
+        assert called["ttl"] is None  # default TTL
+
+    async def test_chromosome_density_cache_hit_skips_db(self, monkeypatch) -> None:
+        from app.api.v1 import stats as stats_module
+        from app.schemas.analytics import ChromosomeDensitySummary
+
+        payload = [
+            {
+                "chromosome": "Gm01",
+                "variant_count": 10,
+                "snp_count": 8,
+                "indel_count": 2,
+                "length_bp": 55900000,
+                "density_per_kb": 0.0002,
+            }
+        ]
+        db = AsyncMock()
+        db.execute = AsyncMock(
+            side_effect=AssertionError("DB must not be queried on cache hit")
+        )
+
+        called: dict = {}
+
+        async def _fake_get_or_set(name, ttl, loader, **kwargs):
+            called["name"] = name
+            called["params"] = kwargs.get("params")
+            return payload
+
+        monkeypatch.setattr(stats_module, "get_or_set", _fake_get_or_set)
+
+        result = await stats_module.chromosome_density_summary(
+            db, release_id=None
+        )
+
+        assert isinstance(result, list)
+        assert isinstance(result[0], ChromosomeDensitySummary)
+        assert result[0].chromosome == "Gm01"
+        assert called["name"] == "stats:chromosome-density"
+        assert called["params"] == {"release_id": None}
+
+    async def test_chromosome_density_cache_key_includes_release(self, monkeypatch) -> None:
+        """Distinct ``release_id`` values must produce distinct cache keys."""
+        from app.api.v1 import stats as stats_module
+
+        seen: list[dict | None] = []
+
+        async def _fake_get_or_set(name, ttl, loader, **kwargs):
+            seen.append(kwargs.get("params"))
+            return []
+
+        monkeypatch.setattr(stats_module, "get_or_set", _fake_get_or_set)
+        db = AsyncMock()
+
+        await stats_module.chromosome_density_summary(db, release_id=None)
+        await stats_module.chromosome_density_summary(db, release_id=7)
+
+        assert seen == [{"release_id": None}, {"release_id": 7}]
+
+    async def test_release_statistics_cache_hit_skips_db(self, monkeypatch) -> None:
+        from app.api.v1 import stats as stats_module
+        from app.schemas.analytics import ReleaseSummary
+
+        payload = [
+            {
+                "release_version": "v4.0",
+                "release_date": "2026-08-01",
+                "variant_count": 10,
+                "gene_count": 100,
+                "mutant_line_count": 5,
+            }
+        ]
+        db = AsyncMock()
+        db.execute = AsyncMock(
+            side_effect=AssertionError("DB must not be queried on cache hit")
+        )
+
+        called: dict = {}
+
+        async def _fake_get_or_set(name, ttl, loader, **kwargs):
+            called["name"] = name
+            called["params"] = kwargs.get("params")
+            return payload
+
+        monkeypatch.setattr(stats_module, "get_or_set", _fake_get_or_set)
+
+        result = await stats_module.release_statistics(db, only_active=False)
+
+        assert isinstance(result, list)
+        assert isinstance(result[0], ReleaseSummary)
+        assert result[0].release_version == "v4.0"
+        assert called["name"] == "stats:releases"
+        assert called["params"] == {"only_active": False}
+
+    async def test_featured_news_cache_hit_skips_db(self, monkeypatch) -> None:
+        from app.api.v1 import news as news_module
+        from app.schemas.news import NewsFeaturedResponse
+
+        payload = {"featured": [], "carousel": []}
+        db = AsyncMock()
+        db.execute = AsyncMock(
+            side_effect=AssertionError("DB must not be queried on cache hit")
+        )
+
+        called: dict = {}
+
+        async def _fake_get_or_set(name, ttl, loader, **kwargs):
+            called["name"] = name
+            called["ttl"] = ttl
+            return payload
+
+        monkeypatch.setattr(news_module, "get_or_set", _fake_get_or_set)
+
+        result = await news_module.featured_news(db)
+
+        assert isinstance(result, NewsFeaturedResponse)
+        assert result.featured == []
+        assert called["name"] == "news:featured"
+        assert called["ttl"] == news_module.FEATURED_CACHE_TTL_SECONDS == 60

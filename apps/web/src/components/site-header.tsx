@@ -26,6 +26,7 @@ import { Button, cn } from "@soymutdb/ui";
 import { useTheme } from "../lib/theme-provider";
 import { useI18n, type SupportedLanguage } from "../lib/i18n";
 import { AnimationControl } from "./animation-control";
+import { NotificationBell } from "./notifications/notification-bell";
 
 interface NavItem {
   to?: string;
@@ -250,6 +251,7 @@ export function SiteHeader() {
 
         {/* Right cluster */}
         <div className="ml-auto flex items-center gap-1 md:ml-2">
+          <NotificationBell />
           <LanguageSwitcher
             open={langOpen}
             setOpen={setLangOpen}

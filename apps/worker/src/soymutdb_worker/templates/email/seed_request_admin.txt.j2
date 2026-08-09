@@ -1,0 +1,20 @@
+SoyMutDB — New seed request
+
+A new seed request has been submitted by {{ name }} ({{ email }}).
+Please review the application and update its status in the admin panel.
+
+Request ID : {{ request_id }}
+Name       : {{ name }}
+Email      : {{ email }}
+Institution: {{ institution }}
+Country    : {{ country }}
+Gene IDs   : {{ gene_count }} requested
+{% for gene_id in gene_ids %}             - {{ gene_id }}
+{% endfor %}{% if notes %}Notes      : {{ notes }}
+{% endif %}Submitted  : {{ created_at }}
+
+{% if admin_url %}Manage requests: {{ admin_url }}
+{% else %}Manage requests at /admin/seed-requests.
+{% endif %}
+— SoyMutDB (Soybean Mutation Database)
+  Seed request {{ request_id }} · pending review.

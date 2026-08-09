@@ -69,6 +69,17 @@ export default function SettingsPage() {
     enabled_formats: "fasta,vcf,gff3,csv,tsv,png,jpg,svg,txt",
   });
 
+  const [about, setAbout] = useState({
+    title_en: "",
+    title_zh: "",
+    summary_en: "",
+    summary_zh: "",
+    content_en: "",
+    content_zh: "",
+  });
+
+  const [aboutLoaded, setAboutLoaded] = useState(false);
+
   useEffect(() => {
     http.get("/admin/cdn-config").then((res: any) => {
       if (res) {
@@ -92,6 +103,24 @@ export default function SettingsPage() {
         });
       }
     }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    http.get("/admin/settings/about").then((res: any) => {
+      if (res && typeof res === "object") {
+        setAbout({
+          title_en: String(res.title_en ?? ""),
+          title_zh: String(res.title_zh ?? ""),
+          summary_en: String(res.summary_en ?? ""),
+          summary_zh: String(res.summary_zh ?? ""),
+          content_en: String(res.content_en ?? ""),
+          content_zh: String(res.content_zh ?? ""),
+        });
+      }
+      setAboutLoaded(true);
+    }).catch(() => {
+      setAboutLoaded(true);
+    });
   }, []);
 
   const saveMutation = useMutation({
@@ -187,6 +216,90 @@ export default function SettingsPage() {
           </div>
           <div className="flex justify-end">
             <Button onClick={() => handleSave("general", general)}>
+              <Save className="size-4" />
+              Save Changes
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* About us content */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Globe className="size-4 text-primary" />
+            {t("admin.about.title")}
+          </CardTitle>
+          <CardDescription>{t("admin.about.description")}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="about-title-en">Title (English)</Label>
+              <Input
+                id="about-title-en"
+                value={about.title_en}
+                onChange={(e) => setAbout({ ...about, title_en: e.target.value })}
+                placeholder="About SoyMutDB"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="about-title-zh">Title (Chinese)</Label>
+              <Input
+                id="about-title-zh"
+                value={about.title_zh}
+                onChange={(e) => setAbout({ ...about, title_zh: e.target.value })}
+                placeholder="关于我们"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="about-summary-en">Summary (English)</Label>
+              <Textarea
+                id="about-summary-en"
+                value={about.summary_en}
+                onChange={(e) => setAbout({ ...about, summary_en: e.target.value })}
+                rows={2}
+                placeholder="Short introduction shown on the About page"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="about-summary-zh">Summary (Chinese)</Label>
+              <Textarea
+                id="about-summary-zh"
+                value={about.summary_zh}
+                onChange={(e) => setAbout({ ...about, summary_zh: e.target.value })}
+                rows={2}
+                placeholder="关于我们页面的简短介绍"
+              />
+            </div>
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label htmlFor="about-content-en">Content (English)</Label>
+              <Textarea
+                id="about-content-en"
+                value={about.content_en}
+                onChange={(e) => setAbout({ ...about, content_en: e.target.value })}
+                rows={8}
+                placeholder="Full page content in English (Markdown supported)"
+                className="font-mono text-sm"
+              />
+            </div>
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label htmlFor="about-content-zh">Content (Chinese)</Label>
+              <Textarea
+                id="about-content-zh"
+                value={about.content_zh}
+                onChange={(e) => setAbout({ ...about, content_zh: e.target.value })}
+                rows={8}
+                placeholder="页面内容（中文，支持 Markdown）"
+                className="font-mono text-sm"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <Button
+              onClick={() => handleSave("about", about)}
+              disabled={!aboutLoaded}
+            >
               <Save className="size-4" />
               Save Changes
             </Button>

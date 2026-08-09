@@ -18,6 +18,12 @@ Contract:
   debug level: the caller transparently falls back to a direct query.  The
   cache is therefore a best-effort accelerator, never a correctness
   dependency.
+- **Anti-penetration**: whatever ``loader()`` returns is cached, including
+  empty structures (``[]`` / ``{}``) that loaders return when their data
+  source is temporarily unavailable or a table is empty.  Once memoised, the
+  empty result short-circuits repeated requests for the whole TTL instead of
+  letting them all penetrate to the source.  Call sites that expect frequent
+  content churn (e.g. news featured) pass a shorter ``ttl``.
 - Only read paths are cached — write paths must not go through here.
 
 NOTE: external reference (geekblogs) was unavailable; this follows the
