@@ -30,7 +30,9 @@
     "analyses": "Analyze",
     "explore": "Explore",
     "resources": "Resources",
-    "allTools": "All tools"
+    "allTools": "All tools",
+    "contact": "Contact Us",
+    "latestNews": "Latest News"
   },
   "home": {
     "newRelease": "New Release Available",
@@ -89,7 +91,9 @@
     "viewRelease": "View Release",
     "downloadData": "Download Data",
     "seeds": "Seeds",
-    "statsUnavailable": "Statistics temporarily unavailable"
+    "statsUnavailable": "Statistics temporarily unavailable",
+    "assembly": "Genome assembly",
+    "welcome": "Welcome"
   },
   "genes": {
     "title": "Gene Search",
@@ -343,15 +347,22 @@
     "viewResults": "View Results",
     "cancel": "Cancel",
     "noJobs": "No jobs yet",
+    "noHits": "No hits found for this job",
     "resultsTitle": "BLAST Results",
     "alignments": "Alignments",
     "hitTable": "Hit Table",
     "hitName": "Name",
+    "hitSubject": "Subject",
+    "hitSubjectCoords": "Subject coords",
     "hitScore": "Score",
     "hitEValue": "E-value",
     "hitIdentity": "Identity",
     "hitCoverage": "Coverage",
-    "hitLength": "Length"
+    "hitLength": "Length",
+    "actions": {
+      "gbrowse": "Gbrowse",
+      "geneSearch": "Gene search"
+    }
   },
   "releases": {
     "title": "Data Releases",
@@ -632,7 +643,93 @@
     "recentSearches": "Recent Searches",
     "clearHistory": "Clear History",
     "advanced_filters": "Advanced Filters",
-    "min_fpkm": "Min FPKM"
+    "min_fpkm": "Min FPKM",
+    "tabGenes": "Gene ID",
+    "tabLocation": "Physical Location",
+    "tabGbrowse": "Gbrowse",
+    "tabPrimer": "Primer Design",
+    "tabBlast": "BLAST",
+    "tabTools": "Search Tools",
+    "hub": {
+      "title": "Search tools"
+    },
+    "genes": {
+      "title": "Gene ID Search",
+      "subtitle": "Find genes by gene ID in a genome version",
+      "assembly": "Genome version",
+      "assemblyPlaceholder": "Select a genome version",
+      "geneId": "Gene ID",
+      "geneIdPlaceholder": "One gene ID per line, e.g. Glyma.01G000100",
+      "geneIdHint": "Multiple gene IDs are supported — one per line.",
+      "submit": "Search",
+      "resultsFor": "Results for",
+      "noResults": "No genes found",
+      "colAssembly": "Genome version",
+      "colChromosome": "Chromosome",
+      "colMutation": "Mutation feature",
+      "colGbrowse": "Gbrowse",
+      "colGeneId": "Gene ID",
+      "colPosition": "Position",
+      "mutations": "{count} variants",
+      "openBrowser": "Open in browser",
+      "openGene": "Open gene {geneId}"
+    },
+    "location": {
+      "title": "Physical Location Search",
+      "subtitle": "Find variants and genes in a genomic region",
+      "assembly": "Genome version",
+      "assemblyPlaceholder": "Select a genome version",
+      "chromosome": "Chromosome",
+      "start": "Start",
+      "end": "End",
+      "formatHint": "Region format: chromosome : start–end",
+      "submit": "Search",
+      "noResults": "No variants found in this region",
+      "found": "{count} variants found",
+      "colAssembly": "Genome version",
+      "colChromosome": "Chromosome",
+      "colMutation": "Mutation feature",
+      "colGbrowse": "Gbrowse",
+      "colGeneId": "Gene ID",
+      "colPosition": "Position",
+      "openBrowser": "Open in browser",
+      "openGene": "Open gene {geneId}"
+    },
+    "gbrowse": {
+      "title": "Gbrowse",
+      "subtitle": "Browse the genome in Gbrowse",
+      "desc": "Select a genome version and open the Gbrowse browser. Search results also link to specific loci directly.",
+      "assembly": "Genome version",
+      "open": "Open Gbrowse"
+    },
+    "primer": {
+      "title": "Primer Design",
+      "subtitle": "Design primers for a target region",
+      "comingSoon": "Coming soon",
+      "desc": "The primer design tool is under development and will be available soon. Use the BLAST tool to locate your sequence in the meantime.",
+      "assembly": "Genome version",
+      "region": "Target region",
+      "regionPlaceholder": "chromosome:start-end, e.g. chr01:1000-2000",
+      "submit": "Design primers"
+    },
+    "blast": {
+      "title": "BLAST",
+      "subtitle": "Homology search against reference genomes",
+      "desc": "Submit nucleotide or protein sequences for homology search against the reference genomes, and track your jobs here.",
+      "open": "Go to BLAST"
+    },
+    "tools": {
+      "title": "Search Tools",
+      "subtitle": "Additional search utilities",
+      "desc": "Pick a tool to fetch sequences, run enrichment analysis, or explore expression patterns.",
+      "open": "Open",
+      "seqfetch": "Sequence Fetch",
+      "seqfetchDesc": "Extract FASTA sequences by gene ID or genomic region.",
+      "enrichment": "GO / KEGG Enrichment",
+      "enrichmentDesc": "Over-representation analysis for a gene list.",
+      "exppattern": "Expression Pattern",
+      "exppatternDesc": "Heatmap of expression across conditions."
+    }
   },
   "admin": {
     "title": "Admin Console",

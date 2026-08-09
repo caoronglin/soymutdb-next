@@ -90,3 +90,17 @@ export function getGeneAnnotations(
     params: { annotation_type: annotationType },
   });
 }
+
+/** A genome assembly (GET /genes/assemblies). */
+export interface AssemblyInfo {
+  id: string | number;
+  name: string;
+  species: string;
+  version: string;
+  is_default: boolean;
+}
+
+/** List all genome assemblies. */
+export function getAssemblies(): Promise<AssemblyInfo[]> {
+  return http.get<AssemblyInfo[]>("/genes/assemblies");
+}

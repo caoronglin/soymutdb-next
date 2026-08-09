@@ -4,8 +4,12 @@
  * AntD 5 migration (A1): Card/Form/Select/Input/List/Tag/Alert replace the
  * frozen packages/ui components. TanStack Query data flow and zod
  * validation logic unchanged.
+ *
+ * Completed jobs expose a hits table (GET /blast/jobs/{id}/hits) with an
+ * actions column: "Gbrowse" opens /browser at the hit's subject coordinates
+ * (new tab) and "Gene search" deep-links /search/genes?q=<subject id>.
  */
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import * as React from "react";
@@ -20,13 +24,17 @@ import {
   List,
   Select,
   Skeleton,
+  Space,
+  Table,
   Tag,
   Typography,
+  type TableColumnsType,
 } from "antd";
 import {
   getBlastDatabases,
   submitBlastJob,
   getBlastJobs,
+  getBlastHits,
   BLAST_PROGRAMS,
   apiBaseUrl,
   getAccessToken,
@@ -61,6 +69,35 @@ type BlastDatabaseWithAssembly = {
   assembly_name?: string | null;
   assembly_version?: string | null;
   assembly_is_default?: boolean | null;
+};
+
+/**
+ * Loose hit type for the hits table. The backend returns `subject_*` fields
+ * (apps/api/app/schemas/blast.py BlastHit) while the api-client BlastHit
+ * type still uses the legacy `target_*` names — read both defensively
+ * instead of touching packages/api-client.
+ */
+type BlastHitLoose = {
+  id?: string | number;
+  hsp_num?: number;
+  subject_id?: string;
+  subject_title?: string;
+  target_id?: string;
+  target_title?: string;
+  percent_identity?: number;
+  identity_percent?: number;
+  alignment_length?: number;
+  mismatches?: number;
+  gap_opens?: number;
+  query_start?: number;
+  query_end?: number;
+  subject_start?: number;
+  subject_end?: number;
+  target_start?: number;
+  target_end?: number;
+  evalue?: number;
+  bit_score?: number;
+  score?: number;
 };
 
 const blastSchema = z.object({
@@ -242,6 +279,178 @@ function BlastComponent() {
 
   const jobs = jobsQuery.data?.items ?? [];
 
+  // -------------------------------------------------------------------------
+  // Hits table (completed jobs) — with Gbrowse / gene-search cross links
+  // -------------------------------------------------------------------------
+  const navigate = useNavigate();
+  const [selectedJob, setSelectedJob] = React.useState<BlastJob | null>(null);
+
+  const hitsQuery = useQuery({
+    queryKey: ["blast-hits", selectedJob?.id],
+    queryFn: async () => {
+      const res = await getBlastHits(selectedJob!.id, { page: 1, page_size: 100 });
+      return (res.items ?? []) as unknown as BlastHitLoose[];
+    },
+    enabled: selectedJob != null,
+    staleTime: 60_000,
+  });
+
+  // The job stores the database *name*; map back to its assembly for the
+  // Gbrowse deep link (name match first, then id match).
+  const assemblyForJob = (job: BlastJob): string | undefined => {
+    const byName = databases.find((d) => d.name === job.database);
+    if (byName?.assembly_name) return byName.assembly_name;
+    const byId = databases.find((d) => String(d.id) === String(job.database));
+    return byId?.assembly_name ?? undefined;
+  };
+
+  const hitSubjectId = (hit: BlastHitLoose): string | undefined =>
+    hit.subject_id ?? hit.target_id;
+  const hitStart = (hit: BlastHitLoose): number | undefined =>
+    hit.subject_start ?? hit.target_start;
+  const hitEnd = (hit: BlastHitLoose): number | undefined =>
+    hit.subject_end ?? hit.target_end;
+
+  /** /browser deep link for a hit, or null when coordinates are missing. */
+  const browserUrlFor = (job: BlastJob, hit: BlastHitLoose): string | null => {
+    const assembly = assemblyForJob(job);
+    const chr = hitSubjectId(hit);
+    const start = hitStart(hit);
+    const end = hitEnd(hit);
+    if (!assembly || !chr || start == null || end == null) return null;
+    const params = new URLSearchParams({
+      assembly,
+      locus: `${chr}:${start}-${end}`,
+    });
+    return `/browser?${params.toString()}`;
+  };
+
+  const hits = hitsQuery.data ?? [];
+  const hitsColumns: TableColumnsType<BlastHitLoose> = [
+    {
+      title: t("blast.hitSubject"),
+      dataIndex: "subject_id",
+      key: "subject",
+      render: (_, hit) => {
+        const id = hitSubjectId(hit);
+        const title = hit.subject_title ?? hit.target_title;
+        return (
+          <span className="min-w-0">
+            <span className="block truncate font-mono text-xs font-medium">{id ?? "—"}</span>
+            {title ? (
+              <span className="block truncate text-xs text-muted-foreground">{title}</span>
+            ) : null}
+          </span>
+        );
+      },
+    },
+    {
+      title: t("blast.hitScore"),
+      dataIndex: "bit_score",
+      key: "score",
+      width: 90,
+      render: (_, hit) => {
+        const score = hit.bit_score ?? hit.score;
+        return score != null ? (
+          <span className="font-mono text-xs">{score.toFixed(1)}</span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        );
+      },
+    },
+    {
+      title: t("blast.hitEValue"),
+      dataIndex: "evalue",
+      key: "evalue",
+      width: 110,
+      render: (_, hit) =>
+        hit.evalue != null ? (
+          <span className="font-mono text-xs">{hit.evalue.toExponential(2)}</span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        ),
+    },
+    {
+      title: t("blast.hitIdentity"),
+      dataIndex: "percent_identity",
+      key: "identity",
+      width: 100,
+      render: (_, hit) => {
+        const identity = hit.percent_identity ?? hit.identity_percent;
+        return identity != null ? (
+          <span className="font-mono text-xs">{identity.toFixed(1)}%</span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        );
+      },
+    },
+    {
+      title: t("blast.hitLength"),
+      dataIndex: "alignment_length",
+      key: "length",
+      width: 90,
+      render: (_, hit) =>
+        hit.alignment_length != null ? (
+          <span className="font-mono text-xs">{hit.alignment_length}</span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        ),
+    },
+    {
+      title: t("blast.hitSubjectCoords"),
+      dataIndex: "subject_start",
+      key: "subject_coords",
+      width: 160,
+      render: (_, hit) => {
+        const chr = hitSubjectId(hit);
+        const start = hitStart(hit);
+        const end = hitEnd(hit);
+        return start != null && end != null && chr ? (
+          <span className="font-mono text-xs text-muted-foreground">
+            {chr}:{start}-{end}
+          </span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        );
+      },
+    },
+    {
+      title: t("common.actions"),
+      key: "actions",
+      width: 190,
+      render: (_, hit) => {
+        const browserUrl = selectedJob ? browserUrlFor(selectedJob, hit) : null;
+        const geneId = hitSubjectId(hit);
+        return (
+          <Space size={4} wrap>
+            <Button
+              size="small"
+              disabled={!browserUrl}
+              href={browserUrl ?? undefined}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {t("blast.actions.gbrowse")}
+            </Button>
+            <Button
+              size="small"
+              disabled={!geneId}
+              onClick={() => {
+                if (!geneId) return;
+                navigate({
+                  to: "/search/genes",
+                  search: { q: geneId, tissue: undefined, treatment: undefined, min_fpkm: undefined },
+                });
+              }}
+            >
+              {t("blast.actions.geneSearch")}
+            </Button>
+          </Space>
+        );
+      },
+    },
+  ];
+
   return (
     <FadeUp>
       <div className="container-prose py-10 md:py-14">
@@ -367,18 +576,63 @@ function BlastComponent() {
                       <p className="truncate font-mono text-xs">{job.id.slice(0, 12)}…</p>
                       <p className="text-xs text-muted-foreground">{job.program} · {job.database}</p>
                     </div>
-                    <Tag
-                      color={job.status === "completed" ? "success" : "default"}
-                      className="m-0 text-[10px] uppercase"
-                    >
-                      {job.status}
-                    </Tag>
+                    <div className="flex shrink-0 items-center gap-3">
+                      <Tag
+                        color={job.status === "completed" ? "success" : "default"}
+                        className="m-0 text-[10px] uppercase"
+                      >
+                        {job.status}
+                      </Tag>
+                      {job.status === "completed" ? (
+                        <Button
+                          size="small"
+                          type={selectedJob?.id === job.id ? "primary" : "default"}
+                          onClick={() => setSelectedJob(job)}
+                        >
+                          {t("blast.viewResults")}
+                        </Button>
+                      ) : null}
+                    </div>
                   </div>
                 </List.Item>
               )}
             />
           )}
         </Card>
+
+        {/* Hits table for the selected completed job — with Gbrowse /
+            gene-search cross links (PPTX V2). */}
+        {selectedJob ? (
+          <Card
+            className="mt-6"
+            title={<span className="text-base">{t("blast.resultsTitle")}</span>}
+            extra={
+              <Typography.Text type="secondary" className="font-mono">
+                {selectedJob.id.slice(0, 12)}…
+              </Typography.Text>
+            }
+          >
+            {hitsQuery.isLoading ? (
+              <Skeleton active paragraph={{ rows: 4 }} title={false} />
+            ) : hits.length === 0 ? (
+              <Empty description={t("blast.noHits")} />
+            ) : (
+              <Table<BlastHitLoose>
+                rowKey={(hit) => String(hit.id ?? hit.hsp_num ?? 0)}
+                columns={hitsColumns}
+                dataSource={hits}
+                loading={hitsQuery.isFetching}
+                size="small"
+                pagination={
+                  hits.length > 25
+                    ? { pageSize: 25, showSizeChanger: false }
+                    : false
+                }
+                scroll={{ x: "max-content" }}
+              />
+            )}
+          </Card>
+        ) : null}
       </div>
     </FadeUp>
   );

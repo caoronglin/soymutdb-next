@@ -2,9 +2,10 @@
 
 Contract:
 - ``GET /api/v1/site/about`` -> AboutContentResponse
+- ``GET /api/v1/site/home``  -> HomeContentResponse
 
-All fields are optional — a fresh deployment without ``about.*`` settings
-rows returns ``None`` for every field.
+All fields are optional — a fresh deployment without the corresponding
+``system_settings`` rows returns ``None`` for every field.
 """
 
 from __future__ import annotations
@@ -21,3 +22,15 @@ class AboutContentResponse(BaseModel):
     summary_zh: str | None = None
     content_en: str | None = None
     content_zh: str | None = None
+
+
+class HomeContentResponse(BaseModel):
+    """Editable homepage welcome block backed by ``system_settings``.
+
+    Values are rich HTML (``home.*`` keys) — the public endpoint re-runs
+    ``sanitize_rich_html`` on read so even rows written outside the admin
+    settings API can never serve untrusted markup.
+    """
+
+    welcome_en: str | None = None
+    welcome_zh: str | None = None

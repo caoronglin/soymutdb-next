@@ -1,0 +1,96 @@
+# =============================================================================
+# SoyMutDB Next — E2E online smoke test (deployed gh-pages site)
+#
+# Target : https://caoronglin.github.io/soymutdb-next/ (fixed in
+#          e2e/playwright.config.ts; SMOKE_BASE_URL can override)
+# Covers : 1) resource loading (no 4xx/5xx, same-origin js/css must load)
+#          2) route rendering (non-blank, no "Not Found", h1/h2 present)
+#          3) script health (zero pageerror / console.error per page)
+#          Full assertion contract: e2e/README.md
+#
+# Triggers:
+#   * schedule       — nightly, 02:00 UTC
+#   * workflow_dispatch — manual run from the Actions tab
+#   * workflow_run   — after "Deploy Web to Pages" (pages.yml) completes
+#                      successfully, smoke-test the freshly deployed site
+#
+# Note: e2e/ is an independent npm package (own package.json + lockfile),
+# intentionally outside the pnpm workspace — no root package.json changes.
+# =============================================================================
+name: E2E Smoke (online)
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["Deploy Web to Pages"]
+    types: [completed]
+
+permissions:
+  contents: read
+  # actions: write needed for actions/upload-artifact v4 (failure artifacts)
+  actions: write
+
+concurrency:
+  group: e2e-smoke
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: Online smoke test (gh-pages)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # workflow_run fires on BOTH success and failure of pages.yml — only
+    # smoke-test when the deployment actually succeeded.
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          # e2e installs with npm (independent package), so cache the npm
+          # store keyed on e2e/package-lock.json — NOT the pnpm store (this
+          # job never installs the root workspace).
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+
+      - name: Install e2e dependencies (independent package)
+        working-directory: e2e
+        run: npm install
+
+      - name: Install Chromium (with system deps)
+        working-directory: e2e
+        run: npx playwright install --with-deps chromium
+
+      # GitHub Pages publishes asynchronously after pages.yml pushes to the
+      # gh-pages branch — give the new deployment a moment to propagate so
+      # the post-deploy run never tests the previous release.
+      - name: Wait for GitHub Pages propagation (post-deploy runs only)
+        if: github.event_name == 'workflow_run'
+        run: sleep 60
+
+      - name: Run online smoke tests
+        working-directory: e2e
+        env:
+          # Set to a mirror when GitHub-hosted runners cannot reach the
+          # default Playwright CDN (e.g. npmmirror):
+          #   PLAYWRIGHT_DOWNLOAD_HOST: https://npmmirror.com/mirrors/playwright/
+          CI: "1"
+        run: npx playwright test
+
+      - name: Upload failure artifacts (HTML report + test-results)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-smoke-failure
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+          if-no-files-found: ignore
+          retention-days: 14

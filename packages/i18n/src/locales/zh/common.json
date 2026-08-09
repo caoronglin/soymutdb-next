@@ -30,7 +30,9 @@
     "analyses": "分析",
     "explore": "浏览",
     "resources": "资源",
-    "allTools": "全部工具"
+    "allTools": "全部工具",
+    "contact": "联系我们",
+    "latestNews": "最新动态"
   },
   "home": {
     "newRelease": "新版本可用",
@@ -89,7 +91,9 @@
     "viewRelease": "查看版本",
     "downloadData": "下载数据",
     "seeds": "种子",
-    "statsUnavailable": "统计数据暂不可用"
+    "statsUnavailable": "统计数据暂不可用",
+    "assembly": "基因组版本",
+    "welcome": "欢迎"
   },
   "genes": {
     "title": "基因搜索",
@@ -343,15 +347,22 @@
     "viewResults": "查看结果",
     "cancel": "取消",
     "noJobs": "暂无任务",
+    "noHits": "该任务未找到比对命中",
     "resultsTitle": "BLAST 结果",
     "alignments": "比对",
     "hitTable": "命中表",
     "hitName": "名称",
+    "hitSubject": "比对对象",
+    "hitSubjectCoords": "比对坐标",
     "hitScore": "得分",
     "hitEValue": "E 值",
     "hitIdentity": "一致性",
     "hitCoverage": "覆盖率",
-    "hitLength": "长度"
+    "hitLength": "长度",
+    "actions": {
+      "gbrowse": "Gbrowse",
+      "geneSearch": "基因搜索"
+    }
   },
   "releases": {
     "title": "数据版本",
@@ -632,7 +643,93 @@
     "recentSearches": "最近搜索",
     "clearHistory": "清除历史",
     "advanced_filters": "高级筛选",
-    "min_fpkm": "最低FPKM"
+    "min_fpkm": "最低FPKM",
+    "tabGenes": "基因 ID",
+    "tabLocation": "物理位置",
+    "tabGbrowse": "Gbrowse",
+    "tabPrimer": "引物设计",
+    "tabBlast": "BLAST",
+    "tabTools": "搜索工具",
+    "hub": {
+      "title": "搜索工具入口"
+    },
+    "genes": {
+      "title": "基因 ID 搜索",
+      "subtitle": "按基因 ID 在指定基因组版本中查找基因",
+      "assembly": "基因组版本",
+      "assemblyPlaceholder": "请选择基因组版本",
+      "geneId": "基因 ID",
+      "geneIdPlaceholder": "每行一个基因 ID，例如 Glyma.01G000100",
+      "geneIdHint": "支持多个基因 ID，每行一个。",
+      "submit": "搜索",
+      "resultsFor": "搜索结果",
+      "noResults": "未找到基因",
+      "colAssembly": "基因组版本",
+      "colChromosome": "染色体号",
+      "colMutation": "突变特征",
+      "colGbrowse": "Gbrowse",
+      "colGeneId": "基因 ID",
+      "colPosition": "位点",
+      "mutations": "{count} 个变异",
+      "openBrowser": "浏览器中打开",
+      "openGene": "打开基因 {geneId}"
+    },
+    "location": {
+      "title": "物理位置搜索",
+      "subtitle": "在基因组区域中查找变异和基因",
+      "assembly": "基因组版本",
+      "assemblyPlaceholder": "请选择基因组版本",
+      "chromosome": "染色体号",
+      "start": "起始位点",
+      "end": "终止位点",
+      "formatHint": "区域格式：染色体号 : 起始–终止",
+      "submit": "搜索",
+      "noResults": "该区域内未找到变异",
+      "found": "找到 {count} 个变异",
+      "colAssembly": "基因组版本",
+      "colChromosome": "染色体号",
+      "colMutation": "突变特征",
+      "colGbrowse": "Gbrowse",
+      "colGeneId": "基因 ID",
+      "colPosition": "位点",
+      "openBrowser": "浏览器中打开",
+      "openGene": "打开基因 {geneId}"
+    },
+    "gbrowse": {
+      "title": "Gbrowse",
+      "subtitle": "在 Gbrowse 中浏览基因组",
+      "desc": "选择基因组版本后打开 Gbrowse 浏览器；搜索结果也可直接跳转到具体位点。",
+      "assembly": "基因组版本",
+      "open": "打开 Gbrowse"
+    },
+    "primer": {
+      "title": "引物设计",
+      "subtitle": "为目标区域设计引物",
+      "comingSoon": "即将上线",
+      "desc": "引物设计工具正在开发中，即将上线。在此期间可使用 BLAST 工具定位您的序列。",
+      "assembly": "基因组版本",
+      "region": "目标区域",
+      "regionPlaceholder": "染色体号:起始-终止，例如 chr01:1000-2000",
+      "submit": "设计引物"
+    },
+    "blast": {
+      "title": "BLAST",
+      "subtitle": "针对参考基因组进行同源性搜索",
+      "desc": "提交核酸或蛋白质序列，对参考基因组进行同源性搜索，并在此跟踪任务状态。",
+      "open": "前往 BLAST"
+    },
+    "tools": {
+      "title": "搜索工具",
+      "subtitle": "更多搜索工具",
+      "desc": "选择工具：获取序列、运行富集分析或探索表达模式。",
+      "open": "打开",
+      "seqfetch": "序列获取",
+      "seqfetchDesc": "按基因 ID 或基因组区域提取 FASTA 序列。",
+      "enrichment": "GO / KEGG 富集",
+      "enrichmentDesc": "基因列表的过表达分析。",
+      "exppattern": "表达模式",
+      "exppatternDesc": "跨条件的表达热图。"
+    }
   },
   "admin": {
     "title": "管理后台",

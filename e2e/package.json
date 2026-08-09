@@ -1,0 +1,17 @@
+{
+  "name": "soymutdb-e2e-smoke",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Online smoke tests for the deployed SoyMutDB site (https://caoronglin.github.io/soymutdb-next/) — assets, route rendering, script health",
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "test:list": "playwright test --list",
+    "test:headed": "playwright test --headed"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@types/node": "^22.10.0",
+    "playwright": "^1.62.1"
+  }
+}

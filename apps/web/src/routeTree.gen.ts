@@ -37,6 +37,12 @@ import { Route as AnalysesIndexRouteImport } from './routes/analyses/index'
 import { Route as AnalysesFastpRouteImport } from './routes/analyses/fastp'
 import { Route as AnalysesScanpyRouteImport } from './routes/analyses/scanpy'
 import { Route as AnalysesJobIdRouteImport } from './routes/analyses/$jobId'
+import { Route as SearchGenesRouteImport } from './routes/search/genes'
+import { Route as SearchLocationRouteImport } from './routes/search/location'
+import { Route as SearchGbrowseRouteImport } from './routes/search/gbrowse'
+import { Route as SearchPrimerRouteImport } from './routes/search/primer'
+import { Route as SearchBlastRouteImport } from './routes/search/blast'
+import { Route as SearchToolsRouteImport } from './routes/search/tools'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -178,6 +184,56 @@ const AnalysesJobIdRoute = AnalysesJobIdRouteImport.update({
   path: '/analyses/$jobId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SearchGenesRoute = SearchGenesRouteImport.update({
+  id: '/search/genes',
+  path: 'genes',
+  getParentRoute: () => SearchRoute,
+} as any)
+const SearchLocationRoute = SearchLocationRouteImport.update({
+  id: '/search/location',
+  path: 'location',
+  getParentRoute: () => SearchRoute,
+} as any)
+const SearchGbrowseRoute = SearchGbrowseRouteImport.update({
+  id: '/search/gbrowse',
+  path: 'gbrowse',
+  getParentRoute: () => SearchRoute,
+} as any)
+const SearchPrimerRoute = SearchPrimerRouteImport.update({
+  id: '/search/primer',
+  path: 'primer',
+  getParentRoute: () => SearchRoute,
+} as any)
+const SearchBlastRoute = SearchBlastRouteImport.update({
+  id: '/search/blast',
+  path: 'blast',
+  getParentRoute: () => SearchRoute,
+} as any)
+const SearchToolsRoute = SearchToolsRouteImport.update({
+  id: '/search/tools',
+  path: 'tools',
+  getParentRoute: () => SearchRoute,
+} as any)
+
+export interface SearchRouteChildren {
+  SearchGenesRoute: typeof SearchGenesRoute
+  SearchLocationRoute: typeof SearchLocationRoute
+  SearchGbrowseRoute: typeof SearchGbrowseRoute
+  SearchPrimerRoute: typeof SearchPrimerRoute
+  SearchBlastRoute: typeof SearchBlastRoute
+  SearchToolsRoute: typeof SearchToolsRoute
+}
+
+const searchRouteChildren: SearchRouteChildren = {
+  SearchGenesRoute: SearchGenesRoute,
+  SearchLocationRoute: SearchLocationRoute,
+  SearchGbrowseRoute: SearchGbrowseRoute,
+  SearchPrimerRoute: SearchPrimerRoute,
+  SearchBlastRoute: SearchBlastRoute,
+  SearchToolsRoute: SearchToolsRoute,
+}
+
+const SearchRouteWithChildren = SearchRoute._addFileChildren(searchRouteChildren)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -193,6 +249,12 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/publications': typeof PublicationsRoute
   '/search': typeof SearchRoute
+  '/search/genes': typeof SearchGenesRoute
+  '/search/location': typeof SearchLocationRoute
+  '/search/gbrowse': typeof SearchGbrowseRoute
+  '/search/primer': typeof SearchPrimerRoute
+  '/search/blast': typeof SearchBlastRoute
+  '/search/tools': typeof SearchToolsRoute
   '/seed-request': typeof SeedRequestRoute
   '/sra': typeof SraRoute
   '/tools/seqfetch': typeof ToolsSeqfetchRoute
@@ -223,6 +285,12 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/publications': typeof PublicationsRoute
   '/search': typeof SearchRoute
+  '/search/genes': typeof SearchGenesRoute
+  '/search/location': typeof SearchLocationRoute
+  '/search/gbrowse': typeof SearchGbrowseRoute
+  '/search/primer': typeof SearchPrimerRoute
+  '/search/blast': typeof SearchBlastRoute
+  '/search/tools': typeof SearchToolsRoute
   '/seed-request': typeof SeedRequestRoute
   '/sra': typeof SraRoute
   '/tools': typeof ToolsIndexRoute
@@ -254,6 +322,12 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/publications': typeof PublicationsRoute
   '/search': typeof SearchRoute
+  '/search/genes': typeof SearchGenesRoute
+  '/search/location': typeof SearchLocationRoute
+  '/search/gbrowse': typeof SearchGbrowseRoute
+  '/search/primer': typeof SearchPrimerRoute
+  '/search/blast': typeof SearchBlastRoute
+  '/search/tools': typeof SearchToolsRoute
   '/seed-request': typeof SeedRequestRoute
   '/sra': typeof SraRoute
   '/tools/seqfetch': typeof ToolsSeqfetchRoute
@@ -286,6 +360,12 @@ export interface FileRouteTypes {
     | '/login'
     | '/publications'
     | '/search'
+    | '/search/genes'
+    | '/search/location'
+    | '/search/gbrowse'
+    | '/search/primer'
+    | '/search/blast'
+    | '/search/tools'
     | '/seed-request'
     | '/sra'
     | '/tools/seqfetch'
@@ -316,6 +396,12 @@ export interface FileRouteTypes {
     | '/login'
     | '/publications'
     | '/search'
+    | '/search/genes'
+    | '/search/location'
+    | '/search/gbrowse'
+    | '/search/primer'
+    | '/search/blast'
+    | '/search/tools'
     | '/seed-request'
     | '/sra'
     | '/tools'
@@ -346,6 +432,12 @@ export interface FileRouteTypes {
     | '/login'
     | '/publications'
     | '/search'
+    | '/search/genes'
+    | '/search/location'
+    | '/search/gbrowse'
+    | '/search/primer'
+    | '/search/blast'
+    | '/search/tools'
     | '/seed-request'
     | '/sra'
     | '/tools/seqfetch'
@@ -487,6 +579,48 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SearchRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/search/genes': {
+      id: '/search/genes'
+      path: 'genes'
+      fullPath: '/search/genes'
+      preLoaderRoute: typeof SearchGenesRouteImport
+      parentRoute: typeof SearchRouteImport
+    }
+    '/search/location': {
+      id: '/search/location'
+      path: 'location'
+      fullPath: '/search/location'
+      preLoaderRoute: typeof SearchLocationRouteImport
+      parentRoute: typeof SearchRouteImport
+    }
+    '/search/gbrowse': {
+      id: '/search/gbrowse'
+      path: 'gbrowse'
+      fullPath: '/search/gbrowse'
+      preLoaderRoute: typeof SearchGbrowseRouteImport
+      parentRoute: typeof SearchRouteImport
+    }
+    '/search/primer': {
+      id: '/search/primer'
+      path: 'primer'
+      fullPath: '/search/primer'
+      preLoaderRoute: typeof SearchPrimerRouteImport
+      parentRoute: typeof SearchRouteImport
+    }
+    '/search/blast': {
+      id: '/search/blast'
+      path: 'blast'
+      fullPath: '/search/blast'
+      preLoaderRoute: typeof SearchBlastRouteImport
+      parentRoute: typeof SearchRouteImport
+    }
+    '/search/tools': {
+      id: '/search/tools'
+      path: 'tools'
+      fullPath: '/search/tools'
+      preLoaderRoute: typeof SearchToolsRouteImport
+      parentRoute: typeof SearchRouteImport
+    }
     '/seed-request': {
       id: '/seed-request'
       path: '/seed-request'
@@ -608,7 +742,7 @@ const rootRouteChildren: RootRouteChildren = {
   HelpRoute: HelpRoute,
   LoginRoute: LoginRoute,
   PublicationsRoute: PublicationsRoute,
-  SearchRoute: SearchRoute,
+  SearchRoute: SearchRouteWithChildren,
   SeedRequestRoute: SeedRequestRoute,
   SraRoute: SraRoute,
   ToolsIndexRoute: ToolsIndexRoute,

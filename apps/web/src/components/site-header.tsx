@@ -1,10 +1,12 @@
 /**
- * SiteHeader — sticky top navigation with logo, grouped nav, search trigger,
- * language switch, theme toggle, animation control, and auth menu.
+ * SiteHeader — sticky top navigation with logo, flat primary nav, search
+ * trigger, language switch, theme toggle, animation control, and auth menu.
  *
  * Features:
  * - Scroll-reactive backdrop blur / shadow (RAF-throttled)
- * - Four nav groups (Explore / Tools / Downloads / Resources) with dropdowns
+ * - Five flat top-level nav items (Home / Search / Tools / Contact / News),
+ *   PPTX V2 design — no secondary dropdowns; deeper pages (Downloads,
+ *   Guide, …) remain reachable from the footer.
  * - Animated underline on active nav links
  * - Cmd+K quick search trigger
  * - Smooth mobile drawer with slide-down animation
@@ -23,66 +25,42 @@ import {
   Dna,
 } from "lucide-react";
 import { Button, cn } from "@soymutdb/ui";
+import { Affix } from "antd";
 import { useTheme } from "../lib/theme-provider";
 import { useI18n, type SupportedLanguage } from "../lib/i18n";
 import { AnimationControl } from "./animation-control";
 import { NotificationBell } from "./notifications/notification-bell";
 
+/** True at the AntD/Tailwind `lg` breakpoint (>=1024px). */
+function useIsDesktop(): boolean {
+  const [isDesktop, setIsDesktop] = React.useState(
+    () => typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches,
+  );
+  React.useEffect(() => {
+    const mql = window.matchMedia("(min-width: 1024px)");
+    const onChange = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+  }, []);
+  return isDesktop;
+}
+
 interface NavItem {
-  to?: string;
-  labelKey?: string;
-  divider?: boolean;
-}
-
-interface NavGroup {
+  to: string;
   labelKey: string;
-  items: NavItem[];
 }
 
-const NAV_GROUPS: NavGroup[] = [
-  {
-    labelKey: "nav.explore",
-    items: [
-      { to: "/genes", labelKey: "nav.genes" },
-      { to: "/variants", labelKey: "nav.variants" },
-      { to: "/browser", labelKey: "nav.browser" },
-      { to: "/sra", labelKey: "nav.sra" },
-      { to: "/compare", labelKey: "nav.compare" },
-      { to: "/analytics", labelKey: "nav.analytics" },
-    ],
-  },
-  {
-    labelKey: "nav.tools",
-    items: [
-      { to: "/blast", labelKey: "nav.blast" },
-      { to: "/analyses", labelKey: "nav.analyses" },
-      { divider: true },
-      { to: "/tools/seqfetch", labelKey: "tools.seqfetch.title" },
-      { to: "/tools/enrichment", labelKey: "tools.enrichment.title" },
-      { to: "/tools/exppattern", labelKey: "tools.exppattern.title" },
-      { divider: true },
-      { to: "/tools", labelKey: "nav.allTools" },
-    ],
-  },
-  {
-    labelKey: "nav.resources",
-    items: [
-      { to: "/guide", labelKey: "nav.guide" },
-      { to: "/help", labelKey: "nav.help" },
-      { to: "/news", labelKey: "nav.news" },
-      { to: "/publications", labelKey: "nav.publications" },
-      { to: "/seed-request", labelKey: "nav.seedRequest" },
-      { to: "/about", labelKey: "nav.about" },
-    ],
-  },
-];
-
-/** Mobile menu sections — 4 flat blocks in order. */
-const MOBILE_SECTIONS: ReadonlyArray<{ labelKey: string; items: NavItem[] }> = [
-  { labelKey: "nav.explore", items: NAV_GROUPS[0].items },
-  { labelKey: "nav.tools", items: NAV_GROUPS[1].items },
-  { labelKey: "nav.downloads", items: [{ to: "/downloads", labelKey: "nav.downloads" }] },
-  { labelKey: "nav.resources", items: NAV_GROUPS[2].items },
+/**
+ * Primary navigation — five flat items in PPTX order. The order is fixed
+ * this iteration; a future admin setting may make it editable (the array is
+ * the single source of truth for both desktop and mobile drawers).
+ */
+const NAV_ITEMS: NavItem[] = [
+  { to: "/", labelKey: "nav.home" },
+  { to: "/search", labelKey: "nav.search" },
+  { to: "/tools", labelKey: "nav.tools" },
+  { to: "/help", labelKey: "nav.contact" },
+  { to: "/news", labelKey: "nav.latestNews" },
 ];
 
 export function SiteHeader() {
@@ -92,8 +70,8 @@ export function SiteHeader() {
   const currentPath = routerState.location.pathname;
   const { theme, toggleTheme } = useTheme();
   const { currentLanguage, changeLanguage } = useI18n();
+  const isDesktop = useIsDesktop();
   const [mobileOpen, setMobileOpen] = React.useState(false);
-  const [openMenu, setOpenMenu] = React.useState<string | null>(null);
   const [langOpen, setLangOpen] = React.useState(false);
   const [scrolled, setScrolled] = React.useState(false);
   const [searchValue, setSearchValue] = React.useState("");
@@ -119,13 +97,12 @@ export function SiteHeader() {
     };
   }, []);
 
-  // Close mobile menu and dropdowns on route change
+  // Close the mobile menu on route change
   React.useEffect(() => {
     setMobileOpen(false);
-    setOpenMenu(null);
   }, [currentPath]);
 
-  // Escape closes dropdowns; closes the mobile menu and returns focus to the toggle
+  // Escape closes the mobile menu and returns focus to the toggle
   React.useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
@@ -133,7 +110,6 @@ export function SiteHeader() {
         setMobileOpen(false);
         menuButtonRef.current?.focus();
       }
-      setOpenMenu(null);
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
@@ -165,7 +141,7 @@ export function SiteHeader() {
   const isActive = (to: string): boolean =>
     currentPath === to || (to !== "/" && currentPath.startsWith(to));
 
-  return (
+  const header = (
     <header
       ref={headerRef}
       className={cn(
@@ -192,66 +168,44 @@ export function SiteHeader() {
           </span>
         </Link>
 
-        {/* Desktop grouped nav */}
-        <nav className="hidden items-center gap-1 lg:flex" aria-label="Primary">
-          <NavDropdown
-            menuId="nav.explore"
-            labelKey="nav.explore"
-            items={NAV_GROUPS[0].items}
-            currentPath={currentPath}
-            open={openMenu === "nav.explore"}
-            onOpenChange={(open) => setOpenMenu(open ? "nav.explore" : null)}
-          />
-          <NavDropdown
-            menuId="nav.tools"
-            labelKey="nav.tools"
-            items={NAV_GROUPS[1].items}
-            currentPath={currentPath}
-            open={openMenu === "nav.tools"}
-            onOpenChange={(open) => setOpenMenu(open ? "nav.tools" : null)}
-          />
-          <Link
-            to="/downloads"
-            data-active={isActive("/downloads")}
-            className={cn(
-              "nav-link rounded-md px-3 py-2 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
-              isActive("/downloads")
-                ? "text-foreground"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {t("nav.downloads")}
-          </Link>
-          <NavDropdown
-            menuId="nav.resources"
-            labelKey="nav.resources"
-            items={NAV_GROUPS[2].items}
-            currentPath={currentPath}
-            open={openMenu === "nav.resources"}
-            onOpenChange={(open) => setOpenMenu(open ? "nav.resources" : null)}
-          />
+        {/* Desktop flat nav — five primary items, centered (PPTX V2) */}
+        <nav className="mx-auto hidden items-center gap-1 lg:flex" aria-label="Primary">
+          {NAV_ITEMS.map((item) => (
+            <Link
+              key={item.to}
+              to={item.to}
+              data-active={isActive(item.to)}
+              className={cn(
+                "nav-link rounded-md px-3 py-2 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+                isActive(item.to)
+                  ? "text-foreground"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {t(item.labelKey)}
+            </Link>
+          ))}
         </nav>
-
-        {/* Search (desktop) — triggers command palette */}
-        <button
-          type="button"
-          onClick={openPalette}
-          className="ml-auto hidden h-9 items-center gap-2.5 rounded-lg border border-input/70 bg-muted/40 px-3 text-sm text-muted-foreground shadow-sm transition-all hover:border-border hover:bg-muted/70 hover:text-foreground md:flex md:w-44 lg:w-56"
-          aria-label="Quick search (Cmd+K)"
-        >
-          <Search className="size-4 shrink-0" aria-hidden />
-          <span className="min-w-0 flex-1 truncate text-left">
-            <span className="hidden lg:inline">{t("home.searchPlaceholder")}</span>
-            <span className="lg:hidden">Search…</span>
-          </span>
-          <span className="ml-auto flex shrink-0 items-center gap-1" aria-hidden>
-            <kbd className="hidden sm:inline-flex">⌘</kbd>
-            <kbd className="hidden sm:inline-flex">K</kbd>
-          </span>
-        </button>
 
         {/* Right cluster */}
         <div className="ml-auto flex items-center gap-1 md:ml-2">
+          {/* Search (desktop) — triggers command palette */}
+          <button
+            type="button"
+            onClick={openPalette}
+            className="hidden h-9 items-center gap-2.5 rounded-lg border border-input/70 bg-muted/40 px-3 text-sm text-muted-foreground shadow-sm transition-all hover:border-border hover:bg-muted/70 hover:text-foreground md:flex md:w-44 lg:w-56"
+            aria-label="Quick search (Cmd+K)"
+          >
+            <Search className="size-4 shrink-0" aria-hidden />
+            <span className="min-w-0 flex-1 truncate text-left">
+              <span className="hidden lg:inline">{t("home.searchPlaceholder")}</span>
+              <span className="lg:hidden">Search…</span>
+            </span>
+            <span className="ml-auto flex shrink-0 items-center gap-1" aria-hidden>
+              <kbd className="hidden sm:inline-flex">⌘</kbd>
+              <kbd className="hidden sm:inline-flex">K</kbd>
+            </span>
+          </button>
           <NotificationBell />
           <LanguageSwitcher
             open={langOpen}
@@ -317,115 +271,35 @@ export function SiteHeader() {
               </div>
             </form>
 
-            {MOBILE_SECTIONS.map((section, sectionIndex) => (
-              <div key={section.labelKey} className={cn(sectionIndex > 0 && "mt-5")}>
-                <h2 className="px-1 pb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/70">
-                  {t(section.labelKey)}
-                </h2>
-                <nav aria-label={t(section.labelKey)} className="flex flex-col gap-1">
-                  {section.items.map((item, itemIndex) =>
-                    item.divider || !item.to || !item.labelKey ? null : (
-                      <Link
-                        key={item.to}
-                        to={item.to}
-                        onClick={() => setMobileOpen(false)}
-                        ref={sectionIndex === 0 && itemIndex === 0 ? firstMobileLinkRef : undefined}
-                        className={cn(
-                          "flex items-center rounded-xl px-4 py-3 text-[15px] font-medium transition-colors",
-                          isActive(item.to)
-                            ? "bg-primary/10 text-primary"
-                            : "text-foreground/80 hover:bg-accent",
-                        )}
-                      >
-                        {t(item.labelKey)}
-                      </Link>
-                    ),
+            {/* Flat five-item nav (mirrors the desktop primary nav) */}
+            <nav aria-label="Primary" className="flex flex-col gap-1">
+              {NAV_ITEMS.map((item, itemIndex) => (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  onClick={() => setMobileOpen(false)}
+                  ref={itemIndex === 0 ? firstMobileLinkRef : undefined}
+                  className={cn(
+                    "flex items-center rounded-xl px-4 py-3 text-[15px] font-medium transition-colors",
+                    isActive(item.to)
+                      ? "bg-primary/10 text-primary"
+                      : "text-foreground/80 hover:bg-accent",
                   )}
-                </nav>
-              </div>
-            ))}
+                >
+                  {t(item.labelKey)}
+                </Link>
+              ))}
+            </nav>
           </div>
         </div>
       ) : null}
     </header>
   );
-}
 
-function NavDropdown({
-  menuId,
-  labelKey,
-  items,
-  currentPath,
-  open,
-  onOpenChange,
-}: {
-  menuId: string;
-  labelKey: string;
-  items: NavItem[];
-  currentPath: string;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const { t } = useTranslation();
-  const ref = React.useRef<HTMLDivElement | null>(null);
-
-  React.useEffect(() => {
-    if (!open) return;
-    const onPointer = (e: PointerEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onOpenChange(false);
-    };
-    document.addEventListener("pointerdown", onPointer);
-    return () => document.removeEventListener("pointerdown", onPointer);
-  }, [open, onOpenChange]);
-
-  const isActive = (to: string): boolean =>
-    currentPath === to || (to !== "/" && currentPath.startsWith(to));
-  const groupActive = items.some((item) => item.to && isActive(item.to));
-
-  return (
-    <div className="relative" ref={ref}>
-      <button
-        type="button"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        data-active={groupActive}
-        onClick={() => onOpenChange(!open)}
-        className={cn(
-          "nav-link flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
-          groupActive ? "text-foreground" : "text-muted-foreground hover:text-foreground",
-        )}
-      >
-        {t(labelKey)}
-        <ChevronDown className={cn("size-3.5 transition-transform", open && "rotate-180")} aria-hidden />
-      </button>
-      {open ? (
-        <div
-          role="menu"
-          className="absolute left-1/2 top-full z-50 mt-2 w-60 -translate-x-1/2 rounded-xl border bg-popover p-1.5 shadow-lg"
-          style={{ animation: "fade-down 160ms cubic-bezier(0.16,1,0.3,1)" }}
-        >
-          {items.map((item, i) =>
-            item.divider || !item.to || !item.labelKey ? (
-              <div key={`${menuId}-divider-${i}`} className="my-1 h-px bg-border" aria-hidden />
-            ) : (
-              <Link
-                key={item.to}
-                to={item.to}
-                role="menuitem"
-                onClick={() => onOpenChange(false)}
-                className={cn(
-                  "flex items-center rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
-                  isActive(item.to) && "bg-accent/60 font-medium text-foreground",
-                )}
-              >
-                {t(item.labelKey)}
-              </Link>
-            ),
-          )}
-        </div>
-      ) : null}
-    </div>
-  );
+  // Desktop: AntD Affix pins the header (offsetTop=0, placeholder keeps the
+  // layout stable). Mobile: the plain CSS-sticky header keeps the existing
+  // drawer behavior untouched.
+  return isDesktop ? <Affix offsetTop={0}>{header}</Affix> : header;
 }
 
 function LanguageSwitcher({

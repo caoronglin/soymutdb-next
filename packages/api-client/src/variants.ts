@@ -127,6 +127,27 @@ export function getVariantsByRegion(
   });
 }
 
+/**
+ * Query variants in a genomic region by assembly *name*.
+ *
+ * The backend (GET /variants/region) requires the `assembly` name query
+ * parameter (see apps/api/app/api/v1/variants.py); the legacy
+ * `getVariantsByRegion` above sends `assembly_id` and is kept untouched.
+ */
+export interface RegionQueryParams {
+  assembly: string;
+  chromosome: string;
+  start: number;
+  end: number;
+  max_results?: number;
+}
+
+export function searchRegionVariants(
+  params: RegionQueryParams,
+): Promise<VariantSummary[]> {
+  return http.get<VariantSummary[]>("/variants/region", { params });
+}
+
 export function getGeneVariantSummary(
   geneId: string,
   releaseId?: string,
