@@ -17,6 +17,7 @@ import dayjs from "dayjs";
 import {
   deleteNews,
   listAdminNews,
+  type AdminNewsListParams,
   type NewsStatus,
   type NewsSummary,
 } from "@soymutdb/api-client";
@@ -28,6 +29,32 @@ const STATUS_COLORS: Record<NewsStatus, string> = {
   published: "success",
   archived: "warning",
 };
+
+/**
+ * Map ProTable request params to the backend admin-list query params.
+ *
+ * Pure function — extracted for unit testing. `status` (valueEnum select)
+ * maps to `status_filter`; `title_en` (search input) maps to the backend
+ * `search` (ILIKE); `category` passes through; `current`/`pageSize` map to
+ * `page`/`page_size`. Empty/undefined values are dropped so the backend
+ * defaults apply.
+ */
+export function buildAdminNewsQuery(params: {
+  current?: number;
+  pageSize?: number;
+  title_en?: string;
+  category?: string;
+  status?: NewsStatus | string;
+}): AdminNewsListParams {
+  const query: AdminNewsListParams = {
+    page: params.current ?? 1,
+    page_size: params.pageSize ?? 10,
+  };
+  if (params.status) query.status_filter = params.status as NewsStatus;
+  if (params.category) query.category = params.category;
+  if (params.title_en) query.search = params.title_en;
+  return query;
+}
 
 export default function NewsListPage() {
   const { t } = useTranslation();
@@ -177,15 +204,8 @@ export default function NewsListPage() {
           labelWidth: "auto",
         }}
         request={async (params) => {
-          const { current = 1, pageSize = 10, title_en, category, status } = params;
           try {
-            const data = await listAdminNews({
-              status_filter: status as NewsStatus | undefined,
-              category: category || undefined,
-              search: title_en || undefined,
-              page: current,
-              page_size: pageSize,
-            });
+            const data = await listAdminNews(buildAdminNewsQuery(params));
             return { data: data.items, total: data.total, success: true };
           } catch (err) {
             message.error(
