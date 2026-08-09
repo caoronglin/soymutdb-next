@@ -3,21 +3,16 @@
  *
  * Contract (apps/api/app/api/v1/admin_news.py + apps/api/app/schemas/news.py):
  *
- *   POST   /api/v1/admin/news                    NewsCreate   -> NewsDetail (201)
- *   PUT    /api/v1/admin/news/{news_id}          NewsUpdate   -> NewsDetail
- *   DELETE /api/v1/admin/news/{news_id}          -> 204
- *   PATCH  /api/v1/admin/news/reorder            NewsReorderRequest -> NewsReorderResponse
+ *   GET    /api/v1/admin/news                     -> NewsListResponse (all statuses)
+ *   POST   /api/v1/admin/news                     NewsCreate   -> NewsDetail (201)
+ *   PUT    /api/v1/admin/news/{news_id}           NewsUpdate   -> NewsDetail
+ *   DELETE /api/v1/admin/news/{news_id}           -> 204
+ *   PATCH  /api/v1/admin/news/reorder           NewsReorderRequest -> NewsReorderResponse
  *   GET    /api/v1/admin/news/{news_id}/preview-token -> PreviewTokenResponse
+ *   GET    /api/v1/admin/news/{news_id}         (via preview-token dance) -> NewsDetail
  *
  * All admin calls go through the `http` coordinating layer (refresh-on-401,
- * retry, logout events) with the in-memory Bearer token attached (auth:
- * true is the default).
- *
- * NOTE — admin list gap: B1 did not ship a `GET /admin/news` list endpoint,
- * so the admin table currently reads the public `GET /news` (published +
- * visible only) via `listNews()` from ./news.ts. The ProTable still sends
- * `status`/`q` search-form params for forward compatibility; until B1 adds
- * the admin list endpoint, draft/archived rows are not listable.
+ * retry, logout events) with the in-memory Bearer token attached.
  */
 
 import type { NewsDetail, NewsSummary, NewsStatus } from "./news";
@@ -31,6 +26,23 @@ export type AdminNewsDetail = NewsDetail;
 
 /** List item with lifecycle status (backend NewsSummaryResponse). */
 export type AdminNewsItem = NewsSummary;
+
+/** Admin list query params — mirrors backend query parameters. */
+export interface AdminNewsListParams {
+  status_filter?: NewsStatus;
+  category?: string;
+  search?: string;
+  page?: number;
+  page_size?: number;
+}
+
+/** Admin list response — same shape as public NewsListResponse. */
+export interface AdminNewsListResponse {
+  items: NewsSummary[];
+  total: number;
+  page: number;
+  page_size: number;
+}
 
 /** Create payload — mirrors backend `NewsCreate`. */
 export interface NewsCreatePayload {
@@ -87,6 +99,22 @@ export interface NewsPreviewToken {
   preview: string;
   exp: number;
   url: string;
+}
+
+/**
+ * List ALL news articles (researcher+) — including drafts and archived.
+ * Supports status_filter, category, search (title ILIKE), and pagination.
+ */
+export function listAdminNews(
+  params: AdminNewsListParams = {},
+): Promise<AdminNewsListResponse> {
+  const query: Record<string, string> = {};
+  if (params.status_filter) query.status_filter = params.status_filter;
+  if (params.category) query.category = params.category;
+  if (params.search) query.search = params.search;
+  if (params.page) query.page = String(params.page);
+  if (params.page_size) query.page_size = String(params.page_size);
+  return http.get<AdminNewsListResponse>("/admin/news", { params: query });
 }
 
 /** Create a news article (draft by default; publish via `status`). */

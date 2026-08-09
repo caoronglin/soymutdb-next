@@ -2,10 +2,10 @@
  * News management list (B3) — ProTable with pagination + search + status
  * filter, row actions (edit / delete / preview) and featured reorder.
  *
- * Data source: B1 only ships the public `GET /news` list (published +
- * visible rows). The search form's keyword/status fields are forwarded for
- * forward compatibility with the missing `GET /admin/news` list endpoint —
- * see packages/api-client/src/admin-news.ts for the contract gap note.
+ * Data source: GET /api/v1/admin/news (researcher+) — sees ALL statuses
+ * (draft/published/archived) with optional status_filter, category, and
+ * title search.  Loading / error / empty states are handled by ProTable's
+ * built-in request lifecycle.
  */
 import { useCallback, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -16,7 +16,7 @@ import { useRouter } from "@tanstack/react-router";
 import dayjs from "dayjs";
 import {
   deleteNews,
-  listNews,
+  listAdminNews,
   type NewsStatus,
   type NewsSummary,
 } from "@soymutdb/api-client";
@@ -177,13 +177,22 @@ export default function NewsListPage() {
           labelWidth: "auto",
         }}
         request={async (params) => {
-          const { current = 1, pageSize = 10, category } = params;
-          // B1 gap: keyword (`title_en`) / status search fields are shown in
-          // the search form but only `category` + pagination are honoured by
-          // the public GET /news today (draft/archived rows are not listable
-          // until B1 ships GET /admin/news?status=&q=). Wiring is ready.
-          const data = await listNews(category, current, pageSize);
-          return { data: data.items, total: data.total, success: true };
+          const { current = 1, pageSize = 10, title_en, category, status } = params;
+          try {
+            const data = await listAdminNews({
+              status_filter: status as NewsStatus | undefined,
+              category: category || undefined,
+              search: title_en || undefined,
+              page: current,
+              page_size: pageSize,
+            });
+            return { data: data.items, total: data.total, success: true };
+          } catch (err) {
+            message.error(
+              `${t("admin.news.messages.loadError")}: ${err instanceof Error ? err.message : String(err)}`,
+            );
+            return { data: [], total: 0, success: false };
+          }
         }}
         pagination={{ defaultPageSize: 10, showSizeChanger: true }}
         toolBarRender={() => [

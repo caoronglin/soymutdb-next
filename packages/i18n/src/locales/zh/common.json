@@ -706,7 +706,8 @@
         "deleteSuccess": "文章已删除",
         "deleteError": "删除文章失败",
         "reorderSuccess": "首推顺序已更新",
-        "reorderError": "更新首推顺序失败"
+        "reorderError": "更新首推顺序失败",
+        "loadError": "新闻加载失败"
       },
       "search": {
         "placeholder": "搜索标题",

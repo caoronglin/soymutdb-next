@@ -706,7 +706,8 @@
         "deleteSuccess": "Article deleted",
         "deleteError": "Failed to delete article",
         "reorderSuccess": "Featured order updated",
-        "reorderError": "Failed to update featured order"
+        "reorderError": "Failed to update featured order",
+        "loadError": "Failed to load news"
       },
       "search": {
         "placeholder": "Search title",
