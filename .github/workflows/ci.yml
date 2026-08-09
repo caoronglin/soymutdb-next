@@ -83,6 +83,12 @@ jobs:
       - name: Build all apps (hard gate)
         run: pnpm turbo run build
 
+      # --- G2 bundle budget gate (hard gate) ----------------------------------
+      # antd ≤280KB / pro-components ≤180KB / main entry ≤200KB gzip.
+      # Thresholds overridable via ANTD_MAX_KB / PRO_MAX_KB / ENTRY_MAX_KB env.
+      - name: Bundle size budget check (G2 hard gate)
+        run: bash scripts/check-bundle-size.sh
+
       # --- non-blocking quality gates (baseline failing, see header) ----------
       - name: Lint (baseline failing — non-blocking)
         if: always()

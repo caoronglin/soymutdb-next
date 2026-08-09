@@ -43,6 +43,7 @@ celery_app = Celery(
         "soymutdb_worker.tasks.cleanup",
         "soymutdb_worker.tasks.expression",
         "soymutdb_worker.tasks.homolog",
+        "soymutdb_worker.tasks.gwas",
         "soymutdb_worker.tasks.static_pages",
         "soymutdb_worker.tasks.analyses",
     ],
@@ -100,6 +101,7 @@ celery_app.conf.update(
         "soymutdb_worker.tasks.static_pages.*": {"queue": "stats"},
         "soymutdb_worker.tasks.cleanup.*": {"queue": "cleanup"},
         "soymutdb_worker.tasks.analyses.*": {"queue": "analyses"},
+        "soymutdb_worker.tasks.gwas.*": {"queue": "analyses"},
     },
     task_default_queue="default",
 )
@@ -118,6 +120,7 @@ celery_app.autodiscover_tasks(
         "soymutdb_worker.tasks.cleanup",
         "soymutdb_worker.tasks.expression",
         "soymutdb_worker.tasks.homolog",
+        "soymutdb_worker.tasks.gwas",
         "soymutdb_worker.tasks.static_pages",
     ]
 )

@@ -12,6 +12,7 @@ from . import (
     admin,
     admin_content,
     admin_imports,
+    admin_news,
     admin_settings,
     admin_static,
     analyses,
@@ -21,9 +22,12 @@ from . import (
     content,
     expression,
     genes,
+    gwas,
     health,
     homolog,
     mutants,
+    news,
+    popgen,
     releases,
     search,
     seeds,
@@ -43,6 +47,8 @@ api_router = APIRouter()
 api_router.include_router(health.router)
 api_router.include_router(auth.router)
 api_router.include_router(genes.router)
+api_router.include_router(gwas.router)
+api_router.include_router(popgen.router)
 api_router.include_router(variants.router)
 api_router.include_router(tools_seqfetch.router)
 api_router.include_router(search.router)
@@ -54,8 +60,10 @@ api_router.include_router(releases.router)
 api_router.include_router(mutants.router)
 api_router.include_router(seeds.router)
 api_router.include_router(content.router)
+api_router.include_router(news.router)
 api_router.include_router(admin.router)
 api_router.include_router(admin_content.router)
+api_router.include_router(admin_news.router)
 api_router.include_router(admin_imports.router)
 api_router.include_router(admin_settings.router)
 api_router.include_router(admin_static.router)

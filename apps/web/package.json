@@ -18,6 +18,11 @@
     "build:ui": "vite build"
   },
   "dependencies": {
+    "@ant-design/cssinjs": "^1.22.0",
+    "@ant-design/icons": "^5.5.0",
+    "@ant-design/pro-components": "^2.0.0",
+    "antd": "^5.27.0",
+    "dayjs": "^1.11.0",
     "@fontsource/fraunces": "^5.1.0",
     "@fontsource/inter": "^5.1.0",
     "@fontsource/jetbrains-mono": "^5.1.0",

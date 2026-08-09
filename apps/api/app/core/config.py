@@ -116,6 +116,9 @@ class Settings(BaseSettings):
     s3_export_bucket: str = "exports"
     #: Bucket for user-uploaded analysis inputs / results (fastp, scanpy).
     s3_analyses_bucket: str = "analyses"
+    #: Bucket for GWAS inputs (``gwas/{job}/input/``) and results
+    #: (``gwas/{job}/output/``).
+    s3_gwas_bucket: str = "gwas"
     s3_public_url: str = "http://localhost:8080/files"
 
     # ------------------------------------------------------------------ JWT
@@ -164,6 +167,10 @@ class Settings(BaseSettings):
     #: Maximum delivery attempts per BLAST job (broker-level retries only;
     #: the worker itself is idempotent on top of this).
     blast_max_attempts: int = 3
+
+    # ---------------------------------------------------------------- GWAS
+    #: Maximum delivery attempts per GWAS job (broker-level retries only).
+    gwas_max_attempts: int = 3
 
     # --------------------------------------------------------------- Outbox
     # Transactional outbox: API writes events inside business transactions;

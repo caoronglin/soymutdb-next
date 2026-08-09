@@ -83,7 +83,21 @@ class Release(Base, TimestampMixin):
         return f"<Release id={self.id} version={self.version!r} status={self.status}>"
 
 
+class NewsStatus(str, enum.Enum):
+    DRAFT = "draft"
+    PUBLISHED = "published"
+    ARCHIVED = "archived"
+
+
 class NewsArticle(Base, TimestampMixin):
+    """News article with the operations pipeline (B1) fields.
+
+    Double-write contract (migration 0010): ``is_published`` is kept in sync
+    with ``status`` and is NOT dropped.  ``status`` is the source of truth for
+    the new endpoints; ``is_published`` remains for backwards compatibility
+    until migration 0011 removes it.
+    """
+
     __tablename__ = "news_articles"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -95,6 +109,23 @@ class NewsArticle(Base, TimestampMixin):
         String(256), unique=True, nullable=False, index=True
     )
     category: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    cover_url: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    featured_sort: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
+    )
+    carousel_group: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    carousel_sort: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
+    )
+    status: Mapped[str] = mapped_column(
+        String(16), default="draft", server_default="draft", nullable=False
+    )
+    visible_from: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    visible_to: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     is_published: Mapped[bool] = mapped_column(
         default=False, server_default="false", nullable=False
     )
@@ -111,10 +142,13 @@ class NewsArticle(Base, TimestampMixin):
         back_populates="articles", lazy="joined"
     )
 
-    __table_args__ = (Index("ix_news_published", "is_published", "published_at"),)
+    __table_args__ = (
+        Index("ix_news_published", "is_published", "published_at"),
+        Index("ix_news_status_window", "status", "visible_from", "visible_to"),
+    )
 
     def __repr__(self) -> str:
-        return f"<NewsArticle id={self.id} slug={self.slug!r}>"
+        return f"<NewsArticle id={self.id} slug={self.slug!r} status={self.status}>"
 
 
 class Publication(Base, TimestampMixin):
@@ -240,6 +274,7 @@ __all__ = [
     "ContentVersion",
     "DownloadFile",
     "NewsArticle",
+    "NewsStatus",
     "Publication",
     "Release",
     "ReleaseStatus",

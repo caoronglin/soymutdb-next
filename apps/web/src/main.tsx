@@ -10,10 +10,13 @@
  *   - View Transitions API for route navigations (graceful fallback)
  *   - Lazy Web Worker for off-thread search/filter computations
  */
-import { StrictMode } from "react";
+import * as React from "react";
 import { createRoot } from "react-dom/client";
 import { RouterProvider, createRouter } from "@tanstack/react-router";
 import { QueryClientProvider } from "@tanstack/react-query";
+import { ConfigProvider } from "antd";
+import type { Locale } from "antd/es/locale";
+import i18n from "@soymutdb/i18n";
 
 // Fonts — HarmonyOS Sans SC (local, covers Latin + CJK), JetBrains Mono (code).
 // Fraunces/Inter replaced by HarmonyOS Sans SC (2026-08 redesign).
@@ -27,6 +30,7 @@ import { createQueryClient } from "./lib/query-client";
 import { ThemeProvider } from "./lib/theme-provider";
 import { AnimationProvider } from "./lib/animation-context";
 import { ToastProvider } from "@soymutdb/ui";
+import { createAntdTheme, loadAntdLocale } from "./lib/antd-theme";
 import { initI18nOnce } from "./lib/i18n";
 import { initWidgetLoader } from "./lib/widget-loader";
 import { registry, SERVICES } from "./lib/di";
@@ -133,17 +137,53 @@ function lazyInitWorker(): void {
 }
 lazyInitWorker();
 
+// ---------------------------------------------------------------------------
+// AntD ConfigProvider wrapper — children form, does not touch the router tree.
+// theme: createAntdTheme()（OKLCH 覆盖 + reduced-motion，见 lib/antd-theme.ts）
+// locale: i18next `languageChanged` 事件驱动（oracle 遗漏 #1），按需 import
+// dayjs/antd locale 包（约 8KB）。路由级懒加载占位见 loadAntdLocale 注释。
+// ---------------------------------------------------------------------------
+function AntdProvider({ children }: { children: React.ReactNode }) {
+    const [locale, setLocale] = React.useState<Locale | null>(null);
+
+    React.useEffect(() => {
+        let disposed = false;
+        const apply = (lng?: string) => {
+            void loadAntdLocale(lng ?? i18n.language).then((l) => {
+                if (!disposed) setLocale(l);
+            });
+        };
+        apply();
+        const onChange = (lng: string) => apply(lng);
+        i18n.on("languageChanged", onChange);
+        return () => {
+            disposed = true;
+            i18n.off("languageChanged", onChange);
+        };
+    }, []);
+
+    const theme = React.useMemo(() => createAntdTheme(), []);
+
+    return (
+        <ConfigProvider locale={locale ?? undefined} theme={theme}>
+            {children}
+        </ConfigProvider>
+    );
+}
+
 createRoot(rootEl).render(
-    <StrictMode>
-        <QueryClientProvider client={queryClient}>
-            <ThemeProvider>
-                <AnimationProvider>
-                    <ToastProvider>
-                        <RouterProvider router={router} />
-                        {null /* devtools hidden */}
-                    </ToastProvider>
-                </AnimationProvider>
-            </ThemeProvider>
-        </QueryClientProvider>
-    </StrictMode>,
+    <React.StrictMode>
+        <AntdProvider>
+            <QueryClientProvider client={queryClient}>
+                <ThemeProvider>
+                    <AnimationProvider>
+                        <ToastProvider>
+                            <RouterProvider router={router} />
+                            {null /* devtools hidden */}
+                        </ToastProvider>
+                    </AnimationProvider>
+                </ThemeProvider>
+            </QueryClientProvider>
+        </AntdProvider>
+    </React.StrictMode>,
 );

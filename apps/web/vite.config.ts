@@ -32,8 +32,25 @@ export default defineConfig({
         chunkSizeWarningLimit: 2048,
         rollupOptions: {
             output: {
+                // G2 体积分块预算（docs/design/upgrade-plan.md §七）：
+                //   antd ≤280KB / pro-components ≤180KB / 主入口 ≤200KB (gzip)
+                // 阈值由 scripts/check-bundle-size.sh 硬门禁执行（CI + 本地）。
+                // 注：@ant-design/vite-plugin 在 npm registry 上不存在（404，
+                // 方案中列出的包名有误），antd v5 走 ESM + cssinjs 运行时按需，
+                // 不需要构建期按需插件；如需 dayjs 优化可用 antd-dayjs-vite-plugin。
                 manualChunks(id: string) {
                     if (id.includes("node_modules")) {
+                        // pro-components 及其 @ant-design/pro-* 依赖 → 独立 chunk
+                        if (id.includes("@ant-design/pro")) return "pro-components";
+                        // antd + @ant-design/* + rc-*（rc-util/rc-picker/rc-table 等
+                        // 是 antd 运行时依赖）→ 独立 chunk
+                        if (
+                            id.includes("/antd/") ||
+                            id.includes("@ant-design") ||
+                            id.includes("/rc-")
+                        ) {
+                            return "antd";
+                        }
                         if (id.includes("echarts")) return "echarts";
                         if (id.includes("gsap") || id.includes("lenis")) return "motion-vendor";
                         if (id.includes("react") || id.includes("scheduler")) return "react";

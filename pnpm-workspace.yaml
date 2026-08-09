@@ -1,3 +1,12 @@
 packages:
   - "packages/*"
   - "apps/*"
+
+# pnpm 10: workspace-level settings live here (the root package.json "pnpm"
+# field is no longer read). Overrides force the exact React 19.2.0 build for
+# every transitive peer (antd 5 / @ant-design/pro-components peer ranges are
+# wide, but we pin one react instance so @ant-design/* and @soymutdb/* share a
+# single React runtime — no React downgrade).
+overrides:
+  react: 19.2.0
+  react-dom: 19.2.0

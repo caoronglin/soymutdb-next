@@ -14,10 +14,18 @@ from .auth import (
 )
 from .base import AuditMixin, Base, SoftDeleteMixin, TimestampMixin
 from .blast import BlastDatabase, BlastHit, BlastJob
-from .content import DownloadFile, NewsArticle, Publication, Release, StaticPage
+from .content import (
+    DownloadFile,
+    NewsArticle,
+    NewsStatus,
+    Publication,
+    Release,
+    StaticPage,
+)
 from .expression import ExpressionData, ExpressionLibrary
 from .gene_data_cache import GeneDataCache
 from .genomic import Assembly, Chromosome, Exon, Gene, GeneAlias, Transcript
+from .gwas import GwasFileType, GwasJob, GwasJobStatus, GwasMethod
 from .homolog import GeneHomolog
 from .import_task import ImportTask
 from .outbox import OutboxEvent
@@ -46,9 +54,14 @@ __all__ = [
     "GeneAlias",
     "GeneDataCache",
     "GeneHomolog",
+    "GwasFileType",
+    "GwasJob",
+    "GwasJobStatus",
+    "GwasMethod",
     "ImportTask",
     "MutantLine",
     "NewsArticle",
+    "NewsStatus",
     "Organization",
     "OutboxEvent",
     "PageLayout",

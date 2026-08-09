@@ -148,6 +148,22 @@ blast_hits = Table(
     Column("subject_strand", String(8)),
 )
 
+#: GWAS association jobs (EMMAX / GEMMA).  The API side (B5) owns the
+#: migration (:mod:`app.models.gwas`); the worker only reads/writes the
+#: columns declared below.  ``status`` uses the BLAST-style spelling
+#: (``completed``, not ``succeeded``), matching the PostgreSQL enum
+#: ``gwas_job_status_enum``.
+gwas_jobs = Table(
+    "gwas_jobs",
+    metadata,
+    Column("id", UUID(as_uuid=True), primary_key=True),
+    Column("status", String(32)),
+    Column("started_at", DateTime(timezone=True)),
+    Column("completed_at", DateTime(timezone=True)),
+    Column("error_message", Text),
+    Column("result_summary", JSON),
+)
+
 
 def utcnow() -> datetime:
     """Timezone-aware current time for status timestamps."""
@@ -165,6 +181,7 @@ __all__ = [
     "gene_data_cache",
     "gene_homologs",
     "genes",
+    "gwas_jobs",
     "import_tasks",
     "metadata",
     "utcnow",

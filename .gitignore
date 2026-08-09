@@ -174,3 +174,4 @@ reports/
 # Project .npmrc is committed (npmmirror registry, no secrets) so Docker
 # COPY .npmrc works and local installs stay fast.
 !/.npmrc
+apps/api/.venv

@@ -364,6 +364,28 @@ services:
     restart: unless-stopped
 
   # ------------------------------------------------------------------
+  # MCP Server (FastMCP, Streamable HTTP) - B1 skeleton
+  # 工具为 stub，穿透调用内部 REST API（SOYMUTDB_API_BASE -> api:8000）。
+  # 写工具鉴权用 SOYMUTDB_MCP_API_TOKEN（Bearer 透传）；60/min 限流占位，
+  # 由 G3 门禁在传输层实现。端口仅容器网络可见（expose，不发布到宿主机——
+  # 宿主 9000 已被 clickhouse 占用）；对外经 nginx /mcp/ 反代（SSE 配置见
+  # infra/nginx/conf.d/default.conf）。
+  # ------------------------------------------------------------------
+  mcp-server:
+    build:
+      context: ./apps/mcp-server
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      SOYMUTDB_API_BASE: http://api:8000
+      SOYMUTDB_MCP_API_TOKEN: ${SOYMUTDB_MCP_API_TOKEN:-}
+    expose:
+      - "9000"
+    command: [ "python", "-m", "mcp_server.server", "--host", "0.0.0.0", "--port", "9000" ]
+    restart: unless-stopped
+
+  # ------------------------------------------------------------------
   # Reverse proxy（仅反代 API 与 MinIO；前端静态由 Cloudflare Pages 托管）
   # infra/nginx 中 web/admin/jbrowse 上游定义保留（禁止改动），但对应
   # 容器已移除；若直接解析会因主机不存在导致 nginx 启动失败（emerg），

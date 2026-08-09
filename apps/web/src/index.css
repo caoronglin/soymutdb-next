@@ -1,6 +1,17 @@
 @import "tailwindcss";
 @import "@soymutdb/ui/styles.css";
 
+/* ----------------------------------------------------------------------------
+ * Cascade layer order (oracle R1 修正, 2026-08):
+ *   antd, theme, design, base, components, utilities
+ * 必须含 `design` 层——原方案遗漏会导致 widget/header 等 design 层样式被
+ * antd 的未分层 runtime 样式压住。层声明本身也建立了 Tailwind v4 与未来
+ * AntD 主题样式的优先级边界：utilities 最后声明 = 层内最高优先级。
+ * antd 层目前为空（cssinjs 注入的样式未分层，按 CSS 规范未分层样式优先），
+ * 保留该层名以稳定顺序，避免后续引入 @layer antd 内容时顺序漂移。
+ * ------------------------------------------------------------------------- */
+@layer antd, theme, design, base, components, utilities;
+
 /* NOTE: @fontsource/* 字体 CSS 已移至 src/main.tsx 以 JS import 方式引入。
    Tailwind v4 postcss 内联 node_modules CSS 时会错误改写其内部
    url(./files/...) 相对路径（字体文件无法解析、不进入 dist），

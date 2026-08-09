@@ -1,0 +1,715 @@
+"""News operations API tests (B1) – no docker / no testcontainers.
+
+Covers with a fake database session:
+- HMAC preview token sign/verify (pure functions: roundtrip, tamper, expiry,
+  future-exp rejection, wrong slug)
+- service layer: list (published + visibility window + category filter),
+  featured (5 + carousel grouping), detail (published / hidden / preview),
+  admin CRUD (is_published <-> status double-write), reorder
+- HTTP layer: RBAC (401 unauthenticated / 403 viewer / 200 researcher+),
+  endpoint wiring for every news route
+"""
+
+from __future__ import annotations
+
+import uuid
+from datetime import UTC, datetime
+from typing import Any, cast
+
+import pytest
+from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
+
+from app.core.exceptions import (
+    SoyMutDBError,
+    http_exception_handler,
+    soy_mut_db_exception_handler,
+    unhandled_exception_handler,
+    validation_exception_handler,
+)
+from app.core.security import RoleName, create_access_token
+from app.models.auth import Role, User
+from app.models.content import NewsArticle
+
+# ---------------------------------------------------------------------------
+# Fake database session (unit-level, no docker)
+# ---------------------------------------------------------------------------
+
+
+class _Scalars:
+    def __init__(self, items: list):
+        self._items = items
+
+    def all(self) -> list:
+        return self._items
+
+    def first(self):
+        return self._items[0] if self._items else None
+
+
+class _Result:
+    def __init__(self, rows: list):
+        self._rows = rows
+
+    def scalars(self) -> _Scalars:
+        return _Scalars(self._rows)
+
+    def scalar_one_or_none(self):
+        return self._rows[0] if self._rows else None
+
+
+class FakeDbSession:
+    """AsyncSession stand-in: returns fake news rows for any news query."""
+
+    def __init__(
+        self, articles: list[NewsArticle] | None = None, user: User | None = None
+    ):
+        self.articles = list(articles or [])
+        self.user = user
+        self.added: list[Any] = []
+        self.deleted: list[Any] = []
+        self.commits = 0
+        self.flushes = 0
+        self.last_stmt = None
+        self.statements: list[Any] = []
+
+    async def execute(self, stmt, params=None):
+        self.last_stmt = stmt
+        self.statements.append(stmt)
+        text = str(stmt)
+        if "FROM news_articles" in text:
+            return _Result(list(self.articles))
+        if "FROM users" in text:
+            return _Result([self.user] if self.user else [])
+        return _Result([])
+
+    async def scalar(self, stmt):
+        self.last_stmt = stmt
+        self.statements.append(stmt)
+        if "FROM news_articles" in str(stmt):
+            return len(self.articles)
+        return None
+
+    def add(self, obj) -> None:
+        # Emulate the DB: autoincrement id + server-side timestamps.
+        if isinstance(obj, NewsArticle):
+            now = datetime.now(UTC)
+            if obj.id is None:
+                obj.id = max([a.id for a in self.articles] + [0]) + 1
+            obj.created_at = obj.created_at or now
+            obj.updated_at = obj.updated_at or now
+        self.added.append(obj)
+
+    async def flush(self) -> None:
+        self.flushes += 1
+
+    async def commit(self) -> None:
+        self.commits += 1
+
+    async def refresh(self, obj) -> None:
+        pass
+
+    async def delete(self, obj) -> None:
+        self.deleted.append(obj)
+
+    async def rollback(self) -> None:
+        pass
+
+
+def _make_user(role: RoleName = RoleName.RESEARCHER) -> User:
+    return User(
+        id=uuid.uuid4(),
+        username="tester",
+        email="tester@soymutdb.local",
+        password_hash="x",
+        is_active=True,
+        is_deleted=False,
+        role_rel=Role(id=1, name=role.value),
+    )
+
+
+def _make_article(
+    *,
+    article_id: int = 1,
+    slug: str = "hello-soymutdb",
+    status: str = "published",
+    is_published: bool | None = None,
+    category: str | None = "news",
+    featured_sort: int = 0,
+    carousel_group: str | None = None,
+    carousel_sort: int = 0,
+    visible_from=None,
+    visible_to=None,
+    published_at: datetime | None = None,
+) -> NewsArticle:
+    now = datetime.now(UTC)
+    return NewsArticle(
+        id=article_id,
+        title_en="Test Title",
+        title_zh=None,
+        content_en="Test body",
+        content_zh=None,
+        slug=slug,
+        category=category,
+        cover_url=None,
+        featured_sort=featured_sort,
+        carousel_group=carousel_group,
+        carousel_sort=carousel_sort,
+        status=status,
+        visible_from=visible_from,
+        visible_to=visible_to,
+        is_published=(
+            status == "published" if is_published is None else is_published
+        ),
+        published_at=published_at or now,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+# ---------------------------------------------------------------------------
+# HMAC preview tokens (pure functions)
+# ---------------------------------------------------------------------------
+
+
+class TestPreviewToken:
+    def test_roundtrip_ok(self):
+        from app.services.news_service import (
+            sign_preview_token,
+            verify_preview_token,
+        )
+
+        token, exp = sign_preview_token("my-article")
+        assert verify_preview_token("my-article", token, exp) is True
+
+    def test_tampered_token_rejected(self):
+        from app.services.news_service import (
+            sign_preview_token,
+            verify_preview_token,
+        )
+
+        token, exp = sign_preview_token("my-article")
+        assert verify_preview_token("my-article", token + "x", exp) is False
+
+    def test_wrong_slug_rejected(self):
+        from app.services.news_service import (
+            sign_preview_token,
+            verify_preview_token,
+        )
+
+        token, exp = sign_preview_token("my-article")
+        assert verify_preview_token("other-article", token, exp) is False
+
+    def test_expired_token_rejected(self):
+        from app.services.news_service import verify_preview_token
+
+        import time as _time
+
+        past = int(_time.time()) - 60
+        # recompute a token for the past timestamp
+        import hashlib
+        import hmac
+
+        from app.core.config import get_settings
+
+        secret = get_settings().jwt_secret.encode("utf-8")
+        token = hmac.new(secret, f"my-article{past}".encode(), hashlib.sha256).hexdigest()
+        assert verify_preview_token("my-article", token, past) is False
+
+    def test_future_exp_rejected(self):
+        from app.services.news_service import (
+            PREVIEW_TTL_SECONDS,
+            sign_preview_token,
+            verify_preview_token,
+        )
+
+        token, exp = sign_preview_token("my-article", ttl=PREVIEW_TTL_SECONDS)
+        # an attacker-supplied exp far in the future must be rejected even
+        # though the signature check would fail anyway
+        assert verify_preview_token("my-article", token, exp + 10_000) is False
+
+    def test_missing_token_or_exp_rejected(self):
+        from app.services.news_service import verify_preview_token
+
+        assert verify_preview_token("my-article", None, 123) is False
+        assert verify_preview_token("my-article", "abc", None) is False
+        bad_exp = cast(Any, "not-an-int")
+        assert verify_preview_token("my-article", "abc", bad_exp) is False
+
+
+# ---------------------------------------------------------------------------
+# Service layer
+# ---------------------------------------------------------------------------
+
+
+class TestListArticles:
+    async def test_list_returns_paginated_response(self):
+        from app.schemas.news import NewsSummaryResponse
+        from app.services.news_service import NewsService
+
+        session = FakeDbSession(
+            articles=[_make_article(article_id=1), _make_article(article_id=2, slug="two")]
+        )
+        response = await NewsService().list_articles(
+            session, page=1, page_size=20
+        )
+        assert response.total == 2
+        assert response.page == 1
+        assert response.page_size == 20
+        assert all(isinstance(i, NewsSummaryResponse) for i in response.items)
+
+    async def test_list_filters_visibility_window_in_sql(self):
+        from app.services.news_service import NewsService
+
+        session = FakeDbSession(articles=[_make_article()])
+        await NewsService().list_articles(session, page=1, page_size=20)
+        sql = str(session.last_stmt)
+        assert "news_articles.status" in sql
+        assert "news_articles.visible_from" in sql
+        assert "news_articles.visible_to" in sql
+        assert "news_articles.is_published" in sql
+
+    async def test_list_category_filter_adds_where_clause(self):
+        from app.services.news_service import NewsService
+
+        session = FakeDbSession(articles=[_make_article()])
+        await NewsService().list_articles(
+            session, category="announcement", page=1, page_size=20
+        )
+        assert "news_articles.category" in str(session.last_stmt)
+
+
+class TestFeatured:
+    async def test_featured_limits_to_five_in_sql(self):
+        from app.services.news_service import NewsService
+
+        session = FakeDbSession(
+            articles=[_make_article(article_id=i) for i in range(1, 8)]
+        )
+        response = await NewsService().featured(session)
+        sqls = [str(s) for s in session.statements]
+        assert any("featured_sort" in s for s in sqls)
+        assert any("LIMIT" in s for s in sqls)
+
+    async def test_carousel_groups_are_grouped(self):
+        from app.services.news_service import NewsService
+
+        session = FakeDbSession(
+            articles=[
+                _make_article(
+                    article_id=1, slug="a", carousel_group="home", carousel_sort=1
+                ),
+                _make_article(
+                    article_id=2, slug="b", carousel_group="home", carousel_sort=2
+                ),
+                _make_article(
+                    article_id=3, slug="c", carousel_group="events", carousel_sort=1
+                ),
+            ]
+        )
+        response = await NewsService().featured(session)
+        groups = {g.group: g.items for g in response.carousel}
+        assert set(groups) == {"home", "events"}
+        assert [i.slug for i in groups["home"]] == ["a", "b"]
+        assert [i.slug for i in groups["events"]] == ["c"]
+
+
+class TestGetBySlug:
+    async def test_published_visible_returns_article(self):
+        from app.services.news_service import NewsService
+
+        article = _make_article(slug="public-post")
+        session = FakeDbSession(articles=[article])
+        got = await NewsService().get_by_slug(session, "public-post")
+        assert got is article
+
+    async def test_hidden_without_token_404(self):
+        from app.core.exceptions import NotFoundError
+        from app.services.news_service import NewsService
+
+        article = _make_article(slug="draft-post", status="draft")
+        session = FakeDbSession(articles=[article])
+        with pytest.raises(NotFoundError):
+            await NewsService().get_by_slug(session, "draft-post")
+
+    async def test_hidden_with_valid_preview_returns(self):
+        from app.services.news_service import NewsService, sign_preview_token
+
+        article = _make_article(slug="draft-post", status="draft")
+        session = FakeDbSession(articles=[article])
+        token, exp = sign_preview_token("draft-post")
+        got = await NewsService().get_by_slug(
+            session, "draft-post", preview=token, exp=exp
+        )
+        assert got is article
+
+    async def test_hidden_with_tampered_preview_404(self):
+        from app.core.exceptions import NotFoundError
+        from app.services.news_service import NewsService, sign_preview_token
+
+        article = _make_article(slug="draft-post", status="draft")
+        session = FakeDbSession(articles=[article])
+        token, exp = sign_preview_token("draft-post")
+        with pytest.raises(NotFoundError):
+            await NewsService().get_by_slug(
+                session, "draft-post", preview=token + "zz", exp=exp
+            )
+
+    async def test_missing_slug_404(self):
+        from app.core.exceptions import NotFoundError
+        from app.services.news_service import NewsService
+
+        session = FakeDbSession(articles=[])
+        with pytest.raises(NotFoundError):
+            await NewsService().get_by_slug(session, "nope")
+
+
+class TestAdminCrud:
+    async def test_create_published_syncs_is_published(self):
+        from app.schemas.news import NewsCreate, NewsStatus
+        from app.services.news_service import NewsService
+
+        session = FakeDbSession(user=_make_user())
+        payload = NewsCreate(
+            title_en="Hello",
+            content_en="Body",
+            slug="hello",
+            status=NewsStatus.PUBLISHED,
+        )
+        article = await NewsService().create_article(
+            session, payload, uuid.uuid4()
+        )
+        assert article.status == "published"
+        assert article.is_published is True
+        assert article.published_at is not None
+        assert session.commits == 1
+
+    async def test_create_draft_default_unpublished(self):
+        from app.schemas.news import NewsCreate
+        from app.services.news_service import NewsService
+
+        session = FakeDbSession(user=_make_user())
+        payload = NewsCreate(title_en="Draft", content_en="Body", slug="draft")
+        article = await NewsService().create_article(
+            session, payload, uuid.uuid4()
+        )
+        assert article.status == "draft"
+        assert article.is_published is False
+        assert article.published_at is None
+
+    async def test_update_status_to_published_double_write(self):
+        from app.schemas.news import NewsStatus, NewsUpdate
+        from app.services.news_service import NewsService
+
+        article = _make_article(article_id=7, slug="old", status="draft")
+        session = FakeDbSession(articles=[article], user=_make_user())
+        updated = await NewsService().update_article(
+            session,
+            7,
+            NewsUpdate(title_en="New Title", status=NewsStatus.PUBLISHED),
+            uuid.uuid4(),
+        )
+        assert updated.title_en == "New Title"
+        assert updated.status == "published"
+        assert updated.is_published is True
+        assert updated.published_at is not None
+        assert session.commits == 1
+
+    async def test_update_is_published_false_flips_status(self):
+        from app.schemas.news import NewsUpdate
+        from app.services.news_service import NewsService
+
+        article = _make_article(article_id=7, slug="old", status="published")
+        session = FakeDbSession(articles=[article], user=_make_user())
+        updated = await NewsService().update_article(
+            session, 7, NewsUpdate(is_published=False), uuid.uuid4()
+        )
+        assert updated.status == "draft"
+        assert updated.is_published is False
+
+    async def test_update_missing_404(self):
+        from app.core.exceptions import NotFoundError
+        from app.schemas.news import NewsUpdate
+        from app.services.news_service import NewsService
+
+        session = FakeDbSession(articles=[])
+        with pytest.raises(NotFoundError):
+            await NewsService().update_article(
+                session, 99, NewsUpdate(title_en="x"), uuid.uuid4()
+            )
+
+    async def test_delete_removes_article(self):
+        from app.services.news_service import NewsService
+
+        article = _make_article(article_id=5, slug="bye")
+        session = FakeDbSession(articles=[article])
+        await NewsService().delete_article(session, 5)
+        assert session.deleted == [article]
+        assert session.commits == 1
+
+    async def test_delete_missing_404(self):
+        from app.core.exceptions import NotFoundError
+        from app.services.news_service import NewsService
+
+        session = FakeDbSession(articles=[])
+        with pytest.raises(NotFoundError):
+            await NewsService().delete_article(session, 5)
+
+    async def test_reorder_updates_featured_sort(self):
+        from app.schemas.news import NewsReorderItem, NewsReorderRequest
+        from app.services.news_service import NewsService
+
+        a = _make_article(article_id=1, slug="a")
+        b = _make_article(article_id=2, slug="b")
+        session = FakeDbSession(articles=[a, b])
+        response = await NewsService().reorder(
+            session,
+            NewsReorderRequest(
+                items=[
+                    NewsReorderItem(id=1, featured_sort=0),
+                    NewsReorderItem(id=2, featured_sort=1),
+                ]
+            ),
+        )
+        assert response.updated == 2
+        assert a.featured_sort == 0
+        assert b.featured_sort == 1
+
+    async def test_reorder_unknown_id_404(self):
+        from app.core.exceptions import NotFoundError
+        from app.schemas.news import NewsReorderItem, NewsReorderRequest
+        from app.services.news_service import NewsService
+
+        a = _make_article(article_id=1, slug="a")
+        session = FakeDbSession(articles=[a])
+        with pytest.raises(NotFoundError):
+            await NewsService().reorder(
+                session,
+                NewsReorderRequest(items=[NewsReorderItem(id=999, featured_sort=0)]),
+            )
+
+
+# ---------------------------------------------------------------------------
+# HTTP layer: RBAC + endpoint wiring
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+async def api_app():
+    """Minimal app with the full v1 router and a fake DB session."""
+    from fastapi.exceptions import RequestValidationError
+
+    from app.api.v1.router import api_router
+    from app.core.database import get_db
+
+    session = FakeDbSession(user=None)
+
+    async def override_get_db():
+        yield session
+
+    application = FastAPI(title="News Test API")
+    application.include_router(api_router, prefix="/api/v1")
+    application.add_exception_handler(SoyMutDBError, soy_mut_db_exception_handler)
+    application.add_exception_handler(
+        RequestValidationError, validation_exception_handler
+    )
+    application.add_exception_handler(Exception, http_exception_handler)
+    application.add_exception_handler(Exception, unhandled_exception_handler)
+    application.dependency_overrides[get_db] = override_get_db
+    application.state.fake_session = session
+    return application
+
+
+@pytest.fixture
+async def api_client(api_app):
+    transport = ASGITransport(app=api_app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield ac
+
+
+def _auth_header(user: User) -> dict[str, str]:
+    token = create_access_token(subject=str(user.id))
+    return {"Authorization": f"Bearer {token}"}
+
+
+class TestPublicEndpoints:
+    async def test_list_200(self, api_client, api_app):
+        api_app.state.fake_session.articles = [
+            _make_article(article_id=1, slug="one"),
+            _make_article(article_id=2, slug="two"),
+        ]
+        r = await api_client.get("/api/v1/news")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["total"] == 2
+        assert {i["slug"] for i in body["items"]} == {"one", "two"}
+        assert "content_en" not in body["items"][0]
+
+    async def test_list_category_filter_200(self, api_client, api_app):
+        api_app.state.fake_session.articles = [_make_article(slug="one")]
+        r = await api_client.get("/api/v1/news", params={"category": "news"})
+        assert r.status_code == 200
+
+    async def test_featured_200(self, api_client, api_app):
+        api_app.state.fake_session.articles = [
+            _make_article(
+                article_id=1,
+                slug="hero",
+                carousel_group="home",
+                carousel_sort=1,
+            )
+        ]
+        r = await api_client.get("/api/v1/news/featured")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["featured"][0]["slug"] == "hero"
+        assert body["carousel"][0]["group"] == "home"
+
+    async def test_detail_published_200(self, api_client, api_app):
+        api_app.state.fake_session.articles = [_make_article(slug="post")]
+        r = await api_client.get("/api/v1/news/post")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["slug"] == "post"
+        assert body["content_en"] == "Test body"
+
+    async def test_detail_hidden_404_without_token(self, api_client, api_app):
+        api_app.state.fake_session.articles = [
+            _make_article(slug="secret", status="draft")
+        ]
+        r = await api_client.get("/api/v1/news/secret")
+        assert r.status_code == 404
+
+    async def test_detail_hidden_200_with_valid_preview(self, api_client, api_app):
+        from app.services.news_service import sign_preview_token
+
+        api_app.state.fake_session.articles = [
+            _make_article(slug="secret", status="draft")
+        ]
+        token, exp = sign_preview_token("secret")
+        r = await api_client.get(
+            "/api/v1/news/secret", params={"preview": token, "exp": exp}
+        )
+        assert r.status_code == 200
+        assert r.json()["slug"] == "secret"
+
+    async def test_detail_hidden_404_with_tampered_preview(self, api_client, api_app):
+        from app.services.news_service import sign_preview_token
+
+        api_app.state.fake_session.articles = [
+            _make_article(slug="secret", status="draft")
+        ]
+        token, exp = sign_preview_token("secret")
+        r = await api_client.get(
+            "/api/v1/news/secret", params={"preview": token + "zz", "exp": exp}
+        )
+        assert r.status_code == 404
+
+
+class TestAdminRBAC:
+    async def test_admin_unauthenticated_401(self, api_client):
+        r = await api_client.post(
+            "/api/v1/admin/news",
+            json={"title_en": "T", "content_en": "C", "slug": "t"},
+        )
+        assert r.status_code == 401
+
+    async def test_admin_viewer_403(self, api_client, api_app):
+        user = _make_user(RoleName.VIEWER)
+        api_app.state.fake_session.user = user
+        r = await api_client.post(
+            "/api/v1/admin/news",
+            json={"title_en": "T", "content_en": "C", "slug": "t"},
+            headers=_auth_header(user),
+        )
+        assert r.status_code == 403
+        assert r.json()["error"]["code"] == "forbidden"
+
+    async def test_admin_researcher_create_201(self, api_client, api_app):
+        user = _make_user(RoleName.RESEARCHER)
+        api_app.state.fake_session.user = user
+        r = await api_client.post(
+            "/api/v1/admin/news",
+            json={
+                "title_en": "Hello",
+                "content_en": "Body",
+                "slug": "hello",
+                "status": "published",
+            },
+            headers=_auth_header(user),
+        )
+        assert r.status_code == 201
+        body = r.json()
+        assert body["slug"] == "hello"
+        assert body["status"] == "published"
+        assert body["is_published"] is True
+
+    async def test_admin_researcher_update_200(self, api_client, api_app):
+        user = _make_user(RoleName.RESEARCHER)
+        api_app.state.fake_session.user = user
+        api_app.state.fake_session.articles = [_make_article(article_id=3, slug="a")]
+        r = await api_client.put(
+            "/api/v1/admin/news/3",
+            json={"title_en": "Updated"},
+            headers=_auth_header(user),
+        )
+        assert r.status_code == 200
+        assert r.json()["title_en"] == "Updated"
+
+    async def test_admin_researcher_delete_204(self, api_client, api_app):
+        user = _make_user(RoleName.RESEARCHER)
+        api_app.state.fake_session.user = user
+        api_app.state.fake_session.articles = [_make_article(article_id=3, slug="a")]
+        r = await api_client.delete(
+            "/api/v1/admin/news/3", headers=_auth_header(user)
+        )
+        assert r.status_code == 204
+
+    async def test_admin_researcher_reorder_200(self, api_client, api_app):
+        user = _make_user(RoleName.RESEARCHER)
+        api_app.state.fake_session.user = user
+        api_app.state.fake_session.articles = [
+            _make_article(article_id=1, slug="a"),
+            _make_article(article_id=2, slug="b"),
+        ]
+        r = await api_client.patch(
+            "/api/v1/admin/news/reorder",
+            json={"items": [{"id": 1, "featured_sort": 0}, {"id": 2, "featured_sort": 1}]},
+            headers=_auth_header(user),
+        )
+        assert r.status_code == 200
+        assert r.json()["updated"] == 2
+
+    async def test_admin_preview_token_200_and_hmac_valid(self, api_client, api_app):
+        import hashlib
+        import hmac
+
+        from app.core.config import get_settings
+
+        user = _make_user(RoleName.RESEARCHER)
+        api_app.state.fake_session.user = user
+        api_app.state.fake_session.articles = [
+            _make_article(article_id=4, slug="draft-post", status="draft")
+        ]
+        r = await api_client.get(
+            "/api/v1/admin/news/4/preview-token", headers=_auth_header(user)
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["url"].startswith("/api/v1/news/draft-post?preview=")
+        expected = hmac.new(
+            get_settings().jwt_secret.encode("utf-8"),
+            f"draft-post{body['exp']}".encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+        assert body["preview"] == expected
+        # token is HMAC, not a JWT (no signature dots)
+        assert body["preview"].count(".") == 0
+
+    async def test_admin_preview_token_404_unknown(self, api_client, api_app):
+        user = _make_user(RoleName.RESEARCHER)
+        api_app.state.fake_session.user = user
+        r = await api_client.get(
+            "/api/v1/admin/news/404/preview-token", headers=_auth_header(user)
+        )
+        assert r.status_code == 404

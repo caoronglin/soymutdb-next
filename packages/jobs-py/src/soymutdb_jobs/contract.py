@@ -20,6 +20,7 @@ IMPORT_EXPRESSION_TASK: Final[str] = "soymutdb_worker.tasks.expression.import_ex
 IMPORT_HOMOLOG_TASK: Final[str] = "soymutdb_worker.tasks.homolog.import_homolog_csv"
 ANALYSIS_FASTP_TASK: Final[str] = "soymutdb_worker.tasks.analyses.run_fastp"
 ANALYSIS_SCANPY_TASK: Final[str] = "soymutdb_worker.tasks.analyses.run_scanpy"
+GWAS_RUN_TASK: Final[str] = "soymutdb_worker.tasks.gwas.run_gwas"
 
 # ---------------------------------------------------------------------------
 # Celery queues (must match ``task_routes`` in the worker application)
@@ -42,6 +43,7 @@ TASK_QUEUE_MAP: Final[dict[str, str]] = {
     IMPORT_HOMOLOG_TASK: QUEUE_INGEST,
     ANALYSIS_FASTP_TASK: QUEUE_ANALYSES,
     ANALYSIS_SCANPY_TASK: QUEUE_ANALYSES,
+    GWAS_RUN_TASK: QUEUE_ANALYSES,
 }
 
 # ---------------------------------------------------------------------------
@@ -57,6 +59,7 @@ __all__ = [
     "ANALYSIS_FASTP_TASK",
     "ANALYSIS_SCANPY_TASK",
     "BLAST_RUN_TASK",
+    "GWAS_RUN_TASK",
     "BUILD_STATIC_PAGES_TASK",
     "EXPORT_VARIANTS_TASK",
     "IMPORT_EXPRESSION_TASK",

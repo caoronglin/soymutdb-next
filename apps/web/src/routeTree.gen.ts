@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AntdPilotRouteImport } from './routes/_antd-pilot'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as BlastRouteImport } from './routes/blast'
 import { Route as BrowserRouteImport } from './routes/browser'
@@ -39,6 +40,11 @@ import { Route as AnalysesJobIdRouteImport } from './routes/analyses/$jobId'
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AntdPilotRoute = AntdPilotRouteImport.update({
+  id: '/antd-pilot',
+  path: '/antd-pilot',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AnalyticsRoute = AnalyticsRouteImport.update({
@@ -169,6 +175,7 @@ const AnalysesJobIdRoute = AnalysesJobIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/antd-pilot': typeof AntdPilotRoute
   '/analytics': typeof AnalyticsRoute
   '/blast': typeof BlastRoute
   '/browser': typeof BrowserRoute
@@ -197,6 +204,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/antd-pilot': typeof AntdPilotRoute
   '/analytics': typeof AnalyticsRoute
   '/blast': typeof BlastRoute
   '/browser': typeof BrowserRoute
@@ -226,6 +234,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/antd-pilot': typeof AntdPilotRoute
   '/analytics': typeof AnalyticsRoute
   '/blast': typeof BlastRoute
   '/browser': typeof BrowserRoute
@@ -256,6 +265,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/antd-pilot'
     | '/analytics'
     | '/blast'
     | '/browser'
@@ -284,6 +294,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/antd-pilot'
     | '/analytics'
     | '/blast'
     | '/browser'
@@ -312,6 +323,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/antd-pilot'
     | '/analytics'
     | '/blast'
     | '/browser'
@@ -341,6 +353,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AntdPilotRoute: typeof AntdPilotRoute
   AnalyticsRoute: typeof AnalyticsRoute
   BlastRoute: typeof BlastRoute
   BrowserRoute: typeof BrowserRoute
@@ -375,6 +388,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/antd-pilot': {
+      id: '/antd-pilot'
+      path: '/antd-pilot'
+      fullPath: '/antd-pilot'
+      preLoaderRoute: typeof AntdPilotRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/analytics': {
@@ -557,6 +577,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AntdPilotRoute: AntdPilotRoute,
   AnalyticsRoute: AnalyticsRoute,
   BlastRoute: BlastRoute,
   BrowserRoute: BrowserRoute,
