@@ -170,6 +170,64 @@ class NewsService:
             page_size=page_size,
         )
 
+    async def list_articles_admin(
+        self,
+        db: AsyncSession,
+        *,
+        status_filter: str | None = None,
+        category: str | None = None,
+        search: str | None = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> NewsListResponse:
+        """Admin paginated list — sees ALL statuses (draft/published/archived).
+
+        Optional filters: status (draft|published|archived), category, and
+        a title/keyword ``search`` (case-insensitive ILIKE on title_en +
+        title_zh).
+        """
+        page = max(1, page)
+        page_size = min(100, max(1, page_size))
+
+        conditions: list = []
+        if status_filter is not None:
+            conditions.append(NewsArticle.status == status_filter)
+        if category is not None:
+            conditions.append(NewsArticle.category == category)
+        if search is not None and search.strip():
+            pattern = f"%{search.strip()}%"
+            conditions.append(
+                or_(
+                    NewsArticle.title_en.ilike(pattern),
+                    NewsArticle.title_zh.ilike(pattern),
+                )
+            )
+
+        total = int(
+            await db.scalar(
+                select(func.count()).select_from(NewsArticle).where(*conditions)
+            )
+            or 0
+        )
+        offset = (page - 1) * page_size
+        stmt = (
+            select(NewsArticle)
+            .where(*conditions)
+            .order_by(
+                NewsArticle.created_at.desc(),
+                NewsArticle.id.desc(),
+            )
+            .offset(offset)
+            .limit(page_size)
+        )
+        rows = (await db.execute(stmt)).scalars().all()
+        return NewsListResponse(
+            items=[NewsSummaryResponse.model_validate(r) for r in rows],
+            total=total,
+            page=page,
+            page_size=page_size,
+        )
+
     async def featured(self, db: AsyncSession) -> NewsFeaturedResponse:
         """Homepage block: 5 featured articles + carousel groups."""
         now = _utcnow()

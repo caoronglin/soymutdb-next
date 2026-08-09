@@ -1,19 +1,20 @@
-"""Admin news endpoints (B1): CRUD, drag reorder, HMAC preview tokens.
+"""Admin news endpoints (B1): list (all statuses), CRUD, drag reorder, HMAC preview tokens.
 
 Requires ``researcher`` role or higher (hierarchical RBAC, see
 ``app.core.security.has_role``).
 
 Contract:
-- ``POST   /api/v1/admin/news``                          create (201)
-- ``PUT    /api/v1/admin/news/{news_id}``                update
-- ``DELETE /api/v1/admin/news/{news_id}``                delete (204)
-- ``PATCH  /api/v1/admin/news/reorder``                  featured_sort drag order
+- ``GET    /api/v1/admin/news``                        list (all statuses, filter+search)
+- ``POST   /api/v1/admin/news``                        create (201)
+- ``PUT    /api/v1/admin/news/{news_id}``              update
+- ``DELETE /api/v1/admin/news/{news_id}``              delete (204)
+- ``PATCH  /api/v1/admin/news/reorder``                featured_sort drag order
 - ``GET    /api/v1/admin/news/{news_id}/preview-token``  HMAC token (15 min)
 """
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,6 +26,7 @@ from ...models.content import NewsArticle
 from ...schemas.news import (
     NewsCreate,
     NewsDetailResponse,
+    NewsListResponse,
     NewsReorderRequest,
     NewsReorderResponse,
     NewsUpdate,
@@ -43,6 +45,41 @@ def _require_researcher(user: User) -> User:
     if not has_role(roles, RoleName.RESEARCHER):
         raise AuthorizationError("Researcher access required")
     return user
+
+
+@router.get("", response_model=NewsListResponse)
+async def list_news_admin(
+    status_filter: str | None = Query(
+        default=None,
+        description="Filter by status: draft, published, archived (case-insensitive).",
+    ),
+    category: str | None = Query(
+        default=None, description="Filter by category (exact match)."
+    ),
+    search: str | None = Query(
+        default=None, description="Case-insensitive title search."
+    ),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> NewsListResponse:
+    """List ALL news articles — including drafts and archived.
+
+    Unlike the public ``GET /news`` (published only), this admin endpoint
+    sees every status and supports ``status_filter``, ``category`` and
+    ``search`` parameters.
+    """
+    _require_researcher(current_user)
+    sf = status_filter.lower() if status_filter else None
+    return await service.list_articles_admin(
+        db,
+        status_filter=sf,
+        category=category,
+        search=search,
+        page=page,
+        page_size=page_size,
+    )
 
 
 async def _get_article(db: AsyncSession, news_id: int) -> NewsArticle:

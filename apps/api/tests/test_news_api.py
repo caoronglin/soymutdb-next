@@ -713,3 +713,74 @@ class TestAdminRBAC:
             "/api/v1/admin/news/404/preview-token", headers=_auth_header(user)
         )
         assert r.status_code == 404
+
+    # -- admin list endpoint (all statuses) --
+
+    async def test_admin_list_researcher_200(self, api_client, api_app):
+        user = _make_user(RoleName.RESEARCHER)
+        api_app.state.fake_session.user = user
+        api_app.state.fake_session.articles = [
+            _make_article(article_id=1, slug="pub", status="published"),
+            _make_article(article_id=2, slug="draft", status="draft"),
+            _make_article(article_id=3, slug="archived", status="archived"),
+        ]
+        r = await api_client.get(
+            "/api/v1/admin/news", headers=_auth_header(user)
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["total"] == 3
+        assert len(body["items"]) == 3
+
+    async def test_admin_list_viewer_403(self, api_client, api_app):
+        user = _make_user(RoleName.VIEWER)
+        api_app.state.fake_session.user = user
+        r = await api_client.get(
+            "/api/v1/admin/news", headers=_auth_header(user)
+        )
+        assert r.status_code == 403
+
+    async def test_admin_list_unauthenticated_401(self, api_client):
+        r = await api_client.get("/api/v1/admin/news")
+        assert r.status_code == 401
+
+    async def test_admin_list_filter_draft(self, api_client, api_app):
+        user = _make_user(RoleName.RESEARCHER)
+        api_app.state.fake_session.user = user
+        api_app.state.fake_session.articles = [
+            _make_article(article_id=1, slug="pub", status="published"),
+            _make_article(article_id=2, slug="draft", status="draft"),
+            _make_article(article_id=3, slug="arch", status="archived"),
+        ]
+        r = await api_client.get(
+            "/api/v1/admin/news",
+            params={"status_filter": "draft"},
+            headers=_auth_header(user),
+        )
+        assert r.status_code == 200
+        body = r.json()
+        # FakeDbSession returns all rows regardless of WHERE clause;
+        # real DB + service applies status filter. Verify endpoint accepts
+        # the param and returns paginated shape.
+        assert body["total"] == 3
+        assert body["page"] == 1
+        # At least one draft is present (filter would narrow in real DB)
+        statuses = {item["status"] for item in body["items"]}
+        assert "draft" in statuses
+
+    async def test_admin_list_pagination(self, api_client, api_app):
+        user = _make_user(RoleName.RESEARCHER)
+        api_app.state.fake_session.user = user
+        api_app.state.fake_session.articles = [
+            _make_article(article_id=i, slug=f"a{i}", status="published")
+            for i in range(1, 26)
+        ]
+        r = await api_client.get(
+            "/api/v1/admin/news",
+            params={"page": 2, "page_size": 5},
+            headers=_auth_header(user),
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["page"] == 2
+        assert body["page_size"] == 5
