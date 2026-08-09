@@ -71,7 +71,9 @@ export const Route = createFileRoute("/browser")({
 
 // Configurable JBrowse URL — defaults to the local JBrowse app (port 5175).
 // In production, set VITE_JBROWSE_URL to the deployed JBrowse instance URL.
-const JBROWSE_BASE = import.meta.env.VITE_JBROWSE_URL ?? "http://localhost:5175";
+// NOTE: CI passes VITE_JBROWSE_URL from a (possibly unset) GitHub secret, so
+// the value can be an empty string — never construct a URL from it directly.
+const JBROWSE_BASE = import.meta.env.VITE_JBROWSE_URL?.trim() || "http://localhost:5175";
 const JBROWSE_ORIGIN = new URL(JBROWSE_BASE).origin;
 
 /** How long to wait for the JBrowse `ready` message before showing the retry panel. */

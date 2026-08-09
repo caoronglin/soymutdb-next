@@ -17,9 +17,10 @@
 /** In-memory access token (module singleton; never written to storage). */
 let accessToken: string | null = null;
 
-/** Resolved API base URL. */
+/** Resolved API base URL. Empty env (CI unset secret) falls back to the
+ * relative /api/v1 base, matching the undefined case. */
 export const apiBaseUrl =
-    (import.meta.env?.VITE_API_BASE_URL as string | undefined) ?? "/api/v1";
+    (import.meta.env?.VITE_API_BASE_URL as string | undefined)?.trim() || "/api/v1";
 
 /** Default request timeout in milliseconds (critical operations). */
 const DEFAULT_TIMEOUT = 30_000;
