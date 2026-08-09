@@ -28,6 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.config import get_settings
 from ..core.exceptions import ConflictError, NotFoundError
+from ..core.sanitize import sanitize_rich_html
 from ..models.content import NewsArticle
 from ..schemas.news import (
     CarouselGroupResponse,
@@ -319,8 +320,12 @@ class NewsService:
         article = NewsArticle(
             title_en=payload.title_en,
             title_zh=payload.title_zh,
-            content_en=payload.content_en,
-            content_zh=payload.content_zh,
+            content_en=sanitize_rich_html(payload.content_en),
+            content_zh=(
+                sanitize_rich_html(payload.content_zh)
+                if payload.content_zh
+                else None
+            ),
             slug=payload.slug,
             category=payload.category,
             cover_url=payload.cover_url,
@@ -366,7 +371,7 @@ class NewsService:
         if "title_en" in provided and payload.title_en is not None:
             article.title_en = payload.title_en
         if "content_en" in provided and payload.content_en is not None:
-            article.content_en = payload.content_en
+            article.content_en = sanitize_rich_html(payload.content_en)
         if "slug" in provided and payload.slug is not None:
             article.slug = payload.slug
         if "featured_sort" in provided and payload.featured_sort is not None:
@@ -377,7 +382,6 @@ class NewsService:
         # Nullable fields: explicit null clears, absent keeps.
         for field in (
             "title_zh",
-            "content_zh",
             "category",
             "cover_url",
             "carousel_group",
@@ -386,6 +390,14 @@ class NewsService:
         ):
             if field in provided:
                 setattr(article, field, getattr(payload, field))
+        # content_zh is nullable but rich-text: sanitize when a string is
+        # supplied, clear when explicitly null.
+        if "content_zh" in provided:
+            article.content_zh = (
+                sanitize_rich_html(payload.content_zh)
+                if payload.content_zh is not None
+                else None
+            )
 
         # status wins when both are supplied (status is the source of truth).
         if payload.status is not None:

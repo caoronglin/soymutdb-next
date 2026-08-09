@@ -14,6 +14,7 @@
     "publications": "文献",
     "news": "新闻",
     "seedRequest": "种子申请",
+    "about": "关于我们",
     "language": "切换语言",
     "theme": "切换主题",
     "profile": "个人中心",
@@ -780,6 +781,47 @@
     "about": {
       "title": "关于我们内容",
       "description": "可编辑的“关于我们”页面内容（由 GET /site/about 提供）。"
+    },
+    "editor": {
+      "toolbar": "富文本工具栏",
+      "bold": "加粗",
+      "italic": "斜体",
+      "strike": "删除线",
+      "heading1": "一级标题",
+      "heading2": "二级标题",
+      "heading3": "三级标题",
+      "bulletList": "无序列表",
+      "orderedList": "有序列表",
+      "table": "插入表格",
+      "image": "插入图片",
+      "link": "插入链接",
+      "linkUnset": "移除链接",
+      "linkPlaceholder": "https://...",
+      "imagePlaceholder": "https://...（外部图片链接）",
+      "imageUpload": "上传图片",
+      "undo": "撤销",
+      "redo": "重做",
+      "pasteMarkdown": "粘贴为 Markdown",
+    "sourceMode": "Markdown 源码模式",
+      "importDocx": "导入 DOCX",
+      "placeholder": "开始输入…",
+      "tabRichtext": "富文本",
+      "tabMarkdown": "Markdown",
+      "markdownHint": "Markdown 为显式应用：此处编辑不会改动富文本结构，点击「应用」后才生效；双向转换不保证无损。",
+      "markdownPlaceholder": "在此输入 Markdown…",
+      "markdownPreview": "预览",
+      "markdownEdit": "编辑源码",
+      "markdownApply": "应用",
+      "markdownApplied": "已应用",
+      "overwriteConfirmTitle": "切换到 Markdown 模式？",
+      "overwriteConfirmContent": "应用 Markdown 将覆盖现有富文本结构，是否继续？",
+      "overwriteConfirmOk": "继续",
+      "cancel": "取消",
+      "docxImportSuccess": "DOCX 导入成功",
+      "docxImportError": "DOCX 导入失败",
+      "clipboardEmpty": "剪贴板为空",
+      "clipboardError": "无法读取剪贴板，请手动粘贴文本。",
+      "markdownPasteSuccess": "已按 Markdown 应用剪贴板内容"
     }
   },
   "news": {
@@ -812,6 +854,12 @@
     "carouselAria": "精选新闻轮播",
     "carouselLoading": "正在加载新闻轮播",
     "homeUnavailable": "新闻暂时不可用"
+  },
+  "about": {
+    "title": "关于我们",
+    "empty": "关于我们内容尚未发布。",
+    "loadErrorTitle": "关于我们页面加载失败",
+    "loadErrorSubtitle": "服务暂时不可用，请稍后重试。"
   },
   "publications": {
     "title": "文献",

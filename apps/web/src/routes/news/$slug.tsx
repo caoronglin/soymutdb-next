@@ -6,9 +6,16 @@
  * Drafts without a valid token 404 on the backend → "article not found".
  * Body HTML is sanitised with DOMPurify before rendering. Prev/next
  * navigation derives from the same-category published list (cap 200).
+ *
+ * E3 (snapshot takeover): SSG detail pages embed a `#rl-bootstrap` JSON for
+ * the current slug; it prefills the query cache so the first paint renders
+ * the snapshot article (no loading flash) with the API refreshing in the
+ * background. Preview/exp requests ALWAYS hit the API. Slugs missing from
+ * the snapshot (e.g. visibility-window articles) fall back to the normal
+ * API load.
  */
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { Button, Result, Skeleton, Tag } from "antd";
@@ -27,12 +34,20 @@ import {
   type NewsSummary,
 } from "@soymutdb/api-client";
 import { formatDate } from "../../lib/format";
+import {
+  isDetailData,
+  prefillQueryData,
+  readBootstrap,
+  snapshotTimestamp,
+} from "../../lib/content-snapshot";
 
 export const Route = createFileRoute("/news/$slug")({
   component: NewsDetailComponent,
 });
 
 const SIBLING_PAGE_SIZE = 200;
+/** Snapshot-prefilled detail refreshes from the API after this long. */
+const PREFILL_STALE_TIME = 30_000;
 
 interface PreviewSearch {
   preview?: string;
@@ -41,15 +56,41 @@ interface PreviewSearch {
 
 function NewsDetailComponent() {
   const { t, i18n } = useTranslation();
+  const queryClient = useQueryClient();
   const { slug } = Route.useParams();
   const { preview, exp } = Route.useSearch({ select: (s) => s as PreviewSearch });
+
+  // Bootstrap is read synchronously once per mount — SSG detail pages embed
+  // it only for the generated slug. Preview/exp never prefill.
+  const bootstrap = React.useMemo(() => readBootstrap(), []);
+  const bootstrapArticle =
+    !preview && !exp && bootstrap?.page === "news-detail" && bootstrap.slug === slug && isDetailData(bootstrap.data)
+      ? bootstrap.data
+      : undefined;
 
   const detailQuery = useQuery({
     queryKey: ["news-detail", slug, preview ?? null, exp ?? null],
     queryFn: () => getNewsBySlug(slug, preview, exp),
-    staleTime: 60_000,
+    staleTime: bootstrapArticle ? PREFILL_STALE_TIME : 60_000,
     retry: false,
+    // First paint renders the snapshot article — no loading flash on SSG pages.
+    initialData: bootstrapArticle,
+    initialDataUpdatedAt: bootstrapArticle
+      ? snapshotTimestamp(bootstrap?.generated_at)
+      : undefined,
   });
+
+  // Pin the bootstrap article into the cache (dataUpdatedAt = generated_at)
+  // so the query is already stale and the background API refresh replaces it.
+  React.useEffect(() => {
+    if (!bootstrapArticle || !bootstrap) return;
+    prefillQueryData(
+      queryClient,
+      ["news-detail", slug, null, null],
+      bootstrapArticle,
+      bootstrap.generated_at,
+    );
+  }, [bootstrapArticle, bootstrap, slug, queryClient]);
 
   const article = detailQuery.data;
   const isZh = i18n.language.toLowerCase().startsWith("zh");
@@ -83,30 +124,31 @@ function NewsDetailComponent() {
     <div className="container-prose section-rhythm">
       <Link
         to="/news"
+        search={{ category: undefined, page: undefined }}
         className="link-underline inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
       >
         <ArrowLeftOutlined className="text-xs" aria-hidden />
         {t("news.backToList")}
       </Link>
 
-      {detailQuery.isLoading ? (
+      {detailQuery.isLoading && !article ? (
         <div className="mt-8 max-w-3xl" data-testid="news-detail-loading">
           <Skeleton active paragraph={{ rows: 1 }} title={{ width: 200 }} />
           <Skeleton.Image active style={{ height: 360, width: "100%", marginTop: 16 }} />
           <Skeleton active paragraph={{ rows: 6 }} className="mt-6" />
         </div>
-      ) : isNotFound || !article ? (
+      ) : isNotFound && !article ? (
         <Result
           status="404"
           title={t("news.articleNotFound")}
           subTitle={t("news.articleNotFoundHint")}
           extra={
-            <Link to="/news">
+            <Link to="/news" search={{ category: undefined, page: undefined }}>
               <Button type="primary">{t("news.backToList")}</Button>
             </Link>
           }
         />
-      ) : detailQuery.isError ? (
+      ) : !article ? (
         <Result
           status="error"
           title={t("news.loadErrorTitle")}

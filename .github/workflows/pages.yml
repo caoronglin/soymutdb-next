@@ -55,6 +55,12 @@ jobs:
         env:
           VITE_API_BASE_URL: ${{ secrets.API_BASE_URL }}
           VITE_CDN_ENABLED: "false"
+          # Content snapshot for SSG content pages (news/about).
+          # Set the repository secret CONTENT_SNAPSHOT_URL to the production
+          # API endpoint (e.g. https://api.example.com/api/v1/content/snapshot).
+          # Missing URL -> fetch-content-snapshot.ts exits 1 (fail-fast) so
+          # CI never silently ships stale content pages.
+          CONTENT_SNAPSHOT_URL: ${{ secrets.CONTENT_SNAPSHOT_URL }}
         run: pnpm --filter @soymutdb/web build
 
       - name: Deploy dist to pages (gh-pages) branch

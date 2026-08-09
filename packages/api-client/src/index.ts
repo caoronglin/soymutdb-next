@@ -44,5 +44,6 @@ export * from "./sra";
 export * from "./analyses";
 export * from "./tools";
 export * from "./news";
+export * from "./site";
 export * from "./admin-news";
 export * from "./admin-uploads";

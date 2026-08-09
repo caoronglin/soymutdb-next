@@ -17,6 +17,10 @@ export function SiteFooter() {
           <div className="flex items-center gap-4">
             <p className="font-mono">v2.0.0</p>
             <span className="text-border">·</span>
+            <Link to="/about" className="link-underline hover:text-foreground">
+              {t("nav.about")}
+            </Link>
+            <span className="text-border">·</span>
             <Link to="/help" className="link-underline hover:text-foreground">
               API Docs
             </Link>

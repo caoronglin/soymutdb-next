@@ -1,0 +1,328 @@
+#!/usr/bin/env tsx
+/**
+ * SSG Content Pages (E2-3)
+ *
+ * Generates static HTML for content pages from the snapshot JSON
+ * (dist/data/content.json, produced by fetch-content-snapshot.ts):
+ *
+ *   /news/index.html          — list (categories, cards, pagination)
+ *   /news/{slug}.html         — detail (only snapshot-window articles;
+ *                               visibility-window articles are null in the
+ *                               snapshot and are NEVER generated here)
+ *   /about.html               — about content
+ *
+ * Each page embeds a `#rl-bootstrap` JSON payload consumed by the SPA
+ * (E3: src/lib/content-snapshot.ts) to prefill the query cache.
+ *
+ * Runs AFTER ssg-build/generate-samples and BEFORE gzip-compress/gen-sw
+ * (see package.json build chain).  Missing snapshot → skip (exit 0); the
+ * existing legacy pages remain untouched.
+ */
+
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import createDOMPurify from "dompurify";
+// jsdom ships no types; the script runs via tsx (scripts are outside the
+// typecheck path — ssg-build.ts has the same pattern).
+// @ts-expect-error jsdom has no bundled types
+import jsdomPkg from "jsdom";
+import { renderBaseTemplate, discoverAssets } from "./base-template";
+
+const { JSDOM } = jsdomPkg as {
+  JSDOM: new (html: string) => { window: unknown };
+};
+
+const DIST_DIR = join(process.cwd(), "dist");
+const SNAPSHOT_FILE = join(DIST_DIR, "data", "content.json");
+const NEWS_DIR = join(DIST_DIR, "news");
+
+const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+interface Snapshot {
+  schema_version: number;
+  generated_at: string;
+  news: {
+    source_total: number;
+    included_total: number;
+    truncated: boolean;
+    items: NewsItem[];
+  };
+  news_detail: Record<string, NewsDetail | null>;
+  about: About | null;
+}
+
+interface NewsItem {
+  slug: string;
+  title_en: string;
+  title_zh: string | null;
+  category: string;
+  cover_url: string | null;
+  published_at: string;
+  featured_sort: number;
+  carousel_group: string | null;
+  carousel_sort: number;
+  is_published: boolean;
+  updated_at: string;
+}
+
+interface NewsDetail extends NewsItem {
+  content_en: string;
+  content_zh: string | null;
+}
+
+interface About {
+  title_en: string | null;
+  title_zh: string | null;
+  summary_en: string | null;
+  summary_zh: string | null;
+  content_en: string | null;
+  content_zh: string | null;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Sanitisation (SSG-side re-clean; server bleach is primary)        */
+/* ------------------------------------------------------------------ */
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const window = new JSDOM("").window as any;
+const DOMPurify = createDOMPurify(window);
+
+function sanitizeHtml(html: string): string {
+  return DOMPurify.sanitize(html, {
+    USE_PROFILES: { html: true },
+  });
+}
+
+function stripTags(html: string): string {
+  return html
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function truncate(text: string, max = 160): string {
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Bootstrap embedding                                               */
+/* ------------------------------------------------------------------ */
+
+function embedBootstrap(payload: Record<string, unknown>): string {
+  // \u003c escapes prevent </script> breakout inside JSON.
+  const json = JSON.stringify(payload).replace(/</g, "\\u003c");
+  return `<script type="application/json" id="rl-bootstrap">${json}</script>`;
+}
+
+function formatDate(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? iso : d.toISOString().slice(0, 10);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Page builders                                                     */
+/* ------------------------------------------------------------------ */
+
+function renderNewsList(snapshot: Snapshot): string {
+  const items = snapshot.news.items;
+  const title = "News — SoyMutDB";
+  const description = "SoyMutDB news, updates and announcements.";
+
+  const cards = items
+    .map((it) => {
+      const titleText = it.title_zh ?? it.title_en;
+      const cover = it.cover_url
+        ? `<img class="news-card-cover" src="${it.cover_url}" alt="" loading="lazy" />`
+        : "";
+      return `<a class="news-card" href="news/${it.slug}.html">
+        ${cover}
+        <div class="news-card-body">
+          <span class="news-card-cat">${it.category}</span>
+          <h3>${escapeAttr(titleText)}</h3>
+          <time>${formatDate(it.published_at)}</time>
+        </div>
+      </a>`;
+    })
+    .join("\n");
+
+  const truncationNotice = snapshot.news.truncated
+    ? `<p class="news-more">More articles available online — <a href="/news">open the portal</a>.</p>`
+    : "";
+
+  const bootstrap = embedBootstrap({
+    page: "news-list",
+    data: { items, total: snapshot.news.included_total },
+    generated_at: snapshot.generated_at,
+  });
+
+  return renderBaseTemplate({
+    title,
+    description,
+    widgetsHtml: `
+      <div class="container-prose news-page">
+        <header><p class="eyebrow">SoyMutDB</p><h1>News</h1></header>
+        <div class="news-grid">${cards}</div>
+        ${truncationNotice}
+      </div>`,
+    bodyScripts: bootstrap,
+  });
+}
+
+function renderNewsDetail(slug: string, detail: NewsDetail, snapshot: Snapshot): string {
+  const titleText = detail.title_zh ?? detail.title_en;
+  const title = `${titleText} — SoyMutDB News`;
+  const description = truncate(stripTags(detail.content_en));
+  const cover = detail.cover_url
+    ? `<img class="news-cover" src="${detail.cover_url}" alt="" />`
+    : "";
+  const bodyHtml = sanitizeHtml(detail.content_en);
+
+  const bootstrap = embedBootstrap({
+    page: "news-detail",
+    slug,
+    data: detail,
+    generated_at: snapshot.generated_at,
+  });
+
+  return renderBaseTemplate({
+    title,
+    description,
+    widgetsHtml: `
+      <article class="container-prose news-detail">
+        <header>
+          <p class="eyebrow">${escapeAttr(detail.category)}</p>
+          <h1>${escapeAttr(titleText)}</h1>
+          <time>${formatDate(detail.published_at)}</time>
+        </header>
+        ${cover}
+        <div class="news-body">${bodyHtml}</div>
+      </article>`,
+    bodyScripts: bootstrap,
+    jsonLd: {
+      "@context": "https://schema.org",
+      "@type": "Article",
+      headline: titleText,
+      datePublished: detail.published_at,
+      dateModified: detail.updated_at,
+      description,
+    },
+  });
+}
+
+function renderAbout(snapshot: Snapshot): string | null {
+  const about = snapshot.about;
+  if (!about || (!about.content_en && !about.content_zh)) {
+    return null;
+  }
+  const titleText = about.title_en ?? "About — SoyMutDB";
+  const content = sanitizeHtml(about.content_en ?? "");
+
+  const bootstrap = embedBootstrap({
+    page: "about",
+    data: about,
+    generated_at: snapshot.generated_at,
+  });
+
+  return renderBaseTemplate({
+    title: `${about.title_en ?? "About"} — SoyMutDB`,
+    description: truncate(stripTags(about.content_en ?? "")),
+    widgetsHtml: `
+      <article class="container-prose about-page">
+        <header><p class="eyebrow">SoyMutDB</p><h1>${escapeAttr(titleText)}</h1></header>
+        <div class="about-body">${content}</div>
+      </article>`,
+    bodyScripts: bootstrap,
+  });
+}
+
+function escapeAttr(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/* ------------------------------------------------------------------ */
+/*  Main                                                              */
+/* ------------------------------------------------------------------ */
+
+function main(): void {
+  if (!existsSync(SNAPSHOT_FILE)) {
+    console.warn(
+      "[ssg-content] no dist/data/content.json — skipping content pages (SPA/API fallback)",
+    );
+    return;
+  }
+
+  let snapshot: Snapshot;
+  try {
+    snapshot = JSON.parse(readFileSync(SNAPSHOT_FILE, "utf-8")) as Snapshot;
+  } catch (err) {
+    console.error(`[ssg-content] invalid snapshot: ${(err as Error).message}`);
+    return;
+  }
+
+  mkdirSync(NEWS_DIR, { recursive: true });
+  const assets = discoverAssets();
+
+  // News list.
+  const listHtml = renderNewsList(snapshot);
+  writeFileSync(join(DIST_DIR, "news", "index.html"), listHtml);
+  console.log(`[ssg-content] wrote news/index.html (${snapshot.news.items.length} items)`);
+
+  // News details — ONLY snapshot-window articles (never null entries).
+  let detailCount = 0;
+  for (const [slug, detail] of Object.entries(snapshot.news_detail)) {
+    if (!detail || !SLUG_RE.test(slug)) continue;
+    const html = renderNewsDetail(slug, detail, snapshot);
+    writeFileSync(join(NEWS_DIR, `${slug}.html`), html);
+    detailCount += 1;
+  }
+  console.log(`[ssg-content] wrote ${detailCount} news detail pages`);
+
+  // About (optional).
+  const aboutHtml = renderAbout(snapshot);
+  if (aboutHtml) {
+    writeFileSync(join(DIST_DIR, "about.html"), aboutHtml);
+    console.log("[ssg-content] wrote about.html");
+  }
+
+  // Append news URLs to the existing sitemap.xml (written by
+  // generate-samples.ts) so search engines discover the static pages.
+  appendNewsToSitemap(snapshot);
+}
+
+function appendNewsToSitemap(snapshot: Snapshot): void {
+  const sitemapPath = join(DIST_DIR, "sitemap.xml");
+  if (!existsSync(sitemapPath)) {
+    console.warn("[ssg-content] no sitemap.xml found — skipping sitemap update");
+    return;
+  }
+  let sitemap = readFileSync(sitemapPath, "utf-8");
+  if (sitemap.includes("news/")) {
+    // Already appended (idempotent).
+    return;
+  }
+  const urls: string[] = [];
+  urls.push(`<url><loc>${join(SITE_BASE, "news")}</loc><priority>0.6</priority></url>`);
+  for (const slug of Object.keys(snapshot.news_detail)) {
+    if (snapshot.news_detail[slug]) {
+      urls.push(
+        `<url><loc>${join(SITE_BASE, "news", slug)}</loc><priority>0.5</priority></url>`,
+      );
+    }
+  }
+  const urlsetEnd = sitemap.lastIndexOf("</urlset>");
+  if (urlsetEnd === -1) return;
+  sitemap =
+    sitemap.slice(0, urlsetEnd) + urls.join("\n") + "\n" + sitemap.slice(urlsetEnd);
+  writeFileSync(sitemapPath, sitemap, "utf-8");
+  console.log(`[ssg-content] appended ${urls.length} news URLs to sitemap.xml`);
+}
+
+//: Site base for sitemap <loc> entries (env-configurable, defaults to root).
+const SITE_BASE = process.env.SITE_BASE_URL ?? "https://caoronglin.github.io/soymutdb-next";
+
+main();

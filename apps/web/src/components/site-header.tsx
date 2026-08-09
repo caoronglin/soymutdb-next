@@ -72,6 +72,7 @@ const NAV_GROUPS: NavGroup[] = [
       { to: "/news", labelKey: "nav.news" },
       { to: "/publications", labelKey: "nav.publications" },
       { to: "/seed-request", labelKey: "nav.seedRequest" },
+      { to: "/about", labelKey: "nav.about" },
     ],
   },
 ];

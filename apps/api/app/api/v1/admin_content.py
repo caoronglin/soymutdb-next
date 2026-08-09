@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.database import get_db
 from ...core.exceptions import AuthorizationError, NotFoundError
+from ...core.sanitize import sanitize_rich_html
 from ...core.security import RoleName, has_role
 from ...models.auth import User
 from ...models.content import ContentVersion, StaticPage
@@ -183,8 +184,12 @@ async def create_page(
         slug=payload.slug,
         title_en=payload.title_en,
         title_zh=payload.title_zh,
-        content_en=payload.content_en,
-        content_zh=payload.content_zh,
+        content_en=sanitize_rich_html(payload.content_en),
+        content_zh=(
+            sanitize_rich_html(payload.content_zh)
+            if payload.content_zh
+            else None
+        ),
         status=payload.status.value,
         author_id=current_user.id,
         summary=payload.summary,
@@ -200,8 +205,12 @@ async def create_page(
         version=1,
         title_en=payload.title_en,
         title_zh=payload.title_zh,
-        content_en=payload.content_en,
-        content_zh=payload.content_zh,
+        content_en=sanitize_rich_html(payload.content_en),
+        content_zh=(
+            sanitize_rich_html(payload.content_zh)
+            if payload.content_zh
+            else None
+        ),
         summary=payload.summary,
         edited_by=current_user.id,
         edit_comment=payload.edit_comment,
@@ -237,10 +246,14 @@ async def update_page(
     new_title_en = payload.title_en if payload.title_en is not None else page.title_en
     new_title_zh = payload.title_zh if payload.title_zh is not None else page.title_zh
     new_content_en = (
-        payload.content_en if payload.content_en is not None else page.content_en
+        sanitize_rich_html(payload.content_en)
+        if payload.content_en is not None
+        else page.content_en
     )
     new_content_zh = (
-        payload.content_zh if payload.content_zh is not None else page.content_zh
+        sanitize_rich_html(payload.content_zh)
+        if payload.content_zh is not None
+        else page.content_zh
     )
     new_summary = payload.summary if payload.summary is not None else page.summary
     new_category = payload.category if payload.category is not None else page.category

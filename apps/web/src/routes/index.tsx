@@ -181,6 +181,7 @@ function HomeNewsSection() {
           </div>
           <Link
             to="/news"
+            search={{ category: undefined, page: undefined }}
             className="link-underline inline-flex items-center gap-1 text-sm font-medium text-primary"
           >
             {t("news.viewAll")}

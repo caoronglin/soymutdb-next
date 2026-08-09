@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+import hashlib
+
+from fastapi import APIRouter, Depends, Query, Request, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,9 +23,51 @@ from ...schemas.content import (
     SignedUrlResponse,
     StaticPageResponse,
 )
+from ...services.cache import get_or_set
+from ...services.content_snapshot_service import ContentSnapshotService
 from ...utils.s3 import generate_presigned_url, parse_s3_path
 
 router = APIRouter(prefix="/content", tags=["content"])
+
+
+# ---------------------------------------------------------------------------
+# Snapshot (SSG content feed)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/snapshot")
+async def content_snapshot(
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Public content snapshot for static builds (E2-2).
+
+    Frozen contract in ``docs/design/static-content-richtext-2026-08.md``
+    §4.1: schema_version/generated_at/news{source_total,included_total,
+    truncated,items}/news_detail{slug: detail|null}/about.
+
+    Aggregation is cached in Redis for 60 s (cache.py); the response carries
+    an ETag so build-time fetchers can short-circuit with 304.
+    """
+    payload = await get_or_set(
+        "content:snapshot",
+        60,
+        loader=lambda: _build_snapshot(db),
+    )
+    etag = '"' + hashlib.sha256(
+        payload["generated_at"].encode("utf-8")
+    ).hexdigest()[:16] + '"'
+    if request.headers.get("if-none-match") == etag:
+        response.status_code = 304
+        return {}
+    response.headers["ETag"] = etag
+    return payload
+
+
+async def _build_snapshot(db: AsyncSession) -> dict:
+    service = ContentSnapshotService()
+    return await service.build_snapshot(db)
 
 
 # ---------------------------------------------------------------------------

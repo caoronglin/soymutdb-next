@@ -14,6 +14,7 @@
     "publications": "Publications",
     "news": "News",
     "seedRequest": "Seed Request",
+    "about": "About",
     "language": "Toggle Language",
     "theme": "Toggle Theme",
     "profile": "Profile",
@@ -780,6 +781,47 @@
     "about": {
       "title": "About Us Content",
       "description": "Editable 'About us' page content (served by GET /site/about)."
+    },
+    "editor": {
+      "toolbar": "Rich text toolbar",
+      "bold": "Bold",
+      "italic": "Italic",
+      "strike": "Strikethrough",
+      "heading1": "Heading 1",
+      "heading2": "Heading 2",
+      "heading3": "Heading 3",
+      "bulletList": "Bullet list",
+      "orderedList": "Ordered list",
+      "table": "Insert table",
+      "image": "Insert image",
+      "link": "Insert link",
+      "linkUnset": "Remove link",
+      "linkPlaceholder": "https://...",
+      "imagePlaceholder": "https://... (external URL)",
+      "imageUpload": "Upload image",
+      "undo": "Undo",
+      "redo": "Redo",
+      "pasteMarkdown": "Paste as Markdown",
+    "sourceMode": "Markdown source mode",
+      "importDocx": "Import DOCX",
+      "placeholder": "Start writing…",
+      "tabRichtext": "Rich text",
+      "tabMarkdown": "Markdown",
+      "markdownHint": "Markdown is applied explicitly: editing here does not touch the rich-text structure until you press Apply. Round-trips are not lossless.",
+      "markdownPlaceholder": "Type Markdown here…",
+      "markdownPreview": "Preview",
+      "markdownEdit": "Edit source",
+      "markdownApply": "Apply",
+      "markdownApplied": "Applied",
+      "overwriteConfirmTitle": "Switch to Markdown mode?",
+      "overwriteConfirmContent": "Applying Markdown will overwrite the existing rich-text structure. Continue?",
+      "overwriteConfirmOk": "Continue",
+      "cancel": "Cancel",
+      "docxImportSuccess": "DOCX imported",
+      "docxImportError": "DOCX import failed",
+      "clipboardEmpty": "Clipboard is empty",
+      "clipboardError": "Could not read clipboard. Paste the text manually.",
+      "markdownPasteSuccess": "Clipboard content applied as Markdown"
     }
   },
   "news": {
@@ -812,6 +854,12 @@
     "carouselAria": "Featured news carousel",
     "carouselLoading": "Loading news carousel",
     "homeUnavailable": "News temporarily unavailable"
+  },
+  "about": {
+    "title": "About SoyMutDB",
+    "empty": "About content has not been published yet.",
+    "loadErrorTitle": "Failed to load about page",
+    "loadErrorSubtitle": "The about service is temporarily unavailable. Please try again later."
   },
   "publications": {
     "title": "Publications",

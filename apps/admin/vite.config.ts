@@ -33,6 +33,17 @@ export default defineConfig({
             output: {
                 manualChunks(id: string) {
                     if (id.includes("node_modules/echarts")) return "echarts";
+                    // TipTap editor (E1) — tiptap + prosemirror + marked@17
+                    // + mammoth land in their own chunk (lazy-loaded via
+                    // RichEditor). Keep them out of the entry bundle.
+                    if (
+                        id.includes("node_modules/@tiptap") ||
+                        id.includes("node_modules/prosemirror") ||
+                        id.includes("node_modules/marked") ||
+                        id.includes("node_modules/mammoth")
+                    ) {
+                        return "tiptap";
+                    }
                     if (id.includes("node_modules/react") || id.includes("node_modules/react-dom")) return "react";
                     if (id.includes("node_modules/@tanstack")) return "router";
                     // AntD Pro split (G2 budget: antd ≤ 280KB / pro ≤ 180KB gzip).

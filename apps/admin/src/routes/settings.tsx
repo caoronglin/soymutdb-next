@@ -22,6 +22,7 @@ import {
   Badge,
 } from "@soymutdb/ui";
 import { ConfirmDialog } from "../components/confirm-dialog";
+import { RichEditor } from "../components/rich-editor/rich-editor";
 
 export default function SettingsPage() {
   const { t } = useTranslation();
@@ -274,24 +275,18 @@ export default function SettingsPage() {
             </div>
             <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="about-content-en">Content (English)</Label>
-              <Textarea
-                id="about-content-en"
+              <RichEditor
                 value={about.content_en}
-                onChange={(e) => setAbout({ ...about, content_en: e.target.value })}
-                rows={8}
-                placeholder="Full page content in English (Markdown supported)"
-                className="font-mono text-sm"
+                onChange={(html) => setAbout({ ...about, content_en: html })}
+                placeholder="Full page content in English (rich text / Markdown supported)"
               />
             </div>
             <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="about-content-zh">Content (Chinese)</Label>
-              <Textarea
-                id="about-content-zh"
+              <RichEditor
                 value={about.content_zh}
-                onChange={(e) => setAbout({ ...about, content_zh: e.target.value })}
-                rows={8}
-                placeholder="页面内容（中文，支持 Markdown）"
-                className="font-mono text-sm"
+                onChange={(html) => setAbout({ ...about, content_zh: html })}
+                placeholder="页面内容（中文，富文本 / Markdown 均可）"
               />
             </div>
           </div>

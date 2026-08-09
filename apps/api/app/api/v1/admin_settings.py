@@ -18,12 +18,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...core.audit import log_action
 from ...core.database import get_db
 from ...core.exceptions import AuthorizationError
+from ...core.sanitize import sanitize_rich_html
 from ...core.security import RoleName, has_role
 from ...models.auth import AuditLog, User
 from ...models.system_settings import SystemSetting
 from .deps import get_current_user, get_user_roles
 
 router = APIRouter(prefix="/admin/settings", tags=["admin-settings"])
+
+#: Rich-text content keys (without the section prefix).  Values stored under
+#: these keys (e.g. ``about.content_en`` / ``about.content_zh``) are run
+#: through the server-side sanitizer before being persisted.
+_CONTENT_KEYS = {"content_en", "content_zh"}
 
 
 def _require_admin(current_user: User) -> None:
@@ -96,7 +102,13 @@ async def update_settings(
             import json  # noqa: PLC0415 — lazy import for non-string values
             str_value = json.dumps(value)
         else:
-            str_value = value
+            # Rich-text content keys (about.content_en/content_zh) are
+            # sanitized server-side before persistence.
+            str_value = (
+                sanitize_rich_html(value)
+                if short_key in _CONTENT_KEYS
+                else value
+            )
 
         row = existing_map.get(full_key)
         if row:

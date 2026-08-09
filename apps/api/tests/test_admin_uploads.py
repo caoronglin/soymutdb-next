@@ -140,7 +140,7 @@ class TestAdminUploadsEndpoint:
     async def test_unauthenticated_401(self, api_client):
         r = await api_client.post(
             "/api/v1/admin/uploads/presign",
-            json={"filename": "a.png", "purpose": "news"},
+            json={"filename": "a.png", "purpose": "news", "size": 1024},
         )
         assert r.status_code == 401
 
@@ -149,7 +149,7 @@ class TestAdminUploadsEndpoint:
         api_app.state.fake_session.user = user
         r = await api_client.post(
             "/api/v1/admin/uploads/presign",
-            json={"filename": "a.png", "purpose": "news"},
+            json={"filename": "a.png", "purpose": "news", "size": 1024},
             headers=_auth_header(user),
         )
         assert r.status_code == 403
@@ -165,7 +165,7 @@ class TestAdminUploadsEndpoint:
         ) as mocked:
             r = await api_client.post(
                 "/api/v1/admin/uploads/presign",
-                json={"filename": "cover.png", "purpose": "news"},
+                json={"filename": "cover.png", "purpose": "news", "size": 1024},
                 headers=_auth_header(user),
             )
         assert r.status_code == 200

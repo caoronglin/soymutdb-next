@@ -1,8 +1,8 @@
 /**
  * Shared news ProForm (B3) — used by both the create (/news/new) and edit
- * (/news/$id) pages. Simple textarea content (no rich-text library per
- * scope), cover URL input, status select, featured/carousel ordering and
- * optional visibility window.
+ * (/news/$id) pages. Rich-text content (E1 RichEditor, HTML value), cover
+ * URL input, status select, featured/carousel ordering and optional
+ * visibility window.
  *
  * Field set mirrors the backend schemas (apps/api/app/schemas/news.py):
  * NewsCreate / NewsUpdate.
@@ -15,11 +15,11 @@ import {
   ProFormDigit,
   ProFormSelect,
   ProFormText,
-  ProFormTextArea,
 } from "@ant-design/pro-components";
 import dayjs from "dayjs";
 import type { NewsStatus } from "@soymutdb/api-client";
 import FileUpload from "./file-upload";
+import { RichEditor } from "./rich-editor/rich-editor";
 
 /** Form values (Dayjs for the two datetime fields). */
 export interface NewsFormValues {
@@ -106,17 +106,19 @@ export function NewsForm({
           },
         ]}
       />
-      <ProFormTextArea
+      <ProForm.Item
         name="content_en"
         label={t("admin.news.form.contentEn")}
         rules={[{ required: true, message: t("admin.news.form.contentEn") }]}
-        fieldProps={{ rows: 10 }}
-      />
-      <ProFormTextArea
+      >
+        <RichEditor placeholder={t("admin.editor.placeholder")} />
+      </ProForm.Item>
+      <ProForm.Item
         name="content_zh"
         label={t("admin.news.form.contentZh")}
-        fieldProps={{ rows: 6 }}
-      />
+      >
+        <RichEditor placeholder={t("admin.editor.placeholder")} />
+      </ProForm.Item>
       <ProFormText
         name="category"
         label={t("admin.news.form.category")}

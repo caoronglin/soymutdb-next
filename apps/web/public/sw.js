@@ -155,6 +155,13 @@ self.addEventListener("fetch", (event) => {
         return;
     }
 
+    // 内容快照（data/content.json）→ network-first（快照更新频繁，
+    // 首屏永远在线优先；离线回退缓存）
+    if (pathname.endsWith("/data/content.json")) {
+        event.respondWith(networkFirst(request));
+        return;
+    }
+
     // 策略 3：导航请求（SSG HTML 页）→ network-first，离线回退缓存
     if (request.mode === "navigate") {
         event.respondWith(networkFirst(request));
