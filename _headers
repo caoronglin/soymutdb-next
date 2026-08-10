@@ -1,0 +1,60 @@
+# ============================================================================
+# SoyMutDB Portal (apps/web) — Cloudflare Pages custom headers
+# Docs: https://developers.cloudflare.com/pages/configuration/headers/
+#
+# Rules are matched per request path; a request inherits headers from ALL
+# matching rules, and duplicate headers are comma-joined. Therefore `/*`
+# below deliberately carries NO Cache-Control (it would merge with the
+# /assets/* rule). Cache-Control is set only by the specific rules below.
+# ============================================================================
+
+# ---------------------------------------------------------------------------
+# Security headers — applied to every response (browsers ignore CSP on
+# non-HTML responses, so applying it to assets is harmless).
+# HSTS: Cloudflare Pages always serves HTTPS; max-age without
+# includeSubDomains so the header never forces HTTPS on sibling subdomains
+# (e.g. api.example.com, staging) that are not Cloudflare-fronted.
+# ---------------------------------------------------------------------------
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()
+  Strict-Transport-Security: max-age=31536000
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://api.example.com https://cloudflareinsights.com; frame-src 'self' https://jbrowse.example.com; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; object-src 'none'; worker-src 'self' blob:
+
+# ---------------------------------------------------------------------------
+# Hashed build assets (Vite emits everything under /assets/ with a content
+# hash in the filename) — safe to cache immutable for 1 year.
+# ---------------------------------------------------------------------------
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# ---------------------------------------------------------------------------
+# HTML documents — always revalidate (same policy Cloudflare Pages sends by
+# default; declared explicitly so it survives any future default change).
+# Note: `/about`-style requests are served real SSG HTML by Pages itself;
+# this rule matches the extensionless request path too via Pages' default
+# no-cache behavior, so those pages never go stale.
+# ---------------------------------------------------------------------------
+/
+  Cache-Control: public, max-age=0, must-revalidate
+/*.html
+  Cache-Control: public, max-age=0, must-revalidate
+
+# ---------------------------------------------------------------------------
+# Placeholder domains to replace before going live (see deploy/cloudflare.md):
+#   https://api.example.com      -> production API origin
+#   https://jbrowse.example.com  -> deployed JBrowse origin (iframe on /browse)
+# Keep the CSP in sync with the <meta http-equiv="Content-Security-Policy">
+# in apps/web/index.html and apps/web/scripts/base-template.ts (SSG pages).
+# Preview deployments: replace both occurrences with the STAGING origins.
+# If VITE_CDN_ENABLED=true is ever re-enabled, add the CDN hosts to
+# script-src here AND in the meta CSP.
+# Cloudflare Web Analytics (C3): `https://static.cloudflareinsights.com`
+# (script-src) and `https://cloudflareinsights.com` (connect-src) are listed
+# statically so the beacon works whenever VITE_CLOUDFLARE_ANALYTICS_TOKEN is
+# set at build time. Widening these origins is harmless when no token is set
+# (the page simply never loads the beacon). The <meta> CSP in index.html is
+# widened only when a token IS set (vite.config.ts transformIndexHtml) — the
+# intersection of the two still allows the beacon in both cases.
+# ---------------------------------------------------------------------------
