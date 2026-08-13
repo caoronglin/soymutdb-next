@@ -1,10 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
-ROOT="/opt/soymutdb"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="${CLICKHOUSE_MIGRATION_ROOT:-/opt/soymutdb}"
+if [[ ! -f "${ROOT}/migrate_clickhouse_lib.py" ]]; then
+  ROOT="${SCRIPT_DIR}"
+fi
 PYTHON="${CLICKHOUSE_MIGRATION_PYTHON:-${ROOT}/../venv/bin/python}"
 [[ -x "${PYTHON}" ]] || PYTHON="$(command -v python3 || true)"
 [[ -n "${PYTHON}" ]] || { echo "python3 is required" >&2; exit 1; }
-SQL_FILE="${CH_MIGRATION_SQL:-${ROOT}/upgrade_variant_facts_schema.sql}"
+if [[ -f "${ROOT}/upgrade_variant_facts_schema.sql" ]]; then
+  SQL_FILE="${CH_MIGRATION_SQL:-${ROOT}/upgrade_variant_facts_schema.sql}"
+else
+  REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+  SQL_FILE="${CH_MIGRATION_SQL:-${REPO_ROOT}/infra/clickhouse/upgrade_variant_facts_schema.sql}"
+fi
 export ROOT SQL_FILE
 DRY_RUN="${1:-}"
 exec "${PYTHON}" - "${DRY_RUN}" <<'PY'

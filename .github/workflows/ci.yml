@@ -253,10 +253,12 @@ jobs:
           RELEASE_TAG: ${{ steps.image-tags.outputs.tag }}
         run: |
           registry_owner="${GITHUB_REPOSITORY_OWNER,,}"
-          for image in api worker mcp-server; do
+          for image in api worker; do
             docker tag "soymutdb-${image}:ci" "ghcr.io/${registry_owner}/${image}:${RELEASE_TAG}"
             docker push "ghcr.io/${registry_owner}/${image}:${RELEASE_TAG}"
           done
+          docker tag "soymutdb-mcp:ci" "ghcr.io/${registry_owner}/mcp-server:${RELEASE_TAG}"
+          docker push "ghcr.io/${registry_owner}/mcp-server:${RELEASE_TAG}"
 
       - name: Verify pushed image manifests
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
