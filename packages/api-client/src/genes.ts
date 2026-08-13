@@ -97,7 +97,7 @@ export interface ChromosomeInfo {
 }
 
 export function getAssemblyChromosomes(
-  assemblyId: string | number,
+  assembly_id: string | number,
 ): Promise<ChromosomeInfo[]> {
-  return http.get<ChromosomeInfo[]>(`/genes/assemblies/${assemblyId}/chromosomes`);
+  return http.get<ChromosomeInfo[]>(`/genes/assemblies/${assembly_id}/chromosomes`);
 }

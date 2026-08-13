@@ -12,7 +12,7 @@ from typing import Any
 
 _CALL_RE = re.compile(r"\bhttp\.(get|post|put|patch|delete)\s*<[^>]*>\s*\(\s*[`\"]([^`\"]+)")
 _CALL_RE_PLAIN = re.compile(r"\bhttp\.(get|post|put|patch|delete)\s*\(\s*[`\"]([^`\"]+)")
-_TEMPLATE_RE = re.compile(r"\$\{[^}]+\}")
+_TEMPLATE_RE = re.compile(r"\$\{[^}]+\}|\{[^}]+\}")
 
 
 def _normalize_route(route: str) -> str:

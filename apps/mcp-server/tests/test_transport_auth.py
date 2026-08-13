@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 import socket
 import subprocess
 import sys
@@ -99,6 +100,16 @@ def test_streamable_http_rejects_missing_empty_wrong_scheme_and_token(mcp_server
 def test_streamable_http_accepts_correct_bearer(mcp_server):
     url, token = mcp_server
     assert 200 <= _post_initialize(url, token) < 300
+
+
+def test_reverse_proxy_uses_canonical_path():
+    repo_root = Path(__file__).resolve().parents[3]
+    workflow = (repo_root / ".github/workflows/ci.yml").read_text()
+    nginx = (repo_root / "infra/nginx/conf.d/default.conf").read_text()
+
+    assert "location = /mcp {" in workflow
+    assert "base=http://127.0.0.1:8081/mcp" in workflow
+    assert "location = /mcp {" in nginx
 
 
 def test_initialize_rejects_missing_and_wrong_bearer(mcp_server):

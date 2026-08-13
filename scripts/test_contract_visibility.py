@@ -55,3 +55,29 @@ def test_known_route_drift_is_debt_but_does_not_fail(tmp_path: Path) -> None:
 
     assert report["status"] == "PASS"
     assert report["baseline_debt"] == ["GET /genes/assemblies"]
+
+
+def test_template_parameter_matches_openapi_parameter(tmp_path: Path) -> None:
+    schema = {
+        "paths": {
+            "/api/v1/genes/assemblies/{assembly_id}/chromosomes": {"get": {}}
+        }
+    }
+    schema_path = tmp_path / "openapi.json"
+    schema_path.write_text(json.dumps(schema), encoding="utf-8")
+    client_path = tmp_path / "genes.ts"
+    client_path.write_text(
+        'return http.get(`/genes/assemblies/${assembly_id}/chromosomes`);\n',
+        encoding="utf-8",
+    )
+
+    from contract_visibility import check_contract_visibility
+
+    report = check_contract_visibility(
+        schema_path=schema_path,
+        client_paths=[client_path],
+        baseline_path=tmp_path / "baseline.json",
+    )
+
+    assert report["status"] == "PASS"
+    assert report["new_drift"] == []

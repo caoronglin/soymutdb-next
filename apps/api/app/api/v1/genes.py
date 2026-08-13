@@ -46,7 +46,7 @@ async def list_assemblies(
 async def _load_assemblies(db: AsyncSession) -> list[dict]:
     """Fetch all assemblies as JSON payloads (loader for the Redis cache)."""
     rows = await service.list_assemblies(db)
-    return [r.model_dump(mode="json") for r in rows]
+    return [AssemblyResponse.model_validate(row).model_dump(mode="json") for row in rows]
 
 
 @router.get(

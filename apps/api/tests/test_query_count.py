@@ -147,6 +147,9 @@ class TestGeneDetailQueryCount:
         gene.id = "Glyma.01G000100"
         gene.assembly_id = 1
         gene.chromosome_id = "1"
+        chromosome = MagicMock()
+        chromosome.name = "1"
+        gene.chromosome = chromosome
         gene.name = "Gene1"
         gene.biotype = "protein_coding"
         gene.start = 100

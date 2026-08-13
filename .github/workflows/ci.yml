@@ -39,6 +39,7 @@ concurrency:
 
 permissions:
   contents: read
+  packages: write
   # actions: write needed for actions/upload-artifact v4 (dist bundles, SARIF)
   actions: write
 
@@ -423,7 +424,7 @@ jobs:
             limit_req_zone $binary_remote_addr zone=auth:10m rate=10r/s;
             server {
               listen 80;
-              location ^~ /mcp/ {
+              location = /mcp {
                 if ($http_authorization = "") { return 401; }
                 limit_req zone=auth burst=10 nodelay;
                 proxy_pass http://mcp-server:9000;
@@ -441,7 +442,9 @@ jobs:
       - name: Assert MCP authentication through nginx
         run: |
           payload='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci","version":"1"}}}'
-          base=http://127.0.0.1:8081/mcp/
+          # FastMCP's canonical Streamable HTTP endpoint is /mcp. The
+          # trailing-slash variant redirects instead of returning JSON-RPC.
+          base=http://127.0.0.1:8081/mcp
           code=000
           for attempt in {1..60}; do
             code=$(curl --silent --output /dev/null --write-out '%{http_code}' -X POST "$base" -H 'Content-Type: application/json' -d "$payload" || true)
