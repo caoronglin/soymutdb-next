@@ -16,6 +16,6 @@ curl --fail --silent --show-error \
   -u "${USER}:${PASSWORD}" >/dev/null
 
 curl --fail --silent --show-error \
-  "http://${HOST}:${PORT}/?database=soymutdb" \
+  "http://${HOST}:${PORT}/?database=soymutdb&multiquery=1" \
   -u "${USER}:${PASSWORD}" \
   --data-binary @"${ROOT}/infra/clickhouse/fixture_legacy.sql" >/dev/null
