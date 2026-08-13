@@ -52,6 +52,22 @@ class ClickHouseService:
         assert self._client is not None
         return self._client
 
+    async def insert_release_variants(self, rows: list[dict[str, Any]]) -> None:
+        """Insert importer rows using the fixed variant table and bound values."""
+        if not rows:
+            return
+        columns = tuple(rows[0].keys())
+        if "variant_id" not in columns or "release_key" not in columns:
+            raise ValueError("variant_id and release_key are required")
+        if any(set(row) != set(columns) for row in rows):
+            raise ValueError("variant rows must have a stable shape")
+        client = await self._get_client()
+        await client.insert(
+            VARIANT_FACTS_TABLE,
+            [tuple(row[column] for column in columns) for row in rows],
+            column_names=list(columns),
+        )
+
     # ------------------------------------------------------------------ #
     # Internal helpers
     # ------------------------------------------------------------------ #
@@ -144,21 +160,11 @@ class ClickHouseService:
         qp["lim"] = limit
         query = f"""
         SELECT
-            variant_id,
-            chromosome,
-            position,
-            ref_allele,
-            alt_allele,
-            variant_type,
-            consequence,
-            impact,
-            gene_id,
-            gene_symbol,
-            hgvs_p,
-            hgvs_c,
-            quality_score,
-            filter_status,
-            allele_frequency
+            variant_id, release_key, assembly_key, chromosome, position,
+            ref_allele, alt_allele, variant_type, gene_id, gene_symbol,
+            variant_subtype, length, gene_surrogate_id, mutant_line_surrogate_id,
+            consequence, consequence_id, impact, rs_id, quality_score,
+            filter_status, read_depth, allele_frequency, hgvs_c, hgvs_p, zygosity
         FROM {VARIANT_FACTS_TABLE}
         WHERE {where}
         ORDER BY position ASC
@@ -189,9 +195,11 @@ class ClickHouseService:
         """
         query = f"""
         SELECT
-            variant_id, chromosome, position, ref_allele, alt_allele,
-            variant_type, consequence, impact, gene_id, gene_symbol,
-            hgvs_p, hgvs_c, quality_score, filter_status, allele_frequency
+            variant_id, release_key, assembly_key, chromosome, position,
+            ref_allele, alt_allele, variant_type, gene_id, gene_symbol,
+            variant_subtype, length, gene_surrogate_id, mutant_line_surrogate_id,
+            consequence, consequence_id, impact, rs_id, quality_score,
+            filter_status, read_depth, allele_frequency, hgvs_c, hgvs_p, zygosity
         FROM {VARIANT_FACTS_TABLE}
         WHERE assembly_key = %(assembly)s
           AND chromosome = %(chromosome)s
@@ -221,10 +229,11 @@ class ClickHouseService:
         """Fetch a single variant by its ID."""
         query = f"""
         SELECT
-            variant_id, chromosome, position, ref_allele, alt_allele,
-            variant_type, consequence, impact, gene_id, gene_symbol,
-            hgvs_p, hgvs_c, quality_score, filter_status, allele_frequency,
-            read_depth, zygosity
+            variant_id, release_key, assembly_key, chromosome, position,
+            ref_allele, alt_allele, variant_type, gene_id, gene_symbol,
+            variant_subtype, length, gene_surrogate_id, mutant_line_surrogate_id,
+            consequence, consequence_id, impact, rs_id, quality_score,
+            filter_status, read_depth, allele_frequency, hgvs_c, hgvs_p, zygosity
         FROM {VARIANT_FACTS_TABLE}
         WHERE variant_id = %(vid)s
         LIMIT 1

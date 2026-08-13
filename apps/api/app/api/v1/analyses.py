@@ -37,7 +37,7 @@ from ...services.presign import (
     build_upload_key,
     generate_upload_url,
 )
-from .deps import get_current_user, require_role
+from .deps import get_current_user, get_user_roles, require_role
 
 settings = get_settings()
 
@@ -117,13 +117,14 @@ async def submit_analysis(
 async def get_analysis_job(
     job_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> AnalysesJobResponse:
     """Return the current status of an analysis job.
 
     ``result`` is ``null`` until the job completes; completed jobs carry the
     worker-written summary.
     """
-    return await service.get_job(db, job_id)
+    return await service.get_job(db, job_id, current_user.id, get_user_roles(current_user))
 
 
 @router.get(
@@ -135,10 +136,13 @@ async def download_analysis_object(
     job_id: uuid.UUID,
     object_key: str = Query(..., min_length=1),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> AnalysesDownloadResponse:
     """Return a pre-signed GET URL for one of the job's own objects.
 
     The key must live under ``analyses/{job_id}/``; anything outside that
     prefix (including other jobs' objects) is rejected.
     """
-    return await service.get_download_url(db, job_id, object_key)
+    return await service.get_download_url(
+        db, job_id, object_key, current_user.id, get_user_roles(current_user)
+    )

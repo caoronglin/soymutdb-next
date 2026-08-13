@@ -18,6 +18,11 @@ BUILD_STATIC_PAGES_TASK: Final[str] = "soymutdb_worker.tasks.static_pages.build_
 EXPORT_VARIANTS_TASK: Final[str] = "soymutdb_worker.tasks.export.export_variants"
 IMPORT_EXPRESSION_TASK: Final[str] = "soymutdb_worker.tasks.expression.import_expression_csv"
 IMPORT_HOMOLOG_TASK: Final[str] = "soymutdb_worker.tasks.homolog.import_homolog_csv"
+IMPORT_FASTA_TASK: Final[str] = "soymutdb_worker.tasks.ingest.import_fasta"
+IMPORT_GFF3_TASK: Final[str] = "soymutdb_worker.tasks.ingest.import_gff3"
+IMPORT_VCF_TASK: Final[str] = "soymutdb_worker.tasks.ingest.import_vcf"
+IMPORT_BLAST_DB_TASK: Final[str] = "soymutdb_worker.tasks.ingest.import_blast_db"
+IMPORT_SEED_TASK: Final[str] = "soymutdb_worker.tasks.ingest.import_seed"
 ANALYSIS_FASTP_TASK: Final[str] = "soymutdb_worker.tasks.analyses.run_fastp"
 ANALYSIS_SCANPY_TASK: Final[str] = "soymutdb_worker.tasks.analyses.run_scanpy"
 GWAS_RUN_TASK: Final[str] = "soymutdb_worker.tasks.gwas.run_gwas"
@@ -69,6 +74,11 @@ __all__ = [
     "EXPORT_VARIANTS_TASK",
     "IMPORT_EXPRESSION_TASK",
     "IMPORT_HOMOLOG_TASK",
+    "IMPORT_FASTA_TASK",
+    "IMPORT_GFF3_TASK",
+    "IMPORT_VCF_TASK",
+    "IMPORT_BLAST_DB_TASK",
+    "IMPORT_SEED_TASK",
     "PAYLOAD_VERSION",
     "QUEUE_ANALYSES",
     "SEED_REQUEST_EMAIL_TASK",

@@ -6,11 +6,13 @@ import enum
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text, func
+from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base, TimestampMixin, enum_values
+from .data_publishing import ImportStatus
 
 if TYPE_CHECKING:
     pass
@@ -28,13 +30,7 @@ class ImportTaskType(str, enum.Enum):
     HOMOLOG_CSV = "homolog_csv"
 
 
-class ImportTaskStatus(str, enum.Enum):
-    """Status of an import task."""
-
-    QUEUED = "queued"
-    RUNNING = "running"
-    COMPLETED = "completed"
-    FAILED = "failed"
+ImportTaskStatus = ImportStatus
 
 
 class ImportTask(Base, TimestampMixin):
@@ -47,10 +43,10 @@ class ImportTask(Base, TimestampMixin):
         nullable=False,
     )
     status: Mapped[str] = mapped_column(
-        Enum(ImportTaskStatus, name="import_task_status_enum", create_constraint=True, values_callable=enum_values),
+        Enum(ImportStatus, name="import_status_enum", values_callable=enum_values),
         nullable=False,
-        default=ImportTaskStatus.QUEUED,
-        server_default="queued",
+        default=ImportStatus.UPLOADING,
+        server_default=ImportStatus.UPLOADING.value,
     )
     progress: Mapped[int] = mapped_column(
         Integer, default=0, server_default="0", nullable=False
@@ -77,6 +73,15 @@ class ImportTask(Base, TimestampMixin):
     )
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     file_path: Mapped[str] = mapped_column(String(512), nullable=False)
+    data_set_id: Mapped[int | None] = mapped_column(ForeignKey("data_sets.id", ondelete="SET NULL"), nullable=True)
+    release_id: Mapped[int | None] = mapped_column(ForeignKey("releases.id", ondelete="SET NULL"), nullable=True)
+    idempotency_key: Mapped[str] = mapped_column(String(256), nullable=False, unique=True, default=lambda: "legacy")
+    object_key: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    error_detail: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    failed_batch: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    retry_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+
+    __table_args__ = (UniqueConstraint("idempotency_key", name="uq_import_tasks_idempotency_key"),)
 
     def __repr__(self) -> str:
         return (

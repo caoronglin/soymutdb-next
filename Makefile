@@ -16,7 +16,7 @@
 .PHONY: help dev install env db-up db-down migrate init-clickhouse start stop restart logs ps \
         run-api run-worker run-web run-admin \
         test test-api test-web test-e2e load-test smoke-test \
-        build build-web build-admin build-jbrowse build-docker build-windows \
+        build build-web build-admin build-jbrowse build-docker \
         lint lint-fix typecheck \
         backup backup-full restore upgrade health deploy-linux \
         clean clean-all
@@ -172,9 +172,6 @@ build-jbrowse: ## Build JBrowse app
 
 build-docker: ## Build Docker images
 	$(DOCKER_COMPOSE) build
-
-build-windows: ## Build Windows package
-	cd deploy/windows && cmd /c build_installer.bat
 
 # =====================================================================
 # Code Quality

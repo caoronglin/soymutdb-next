@@ -9,10 +9,12 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.database import get_db
-from ...core.exceptions import AuthorizationError, NotFoundError
-from ...core.security import RoleName, has_role
-from ...core.task_contract import IMPORT_EXPRESSION_TASK, IMPORT_HOMOLOG_TASK
-from ...core.task_dispatch import dispatch_task, get_celery_client
+from ...core.exceptions import NotFoundError
+from ...core.security import require_admin_roles
+from ...core.task_dispatch import get_celery_client
+from ...schemas.data_publishing import ImportCreateRequest, MultipartCompleteRequest, MultipartStartRequest
+from ...services.outbox_service import create_import_command
+from ...services.presign import CompletedPart, complete_multipart_upload, initiate_multipart_upload, sign_multipart_part
 from ...models.auth import User
 from ...models.import_task import ImportTask, ImportTaskStatus
 from .deps import get_current_user, get_user_roles
@@ -20,10 +22,13 @@ from .deps import get_current_user, get_user_roles
 router = APIRouter(prefix="/admin/imports", tags=["admin-imports"])
 
 
+class MultipartCompletePathRequest(MultipartCompleteRequest):
+    pass
+
+
 def _require_admin(current_user: User) -> None:
     """Raise :class:`AuthorizationError` unless *current_user* is an administrator."""
-    if not has_role(get_user_roles(current_user), RoleName.ADMINISTRATOR):
-        raise AuthorizationError("Administrator role required")
+    require_admin_roles(get_user_roles(current_user))
 
 
 def _task_to_dict(task: ImportTask) -> dict:
@@ -155,9 +160,24 @@ async def get_import_status(
 # ---------------------------------------------------------------------------
 
 
+@router.post("/uploads/multipart", status_code=status.HTTP_201_CREATED)
+async def start_multipart_upload(body: MultipartStartRequest, current_user: User = Depends(get_current_user)) -> dict:
+    _require_admin(current_user)
+    data_set_id = body.data_set_id or 1
+    session = initiate_multipart_upload(data_set_id=data_set_id, filename=body.filename, content_type=body.content_type)
+    return {"upload_id": session.upload_id, "object_key": session.object_key, "parts": [{"part_number": n, "url": sign_multipart_part(object_key=session.object_key, upload_id=session.upload_id, part_number=n)} for n in range(1, body.part_count + 1)]}
+
+
+@router.post("/uploads/multipart/{upload_id}/complete", status_code=status.HTTP_200_OK)
+async def finish_multipart_upload(upload_id: str, body: MultipartCompletePathRequest, current_user: User = Depends(get_current_user)) -> dict:
+    _require_admin(current_user)
+    completed = complete_multipart_upload(object_key=body.object_key, upload_id=upload_id, parts=[CompletedPart(p.part_number, p.etag) for p in body.parts], sha256=body.sha256)
+    return {"upload_id": completed.upload_id, "object_key": completed.object_key, "sha256": completed.sha256, "parts": [{"part_number": p.part_number, "etag": p.etag} for p in completed.parts]}
+
+
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_import(
-    body: dict,
+    body: ImportCreateRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
@@ -174,39 +194,11 @@ async def create_import(
     """
     _require_admin(current_user)
 
-    task = ImportTask(
-        filename=body["filename"],
-        type=body["type"],
-        status=ImportTaskStatus.QUEUED.value,
-        file_path=body["file_path"],
-        submitted_by=body.get("submitted_by"),
-    )
-    db.add(task)
+    task = await create_import_command(db, actor_id=current_user.id, idempotency_key=body.idempotency_key, data_set_id=body.data_set_id or 1, import_type=body.type, filename=body.filename, object_key=body.object_key or body.file_path)
     await db.commit()
     await db.refresh(task)
 
-    # Dispatch Celery task by name.
-    task_name = _resolve_task_name(task.type)
-    if task_name:
-        async_result = dispatch_task(
-            task_name,
-            identifier=task.id,
-            args=[task.id, task.file_path],
-            queue="ingest",
-        )
-        task.celery_task_id = async_result.id
-        await db.commit()
-
     return _task_to_dict(task)
-
-
-def _resolve_task_name(import_type: str) -> str | None:
-    """Map an import type to the corresponding Celery task name."""
-    mapping = {
-        "expression_csv": IMPORT_EXPRESSION_TASK,
-        "homolog_csv": IMPORT_HOMOLOG_TASK,
-    }
-    return mapping.get(import_type)
 
 
 # ---------------------------------------------------------------------------
@@ -266,17 +258,6 @@ async def retry_import(
     task.completed_at = None
     task.progress = 0
     task.processed_records = 0
-
-    # Re-dispatch Celery task.
-    task_name = _resolve_task_name(task.type)
-    if task_name:
-        async_result = dispatch_task(
-            task_name,
-            identifier=task.id,
-            args=[task.id, task.file_path],
-            queue="ingest",
-        )
-        task.celery_task_id = async_result.id
 
     await db.commit()
     await db.refresh(task)

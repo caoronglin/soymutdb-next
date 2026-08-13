@@ -34,18 +34,18 @@ export async function getGeneExpression(
     max_fpkm?: number;
   },
 ): Promise<GeneExpressionResponse> {
-  return http.get<GeneExpressionResponse>(`/genes/${geneId}/expression`, {
+  return http.get<GeneExpressionResponse>(`/expression/genes/${geneId}/expression`, {
     params,
   });
 }
 
 export async function getExpressionLibraries(params?: {
-  page?: number;
-  page_size?: number;
+  cursor?: string;
+  limit?: number;
   tissue?: string;
   treatment?: string;
-}): Promise<{ items: ExpressionLibrary[]; total: number }> {
-  return http.get<{ items: ExpressionLibrary[]; total: number }>(
+}): Promise<{ items: ExpressionLibrary[]; cursor: string | null; next_cursor: string | null; has_more: boolean; total_count: number | null }> {
+  return http.get<Awaited<ReturnType<typeof getExpressionLibraries>>>(
     "/expression/libraries",
     { params },
   );
@@ -58,10 +58,10 @@ export async function searchExpression(params: {
   treatment?: string;
   min_fpkm?: number;
   max_fpkm?: number;
-  page?: number;
-  page_size?: number;
-}): Promise<{ items: unknown[]; total: number }> {
-  return http.get<{ items: unknown[]; total: number }>(
+  cursor?: string;
+  limit?: number;
+}): Promise<{ items: unknown[]; cursor: string | null; next_cursor: string | null; has_more: boolean; total_count: number | null }> {
+  return http.get<Awaited<ReturnType<typeof searchExpression>>>(
     "/expression/search",
     { params },
   );

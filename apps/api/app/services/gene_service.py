@@ -5,7 +5,7 @@ from __future__ import annotations
 import base64
 import json
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.exceptions import NotFoundError, ValidationError
@@ -70,24 +70,45 @@ class GeneService:
                 )
             )
 
+        page_size = params.page_size or params.limit
+        total = 0
+        if params.page is not None:
+            count_stmt = select(func.count()).select_from(stmt.order_by(None).subquery())
+            total = int(await db.scalar(count_stmt) or 0)
+
         # Keyset pagination on gene id (string, ascending).
         if params.cursor:
             last_id = decode_cursor(params.cursor)
             stmt = stmt.where(Gene.id > last_id)
 
-        stmt = stmt.order_by(Gene.id.asc()).limit(params.limit + 1)
+        stmt = stmt.order_by(Gene.id.asc())
+        if params.page is not None:
+            stmt = stmt.offset((params.page - 1) * page_size).limit(page_size)
+        else:
+            stmt = stmt.limit(params.limit + 1)
         result = await db.execute(stmt)
         genes = list(result.scalars().all())
 
-        has_more = len(genes) > params.limit
-        if has_more:
+        has_more = (
+            len(genes) > params.limit
+            if params.page is None
+            else params.page * page_size < total
+        )
+        if has_more and params.page is None:
             genes = genes[: params.limit]
 
         items = [self._gene_to_response(g) for g in genes]
         next_cursor = encode_cursor(genes[-1].id) if has_more and genes else None
 
+        page = params.page or 1
         return GeneListResponse(
-            items=items, next_cursor=next_cursor, has_more=has_more
+            items=items,
+            next_cursor=next_cursor,
+            has_more=has_more,
+            page=page,
+            page_size=page_size,
+            total=total if params.page is not None else len(items),
+            total_pages=(total + page_size - 1) // page_size if total else 0,
         )
 
     async def get_gene(self, db: AsyncSession, gene_id: str) -> GeneDetail:
@@ -108,11 +129,14 @@ class GeneService:
             id=str(gene.id),
             gene_id=str(gene.id),
             assembly_id=str(gene.assembly_id),
-            chromosome=str(gene.chromosome_id),
+            chromosome=gene.chromosome.name,
             name=gene.name,
+            symbol=gene.name,
             biotype=gene.biotype,
             start=gene.start,
             end=gene.end,
+            start_pos=gene.start,
+            end_pos=gene.end,
             strand=gene.strand,
             description=gene.description,
             transcripts=transcripts,
@@ -167,11 +191,14 @@ class GeneService:
             id=str(gene.id),
             gene_id=str(gene.id),
             assembly_id=str(gene.assembly_id),
-            chromosome=str(gene.chromosome_id),
+            chromosome=gene.chromosome.name,
             name=gene.name,
+            symbol=gene.name,
             biotype=gene.biotype,
             start=gene.start,
             end=gene.end,
+            start_pos=gene.start,
+            end_pos=gene.end,
             strand=gene.strand,
             description=gene.description,
         )

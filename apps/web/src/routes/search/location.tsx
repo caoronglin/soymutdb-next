@@ -26,11 +26,12 @@ import { SearchOutlined } from "@ant-design/icons";
 import {
   searchRegionVariants,
   getAssemblies,
+  getAssemblyChromosomes,
   type VariantSummary,
   type AssemblyInfo,
 } from "@soymutdb/api-client";
 import { FadeUp } from "../../components/route-motion";
-import { SOYBEAN_CHROMOSOMES, formatNumber, compactGeneId } from "../../lib/format";
+import { formatNumber, compactGeneId } from "../../lib/format";
 
 export const Route = createFileRoute("/search/location")({
   component: LocationSearchComponent,
@@ -68,6 +69,20 @@ function LocationSearchComponent() {
     const def = assemblies.find((a) => a.is_default) ?? assemblies[0];
     if (def) setAssemblyId(String(def.id));
   }, [assemblies, assemblyId]);
+
+  const chromosomesQuery = useQuery({
+    queryKey: ["assembly-chromosomes", assemblyId],
+    queryFn: () => getAssemblyChromosomes(assemblyId!),
+    enabled: Boolean(assemblyId),
+    staleTime: 30 * 60 * 1000,
+  });
+  const chromosomes = chromosomesQuery.data ?? [];
+
+  React.useEffect(() => {
+    if (chromosome && !chromosomes.some((item) => item.name === chromosome)) {
+      setChromosome(undefined);
+    }
+  }, [chromosome, chromosomes]);
 
   const regionQuery = useQuery({
     queryKey: ["search-region-variants", submitted],
@@ -219,9 +234,10 @@ function LocationSearchComponent() {
                   <Select
                     value={chromosome}
                     onChange={(v) => setChromosome(v)}
-                    options={SOYBEAN_CHROMOSOMES.map((c) => ({
-                      value: c,
-                      label: c,
+                    loading={chromosomesQuery.isLoading}
+                    options={chromosomes.map((item) => ({
+                      value: item.name,
+                      label: item.name,
                     }))}
                     showSearch
                   />

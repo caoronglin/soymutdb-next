@@ -31,7 +31,10 @@ ORDER BY (release_id);
 -- 1b. Gene dimension
 CREATE TABLE IF NOT EXISTS gene_dim (
     gene_id         LowCardinality(String),
+    gene_surrogate_id UInt32 DEFAULT 0,
+    release_key     String DEFAULT '',
     gene_symbol     LowCardinality(String),
+    gene_name       LowCardinality(String) DEFAULT '',
     chromosome      LowCardinality(String),
     start_pos       UInt64,
     end_pos         UInt64,
@@ -69,28 +72,35 @@ ORDER BY (consequence, impact);
 -- ----------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS variant_facts (
-    release_id       UInt16,
-    assembly_id      UInt16,
+    variant_id       UInt64,
+    release_key      String,
+    assembly_key     String,
     chromosome       LowCardinality(String),
     position         UInt64,
-    ref              String,
-    alt              String,
-    variant_type     LowCardinality(String),   -- SNP, INS, DEL, MNV, SV
+    ref_allele       String,
+    alt_allele       String,
+    variant_type     LowCardinality(String),
+    variant_subtype  LowCardinality(String) DEFAULT '',
+    length           UInt32 DEFAULT 0,
     gene_id          LowCardinality(String),
-    transcript_id    LowCardinality(String),
+    gene_symbol      LowCardinality(String) DEFAULT '',
+    gene_surrogate_id UInt32 DEFAULT 0,
+    mutant_line_surrogate_id UInt32 DEFAULT 0,
+    mutant_line_name LowCardinality(String) DEFAULT '',
     consequence      LowCardinality(String),
+    consequence_id   UInt32 DEFAULT 0,
     impact           LowCardinality(String),   -- HIGH, MODERATE, LOW, MODIFIER
-    mutant_line_id   UInt32,
-    mutant_line_name LowCardinality(String),
-    qual             Float32    DEFAULT 0,
-    filter           LowCardinality(String)  DEFAULT 'PASS',
-    dp               UInt32     DEFAULT 0,
-    af               Float32    DEFAULT 0,
-    annotations      String     DEFAULT '',    -- extra SnpEff / VEP JSON
-    variant_id       UInt64                     -- surrogate ID
+    rs_id            String DEFAULT '',
+    quality_score    Float32 DEFAULT 0,
+    filter_status    LowCardinality(String) DEFAULT 'PASS',
+    read_depth       UInt32 DEFAULT 0,
+    allele_frequency Float32 DEFAULT 0,
+    hgvs_c           String DEFAULT '',
+    hgvs_p           String DEFAULT '',
+    zygosity         LowCardinality(String) DEFAULT 'unknown'
 ) ENGINE = MergeTree()
-PARTITION BY (release_id, chromosome)
-ORDER BY (release_id, assembly_id, chromosome, position, gene_id, mutant_line_id, variant_id)
+PARTITION BY (release_key, chromosome)
+ORDER BY (release_key, assembly_key, chromosome, position, gene_surrogate_id, mutant_line_surrogate_id, variant_id)
 SETTINGS index_granularity = 8192;
 
 -- ----------------------------------------------------------
@@ -99,22 +109,22 @@ SETTINGS index_granularity = 8192;
 
 ALTER TABLE variant_facts ADD PROJECTION IF NOT EXISTS prj_by_gene (
     SELECT *
-    ORDER BY (gene_id, consequence, impact, release_id, chromosome, position)
+    ORDER BY (gene_surrogate_id, consequence, impact, release_key, chromosome, position)
 );
 
 ALTER TABLE variant_facts ADD PROJECTION IF NOT EXISTS prj_by_mutant_line (
     SELECT *
-    ORDER BY (mutant_line_id, chromosome, position, release_id)
+    ORDER BY (mutant_line_surrogate_id, chromosome, position, release_key)
 );
 
 ALTER TABLE variant_facts ADD PROJECTION IF NOT EXISTS prj_by_consequence (
     SELECT *
-    ORDER BY (consequence, impact, chromosome, position, release_id)
+    ORDER BY (consequence, impact, chromosome, position, release_key)
 );
 
 ALTER TABLE variant_facts ADD PROJECTION IF NOT EXISTS prj_by_region (
     SELECT *
-    ORDER BY (chromosome, position, release_id)
+    ORDER BY (chromosome, position, release_key)
 );
 
 -- Materialize existing data into projections (run once after bulk load)
@@ -129,166 +139,166 @@ ALTER TABLE variant_facts ADD PROJECTION IF NOT EXISTS prj_by_region (
 
 -- 4a. Gene-impact summary (SummingMergeTree)
 CREATE TABLE IF NOT EXISTS gene_impact_summary (
-    gene_id          LowCardinality(String),
+    gene_surrogate_id UInt32,
     impact           LowCardinality(String),
     consequence      LowCardinality(String),
     variant_type     LowCardinality(String),
-    release_id       UInt16,
+    release_key      String,
     cnt              UInt64
 ) ENGINE = SummingMergeTree((cnt))
-ORDER BY (gene_id, impact, consequence, variant_type, release_id);
+ORDER BY (gene_surrogate_id, impact, consequence, variant_type, release_key);
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS mv_gene_impact TO gene_impact_summary AS
 SELECT
-    gene_id,
+    gene_surrogate_id,
     impact,
     consequence,
     variant_type,
-    release_id,
+    release_key,
     count() AS cnt
 FROM variant_facts
-GROUP BY gene_id, impact, consequence, variant_type, release_id;
+GROUP BY gene_surrogate_id, impact, consequence, variant_type, release_key;
 
 -- 4b. Chromosome summary (AggregatingMergeTree)
 CREATE TABLE IF NOT EXISTS chromosome_summary (
-    release_id   UInt16,
+    release_key  String,
     chromosome   LowCardinality(String),
     variant_type LowCardinality(String),
     cnt          UInt64,
     min_pos      SimpleAggregateFunction(min, UInt64),
     max_pos      SimpleAggregateFunction(max, UInt64)
 ) ENGINE = AggregatingMergeTree()
-ORDER BY (release_id, chromosome, variant_type);
+ORDER BY (release_key, chromosome, variant_type);
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS mv_chromosome_summary TO chromosome_summary AS
 SELECT
-    release_id,
+    release_key,
     chromosome,
     variant_type,
     count()       AS cnt,
     min(position) AS min_pos,
     max(position) AS max_pos
 FROM variant_facts
-GROUP BY release_id, chromosome, variant_type;
+GROUP BY release_key, chromosome, variant_type;
 
 -- 4c. Mutant-line summary (SummingMergeTree)
 CREATE TABLE IF NOT EXISTS mutant_line_summary (
-    mutant_line_id   UInt32,
+    mutant_line_surrogate_id UInt32,
     mutant_line_name LowCardinality(String),
     chromosome       LowCardinality(String),
     variant_type     LowCardinality(String),
     impact           LowCardinality(String),
-    release_id       UInt16,
+    release_key      String,
     cnt              UInt64
 ) ENGINE = SummingMergeTree((cnt))
-ORDER BY (mutant_line_id, mutant_line_name, chromosome, variant_type, impact, release_id);
+ORDER BY (mutant_line_surrogate_id, mutant_line_name, chromosome, variant_type, impact, release_key);
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS mv_mutant_line_summary TO mutant_line_summary AS
 SELECT
-    mutant_line_id,
+    mutant_line_surrogate_id,
     mutant_line_name,
     chromosome,
     variant_type,
     impact,
-    release_id,
+    release_key,
     count() AS cnt
 FROM variant_facts
-GROUP BY mutant_line_id, mutant_line_name, chromosome, variant_type, impact, release_id;
+GROUP BY mutant_line_surrogate_id, mutant_line_name, chromosome, variant_type, impact, release_key;
 
 -- 4d. Release dashboard (SummingMergeTree)
 CREATE TABLE IF NOT EXISTS release_dashboard (
-    release_id   UInt16,
+    release_key  String,
     variant_type LowCardinality(String),
     impact       LowCardinality(String),
     consequence  LowCardinality(String),
     cnt          UInt64
 ) ENGINE = SummingMergeTree((cnt))
-ORDER BY (release_id, variant_type, impact, consequence);
+ORDER BY (release_key, variant_type, impact, consequence);
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS mv_release_dashboard TO release_dashboard AS
 SELECT
-    release_id,
+    release_key,
     variant_type,
     impact,
     consequence,
     count() AS cnt
 FROM variant_facts
-GROUP BY release_id, variant_type, impact, consequence;
+GROUP BY release_key, variant_type, impact, consequence;
 
 -- 4e. Density 10 kb (SummingMergeTree)
 CREATE TABLE IF NOT EXISTS density_10kb (
-    release_id  UInt16,
+    release_key String,
     chromosome  LowCardinality(String),
     bin_start   UInt64,
     cnt         UInt64
 ) ENGINE = SummingMergeTree((cnt))
-ORDER BY (release_id, chromosome, bin_start);
+ORDER BY (release_key, chromosome, bin_start);
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS mv_density_10kb TO density_10kb AS
 SELECT
-    release_id,
+    release_key,
     chromosome,
     intDiv(position, 10000) * 10000 AS bin_start,
     count()                         AS cnt
 FROM variant_facts
-GROUP BY release_id, chromosome, bin_start;
+GROUP BY release_key, chromosome, bin_start;
 
 -- 4f. Density 100 kb (SummingMergeTree)
 CREATE TABLE IF NOT EXISTS density_100kb (
-    release_id  UInt16,
+    release_key String,
     chromosome  LowCardinality(String),
     bin_start   UInt64,
     cnt         UInt64
 ) ENGINE = SummingMergeTree((cnt))
-ORDER BY (release_id, chromosome, bin_start);
+ORDER BY (release_key, chromosome, bin_start);
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS mv_density_100kb TO density_100kb AS
 SELECT
-    release_id,
+    release_key,
     chromosome,
     intDiv(position, 100000) * 100000 AS bin_start,
     count()                            AS cnt
 FROM variant_facts
-GROUP BY release_id, chromosome, bin_start;
+GROUP BY release_key, chromosome, bin_start;
 
 -- 4g. Density 1 Mb (SummingMergeTree)
 CREATE TABLE IF NOT EXISTS density_1mb (
-    release_id  UInt16,
+    release_key String,
     chromosome  LowCardinality(String),
     bin_start   UInt64,
     cnt         UInt64
 ) ENGINE = SummingMergeTree((cnt))
-ORDER BY (release_id, chromosome, bin_start);
+ORDER BY (release_key, chromosome, bin_start);
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS mv_density_1mb TO density_1mb AS
 SELECT
-    release_id,
+    release_key,
     chromosome,
     intDiv(position, 1000000) * 1000000 AS bin_start,
     count()                              AS cnt
 FROM variant_facts
-GROUP BY release_id, chromosome, bin_start;
+GROUP BY release_key, chromosome, bin_start;
 
 -- 4h. Substitution spectrum (ref->alt for SNPs)
 CREATE TABLE IF NOT EXISTS substitution_spectrum (
-    release_id       UInt16,
-    mutant_line_id   UInt32,
+    release_key      String,
+    mutant_line_surrogate_id UInt32,
     ref_base         LowCardinality(String),
     alt_base         LowCardinality(String),
     cnt              UInt64
 ) ENGINE = SummingMergeTree((cnt))
-ORDER BY (release_id, mutant_line_id, ref_base, alt_base);
+ORDER BY (release_key, mutant_line_surrogate_id, ref_base, alt_base);
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS mv_substitution_spectrum TO substitution_spectrum AS
 SELECT
-    release_id,
-    mutant_line_id,
-    ref  AS ref_base,
-    alt  AS alt_base,
+    release_key,
+    mutant_line_surrogate_id,
+    ref_allele AS ref_base,
+    alt_allele AS alt_base,
     count() AS cnt
 FROM variant_facts
-WHERE variant_type = 'SNP' AND length(ref) = 1 AND length(alt) = 1
-GROUP BY release_id, mutant_line_id, ref_base, alt_base;
+WHERE variant_type = 'SNP' AND length(ref_allele) = 1 AND length(alt_allele) = 1
+GROUP BY release_key, mutant_line_surrogate_id, ref_base, alt_base;
 
 -- ----------------------------------------------------------
 -- 5. Seed dimension data (consequence types)

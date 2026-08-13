@@ -98,7 +98,7 @@ def update_release_stats(self: Task, release_id: str = "") -> dict:
         results[rel_key] = {
             "variant_count": total,
             "snp_count": type_counts.get("SNP", 0),
-            "indel_count": type_counts.get("InDel", 0),
+            "indel_count": type_counts.get("INS", 0) + type_counts.get("DEL", 0),
             "sv_count": type_counts.get("SV", 0),
             "gene_count": gene_count,
             "mutant_line_count": ml_count,
@@ -145,7 +145,7 @@ def compute_chromosome_density(
                 intDiv(position - 1, %(bin_size)s) * %(bin_size)s + 1 AS bin_start,
                 count() AS variant_count,
                 sum(if(variant_type = 'SNP', 1, 0)) AS snp_count,
-                sum(if(variant_type = 'InDel', 1, 0)) AS indel_count,
+                sum(if(variant_type IN ('INS', 'DEL'), 1, 0)) AS indel_count,
                 sum(if(variant_type = 'SV', 1, 0)) AS sv_count,
                 sum(if(impact = 'HIGH', 1, 0)) AS high_impact_count
             FROM variant_facts
@@ -168,7 +168,7 @@ def compute_chromosome_density(
                 intDiv(position - 1, %(bin_size)s) * %(bin_size)s + 1 AS bin_start,
                 count() AS variant_count,
                 sum(if(variant_type = 'SNP', 1, 0)) AS snp_count,
-                sum(if(variant_type = 'InDel', 1, 0)) AS indel_count,
+                sum(if(variant_type IN ('INS', 'DEL'), 1, 0)) AS indel_count,
                 sum(if(variant_type = 'SV', 1, 0)) AS sv_count,
                 sum(if(impact = 'HIGH', 1, 0)) AS high_impact_count
             FROM variant_facts
@@ -222,7 +222,7 @@ def compute_gene_burden(
         SELECT
             v.gene_surrogate_id,
             g.gene_id,
-            g.gene_name,
+            g.gene_symbol,
             count() AS variant_count,
             sum(if(impact = 'HIGH', 1, 0)) AS high_impact_count,
             sum(if(impact = 'MODERATE', 1, 0)) AS moderate_impact_count
@@ -231,7 +231,7 @@ def compute_gene_burden(
             AND v.release_key = g.release_key
         WHERE v.release_key = %(release)s
           AND v.gene_surrogate_id > 0
-        GROUP BY v.gene_surrogate_id, g.gene_id, g.gene_name
+        GROUP BY v.gene_surrogate_id, g.gene_id, g.gene_symbol
         ORDER BY high_impact_count DESC, variant_count DESC
         LIMIT %(top_n)s
         """,

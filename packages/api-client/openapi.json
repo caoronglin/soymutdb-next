@@ -386,7 +386,7 @@
           "assemblies"
         ],
         "summary": "List Assemblies",
-        "description": "List all genome assemblies.",
+        "description": "List all genome assemblies.\n\nRead-hot query cached in Redis (default TTL) via cache-aside; a Redis\nfailure degrades to a direct query.  An empty assembly list is cached as\nwell (short-circuit for a freshly seeded database) \u2014 that empty-result\ncaching is the anti-cache-penetration behaviour shared by every\n``get_or_set`` call site: once a loader result (even an empty one) is\nstored, repeated requests no longer hit the database until the TTL\nexpires.",
         "operationId": "list_assemblies_api_v1_genes_assemblies_get",
         "responses": {
           "200": {
@@ -490,7 +490,7 @@
           "genes"
         ],
         "summary": "List Genes",
-        "description": "List genes with cursor pagination.",
+        "description": "List genes with cursor pagination or the portal's page contract.",
         "operationId": "list_genes_api_v1_genes_get",
         "parameters": [
           {
@@ -559,6 +559,23 @@
             }
           },
           {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 500
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
             "name": "cursor",
             "in": "query",
             "required": false,
@@ -584,6 +601,41 @@
               "minimum": 1,
               "default": 50,
               "title": "Limit"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 200,
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Page Size"
             }
           }
         ],
@@ -647,6 +699,434 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/GeneDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/gwas/uploads": {
+      "post": {
+        "tags": [
+          "gwas"
+        ],
+        "summary": "Create Upload",
+        "description": "Request a pre-signed upload URL for a GWAS input file.\n\nReturns a PUT URL valid for 1 hour plus the object key the client must\nsend back at submit time.  Nothing is persisted yet.",
+        "operationId": "create_upload_api_v1_gwas_uploads_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GwasUploadRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GwasUploadResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/gwas/submit": {
+      "post": {
+        "tags": [
+          "gwas"
+        ],
+        "summary": "Submit Gwas Job",
+        "description": "Submit a GWAS job for the uploaded inputs.\n\nValidates the ``gwas/`` key namespace, the phenotype file format, the\nmethod whitelist and the parameter whitelist, then creates the job row +\noutbox event in one transaction (pending).",
+        "operationId": "submit_gwas_job_api_v1_gwas_submit_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GwasSubmitRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GwasJobResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/gwas/{job_id}": {
+      "get": {
+        "tags": [
+          "gwas"
+        ],
+        "summary": "Get Gwas Job",
+        "description": "Return the current status of a GWAS job.\n\n``result`` is ``null`` until the job completes; completed jobs carry the\nworker-written summary (MinIO object keys + association statistics).",
+        "operationId": "get_gwas_job_api_v1_gwas__job_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GwasJobResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/gwas/{job_id}/results": {
+      "get": {
+        "tags": [
+          "gwas"
+        ],
+        "summary": "Get Gwas Results",
+        "description": "Return pre-signed download URLs for a completed GWAS job's outputs.\n\nNon-completed jobs return no URLs (status-aware envelope); completed jobs\nexpose the Manhattan data JSON, the QQ data JSON and the self-contained\n``Manhattan_QQ.html`` report.",
+        "operationId": "get_gwas_results_api_v1_gwas__job_id__results_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GwasResultResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/jobs/events": {
+      "get": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Job Events",
+        "description": "Stream job status updates as Server-Sent Events.\n\nEvent format (one per updated job)::\n\n    event: job_update\n    data: {\"job_type\": \"blast\", \"job_id\": \"...\", \"status\": \"running\",\n           \"updated_at\": \"2026-08-09T12:00:00+00:00\"}\n\nWhen no job changed in the last poll cycle a ``: ping`` heartbeat\ncomment line is emitted instead.  The stream ends when the client\ndisconnects.",
+        "operationId": "job_events_api_v1_jobs_events_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tools/ld": {
+      "post": {
+        "tags": [
+          "tools"
+        ],
+        "summary": "Compute Ld",
+        "description": "LD heatmap data: variant coordinates + r\u00b2 matrix.\n\n- Region/gene mode returns the variant coordinates in the interval\n  (from ``variant_facts``) together with ``r_squared: null`` when no\n  per-sample genotype data is available (the store only carries allele\n  frequencies).\n- Inline ``genotypes`` mode (sample \u00d7 variant dosage matrix) computes the\n  full pairwise r\u00b2 matrix (squared Pearson correlation of dosages).",
+        "operationId": "compute_ld_api_v1_tools_ld_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LdRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LdResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tools/diversity": {
+      "post": {
+        "tags": [
+          "tools"
+        ],
+        "summary": "Nucleotide Diversity",
+        "description": "Nucleotide diversity (\u03c0) and Watterson's \u03b8 for a gene / interval.\n\n\u03c0 = \u03a3 2\u00b7p\u00b7(1\u2212p) over polymorphic sites, per base pair; \u03b8 = S / a_n is\nreported when ``sample_size`` is provided.  Optional ``window_size``\n(bp) returns per-window \u03c0 for sliding-window plots.",
+        "operationId": "nucleotide_diversity_api_v1_tools_diversity_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiversityRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiversityResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tools/allelefreq": {
+      "post": {
+        "tags": [
+          "tools"
+        ],
+        "summary": "Allele Frequencies",
+        "description": "Per-variant allele frequencies for a locus / gene / interval.",
+        "operationId": "allele_frequencies_api_v1_tools_allelefreq_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlleleFreqRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlleleFreqResponse"
                 }
               }
             }
@@ -1235,6 +1715,22 @@
             "description": "External sources to query (comma-separated): ncbi,uniprot,ensembl,ebi"
           },
           {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
             "name": "limit",
             "in": "query",
             "required": false,
@@ -1393,7 +1889,7 @@
           "stats"
         ],
         "summary": "Dashboard Stats",
-        "description": "High-level database statistics for the dashboard.",
+        "description": "High-level database statistics for the dashboard.\n\nRead-hot aggregation cached in Redis (default TTL) via cache-aside;\na Redis failure degrades to a direct aggregation.",
         "operationId": "dashboard_stats_api_v1_stats_dashboard_get",
         "responses": {
           "200": {
@@ -1665,7 +2161,7 @@
           "stats"
         ],
         "summary": "Per-chromosome variant density",
-        "description": "Variant density per chromosome, aggregated from PostgreSQL.\n\n``density_per_kb`` is computed as ``variant_count / (length_bp / 1000)``.",
+        "description": "Variant density per chromosome, aggregated from PostgreSQL.\n\n``density_per_kb`` is computed as ``variant_count / (length_bp / 1000)``.\nRead-hot aggregation cached in Redis (default TTL) keyed by\n``release_id``; a Redis failure degrades to a direct aggregation.  Empty\nresults are cached too (anti-penetration): when no data exists the\nloader returns ``[]`` which is memoised until the TTL expires instead of\nre-running the aggregate per request.",
         "operationId": "chromosome_density_summary_api_v1_stats_chromosome_density_get",
         "parameters": [
           {
@@ -1805,7 +2301,7 @@
           "stats"
         ],
         "summary": "Per-release statistics",
-        "description": "Statistics per release (version, date, variant/gene/line counts).",
+        "description": "Statistics per release (version, date, variant/gene/line counts).\n\nRead-hot query cached in Redis (default TTL) keyed by ``only_active``;\na Redis failure degrades to a direct query.  An empty release list is\ncached as well (anti-penetration) so a freshly seeded database does not\nre-run the query on every request.",
         "operationId": "release_statistics_api_v1_stats_releases_get",
         "parameters": [
           {
@@ -2050,15 +2546,20 @@
         "summary": "Submit Blast Job",
         "description": "Submit a BLAST job (requires researcher role or higher).",
         "operationId": "submit_blast_job_api_v1_blast_jobs_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/BlastSubmitRequest"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "201": {
@@ -2091,12 +2592,93 @@
               }
             }
           }
-        },
+        }
+      },
+      "get": {
+        "tags": [
+          "blast"
+        ],
+        "summary": "List Blast Jobs",
+        "description": "List the current user's BLAST jobs, newest first.",
+        "operationId": "list_blast_jobs_api_v1_blast_jobs_get",
         "security": [
           {
             "HTTPBearer": []
           }
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Page Size"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlastJobListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/blast/jobs/{job_id}": {
@@ -2107,6 +2689,11 @@
         "summary": "Get Blast Job",
         "description": "Check BLAST job status.",
         "operationId": "get_blast_job_api_v1_blast_jobs__job_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "job_id",
@@ -2161,6 +2748,11 @@
         "summary": "Get Blast Results",
         "description": "Retrieve BLAST results for a job (status-aware envelope).\n\nReturns ``hits=None`` for pending/running/failed jobs; only completed\njobs carry a hit list (empty means a genuine zero-hit result).",
         "operationId": "get_blast_results_api_v1_blast_jobs__job_id__results_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "job_id",
@@ -2848,7 +3440,7 @@
           "releases"
         ],
         "summary": "List Releases",
-        "description": "List database releases.",
+        "description": "List database releases.\n\nRead-hot query cached in Redis (default TTL) keyed by ``status``; a\nRedis failure degrades to a direct query.",
         "operationId": "list_releases_api_v1_releases_get",
         "parameters": [
           {
@@ -2858,7 +3450,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "$ref": "#/components/schemas/ReleaseStatus"
+                  "$ref": "#/components/schemas/ReleaseStatus-Input"
                 },
                 {
                   "type": "null"
@@ -3274,7 +3866,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SeedRequestCreate"
+                "$ref": "#/components/schemas/app__schemas__seed__SeedRequestCreate"
               }
             }
           }
@@ -3285,7 +3877,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SeedRequestResponse"
+                  "$ref": "#/components/schemas/app__schemas__seed__SeedRequestResponse"
                 }
               }
             }
@@ -3327,7 +3919,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "$ref": "#/components/schemas/SeedRequestStatus"
+                  "$ref": "#/components/schemas/app__schemas__seed__SeedRequestStatus"
                 },
                 {
                   "type": "null"
@@ -3345,7 +3937,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/SeedRequestResponse"
+                    "$ref": "#/components/schemas/app__schemas__seed__SeedRequestResponse"
                   },
                   "title": "Response List Seed Requests Api V1 Seeds Requests Get"
                 }
@@ -3405,7 +3997,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SeedRequestUpdate"
+                "$ref": "#/components/schemas/app__schemas__seed__SeedRequestUpdate"
               }
             }
           }
@@ -3416,7 +4008,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SeedRequestResponse"
+                  "$ref": "#/components/schemas/app__schemas__seed__SeedRequestResponse"
                 }
               }
             }
@@ -3427,6 +4019,259 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/seed-requests": {
+      "post": {
+        "tags": [
+          "seed-requests"
+        ],
+        "summary": "Submit a public seed request",
+        "description": "Submit a seed request contact (open to all; no authentication).",
+        "operationId": "create_seed_request_api_v1_seed_requests_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/app__schemas__seed_request__SeedRequestCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/app__schemas__seed_request__SeedRequestResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/seed-requests": {
+      "get": {
+        "tags": [
+          "seed-requests"
+        ],
+        "summary": "List seed requests (researcher+)",
+        "description": "Paginated admin listing with an optional status filter.",
+        "operationId": "list_seed_requests_api_v1_admin_seed_requests_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 20,
+              "title": "Page Size"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/app__models__seed_request__SeedRequestStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeedRequestListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/seed-requests/{request_id}": {
+      "patch": {
+        "tags": [
+          "seed-requests"
+        ],
+        "summary": "Update a seed request status (researcher+)",
+        "description": "Advance a request's status (pending \u2192 approved/rejected \u2192 fulfilled).",
+        "operationId": "update_seed_request_api_v1_admin_seed_requests__request_id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Request Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/app__schemas__seed_request__SeedRequestUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/app__schemas__seed_request__SeedRequestResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/content/snapshot": {
+      "get": {
+        "tags": [
+          "content"
+        ],
+        "summary": "Content Snapshot",
+        "description": "Public content snapshot for static builds (E2-2).\n\nFrozen contract in ``docs/design/static-content-richtext-2026-08.md``\n\u00a74.1: schema_version/generated_at/news{source_total,included_total,\ntruncated,items}/news_detail{slug: detail|null}/about.\n\nAggregation is cached in Redis for 60 s (cache.py); the response carries\nan ETag so build-time fetchers can short-circuit with 304.",
+        "operationId": "content_snapshot_api_v1_content_snapshot_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Content Snapshot Api V1 Content Snapshot Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -3856,6 +4701,766 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SignedUrlResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/news": {
+      "get": {
+        "tags": [
+          "news"
+        ],
+        "summary": "List News",
+        "description": "Paginated public news list (published only).",
+        "operationId": "list_news_api_v1_news_get",
+        "parameters": [
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 20,
+              "title": "Page Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NewsListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/news/featured": {
+      "get": {
+        "tags": [
+          "news"
+        ],
+        "summary": "Featured News",
+        "description": "Homepage block: 5 featured articles + carousel groups.\n\nRead-hot query cached in Redis with a short TTL (60s, content changes\nfrequently); a Redis failure degrades to a direct query.",
+        "operationId": "featured_news_api_v1_news_featured_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NewsFeaturedResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/news/{slug}": {
+      "get": {
+        "tags": [
+          "news"
+        ],
+        "summary": "Get News",
+        "description": "Article detail.\n\nPublished + visible articles are public.  Draft/hidden articles return a\nvalid HMAC preview token URL from the admin endpoint\n(``/admin/news/{id}/preview-token``) and are then accessible with\n``?preview=<token>&exp=<ts>`` without login.",
+        "operationId": "get_news_api_v1_news__slug__get",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Slug"
+            }
+          },
+          {
+            "name": "preview",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Preview"
+            }
+          },
+          {
+            "name": "exp",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Exp"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NewsDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/notifications": {
+      "get": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "List Notifications",
+        "description": "List the caller's notifications, unread first, newest first.\n\n``total`` / ``unread_count`` reflect the full set (not just the page).",
+        "operationId": "list_notifications_api_v1_notifications_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/notifications/unread-count": {
+      "get": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "Get Unread Count",
+        "description": "Return the caller's unread notification count (bell badge).",
+        "operationId": "get_unread_count_api_v1_notifications_unread_count_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnreadCountResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/notifications/read": {
+      "post": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "Mark Notifications Read",
+        "description": "Mark a subset (``ids``) or all (``all``) notifications as read.\n\n``ids`` are always scoped to the caller; foreign ids are ignored.",
+        "operationId": "mark_notifications_read_api_v1_notifications_read_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarkReadRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarkReadResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/releases": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Create Release",
+        "operationId": "create_release_api_v1_admin_releases_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReleaseCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Create Release Api V1 Admin Releases Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/releases/{release_id}/validate": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Validate Admin Release",
+        "operationId": "validate_admin_release_api_v1_admin_releases__release_id__validate_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "release_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Release Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Validate Admin Release Api V1 Admin Releases  Release Id  Validate Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/releases/{release_id}/ready": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Ready Admin Release",
+        "operationId": "ready_admin_release_api_v1_admin_releases__release_id__ready_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "release_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Release Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReleaseReadyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Ready Admin Release Api V1 Admin Releases  Release Id  Ready Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/releases/{release_id}/publish": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Publish Admin Release",
+        "operationId": "publish_admin_release_api_v1_admin_releases__release_id__publish_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "release_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Release Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReleaseActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Publish Admin Release Api V1 Admin Releases  Release Id  Publish Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/releases/{release_id}/rollback": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Rollback Admin Release",
+        "operationId": "rollback_admin_release_api_v1_admin_releases__release_id__rollback_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "release_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Release Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReleaseActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Rollback Admin Release Api V1 Admin Releases  Release Id  Rollback Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/releases/{release_id}": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Get Admin Release",
+        "operationId": "get_admin_release_api_v1_admin_releases__release_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "release_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Release Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Admin Release Api V1 Admin Releases  Release Id  Get"
                 }
               }
             }
@@ -5428,6 +7033,419 @@
         }
       }
     },
+    "/api/v1/admin/news": {
+      "get": {
+        "tags": [
+          "admin-news"
+        ],
+        "summary": "List News Admin",
+        "description": "List ALL news articles \u2014 including drafts and archived.\n\nUnlike the public ``GET /news`` (published only), this admin endpoint\nsees every status and supports ``status_filter``, ``category`` and\n``search`` parameters.",
+        "operationId": "list_news_admin_api_v1_admin_news_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "status_filter",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by status: draft, published, archived (case-insensitive).",
+              "title": "Status Filter"
+            },
+            "description": "Filter by status: draft, published, archived (case-insensitive)."
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by category (exact match).",
+              "title": "Category"
+            },
+            "description": "Filter by category (exact match)."
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Case-insensitive title search.",
+              "title": "Search"
+            },
+            "description": "Case-insensitive title search."
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Page Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NewsListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "admin-news"
+        ],
+        "summary": "Create News",
+        "description": "Create a news article (draft by default; publish via ``status``).",
+        "operationId": "create_news_api_v1_admin_news_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewsCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NewsDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/news/{news_id}": {
+      "put": {
+        "tags": [
+          "admin-news"
+        ],
+        "summary": "Update News",
+        "description": "Partial update; ``status``/``is_published`` stay double-written.",
+        "operationId": "update_news_api_v1_admin_news__news_id__put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "news_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "News Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewsUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NewsDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "admin-news"
+        ],
+        "summary": "Delete News",
+        "description": "Hard-delete a news article.",
+        "operationId": "delete_news_api_v1_admin_news__news_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "news_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "News Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/news/reorder": {
+      "patch": {
+        "tags": [
+          "admin-news"
+        ],
+        "summary": "Reorder News",
+        "description": "Apply a full drag-and-drop ordering of ``featured_sort``.",
+        "operationId": "reorder_news_api_v1_admin_news_reorder_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewsReorderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NewsReorderResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/news/{news_id}/preview-token": {
+      "get": {
+        "tags": [
+          "admin-news"
+        ],
+        "summary": "Preview Token",
+        "description": "Mint a 15-minute stateless HMAC preview token for a hidden/draft article.\n\nThe returned ``url`` (``/api/v1/news/{slug}?preview=<token>&exp=<ts>``)\ncan be opened without login; verification happens on the public detail\nendpoint.  The token is NOT a JWT \u2014 no server-side state, HMAC-signed\nwith ``settings.jwt_secret``.",
+        "operationId": "preview_token_api_v1_admin_news__news_id__preview_token_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "news_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "News Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewTokenResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/imports": {
       "get": {
         "tags": [
@@ -5566,9 +7584,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "additionalProperties": true,
-                "title": "Body"
+                "$ref": "#/components/schemas/ImportCreateRequest"
               }
             }
           }
@@ -5751,6 +7767,133 @@
                   "type": "object",
                   "additionalProperties": true,
                   "title": "Response Get Import Status Api V1 Admin Imports  Import Id  Status Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/imports/uploads/multipart": {
+      "post": {
+        "tags": [
+          "admin-imports"
+        ],
+        "summary": "Start Multipart Upload",
+        "operationId": "start_multipart_upload_api_v1_admin_imports_uploads_multipart_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MultipartStartRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Start Multipart Upload Api V1 Admin Imports Uploads Multipart Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/imports/uploads/multipart/{upload_id}/complete": {
+      "post": {
+        "tags": [
+          "admin-imports"
+        ],
+        "summary": "Finish Multipart Upload",
+        "operationId": "finish_multipart_upload_api_v1_admin_imports_uploads_multipart__upload_id__complete_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "upload_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Upload Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MultipartCompletePathRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Finish Multipart Upload Api V1 Admin Imports Uploads Multipart  Upload Id  Complete Post"
                 }
               }
             }
@@ -6056,6 +8199,63 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/uploads/presign": {
+      "post": {
+        "tags": [
+          "admin-uploads"
+        ],
+        "summary": "Create Upload Presign",
+        "description": "Request a pre-signed PUT URL for an admin upload (researcher+).\n\nReturns a PUT URL valid for 1 hour, the object key, and the public URL\nthe caller should persist.  Nothing is stored server-side yet.\n\nObjects are stored in the PUBLIC bucket (``SOYMUTDB_S3_PUBLIC_BUCKET``)\nso ``public_url`` can be served directly by the static gateway.",
+        "operationId": "create_upload_presign_api_v1_admin_uploads_presign_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UploadPresignRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadPresignResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -6772,6 +8972,90 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/site/about": {
+      "get": {
+        "tags": [
+          "site"
+        ],
+        "summary": "Get About Content",
+        "description": "Return the editable \"About us\" content (bilingual, optional).",
+        "operationId": "get_about_content_api_v1_site_about_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AboutContentResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/site/home": {
+      "get": {
+        "tags": [
+          "site"
+        ],
+        "summary": "Get Home Content",
+        "description": "Return the editable homepage welcome block (bilingual, optional).\n\nValues are rich HTML authored by administrators.  The generic\n``PUT /admin/settings/{section}`` endpoint only sanitizes its\n``content_*`` keys, so every value is re-sanitized here on read \u2014\ndefence in depth against rows written by any other path.",
+        "operationId": "get_home_content_api_v1_site_home_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeContentResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -7635,6 +9919,79 @@
   },
   "components": {
     "schemas": {
+      "AboutContentResponse": {
+        "properties": {
+          "title_en": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title En"
+          },
+          "title_zh": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title Zh"
+          },
+          "summary_en": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary En"
+          },
+          "summary_zh": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary Zh"
+          },
+          "content_en": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content En"
+          },
+          "content_zh": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Zh"
+          }
+        },
+        "type": "object",
+        "title": "AboutContentResponse",
+        "description": "Editable \"About us\" content backed by ``system_settings``."
+      },
       "AdminDashboardSeries": {
         "properties": {
           "import_throughput": {
@@ -7713,6 +10070,198 @@
         "type": "object",
         "title": "AdminDashboardStats",
         "description": "System overview numbers for the admin dashboard.\n\nSerialised with camelCase keys (``totalUsers``, ``activeReleases``, \u2026)\nto match the admin frontend contract."
+      },
+      "AlleleFreqRequest": {
+        "properties": {
+          "gene_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gene Id"
+          },
+          "assembly": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assembly"
+          },
+          "chromosome": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chromosome"
+          },
+          "start": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start"
+          },
+          "end": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End"
+          },
+          "max_variants": {
+            "type": "integer",
+            "maximum": 50000.0,
+            "minimum": 1.0,
+            "title": "Max Variants",
+            "default": 10000
+          }
+        },
+        "type": "object",
+        "title": "AlleleFreqRequest",
+        "description": "Allele-frequency query (per locus / gene / interval)."
+      },
+      "AlleleFreqResponse": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "gene_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gene Id"
+          },
+          "assembly": {
+            "type": "string",
+            "title": "Assembly"
+          },
+          "chromosome": {
+            "type": "string",
+            "title": "Chromosome"
+          },
+          "start": {
+            "type": "integer",
+            "title": "Start"
+          },
+          "end": {
+            "type": "integer",
+            "title": "End"
+          },
+          "n_variants": {
+            "type": "integer",
+            "title": "N Variants"
+          },
+          "variants": {
+            "items": {
+              "$ref": "#/components/schemas/AlleleFreqVariant"
+            },
+            "type": "array",
+            "title": "Variants"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "assembly",
+          "chromosome",
+          "start",
+          "end",
+          "n_variants",
+          "variants"
+        ],
+        "title": "AlleleFreqResponse"
+      },
+      "AlleleFreqVariant": {
+        "properties": {
+          "variant_id": {
+            "type": "string",
+            "title": "Variant Id"
+          },
+          "chromosome": {
+            "type": "string",
+            "title": "Chromosome"
+          },
+          "position": {
+            "type": "integer",
+            "title": "Position"
+          },
+          "ref_allele": {
+            "type": "string",
+            "title": "Ref Allele"
+          },
+          "alt_allele": {
+            "type": "string",
+            "title": "Alt Allele"
+          },
+          "allele_frequency": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allele Frequency"
+          },
+          "variant_type": {
+            "type": "string",
+            "title": "Variant Type",
+            "default": "SNP"
+          },
+          "gene_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gene Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "variant_id",
+          "chromosome",
+          "position",
+          "ref_allele",
+          "alt_allele",
+          "allele_frequency"
+        ],
+        "title": "AlleleFreqVariant"
       },
       "AnalysesDownloadResponse": {
         "properties": {
@@ -8165,6 +10714,36 @@
         ],
         "title": "BlastHit"
       },
+      "BlastJobListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BlastJobResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "BlastJobListResponse"
+      },
       "BlastJobResponse": {
         "properties": {
           "job_id": {
@@ -8180,6 +10759,38 @@
           "database_id": {
             "type": "integer",
             "title": "Database Id"
+          },
+          "database": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Database"
+          },
+          "query_sequence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Query Sequence"
+          },
+          "parameters": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Parameters"
+          },
+          "hit_count": {
+            "type": "integer",
+            "title": "Hit Count",
+            "default": 0
           },
           "submitted_at": {
             "type": "string",
@@ -8521,6 +11132,28 @@
           "query_sequence"
         ],
         "title": "BlastSubmitRequest"
+      },
+      "CarouselGroupResponse": {
+        "properties": {
+          "group": {
+            "type": "string",
+            "title": "Group"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/NewsSummaryResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "group",
+          "items"
+        ],
+        "title": "CarouselGroupResponse",
+        "description": "One carousel group (grouped by ``carousel_group``, ordered by\n``carousel_sort``)."
       },
       "ChromosomeDensity": {
         "properties": {
@@ -8882,6 +11515,234 @@
         "title": "DiscoveryTrendPoint",
         "description": "One point of the cumulative variant discovery trend."
       },
+      "DiversityRequest": {
+        "properties": {
+          "gene_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gene Id"
+          },
+          "assembly": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assembly"
+          },
+          "chromosome": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chromosome"
+          },
+          "start": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start"
+          },
+          "end": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End"
+          },
+          "sample_size": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 1000000.0,
+                "minimum": 2.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample Size"
+          },
+          "window_size": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Window Size",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "DiversityRequest",
+        "description": "Nucleotide-diversity query.\n\n``sample_size`` enables the Watterson \u03b8 estimate (\u03b8 = S / a_n, where\na_n = sum(1/k, k=1..n-1)); it is ``None`` when the sample size is\nunknown, in which case only \u03c0 and the segregating-site count are\nreported.  ``window_size`` (bp, default 0 = no windows) bins \u03c0 per\nwindow for plotting."
+      },
+      "DiversityResponse": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "gene_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gene Id"
+          },
+          "assembly": {
+            "type": "string",
+            "title": "Assembly"
+          },
+          "chromosome": {
+            "type": "string",
+            "title": "Chromosome"
+          },
+          "start": {
+            "type": "integer",
+            "title": "Start"
+          },
+          "end": {
+            "type": "integer",
+            "title": "End"
+          },
+          "n_bp": {
+            "type": "integer",
+            "title": "N Bp"
+          },
+          "n_variants": {
+            "type": "integer",
+            "title": "N Variants"
+          },
+          "segregating_sites": {
+            "type": "integer",
+            "title": "Segregating Sites"
+          },
+          "pi": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pi"
+          },
+          "pi_per_site": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pi Per Site"
+          },
+          "theta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Theta"
+          },
+          "windows": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/DiversityWindow"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Windows"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "assembly",
+          "chromosome",
+          "start",
+          "end",
+          "n_bp",
+          "n_variants",
+          "segregating_sites",
+          "pi",
+          "pi_per_site",
+          "theta"
+        ],
+        "title": "DiversityResponse"
+      },
+      "DiversityWindow": {
+        "properties": {
+          "start": {
+            "type": "integer",
+            "title": "Start"
+          },
+          "end": {
+            "type": "integer",
+            "title": "End"
+          },
+          "n_variants": {
+            "type": "integer",
+            "title": "N Variants"
+          },
+          "segregating_sites": {
+            "type": "integer",
+            "title": "Segregating Sites"
+          },
+          "pi": {
+            "type": "number",
+            "title": "Pi"
+          }
+        },
+        "type": "object",
+        "required": [
+          "start",
+          "end",
+          "n_variants",
+          "segregating_sites",
+          "pi"
+        ],
+        "title": "DiversityWindow"
+      },
       "DownloadFileResponse": {
         "properties": {
           "id": {
@@ -8948,6 +11809,123 @@
           "created_at"
         ],
         "title": "DownloadFileResponse"
+      },
+      "EnrichmentGseaResponse": {
+        "properties": {
+          "mode": {
+            "type": "string",
+            "const": "gsea",
+            "title": "Mode",
+            "description": "Analysis mode"
+          },
+          "ontology": {
+            "type": "string",
+            "enum": [
+              "go",
+              "kegg"
+            ],
+            "title": "Ontology"
+          },
+          "input_genes": {
+            "type": "integer",
+            "title": "Input Genes",
+            "description": "Number of unique input genes (the ranked list)"
+          },
+          "background_genes": {
+            "type": "integer",
+            "title": "Background Genes",
+            "description": "Number of annotated genes in the background set (all genes with annotations for the requested ontology)"
+          },
+          "terms": {
+            "items": {
+              "$ref": "#/components/schemas/EnrichmentGseaTerm"
+            },
+            "type": "array",
+            "title": "Terms",
+            "description": "GSEA terms sorted by q-value (asc)"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message",
+            "description": "Explanatory note, e.g. when no term passes min_genes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "mode",
+          "ontology",
+          "input_genes",
+          "background_genes"
+        ],
+        "title": "EnrichmentGseaResponse",
+        "description": "Rank-based (GSEA) enrichment analysis result."
+      },
+      "EnrichmentGseaTerm": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Term id, e.g. GO:0008150 or ko00010"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Term name (falls back to the term id)"
+          },
+          "es": {
+            "type": "number",
+            "title": "Es",
+            "description": "Enrichment score: signed running-sum statistic over the value-descending ranked list (positive = concentrated at high values, negative = at low values)"
+          },
+          "nes": {
+            "type": "number",
+            "title": "Nes",
+            "description": "Normalized enrichment score: z-score of ES under the analytic null (ES * sqrt(k(n-k)/n)); a simplification of the permutation normalization used by the reference GSEA implementation"
+          },
+          "p_value": {
+            "type": "number",
+            "title": "P Value",
+            "description": "Rank-based p-value from the one-sided Smirnov asymptotic exp(-2 * k(n-k)/n * ES^2)"
+          },
+          "q_value": {
+            "type": "number",
+            "title": "Q Value",
+            "description": "Benjamini-Hochberg adjusted p-value"
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size",
+            "description": "Term genes present in the ranked input"
+          },
+          "genes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Genes",
+            "description": "Member input genes (first 20)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "es",
+          "nes",
+          "p_value",
+          "q_value",
+          "size",
+          "genes"
+        ],
+        "title": "EnrichmentGseaTerm",
+        "description": "A single enriched term (GSEA mode, rank-based test)."
       },
       "EnrichmentRequest": {
         "properties": {
@@ -9312,6 +12290,17 @@
             ],
             "title": "Name"
           },
+          "symbol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symbol"
+          },
           "biotype": {
             "type": "string",
             "title": "Biotype",
@@ -9326,6 +12315,16 @@
             "type": "integer",
             "minimum": 0.0,
             "title": "End"
+          },
+          "start_pos": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Start Pos"
+          },
+          "end_pos": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "End Pos"
           },
           "strand": {
             "$ref": "#/components/schemas/Strand"
@@ -9391,6 +12390,8 @@
           "chromosome",
           "start",
           "end",
+          "start_pos",
+          "end_pos",
           "strand"
         ],
         "title": "GeneDetail"
@@ -9419,6 +12420,26 @@
             "type": "boolean",
             "title": "Has More",
             "default": false
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page",
+            "default": 1
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size",
+            "default": 50
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "default": 0
+          },
+          "total_pages": {
+            "type": "integer",
+            "title": "Total Pages",
+            "default": 0
           }
         },
         "type": "object",
@@ -9474,6 +12495,17 @@
             ],
             "title": "Name"
           },
+          "symbol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symbol"
+          },
           "biotype": {
             "type": "string",
             "title": "Biotype",
@@ -9488,6 +12520,16 @@
             "type": "integer",
             "minimum": 0.0,
             "title": "End"
+          },
+          "start_pos": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Start Pos"
+          },
+          "end_pos": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "End Pos"
           },
           "strand": {
             "$ref": "#/components/schemas/Strand"
@@ -9509,9 +12551,51 @@
           "chromosome",
           "start",
           "end",
+          "start_pos",
+          "end_pos",
           "strand"
         ],
         "title": "GeneResponse"
+      },
+      "GenotypeMatrix": {
+        "properties": {
+          "sample_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 10000,
+            "minItems": 2,
+            "title": "Sample Ids"
+          },
+          "variant_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 2000,
+            "minItems": 2,
+            "title": "Variant Ids"
+          },
+          "values": {
+            "items": {
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            "type": "array",
+            "title": "Values"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sample_ids",
+          "variant_ids",
+          "values"
+        ],
+        "title": "GenotypeMatrix",
+        "description": "Inline genotype matrix for LD computation.\n\n``sample_ids`` (rows) \u00d7 ``variant_ids`` (columns); each value is the\nallele dosage (0/1/2).  Missing genotypes are not allowed \u2013 complete\nrows are required (the service rejects matrices with missing calls)."
       },
       "GlobalSearchResponse": {
         "properties": {
@@ -9526,10 +12610,51 @@
             "type": "array",
             "title": "Results"
           },
-          "total": {
-            "type": "integer",
-            "minimum": 0.0,
-            "title": "Total",
+          "by_type": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "By Type"
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "has_more": {
+            "type": "boolean",
+            "title": "Has More",
+            "default": false
+          },
+          "total_count": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Count",
             "default": 0
           }
         },
@@ -9538,6 +12663,322 @@
           "query"
         ],
         "title": "GlobalSearchResponse"
+      },
+      "GwasFileType": {
+        "type": "string",
+        "enum": [
+          "snp",
+          "other"
+        ],
+        "title": "GwasFileType",
+        "description": "Input file family (``snp`` = EMMAX-style per-SNP phenotype format)."
+      },
+      "GwasJobResponse": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "method": {
+            "$ref": "#/components/schemas/GwasMethod"
+          },
+          "status": {
+            "$ref": "#/components/schemas/GwasJobStatus"
+          },
+          "object_type": {
+            "$ref": "#/components/schemas/GwasFileType",
+            "default": "snp"
+          },
+          "submitted_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Submitted At"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "method",
+          "status",
+          "submitted_at"
+        ],
+        "title": "GwasJobResponse",
+        "description": "Job status envelope; ``result`` is the worker-written summary once the\njob completes (MinIO object keys + association statistics), ``None``\notherwise."
+      },
+      "GwasJobStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "running",
+          "completed",
+          "failed",
+          "cancelled"
+        ],
+        "title": "GwasJobStatus",
+        "description": "Job status values \u2013 BLAST-style spelling aligned with the shared state\nmachine."
+      },
+      "GwasMethod": {
+        "type": "string",
+        "enum": [
+          "emmax",
+          "gemma"
+        ],
+        "title": "GwasMethod",
+        "description": "Supported association-testing engines."
+      },
+      "GwasResultResponse": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "method": {
+            "$ref": "#/components/schemas/GwasMethod"
+          },
+          "status": {
+            "$ref": "#/components/schemas/GwasJobStatus"
+          },
+          "manhattan_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manhattan Url"
+          },
+          "qq_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Qq Url"
+          },
+          "report_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Report Url"
+          },
+          "assoc_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assoc Url"
+          },
+          "n_variants": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "N Variants"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "method",
+          "status"
+        ],
+        "title": "GwasResultResponse",
+        "description": "Status-aware result envelope for a GWAS job.\n\nCompleted jobs carry pre-signed download URLs for the Manhattan data\nJSON, the QQ data JSON and the self-contained ``Manhattan_QQ.html``\nreport (all stored under ``gwas/{job_id}/output/`` in MinIO)."
+      },
+      "GwasSubmitRequest": {
+        "properties": {
+          "method": {
+            "$ref": "#/components/schemas/GwasMethod"
+          },
+          "object_type": {
+            "$ref": "#/components/schemas/GwasFileType",
+            "default": "snp"
+          },
+          "phenotype_object_key": {
+            "type": "string",
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Phenotype Object Key"
+          },
+          "genotype_object_key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2048
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Genotype Object Key"
+          },
+          "kinship_object_key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2048
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kinship Object Key"
+          },
+          "covariate_object_key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2048
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Covariate Object Key"
+          },
+          "params": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Params"
+          }
+        },
+        "type": "object",
+        "required": [
+          "method",
+          "phenotype_object_key"
+        ],
+        "title": "GwasSubmitRequest"
+      },
+      "GwasUploadRequest": {
+        "properties": {
+          "filename": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Filename"
+          }
+        },
+        "type": "object",
+        "required": [
+          "filename"
+        ],
+        "title": "GwasUploadRequest"
+      },
+      "GwasUploadResponse": {
+        "properties": {
+          "upload_url": {
+            "type": "string",
+            "title": "Upload Url"
+          },
+          "object_key": {
+            "type": "string",
+            "title": "Object Key"
+          },
+          "expires_in": {
+            "type": "integer",
+            "title": "Expires In"
+          },
+          "max_upload_size": {
+            "type": "integer",
+            "title": "Max Upload Size",
+            "default": 524288000
+          }
+        },
+        "type": "object",
+        "required": [
+          "upload_url",
+          "object_key",
+          "expires_in"
+        ],
+        "title": "GwasUploadResponse"
       },
       "HTTPValidationError": {
         "properties": {
@@ -9551,6 +12992,35 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "HomeContentResponse": {
+        "properties": {
+          "welcome_en": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Welcome En"
+          },
+          "welcome_zh": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Welcome Zh"
+          }
+        },
+        "type": "object",
+        "title": "HomeContentResponse",
+        "description": "Editable homepage welcome block backed by ``system_settings``.\n\nValues are rich HTML (``home.*`` keys) \u2014 the public endpoint re-runs\n``sanitize_rich_html`` on read so even rows written outside the admin\nsettings API can never serve untrusted markup."
       },
       "HomepageStats": {
         "properties": {
@@ -9666,6 +13136,69 @@
         "title": "ImpactSummaryItem",
         "description": "Variant count for one predicted impact class."
       },
+      "ImportCreateRequest": {
+        "properties": {
+          "filename": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Filename"
+          },
+          "type": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Type"
+          },
+          "file_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Path"
+          },
+          "object_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Key"
+          },
+          "data_set_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Set Id"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Idempotency Key"
+          }
+        },
+        "type": "object",
+        "required": [
+          "filename",
+          "type",
+          "idempotency_key"
+        ],
+        "title": "ImportCreateRequest"
+      },
       "ImportThroughputPoint": {
         "properties": {
           "date": {
@@ -9758,6 +13291,213 @@
         "type": "object",
         "title": "LayoutUpdateRequest"
       },
+      "LdRequest": {
+        "properties": {
+          "gene_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gene Id"
+          },
+          "assembly": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assembly"
+          },
+          "chromosome": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chromosome"
+          },
+          "start": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start"
+          },
+          "end": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End"
+          },
+          "genotypes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GenotypeMatrix"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "LdRequest",
+        "description": "LD query: a region (or gene) plus an optional inline genotype matrix.\n\nThe ``variant_facts`` store carries per-variant allele frequencies but no\nper-sample genotype calls, so pairwise r\u00b2 cannot be derived from the\ndatabase alone: clients that hold genotype data supply it inline via\n``genotypes``; without it the response returns ``r_squared: null`` with a\n``note`` explaining what is needed (the variant coordinates are still\nreturned for plotting)."
+      },
+      "LdResponse": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "gene_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gene Id"
+          },
+          "assembly": {
+            "type": "string",
+            "title": "Assembly"
+          },
+          "chromosome": {
+            "type": "string",
+            "title": "Chromosome"
+          },
+          "start": {
+            "type": "integer",
+            "title": "Start"
+          },
+          "end": {
+            "type": "integer",
+            "title": "End"
+          },
+          "n_variants": {
+            "type": "integer",
+            "title": "N Variants"
+          },
+          "variants": {
+            "items": {
+              "$ref": "#/components/schemas/LdVariant"
+            },
+            "type": "array",
+            "title": "Variants"
+          },
+          "r_squared": {
+            "anyOf": [
+              {
+                "items": {
+                  "items": {
+                    "type": "number"
+                  },
+                  "type": "array"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "R Squared"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "assembly",
+          "chromosome",
+          "start",
+          "end",
+          "n_variants",
+          "variants"
+        ],
+        "title": "LdResponse"
+      },
+      "LdVariant": {
+        "properties": {
+          "variant_id": {
+            "type": "string",
+            "title": "Variant Id"
+          },
+          "chromosome": {
+            "type": "string",
+            "title": "Chromosome"
+          },
+          "position": {
+            "type": "integer",
+            "title": "Position"
+          },
+          "ref_allele": {
+            "type": "string",
+            "title": "Ref Allele"
+          },
+          "alt_allele": {
+            "type": "string",
+            "title": "Alt Allele"
+          }
+        },
+        "type": "object",
+        "required": [
+          "variant_id",
+          "chromosome",
+          "position",
+          "ref_allele",
+          "alt_allele"
+        ],
+        "title": "LdVariant"
+      },
       "LoginRequest": {
         "properties": {
           "username": {
@@ -9804,6 +13544,143 @@
         ],
         "title": "LoginRequest",
         "description": "Credentials for logging in \u2014 accepts email or username.\n\nBoth ``username`` and ``email`` keys are accepted; ``email`` is treated\nas an alias for ``username`` so API clients may send either field."
+      },
+      "MarkReadRequest": {
+        "properties": {
+          "ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array",
+                "maxItems": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ids"
+          },
+          "all": {
+            "type": "boolean",
+            "title": "All",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "MarkReadRequest",
+        "description": "Mark a subset of notifications read (``ids``) or all of them (``all``)."
+      },
+      "MarkReadResponse": {
+        "properties": {
+          "marked": {
+            "type": "integer",
+            "title": "Marked"
+          }
+        },
+        "type": "object",
+        "required": [
+          "marked"
+        ],
+        "title": "MarkReadResponse",
+        "description": "Number of rows flipped to read."
+      },
+      "MultipartCompletePathRequest": {
+        "properties": {
+          "object_key": {
+            "type": "string",
+            "title": "Object Key"
+          },
+          "parts": {
+            "items": {
+              "$ref": "#/components/schemas/MultipartPart"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Parts"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{64}$",
+            "title": "Sha256"
+          }
+        },
+        "type": "object",
+        "required": [
+          "object_key",
+          "parts",
+          "sha256"
+        ],
+        "title": "MultipartCompletePathRequest"
+      },
+      "MultipartPart": {
+        "properties": {
+          "part_number": {
+            "type": "integer",
+            "maximum": 10000.0,
+            "minimum": 1.0,
+            "title": "Part Number"
+          },
+          "etag": {
+            "type": "string",
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Etag"
+          }
+        },
+        "type": "object",
+        "required": [
+          "part_number",
+          "etag"
+        ],
+        "title": "MultipartPart"
+      },
+      "MultipartStartRequest": {
+        "properties": {
+          "filename": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Filename"
+          },
+          "type": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Type"
+          },
+          "part_count": {
+            "type": "integer",
+            "maximum": 10000.0,
+            "minimum": 1.0,
+            "title": "Part Count"
+          },
+          "content_type": {
+            "type": "string",
+            "title": "Content Type",
+            "default": "application/octet-stream"
+          },
+          "data_set_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Set Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "filename",
+          "type",
+          "part_count"
+        ],
+        "title": "MultipartStartRequest"
       },
       "MutagenCount": {
         "properties": {
@@ -9976,6 +13853,394 @@
         "title": "MutantLineResponse",
         "description": "Compact mutant line representation."
       },
+      "NewsCreate": {
+        "properties": {
+          "title_en": {
+            "type": "string",
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Title En"
+          },
+          "title_zh": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 512
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title Zh"
+          },
+          "content_en": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Content En"
+          },
+          "content_zh": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Zh"
+          },
+          "slug": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "title": "Slug"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "cover_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cover Url"
+          },
+          "featured_sort": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Featured Sort",
+            "default": 0
+          },
+          "carousel_group": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Carousel Group"
+          },
+          "carousel_sort": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Carousel Sort",
+            "default": 0
+          },
+          "status": {
+            "$ref": "#/components/schemas/NewsStatus",
+            "default": "draft"
+          },
+          "visible_from": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Visible From"
+          },
+          "visible_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Visible To"
+          },
+          "is_published": {
+            "type": "boolean",
+            "title": "Is Published",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "title_en",
+          "content_en",
+          "slug"
+        ],
+        "title": "NewsCreate"
+      },
+      "NewsDetailResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "title_en": {
+            "type": "string",
+            "title": "Title En"
+          },
+          "title_zh": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title Zh"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "cover_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cover Url"
+          },
+          "featured_sort": {
+            "type": "integer",
+            "title": "Featured Sort",
+            "default": 0
+          },
+          "carousel_group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Carousel Group"
+          },
+          "carousel_sort": {
+            "type": "integer",
+            "title": "Carousel Sort",
+            "default": 0
+          },
+          "status": {
+            "$ref": "#/components/schemas/NewsStatus",
+            "default": "draft"
+          },
+          "is_published": {
+            "type": "boolean",
+            "title": "Is Published",
+            "default": false
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "content_en": {
+            "type": "string",
+            "title": "Content En"
+          },
+          "content_zh": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Zh"
+          },
+          "visible_from": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Visible From"
+          },
+          "visible_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Visible To"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title_en",
+          "slug",
+          "created_at",
+          "updated_at",
+          "content_en"
+        ],
+        "title": "NewsDetailResponse",
+        "description": "Full article view including body content."
+      },
+      "NewsFeaturedResponse": {
+        "properties": {
+          "featured": {
+            "items": {
+              "$ref": "#/components/schemas/NewsSummaryResponse"
+            },
+            "type": "array",
+            "title": "Featured"
+          },
+          "carousel": {
+            "items": {
+              "$ref": "#/components/schemas/CarouselGroupResponse"
+            },
+            "type": "array",
+            "title": "Carousel"
+          }
+        },
+        "type": "object",
+        "required": [
+          "featured",
+          "carousel"
+        ],
+        "title": "NewsFeaturedResponse",
+        "description": "Homepage block: 5 featured articles + carousel groups."
+      },
+      "NewsListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/NewsSummaryResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "NewsListResponse",
+        "description": "Paginated public news list (published + visible window only)."
+      },
+      "NewsReorderItem": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "featured_sort": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Featured Sort"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "featured_sort"
+        ],
+        "title": "NewsReorderItem"
+      },
+      "NewsReorderRequest": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/NewsReorderItem"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "NewsReorderRequest"
+      },
+      "NewsReorderResponse": {
+        "properties": {
+          "updated": {
+            "type": "integer",
+            "title": "Updated"
+          }
+        },
+        "type": "object",
+        "required": [
+          "updated"
+        ],
+        "title": "NewsReorderResponse"
+      },
       "NewsResponse": {
         "properties": {
           "id": {
@@ -10049,6 +14314,382 @@
           "updated_at"
         ],
         "title": "NewsResponse"
+      },
+      "NewsStatus": {
+        "type": "string",
+        "enum": [
+          "draft",
+          "published",
+          "archived"
+        ],
+        "title": "NewsStatus"
+      },
+      "NewsSummaryResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "title_en": {
+            "type": "string",
+            "title": "Title En"
+          },
+          "title_zh": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title Zh"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "cover_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cover Url"
+          },
+          "featured_sort": {
+            "type": "integer",
+            "title": "Featured Sort",
+            "default": 0
+          },
+          "carousel_group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Carousel Group"
+          },
+          "carousel_sort": {
+            "type": "integer",
+            "title": "Carousel Sort",
+            "default": 0
+          },
+          "status": {
+            "$ref": "#/components/schemas/NewsStatus",
+            "default": "draft"
+          },
+          "is_published": {
+            "type": "boolean",
+            "title": "Is Published",
+            "default": false
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title_en",
+          "slug",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "NewsSummaryResponse",
+        "description": "List-item view (no body content)."
+      },
+      "NewsUpdate": {
+        "properties": {
+          "title_en": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 512,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title En"
+          },
+          "title_zh": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 512
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title Zh"
+          },
+          "content_en": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content En"
+          },
+          "content_zh": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Zh"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "cover_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cover Url"
+          },
+          "featured_sort": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Featured Sort"
+          },
+          "carousel_group": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Carousel Group"
+          },
+          "carousel_sort": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Carousel Sort"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NewsStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "visible_from": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Visible From"
+          },
+          "visible_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Visible To"
+          },
+          "is_published": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Published"
+          }
+        },
+        "type": "object",
+        "title": "NewsUpdate"
+      },
+      "NotificationListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/NotificationResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "unread_count": {
+            "type": "integer",
+            "title": "Unread Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "unread_count"
+        ],
+        "title": "NotificationListResponse",
+        "description": "Paginated notification list (unread first) plus counters."
+      },
+      "NotificationResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "body": {
+            "type": "string",
+            "title": "Body"
+          },
+          "link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link"
+          },
+          "read_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Read At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "type",
+          "title",
+          "body",
+          "created_at"
+        ],
+        "title": "NotificationResponse",
+        "description": "One notification entry (list item)."
       },
       "PageStatus": {
         "type": "string",
@@ -10141,6 +14782,30 @@
         ],
         "title": "PhenotypeResponse",
         "description": "Public representation of a phenotype observation."
+      },
+      "PreviewTokenResponse": {
+        "properties": {
+          "preview": {
+            "type": "string",
+            "title": "Preview"
+          },
+          "exp": {
+            "type": "integer",
+            "title": "Exp"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "preview",
+          "exp",
+          "url"
+        ],
+        "title": "PreviewTokenResponse",
+        "description": "Short-lived HMAC preview token (15 min, stateless, NOT a JWT)."
       },
       "PublicationResponse": {
         "properties": {
@@ -10263,6 +14928,104 @@
         "title": "QueryLatencyPoint",
         "description": "Daily query-latency percentiles (ms)."
       },
+      "ReleaseActionRequest": {
+        "properties": {
+          "confirm": {
+            "type": "boolean",
+            "const": true,
+            "title": "Confirm"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "confirm",
+          "reason"
+        ],
+        "title": "ReleaseActionRequest"
+      },
+      "ReleaseCreateRequest": {
+        "properties": {
+          "version": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Version"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "assembly": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assembly"
+          },
+          "data_set_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Data Set Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version",
+          "name",
+          "data_set_ids"
+        ],
+        "title": "ReleaseCreateRequest"
+      },
+      "ReleaseReadyRequest": {
+        "properties": {
+          "manifest": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Manifest"
+          },
+          "readiness": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "type": "object",
+            "title": "Readiness"
+          }
+        },
+        "type": "object",
+        "required": [
+          "manifest",
+          "readiness"
+        ],
+        "title": "ReleaseReadyRequest"
+      },
       "ReleaseResponse": {
         "properties": {
           "id": {
@@ -10307,7 +15070,7 @@
             "default": 0
           },
           "status": {
-            "$ref": "#/components/schemas/ReleaseStatus"
+            "$ref": "#/components/schemas/ReleaseStatus-Output"
           },
           "published_at": {
             "anyOf": [
@@ -10343,7 +15106,21 @@
         ],
         "title": "ReleaseResponse"
       },
-      "ReleaseStatus": {
+      "ReleaseStatus-Input": {
+        "type": "string",
+        "enum": [
+          "draft",
+          "validated",
+          "ready",
+          "published",
+          "rolled_back",
+          "validated",
+          "published",
+          "rolled_back"
+        ],
+        "title": "ReleaseStatus"
+      },
+      "ReleaseStatus-Output": {
         "type": "string",
         "enum": [
           "draft",
@@ -10426,6 +15203,22 @@
             "minimum": 0.0,
             "title": "Score",
             "default": 0.0
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "default": "internal"
           }
         },
         "type": "object",
@@ -10532,197 +15325,37 @@
         ],
         "title": "SeedInventoryResponse"
       },
-      "SeedRequestCreate": {
+      "SeedRequestListResponse": {
         "properties": {
-          "mutant_line_id": {
-            "type": "string",
-            "title": "Mutant Line Id"
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/app__schemas__seed_request__SeedRequestResponse"
+            },
+            "type": "array",
+            "title": "Items"
           },
-          "quantity_grams": {
-            "type": "number",
-            "maximum": 500.0,
-            "exclusiveMinimum": 0.0,
-            "title": "Quantity Grams"
+          "total": {
+            "type": "integer",
+            "title": "Total"
           },
-          "requester_name": {
-            "type": "string",
-            "maxLength": 255,
-            "minLength": 1,
-            "title": "Requester Name"
+          "page": {
+            "type": "integer",
+            "title": "Page"
           },
-          "requester_email": {
-            "type": "string",
-            "format": "email",
-            "title": "Requester Email"
-          },
-          "requester_institution": {
-            "type": "string",
-            "maxLength": 500,
-            "minLength": 1,
-            "title": "Requester Institution"
-          },
-          "purpose": {
-            "type": "string",
-            "maxLength": 5000,
-            "minLength": 10,
-            "title": "Purpose"
-          },
-          "agrees_to_terms": {
-            "type": "boolean",
-            "title": "Agrees To Terms"
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
           }
         },
         "type": "object",
         "required": [
-          "mutant_line_id",
-          "quantity_grams",
-          "requester_name",
-          "requester_email",
-          "requester_institution",
-          "purpose",
-          "agrees_to_terms"
+          "items",
+          "total",
+          "page",
+          "page_size"
         ],
-        "title": "SeedRequestCreate"
-      },
-      "SeedRequestResponse": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "mutant_line_id": {
-            "type": "string",
-            "title": "Mutant Line Id"
-          },
-          "status": {
-            "$ref": "#/components/schemas/SeedRequestStatus"
-          },
-          "quantity_requested": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Quantity Requested"
-          },
-          "requester_name": {
-            "type": "string",
-            "title": "Requester Name"
-          },
-          "requester_email": {
-            "type": "string",
-            "title": "Requester Email"
-          },
-          "requester_institution": {
-            "type": "string",
-            "title": "Requester Institution"
-          },
-          "purpose": {
-            "type": "string",
-            "title": "Purpose"
-          },
-          "tracking_number": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Tracking Number"
-          },
-          "notes": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Notes"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Created At"
-          },
-          "reviewed_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Reviewed At"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "mutant_line_id",
-          "status",
-          "requester_name",
-          "requester_email",
-          "requester_institution",
-          "purpose",
-          "created_at"
-        ],
-        "title": "SeedRequestResponse"
-      },
-      "SeedRequestStatus": {
-        "type": "string",
-        "enum": [
-          "pending",
-          "approved",
-          "shipped",
-          "completed",
-          "rejected"
-        ],
-        "title": "SeedRequestStatus"
-      },
-      "SeedRequestUpdate": {
-        "properties": {
-          "status": {
-            "$ref": "#/components/schemas/SeedRequestStatus"
-          },
-          "tracking_number": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 128
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Tracking Number"
-          },
-          "notes": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 5000
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Notes"
-          }
-        },
-        "type": "object",
-        "required": [
-          "status"
-        ],
-        "title": "SeedRequestUpdate"
+        "title": "SeedRequestListResponse",
+        "description": "Paginated admin listing of seed request contacts."
       },
       "SeqFetchRequest": {
         "properties": {
@@ -11394,6 +16027,91 @@
         ],
         "title": "TranscriptResponse"
       },
+      "UnreadCountResponse": {
+        "properties": {
+          "unread_count": {
+            "type": "integer",
+            "title": "Unread Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "unread_count"
+        ],
+        "title": "UnreadCountResponse",
+        "description": "Number of unread notifications for the current user."
+      },
+      "UploadPresignRequest": {
+        "properties": {
+          "filename": {
+            "type": "string",
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Filename"
+          },
+          "purpose": {
+            "type": "string",
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Purpose",
+            "default": "news"
+          },
+          "size": {
+            "type": "integer",
+            "maximum": 10485760.0,
+            "minimum": 1.0,
+            "title": "Size"
+          },
+          "content_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "filename",
+          "size"
+        ],
+        "title": "UploadPresignRequest",
+        "description": "Request a pre-signed upload URL for a public resource."
+      },
+      "UploadPresignResponse": {
+        "properties": {
+          "upload_url": {
+            "type": "string",
+            "title": "Upload Url"
+          },
+          "object_key": {
+            "type": "string",
+            "title": "Object Key"
+          },
+          "public_url": {
+            "type": "string",
+            "title": "Public Url"
+          },
+          "expires_in": {
+            "type": "integer",
+            "title": "Expires In"
+          }
+        },
+        "type": "object",
+        "required": [
+          "upload_url",
+          "object_key",
+          "public_url",
+          "expires_in"
+        ],
+        "title": "UploadPresignResponse",
+        "description": "Pre-signed PUT URL + object key + public URL (nothing persisted)."
+      },
       "UserCreate": {
         "properties": {
           "username": {
@@ -11707,17 +16425,6 @@
             ],
             "title": "Gene Symbol"
           },
-          "transcript_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Transcript Id"
-          },
           "consequence": {
             "anyOf": [
               {
@@ -11737,6 +16444,17 @@
                 "type": "null"
               }
             ]
+          },
+          "transcript_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcript Id"
           },
           "hgvs_c": {
             "anyOf": [
@@ -12122,6 +16840,48 @@
               }
             ],
             "title": "Allele Frequency"
+          },
+          "gene_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gene Id"
+          },
+          "gene_symbol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gene Symbol"
+          },
+          "consequence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConsequenceType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "impact": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ImpactLevel"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -12617,6 +17377,366 @@
         "type": "object",
         "title": "WidgetUpdate"
       },
+      "app__models__seed_request__SeedRequestStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "approved",
+          "rejected",
+          "fulfilled"
+        ],
+        "title": "SeedRequestStatus",
+        "description": "Lifecycle of a contact-style seed request."
+      },
+      "app__schemas__seed__SeedRequestCreate": {
+        "properties": {
+          "mutant_line_id": {
+            "type": "string",
+            "title": "Mutant Line Id"
+          },
+          "quantity_grams": {
+            "type": "number",
+            "maximum": 500.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Quantity Grams"
+          },
+          "requester_name": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Requester Name"
+          },
+          "requester_email": {
+            "type": "string",
+            "format": "email",
+            "title": "Requester Email"
+          },
+          "requester_institution": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Requester Institution"
+          },
+          "purpose": {
+            "type": "string",
+            "maxLength": 5000,
+            "minLength": 10,
+            "title": "Purpose"
+          },
+          "agrees_to_terms": {
+            "type": "boolean",
+            "title": "Agrees To Terms"
+          }
+        },
+        "type": "object",
+        "required": [
+          "mutant_line_id",
+          "quantity_grams",
+          "requester_name",
+          "requester_email",
+          "requester_institution",
+          "purpose",
+          "agrees_to_terms"
+        ],
+        "title": "SeedRequestCreate"
+      },
+      "app__schemas__seed__SeedRequestResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "mutant_line_id": {
+            "type": "string",
+            "title": "Mutant Line Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/app__schemas__seed__SeedRequestStatus"
+          },
+          "quantity_requested": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity Requested"
+          },
+          "requester_name": {
+            "type": "string",
+            "title": "Requester Name"
+          },
+          "requester_email": {
+            "type": "string",
+            "title": "Requester Email"
+          },
+          "requester_institution": {
+            "type": "string",
+            "title": "Requester Institution"
+          },
+          "purpose": {
+            "type": "string",
+            "title": "Purpose"
+          },
+          "tracking_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tracking Number"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "reviewed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "mutant_line_id",
+          "status",
+          "requester_name",
+          "requester_email",
+          "requester_institution",
+          "purpose",
+          "created_at"
+        ],
+        "title": "SeedRequestResponse"
+      },
+      "app__schemas__seed__SeedRequestStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "approved",
+          "shipped",
+          "completed",
+          "rejected"
+        ],
+        "title": "SeedRequestStatus"
+      },
+      "app__schemas__seed__SeedRequestUpdate": {
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/app__schemas__seed__SeedRequestStatus"
+          },
+          "tracking_number": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tracking Number"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 5000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "SeedRequestUpdate"
+      },
+      "app__schemas__seed_request__SeedRequestCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          },
+          "institution": {
+            "type": "string",
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Institution"
+          },
+          "country": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Country"
+          },
+          "gene_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Gene Ids"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 5000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "email",
+          "institution",
+          "country",
+          "gene_ids"
+        ],
+        "title": "SeedRequestCreate",
+        "description": "Public submission payload (no authentication required)."
+      },
+      "app__schemas__seed_request__SeedRequestResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "institution": {
+            "type": "string",
+            "title": "Institution"
+          },
+          "country": {
+            "type": "string",
+            "title": "Country"
+          },
+          "gene_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Gene Ids"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "status": {
+            "$ref": "#/components/schemas/app__models__seed_request__SeedRequestStatus"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "processed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processed At"
+          },
+          "processed_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processed By"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "email",
+          "institution",
+          "country",
+          "gene_ids",
+          "status",
+          "created_at"
+        ],
+        "title": "SeedRequestResponse",
+        "description": "Public/admin representation of a seed request contact."
+      },
+      "app__schemas__seed_request__SeedRequestUpdate": {
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/app__models__seed_request__SeedRequestStatus"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "SeedRequestUpdate",
+        "description": "Admin status update payload."
+      },
       "ErrorDetail": {
         "description": "Machine-readable error detail (inside the ``error`` envelope).",
         "properties": {
@@ -12813,123 +17933,6 @@
         ],
         "title": "ValidationErrorResponse",
         "type": "object"
-      },
-      "EnrichmentGseaTerm": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id",
-            "description": "Term id, e.g. GO:0008150 or ko00010"
-          },
-          "name": {
-            "type": "string",
-            "title": "Name",
-            "description": "Term name (falls back to the term id)"
-          },
-          "es": {
-            "type": "number",
-            "title": "Es",
-            "description": "Enrichment score: signed running-sum statistic over the value-descending ranked list (positive = concentrated at high values, negative = at low values)"
-          },
-          "nes": {
-            "type": "number",
-            "title": "Nes",
-            "description": "Normalized enrichment score: z-score of ES under the analytic null (ES * sqrt(k(n-k)/n)); a simplification of the permutation normalization used by the reference GSEA implementation"
-          },
-          "p_value": {
-            "type": "number",
-            "title": "P Value",
-            "description": "Rank-based p-value from the one-sided Smirnov asymptotic exp(-2 * k(n-k)/n * ES^2)"
-          },
-          "q_value": {
-            "type": "number",
-            "title": "Q Value",
-            "description": "Benjamini-Hochberg adjusted p-value"
-          },
-          "size": {
-            "type": "integer",
-            "title": "Size",
-            "description": "Term genes present in the ranked input"
-          },
-          "genes": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Genes",
-            "description": "Member input genes (first 20)"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "name",
-          "es",
-          "nes",
-          "p_value",
-          "q_value",
-          "size",
-          "genes"
-        ],
-        "title": "EnrichmentGseaTerm",
-        "description": "A single enriched term (GSEA mode, rank-based test)."
-      },
-      "EnrichmentGseaResponse": {
-        "properties": {
-          "mode": {
-            "type": "string",
-            "const": "gsea",
-            "title": "Mode",
-            "description": "Analysis mode"
-          },
-          "ontology": {
-            "type": "string",
-            "enum": [
-              "go",
-              "kegg"
-            ],
-            "title": "Ontology"
-          },
-          "input_genes": {
-            "type": "integer",
-            "title": "Input Genes",
-            "description": "Number of unique input genes (the ranked list)"
-          },
-          "background_genes": {
-            "type": "integer",
-            "title": "Background Genes",
-            "description": "Number of annotated genes in the background set (all genes with annotations for the requested ontology)"
-          },
-          "terms": {
-            "items": {
-              "$ref": "#/components/schemas/EnrichmentGseaTerm"
-            },
-            "type": "array",
-            "title": "Terms",
-            "description": "GSEA terms sorted by q-value (asc)"
-          },
-          "message": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Message",
-            "description": "Explanatory note, e.g. when no term passes min_genes"
-          }
-        },
-        "type": "object",
-        "required": [
-          "mode",
-          "ontology",
-          "input_genes",
-          "background_genes"
-        ],
-        "title": "EnrichmentGseaResponse",
-        "description": "Rank-based (GSEA) enrichment analysis result."
       }
     },
     "securitySchemes": {

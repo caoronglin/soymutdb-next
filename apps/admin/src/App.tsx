@@ -13,14 +13,8 @@ import { useAuth } from "./lib/auth-context";
 
 // Lazy-loaded route components (code-splitting per route).
 const DashboardPage = lazy(() => import("./routes/index"));
-const UsersPage = lazy(() => import("./routes/users"));
-const ReleasesPage = lazy(() => import("./routes/releases"));
+const ResourceCatalogPage = lazy(() => import("./routes/resource-catalog"));
 const ImportsPage = lazy(() => import("./routes/imports"));
-const AssembliesPage = lazy(() => import("./routes/assemblies"));
-const VariantsPage = lazy(() => import("./routes/variants"));
-const TracksPage = lazy(() => import("./routes/tracks"));
-const BlastPage = lazy(() => import("./routes/blast"));
-const SeedsPage = lazy(() => import("./routes/seeds"));
 const ContentPage = lazy(() => import("./routes/content"));
 const NewsListPage = lazy(() => import("./routes/news/index"));
 const NewsNewPage = lazy(() => import("./routes/news/new"));
@@ -106,52 +100,16 @@ const dashboardRoute = createRoute({
   component: () => withSuspense(DashboardPage),
 });
 
-const usersRoute = createRoute({
+const resourceCatalogRoute = createRoute({
   getParentRoute: () => authLayoutRoute,
-  path: "/users",
-  component: () => withSuspense(UsersPage),
-});
-
-const releasesRoute = createRoute({
-  getParentRoute: () => authLayoutRoute,
-  path: "/releases",
-  component: () => withSuspense(ReleasesPage),
+  path: "/resource-catalog",
+  component: () => withSuspense(ResourceCatalogPage),
 });
 
 const importsRoute = createRoute({
   getParentRoute: () => authLayoutRoute,
   path: "/imports",
   component: () => withSuspense(ImportsPage),
-});
-
-const assembliesRoute = createRoute({
-  getParentRoute: () => authLayoutRoute,
-  path: "/assemblies",
-  component: () => withSuspense(AssembliesPage),
-});
-
-const variantsRoute = createRoute({
-  getParentRoute: () => authLayoutRoute,
-  path: "/variants",
-  component: () => withSuspense(VariantsPage),
-});
-
-const tracksRoute = createRoute({
-  getParentRoute: () => authLayoutRoute,
-  path: "/tracks",
-  component: () => withSuspense(TracksPage),
-});
-
-const blastRoute = createRoute({
-  getParentRoute: () => authLayoutRoute,
-  path: "/blast",
-  component: () => withSuspense(BlastPage),
-});
-
-const seedsRoute = createRoute({
-  getParentRoute: () => authLayoutRoute,
-  path: "/seeds",
-  component: () => withSuspense(SeedsPage),
 });
 
 const contentRoute = createRoute({
@@ -230,14 +188,8 @@ const routeTree = rootRoute.addChildren([
   loginRoute,
   authLayoutRoute.addChildren([
     dashboardRoute,
-    usersRoute,
-    releasesRoute,
+    resourceCatalogRoute,
     importsRoute,
-    assembliesRoute,
-    variantsRoute,
-    tracksRoute,
-    blastRoute,
-    seedsRoute,
     contentRoute,
     newsRoute,
     newsNewRoute,

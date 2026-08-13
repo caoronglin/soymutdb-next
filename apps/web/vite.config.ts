@@ -2,6 +2,7 @@ import { defineConfig, loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildCsp, normalizeBasePath, requireDeploymentOrigin } from "./src/lib/deployment";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
@@ -50,6 +51,15 @@ function cloudflareWebAnalytics(token: string | undefined): Plugin {
     };
 }
 
+function deploymentCsp(csp: string): Plugin {
+    return {
+        name: "deployment-csp",
+        transformIndexHtml(html) {
+            return html.replace(/(<meta\s+http-equiv="Content-Security-Policy"\s+content=")[^"]*("\s*\/>)/, `$1${csp}$2`);
+        },
+    };
+}
+
 // Public portal — served on port 5173 in dev.
 // Manual TanStack Router (no file-based plugin). Routes defined in src/routes/.
 // Tailwind v4 is wired via postcss.config.mjs (not as a Vite plugin).
@@ -63,12 +73,13 @@ export default defineConfig(({ mode }) => {
     // built index.html references /assets/... which resolves to the
     // github.io ROOT (404, app JS crashes).  Override per deployment via
     // VITE_BASE_URL (e.g. "/" for a Cloudflare root domain).
-    const deployBase =
-        env.VITE_BASE_URL?.trim() || (mode === "production" ? "/soymutdb-next/" : "/");
+    const deployBase = normalizeBasePath(env.VITE_BASE_URL?.trim() || "/");
+    const apiOrigin = requireDeploymentOrigin(env.VITE_API_BASE_URL || (mode === "development" ? "http://localhost:8000" : undefined), "API");
+    const jbrowseOrigin = requireDeploymentOrigin(env.VITE_JBROWSE_BASE_URL || env.VITE_JBROWSE_URL || (mode === "development" ? "http://localhost:5175" : undefined), "JBrowse");
 
     return {
         base: deployBase,
-        plugins: [react(), cloudflareWebAnalytics(cfAnalyticsToken)],
+        plugins: [react(), deploymentCsp(buildCsp({ apiOrigin, jbrowseOrigin }, Boolean(cfAnalyticsToken))), cloudflareWebAnalytics(cfAnalyticsToken)],
         resolve: {
             alias: {
                 "@": resolve(__dirname, "src"),

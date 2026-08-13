@@ -12,10 +12,6 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**"]
     },
-    "build:desktop": {
-      "dependsOn": ["^build"],
-      "outputs": ["src-tauri/target/**", "dist/**"]
-    },
     "dev": {
       "cache": false,
       "persistent": true

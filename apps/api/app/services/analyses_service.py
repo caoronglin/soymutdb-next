@@ -21,7 +21,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.config import get_settings
-from ..core.exceptions import NotFoundError, ValidationError
+from ..core.exceptions import AuthorizationError, NotFoundError, ValidationError
+from ..core.security import RoleName, has_role
 from ..core.jobs_package import ensure_jobs_package  # noqa: F401  (sys.path bootstrap)
 from ..core.task_contract import ANALYSIS_FASTP_TASK, ANALYSIS_SCANPY_TASK
 from ..models.analysis_job import AnalysisJob, AnalysisJobStatus, AnalysisType
@@ -169,12 +170,13 @@ class AnalysesService:
         return AnalysesSubmitResponse(job_id=str(job.id), status="queued")
 
     async def get_job(
-        self, db: AsyncSession, job_id: uuid.UUID
+        self, db: AsyncSession, job_id: uuid.UUID, user_id: uuid.UUID | None = None, user_roles: list[str] | None = None
     ) -> AnalysesJobResponse:
         result = await db.execute(select(AnalysisJob).where(AnalysisJob.id == job_id))
         job = result.scalar_one_or_none()
         if job is None:
             raise NotFoundError(f"Analysis job {job_id} not found")
+        self._authorize_job(job.user_id, user_id, user_roles)
         return self._job_to_response(job)
 
     async def list_jobs(
@@ -201,6 +203,8 @@ class AnalysesService:
         db: AsyncSession,
         job_id: uuid.UUID,
         object_key: str,
+        user_id: uuid.UUID | None = None,
+        user_roles: list[str] | None = None,
     ) -> AnalysesDownloadResponse:
         """Return a pre-signed GET URL for one of the job's own objects.
 
@@ -211,6 +215,7 @@ class AnalysesService:
         job = result.scalar_one_or_none()
         if job is None:
             raise NotFoundError(f"Analysis job {job_id} not found")
+        self._authorize_job(job.user_id, user_id, user_roles)
 
         try:
             validate_job_object_key(object_key, job.id)
@@ -223,6 +228,11 @@ class AnalysesService:
         return AnalysesDownloadResponse(
             download_url=download_url, expires_in=DOWNLOAD_EXPIRES_IN
         )
+
+    @staticmethod
+    def _authorize_job(owner_id, user_id, user_roles) -> None:
+        if owner_id != user_id and not has_role(user_roles, RoleName.ADMINISTRATOR):
+            raise AuthorizationError("You do not have permission to access this analysis job")
 
     @staticmethod
     def _job_to_response(job: AnalysisJob) -> AnalysesJobResponse:

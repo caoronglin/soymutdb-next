@@ -38,7 +38,8 @@
 #   BACKUP_S3_ENDPOINT      异地备份 S3 endpoint（可选，缺省用已有 mc alias）
 #   BACKUP_S3_ACCESS_KEY / BACKUP_S3_SECRET_KEY  异地备份凭据（可选）
 #   BAK_S3_BUCKETS          需要备份对象数据的 bucket 列表
-#                           （默认 "genomic-data user-tracks blast-dbs exports"）
+#                           （默认 "genomic-data user-tracks blast-dbs exports gwas"；
+#                           analyses 为临时可重建数据，默认不纳入）
 #   BAK_RETAIN_DAILY        保留日备数（默认 7）
 #   BAK_RETAIN_WEEKLY       保留周备数（默认 4）
 #   BAK_RETAIN_MONTHLY      保留月备数（默认 6）
@@ -104,7 +105,7 @@ BACKUP_S3="${BACKUP_S3:-}"
 BACKUP_S3_ENDPOINT="${BACKUP_S3_ENDPOINT:-}"
 BACKUP_S3_ACCESS_KEY="${BACKUP_S3_ACCESS_KEY:-}"
 BACKUP_S3_SECRET_KEY="${BACKUP_S3_SECRET_KEY:-}"
-BAK_S3_BUCKETS="${BAK_S3_BUCKETS:-genomic-data user-tracks blast-dbs exports}"
+BAK_S3_BUCKETS="${BAK_S3_BUCKETS:-genomic-data user-tracks blast-dbs exports gwas}"
 BAK_RETAIN_DAILY="${BAK_RETAIN_DAILY:-7}"
 BAK_RETAIN_WEEKLY="${BAK_RETAIN_WEEKLY:-4}"
 BAK_RETAIN_MONTHLY="${BAK_RETAIN_MONTHLY:-6}"
@@ -288,6 +289,7 @@ done
 echo -e "${CYAN}[3/3] MinIO/S3 backup...${NC}"
 S3_MANIFEST_TSV="${STAGING_DIR}/s3_manifest.tsv"
 : > "${S3_MANIFEST_TSV}"
+printf '%s\n' ${BAK_S3_BUCKETS} > "${STAGING_DIR}/s3_buckets.txt"
 S3_STATUS="ok"
 S3_OBJECT_COUNT=0
 S3_TOTAL_BYTES=0
@@ -319,11 +321,13 @@ if mc_run alias set s3src "${S3_ENDPOINT}" "${S3_ACCESS_KEY}" "${S3_SECRET_KEY}"
     if [[ -n "${S3_SKIPPED_BUCKETS}" ]]; then
         S3_STATUS="partial"
         warn "以下 bucket 镜像失败（已跳过）:${S3_SKIPPED_BUCKETS}"
+        [[ " ${S3_SKIPPED_BUCKETS} " != *" gwas "* ]] || die "gwas bucket 镜像失败，拒绝生成不完整备份"
     fi
+    grep -qx 'gwas' "${STAGING_DIR}/s3_buckets.txt" || die "完整备份必须包含 gwas bucket"
     info "Objects: ${S3_OBJECT_COUNT}, bytes: ${S3_TOTAL_BYTES}, manifest: $(basename "${S3_MANIFEST_TSV}")"
 else
     S3_STATUS="skipped"
-    warn "mc 不可用（host 无 mc 且 docker 无法运行 minio/mc 镜像），对象数据未备份。"
+    die "mc 不可用，对象数据（包括 gwas）未备份，拒绝生成不完整备份"
 fi
 
 # ---------------------------------------------------------------------

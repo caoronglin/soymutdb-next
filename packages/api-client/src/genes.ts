@@ -32,10 +32,10 @@ export interface GeneDetail extends GeneSummary {
 
 export interface GeneSearchResponse {
   items: GeneSummary[];
-  page: number;
-  page_size: number;
-  total: number;
-  total_pages: number;
+  cursor: string | null;
+  next_cursor: string | null;
+  has_more: boolean;
+  total_count: number | null;
 }
 
 export interface GeneSearchParams {
@@ -45,14 +45,17 @@ export interface GeneSearchParams {
   biotype?: string;
   start_pos?: number;
   end_pos?: number;
-  page?: number;
-  page_size?: number;
+  cursor?: string;
+  limit?: number;
   sort_by?: string;
   sort_dir?: "asc" | "desc";
 }
 
 export function searchGenes(params: GeneSearchParams): Promise<GeneSearchResponse> {
-  return http.get<GeneSearchResponse>("/genes", { params });
+  const { q, ...rest } = params;
+  return http.get<GeneSearchResponse>("/genes", {
+    params: { ...rest, search: q },
+  });
 }
 
 export function getGene(geneId: string, releaseId?: string): Promise<GeneDetail> {
@@ -61,34 +64,14 @@ export function getGene(geneId: string, releaseId?: string): Promise<GeneDetail>
   });
 }
 
-export function getGeneTranscripts(geneId: string): Promise<unknown[]> {
-  return http.get<unknown[]>(`/genes/${geneId}/transcripts`);
-}
-
 export interface GeneVariantParams {
   release_id?: string;
   impact?: string[];
   variant_type?: string[];
-  page?: number;
-  page_size?: number;
+  cursor?: string;
+  limit?: number;
   sort_by?: string;
   sort_dir?: "asc" | "desc";
-}
-
-export function getGeneVariants(
-  geneId: string,
-  params: GeneVariantParams = {},
-): Promise<unknown> {
-  return http.get<unknown>(`/genes/${geneId}/variants`, { params });
-}
-
-export function getGeneAnnotations(
-  geneId: string,
-  annotationType?: string,
-): Promise<unknown[]> {
-  return http.get<unknown[]>(`/genes/${geneId}/annotations`, {
-    params: { annotation_type: annotationType },
-  });
 }
 
 /** A genome assembly (GET /genes/assemblies). */
@@ -103,4 +86,18 @@ export interface AssemblyInfo {
 /** List all genome assemblies. */
 export function getAssemblies(): Promise<AssemblyInfo[]> {
   return http.get<AssemblyInfo[]>("/genes/assemblies");
+}
+
+export interface ChromosomeInfo {
+  id: string | number;
+  assembly_id: string | number;
+  name: string;
+  length: number;
+  order: number;
+}
+
+export function getAssemblyChromosomes(
+  assemblyId: string | number,
+): Promise<ChromosomeInfo[]> {
+  return http.get<ChromosomeInfo[]>(`/genes/assemblies/${assemblyId}/chromosomes`);
 }

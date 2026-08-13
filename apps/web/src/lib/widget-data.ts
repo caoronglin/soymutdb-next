@@ -57,7 +57,7 @@ export function buildWidgetParams(params: Record<string, unknown>): string {
 
 /** Widget fetch endpoint */
 export function widgetEndpoint(name: string, params?: Record<string, unknown>): string {
-  const base = `/api/v1/widget/${encodeURIComponent(name)}`;
+  const base = `${import.meta.env.BASE_URL}api/v1/widget/${encodeURIComponent(name)}`;
   if (!params || Object.keys(params).length === 0) return base;
   return `${base}?params=${buildWidgetParams(params)}`;
 }

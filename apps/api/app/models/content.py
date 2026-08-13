@@ -19,6 +19,7 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base, TimestampMixin, enum_values
@@ -31,9 +32,13 @@ if TYPE_CHECKING:
 
 class ReleaseStatus(str, enum.Enum):
     DRAFT = "draft"
-    STAGING = "staging"
-    ACTIVE = "active"
-    ARCHIVED = "archived"
+    VALIDATED = "validated"
+    READY = "ready"
+    PUBLISHED = "published"
+    ROLLED_BACK = "rolled_back"
+    STAGING = VALIDATED
+    ACTIVE = PUBLISHED
+    ARCHIVED = ROLLED_BACK
 
 
 class Release(Base, TimestampMixin):
@@ -63,6 +68,11 @@ class Release(Base, TimestampMixin):
         PG_UUID(as_uuid=True), nullable=True
     )
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    assembly: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    manifest: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    active_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    rolled_back_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     assemblies: Mapped[List["Assembly"]] = relationship(
         back_populates="release", lazy="noload"

@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from datetime import datetime
-from ..core.compat import StrEnum
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from ..core.compat import StrEnum
 
 
 class Strand(StrEnum):
@@ -51,13 +52,27 @@ class GeneResponse(BaseModel):
     assembly_id: str | None = None
     chromosome: str
     name: str | None = None
+    symbol: str | None = None
     biotype: str = "protein_coding"
     start: int = Field(..., ge=0)
     end: int = Field(..., ge=0)
+    start_pos: int = Field(..., ge=0)
+    end_pos: int = Field(..., ge=0)
     strand: Strand
     description: str | None = None
 
     model_config = {"from_attributes": True}
+
+    @model_validator(mode="before")
+    @classmethod
+    def _portal_fields(cls, data):  # noqa: ANN001
+        if isinstance(data, dict):
+            values = dict(data)
+            values.setdefault("symbol", values.get("name"))
+            values.setdefault("start_pos", values.get("start"))
+            values.setdefault("end_pos", values.get("end"))
+            return values
+        return data
 
     @field_validator("end")
     @classmethod
@@ -69,7 +84,7 @@ class GeneResponse(BaseModel):
 
 
 class GeneDetail(GeneResponse):
-    transcripts: list["TranscriptResponse"] = Field(default_factory=list)
+    transcripts: list[TranscriptResponse] = Field(default_factory=list)
     aliases: list[str] = Field(default_factory=list)
     variant_count: int = Field(default=0, ge=0)
     created_at: datetime | None = None
@@ -108,12 +123,18 @@ class GeneListParams(BaseModel):
     search: str | None = Field(default=None, max_length=500)
     cursor: str | None = None
     limit: int = Field(default=50, ge=1, le=200)
+    page: int | None = Field(default=None, ge=1)
+    page_size: int | None = Field(default=None, ge=1, le=200)
 
 
 class GeneListResponse(BaseModel):
     items: list[GeneResponse] = Field(default_factory=list)
     next_cursor: str | None = None
     has_more: bool = False
+    page: int = 1
+    page_size: int = 50
+    total: int = 0
+    total_pages: int = 0
 
 
 GeneDetail.model_rebuild()

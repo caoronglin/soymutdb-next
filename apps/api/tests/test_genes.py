@@ -49,6 +49,33 @@ class TestListGenes:
         assert len(data["items"]) == 1
         assert data["items"][0]["gene_id"] == "Glyma.01G000100"
 
+    async def test_portal_query_contract_is_forwarded(self, client):
+        """The portal's q/page/page_size request must not be silently ignored."""
+        with patch(
+            "app.services.gene_service.GeneService.list_genes",
+            new_callable=AsyncMock,
+            return_value={
+                "items": [],
+                "next_cursor": None,
+                "has_more": False,
+                "page": 2,
+                "page_size": 20,
+                "total": 0,
+                "total_pages": 0,
+            },
+        ) as list_genes:
+            response = await client.get(
+                f"{GENES_PREFIX}?q=Glyma.01G000100&page=2&page_size=20"
+            )
+
+        assert response.status_code == 200
+        assert list_genes.await_args is not None
+        params = list_genes.await_args.args[1]
+        assert params.search == "Glyma.01G000100"
+        assert params.page == 2
+        assert params.page_size == 20
+        assert response.json()["total"] == 0
+
     async def test_list_genes_cursor_pagination(self, client, gene_factory):
         """Cursor pagination returns next_cursor when more results exist."""
         genes = [

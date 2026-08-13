@@ -145,6 +145,8 @@ class TestRegionQuery:
         assert response.status_code == 200
         data = response.json()
         assert len(data) == 10
+        assert data[0]["gene_id"] == "Glyma.01G000100"
+        assert data[0]["impact"] == "MODERATE"
 
     async def test_region_query_missing_assembly(self, client):
         """Region query without assembly returns 422."""

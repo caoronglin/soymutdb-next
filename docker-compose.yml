@@ -26,26 +26,28 @@ x-app-env: &app-env
   SOYMUTDB_CLICKHOUSE_HOST: clickhouse
   SOYMUTDB_CLICKHOUSE_PORT: "8123"
   SOYMUTDB_CLICKHOUSE_USER: soymutdb
-  SOYMUTDB_CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-soymutdb_dev_password}
+  SOYMUTDB_CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?CLICKHOUSE_PASSWORD is required}
   SOYMUTDB_CLICKHOUSE_DATABASE: soymutdb
   # 缓存 Redis（服务名 redis，redis-cache 角色，allkeys-lru 可驱逐）
-  SOYMUTDB_REDIS_URL: redis://:${REDIS_PASSWORD:-soymutdb_dev_password}@redis:6379/0
+  SOYMUTDB_REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis:6379/0
   # Celery broker/result 使用独立实例 redis-celery（noeviction + AOF，
   # 禁止驱逐策略，防止消息/结果丢失）；broker DB 0、result DB 1。
-  SOYMUTDB_CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-soymutdb_dev_password}@redis-celery:6379/0
-  SOYMUTDB_CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-soymutdb_dev_password}@redis-celery:6379/1
+  SOYMUTDB_CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis-celery:6379/0
+  SOYMUTDB_CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis-celery:6379/1
   # Celery result TTL（秒，默认 7 天，1-7 天范围内）
   SOYMUTDB_CELERY_RESULT_EXPIRES: ${SOYMUTDB_CELERY_RESULT_EXPIRES:-604800}
   # worker 同步 engine 连接池（每个 worker 进程 2+4；API 忽略此变量）
   SOYMUTDB_WORKER_DB_POOL_SIZE: ${SOYMUTDB_WORKER_DB_POOL_SIZE:-2}
   SOYMUTDB_WORKER_DB_MAX_OVERFLOW: ${SOYMUTDB_WORKER_DB_MAX_OVERFLOW:-4}
   SOYMUTDB_S3_ENDPOINT: http://minio:9000
-  SOYMUTDB_S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
-  SOYMUTDB_S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+  SOYMUTDB_S3_ACCESS_KEY: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
+  SOYMUTDB_S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
   SOYMUTDB_S3_PUBLIC_BUCKET: genomic-data
   SOYMUTDB_S3_PRIVATE_BUCKET: user-tracks
   SOYMUTDB_S3_BLAST_BUCKET: blast-dbs
   SOYMUTDB_S3_EXPORT_BUCKET: exports
+  SOYMUTDB_S3_GWAS_BUCKET: ${S3_GWAS_BUCKET:-gwas}
+  SOYMUTDB_S3_ANALYSES_BUCKET: ${S3_ANALYSES_BUCKET:-analyses}
   # 生产必填（此处无默认值：缺失时 prod 校验失败、API 拒绝启动）：
   SOYMUTDB_JWT_SECRET: ${SOYMUTDB_JWT_SECRET:-}
   SOYMUTDB_CORS_ORIGINS: ${SOYMUTDB_CORS_ORIGINS:-}
@@ -73,9 +75,9 @@ services:
     environment:
       POSTGRES_DB: soymutdb
       POSTGRES_USER: soymutdb
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-soymutdb_dev_password}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -91,11 +93,11 @@ services:
     environment:
       CLICKHOUSE_DB: soymutdb
       CLICKHOUSE_USER: soymutdb
-      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-soymutdb_dev_password}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?CLICKHOUSE_PASSWORD is required}
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
     ports:
-      - "8123:8123"
-      - "9000:9000"
+      - "127.0.0.1:8123:8123"
+      - "127.0.0.1:9000:9000"
     volumes:
       - chdata:/var/lib/clickhouse
       - ./infra/clickhouse/config.xml:/etc/clickhouse-server/config.d/custom.xml:ro
@@ -117,13 +119,13 @@ services:
   redis:
     image: redis:7.4-alpine
     command: >
-      redis-server --appendonly yes --maxmemory ${REDIS_CACHE_MAXMEMORY:-512mb} --maxmemory-policy allkeys-lru --requirepass ${REDIS_PASSWORD:-soymutdb_dev_password}
+      redis-server --appendonly yes --maxmemory ${REDIS_CACHE_MAXMEMORY:-512mb} --maxmemory-policy allkeys-lru --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redisdata:/data
     healthcheck:
-      test: [ "CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-soymutdb_dev_password}", "ping" ]
+      test: [ "CMD", "redis-cli", "-a", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -134,11 +136,11 @@ services:
   redis-celery:
     image: redis:7.4-alpine
     command: >
-      redis-server --appendonly yes --maxmemory ${REDIS_CELERY_MAXMEMORY:-512mb} --maxmemory-policy noeviction --requirepass ${REDIS_PASSWORD:-soymutdb_dev_password}
+      redis-server --appendonly yes --maxmemory ${REDIS_CELERY_MAXMEMORY:-512mb} --maxmemory-policy noeviction --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
     volumes:
       - redis-celerydata:/data
     healthcheck:
-      test: [ "CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-soymutdb_dev_password}", "ping" ]
+      test: [ "CMD", "redis-cli", "-a", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -148,11 +150,11 @@ services:
     image: minio/minio:RELEASE.2024-01-01T00-00-00Z
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
     ports:
-      - "9001:9000" # S3 API (host 9001 -> container 9000)
-      - "9002:9001" # Web console (host 9002 -> container 9001)
+      - "127.0.0.1:9001:9000" # S3 API (host 9001 -> container 9000)
+      - "127.0.0.1:9002:9001" # Web console (host 9002 -> container 9001)
     volumes:
       - miniodata:/data
     healthcheck:
@@ -169,7 +171,7 @@ services:
       minio:
         condition: service_healthy
     entrypoint: >
-      /bin/sh -c " /usr/bin/mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin}; /usr/bin/mc mb --ignore-existing local/genomic-data; /usr/bin/mc mb --ignore-existing local/user-tracks; /usr/bin/mc mb --ignore-existing local/blast-dbs; /usr/bin/mc mb --ignore-existing local/exports; /usr/bin/mc policy set public local/genomic-data; /usr/bin/mc version enable local/user-tracks; exit 0; "
+      /bin/sh -c " /usr/bin/mc alias set local http://minio:9000 ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required} ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}; /usr/bin/mc mb --ignore-existing local/genomic-data; /usr/bin/mc mb --ignore-existing local/user-tracks; /usr/bin/mc mb --ignore-existing local/blast-dbs; /usr/bin/mc mb --ignore-existing local/exports; /usr/bin/mc mb --ignore-existing local/gwas; /usr/bin/mc mb --ignore-existing local/analyses; /usr/bin/mc policy set public local/genomic-data; /usr/bin/mc version enable local/user-tracks; exit 0; "
     restart: "no"
 
   # ------------------------------------------------------------------
@@ -188,8 +190,23 @@ services:
         condition: service_healthy
     environment:
       <<: *app-env
-      SOYMUTDB_DATABASE_URL: postgresql+asyncpg://soymutdb:${POSTGRES_PASSWORD:-soymutdb_dev_password}@postgres:5432/soymutdb
+      SOYMUTDB_DATABASE_URL: postgresql+asyncpg://soymutdb:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/soymutdb
     command: [ "alembic", "upgrade", "head" ]
+    restart: "no"
+
+  # 一次性 ClickHouse schema 迁移；由 deploy/scripts/upgrade.sh 显式调用。
+  # 运行容器与 clickhouse 共享 Compose 网络，因此可直接解析服务名 clickhouse。
+  migrate-clickhouse:
+    image: ${WORKER_IMAGE_TAG:?WORKER_IMAGE_TAG is required (e.g. ghcr.io/soymutdb/worker:2026.08.07-1) - see deploy/.env.example}
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    environment:
+      <<: *app-env
+      CH_MIGRATION_SQL: /upgrade_variant_facts_schema.sql
+      CLICKHOUSE_MIGRATION_PYTHON: /opt/venv/bin/python
+    volumes:
+    command: [ "bash", "/opt/soymutdb/migrate-clickhouse.sh" ]
     restart: "no"
 
   # ------------------------------------------------------------------
@@ -215,9 +232,9 @@ services:
         condition: service_completed_successfully
     environment:
       <<: *app-env
-      SOYMUTDB_DATABASE_URL: postgresql+asyncpg://soymutdb:${POSTGRES_PASSWORD:-soymutdb_dev_password}@postgres:5432/soymutdb
-    ports:
-      - "8000:8000"
+      SOYMUTDB_DATABASE_URL: postgresql+asyncpg://soymutdb:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/soymutdb
+    expose:
+      - "8000"
     healthcheck:
       # Liveness（readiness 由发布脚本轮询 /api/v1/health/ready）
       test: [ "CMD", "curl", "-f", "http://localhost:8000/api/v1/health/live" ]
@@ -233,12 +250,7 @@ services:
   #     （ingest,export,stats,cleanup,default），两个实例并行分摊负载；
   #   - worker-blast 独占 blast 队列（CPU 密集，低并发隔离）。
   # ------------------------------------------------------------------
-  # Celery workers.  Each service listens on a subset of queues; the
-  # ``analyses`` queue (fastp/scanpy online analysis, see
-  # soymutdb_worker.tasks.analyses) is intentionally NOT wired into any
-  # worker service yet — it will get a dedicated ``worker-analyses``
-  # service (dedicated concurrency, memory budget for scanpy) in a follow-up
-  # wave.  Until then no production traffic is routed there.
+  # Celery workers. Each service listens on a subset of queues.
   # ------------------------------------------------------------------
   worker-default:
     image: ${WORKER_IMAGE_TAG:?WORKER_IMAGE_TAG is required (e.g. ghcr.io/soymutdb/worker:2026.08.07-1) - see deploy/.env.example}
@@ -258,7 +270,7 @@ services:
         condition: service_completed_successfully
     environment:
       <<: *app-env
-      SOYMUTDB_DATABASE_URL: postgresql+psycopg://soymutdb:${POSTGRES_PASSWORD:-soymutdb_dev_password}@postgres:5432/soymutdb
+      SOYMUTDB_DATABASE_URL: postgresql+psycopg://soymutdb:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/soymutdb
     command: >
       celery -A soymutdb_worker.main:celery_app worker --loglevel=info --queues=ingest,export,stats,cleanup,default --concurrency=${WORKER_DEFAULT_CONCURRENCY:-4} --max-tasks-per-child=100 --hostname=worker-default@%h
     # Prometheus /metrics (container network only, never published to host)
@@ -290,7 +302,7 @@ services:
         condition: service_completed_successfully
     environment:
       <<: *app-env
-      SOYMUTDB_DATABASE_URL: postgresql+psycopg://soymutdb:${POSTGRES_PASSWORD:-soymutdb_dev_password}@postgres:5432/soymutdb
+      SOYMUTDB_DATABASE_URL: postgresql+psycopg://soymutdb:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/soymutdb
     command: >
       celery -A soymutdb_worker.main:celery_app worker --loglevel=info --queues=blast --concurrency=${WORKER_BLAST_CONCURRENCY:-2} --max-tasks-per-child=50 --hostname=worker-blast@%h
     # Prometheus /metrics (container network only, never published to host)
@@ -322,7 +334,7 @@ services:
         condition: service_completed_successfully
     environment:
       <<: *app-env
-      SOYMUTDB_DATABASE_URL: postgresql+psycopg://soymutdb:${POSTGRES_PASSWORD:-soymutdb_dev_password}@postgres:5432/soymutdb
+      SOYMUTDB_DATABASE_URL: postgresql+psycopg://soymutdb:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/soymutdb
     command: >
       celery -A soymutdb_worker.main:celery_app worker --loglevel=info --queues=ingest,export,stats,cleanup,default --concurrency=${WORKER_INGESTION_CONCURRENCY:-2} --max-tasks-per-child=20 --hostname=worker-ingest@%h
     # Prometheus /metrics (container network only, never published to host)
@@ -330,6 +342,39 @@ services:
       - "9808"
     healthcheck:
       test: [ "CMD-SHELL", "celery -A soymutdb_worker.main:celery_app inspect ping -d worker-ingest@$$HOSTNAME || exit 1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
+  worker-analyses:
+    image: ${WORKER_IMAGE_TAG:?WORKER_IMAGE_TAG is required (e.g. ghcr.io/soymutdb/worker:2026.08.07-1) - see deploy/.env.example}
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      redis-celery:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      <<: *app-env
+      SOYMUTDB_DATABASE_URL: postgresql+psycopg://soymutdb:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/soymutdb
+    command: >
+      celery -A soymutdb_worker.main:celery_app worker --loglevel=info
+      --queues=analyses --concurrency=${WORKER_ANALYSES_CONCURRENCY:-2}
+      --max-tasks-per-child=20 --hostname=worker-analyses@%h
+    expose:
+      - "9808"
+    healthcheck:
+      test: [ "CMD-SHELL", "celery -A soymutdb_worker.main:celery_app inspect ping -d worker-analyses@$$HOSTNAME || exit 1" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -348,8 +393,8 @@ services:
         condition: service_completed_successfully
     environment:
       SOYMUTDB_APP_ENV: prod
-      SOYMUTDB_CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-soymutdb_dev_password}@redis-celery:6379/0
-      SOYMUTDB_CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-soymutdb_dev_password}@redis-celery:6379/1
+      SOYMUTDB_CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis-celery:6379/0
+      SOYMUTDB_CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis-celery:6379/1
     command: >
       celery -A soymutdb_worker.main:celery_app beat --loglevel=info --schedule=/tmp/celerybeat-schedule
     # Prometheus /metrics (container network only, never published to host)
@@ -372,6 +417,7 @@ services:
   # infra/nginx/conf.d/default.conf）。
   # ------------------------------------------------------------------
   mcp-server:
+    image: ${MCP_IMAGE_TAG:?MCP_IMAGE_TAG is required (e.g. ghcr.io/soymutdb/mcp-server:2026.08.13-1) - see deploy/.env.example}
     build:
       context: ./apps/mcp-server
     depends_on:
@@ -379,10 +425,17 @@ services:
         condition: service_healthy
     environment:
       SOYMUTDB_API_BASE: http://api:8000
-      SOYMUTDB_MCP_API_TOKEN: ${SOYMUTDB_MCP_API_TOKEN:-}
+      SOYMUTDB_MCP_API_TOKEN: ${SOYMUTDB_MCP_API_TOKEN:?SOYMUTDB_MCP_API_TOKEN is required}
+      SOYMUTDB_MCP_REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis:6379/0
     expose:
       - "9000"
     command: [ "python", "-m", "mcp_server.server", "--host", "0.0.0.0", "--port", "9000" ]
+    healthcheck:
+      test: [ "CMD", "python", "-c", "import json, os, urllib.request; payload = json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'initialize', 'params': {'protocolVersion': '2024-11-05', 'capabilities': {}, 'clientInfo': {'name': 'healthcheck', 'version': '1'}}}).encode(); request = urllib.request.Request('http://localhost:9000/mcp', method='POST', data=payload, headers={'Authorization': 'Bearer ' + os.environ['SOYMUTDB_MCP_API_TOKEN'], 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream'}); response = urllib.request.urlopen(request, timeout=3); assert 200 <= response.status < 300" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     restart: unless-stopped
 
   # ------------------------------------------------------------------
@@ -398,7 +451,7 @@ services:
       api:
         condition: service_healthy
     ports:
-      - "8080:80"
+      - "127.0.0.1:8080:80"
     volumes:
       - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./infra/nginx/conf.d:/etc/nginx/conf.d:ro
@@ -425,7 +478,7 @@ services:
   postgres-exporter:
     image: prometheuscommunity/postgres-exporter:v0.15.0
     environment:
-      DATA_SOURCE_NAME: "postgresql://soymutdb:${POSTGRES_PASSWORD:-soymutdb_dev_password}@postgres:5432/soymutdb?sslmode=disable"
+      DATA_SOURCE_NAME: "postgresql://soymutdb:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/soymutdb?sslmode=disable"
     expose:
       - "9187"
     depends_on:
@@ -444,7 +497,7 @@ services:
     image: oliver006/redis-exporter:v1.60.0
     environment:
       REDIS_ADDR: "redis://redis:6379,redis://redis-celery:6379"
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-soymutdb_dev_password}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
     expose:
       - "9121"
     depends_on:
@@ -479,7 +532,7 @@ services:
   prometheus:
     image: prom/prometheus:v3.0.0
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     volumes:
       - ./infra/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./infra/monitoring/rules:/etc/prometheus/rules:ro
@@ -499,10 +552,10 @@ services:
   grafana:
     image: grafana/grafana:11.4.0
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?GRAFANA_PASSWORD is required}
       GF_USERS_ALLOW_SIGN_UP: "false"
     volumes:
       - grafanadata:/var/lib/grafana

@@ -1,37 +1,34 @@
 import { http } from "./auth";
 
+export type SearchResultType = "gene" | "variant" | "mutant_line" | "phenotype" | "publication";
+
 export interface SearchResult {
-  type: "gene" | "variant" | "mutant_line" | "documentation" | "expression";
+  type: SearchResultType;
   id: string;
-  name: string;
+  name?: string;
   description?: string;
   url?: string;
+  source?: string;
 }
 
 export interface SearchResponse {
   query: string;
-  total: number;
   results: SearchResult[];
-  by_type: {
-    gene: number;
-    variant: number;
-    mutant_line: number;
-    documentation: number;
-    expression?: number;
-  };
+  by_type: Record<string, number>;
+  cursor: string | null;
+  next_cursor: string | null;
+  has_more: boolean;
+  total_count: number | null;
 }
 
-export interface SearchSuggestion {
-  text: string;
-  type: string;
-  id?: string;
-}
+export interface SearchSuggestion { text: string; type: string; id?: string; }
 
 export interface SearchParams {
   q: string;
-  type?: string;
-  page?: number;
-  page_size?: number;
+  types?: SearchResultType[];
+  sources?: string[];
+  cursor?: string;
+  limit?: number;
 }
 
 export function globalSearch(params: SearchParams): Promise<SearchResponse> {

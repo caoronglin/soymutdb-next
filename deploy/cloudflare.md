@@ -6,6 +6,7 @@
 > https://caoronglin.github.io/soymutdb-next/），本文档所述 Cloudflare Pages 方案**未启用**。
 > 保留仅为历史参考；其中 CSP/`_headers` 占位符、preview 隔离等约束对任何静态托管仍适用。
 > 当前部署架构见 **docs/design/deployment-architecture.md**。
+> 当前主入口已迁移至 **[开发者架构与部署](../docs/dev/architecture-and-deployment.md)**；本文仅作历史参考。
 >
 > ---
 

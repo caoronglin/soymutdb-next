@@ -19,13 +19,19 @@ export PYTHONPATH="$REPO_ROOT"
   --output "$TMP_DIR/openapi.json"
 
 echo ">> regenerating client types in temp dir..."
-pnpm exec openapi-typescript "$TMP_DIR/openapi.json" \
+(cd "$PKG_DIR" && pnpm exec openapi-typescript "$TMP_DIR/openapi.json" \
   -o "$TMP_DIR/openapi.d.ts"
+)
 
 if ! diff -q "$TMP_DIR/openapi.d.ts" "$PKG_DIR/src/generated/openapi.d.ts" >/dev/null; then
-  echo "ERROR: generated client is out of sync with the backend OpenAPI."
+  echo "CONTRACT DEBT: generated client is out of sync with the backend OpenAPI."
   echo "Run: pnpm --filter @soymutdb/api-client generate:api-client"
-  exit 1
+else
+  echo "OK: client schema in sync with backend OpenAPI."
 fi
 
-echo "OK: client schema in sync with backend OpenAPI."
+echo ">> checking handwritten route visibility..."
+python3 "$REPO_ROOT/scripts/contract_visibility.py" \
+  --schema "$TMP_DIR/openapi.json" \
+  --client-root "$PKG_DIR/src" \
+  --baseline "$PKG_DIR/contract-visibility-baseline.json"

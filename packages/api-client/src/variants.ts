@@ -54,10 +54,10 @@ export interface VariantDetail extends VariantSummary {
 
 export interface VariantSearchResponse {
   items: VariantSummary[];
-  page: number;
-  page_size: number;
-  total: number;
-  total_pages: number;
+  cursor: string | null;
+  next_cursor: string | null;
+  has_more: boolean;
+  total_count: number | null;
 }
 
 export interface VariantFilterParams {
@@ -87,8 +87,8 @@ export interface VariantFilterParams {
 }
 
 export interface VariantSearchParams extends VariantFilterParams {
-  page?: number;
-  page_size?: number;
+  cursor?: string;
+  limit?: number;
   sort_by?: string;
   sort_dir?: "asc" | "desc";
 }
@@ -148,19 +148,6 @@ export function searchRegionVariants(
   return http.get<VariantSummary[]>("/variants/region", { params });
 }
 
-export function getGeneVariantSummary(
-  geneId: string,
-  releaseId?: string,
-): Promise<unknown> {
-  return http.get<unknown>(`/variants/summary/gene/${geneId}`, {
-    params: { release_id: releaseId },
-  });
-}
-
 export function createVariantExport(data: unknown): Promise<unknown> {
   return http.post<unknown>("/variants/export", { json: data });
-}
-
-export function getExportStatus(jobId: string): Promise<unknown> {
-  return http.get<unknown>(`/variants/export/${jobId}`);
 }

@@ -18,6 +18,7 @@ from jose import JWTError, jwt
 
 from .compat import StrEnum
 from .config import get_settings
+from .exceptions import AuthorizationError
 
 settings = get_settings()
 
@@ -161,6 +162,12 @@ def has_role(user_roles: list[str], required: RoleName) -> bool:
             # Unknown role string – ignore (defensive).
             continue
     return False
+
+
+def require_admin_roles(user_roles: list[str]) -> None:
+    """Require the administrator role for protected admin operations."""
+    if not has_role(user_roles, RoleName.ADMINISTRATOR):
+        raise AuthorizationError("Administrator role required")
 
 
 # ---------------------------------------------------------------------------

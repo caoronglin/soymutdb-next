@@ -16,6 +16,7 @@
 
 import { readdirSync, existsSync } from "node:fs";
 import { join, posix } from "node:path";
+import { buildCsp, normalizeBasePath, requireDeploymentOrigin, resolveAssetUrl } from "../src/lib/deployment";
 
 /* ------------------------------------------------------------------ */
 /*  Asset discovery                                                   */
@@ -245,9 +246,11 @@ const CF_BEACON_HTML = CF_ANALYTICS_TOKEN
  * configured (keeps the no-token build byte-identical in behaviour).
  * Keep in sync with apps/web/public/_headers (browsers intersect both).
  */
-const CSP_CONTENT = CF_ANALYTICS_TOKEN
-    ? "default-src 'self'; script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://api.example.com https://cloudflareinsights.com; frame-src 'self' https://jbrowse.example.com; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; object-src 'none'; worker-src 'self' blob:"
-    : "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://api.example.com; frame-src 'self' https://jbrowse.example.com; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; object-src 'none'; worker-src 'self' blob:";
+const BASE_PATH = normalizeBasePath(process.env.VITE_BASE_URL ?? "/");
+const CSP_CONTENT = buildCsp({
+    apiOrigin: requireDeploymentOrigin(process.env.VITE_API_BASE_URL ?? process.env.SOYMUTDB_API_URL, "API"),
+    jbrowseOrigin: requireDeploymentOrigin(process.env.VITE_JBROWSE_BASE_URL ?? process.env.VITE_JBROWSE_URL, "JBrowse"),
+}, Boolean(CF_ANALYTICS_TOKEN));
 
 /* ------------------------------------------------------------------ */
 /*  Tracking pixel (noscript-friendly analytics)                      */
@@ -303,7 +306,7 @@ export function renderBaseTemplate(opts: BaseTemplateOptions): string {
     const fontPreloadHtml = assets.fontPreloads
         .map(
             (p) =>
-                `<link rel="preload" href="${p}" as="font" type="font/woff2" crossorigin />`,
+                `<link rel="preload" href="${resolveAssetUrl(BASE_PATH, p)}" as="font" type="font/woff2" crossorigin />`,
         )
         .join("\n    ");
 
@@ -311,7 +314,7 @@ export function renderBaseTemplate(opts: BaseTemplateOptions): string {
     const modulePreloadHtml = assets.preloads
         .map(
             (p) =>
-                `<link rel="modulepreload" crossorigin href="${p}" />`,
+                `<link rel="modulepreload" crossorigin href="${resolveAssetUrl(BASE_PATH, p)}" />`,
         )
         .join("\n    ");
 
@@ -341,7 +344,7 @@ export function renderBaseTemplate(opts: BaseTemplateOptions): string {
 <html lang="${lang}" data-theme="light">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <link rel="icon" type="image/svg+xml" href="${resolveAssetUrl(BASE_PATH, "favicon.svg")}" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#2F6F4F" />
     <meta name="description" content="${escapeHtml(description)}" />
@@ -369,7 +372,7 @@ ${ogHtml}
     ${fontPreloadHtml}
 
     <!-- CSS -->
-    <link rel="stylesheet" crossorigin href="${assets.cssEntry}" />
+    <link rel="stylesheet" crossorigin href="${resolveAssetUrl(BASE_PATH, assets.cssEntry)}" />
 
     <!-- Reduced motion -->
     ${REDUCED_MOTION_STYLE}
@@ -389,7 +392,7 @@ ${ogHtml}
     ${trackingHtml}
 
     <!-- React SPA entrypoint -->
-    <script type="module" crossorigin src="${assets.jsEntry}"></script>
+    <script type="module" crossorigin src="${resolveAssetUrl(BASE_PATH, assets.jsEntry)}"></script>
     ${modulePreloadHtml}
 
     ${WIDGET_LOADER_SNIPPET}

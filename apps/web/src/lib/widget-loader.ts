@@ -9,6 +9,7 @@
  * environments that disallow direct innerHTML assignment.
  */
 import DOMPurify from "dompurify";
+import { resolveAssetUrl } from "./deployment";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                             */
@@ -103,7 +104,7 @@ export async function fetchWidget(
         if (cached) return cached.html;
     }
 
-    const url = new URL(`/api/v1/widget/${name}`, window.location.origin);
+    const url = new URL(resolveAssetUrl(import.meta.env.BASE_URL, `api/v1/widget/${name}`), window.location.origin);
     if (params) {
         url.searchParams.set("params", JSON.stringify(params));
     }

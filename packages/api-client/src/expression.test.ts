@@ -31,7 +31,7 @@ describe("getGeneExpression", () => {
     const params = { tissue: "root", min_fpkm: 1.0 };
     const result = await getGeneExpression("Glyma.01G000100", params);
 
-    expect(mockGet).toHaveBeenCalledWith("/genes/Glyma.01G000100/expression", {
+    expect(mockGet).toHaveBeenCalledWith("/expression/genes/Glyma.01G000100/expression", {
       params,
     });
     expect(result).toEqual(mockResponse);
@@ -42,7 +42,7 @@ describe("getGeneExpression", () => {
 
     await getGeneExpression("G1");
 
-    expect(mockGet).toHaveBeenCalledWith("/genes/G1/expression", {
+    expect(mockGet).toHaveBeenCalledWith("/expression/genes/G1/expression", {
       params: undefined,
     });
   });

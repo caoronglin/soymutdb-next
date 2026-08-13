@@ -1,14 +1,8 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard,
-  Users,
-  GitBranch,
   Upload,
-  Dna,
-  Microscope,
-  Layers,
-  Search,
-  Sprout,
+  FolderTree,
   FileText,
   Newspaper,
   ScrollText,
@@ -48,18 +42,13 @@ const NAV_SECTIONS: NavSection[] = [
   {
     label: "Data Management",
     items: [
-      { path: "/releases", label: "Releases", icon: GitBranch },
+      { path: "/resource-catalog", label: "Resource Catalog", icon: FolderTree },
       { path: "/imports", label: "Imports", icon: Upload },
-      { path: "/assemblies", label: "Assemblies", icon: Dna },
-      { path: "/variants", label: "Variants", icon: Microscope },
-      { path: "/tracks", label: "Tracks", icon: Layers },
     ],
   },
   {
     label: "Tools",
     items: [
-      { path: "/blast", label: "BLAST", icon: Search },
-      { path: "/seeds", label: "Seeds", icon: Sprout },
       { path: "/news", label: "News", icon: Newspaper },
       { path: "/content", label: "Content", icon: FileText },
     ],
@@ -76,7 +65,6 @@ const NAV_SECTIONS: NavSection[] = [
   {
     label: "Administration",
     items: [
-      { path: "/users", label: "Users & Roles", icon: Users },
       { path: "/audit", label: "Audit Logs", icon: ScrollText },
       { path: "/settings", label: "Settings", icon: Settings },
       { path: "/analytics-settings", label: "Analytics", icon: BarChart3 },

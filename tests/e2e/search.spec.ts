@@ -12,92 +12,58 @@ test.describe('Global Search', () => {
   });
 
   test('displays search input on search page', async ({ page }) => {
-    const searchInput = page.locator(
-      'input[type="search"], input[placeholder*="search" i], [data-testid="global-search"]'
-    );
+    const searchInput = page.getByRole('searchbox');
     await expect(searchInput).toBeVisible();
   });
 
   test('searching for "Glyma" returns gene results', async ({ page }) => {
-    const searchInput = page.locator(
-      'input[type="search"], input[placeholder*="search" i], [data-testid="global-search"]'
-    );
+    const searchInput = page.getByRole('searchbox');
     await searchInput.fill('Glyma');
     await searchInput.press('Enter');
 
-    await page.waitForTimeout(3000);
-
-    // Results should be visible
-    const results = page.locator(
-      '[data-testid="search-results"], [data-testid="results-section"]'
-    );
+    const results = page.getByTestId('search-results').first();
     await expect(results).toBeVisible();
   });
 
   test('searching for a specific gene ID returns results', async ({ page }) => {
-    const searchInput = page.locator(
-      'input[type="search"], input[placeholder*="search" i], [data-testid="global-search"]'
-    );
+    const searchInput = page.getByRole('searchbox');
     await searchInput.fill('Glyma.01G001000');
     await searchInput.press('Enter');
 
-    await page.waitForTimeout(3000);
-
-    // Should find the gene
-    const results = page.locator('[data-testid="search-results"], [data-testid="results-section"]');
-    if (await results.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await expect(results).toBeVisible();
-    }
+    await expect(page.getByTestId('search-results').first()).toBeVisible();
   });
 
   test('searching for non-existent term shows empty state', async ({ page }) => {
-    const searchInput = page.locator(
-      'input[type="search"], input[placeholder*="search" i], [data-testid="global-search"]'
-    );
+    const searchInput = page.getByRole('searchbox');
     await searchInput.fill('ZZZZZ_nonexistent_gene');
     await searchInput.press('Enter');
 
-    await page.waitForTimeout(3000);
-
-    // Should show empty state or no results message
-    const emptyState = page.locator(
-      '[data-testid="empty-state"], [data-testid="no-results"], :text-matches("no results" i)'
-    );
-
-    if (await emptyState.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await expect(emptyState).toBeVisible();
-    }
+    await expect(page.getByText('No matches')).toBeVisible();
   });
 
   test('search results have clickable links', async ({ page }) => {
-    const searchInput = page.locator(
-      'input[type="search"], input[placeholder*="search" i], [data-testid="global-search"]'
-    );
+    const searchInput = page.getByRole('searchbox');
     await searchInput.fill('Glyma');
     await searchInput.press('Enter');
 
-    await page.waitForTimeout(3000);
-
-    // Check for result links
-    const resultLinks = page.locator(
-      '[data-testid="search-results"] a, [data-testid="results-section"] a'
-    );
-
-    if (await resultLinks.first().isVisible({ timeout: 5000 }).catch(() => false)) {
-      const linkHref = await resultLinks.first().getAttribute('href');
-      expect(linkHref).toBeTruthy();
-    }
+    const result = page.getByTestId('search-result-row').first();
+    await expect(result).toBeVisible();
+    await expect(result).toHaveAttribute('data-url', /^\/search\//);
+    await expect(result).not.toHaveAttribute('data-url', /\/api\/v1/);
   });
 
   test('search filters are present', async ({ page }) => {
     // Check for filter options (gene, variant, mutant line, etc.)
-    const filters = page.locator(
-      '[data-testid="search-filters"], [data-testid="filter-section"], [role="checkbox"], [role="tab"]'
-    );
+    await expect(page.getByTestId('external-source-toggle')).toBeVisible();
+  });
 
-    if (await filters.first().isVisible({ timeout: 5000 }).catch(() => false)) {
-      await expect(filters.first()).toBeVisible();
-    }
+  test('query and external source are URL state', async ({ page }) => {
+    await page.getByRole('searchbox').fill('Glyma');
+    await page.getByTestId('external-source-toggle').check();
+    await page.getByRole('searchbox').press('Enter');
+
+    await expect(page).toHaveURL(/q=Glyma/);
+    await expect(page).toHaveURL(/external=1/);
   });
 
   test('search from homepage navigation works', async ({ page }) => {

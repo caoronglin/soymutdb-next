@@ -36,6 +36,7 @@ import { initWidgetLoader } from "./lib/widget-loader";
 import { registry, SERVICES } from "./lib/di";
 import { bus } from "./lib/event-bus";
 import { clearLegacyTokens, restoreSession, onAuthLogout } from "@soymutdb/api-client";
+import { resolveAppUrl } from "./lib/deployment";
 
 // One-time migration: drop legacy persisted access/refresh tokens from
 // localStorage/sessionStorage (sessions now live in memory + HttpOnly cookie).
@@ -50,8 +51,8 @@ void restoreSession();
 onAuthLogout(() => {
     if (typeof window === "undefined") return;
     const { pathname } = window.location;
-    if (pathname.startsWith("/login")) return;
-    window.location.href = "/login";
+    if (pathname === `${import.meta.env.BASE_URL}login` || pathname.startsWith(`${import.meta.env.BASE_URL}login/`)) return;
+    window.location.href = resolveAppUrl(import.meta.env.BASE_URL, "/login");
 });
 
 // Register the <soymutdb-widget> custom element (side-effect import).
@@ -121,25 +122,6 @@ declare module "@tanstack/react-router" {
 
 const rootEl = document.getElementById("root");
 if (!rootEl) throw new Error("#root element not found");
-
-// ---------------------------------------------------------------------------
-// Lazy-initialize the search Web Worker during idle time so it doesn't
-// compete for the main thread on first paint.
-// ---------------------------------------------------------------------------
-function lazyInitWorker(): void {
-    const ric = (window as unknown as {
-        requestIdleCallback?: (cb: () => void) => void;
-    }).requestIdleCallback;
-    const schedule = ric ?? ((cb: () => void) => setTimeout(cb, 500));
-    schedule(() => {
-        // Dynamic import triggers worker download + instantiation only after
-        // the app is idle. The client also has a main-thread fallback.
-        import("./lib/search-worker-client").catch(() => {
-            /* worker is optional — search falls back to main thread */
-        });
-    });
-}
-lazyInitWorker();
 
 // ---------------------------------------------------------------------------
 // AntD ConfigProvider wrapper — children form, does not touch the router tree.

@@ -10,12 +10,9 @@ import base64
 import json
 from typing import Any
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.exceptions import NotFoundError, ValidationError
-from ..models.genomic import Assembly, Chromosome
-from ..models.variant import VariantSummary
 from ..schemas.variant import (
     VariantDetail,
     VariantFilterParams,
@@ -132,6 +129,10 @@ class VariantService:
             quality=float(row.get("quality_score") or 0) or None,
             filter_status=str(row.get("filter_status", "PASS")),
             allele_frequency=float(row.get("allele_frequency") or 0) or None,
+            gene_id=row.get("gene_id"),
+            gene_symbol=row.get("gene_symbol"),
+            consequence=row.get("consequence"),
+            impact=row.get("impact"),
         )
 
     @staticmethod

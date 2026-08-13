@@ -262,7 +262,7 @@ async def test_get_job_returns_status_and_result_when_completed() -> None:
     session = FakeDbSession(job=job)
     service = GwasService()
 
-    response = await service.get_job(session, job.id)
+    response = await service.get_job(session, job.id, job.user_id, ["researcher"])
 
     assert response.status.value == "completed"
     assert response.result["n_variants"] == 42
@@ -272,7 +272,7 @@ async def test_get_job_returns_no_result_while_pending() -> None:
     session = FakeDbSession(job=_make_job(status=GwasJobStatus.PENDING))
     service = GwasService()
 
-    response = await service.get_job(session, session.job.id)
+    response = await service.get_job(session, session.job.id, session.job.user_id, ["researcher"])
 
     assert response.status.value == "pending"
     assert response.result is None
@@ -283,7 +283,7 @@ async def test_get_job_unknown_id_raises_not_found() -> None:
 
     service = GwasService()
     with pytest.raises(NotFoundError):
-        await service.get_job(FakeDbSession(), uuid.uuid4())
+        await service.get_job(FakeDbSession(), uuid.uuid4(), uuid.uuid4(), ["researcher"])
 
 
 async def test_get_result_completed_returns_presigned_urls(monkeypatch) -> None:
@@ -305,7 +305,9 @@ async def test_get_result_completed_returns_presigned_urls(monkeypatch) -> None:
     )
     service = GwasService()
 
-    response = await service.get_result(FakeDbSession(job=job), job.id)
+    response = await service.get_result(
+        FakeDbSession(job=job), job.id, job.user_id, ["researcher"]
+    )
 
     assert response.status.value == "completed"
     assert response.manhattan_url == "https://minio/gwas/abc/output/manhattan.json"
@@ -319,7 +321,9 @@ async def test_get_result_running_returns_no_urls() -> None:
     session = FakeDbSession(job=_make_job(status=GwasJobStatus.RUNNING))
     service = GwasService()
 
-    response = await service.get_result(session, session.job.id)
+    response = await service.get_result(
+        session, session.job.id, session.job.user_id, ["researcher"]
+    )
 
     assert response.status.value == "running"
     assert response.manhattan_url is None
@@ -329,6 +333,22 @@ async def test_get_result_running_returns_no_urls() -> None:
 def test_validate_gwas_key_accepts_input_key() -> None:
     key = f"gwas/{uuid.uuid4()}/input/abc.pheno"
     assert validate_gwas_key(key) == key
+
+
+@pytest.mark.asyncio
+async def test_gwas_reads_reject_cross_user_and_allow_owner_and_admin() -> None:
+    from app.core.exceptions import AuthorizationError
+
+    job = _make_job()
+    service = GwasService()
+    session = FakeDbSession(job=job)
+    with pytest.raises(AuthorizationError):
+        await service.get_job(session, job.id, uuid.uuid4(), ["researcher"])
+    assert (await service.get_job(session, job.id, job.user_id, ["researcher"])).job_id == str(job.id)
+    assert (await service.get_job(session, job.id, uuid.uuid4(), ["administrator"])).job_id == str(job.id)
+
+    with pytest.raises(AuthorizationError):
+        await service.get_result(session, job.id, uuid.uuid4(), ["researcher"])
 
 
 def test_validate_gwas_key_rejects_lookalike_prefix() -> None:

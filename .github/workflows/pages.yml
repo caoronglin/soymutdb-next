@@ -1,7 +1,7 @@
 # =============================================================================
 # SoyMutDB Next — Deploy public web to GitHub Pages (pages (gh-pages) branch)
 #
-# Trigger: push to main + manual dispatch. Builds apps/web and force-pushes
+# Trigger: push to main + manual dispatch. Builds web/admin/JBrowse and force-pushes
 # the static dist to the `pages` branch (Pages source = pages (gh-pages) branch, /).
 # Only static hosting — no API proxying (API stays on the self-hosted backend).
 #
@@ -67,12 +67,17 @@ jobs:
           CONTENT_SNAPSHOT_URL: ${{ secrets.CONTENT_SNAPSHOT_URL }}
         run: pnpm --filter @soymutdb/web build
 
+      - name: Build admin and JBrowse
+        run: |
+          pnpm --filter @soymutdb/admin build:web
+          pnpm --filter @soymutdb/jbrowse build
+
       - name: Smoke test static content (news/about/sitemap)
         env:
           CONTENT_SNAPSHOT_URL: ${{ secrets.CONTENT_SNAPSHOT_URL }}
         run: pnpm --filter @soymutdb/web exec tsx scripts/smoke-pages.ts
 
-      - name: Deploy dist to pages (gh-pages) branch
+      - name: Deploy all apps to pages (gh-pages) branch
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -80,6 +85,10 @@ jobs:
           # the untracked (gitignored) dist folder.
           mkdir -p /tmp/pages-dist
           cp -r apps/web/dist/. /tmp/pages-dist/
+          mkdir -p /tmp/pages-dist/soymutdb-admin /tmp/pages-dist/soymutdb-jbrowse
+          cp -r apps/admin/dist/. /tmp/pages-dist/soymutdb-admin/
+          # Publish the dist-jbrowse artifact under the stable JBrowse path.
+          cp -r apps/jbrowse/dist/. /tmp/pages-dist/soymutdb-jbrowse/
           git checkout --orphan gh-pages
           git rm -rf --quiet . >/dev/null 2>&1 || true
           # Wipe untracked leftovers too (node_modules, pnpm symlinks) so the
@@ -89,6 +98,9 @@ jobs:
           # SPA fallback: GitHub Pages serves 404.html for unknown paths.
           cp /tmp/pages-dist/index.html ./404.html
           # Pure static hosting — skip Jekyll processing.
+          test -f index.html
+          test -f soymutdb-admin/index.html
+          test -f soymutdb-jbrowse/index.html
           touch .nojekyll
           git add -A
           git commit -m "deploy(web): $(date -u +%Y-%m-%dT%H:%M:%SZ)"

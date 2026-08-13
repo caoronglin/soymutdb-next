@@ -81,6 +81,9 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build all apps (hard gate)
+        env:
+          VITE_API_BASE_URL: https://api.soymutdb.test
+          VITE_JBROWSE_BASE_URL: https://jbrowse.soymutdb.test
         run: pnpm turbo run build
 
       # --- G2 bundle budget gate (hard gate) ----------------------------------
@@ -188,7 +191,7 @@ jobs:
           apps/api/.venv/bin/python -c "import scanpy, anndata, leidenalg, igraph, matplotlib; print('analysis deps OK:', scanpy.__version__)"
 
   # ---------------------------------------------------------------------------
-  # Job 3 — Docker images: api / worker / jbrowse
+  # Job 3 — Docker images: api / worker / MCP / jbrowse
   # ---------------------------------------------------------------------------
   # Independent from Job 1: every Dockerfile is self-contained (the jbrowse
   # image runs its own pnpm install + build inside the container). Runs in
@@ -203,17 +206,27 @@ jobs:
         with:
           fetch-depth: 1
 
-      # Dockerfile.api / Dockerfile.worker COPY a `uv.lock*` glob that matches
-      # nothing (no uv.lock is committed). Docker COPY fails when a glob has no
-      # match, so provide an empty placeholder before building. Harmless once a
-      # real uv.lock exists (`uv pip install` never reads it).
-      - name: Ensure uv.lock placeholders exist (Dockerfile COPY glob)
-        run: touch apps/api/uv.lock apps/worker/uv.lock
+      - name: Verify Python dependency locks
+        run: bash scripts/check-supply-chain.sh
 
       # Regression guard: every COPY source must exist in the build context
       # (e.g. .npmrc was gitignored and broke the jbrowse image build).
       - name: Verify Dockerfile COPY sources exist (hard gate)
         run: bash scripts/check-dockerfile-copy.sh
+
+      - name: Login to GHCR (pushes only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute image tags
+        id: image-tags
+        run: |
+          tag="$(date -u +%Y.%m.%d)-${GITHUB_SHA::7}"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
 
       - name: Build API image (hard gate)
         run: docker build -f infra/docker/Dockerfile.api -t soymutdb-api:ci .
@@ -221,11 +234,39 @@ jobs:
       - name: Build Worker image (hard gate)
         run: docker build -f infra/docker/Dockerfile.worker -t soymutdb-worker:ci .
 
+      - name: Build MCP image (hard gate)
+        run: docker build -f apps/mcp-server/Dockerfile -t soymutdb-mcp:ci apps/mcp-server
+
+      - name: Smoke test MCP image (hard gate)
+        run: docker run --rm soymutdb-mcp:ci python -c "import mcp_server; print('MCP imports OK')"
+
       # NOTE: the jbrowse Dockerfile copies the repo .npmrc into the build
       # context, so its internal pnpm install uses npmmirror (existing repo
       # behavior, not changed here). Image build is self-contained.
       - name: Build JBrowse image (hard gate)
         run: docker build -f apps/jbrowse/Dockerfile -t soymutdb-jbrowse:ci .
+
+      - name: Tag and push release images
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          RELEASE_TAG: ${{ steps.image-tags.outputs.tag }}
+        run: |
+          for image in api worker mcp-server; do
+            docker tag "soymutdb-${image}:ci" "ghcr.io/soymutdb/${image}:${RELEASE_TAG}"
+            docker push "ghcr.io/soymutdb/${image}:${RELEASE_TAG}"
+          done
+
+      - name: Verify pushed image manifests
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          RELEASE_TAG: ${{ steps.image-tags.outputs.tag }}
+        run: |
+          API_IMAGE_TAG="ghcr.io/soymutdb/api:${RELEASE_TAG}"
+          WORKER_IMAGE_TAG="ghcr.io/soymutdb/worker:${RELEASE_TAG}"
+          MCP_IMAGE_TAG="ghcr.io/soymutdb/mcp-server:${RELEASE_TAG}"
+          for image in "$API_IMAGE_TAG" "$WORKER_IMAGE_TAG" "$MCP_IMAGE_TAG"; do
+            docker manifest inspect "$image" >/dev/null
+          done
 
       # Smoke test: confirm the API runtime image actually has its deps.
       # Non-blocking: the Dockerfile never sets VIRTUAL_ENV, so `uv pip install`
@@ -256,3 +297,162 @@ jobs:
           name: trivy-sarif
           path: trivy-api.sarif
           if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
+  # Job 4 — Real ClickHouse legacy migration (hard gate)
+  # ---------------------------------------------------------------------------
+  clickhouse-migration:
+    name: ClickHouse migration fixture
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ClickHouse client
+        run: python -m pip install --quiet clickhouse-connect
+
+      - name: Start ClickHouse
+        run: |
+          docker run -d --name ch-test -p 8123:8123 \
+            -e CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1 \
+            -e CLICKHOUSE_PASSWORD=ci-ch-password \
+            clickhouse/clickhouse-server:24.8-alpine
+          for attempt in {1..60}; do
+            if curl --fail --silent -u default:ci-ch-password http://127.0.0.1:8123/ping; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs ch-test
+          exit 1
+
+      - name: Load legacy fixture
+        env:
+          SOYMUTDB_CLICKHOUSE_HOST: 127.0.0.1
+          SOYMUTDB_CLICKHOUSE_PORT: "8123"
+          SOYMUTDB_CLICKHOUSE_USER: default
+          SOYMUTDB_CLICKHOUSE_PASSWORD: ci-ch-password
+          SOYMUTDB_CLICKHOUSE_DATABASE: soymutdb
+        run: bash deploy/scripts/migrate-ch-fixture.sh
+
+      - name: Run migration and assert canonical state
+        env:
+          SOYMUTDB_CLICKHOUSE_HOST: 127.0.0.1
+          SOYMUTDB_CLICKHOUSE_PORT: "8123"
+          SOYMUTDB_CLICKHOUSE_USER: default
+          SOYMUTDB_CLICKHOUSE_PASSWORD: ci-ch-password
+          SOYMUTDB_CLICKHOUSE_DATABASE: soymutdb
+          CLICKHOUSE_MIGRATION_PYTHON: python
+        run: |
+          bash deploy/scripts/migrate-clickhouse.sh
+          python - <<'PY'
+          import clickhouse_connect
+          c = clickhouse_connect.get_client(host="127.0.0.1", port=8123,
+                                            username="default", password="ci-ch-password",
+                                            database="soymutdb")
+          assert c.query("SELECT count() FROM variant_facts").result_rows[0][0] == 3
+          assert c.query("SELECT countIf(release_key != '') FROM variant_facts").result_rows[0][0] == 3
+          summaries = ["gene_impact_summary", "chromosome_summary", "mutant_line_summary",
+                       "release_dashboard", "density_10kb", "density_100kb", "density_1mb",
+                       "substitution_spectrum"]
+          materialized_views = ["mv_gene_impact", "mv_chromosome_summary", "mv_mutant_line_summary", "mv_release_dashboard", "mv_density_10kb", "mv_density_100kb", "mv_density_1mb", "mv_substitution_spectrum"]
+          objects = {name: engine for name, engine in c.query("SELECT name, engine FROM system.tables WHERE database = currentDatabase()").result_rows}
+          assert len(set(summaries) & objects.keys()) == len(summaries), objects
+          assert len(set(materialized_views) & objects.keys()) == len(materialized_views), objects
+          for name in summaries:
+              assert objects[name] != "MaterializedView", (name, objects[name])
+          for name in materialized_views:
+              assert objects[name] == "MaterializedView", (name, objects[name])
+          print("ClickHouse migration assertions passed")
+          PY
+
+      - name: Re-run migration and assert idempotence
+        env:
+          SOYMUTDB_CLICKHOUSE_HOST: 127.0.0.1
+          SOYMUTDB_CLICKHOUSE_PORT: "8123"
+          SOYMUTDB_CLICKHOUSE_USER: default
+          SOYMUTDB_CLICKHOUSE_PASSWORD: ci-ch-password
+          SOYMUTDB_CLICKHOUSE_DATABASE: soymutdb
+          CLICKHOUSE_MIGRATION_PYTHON: python
+        run: |
+          before=$(python -c 'import clickhouse_connect; c=clickhouse_connect.get_client(host="127.0.0.1",port=8123,username="default",password="ci-ch-password",database="soymutdb"); print(c.query("SELECT count() FROM variant_facts").result_rows[0][0])')
+          before_summary=$(python -c 'import clickhouse_connect; c=clickhouse_connect.get_client(host="127.0.0.1",port=8123,username="default",password="ci-ch-password",database="soymutdb"); print(c.query("SELECT sum(x) FROM (SELECT count() AS x FROM gene_impact_summary UNION ALL SELECT count() FROM chromosome_summary UNION ALL SELECT count() FROM mutant_line_summary UNION ALL SELECT count() FROM release_dashboard UNION ALL SELECT count() FROM density_10kb UNION ALL SELECT count() FROM density_100kb UNION ALL SELECT count() FROM density_1mb UNION ALL SELECT count() FROM substitution_spectrum)").result_rows[0][0])')
+          bash deploy/scripts/migrate-clickhouse.sh
+          after=$(python -c 'import clickhouse_connect; c=clickhouse_connect.get_client(host="127.0.0.1",port=8123,username="default",password="ci-ch-password",database="soymutdb"); print(c.query("SELECT count() FROM variant_facts").result_rows[0][0])')
+          after_summary=$(python -c 'import clickhouse_connect; c=clickhouse_connect.get_client(host="127.0.0.1",port=8123,username="default",password="ci-ch-password",database="soymutdb"); print(c.query("SELECT sum(x) FROM (SELECT count() AS x FROM gene_impact_summary UNION ALL SELECT count() FROM chromosome_summary UNION ALL SELECT count() FROM mutant_line_summary UNION ALL SELECT count() FROM release_dashboard UNION ALL SELECT count() FROM density_10kb UNION ALL SELECT count() FROM density_100kb UNION ALL SELECT count() FROM density_1mb UNION ALL SELECT count() FROM substitution_spectrum)").result_rows[0][0])')
+          test "$before" = "$after" && test "$before_summary" = "$after_summary"
+
+      - name: Cleanup ClickHouse
+        if: always()
+        run: docker rm -f ch-test
+
+  # ---------------------------------------------------------------------------
+  # Job 5 — MCP authenticated transport (hard gate)
+  # ---------------------------------------------------------------------------
+  mcp-e2e:
+    name: MCP transport e2e (nginx /mcp/)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build MCP image
+        run: docker build -t soymutdb-mcp:ci apps/mcp-server
+      - name: Create e2e network
+        run: docker network create mcp-e2e
+      - name: Start MCP server
+        run: docker run -d --network mcp-e2e --name mcp-server -e SOYMUTDB_MCP_API_TOKEN=ci-test-token soymutdb-mcp:ci
+      - name: Start nginx reverse proxy (/mcp/ -> mcp-server)
+        run: |
+          cat > /tmp/mcp-nginx.conf <<'NGINX'
+          worker_processes 1;
+          events {}
+          http {
+            limit_req_zone $binary_remote_addr zone=auth:10m rate=10r/s;
+            server {
+              listen 80;
+              location ^~ /mcp/ {
+                if ($http_authorization = "") { return 401; }
+                limit_req zone=auth burst=10 nodelay;
+                proxy_pass http://mcp-server:9000;
+                proxy_http_version 1.1;
+                proxy_set_header Connection "";
+                proxy_set_header Host $host;
+                proxy_buffering off;
+                proxy_cache off;
+                proxy_read_timeout 600s;
+              }
+            }
+          }
+          NGINX
+          docker run -d --network mcp-e2e --name mcp-nginx -p 8081:80 -v /tmp/mcp-nginx.conf:/etc/nginx/nginx.conf:ro nginx:1.27-alpine
+      - name: Assert MCP authentication through nginx
+        run: |
+          payload='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci","version":"1"}}}'
+          base=http://127.0.0.1:8081/mcp/
+          code=000
+          for attempt in {1..60}; do
+            code=$(curl --silent --output /dev/null --write-out '%{http_code}' -X POST "$base" -H 'Content-Type: application/json' -d "$payload" || true)
+            test "$code" = 401 && break
+            sleep 2
+          done
+          test "$code" = 401
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' -X POST "$base" -H 'Content-Type: application/json' -H 'Authorization: Bearer wrong' -d "$payload")" = 401
+          code=$(curl --fail --silent --output /dev/null --write-out '%{http_code}' -X POST "$base" -H 'Accept: application/json, text/event-stream' -H 'Content-Type: application/json' -H 'Authorization: Bearer ci-test-token' -d "$payload")
+          test "$code" -ge 200 -a "$code" -lt 300
+      - name: Cleanup MCP
+        if: always()
+        run: |
+          docker rm -f mcp-nginx || true
+          docker rm -f mcp-server || true
+          docker network rm mcp-e2e || true

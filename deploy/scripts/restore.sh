@@ -280,8 +280,10 @@ echo -e "${CYAN}[3/3] Restoring MinIO/S3 objects...${NC}"
 S3_MANIFEST="${RESTORE_SRC}/s3_manifest.tsv"
 S3_DATA_DIR="${RESTORE_SRC}/s3_data"
 if [[ -d "${S3_DATA_DIR}" && -f "${S3_MANIFEST}" ]]; then
+    [[ -f "${RESTORE_SRC}/s3_buckets.txt" ]] || die "备份缺少 S3 bucket manifest"
+    grep -qx 'gwas' "${RESTORE_SRC}/s3_buckets.txt" || die "备份缺少 gwas bucket manifest"
     if mc_run alias set s3dst "${S3_ENDPOINT}" "${S3_ACCESS_KEY}" "${S3_SECRET_KEY}" >/dev/null 2>&1; then
-        for bucket in $(cut -f1 "${S3_MANIFEST}" | sort -u); do
+        for bucket in $({ cut -f1 "${S3_MANIFEST}"; cat "${RESTORE_SRC}/s3_buckets.txt"; } | sort -u); do
             SRC_DIR="${S3_DATA_DIR}/${bucket}"
             [[ -d "${SRC_DIR}" ]] || continue
             # --remove: 删除远端多余对象，得到与备份完全一致的状态

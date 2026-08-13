@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.database import get_db, get_redis
 from ...schemas.search import GlobalSearchResponse, SearchResultType
-from ...search import ExternalSearchAggregator, SearchSource, render_search_html
+from ...search import ExternalSearchAggregator, ExternalSearchResponse, SearchSource, render_search_html
 from ...search.cache import SearchCache
 from ...services.search_service import SearchService
 
@@ -75,6 +75,37 @@ def _parse_sources(raw: list[str] | None) -> list[SearchSource]:
     return selected or [s for s in SearchSource if s != SearchSource.INTERNAL]
 
 
+def _external_json_payload(response: ExternalSearchResponse) -> dict:
+    """Serialize the adapter result while preserving per-source degradation."""
+    return {
+        "query": response.query,
+        "sources": [
+            {
+                "source": source.source.value,
+                "status": source.status.value,
+                "hits": [
+                    {
+                        "source": hit.source.value,
+                        "title": hit.title,
+                        "url": hit.url,
+                        "snippet": hit.snippet,
+                        "id": hit.id,
+                        "extra": hit.extra,
+                    }
+                    for hit in source.hits
+                ],
+                "elapsed": source.elapsed_ms,
+                "elapsed_ms": source.elapsed_ms,
+                "error": source.error_message,
+                "health": "healthy" if source.status.value in {"ok", "empty"} else "degraded",
+            }
+            for source in response.sources
+        ],
+        "total_hits": response.total_hits,
+        "elapsed_ms": response.elapsed_ms,
+    }
+
+
 # --------------------------------------------------------------------- JSON
 @router.get(
     "",
@@ -91,6 +122,7 @@ async def global_search(
         default=None,
         description="External sources to query (comma-separated): ncbi,uniprot,ensembl,ebi",
     ),
+    cursor: str | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=50),
     format: str | None = Query(default=None, alias="format", description="'json' or 'html'"),
     accept: str | None = Header(default=None, alias="accept"),
@@ -102,8 +134,19 @@ async def global_search(
     sanitized HTML fragment built from federated external search results.
     """
     if _want_json(accept, format):
+        if sources:
+            selected_sources = _parse_sources(sources)
+            aggregator = ExternalSearchAggregator(get_redis())
+            ext_resp = await aggregator.search(
+                q,
+                sources=selected_sources,
+                limit_per_source=max(3, min(10, limit)),
+            )
+            return JSONResponse(content=_external_json_payload(ext_resp))
         # ---- Internal DB search (legacy / programmatic clients) ------------
-        resp = await service.global_search(db, query=q, types=types, limit=limit)
+        resp = await service.global_search(
+            db, query=q, types=types, cursor=cursor, limit=limit
+        )
         payload = resp if isinstance(resp, dict) else resp.model_dump()
         return JSONResponse(content=payload)
 

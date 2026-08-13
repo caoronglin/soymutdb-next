@@ -15,6 +15,8 @@ from httpx import ASGITransport, AsyncClient
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.main import app
+from app.core.exceptions import AuthorizationError
+from app.core.security import RoleName, require_admin_roles
 
 EXPECTED_PATHS = [
     "/api/v1/stats/homepage",
@@ -26,6 +28,12 @@ EXPECTED_PATHS = [
     "/api/v1/stats/mutagens",
     "/api/v1/admin/dashboard-stats",
     "/api/v1/admin/dashboard-series",
+    "/api/v1/admin/releases",
+    "/api/v1/admin/releases/{release_id}",
+    "/api/v1/admin/releases/{release_id}/validate",
+    "/api/v1/admin/releases/{release_id}/ready",
+    "/api/v1/admin/releases/{release_id}/publish",
+    "/api/v1/admin/releases/{release_id}/rollback",
     "/api/v1/health/ready",
 ]
 
@@ -97,6 +105,20 @@ async def error_client(error_app):
 
 
 class TestOpenApiContract:
+    def test_require_admin_roles_rejects_non_administrator(self):
+        assert require_admin_roles([RoleName.ADMINISTRATOR.value]) is None
+        with pytest.raises(AuthorizationError):
+            require_admin_roles([RoleName.AUDITOR.value])
+
+    def test_dashboard_paths_require_authentication(self):
+        for path in ("/api/v1/admin/dashboard-stats", "/api/v1/admin/dashboard-series"):
+            assert SCHEMA["paths"][path]["get"].get("security")
+
+    def test_release_actions_document_confirmation_and_reason(self):
+        schema = SCHEMA["components"]["schemas"]["ReleaseActionRequest"]["properties"]
+        assert schema["confirm"]["const"] is True
+        assert schema["reason"]["minLength"] == 1
+
     def test_expected_paths_present(self):
         paths = set(SCHEMA["paths"])
         for expected in EXPECTED_PATHS:
@@ -143,6 +165,21 @@ class TestOpenApiContract:
             "variantsChange",
             "queryP95Change",
         }
+
+    def test_gene_variant_and_track_paths_are_exported(self):
+        for path in (
+            "/api/v1/genes",
+            "/api/v1/genes/{gene_id}",
+            "/api/v1/variants",
+            "/api/v1/variants/{variant_id}",
+            "/api/v1/tracks",
+            "/api/v1/tracks/{track_id}",
+        ):
+            assert path in SCHEMA["paths"], f"missing contract path {path}"
+
+    def test_blast_jobs_list_and_results_paths_are_exported(self):
+        assert "get" in SCHEMA["paths"]["/api/v1/blast/jobs"]
+        assert "/api/v1/blast/jobs/{job_id}/results" in SCHEMA["paths"]
 
 
 # ---------------------------------------------------------------------------

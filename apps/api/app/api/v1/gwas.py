@@ -27,7 +27,7 @@ from ...schemas.gwas import (
     GwasUploadResponse,
 )
 from ...services.gwas_service import GwasService
-from .deps import get_current_user, require_role
+from .deps import get_current_user, get_user_roles, require_role
 
 router = APIRouter(prefix="/gwas", tags=["gwas"])
 service = GwasService()
@@ -78,13 +78,14 @@ async def submit_gwas_job(
 async def get_gwas_job(
     job_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> GwasJobResponse:
     """Return the current status of a GWAS job.
 
     ``result`` is ``null`` until the job completes; completed jobs carry the
     worker-written summary (MinIO object keys + association statistics).
     """
-    return await service.get_job(db, job_id)
+    return await service.get_job(db, job_id, current_user.id, get_user_roles(current_user))
 
 
 @router.get(
@@ -95,6 +96,7 @@ async def get_gwas_job(
 async def get_gwas_results(
     job_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> GwasResultResponse:
     """Return pre-signed download URLs for a completed GWAS job's outputs.
 
@@ -102,4 +104,4 @@ async def get_gwas_results(
     expose the Manhattan data JSON, the QQ data JSON and the self-contained
     ``Manhattan_QQ.html`` report.
     """
-    return await service.get_result(db, job_id)
+    return await service.get_result(db, job_id, current_user.id, get_user_roles(current_user))

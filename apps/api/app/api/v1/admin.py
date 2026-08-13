@@ -18,10 +18,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...core.audit import compute_online_duration
 from ...core.config import get_settings
 from ...core.database import get_db, get_session_factory
-from ...core.exceptions import AuthorizationError
-from ...core.security import RoleName, has_role
+from ...core.exceptions import ConflictError, NotFoundError, ValidationError
+from ...core.security import require_admin_roles
 from ...models.auth import AuditLog, User
 from ...models.content import Release, ReleaseStatus
+from ...models.data_publishing import ActiveRelease, DataSet, ReleaseDataSet
 from ...models.import_task import ImportTask, ImportTaskStatus
 from ...models.system_settings import SystemSetting
 from ...models.variant import VariantSummary
@@ -31,7 +32,15 @@ from ...schemas.analytics import (
     ImportThroughputPoint,
     QueryLatencyPoint,
 )
+from ...schemas.data_publishing import ReleaseActionRequest, ReleaseCreateRequest, ReleaseReadyRequest
 from ...services.clickhouse_service import ClickHouseService
+from ...services.release_service import (
+    ReleaseNotReady,
+    mark_release_ready,
+    publish_release,
+    rollback_release,
+    validate_release,
+)
 from .deps import get_current_user, get_user_roles
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -42,8 +51,152 @@ ch_service = ClickHouseService()
 
 def _require_admin(current_user: User) -> None:
     """Raise :class:`AuthorizationError` unless *current_user* is an administrator."""
-    if not has_role(get_user_roles(current_user), RoleName.ADMINISTRATOR):
-        raise AuthorizationError("Administrator role required")
+    require_admin_roles(get_user_roles(current_user))
+
+
+def _release_to_dict(release: Release, datasets: list[DataSet], active_id: int | None) -> dict[str, Any]:
+    return {
+        "id": release.id,
+        "version": release.version,
+        "name": release.name,
+        "description": release.description,
+        "assembly": release.assembly,
+        "status": release.status,
+        "manifest": release.manifest,
+        "readiness": (release.manifest or {}).get("readiness", {}),
+        "active_release_id": active_id,
+        "datasets": [
+            {"id": ds.id, "type": ds.type, "status": ds.status, "source_objects": ds.source_objects,
+             "provenance": ds.validation_evidence or {}}
+            for ds in datasets
+        ],
+        "audit_action": f"release_{release.status}",
+    }
+
+
+async def _get_release(db: AsyncSession, release_id: int) -> tuple[Release, list[DataSet], int | None]:
+    release = await db.scalar(select(Release).where(Release.id == release_id))
+    if release is None:
+        raise NotFoundError(f"Release {release_id} not found")
+    datasets = list((await db.execute(
+        select(DataSet).join(ReleaseDataSet, ReleaseDataSet.data_set_id == DataSet.id)
+        .where(ReleaseDataSet.release_id == release_id)
+    )).scalars())
+    active_id = await db.scalar(select(ActiveRelease.release_id).where(ActiveRelease.id == 1))
+    return release, datasets, active_id
+
+
+def _release_failure(exc: ReleaseNotReady) -> ValidationError:
+    return ValidationError(str(exc), details={"code": "release_not_ready"})
+
+
+# ---------------------------------------------------------------------------
+# Data publishing Release lifecycle
+# ---------------------------------------------------------------------------
+
+
+@router.post("/releases", status_code=status.HTTP_201_CREATED)
+async def create_release(
+    body: ReleaseCreateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    _require_admin(current_user)
+    if await db.scalar(select(Release).where(Release.version == body.version)):
+        raise ConflictError("Release version already exists")
+    datasets = list((await db.execute(select(DataSet).where(DataSet.id.in_(body.data_set_ids)))).scalars())
+    if len(datasets) != len(set(body.data_set_ids)):
+        raise NotFoundError("One or more data sets were not found")
+    release = Release(version=body.version, name=body.name, description=body.description, assembly=body.assembly)
+    db.add(release)
+    await db.flush()
+    for dataset in datasets:
+        db.add(ReleaseDataSet(release_id=release.id, data_set_id=dataset.id))
+    await db.commit()
+    await db.refresh(release)
+    return _release_to_dict(release, datasets, await db.scalar(select(ActiveRelease.release_id).where(ActiveRelease.id == 1)))
+
+
+@router.post("/releases/{release_id}/validate")
+async def validate_admin_release(
+    release_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    _require_admin(current_user)
+    try:
+        await validate_release(db, release_id=release_id, actor_id=current_user.id)
+        await db.commit()
+    except ReleaseNotReady as exc:
+        await db.rollback()
+        raise _release_failure(exc) from exc
+    release, datasets, active_id = await _get_release(db, release_id)
+    return _release_to_dict(release, datasets, active_id)
+
+
+@router.post("/releases/{release_id}/ready")
+async def ready_admin_release(
+    release_id: int,
+    body: ReleaseReadyRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    _require_admin(current_user)
+    try:
+        await mark_release_ready(db, release_id=release_id, actor_id=current_user.id, manifest=body.manifest, readiness=body.readiness)
+        await db.commit()
+    except ReleaseNotReady as exc:
+        await db.rollback()
+        raise _release_failure(exc) from exc
+    release, datasets, active_id = await _get_release(db, release_id)
+    return _release_to_dict(release, datasets, active_id)
+
+
+@router.post("/releases/{release_id}/publish")
+async def publish_admin_release(
+    release_id: int,
+    body: ReleaseActionRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    _require_admin(current_user)
+    try:
+        await publish_release(db, release_id=release_id, actor_id=current_user.id, reason=body.reason, request_id=getattr(request.state, "request_id", None))
+    except ReleaseNotReady as exc:
+        await db.rollback()
+        raise _release_failure(exc) from exc
+    release, datasets, active_id = await _get_release(db, release_id)
+    return _release_to_dict(release, datasets, active_id)
+
+
+@router.post("/releases/{release_id}/rollback")
+async def rollback_admin_release(
+    release_id: int,
+    body: ReleaseActionRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    _require_admin(current_user)
+    try:
+        await rollback_release(db, release_id=release_id, actor_id=current_user.id, reason=body.reason, request_id=getattr(request.state, "request_id", None))
+    except ReleaseNotReady as exc:
+        await db.rollback()
+        raise _release_failure(exc) from exc
+    release, datasets, active_id = await _get_release(db, release_id)
+    return _release_to_dict(release, datasets, active_id)
+
+
+@router.get("/releases/{release_id}")
+async def get_admin_release(
+    release_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    _require_admin(current_user)
+    release, datasets, active_id = await _get_release(db, release_id)
+    return _release_to_dict(release, datasets, active_id)
 
 
 def _build_conditions(
@@ -569,6 +722,7 @@ async def admin_dashboard_stats(
     computed between the last 30 days and the previous 30 days; metrics
     without a temporal source report 0.0.
     """
+    _require_admin(current_user)
     now = datetime.now(timezone.utc)
     since_30 = now - timedelta(days=30)
     since_60 = now - timedelta(days=60)
@@ -664,6 +818,7 @@ async def admin_dashboard_series(
       analytics events (empty when ClickHouse is unavailable).
     - ``storage_growth``: no reliable storage source exists yet — empty.
     """
+    _require_admin(current_user)
     since = datetime.now(timezone.utc) - timedelta(days=days)
 
     import_stmt = (

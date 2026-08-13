@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import re
 import uuid
+from dataclasses import dataclass
 
 from ..core.config import get_settings
 from ..utils.s3 import get_s3_client
@@ -41,10 +42,79 @@ ANALYSES_PREFIX: str = "analyses"
 #: images, attachments).  Stored in the PUBLIC bucket so the returned
 #: ``public_url`` can be persisted directly (e.g. ``cover_url``).
 UPLOADS_PREFIX: str = "uploads"
+DATA_PREFIX: str = "data"
 
 #: Sanitized filename charset – keeps generated keys predictable and free of
 #: control characters / whitespace / separators.
 _FILENAME_RE = re.compile(r"[^A-Za-z0-9._+-]+")
+
+
+@dataclass(frozen=True)
+class MultipartSession:
+    upload_id: str
+    object_key: str
+
+
+@dataclass(frozen=True)
+class CompletedPart:
+    part_number: int
+    etag: str
+
+
+@dataclass(frozen=True)
+class CompletedObject:
+    object_key: str
+    upload_id: str
+    parts: tuple[CompletedPart, ...]
+    sha256: str
+
+
+def build_data_object_key(data_set_id: int, filename: str) -> str:
+    return f"{DATA_PREFIX}/{data_set_id}/{uuid.uuid4()}-{sanitize_filename(filename)}"
+
+
+def validate_data_key(object_key: str, data_set_id: int | None = None) -> str:
+    _validate_key_shape(object_key)
+    if not object_key.startswith(f"{DATA_PREFIX}/"):
+        raise ValueError("object_key must live under 'data/'")
+    if data_set_id is not None and not object_key.startswith(f"{DATA_PREFIX}/{data_set_id}/"):
+        raise ValueError("object_key does not belong to this data set")
+    return object_key
+
+
+def initiate_multipart_upload(*, data_set_id: int, filename: str, content_type: str, bucket: str | None = None) -> MultipartSession:
+    object_key = build_data_object_key(data_set_id, filename)
+    validate_data_key(object_key, data_set_id)
+    result = get_s3_client().create_multipart_upload(
+        Bucket=bucket or settings.s3_analyses_bucket, Key=object_key, ContentType=content_type
+    )
+    return MultipartSession(upload_id=result["UploadId"], object_key=object_key)
+
+
+def sign_multipart_part(*, object_key: str, upload_id: str, part_number: int, bucket: str | None = None) -> str:
+    validate_data_key(object_key)
+    if not 1 <= part_number <= 10_000:
+        raise ValueError("part_number must be between 1 and 10000")
+    return get_s3_client().generate_presigned_url(
+        "upload_part", Params={"Bucket": bucket or settings.s3_analyses_bucket, "Key": object_key, "UploadId": upload_id, "PartNumber": part_number}, ExpiresIn=UPLOAD_EXPIRES_IN
+    )
+
+
+def complete_multipart_upload(*, object_key: str, upload_id: str, parts: list[CompletedPart], sha256: str, bucket: str | None = None) -> CompletedObject:
+    validate_data_key(object_key)
+    if not re.fullmatch(r"[0-9a-fA-F]{64}", sha256):
+        raise ValueError("sha256 must be a 64-character hexadecimal digest")
+    if not parts or any(not p.etag or not 1 <= p.part_number <= 10_000 for p in parts):
+        raise ValueError("parts must contain valid part numbers and ETags")
+    try:
+        get_s3_client().complete_multipart_upload(
+            Bucket=bucket or settings.s3_analyses_bucket, Key=object_key, UploadId=upload_id,
+            MultipartUpload={"Parts": [{"PartNumber": p.part_number, "ETag": p.etag} for p in parts]},
+        )
+    except Exception:
+        get_s3_client().abort_multipart_upload(Bucket=bucket or settings.s3_analyses_bucket, Key=object_key, UploadId=upload_id)
+        raise
+    return CompletedObject(object_key, upload_id, tuple(parts), sha256)
 
 
 def generate_upload_url(
@@ -207,6 +277,7 @@ __all__ = [
     "MAX_UPLOAD_SIZE",
     "UPLOAD_EXPIRES_IN",
     "UPLOADS_PREFIX",
+    "DATA_PREFIX",
     "build_upload_key",
     "build_uploads_key",
     "generate_download_url",
@@ -216,4 +287,12 @@ __all__ = [
     "validate_analyses_key",
     "validate_job_object_key",
     "validate_uploads_key",
+    "build_data_object_key",
+    "validate_data_key",
+    "initiate_multipart_upload",
+    "sign_multipart_part",
+    "complete_multipart_upload",
+    "CompletedPart",
+    "CompletedObject",
+    "MultipartSession",
 ]

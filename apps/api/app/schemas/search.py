@@ -24,6 +24,7 @@ class SortOrder(StrEnum):
 class GlobalSearchRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=500, examples=["GmFT2a"])
     types: list[SearchResultType] | None = None
+    cursor: str | None = None
     limit: int = Field(default=20, ge=1, le=50)
 
 
@@ -53,12 +54,18 @@ class SearchResultItem(BaseModel):
     name: str | None = None
     description: str | None = None
     score: float = Field(default=0.0, ge=0.0)
+    url: str | None = None
+    source: str = "internal"
 
 
 class GlobalSearchResponse(BaseModel):
     query: str
     results: list[SearchResultItem] = Field(default_factory=list)
-    total: int = Field(default=0, ge=0)
+    by_type: dict[str, int] = Field(default_factory=dict)
+    cursor: str | None = None
+    next_cursor: str | None = None
+    has_more: bool = False
+    total_count: int | None = Field(default=0, ge=0)
 
 
 class SortSpec(BaseModel):

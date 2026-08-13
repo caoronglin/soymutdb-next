@@ -23,6 +23,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import (
+    AuthorizationError,
     SoyMutDBError,
     http_exception_handler,
     soy_mut_db_exception_handler,
@@ -101,11 +102,15 @@ def _make_user(role: RoleName = RoleName.RESEARCHER) -> User:
     )
 
 
-def _make_job(*, status: AnalysisJobStatus = AnalysisJobStatus.QUEUED) -> AnalysisJob:
+def _make_job(
+    *,
+    status: AnalysisJobStatus = AnalysisJobStatus.QUEUED,
+    user_id: uuid.UUID | None = None,
+) -> AnalysisJob:
     now = datetime.now(UTC)
     return AnalysisJob(
         id=uuid.uuid4(),
-        user_id=uuid.uuid4(),
+        user_id=user_id or uuid.uuid4(),
         analysis_type=AnalysisType.FASTP.value,
         input_objects=[f"analyses/{uuid.uuid4()}/input/abc.fq.gz"],
         params={"thread": 4},
@@ -357,7 +362,7 @@ class TestGetJob:
 
         job = _make_job(status=AnalysisJobStatus.QUEUED)
         session = FakeDbSession(job=job)
-        response = await AnalysesService().get_job(session, job.id)
+        response = await AnalysesService().get_job(session, job.id, job.user_id, ["researcher"])
         assert response.job_id == str(job.id)
         assert response.analysis_type.value == "fastp"
         assert response.status.value == "queued"
@@ -369,7 +374,7 @@ class TestGetJob:
         job = _make_job(status=AnalysisJobStatus.SUCCEEDED)
         job.result_summary = {"reads_after_trimming": 1_000_000}
         session = FakeDbSession(job=job)
-        response = await AnalysesService().get_job(session, job.id)
+        response = await AnalysesService().get_job(session, job.id, job.user_id, ["researcher"])
         assert response.status.value == "succeeded"
         assert response.result == {"reads_after_trimming": 1_000_000}
 
@@ -379,7 +384,34 @@ class TestGetJob:
 
         session = FakeDbSession(job=None)
         with pytest.raises(NotFoundError):
-            await AnalysesService().get_job(session, uuid.uuid4())
+            await AnalysesService().get_job(session, uuid.uuid4(), uuid.uuid4(), ["researcher"])
+
+    async def test_cross_user_analysis_status_is_forbidden(self):
+        from app.services.analyses_service import AnalysesService
+
+        job = _make_job()
+        with pytest.raises(AuthorizationError):
+            await AnalysesService().get_job(
+                FakeDbSession(job=job), job.id, uuid.uuid4(), ["researcher"]
+            )
+
+    async def test_owner_analysis_status_is_allowed(self):
+        from app.services.analyses_service import AnalysesService
+
+        job = _make_job()
+        response = await AnalysesService().get_job(
+            FakeDbSession(job=job), job.id, job.user_id, ["researcher"]
+        )
+        assert response.job_id == str(job.id)
+
+    async def test_administrator_can_read_other_users_analysis_status(self):
+        from app.services.analyses_service import AnalysesService
+
+        job = _make_job()
+        response = await AnalysesService().get_job(
+            FakeDbSession(job=job), job.id, uuid.uuid4(), ["administrator"]
+        )
+        assert response.job_id == str(job.id)
 
 
 class TestDownloadUrl:
@@ -396,7 +428,7 @@ class TestDownloadUrl:
             return_value="https://minio/get?x=1",
         ):
             response = await AnalysesService().get_download_url(
-                session, job.id, key
+                session, job.id, key, job.user_id, ["researcher"]
             )
         assert response.download_url == "https://minio/get?x=1"
         assert response.expires_in == 600
@@ -409,7 +441,34 @@ class TestDownloadUrl:
         session = FakeDbSession(job=job)
         other_key = f"analyses/{uuid.uuid4()}/input/a.fq.gz"
         with pytest.raises(ValidationError):
-            await AnalysesService().get_download_url(session, job.id, other_key)
+            await AnalysesService().get_download_url(
+                session, job.id, other_key, job.user_id, ["researcher"]
+            )
+
+    async def test_cross_user_analysis_download_is_forbidden(self):
+        from app.services.analyses_service import AnalysesService
+
+        job = _make_job()
+        key = f"analyses/{job.id}/input/a.fq.gz"
+        with pytest.raises(AuthorizationError):
+            await AnalysesService().get_download_url(
+                FakeDbSession(job=job), job.id, key, uuid.uuid4(), ["researcher"]
+            )
+
+    async def test_administrator_can_download_other_users_analysis(self):
+        from unittest.mock import patch
+        from app.services.analyses_service import AnalysesService
+
+        job = _make_job()
+        key = f"analyses/{job.id}/input/a.fq.gz"
+        with patch(
+            "app.services.analyses_service.generate_download_url",
+            return_value="https://minio/get?sig=admin",
+        ):
+            response = await AnalysesService().get_download_url(
+                FakeDbSession(job=job), job.id, key, uuid.uuid4(), ["administrator"]
+            )
+        assert response.download_url == "https://minio/get?sig=admin"
 
 
 # ---------------------------------------------------------------------------
@@ -461,6 +520,11 @@ class TestRBAC:
         assert r.status_code == 401
         assert r.json()["error"]["code"] == "authentication_failed"
 
+    async def test_blast_status_unauthenticated_401(self, api_client):
+        r = await api_client.get(f"/api/v1/blast/jobs/{uuid.uuid4()}")
+        assert r.status_code == 401
+        assert r.json()["error"]["code"] == "authentication_failed"
+
     async def test_viewer_403(self, api_client, api_app):
         user = _make_user(RoleName.VIEWER)
         api_app.state.fake_session.user = user
@@ -473,7 +537,7 @@ class TestRBAC:
     async def test_researcher_allowed(self, api_client, api_app):
         user = _make_user(RoleName.RESEARCHER)
         api_app.state.fake_session.user = user
-        job = _make_job()
+        job = _make_job(user_id=user.id)
         api_app.state.fake_session.job = job
         r = await api_client.get(
             f"/api/v1/analyses/{job.id}", headers=_auth_header(user)
@@ -603,7 +667,7 @@ class TestUploadEndpoint:
     async def test_download_endpoint_rejects_cross_job_422(self, api_client, api_app):
         user = _make_user(RoleName.RESEARCHER)
         api_app.state.fake_session.user = user
-        job = _make_job()
+        job = _make_job(user_id=user.id)
         api_app.state.fake_session.job = job
         r = await api_client.get(
             f"/api/v1/analyses/{job.id}/download",
@@ -617,7 +681,7 @@ class TestUploadEndpoint:
 
         user = _make_user(RoleName.RESEARCHER)
         api_app.state.fake_session.user = user
-        job = _make_job()
+        job = _make_job(user_id=user.id)
         api_app.state.fake_session.job = job
         key = f"analyses/{job.id}/input/a.fq.gz"
         with patch(

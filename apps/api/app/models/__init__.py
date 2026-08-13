@@ -20,6 +20,7 @@ from .content import (
     NewsStatus,
     Publication,
     Release,
+    ReleaseStatus,
     StaticPage,
 )
 from .expression import ExpressionData, ExpressionLibrary
@@ -27,7 +28,8 @@ from .gene_data_cache import GeneDataCache
 from .genomic import Assembly, Chromosome, Exon, Gene, GeneAlias, Transcript
 from .gwas import GwasFileType, GwasJob, GwasJobStatus, GwasMethod
 from .homolog import GeneHomolog
-from .import_task import ImportTask
+from .data_publishing import ActiveRelease, DataSet, ImportStatus, Provenance, ReleaseDataSet
+from .import_task import ImportTask, ImportTaskStatus, ImportTaskType
 from .notification import Notification
 from .outbox import OutboxEvent
 from .seed import SeedInventory, SeedRequest
@@ -61,6 +63,13 @@ __all__ = [
     "GwasJobStatus",
     "GwasMethod",
     "ImportTask",
+    "ImportTaskStatus",
+    "ImportTaskType",
+    "ImportStatus",
+    "DataSet",
+    "ReleaseDataSet",
+    "ActiveRelease",
+    "Provenance",
     "MutantLine",
     "NewsArticle",
     "NewsStatus",
@@ -74,6 +83,7 @@ __all__ = [
     "Publication",
     "RefreshToken",
     "Release",
+    "ReleaseStatus",
     "Role",
     "SeedInventory",
     "SeedRequest",

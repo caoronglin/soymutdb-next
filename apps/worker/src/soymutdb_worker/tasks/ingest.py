@@ -35,10 +35,38 @@ from celery import Task
 from soymutdb_worker.config import get_setting
 from soymutdb_worker.main import celery_app
 from soymutdb_worker.utils.s3 import download_file, stream_s3_file
+from .data_adapters import ImportContext, get_adapter
 
 logger = logging.getLogger(__name__)
 
 BATCH_SIZE = 50_000
+
+
+def update_import_progress(import_task_id: int, **values: Any) -> None:
+    """Narrow integration point for the API/import-state repository."""
+    logger.info("import progress", import_task_id=import_task_id, **values)
+
+
+def current_batch() -> int | None:
+    return None
+
+
+def _surrogate_id(key: str) -> int:
+    """Return a deterministic unsigned UInt32 surrogate ID."""
+    return int.from_bytes(hashlib.sha256(key.encode()).digest()[:4], "big", signed=False) & 0xFFFFFFFF
+
+
+def _pick_mutant_line(sample_names: list[str], gt_types: Any, alt_idx: int) -> tuple[str, int]:
+    """Choose the first known non-reference sample for an ALT row."""
+    if not sample_names or gt_types is None:
+        return "", 0
+    for sample_idx, gt_type in enumerate(gt_types):
+        if sample_idx >= len(sample_names):
+            break
+        if int(gt_type) not in (0, 3):
+            sample_name = sample_names[sample_idx]
+            return sample_name, _surrogate_id(sample_name)
+    return "", 0
 
 # ---------------------------------------------------------------------------
 # SnpEff ANN field consequence rank (most → least severe)
@@ -146,7 +174,7 @@ def compute_variant_id(
     key = f"{release_id}|{file_key}|{chromosome}|{position}|{ref}|{alt}"
     digest = hashlib.sha256(key.encode("utf-8")).digest()
     # Use the first 8 bytes as a signed 64-bit integer
-    return int.from_bytes(digest[:8], byteorder="big", signed=True)
+    return int.from_bytes(digest[:8], byteorder="big", signed=False)
 
 
 # ---------------------------------------------------------------------------
@@ -166,10 +194,10 @@ def determine_variant_type(ref: str, alt: str) -> tuple[str, str]:
     if ref_len == alt_len and ref_len > 1:
         return "SNP", "MNV"
     if alt_len > ref_len:
-        return "InDel", "INS"
+        return "INS", "INS"
     if ref_len > alt_len:
-        return "InDel", "DEL"
-    return "InDel", "MIX"
+        return "DEL", "DEL"
+    return "MNV", "MIX"
 
 
 # ---------------------------------------------------------------------------
@@ -312,24 +340,27 @@ def import_vcf(
         "assembly_key": [],
         "chromosome": [],
         "position": [],
-        "strand": [],
         "ref_allele": [],
         "alt_allele": [],
         "variant_type": [],
         "variant_subtype": [],
         "length": [],
+        "gene_id": [],
+        "gene_symbol": [],
         "gene_surrogate_id": [],
         "mutant_line_surrogate_id": [],
+        "mutant_line_name": [],
+        "consequence": [],
         "consequence_id": [],
         "impact": [],
-        "quality_score": [],
         "rs_id": [],
-        "hgvs_c": [],
-        "hgvs_p": [],
+        "quality_score": [],
+        "filter_status": [],
         "read_depth": [],
         "allele_frequency": [],
+        "hgvs_c": [],
+        "hgvs_p": [],
         "zygosity": [],
-        "filter_status": [],
     }
 
     def flush_batch() -> None:
@@ -404,21 +435,17 @@ def import_vcf(
                     # Resolve gene surrogate ID from gene_id (hash to int)
                     gene_sid = 0
                     if gene_id:
-                        gene_sid = int.from_bytes(
-                            hashlib.sha256(gene_id.encode()).digest()[:4],
-                            byteorder="big",
-                            signed=True,
-                        )
+                        gene_sid = _surrogate_id(gene_id)
 
                     # Resolve mutant-line surrogate ID from sample name
                     ml_sid = 0
-                    if sample_names and alt_idx < len(sample_names):
-                        sample_name = sample_names[alt_idx]
-                        ml_sid = int.from_bytes(
-                            hashlib.sha256(sample_name.encode()).digest()[:4],
-                            byteorder="big",
-                            signed=True,
+                    mutant_line_name = ""
+                    try:
+                        mutant_line_name, ml_sid = _pick_mutant_line(
+                            sample_names, variant.gt_types, alt_idx
                         )
+                    except Exception:
+                        pass
 
                     # Zygosity from actual sample genotype (not hardcoded)
                     zygosity = "unknown"
@@ -453,24 +480,27 @@ def import_vcf(
                     batch["assembly_key"].append(assembly_key)
                     batch["chromosome"].append(chrom)
                     batch["position"].append(pos)
-                    batch["strand"].append("+")
                     batch["ref_allele"].append(ref)
                     batch["alt_allele"].append(str(alt))
                     batch["variant_type"].append(vtype)
                     batch["variant_subtype"].append(vsubtype)
                     batch["length"].append(length)
+                    batch["gene_id"].append(gene_id)
+                    batch["gene_symbol"].append(best_ann.get("gene_name", "") if best_ann else "")
                     batch["gene_surrogate_id"].append(gene_sid)
                     batch["mutant_line_surrogate_id"].append(ml_sid)
+                    batch["mutant_line_name"].append(mutant_line_name)
+                    batch["consequence"].append(consequence)
                     batch["consequence_id"].append(0)
                     batch["impact"].append(impact)
+                    batch["rs_id"].append(rs_id)
                     batch["quality_score"].append(float(qual))
-                    batch["rs_id"].append(str(rs_id))
-                    batch["hgvs_c"].append(hgvs_c)
-                    batch["hgvs_p"].append(hgvs_p)
+                    batch["filter_status"].append(filt)
                     batch["read_depth"].append(dp)
                     batch["allele_frequency"].append(af)
+                    batch["hgvs_c"].append(hgvs_c)
+                    batch["hgvs_p"].append(hgvs_p)
                     batch["zygosity"].append(zygosity)
-                    batch["filter_status"].append(filt)
 
                     if len(batch["variant_id"]) >= batch_size:
                         flush_batch()
@@ -604,3 +634,18 @@ def import_mutant_lines(
     logger.info("Mutant line ingestion complete: %d lines", count)
 
     return {"count": count, "release_id": release_id}
+
+
+@celery_app.task(name="soymutdb_worker.tasks.ingest.run_import_adapter", queue="ingest")
+def run_import_adapter(import_task_id: int, data_set_id: int, kind: str,
+                       release_id: str, file_key: str, assembly: str = "") -> dict[str, Any]:
+    context = ImportContext(import_task_id, data_set_id, release_id, file_key, assembly or None)
+    try:
+        update_import_progress(import_task_id, status="ingesting", progress=0)
+        result = get_adapter(kind).run(context, progress=lambda **values: update_import_progress(import_task_id, **values))
+        update_import_progress(import_task_id, status="ready", progress=100, evidence=result.evidence)
+        from dataclasses import asdict
+        return asdict(result)
+    except Exception as exc:
+        update_import_progress(import_task_id, status="failed", error_detail=str(exc), failed_batch=current_batch())
+        raise

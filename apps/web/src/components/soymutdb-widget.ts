@@ -301,7 +301,7 @@ class SoyMutDBWidget extends HTMLElement {
                 try { params = JSON.parse(rawParams); } catch { /* ignore */ }
             }
 
-            const url = new URL(`/api/v1/widget/${name}`, window.location.origin);
+            const url = new URL(`${import.meta.env.BASE_URL}api/v1/widget/${name}`, window.location.origin);
             if (params) url.searchParams.set('params', JSON.stringify(params));
 
             const res = await fetch(url.toString(), {

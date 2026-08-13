@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { Users, GitBranch, Microscope, Clock, Dna, FlaskConical, Sprout } from "lucide-react";
+import { Users, GitBranch, Microscope, Clock, Dna, FlaskConical, Sprout, ArrowRight } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import { http } from "@soymutdb/api-client";
 import { fetchHomepageStats } from "@soymutdb/api-client";
 import { PageHeader, StatCard, formatNumber } from "@soymutdb/ui";
@@ -71,6 +72,19 @@ export default function DashboardPage() {
         title="System Overview"
         description="Real-time metrics for the SoyMutDB platform."
       />
+
+      <section className="rounded-xl border border-primary/20 bg-primary/5 p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wider text-primary">Next actions</p>
+            <h2 className="mt-1 text-lg font-semibold">Keep the data pipeline moving</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Start from the real operational workflows instead of decorative management pages.</p>
+          </div>
+          <Link to="/resource-catalog" className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+            Open resource catalog <ArrowRight className="size-4" aria-hidden />
+          </Link>
+        </div>
+      </section>
 
       {/* Stat cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

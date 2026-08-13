@@ -31,6 +31,7 @@ class SearchService:
         db: AsyncSession,
         query: str,
         types: list[SearchResultType] | None = None,
+        cursor: str | None = None,
         limit: int = 20,
     ) -> GlobalSearchResponse:
         """Search across multiple entity types."""
@@ -61,11 +62,30 @@ class SearchService:
                     name=h.title,
                     description=h.subtitle,
                     score=h.score,
+                    url=self._frontend_url(h.type, h.id),
+                    source=h.metadata.get("source", "internal"),
                 )
                 for h in hits
             ],
-            total=len(hits),
+            by_type={
+                result_type.value: sum(1 for hit in hits if hit.type == result_type)
+                for result_type in active_types
+            },
+            cursor=cursor,
+            next_cursor=None,
+            has_more=False,
+            total_count=len(hits),
         )
+
+    @staticmethod
+    def _frontend_url(result_type: SearchResultType, result_id: str) -> str:
+        routes = {
+            SearchResultType.GENE: "genes",
+            SearchResultType.VARIANT: "variants",
+            SearchResultType.MUTANT_LINE: "mutants",
+            SearchResultType.PUBLICATION: "publications",
+        }
+        return f"/search/{routes.get(result_type, result_type.value)}/{result_id}"
 
     async def _search_genes(
         self, db: AsyncSession, pattern: str, limit: int

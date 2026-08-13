@@ -22,12 +22,14 @@ from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.config import get_settings
-from ..core.exceptions import NotFoundError, ValidationError
+from ..core.exceptions import AuthorizationError, NotFoundError, ValidationError
+from ..core.security import RoleName, has_role
 from ..core.task_contract import BLAST_RUN_TASK
 from ..models.blast import BlastDatabase, BlastDbType, BlastHit, BlastJob, BlastJobStatus
 from ..models.genomic import Assembly
 from ..schemas.blast import (
     BlastDatabaseResponse,
+    BlastJobListResponse,
     BlastJobResponse,
     BlastParameters,
     BlastProgram,
@@ -285,17 +287,63 @@ class BlastService:
 
         return self._job_to_response(job)
 
-    async def get_job(self, db: AsyncSession, job_id: uuid.UUID) -> BlastJobResponse:
+    async def get_job(
+        self,
+        db: AsyncSession,
+        job_id: uuid.UUID,
+        user_id: uuid.UUID | None = None,
+        user_roles: list[str] | None = None,
+    ) -> BlastJobResponse:
         result = await db.execute(select(BlastJob).where(BlastJob.id == job_id))
         job = result.scalar_one_or_none()
         if job is None:
             raise NotFoundError(f"BLAST job {job_id} not found")
+        self._authorize_job(job.user_id, user_id, user_roles)
         return self._job_to_response(job)
+
+    async def list_jobs(
+        self,
+        db: AsyncSession,
+        user_id: uuid.UUID,
+        user_roles: list[str] | None = None,
+        *,
+        page: int = 1,
+        page_size: int = 20,
+        status: str | None = None,
+    ) -> BlastJobListResponse:
+        conditions = []
+        if not has_role(user_roles or [], RoleName.ADMINISTRATOR):
+            conditions.append(BlastJob.user_id == user_id)
+        if status:
+            conditions.append(BlastJob.status == status)
+
+        total = int(
+            await db.scalar(
+                select(func.count()).select_from(BlastJob).where(*conditions)
+            )
+            or 0
+        )
+        stmt = (
+            select(BlastJob)
+            .where(*conditions)
+            .order_by(BlastJob.submitted_at.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+        jobs = list((await db.execute(stmt)).scalars().all())
+        return BlastJobListResponse(
+            items=[self._job_to_response(job) for job in jobs],
+            total=total,
+            page=page,
+            page_size=page_size,
+        )
 
     async def get_result(
         self,
         db: AsyncSession,
         job_id: uuid.UUID,
+        user_id: uuid.UUID | None = None,
+        user_roles: list[str] | None = None,
         *,
         limit: int = 50,
         offset: int = 0,
@@ -310,6 +358,7 @@ class BlastService:
         job = result.scalar_one_or_none()
         if job is None:
             raise NotFoundError(f"BLAST job {job_id} not found")
+        self._authorize_job(job.user_id, user_id, user_roles)
 
         base = BlastResultResponse(
             job_id=str(job.id),
@@ -393,12 +442,22 @@ class BlastService:
         )
 
     @staticmethod
+    def _authorize_job(owner_id, user_id, user_roles) -> None:
+        if owner_id != user_id and not has_role(user_roles, RoleName.ADMINISTRATOR):
+            raise AuthorizationError("You do not have permission to access this BLAST job")
+
+    @staticmethod
     def _job_to_response(job: BlastJob) -> BlastJobResponse:
+        database = getattr(job, "database", None)
         return BlastJobResponse(
             job_id=str(job.id),
             status=BlastSchemaJobStatus(job.status),
             program=BlastProgram(job.program),
             database_id=job.database_id,
+            database=database.name if database is not None else None,
+            query_sequence=job.query_sequence,
+            parameters=job.parameters or {},
+            hit_count=job.hit_count or 0,
             submitted_at=job.submitted_at,
             started_at=job.started_at,
             completed_at=job.completed_at,

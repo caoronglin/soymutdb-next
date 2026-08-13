@@ -7,7 +7,6 @@ dependency-injection helpers so that tests can override them.
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from functools import lru_cache
 from typing import Any
 
 import clickhouse_connect
@@ -84,25 +83,29 @@ async def get_db() -> AsyncIterator[AsyncSession]:
 # ---------------------------------------------------------------------------
 
 
-@lru_cache(maxsize=1)
-def get_clickhouse_client() -> Any:
+_clickhouse_client: Any | None = None
+
+
+async def get_clickhouse_client() -> Any:
     """Return a singleton async ClickHouse client.
 
     ``clickhouse_connect.get_async_client`` is a **coroutine factory**: this
-    function returns a coroutine that must be awaited to obtain the client.
-    Callers should ``await get_clickhouse_client()`` (and cache the result
-    themselves, e.g. lazily on first use).
+    function awaits the coroutine factory once and reuses the client, so each
+    call returns a fresh awaitable while preserving the existing call shape.
     """
-    return clickhouse_connect.get_async_client(
-        host=settings.clickhouse_host,
-        port=settings.clickhouse_port,
-        username=settings.clickhouse_user,
-        password=settings.clickhouse_password,
-        database=settings.clickhouse_database,
-        secure=settings.clickhouse_secure,
-        connect_timeout=settings.clickhouse_connect_timeout,
-        send_receive_timeout=settings.clickhouse_send_receive_timeout,
-    )
+    global _clickhouse_client
+    if _clickhouse_client is None:
+        _clickhouse_client = await clickhouse_connect.get_async_client(
+            host=settings.clickhouse_host,
+            port=settings.clickhouse_port,
+            username=settings.clickhouse_user,
+            password=settings.clickhouse_password,
+            database=settings.clickhouse_database,
+            secure=settings.clickhouse_secure,
+            connect_timeout=settings.clickhouse_connect_timeout,
+            send_receive_timeout=settings.clickhouse_send_receive_timeout,
+        )
+    return _clickhouse_client
 
 
 # ---------------------------------------------------------------------------
@@ -140,7 +143,7 @@ def get_redis() -> Redis:
 
 async def close_db() -> None:
     """Dispose all database connections (called on application shutdown)."""
-    global _engine, _session_factory, _redis
+    global _engine, _session_factory, _redis, _clickhouse_client
     if _engine is not None:
         await _engine.dispose()
         _engine = None
@@ -148,3 +151,6 @@ async def close_db() -> None:
     if _redis is not None:
         await _redis.aclose()
         _redis = None
+    if _clickhouse_client is not None:
+        await _clickhouse_client.aclose()
+        _clickhouse_client = None

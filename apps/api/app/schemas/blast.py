@@ -160,6 +160,10 @@ class BlastJobResponse(BaseModel):
     status: BlastJobStatus
     program: BlastProgram
     database_id: int
+    database: str | None = None
+    query_sequence: str | None = None
+    parameters: dict[str, Any] = Field(default_factory=dict)
+    hit_count: int = 0
     submitted_at: datetime
     started_at: datetime | None = None
     completed_at: datetime | None = None
@@ -167,6 +171,13 @@ class BlastJobResponse(BaseModel):
     result_url: str | None = None
 
     model_config = {"from_attributes": True}
+
+
+class BlastJobListResponse(BaseModel):
+    items: list[BlastJobResponse] = Field(default_factory=list)
+    total: int
+    page: int
+    page_size: int
 
 
 #: Flat, per-HSP hit row persisted to ``blast_hits`` and returned to clients.

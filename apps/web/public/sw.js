@@ -13,8 +13,7 @@
  *   4. 其他静态资源             → stale-while-revalidate（先缓存后刷新）
  *
  * 部署注意：站点托管在 gh-pages 子路径（如 https://caoronglin.github.io/soymutdb-next/）
- * 且 vite 未配置 base，因此所有路径均以 registration.scope 为基准动态解析，
- * 不依赖 vite base 配置。跨域请求（生产 API 源、CF 分析 beacon 等）一律放行。
+ * 所有路径均以 registration.scope 为基准动态解析，跨域请求一律放行。
  */
 "use strict";
 

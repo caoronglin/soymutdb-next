@@ -9,7 +9,9 @@ timeouts.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 from app.core import database
 from app.core.config import Settings
@@ -192,3 +194,37 @@ def test_redis_client_has_bounded_socket_timeouts(monkeypatch) -> None:
     assert captured["socket_timeout"] == 2.0
     assert captured["socket_connect_timeout"] == 2.0
     assert captured["decode_responses"] is True
+
+
+@pytest.mark.asyncio
+async def test_clickhouse_client_can_be_awaited_repeatedly_without_reusing_coroutine(
+    monkeypatch,
+) -> None:
+    """Repeated dependency resolution returns the same usable client."""
+    client = MagicMock()
+    factory = AsyncMock(return_value=client)
+    monkeypatch.setattr(database.clickhouse_connect, "get_async_client", factory)
+    database._clickhouse_client = None
+
+    try:
+        first = await database.get_clickhouse_client()
+        second = await database.get_clickhouse_client()
+    finally:
+        database._clickhouse_client = None
+
+    assert first is client
+    assert second is client
+    factory.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_close_db_closes_clickhouse_client(monkeypatch) -> None:
+    """Application shutdown closes and clears the ClickHouse client."""
+    client = MagicMock()
+    client.aclose = AsyncMock()
+    database._clickhouse_client = client
+
+    await database.close_db()
+
+    client.aclose.assert_awaited_once()
+    assert database._clickhouse_client is None

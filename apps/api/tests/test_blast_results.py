@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import AuthorizationError, NotFoundError
 from app.models.blast import BlastHit, BlastJob, BlastJobStatus
 from app.schemas.blast import BlastProgram, BlastResultResponse
 from app.services.blast_service import BlastService
@@ -58,6 +58,9 @@ class FakeDbSession:
         if "blast_hits" in sql:
             return _Result(self.hits)
         return _Result([self.job])
+
+    async def scalar(self, stmt):
+        return 1 if self.job is not None else 0
 
 
 def _make_job(status: BlastJobStatus, *, result_path: str | None = None) -> BlastJob:
@@ -111,7 +114,8 @@ def _make_hit(job_id: uuid.UUID, hsp_num: int = 1) -> BlastHit:
 
 class TestResultsEnvelope:
     async def _get(self, session: FakeDbSession, job_id: uuid.UUID):
-        return await BlastService().get_result(session, job_id)
+        user_id = session.job.user_id if session.job is not None else uuid.uuid4()
+        return await BlastService().get_result(session, job_id, user_id, ["researcher"])
 
     @pytest.mark.asyncio
     async def test_pending_job_returns_status_without_hits(self) -> None:
@@ -213,7 +217,55 @@ class TestResultsEnvelope:
         with patch("app.services.blast_service.generate_presigned_url") as mock_p:
             mock_p.return_value = "https://x"
             response = await BlastService().get_result(
-                session, job.id, limit=10, offset=20
+                session, job.id, job.user_id, ["researcher"], limit=10, offset=20
             )
         assert response.total_hits == 2  # from job.hit_count, not the page
         assert len(response.hits or []) == 1
+
+
+class TestBlastOwnership:
+    @pytest.mark.asyncio
+    async def test_cross_user_blast_status_is_forbidden(self) -> None:
+        job = _make_job(BlastJobStatus.PENDING)
+        session = FakeDbSession(job)
+        with pytest.raises(AuthorizationError):
+            await BlastService().get_job(
+                session, job.id, uuid.uuid4(), ["researcher"]
+            )
+
+    @pytest.mark.asyncio
+    async def test_owner_blast_status_is_allowed(self) -> None:
+        job = _make_job(BlastJobStatus.PENDING)
+        session = FakeDbSession(job)
+        response = await BlastService().get_job(
+            session, job.id, job.user_id, ["researcher"]
+        )
+        assert response.job_id == str(job.id)
+
+    @pytest.mark.asyncio
+    async def test_administrator_can_read_other_users_blast_results(self) -> None:
+        job = _make_job(BlastJobStatus.PENDING)
+        session = FakeDbSession(job)
+        response = await BlastService().get_result(
+            session, job.id, uuid.uuid4(), ["administrator"]
+        )
+        assert response.job_id == str(job.id)
+
+    @pytest.mark.asyncio
+    async def test_cross_user_blast_results_are_forbidden(self) -> None:
+        job = _make_job(BlastJobStatus.PENDING)
+        with pytest.raises(AuthorizationError):
+            await BlastService().get_result(
+                FakeDbSession(job), job.id, uuid.uuid4(), ["researcher"]
+            )
+
+    @pytest.mark.asyncio
+    async def test_job_list_returns_normalized_portal_fields(self) -> None:
+        job = _make_job(BlastJobStatus.COMPLETED)
+        response = await BlastService().list_jobs(
+            FakeDbSession(job), job.user_id, ["researcher"], page=1, page_size=5
+        )
+        assert response.total == 1
+        assert response.items[0].job_id == str(job.id)
+        assert response.items[0].query_sequence == job.query_sequence
+        assert response.items[0].hit_count == 2

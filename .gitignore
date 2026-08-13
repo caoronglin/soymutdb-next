@@ -79,6 +79,8 @@ coverage/
 .nyc_output/
 test-results/
 playwright-report/
+playwright-report-*/
+test-results-*/
 /allure-results/
 /htmlcov/
 
@@ -93,6 +95,7 @@ playwright-report/
 
 # Deepwork session state (local OpenCode context, never commit)
 .slim/deepwork/
+.opencode/
 
 # ---------------------------------------------------------------------------
 # Hermes runtime (NOT project code)

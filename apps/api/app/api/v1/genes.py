@@ -69,17 +69,22 @@ async def list_genes(
     chromosome: str | None = Query(default=None),
     biotype: str | None = Query(default=None),
     search: str | None = Query(default=None, max_length=500),
+    q: str | None = Query(default=None, max_length=500),
     cursor: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
+    page: int | None = Query(default=None, ge=1),
+    page_size: int | None = Query(default=None, ge=1, le=200),
 ) -> GeneListResponse:
-    """List genes with cursor pagination."""
+    """List genes with cursor pagination or the portal's page contract."""
     params = GeneListParams(
         assembly_id=str(assembly_id) if assembly_id else None,
         chromosome=chromosome,
         biotype=biotype,
-        search=search,
+        search=search or q,
         cursor=cursor,
         limit=limit,
+        page=page,
+        page_size=page_size,
     )
     return await service.list_genes(db, params)
 

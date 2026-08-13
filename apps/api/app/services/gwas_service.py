@@ -24,7 +24,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.config import get_settings
-from ..core.exceptions import NotFoundError, ValidationError
+from ..core.exceptions import AuthorizationError, NotFoundError, ValidationError
+from ..core.security import RoleName, has_role
 from ..core.task_contract import GWAS_RUN_TASK
 from ..models.gwas import GwasJob, GwasJobStatus
 from ..schemas.gwas import (
@@ -263,15 +264,16 @@ class GwasService:
 
     # -- status / results --------------------------------------------------
 
-    async def get_job(self, db: AsyncSession, job_id: uuid.UUID) -> GwasJobResponse:
+    async def get_job(self, db: AsyncSession, job_id: uuid.UUID, user_id: uuid.UUID, user_roles: list[str]) -> GwasJobResponse:
         result = await db.execute(select(GwasJob).where(GwasJob.id == job_id))
         job = result.scalar_one_or_none()
         if job is None:
             raise NotFoundError(f"GWAS job {job_id} not found")
+        self._authorize_job(job.user_id, user_id, user_roles)
         return self._job_to_response(job)
 
     async def get_result(
-        self, db: AsyncSession, job_id: uuid.UUID
+        self, db: AsyncSession, job_id: uuid.UUID, user_id: uuid.UUID, user_roles: list[str]
     ) -> GwasResultResponse:
         """Return the status-aware result envelope for a GWAS job.
 
@@ -283,6 +285,7 @@ class GwasService:
         job = result.scalar_one_or_none()
         if job is None:
             raise NotFoundError(f"GWAS job {job_id} not found")
+        self._authorize_job(job.user_id, user_id, user_roles)
 
         base = GwasResultResponse(
             job_id=str(job.id),
@@ -315,6 +318,11 @@ class GwasService:
             error_message=None,
             completed_at=job.completed_at,
         )
+
+    @staticmethod
+    def _authorize_job(owner_id, user_id, user_roles) -> None:
+        if owner_id != user_id and not has_role(user_roles, RoleName.ADMINISTRATOR):
+            raise AuthorizationError("You do not have permission to access this GWAS job")
 
     @staticmethod
     def _job_to_response(job: GwasJob) -> GwasJobResponse:

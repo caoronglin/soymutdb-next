@@ -1,5 +1,8 @@
 # SoyMutDB 部署架构
 
+> **历史文档：非当前主路径。** 当前规范见 [开发者架构与部署](../dev/architecture-and-deployment.md) 和
+> [运维数据发布手册](../ops/data-import-and-release.md)。本文仅保留现状审计与迁移背景。
+
 > C6 交付物：梳理当前（2026-08，分支 `feature/upgrade-antd-mcp-mcp`）生产部署拓扑、访问入口、环境变量矩阵与故障排查。
 > 本文档**只描述现状**（docker-compose.yml / infra/nginx / .github/workflows 的实际行为），不改变任何配置。
 > 与配置不符之处见文末「遗留项与现状不符点」。

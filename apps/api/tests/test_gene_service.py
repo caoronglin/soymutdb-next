@@ -74,6 +74,9 @@ class FakeDbSession:
             return _Result(list(self.chromosomes))
         return _Result([])
 
+    async def scalar(self, stmt):
+        return len(self.genes)
+
 
 # ---------------------------------------------------------------------------
 # Factories
@@ -96,7 +99,7 @@ def make_gene(
     transcripts: list[Transcript] | None = None,
     aliases: list[GeneAlias] | None = None,
 ) -> Gene:
-    return Gene(
+    gene = Gene(
         id=gene_id,
         assembly_id=1,
         chromosome_id=chromosome_id,
@@ -111,6 +114,8 @@ def make_gene(
         transcripts=transcripts or [],
         aliases=aliases or [],
     )
+    gene.chromosome = make_chromosome(chr_id=chromosome_id)
+    return gene
 
 
 def make_transcript(
@@ -238,11 +243,16 @@ class TestListGenes:
         assert len(response.items) == 2
 
     async def test_response_items_are_mapped(self):
-        session = FakeDbSession(genes=[make_gene()])
+        gene = make_gene()
+        gene.chromosome = make_chromosome(name="Gm01")
+        session = FakeDbSession(genes=[gene])
         response = await GeneService().list_genes(session, GeneListParams(limit=50))
         item = response.items[0]
         assert item.gene_id == "Glyma.01G000100"
-        assert item.chromosome == "1"  # chromosome_id string, unchanged contract
+        assert item.chromosome == "Gm01"
+        assert item.start_pos == 1000
+        assert item.end_pos == 5000
+        assert item.symbol == "Disease Resistance"
 
 
 class TestGetGene:
@@ -251,6 +261,7 @@ class TestGetGene:
             transcripts=[make_transcript()],
             aliases=[GeneAlias(gene_id="Glyma.01G000100", alias="DR1")],
         )
+        gene.chromosome = make_chromosome(name="Gm01")
         session = FakeDbSession(genes=[gene])
         detail = await GeneService().get_gene(session, "Glyma.01G000100")
         assert detail.gene_id == "Glyma.01G000100"
@@ -262,6 +273,9 @@ class TestGetGene:
         assert detail.transcripts[0].exons[0].start == 1000
         assert detail.aliases == ["DR1"]
         assert detail.variant_count == 0
+        assert detail.chromosome == "Gm01"
+        assert detail.start_pos == 1000
+        assert detail.end_pos == 5000
 
     async def test_missing_raises_not_found(self):
         session = FakeDbSession(genes=[])

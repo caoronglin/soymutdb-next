@@ -10,14 +10,8 @@ interface AdminLayoutProps {
 /** Page titles mapped by route path prefix. */
 const PAGE_TITLES: Record<string, string> = {
   "/": "Dashboard",
-  "/users": "Users & Roles",
-  "/releases": "Release Management",
+  "/resource-catalog": "Resource Catalog",
   "/imports": "Data Imports",
-  "/assemblies": "Assemblies & Genes",
-  "/variants": "Variant Management",
-  "/tracks": "Track Management",
-  "/blast": "BLAST Management",
-  "/seeds": "Seed Management",
   "/content": "Content Management",
   "/news": "News Management",
   "/audit": "Audit Logs",

@@ -240,9 +240,14 @@ else
     echo -e "${CYAN}[3/4] S3 objects & checksums...${NC}"
     S3_MANIFEST="${RESTORE_SRC}/s3_manifest.tsv"
     if [[ -f "${S3_MANIFEST}" ]]; then
+        if [[ ! -f "${RESTORE_SRC}/s3_buckets.txt" ]] || ! grep -qx 'gwas' "${RESTORE_SRC}/s3_buckets.txt"; then
+            check "s3 gwas bucket manifest" 1
+        else
+            check "s3 gwas bucket manifest" 0
+        fi
         if mc_run alias set s3dst "${S3_ENDPOINT}" "${S3_ACCESS_KEY}" "${S3_SECRET_KEY}" >/dev/null 2>&1; then
             # 数量 + 大小
-            for bucket in $(cut -f1 "${S3_MANIFEST}" | sort -u); do
+            for bucket in $({ cut -f1 "${S3_MANIFEST}"; cat "${RESTORE_SRC}/s3_buckets.txt"; } | sort -u); do
                 exp_count="$(grep -c "^${bucket}"$'\t' "${S3_MANIFEST}" || true)"
                 exp_bytes="$(awk -F'\t' -v b="${bucket}" '$1==b {s+=$3} END {print s+0}' "${S3_MANIFEST}")"
                 act_count=0

@@ -6,9 +6,10 @@ Fix vs. reference: ``VariantType`` enum is unified to SNP/INS/DEL/MNV/SV.
 from __future__ import annotations
 
 from datetime import datetime
-from ..core.compat import StrEnum
 
 from pydantic import BaseModel, Field, field_validator
+
+from ..core.compat import StrEnum
 
 
 class VariantType(StrEnum):
@@ -61,6 +62,10 @@ class VariantResponse(BaseModel):
     quality: float | None = Field(default=None, ge=0)
     filter_status: str = Field(default="PASS")
     allele_frequency: float | None = Field(default=None, ge=0.0, le=1.0)
+    gene_id: str | None = None
+    gene_symbol: str | None = None
+    consequence: ConsequenceType | None = None
+    impact: ImpactLevel | None = None
 
     model_config = {"from_attributes": True}
 
@@ -68,11 +73,7 @@ class VariantResponse(BaseModel):
 class VariantDetail(VariantResponse):
     """Extended variant information with annotation and linked entities."""
 
-    gene_id: str | None = None
-    gene_symbol: str | None = None
     transcript_id: str | None = None
-    consequence: ConsequenceType | None = None
-    impact: ImpactLevel | None = None
     hgvs_c: str | None = None
     hgvs_p: str | None = None
     sift_score: float | None = Field(default=None, ge=0.0, le=1.0)

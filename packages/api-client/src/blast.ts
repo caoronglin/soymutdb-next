@@ -1,11 +1,13 @@
 import { http } from "./auth";
 
 export interface BlastDatabase {
-  id: string;
+  id: string | number;
   name: string;
-  type: "nucleotide" | "protein";
-  description: string;
-  sequence_count: number;
+  db_type: "nucl" | "prot";
+  assembly_id: string | number;
+  assembly_name?: string | null;
+  assembly_version?: string | null;
+  assembly_is_default?: boolean | null;
   is_active: boolean;
 }
 
@@ -26,23 +28,18 @@ export interface BlastJob {
 }
 
 export interface BlastHit {
-  id: string;
-  job_id: string;
-  target_id: string;
-  target_description?: string;
-  score: number;
-  e_value: number;
-  identity: number;
-  identity_percent: number;
+  hsp_num: number;
+  subject_id: string;
+  subject_title: string;
+  percent_identity: number;
   alignment_length: number;
+  mismatches: number;
+  gap_opens: number;
   query_start: number;
   query_end: number;
-  target_start: number;
-  target_end: number;
-  gaps: number;
-  query_sequence: string;
-  target_sequence: string;
-  midline: string;
+  subject_start: number;
+  subject_end: number;
+  evalue: number;
   bit_score: number;
 }
 
@@ -59,9 +56,10 @@ export interface BlastJobParams {
 
 export interface BlastJobListResponse {
   items: BlastJob[];
-  total: number;
-  page: number;
-  page_size: number;
+  cursor: string | null;
+  next_cursor: string | null;
+  has_more: boolean;
+  total_count: number | null;
 }
 
 export interface BlastHitListResponse {
@@ -74,35 +72,70 @@ export function getBlastDatabases(): Promise<BlastDatabase[]> {
 }
 
 export function submitBlastJob(params: BlastJobParams): Promise<BlastJob> {
-  return http.post<BlastJob>("/blast/jobs", { json: params });
+  return http.post<BlastJobApi>("/blast/jobs", {
+    json: {
+      program: params.program,
+      database: params.database,
+      query_sequence: params.sequence,
+      parameters: {
+        evalue: params.e_value,
+        max_target_seqs: params.max_hits,
+        word_size: params.word_size,
+        percent_identity: params.identity_cutoff,
+      },
+    },
+  }).then(normalizeJob);
 }
 
 export function getBlastJobs(params: {
-  page?: number;
-  page_size?: number;
+  cursor?: string;
+  limit?: number;
   status?: string;
 } = {}): Promise<BlastJobListResponse> {
-  return http.get<BlastJobListResponse>("/blast/jobs", { params });
+  return http.get<BlastJobListResponse & { items: BlastJobApi[] }>("/blast/jobs", { params }).then(
+    (response) => ({ ...response, items: response.items.map(normalizeJob) }),
+  );
 }
 
 export function getBlastJob(jobId: string): Promise<BlastJob> {
-  return http.get<BlastJob>(`/blast/jobs/${jobId}`);
+  return http.get<BlastJobApi>(`/blast/jobs/${jobId}`).then(normalizeJob);
 }
 
 export function getBlastHits(
   jobId: string,
   params: {
-    page?: number;
-    page_size?: number;
+    cursor?: string;
+    limit?: number;
     min_e_value?: number;
     min_identity?: number;
   } = {},
 ): Promise<BlastHitListResponse> {
-  return http.get<BlastHitListResponse>(`/blast/jobs/${jobId}/hits`, { params });
+  return http.get<BlastResultApi>(`/blast/jobs/${jobId}/results`, {
+    params,
+  }).then((response) => ({
+    items: response.hits ?? [],
+    total: response.total_hits ?? 0,
+  }));
 }
 
-export function cancelBlastJob(jobId: string): Promise<void> {
-  return http.post<void>(`/blast/jobs/${jobId}/cancel`);
+interface BlastJobApi extends Omit<BlastJob, "id" | "database"> {
+  job_id: string;
+  database?: string | null;
+  database_id: string | number;
+}
+
+interface BlastResultApi {
+  hits: BlastHit[] | null;
+  total_hits: number | null;
+}
+
+function normalizeJob(job: BlastJobApi | BlastJob): BlastJob {
+  if ("id" in job) return job;
+  return {
+    ...job,
+    id: job.job_id,
+    database: job.database ?? String(job.database_id),
+  };
 }
 
 export const BLAST_PROGRAMS = [

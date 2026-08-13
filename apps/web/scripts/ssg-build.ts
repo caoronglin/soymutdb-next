@@ -28,7 +28,6 @@ const PAGES = [
     "index",
     "about",
     "browse",
-    "search",
     "guide",
     "downloads",
     "publications",

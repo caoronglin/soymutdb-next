@@ -37,12 +37,15 @@ Run (local)::
 from __future__ import annotations
 
 import argparse
+import json
+import logging
 import os
 import uuid
 from typing import Any
 
 import httpx
 from fastmcp import Context, FastMCP
+from fastmcp.server.auth import AccessToken, AuthProvider
 
 from .manifest import MANIFEST
 from .ratelimit import GLOBAL_LIMITER, SUBMIT_LIMITER
@@ -56,11 +59,23 @@ API_TOKEN: str = os.environ.get("SOYMUTDB_MCP_API_TOKEN", "")
 
 #: Per-request HTTP timeout (seconds).
 HTTP_TIMEOUT = 30.0
+logger = logging.getLogger("mcp.audit")
 
 #: In-memory job ownership registry: ``job_id -> submitter_token``.
 #: Populated by ``blast_submit``; consulted (and enforced) by the poll tools.
 #: Process-local by design (B4); swap for Redis when scaling out (G3).
 _JOB_OWNERSHIP: dict[str, str] = {}
+
+
+def _authenticate_request(authorization: str | None) -> bool:
+    return bool(API_TOKEN) and authorization == f"Bearer {API_TOKEN}"
+
+
+class _McpTokenAuth(AuthProvider):
+    async def verify_token(self, token: str) -> AccessToken | None:
+        if not _authenticate_request(f"Bearer {token}"):
+            return None
+        return AccessToken(token=token, client_id="soymutdb", scopes=[])
 
 
 # ---------------------------------------------------------------------------
@@ -164,6 +179,7 @@ async def _api_request(
     on transport failures.  Success responses are returned verbatim (the
     API has no success envelope — schemas are returned directly).
     """
+    request_id = uuid.uuid4().hex
     try:
         async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
             response = await client.request(
@@ -178,16 +194,25 @@ async def _api_request(
     except httpx.TransportError as exc:
         raise UpstreamUnavailable(f"upstream unreachable: {exc}") from exc
 
-    if response.status_code >= 400:
-        try:
-            body = response.json()
-        except ValueError:
-            body = None
-        raise _parse_api_error(response.status_code, body, response.headers)
     try:
-        return response.json()
+        response_body = response.json()
     except ValueError:
-        return {}
+        response_body = None
+    upstream_request_id = (
+        response.headers.get("X-Request-ID")
+        or (response_body.get("request_id") if isinstance(response_body, dict) else None)
+        or request_id
+    )
+    logger.info(json.dumps({
+        "event": "mcp_upstream_request",
+        "method": method,
+        "path": path,
+        "status": response.status_code,
+        "request_id": upstream_request_id,
+    }, sort_keys=True))
+    if response.status_code >= 400:
+        raise _parse_api_error(response.status_code, response_body, response.headers)
+    return response_body if response_body is not None else {}
 
 
 # ---------------------------------------------------------------------------
@@ -197,9 +222,10 @@ async def _api_request(
 
 def _caller_key(ctx: Context | None) -> str:
     """Per-client identity for rate limiting / quota accounting."""
-    if ctx is not None and getattr(ctx, "client_id", None):
-        return str(ctx.client_id)
-    return "anonymous"
+    # FastMCP's client_id is metadata supplied by the client, not an
+    # authentication fact. Until an authenticated principal is exposed by the
+    # transport, fail closed to one shared anonymous budget.
+    return "authenticated" if API_TOKEN else "anonymous"
 
 
 def _enforce_rate_limit(ctx: Context | None, *, submit_quota: bool = False) -> None:
@@ -296,6 +322,7 @@ mcp = FastMCP(
         "job (the token is the ownership proof - keep it private)."
     ),
     version=str(MANIFEST["version"]),
+    auth=_McpTokenAuth(),
 )
 
 

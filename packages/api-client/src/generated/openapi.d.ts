@@ -212,6 +212,14 @@ export interface paths {
         /**
          * List Assemblies
          * @description List all genome assemblies.
+         *
+         *     Read-hot query cached in Redis (default TTL) via cache-aside; a Redis
+         *     failure degrades to a direct query.  An empty assembly list is cached as
+         *     well (short-circuit for a freshly seeded database) — that empty-result
+         *     caching is the anti-cache-penetration behaviour shared by every
+         *     ``get_or_set`` call site: once a loader result (even an empty one) is
+         *     stored, repeated requests no longer hit the database until the TTL
+         *     expires.
          */
         get: operations["list_assemblies_api_v1_genes_assemblies_get"];
         put?: never;
@@ -251,7 +259,7 @@ export interface paths {
         };
         /**
          * List Genes
-         * @description List genes with cursor pagination.
+         * @description List genes with cursor pagination or the portal's page contract.
          */
         get: operations["list_genes_api_v1_genes_get"];
         put?: never;
@@ -280,6 +288,201 @@ export interface paths {
         get: operations["get_gene_api_v1_genes__gene_id__get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/gwas/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Upload
+         * @description Request a pre-signed upload URL for a GWAS input file.
+         *
+         *     Returns a PUT URL valid for 1 hour plus the object key the client must
+         *     send back at submit time.  Nothing is persisted yet.
+         */
+        post: operations["create_upload_api_v1_gwas_uploads_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/gwas/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit Gwas Job
+         * @description Submit a GWAS job for the uploaded inputs.
+         *
+         *     Validates the ``gwas/`` key namespace, the phenotype file format, the
+         *     method whitelist and the parameter whitelist, then creates the job row +
+         *     outbox event in one transaction (pending).
+         */
+        post: operations["submit_gwas_job_api_v1_gwas_submit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/gwas/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Gwas Job
+         * @description Return the current status of a GWAS job.
+         *
+         *     ``result`` is ``null`` until the job completes; completed jobs carry the
+         *     worker-written summary (MinIO object keys + association statistics).
+         */
+        get: operations["get_gwas_job_api_v1_gwas__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/gwas/{job_id}/results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Gwas Results
+         * @description Return pre-signed download URLs for a completed GWAS job's outputs.
+         *
+         *     Non-completed jobs return no URLs (status-aware envelope); completed jobs
+         *     expose the Manhattan data JSON, the QQ data JSON and the self-contained
+         *     ``Manhattan_QQ.html`` report.
+         */
+        get: operations["get_gwas_results_api_v1_gwas__job_id__results_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Job Events
+         * @description Stream job status updates as Server-Sent Events.
+         *
+         *     Event format (one per updated job)::
+         *
+         *         event: job_update
+         *         data: {"job_type": "blast", "job_id": "...", "status": "running",
+         *                "updated_at": "2026-08-09T12:00:00+00:00"}
+         *
+         *     When no job changed in the last poll cycle a ``: ping`` heartbeat
+         *     comment line is emitted instead.  The stream ends when the client
+         *     disconnects.
+         */
+        get: operations["job_events_api_v1_jobs_events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tools/ld": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Compute Ld
+         * @description LD heatmap data: variant coordinates + r² matrix.
+         *
+         *     - Region/gene mode returns the variant coordinates in the interval
+         *       (from ``variant_facts``) together with ``r_squared: null`` when no
+         *       per-sample genotype data is available (the store only carries allele
+         *       frequencies).
+         *     - Inline ``genotypes`` mode (sample × variant dosage matrix) computes the
+         *       full pairwise r² matrix (squared Pearson correlation of dosages).
+         */
+        post: operations["compute_ld_api_v1_tools_ld_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tools/diversity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Nucleotide Diversity
+         * @description Nucleotide diversity (π) and Watterson's θ for a gene / interval.
+         *
+         *     π = Σ 2·p·(1−p) over polymorphic sites, per base pair; θ = S / a_n is
+         *     reported when ``sample_size`` is provided.  Optional ``window_size``
+         *     (bp) returns per-window π for sliding-window plots.
+         */
+        post: operations["nucleotide_diversity_api_v1_tools_diversity_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tools/allelefreq": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Allele Frequencies
+         * @description Per-variant allele frequencies for a locus / gene / interval.
+         */
+        post: operations["allele_frequencies_api_v1_tools_allelefreq_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -448,6 +651,9 @@ export interface paths {
         /**
          * Dashboard Stats
          * @description High-level database statistics for the dashboard.
+         *
+         *     Read-hot aggregation cached in Redis (default TTL) via cache-aside;
+         *     a Redis failure degrades to a direct aggregation.
          */
         get: operations["dashboard_stats_api_v1_stats_dashboard_get"];
         put?: never;
@@ -553,6 +759,11 @@ export interface paths {
          * @description Variant density per chromosome, aggregated from PostgreSQL.
          *
          *     ``density_per_kb`` is computed as ``variant_count / (length_bp / 1000)``.
+         *     Read-hot aggregation cached in Redis (default TTL) keyed by
+         *     ``release_id``; a Redis failure degrades to a direct aggregation.  Empty
+         *     results are cached too (anti-penetration): when no data exists the
+         *     loader returns ``[]`` which is memoised until the TTL expires instead of
+         *     re-running the aggregate per request.
          */
         get: operations["chromosome_density_summary_api_v1_stats_chromosome_density_get"];
         put?: never;
@@ -596,6 +807,11 @@ export interface paths {
         /**
          * Per-release statistics
          * @description Statistics per release (version, date, variant/gene/line counts).
+         *
+         *     Read-hot query cached in Redis (default TTL) keyed by ``only_active``;
+         *     a Redis failure degrades to a direct query.  An empty release list is
+         *     cached as well (anti-penetration) so a freshly seeded database does not
+         *     re-run the query on every request.
          */
         get: operations["release_statistics_api_v1_stats_releases_get"];
         put?: never;
@@ -673,7 +889,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List Blast Jobs
+         * @description List the current user's BLAST jobs, newest first.
+         */
+        get: operations["list_blast_jobs_api_v1_blast_jobs_get"];
         put?: never;
         /**
          * Submit Blast Job
@@ -963,6 +1183,9 @@ export interface paths {
         /**
          * List Releases
          * @description List database releases.
+         *
+         *     Read-hot query cached in Redis (default TTL) keyed by ``status``; a
+         *     Redis failure degrades to a direct query.
          */
         get: operations["list_releases_api_v1_releases_get"];
         put?: never;
@@ -1134,6 +1357,93 @@ export interface paths {
         patch: operations["update_seed_request_api_v1_seeds_requests__request_id__patch"];
         trace?: never;
     };
+    "/api/v1/seed-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit a public seed request
+         * @description Submit a seed request contact (open to all; no authentication).
+         */
+        post: operations["create_seed_request_api_v1_seed_requests_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/seed-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List seed requests (researcher+)
+         * @description Paginated admin listing with an optional status filter.
+         */
+        get: operations["list_seed_requests_api_v1_admin_seed_requests_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/seed-requests/{request_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update a seed request status (researcher+)
+         * @description Advance a request's status (pending → approved/rejected → fulfilled).
+         */
+        patch: operations["update_seed_request_api_v1_admin_seed_requests__request_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/content/snapshot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Content Snapshot
+         * @description Public content snapshot for static builds (E2-2).
+         *
+         *     Frozen contract in ``docs/design/static-content-richtext-2026-08.md``
+         *     §4.1: schema_version/generated_at/news{source_total,included_total,
+         *     truncated,items}/news_detail{slug: detail|null}/about.
+         *
+         *     Aggregation is cached in Redis for 60 s (cache.py); the response carries
+         *     an ETag so build-time fetchers can short-circuit with 304.
+         */
+        get: operations["content_snapshot_api_v1_content_snapshot_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/content/news": {
         parameters: {
             query?: never;
@@ -1280,6 +1590,240 @@ export interface paths {
          *     generated.  Otherwise the file URL is returned directly.
          */
         get: operations["get_download_url_api_v1_content_downloads__file_id__url_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/news": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List News
+         * @description Paginated public news list (published only).
+         */
+        get: operations["list_news_api_v1_news_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/news/featured": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Featured News
+         * @description Homepage block: 5 featured articles + carousel groups.
+         *
+         *     Read-hot query cached in Redis with a short TTL (60s, content changes
+         *     frequently); a Redis failure degrades to a direct query.
+         */
+        get: operations["featured_news_api_v1_news_featured_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/news/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get News
+         * @description Article detail.
+         *
+         *     Published + visible articles are public.  Draft/hidden articles return a
+         *     valid HMAC preview token URL from the admin endpoint
+         *     (``/admin/news/{id}/preview-token``) and are then accessible with
+         *     ``?preview=<token>&exp=<ts>`` without login.
+         */
+        get: operations["get_news_api_v1_news__slug__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Notifications
+         * @description List the caller's notifications, unread first, newest first.
+         *
+         *     ``total`` / ``unread_count`` reflect the full set (not just the page).
+         */
+        get: operations["list_notifications_api_v1_notifications_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notifications/unread-count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Unread Count
+         * @description Return the caller's unread notification count (bell badge).
+         */
+        get: operations["get_unread_count_api_v1_notifications_unread_count_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notifications/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark Notifications Read
+         * @description Mark a subset (``ids``) or all (``all``) notifications as read.
+         *
+         *     ``ids`` are always scoped to the caller; foreign ids are ignored.
+         */
+        post: operations["mark_notifications_read_api_v1_notifications_read_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/releases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Release */
+        post: operations["create_release_api_v1_admin_releases_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/releases/{release_id}/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Validate Admin Release */
+        post: operations["validate_admin_release_api_v1_admin_releases__release_id__validate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/releases/{release_id}/ready": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ready Admin Release */
+        post: operations["ready_admin_release_api_v1_admin_releases__release_id__ready_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/releases/{release_id}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Publish Admin Release */
+        post: operations["publish_admin_release_api_v1_admin_releases__release_id__publish_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/releases/{release_id}/rollback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rollback Admin Release */
+        post: operations["rollback_admin_release_api_v1_admin_releases__release_id__rollback_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/releases/{release_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Admin Release */
+        get: operations["get_admin_release_api_v1_admin_releases__release_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1655,6 +2199,103 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/news": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List News Admin
+         * @description List ALL news articles — including drafts and archived.
+         *
+         *     Unlike the public ``GET /news`` (published only), this admin endpoint
+         *     sees every status and supports ``status_filter``, ``category`` and
+         *     ``search`` parameters.
+         */
+        get: operations["list_news_admin_api_v1_admin_news_get"];
+        put?: never;
+        /**
+         * Create News
+         * @description Create a news article (draft by default; publish via ``status``).
+         */
+        post: operations["create_news_api_v1_admin_news_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/news/{news_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Update News
+         * @description Partial update; ``status``/``is_published`` stay double-written.
+         */
+        put: operations["update_news_api_v1_admin_news__news_id__put"];
+        post?: never;
+        /**
+         * Delete News
+         * @description Hard-delete a news article.
+         */
+        delete: operations["delete_news_api_v1_admin_news__news_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/news/reorder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Reorder News
+         * @description Apply a full drag-and-drop ordering of ``featured_sort``.
+         */
+        patch: operations["reorder_news_api_v1_admin_news_reorder_patch"];
+        trace?: never;
+    };
+    "/api/v1/admin/news/{news_id}/preview-token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Preview Token
+         * @description Mint a 15-minute stateless HMAC preview token for a hidden/draft article.
+         *
+         *     The returned ``url`` (``/api/v1/news/{slug}?preview=<token>&exp=<ts>``)
+         *     can be opened without login; verification happens on the public detail
+         *     endpoint.  The token is NOT a JWT — no server-side state, HMAC-signed
+         *     with ``settings.jwt_secret``.
+         */
+        get: operations["preview_token_api_v1_admin_news__news_id__preview_token_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/imports": {
         parameters: {
             query?: never;
@@ -1729,6 +2370,40 @@ export interface paths {
         get: operations["get_import_status_api_v1_admin_imports__import_id__status_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/imports/uploads/multipart": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start Multipart Upload */
+        post: operations["start_multipart_upload_api_v1_admin_imports_uploads_multipart_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/imports/uploads/multipart/{upload_id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Finish Multipart Upload */
+        post: operations["finish_multipart_upload_api_v1_admin_imports_uploads_multipart__upload_id__complete_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1831,6 +2506,32 @@ export interface paths {
         get: operations["get_build_status_api_v1_admin_build_static_status_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/uploads/presign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Upload Presign
+         * @description Request a pre-signed PUT URL for an admin upload (researcher+).
+         *
+         *     Returns a PUT URL valid for 1 hour, the object key, and the public URL
+         *     the caller should persist.  Nothing is stored server-side yet.
+         *
+         *     Objects are stored in the PUBLIC bucket (``SOYMUTDB_S3_PUBLIC_BUCKET``)
+         *     so ``public_url`` can be served directly by the static gateway.
+         */
+        post: operations["create_upload_presign_api_v1_admin_uploads_presign_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1983,6 +2684,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/site/about": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get About Content
+         * @description Return the editable "About us" content (bilingual, optional).
+         */
+        get: operations["get_about_content_api_v1_site_about_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/site/home": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Home Content
+         * @description Return the editable homepage welcome block (bilingual, optional).
+         *
+         *     Values are rich HTML authored by administrators.  The generic
+         *     ``PUT /admin/settings/{section}`` endpoint only sanitizes its
+         *     ``content_*`` keys, so every value is re-sanitized here on read —
+         *     defence in depth against rows written by any other path.
+         */
+        get: operations["get_home_content_api_v1_site_home_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sra/run/{accession}": {
         parameters: {
             query?: never;
@@ -2038,8 +2784,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * GO/KEGG enrichment analysis
-         * @description Hypergeometric enrichment test (right-tail) with Benjamini-Hochberg multiple-testing correction.  The background set is the full set of genes annotated for the requested ontology.  Terms are filtered by the raw p-value threshold, sorted by q-value ascending, and limited to ``max_terms``.
+         * GO/KEGG enrichment analysis (ORA or GSEA)
+         * @description Enrichment analysis over the gene_annotations table.  'ora' (default): hypergeometric right-tail test with Benjamini-Hochberg correction; the background set is the full set of genes annotated for the requested ontology.  'gsea': simplified rank-based gene-set test over per-gene values (requires 'values' aligned 1:1 with 'genes' and a minimum term size via 'min_genes').  In both modes terms are filtered by the raw p-value threshold, sorted by q-value ascending, and limited to 'max_terms'.
          */
         post: operations["run_enrichment_api_v1_tools_enrichment_post"];
         delete?: never;
@@ -2252,6 +2998,24 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
+         * AboutContentResponse
+         * @description Editable "About us" content backed by ``system_settings``.
+         */
+        AboutContentResponse: {
+            /** Title En */
+            title_en?: string | null;
+            /** Title Zh */
+            title_zh?: string | null;
+            /** Summary En */
+            summary_en?: string | null;
+            /** Summary Zh */
+            summary_zh?: string | null;
+            /** Content En */
+            content_en?: string | null;
+            /** Content Zh */
+            content_zh?: string | null;
+        };
+        /**
          * AdminDashboardSeries
          * @description Time series data for the admin dashboard charts.
          */
@@ -2311,6 +3075,68 @@ export interface components {
              * @default 0
              */
             queryP95Change: number;
+        };
+        /**
+         * AlleleFreqRequest
+         * @description Allele-frequency query (per locus / gene / interval).
+         */
+        AlleleFreqRequest: {
+            /** Gene Id */
+            gene_id?: string | null;
+            /** Assembly */
+            assembly?: string | null;
+            /** Chromosome */
+            chromosome?: string | null;
+            /** Start */
+            start?: number | null;
+            /** End */
+            end?: number | null;
+            /**
+             * Max Variants
+             * @default 10000
+             */
+            max_variants: number;
+        };
+        /** AlleleFreqResponse */
+        AlleleFreqResponse: {
+            /** Source */
+            source: string;
+            /** Gene Id */
+            gene_id?: string | null;
+            /** Assembly */
+            assembly: string;
+            /** Chromosome */
+            chromosome: string;
+            /** Start */
+            start: number;
+            /** End */
+            end: number;
+            /** N Variants */
+            n_variants: number;
+            /** Variants */
+            variants: components["schemas"]["AlleleFreqVariant"][];
+        };
+        /** AlleleFreqVariant */
+        AlleleFreqVariant: {
+            /** Variant Id */
+            variant_id: string;
+            /** Chromosome */
+            chromosome: string;
+            /** Position */
+            position: number;
+            /** Ref Allele */
+            ref_allele: string;
+            /** Alt Allele */
+            alt_allele: string;
+            /** Allele Frequency */
+            allele_frequency: number | null;
+            /**
+             * Variant Type
+             * @default SNP
+             */
+            variant_type: string;
+            /** Gene Id */
+            gene_id?: string | null;
         };
         /** AnalysesDownloadResponse */
         AnalysesDownloadResponse: {
@@ -2487,6 +3313,17 @@ export interface components {
              */
             subject_strand: string;
         };
+        /** BlastJobListResponse */
+        BlastJobListResponse: {
+            /** Items */
+            items?: components["schemas"]["BlastJobResponse"][];
+            /** Total */
+            total: number;
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+        };
         /** BlastJobResponse */
         BlastJobResponse: {
             /** Job Id */
@@ -2495,6 +3332,19 @@ export interface components {
             program: components["schemas"]["BlastProgram"];
             /** Database Id */
             database_id: number;
+            /** Database */
+            database?: string | null;
+            /** Query Sequence */
+            query_sequence?: string | null;
+            /** Parameters */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Hit Count
+             * @default 0
+             */
+            hit_count: number;
             /**
              * Submitted At
              * Format: date-time
@@ -2596,6 +3446,17 @@ export interface components {
             /** Query Sequence */
             query_sequence: string;
             parameters?: components["schemas"]["BlastParameters"];
+        };
+        /**
+         * CarouselGroupResponse
+         * @description One carousel group (grouped by ``carousel_group``, ordered by
+         *     ``carousel_sort``).
+         */
+        CarouselGroupResponse: {
+            /** Group */
+            group: string;
+            /** Items */
+            items: components["schemas"]["NewsSummaryResponse"][];
         };
         /** ChromosomeDensity */
         ChromosomeDensity: {
@@ -2741,6 +3602,77 @@ export interface components {
              */
             cumulative: number;
         };
+        /**
+         * DiversityRequest
+         * @description Nucleotide-diversity query.
+         *
+         *     ``sample_size`` enables the Watterson θ estimate (θ = S / a_n, where
+         *     a_n = sum(1/k, k=1..n-1)); it is ``None`` when the sample size is
+         *     unknown, in which case only π and the segregating-site count are
+         *     reported.  ``window_size`` (bp, default 0 = no windows) bins π per
+         *     window for plotting.
+         */
+        DiversityRequest: {
+            /** Gene Id */
+            gene_id?: string | null;
+            /** Assembly */
+            assembly?: string | null;
+            /** Chromosome */
+            chromosome?: string | null;
+            /** Start */
+            start?: number | null;
+            /** End */
+            end?: number | null;
+            /** Sample Size */
+            sample_size?: number | null;
+            /**
+             * Window Size
+             * @default 0
+             */
+            window_size: number;
+        };
+        /** DiversityResponse */
+        DiversityResponse: {
+            /** Source */
+            source: string;
+            /** Gene Id */
+            gene_id?: string | null;
+            /** Assembly */
+            assembly: string;
+            /** Chromosome */
+            chromosome: string;
+            /** Start */
+            start: number;
+            /** End */
+            end: number;
+            /** N Bp */
+            n_bp: number;
+            /** N Variants */
+            n_variants: number;
+            /** Segregating Sites */
+            segregating_sites: number;
+            /** Pi */
+            pi: number | null;
+            /** Pi Per Site */
+            pi_per_site: number | null;
+            /** Theta */
+            theta: number | null;
+            /** Windows */
+            windows?: components["schemas"]["DiversityWindow"][] | null;
+        };
+        /** DiversityWindow */
+        DiversityWindow: {
+            /** Start */
+            start: number;
+            /** End */
+            end: number;
+            /** N Variants */
+            n_variants: number;
+            /** Segregating Sites */
+            segregating_sites: number;
+            /** Pi */
+            pi: number;
+        };
         /** DownloadFileResponse */
         DownloadFileResponse: {
             /** Id */
@@ -2765,6 +3697,89 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+        };
+        /**
+         * EnrichmentGseaResponse
+         * @description Rank-based (GSEA) enrichment analysis result.
+         */
+        EnrichmentGseaResponse: {
+            /**
+             * Mode
+             * @description Analysis mode
+             * @constant
+             */
+            mode: "gsea";
+            /**
+             * Ontology
+             * @enum {string}
+             */
+            ontology: "go" | "kegg";
+            /**
+             * Input Genes
+             * @description Number of unique input genes (the ranked list)
+             */
+            input_genes: number;
+            /**
+             * Background Genes
+             * @description Number of annotated genes in the background set (all genes with annotations for the requested ontology)
+             */
+            background_genes: number;
+            /**
+             * Terms
+             * @description GSEA terms sorted by q-value (asc)
+             */
+            terms?: components["schemas"]["EnrichmentGseaTerm"][];
+            /**
+             * Message
+             * @description Explanatory note, e.g. when no term passes min_genes
+             */
+            message?: string | null;
+        };
+        /**
+         * EnrichmentGseaTerm
+         * @description A single enriched term (GSEA mode, rank-based test).
+         */
+        EnrichmentGseaTerm: {
+            /**
+             * Id
+             * @description Term id, e.g. GO:0008150 or ko00010
+             */
+            id: string;
+            /**
+             * Name
+             * @description Term name (falls back to the term id)
+             */
+            name: string;
+            /**
+             * Es
+             * @description Enrichment score: signed running-sum statistic over the value-descending ranked list (positive = concentrated at high values, negative = at low values)
+             */
+            es: number;
+            /**
+             * Nes
+             * @description Normalized enrichment score: z-score of ES under the analytic null (ES * sqrt(k(n-k)/n)); a simplification of the permutation normalization used by the reference GSEA implementation
+             */
+            nes: number;
+            /**
+             * P Value
+             * @description Rank-based p-value from the one-sided Smirnov asymptotic exp(-2 * k(n-k)/n * ES^2)
+             */
+            p_value: number;
+            /**
+             * Q Value
+             * @description Benjamini-Hochberg adjusted p-value
+             */
+            q_value: number;
+            /**
+             * Size
+             * @description Term genes present in the ranked input
+             */
+            size: number;
+            /**
+             * Genes
+             * @description Member input genes (first 20)
+             */
+            genes: string[];
         };
         /**
          * EnrichmentRequest
@@ -2819,89 +3834,6 @@ export interface components {
              * @default 5
              */
             min_genes: number;
-        };
-        /**
-         * EnrichmentGseaTerm
-         * @description A single enriched term (GSEA mode, rank-based test).
-         */
-        EnrichmentGseaTerm: {
-            /**
-             * Id
-             * @description Term id, e.g. GO:0008150 or ko00010
-             */
-            id: string;
-            /**
-             * Name
-             * @description Term name (falls back to the term id)
-             */
-            name: string;
-            /**
-             * Es
-             * @description Enrichment score: signed running-sum statistic over the value-descending ranked list (positive = concentrated at high values, negative = at low values)
-             */
-            es: number;
-            /**
-             * Nes
-             * @description Normalized enrichment score: z-score of ES under the analytic null (ES * sqrt(k(n-k)/n)); a simplification of the permutation normalization used by the reference GSEA implementation
-             */
-            nes: number;
-            /**
-             * P Value
-             * @description Rank-based p-value from the one-sided Smirnov asymptotic exp(-2 * k(n-k)/n * ES^2)
-             */
-            p_value: number;
-            /**
-             * Q Value
-             * @description Benjamini-Hochberg adjusted p-value
-             */
-            q_value: number;
-            /**
-             * Size
-             * @description Term genes present in the ranked input
-             */
-            size: number;
-            /**
-             * Genes
-             * @description Member input genes (first 20)
-             */
-            genes: string[];
-        };
-        /**
-         * EnrichmentGseaResponse
-         * @description Rank-based (GSEA) enrichment analysis result.
-         */
-        EnrichmentGseaResponse: {
-            /**
-             * Mode
-             * @description Analysis mode
-             * @constant
-             */
-            mode: "gsea";
-            /**
-             * Ontology
-             * @enum {string}
-             */
-            ontology: "go" | "kegg";
-            /**
-             * Input Genes
-             * @description Number of unique input genes (the ranked list)
-             */
-            input_genes: number;
-            /**
-             * Background Genes
-             * @description Number of annotated genes in the background set (all genes with annotations for the requested ontology)
-             */
-            background_genes: number;
-            /**
-             * Terms
-             * @description GSEA terms sorted by q-value (asc)
-             */
-            terms?: components["schemas"]["EnrichmentGseaTerm"][];
-            /**
-             * Message
-             * @description Explanatory note, e.g. when no term passes min_genes
-             */
-            message?: string | null;
         };
         /**
          * EnrichmentResponse
@@ -3057,6 +3989,8 @@ export interface components {
             chromosome: string;
             /** Name */
             name?: string | null;
+            /** Symbol */
+            symbol?: string | null;
             /**
              * Biotype
              * @default protein_coding
@@ -3066,6 +4000,10 @@ export interface components {
             start: number;
             /** End */
             end: number;
+            /** Start Pos */
+            start_pos: number;
+            /** End Pos */
+            end_pos: number;
             strand: components["schemas"]["Strand"];
             /** Description */
             description?: string | null;
@@ -3094,6 +4032,26 @@ export interface components {
              * @default false
              */
             has_more: boolean;
+            /**
+             * Page
+             * @default 1
+             */
+            page: number;
+            /**
+             * Page Size
+             * @default 50
+             */
+            page_size: number;
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+            /**
+             * Total Pages
+             * @default 0
+             */
+            total_pages: number;
         };
         /** GeneResponse */
         GeneResponse: {
@@ -3107,6 +4065,8 @@ export interface components {
             chromosome: string;
             /** Name */
             name?: string | null;
+            /** Symbol */
+            symbol?: string | null;
             /**
              * Biotype
              * @default protein_coding
@@ -3116,9 +4076,29 @@ export interface components {
             start: number;
             /** End */
             end: number;
+            /** Start Pos */
+            start_pos: number;
+            /** End Pos */
+            end_pos: number;
             strand: components["schemas"]["Strand"];
             /** Description */
             description?: string | null;
+        };
+        /**
+         * GenotypeMatrix
+         * @description Inline genotype matrix for LD computation.
+         *
+         *     ``sample_ids`` (rows) × ``variant_ids`` (columns); each value is the
+         *     allele dosage (0/1/2).  Missing genotypes are not allowed – complete
+         *     rows are required (the service rejects matrices with missing calls).
+         */
+        GenotypeMatrix: {
+            /** Sample Ids */
+            sample_ids: string[];
+            /** Variant Ids */
+            variant_ids: string[];
+            /** Values */
+            values: number[][];
         };
         /** GlobalSearchResponse */
         GlobalSearchResponse: {
@@ -3126,16 +4106,156 @@ export interface components {
             query: string;
             /** Results */
             results?: components["schemas"]["SearchResultItem"][];
+            /** By Type */
+            by_type?: {
+                [key: string]: number;
+            };
+            /** Cursor */
+            cursor?: string | null;
+            /** Next Cursor */
+            next_cursor?: string | null;
             /**
-             * Total
+             * Has More
+             * @default false
+             */
+            has_more: boolean;
+            /**
+             * Total Count
              * @default 0
              */
-            total: number;
+            total_count: number | null;
+        };
+        /**
+         * GwasFileType
+         * @description Input file family (``snp`` = EMMAX-style per-SNP phenotype format).
+         * @enum {string}
+         */
+        GwasFileType: "snp" | "other";
+        /**
+         * GwasJobResponse
+         * @description Job status envelope; ``result`` is the worker-written summary once the
+         *     job completes (MinIO object keys + association statistics), ``None``
+         *     otherwise.
+         */
+        GwasJobResponse: {
+            /** Job Id */
+            job_id: string;
+            method: components["schemas"]["GwasMethod"];
+            status: components["schemas"]["GwasJobStatus"];
+            /** @default snp */
+            object_type: components["schemas"]["GwasFileType"];
+            /**
+             * Submitted At
+             * Format: date-time
+             */
+            submitted_at: string;
+            /** Started At */
+            started_at?: string | null;
+            /** Completed At */
+            completed_at?: string | null;
+            /** Error Message */
+            error_message?: string | null;
+            /** Result */
+            result?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /**
+         * GwasJobStatus
+         * @description Job status values – BLAST-style spelling aligned with the shared state
+         *     machine.
+         * @enum {string}
+         */
+        GwasJobStatus: "pending" | "running" | "completed" | "failed" | "cancelled";
+        /**
+         * GwasMethod
+         * @description Supported association-testing engines.
+         * @enum {string}
+         */
+        GwasMethod: "emmax" | "gemma";
+        /**
+         * GwasResultResponse
+         * @description Status-aware result envelope for a GWAS job.
+         *
+         *     Completed jobs carry pre-signed download URLs for the Manhattan data
+         *     JSON, the QQ data JSON and the self-contained ``Manhattan_QQ.html``
+         *     report (all stored under ``gwas/{job_id}/output/`` in MinIO).
+         */
+        GwasResultResponse: {
+            /** Job Id */
+            job_id: string;
+            method: components["schemas"]["GwasMethod"];
+            status: components["schemas"]["GwasJobStatus"];
+            /** Manhattan Url */
+            manhattan_url?: string | null;
+            /** Qq Url */
+            qq_url?: string | null;
+            /** Report Url */
+            report_url?: string | null;
+            /** Assoc Url */
+            assoc_url?: string | null;
+            /** N Variants */
+            n_variants?: number | null;
+            /** Error Message */
+            error_message?: string | null;
+            /** Completed At */
+            completed_at?: string | null;
+        };
+        /** GwasSubmitRequest */
+        GwasSubmitRequest: {
+            method: components["schemas"]["GwasMethod"];
+            /** @default snp */
+            object_type: components["schemas"]["GwasFileType"];
+            /** Phenotype Object Key */
+            phenotype_object_key: string;
+            /** Genotype Object Key */
+            genotype_object_key?: string | null;
+            /** Kinship Object Key */
+            kinship_object_key?: string | null;
+            /** Covariate Object Key */
+            covariate_object_key?: string | null;
+            /** Params */
+            params?: {
+                [key: string]: unknown;
+            };
+        };
+        /** GwasUploadRequest */
+        GwasUploadRequest: {
+            /** Filename */
+            filename: string;
+        };
+        /** GwasUploadResponse */
+        GwasUploadResponse: {
+            /** Upload Url */
+            upload_url: string;
+            /** Object Key */
+            object_key: string;
+            /** Expires In */
+            expires_in: number;
+            /**
+             * Max Upload Size
+             * @default 524288000
+             */
+            max_upload_size: number;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * HomeContentResponse
+         * @description Editable homepage welcome block backed by ``system_settings``.
+         *
+         *     Values are rich HTML (``home.*`` keys) — the public endpoint re-runs
+         *     ``sanitize_rich_html`` on read so even rows written outside the admin
+         *     settings API can never serve untrusted markup.
+         */
+        HomeContentResponse: {
+            /** Welcome En */
+            welcome_en?: string | null;
+            /** Welcome Zh */
+            welcome_zh?: string | null;
         };
         /**
          * HomepageStats
@@ -3210,6 +4330,21 @@ export interface components {
              */
             count: number;
         };
+        /** ImportCreateRequest */
+        ImportCreateRequest: {
+            /** Filename */
+            filename: string;
+            /** Type */
+            type: string;
+            /** File Path */
+            file_path?: string | null;
+            /** Object Key */
+            object_key?: string | null;
+            /** Data Set Id */
+            data_set_id?: number | null;
+            /** Idempotency Key */
+            idempotency_key: string;
+        };
         /**
          * ImportThroughputPoint
          * @description Daily import task throughput (success vs. failure).
@@ -3247,6 +4382,70 @@ export interface components {
             is_active?: boolean | null;
         };
         /**
+         * LdRequest
+         * @description LD query: a region (or gene) plus an optional inline genotype matrix.
+         *
+         *     The ``variant_facts`` store carries per-variant allele frequencies but no
+         *     per-sample genotype calls, so pairwise r² cannot be derived from the
+         *     database alone: clients that hold genotype data supply it inline via
+         *     ``genotypes``; without it the response returns ``r_squared: null`` with a
+         *     ``note`` explaining what is needed (the variant coordinates are still
+         *     returned for plotting).
+         */
+        LdRequest: {
+            /** Gene Id */
+            gene_id?: string | null;
+            /** Assembly */
+            assembly?: string | null;
+            /** Chromosome */
+            chromosome?: string | null;
+            /** Start */
+            start?: number | null;
+            /** End */
+            end?: number | null;
+            genotypes?: components["schemas"]["GenotypeMatrix"] | null;
+        };
+        /** LdResponse */
+        LdResponse: {
+            /** Source */
+            source: string;
+            /** Gene Id */
+            gene_id?: string | null;
+            /** Assembly */
+            assembly: string;
+            /** Chromosome */
+            chromosome: string;
+            /** Start */
+            start: number;
+            /** End */
+            end: number;
+            /** N Variants */
+            n_variants: number;
+            /** Variants */
+            variants: components["schemas"]["LdVariant"][];
+            /** R Squared */
+            r_squared?: number[][] | null;
+            /** Note */
+            note?: string | null;
+            /** Details */
+            details?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /** LdVariant */
+        LdVariant: {
+            /** Variant Id */
+            variant_id: string;
+            /** Chromosome */
+            chromosome: string;
+            /** Position */
+            position: number;
+            /** Ref Allele */
+            ref_allele: string;
+            /** Alt Allele */
+            alt_allele: string;
+        };
+        /**
          * LoginRequest
          * @description Credentials for logging in — accepts email or username.
          *
@@ -3271,6 +4470,59 @@ export interface components {
              * @example S3cureP@ss!
              */
             password: string;
+        };
+        /**
+         * MarkReadRequest
+         * @description Mark a subset of notifications read (``ids``) or all of them (``all``).
+         */
+        MarkReadRequest: {
+            /** Ids */
+            ids?: string[] | null;
+            /**
+             * All
+             * @default false
+             */
+            all: boolean;
+        };
+        /**
+         * MarkReadResponse
+         * @description Number of rows flipped to read.
+         */
+        MarkReadResponse: {
+            /** Marked */
+            marked: number;
+        };
+        /** MultipartCompletePathRequest */
+        MultipartCompletePathRequest: {
+            /** Object Key */
+            object_key: string;
+            /** Parts */
+            parts: components["schemas"]["MultipartPart"][];
+            /** Sha256 */
+            sha256: string;
+        };
+        /** MultipartPart */
+        MultipartPart: {
+            /** Part Number */
+            part_number: number;
+            /** Etag */
+            etag: string;
+        };
+        /** MultipartStartRequest */
+        MultipartStartRequest: {
+            /** Filename */
+            filename: string;
+            /** Type */
+            type: string;
+            /** Part Count */
+            part_count: number;
+            /**
+             * Content Type
+             * @default application/octet-stream
+             */
+            content_type: string;
+            /** Data Set Id */
+            data_set_id?: number | null;
         };
         /**
          * MutagenCount
@@ -3355,6 +4607,144 @@ export interface components {
              */
             variant_count: number;
         };
+        /** NewsCreate */
+        NewsCreate: {
+            /** Title En */
+            title_en: string;
+            /** Title Zh */
+            title_zh?: string | null;
+            /** Content En */
+            content_en: string;
+            /** Content Zh */
+            content_zh?: string | null;
+            /** Slug */
+            slug: string;
+            /** Category */
+            category?: string | null;
+            /** Cover Url */
+            cover_url?: string | null;
+            /**
+             * Featured Sort
+             * @default 0
+             */
+            featured_sort: number;
+            /** Carousel Group */
+            carousel_group?: string | null;
+            /**
+             * Carousel Sort
+             * @default 0
+             */
+            carousel_sort: number;
+            /** @default draft */
+            status: components["schemas"]["NewsStatus"];
+            /** Visible From */
+            visible_from?: string | null;
+            /** Visible To */
+            visible_to?: string | null;
+            /**
+             * Is Published
+             * @default false
+             */
+            is_published: boolean;
+        };
+        /**
+         * NewsDetailResponse
+         * @description Full article view including body content.
+         */
+        NewsDetailResponse: {
+            /** Id */
+            id: string;
+            /** Title En */
+            title_en: string;
+            /** Title Zh */
+            title_zh?: string | null;
+            /** Slug */
+            slug: string;
+            /** Category */
+            category?: string | null;
+            /** Cover Url */
+            cover_url?: string | null;
+            /**
+             * Featured Sort
+             * @default 0
+             */
+            featured_sort: number;
+            /** Carousel Group */
+            carousel_group?: string | null;
+            /**
+             * Carousel Sort
+             * @default 0
+             */
+            carousel_sort: number;
+            /** @default draft */
+            status: components["schemas"]["NewsStatus"];
+            /**
+             * Is Published
+             * @default false
+             */
+            is_published: boolean;
+            /** Published At */
+            published_at?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Content En */
+            content_en: string;
+            /** Content Zh */
+            content_zh?: string | null;
+            /** Visible From */
+            visible_from?: string | null;
+            /** Visible To */
+            visible_to?: string | null;
+        };
+        /**
+         * NewsFeaturedResponse
+         * @description Homepage block: 5 featured articles + carousel groups.
+         */
+        NewsFeaturedResponse: {
+            /** Featured */
+            featured: components["schemas"]["NewsSummaryResponse"][];
+            /** Carousel */
+            carousel: components["schemas"]["CarouselGroupResponse"][];
+        };
+        /**
+         * NewsListResponse
+         * @description Paginated public news list (published + visible window only).
+         */
+        NewsListResponse: {
+            /** Items */
+            items: components["schemas"]["NewsSummaryResponse"][];
+            /** Total */
+            total: number;
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+        };
+        /** NewsReorderItem */
+        NewsReorderItem: {
+            /** Id */
+            id: number;
+            /** Featured Sort */
+            featured_sort: number;
+        };
+        /** NewsReorderRequest */
+        NewsReorderRequest: {
+            /** Items */
+            items: components["schemas"]["NewsReorderItem"][];
+        };
+        /** NewsReorderResponse */
+        NewsReorderResponse: {
+            /** Updated */
+            updated: number;
+        };
         /** NewsResponse */
         NewsResponse: {
             /** Id */
@@ -3381,6 +4771,125 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /**
+         * NewsStatus
+         * @enum {string}
+         */
+        NewsStatus: "draft" | "published" | "archived";
+        /**
+         * NewsSummaryResponse
+         * @description List-item view (no body content).
+         */
+        NewsSummaryResponse: {
+            /** Id */
+            id: string;
+            /** Title En */
+            title_en: string;
+            /** Title Zh */
+            title_zh?: string | null;
+            /** Slug */
+            slug: string;
+            /** Category */
+            category?: string | null;
+            /** Cover Url */
+            cover_url?: string | null;
+            /**
+             * Featured Sort
+             * @default 0
+             */
+            featured_sort: number;
+            /** Carousel Group */
+            carousel_group?: string | null;
+            /**
+             * Carousel Sort
+             * @default 0
+             */
+            carousel_sort: number;
+            /** @default draft */
+            status: components["schemas"]["NewsStatus"];
+            /**
+             * Is Published
+             * @default false
+             */
+            is_published: boolean;
+            /** Published At */
+            published_at?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** NewsUpdate */
+        NewsUpdate: {
+            /** Title En */
+            title_en?: string | null;
+            /** Title Zh */
+            title_zh?: string | null;
+            /** Content En */
+            content_en?: string | null;
+            /** Content Zh */
+            content_zh?: string | null;
+            /** Slug */
+            slug?: string | null;
+            /** Category */
+            category?: string | null;
+            /** Cover Url */
+            cover_url?: string | null;
+            /** Featured Sort */
+            featured_sort?: number | null;
+            /** Carousel Group */
+            carousel_group?: string | null;
+            /** Carousel Sort */
+            carousel_sort?: number | null;
+            status?: components["schemas"]["NewsStatus"] | null;
+            /** Visible From */
+            visible_from?: string | null;
+            /** Visible To */
+            visible_to?: string | null;
+            /** Is Published */
+            is_published?: boolean | null;
+        };
+        /**
+         * NotificationListResponse
+         * @description Paginated notification list (unread first) plus counters.
+         */
+        NotificationListResponse: {
+            /** Items */
+            items: components["schemas"]["NotificationResponse"][];
+            /** Total */
+            total: number;
+            /** Unread Count */
+            unread_count: number;
+        };
+        /**
+         * NotificationResponse
+         * @description One notification entry (list item).
+         */
+        NotificationResponse: {
+            /** Id */
+            id: string;
+            /** Type */
+            type: string;
+            /** Title */
+            title: string;
+            /** Body */
+            body: string;
+            /** Link */
+            link?: string | null;
+            /** Read At */
+            read_at?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
         };
         /**
          * PageStatus
@@ -3416,6 +4925,18 @@ export interface components {
             unit?: string | null;
             /** Description */
             description?: string | null;
+        };
+        /**
+         * PreviewTokenResponse
+         * @description Short-lived HMAC preview token (15 min, stateless, NOT a JWT).
+         */
+        PreviewTokenResponse: {
+            /** Preview */
+            preview: string;
+            /** Exp */
+            exp: number;
+            /** Url */
+            url: string;
         };
         /** PublicationResponse */
         PublicationResponse: {
@@ -3469,6 +4990,40 @@ export interface components {
              */
             p99: number;
         };
+        /** ReleaseActionRequest */
+        ReleaseActionRequest: {
+            /**
+             * Confirm
+             * @constant
+             */
+            confirm: true;
+            /** Reason */
+            reason: string;
+        };
+        /** ReleaseCreateRequest */
+        ReleaseCreateRequest: {
+            /** Version */
+            version: string;
+            /** Name */
+            name: string;
+            /** Description */
+            description?: string | null;
+            /** Assembly */
+            assembly?: string | null;
+            /** Data Set Ids */
+            data_set_ids: number[];
+        };
+        /** ReleaseReadyRequest */
+        ReleaseReadyRequest: {
+            /** Manifest */
+            manifest: {
+                [key: string]: unknown;
+            };
+            /** Readiness */
+            readiness: {
+                [key: string]: boolean;
+            };
+        };
         /** ReleaseResponse */
         ReleaseResponse: {
             /** Id */
@@ -3494,7 +5049,7 @@ export interface components {
              * @default 0
              */
             mutant_line_count: number;
-            status: components["schemas"]["ReleaseStatus"];
+            status: components["schemas"]["ReleaseStatus-Output"];
             /** Published At */
             published_at?: string | null;
             /**
@@ -3512,7 +5067,12 @@ export interface components {
          * ReleaseStatus
          * @enum {string}
          */
-        ReleaseStatus: "draft" | "staging" | "active" | "archived";
+        "ReleaseStatus-Input": "draft" | "validated" | "ready" | "published" | "rolled_back" | "validated" | "published" | "rolled_back";
+        /**
+         * ReleaseStatus
+         * @enum {string}
+         */
+        "ReleaseStatus-Output": "draft" | "staging" | "active" | "archived";
         /** ReleaseSummary */
         ReleaseSummary: {
             /** Release Version */
@@ -3555,6 +5115,13 @@ export interface components {
              * @default 0
              */
             score: number;
+            /** Url */
+            url?: string | null;
+            /**
+             * Source
+             * @default internal
+             */
+            source: string;
         };
         /**
          * SearchResultType
@@ -3590,67 +5157,19 @@ export interface components {
              */
             updated_at: string;
         };
-        /** SeedRequestCreate */
-        SeedRequestCreate: {
-            /** Mutant Line Id */
-            mutant_line_id: string;
-            /** Quantity Grams */
-            quantity_grams: number;
-            /** Requester Name */
-            requester_name: string;
-            /**
-             * Requester Email
-             * Format: email
-             */
-            requester_email: string;
-            /** Requester Institution */
-            requester_institution: string;
-            /** Purpose */
-            purpose: string;
-            /** Agrees To Terms */
-            agrees_to_terms: boolean;
-        };
-        /** SeedRequestResponse */
-        SeedRequestResponse: {
-            /** Id */
-            id: string;
-            /** Mutant Line Id */
-            mutant_line_id: string;
-            status: components["schemas"]["SeedRequestStatus"];
-            /** Quantity Requested */
-            quantity_requested?: number | null;
-            /** Requester Name */
-            requester_name: string;
-            /** Requester Email */
-            requester_email: string;
-            /** Requester Institution */
-            requester_institution: string;
-            /** Purpose */
-            purpose: string;
-            /** Tracking Number */
-            tracking_number?: string | null;
-            /** Notes */
-            notes?: string | null;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /** Reviewed At */
-            reviewed_at?: string | null;
-        };
         /**
-         * SeedRequestStatus
-         * @enum {string}
+         * SeedRequestListResponse
+         * @description Paginated admin listing of seed request contacts.
          */
-        SeedRequestStatus: "pending" | "approved" | "shipped" | "completed" | "rejected";
-        /** SeedRequestUpdate */
-        SeedRequestUpdate: {
-            status: components["schemas"]["SeedRequestStatus"];
-            /** Tracking Number */
-            tracking_number?: string | null;
-            /** Notes */
-            notes?: string | null;
+        SeedRequestListResponse: {
+            /** Items */
+            items: components["schemas"]["app__schemas__seed_request__SeedRequestResponse"][];
+            /** Total */
+            total: number;
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
         };
         /**
          * SeqFetchRequest
@@ -3932,6 +5451,45 @@ export interface components {
             exons?: components["schemas"]["ExonResponse"][];
         };
         /**
+         * UnreadCountResponse
+         * @description Number of unread notifications for the current user.
+         */
+        UnreadCountResponse: {
+            /** Unread Count */
+            unread_count: number;
+        };
+        /**
+         * UploadPresignRequest
+         * @description Request a pre-signed upload URL for a public resource.
+         */
+        UploadPresignRequest: {
+            /** Filename */
+            filename: string;
+            /**
+             * Purpose
+             * @default news
+             */
+            purpose: string;
+            /** Size */
+            size: number;
+            /** Content Type */
+            content_type?: string | null;
+        };
+        /**
+         * UploadPresignResponse
+         * @description Pre-signed PUT URL + object key + public URL (nothing persisted).
+         */
+        UploadPresignResponse: {
+            /** Upload Url */
+            upload_url: string;
+            /** Object Key */
+            object_key: string;
+            /** Public Url */
+            public_url: string;
+            /** Expires In */
+            expires_in: number;
+        };
+        /**
          * UserCreate
          * @description Payload for creating a new user account.
          */
@@ -4049,10 +5607,10 @@ export interface components {
             gene_id?: string | null;
             /** Gene Symbol */
             gene_symbol?: string | null;
-            /** Transcript Id */
-            transcript_id?: string | null;
             consequence?: components["schemas"]["ConsequenceType"] | null;
             impact?: components["schemas"]["ImpactLevel"] | null;
+            /** Transcript Id */
+            transcript_id?: string | null;
             /** Hgvs C */
             hgvs_c?: string | null;
             /** Hgvs P */
@@ -4160,6 +5718,12 @@ export interface components {
             filter_status: string;
             /** Allele Frequency */
             allele_frequency?: number | null;
+            /** Gene Id */
+            gene_id?: string | null;
+            /** Gene Symbol */
+            gene_symbol?: string | null;
+            consequence?: components["schemas"]["ConsequenceType"] | null;
+            impact?: components["schemas"]["ImpactLevel"] | null;
         };
         /**
          * VariantType
@@ -4376,6 +5940,132 @@ export interface components {
             permissions?: components["schemas"]["WidgetPermissionEnum"] | null;
             /** Is Active */
             is_active?: boolean | null;
+        };
+        /**
+         * SeedRequestStatus
+         * @description Lifecycle of a contact-style seed request.
+         * @enum {string}
+         */
+        app__models__seed_request__SeedRequestStatus: "pending" | "approved" | "rejected" | "fulfilled";
+        /** SeedRequestCreate */
+        app__schemas__seed__SeedRequestCreate: {
+            /** Mutant Line Id */
+            mutant_line_id: string;
+            /** Quantity Grams */
+            quantity_grams: number;
+            /** Requester Name */
+            requester_name: string;
+            /**
+             * Requester Email
+             * Format: email
+             */
+            requester_email: string;
+            /** Requester Institution */
+            requester_institution: string;
+            /** Purpose */
+            purpose: string;
+            /** Agrees To Terms */
+            agrees_to_terms: boolean;
+        };
+        /** SeedRequestResponse */
+        app__schemas__seed__SeedRequestResponse: {
+            /** Id */
+            id: string;
+            /** Mutant Line Id */
+            mutant_line_id: string;
+            status: components["schemas"]["app__schemas__seed__SeedRequestStatus"];
+            /** Quantity Requested */
+            quantity_requested?: number | null;
+            /** Requester Name */
+            requester_name: string;
+            /** Requester Email */
+            requester_email: string;
+            /** Requester Institution */
+            requester_institution: string;
+            /** Purpose */
+            purpose: string;
+            /** Tracking Number */
+            tracking_number?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Reviewed At */
+            reviewed_at?: string | null;
+        };
+        /**
+         * SeedRequestStatus
+         * @enum {string}
+         */
+        app__schemas__seed__SeedRequestStatus: "pending" | "approved" | "shipped" | "completed" | "rejected";
+        /** SeedRequestUpdate */
+        app__schemas__seed__SeedRequestUpdate: {
+            status: components["schemas"]["app__schemas__seed__SeedRequestStatus"];
+            /** Tracking Number */
+            tracking_number?: string | null;
+            /** Notes */
+            notes?: string | null;
+        };
+        /**
+         * SeedRequestCreate
+         * @description Public submission payload (no authentication required).
+         */
+        app__schemas__seed_request__SeedRequestCreate: {
+            /** Name */
+            name: string;
+            /**
+             * Email
+             * Format: email
+             */
+            email: string;
+            /** Institution */
+            institution: string;
+            /** Country */
+            country: string;
+            /** Gene Ids */
+            gene_ids: string[];
+            /** Notes */
+            notes?: string | null;
+        };
+        /**
+         * SeedRequestResponse
+         * @description Public/admin representation of a seed request contact.
+         */
+        app__schemas__seed_request__SeedRequestResponse: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Email */
+            email: string;
+            /** Institution */
+            institution: string;
+            /** Country */
+            country: string;
+            /** Gene Ids */
+            gene_ids: string[];
+            /** Notes */
+            notes?: string | null;
+            status: components["schemas"]["app__models__seed_request__SeedRequestStatus"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Processed At */
+            processed_at?: string | null;
+            /** Processed By */
+            processed_by?: string | null;
+        };
+        /**
+         * SeedRequestUpdate
+         * @description Admin status update payload.
+         */
+        app__schemas__seed_request__SeedRequestUpdate: {
+            status: components["schemas"]["app__models__seed_request__SeedRequestStatus"];
         };
         /**
          * ErrorDetail
@@ -4941,8 +6631,11 @@ export interface operations {
                 chromosome?: string | null;
                 biotype?: string | null;
                 search?: string | null;
+                q?: string | null;
                 cursor?: string | null;
                 limit?: number;
+                page?: number | null;
+                page_size?: number | null;
             };
             header?: never;
             path?: never;
@@ -4997,6 +6690,334 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GeneDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_upload_api_v1_gwas_uploads_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GwasUploadRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GwasUploadResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    submit_gwas_job_api_v1_gwas_submit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GwasSubmitRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GwasJobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_gwas_job_api_v1_gwas__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GwasJobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_gwas_results_api_v1_gwas__job_id__results_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GwasResultResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    job_events_api_v1_jobs_events_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    compute_ld_api_v1_tools_ld_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LdRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LdResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    nucleotide_diversity_api_v1_tools_diversity_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DiversityRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiversityResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    allele_frequencies_api_v1_tools_allelefreq_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlleleFreqRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlleleFreqResponse"];
                 };
             };
             /** @description Validation Error */
@@ -5246,6 +7267,7 @@ export interface operations {
                 types?: components["schemas"]["SearchResultType"][] | null;
                 /** @description External sources to query (comma-separated): ncbi,uniprot,ensembl,ebi */
                 sources?: string[] | null;
+                cursor?: string | null;
                 limit?: number;
                 /** @description 'json' or 'html' */
                 format?: string | null;
@@ -5755,6 +7777,48 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_blast_jobs_api_v1_blast_jobs_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+                status?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlastJobListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
             /** @description Internal Server Error */
@@ -6312,7 +8376,7 @@ export interface operations {
     list_releases_api_v1_releases_get: {
         parameters: {
             query?: {
-                status?: components["schemas"]["ReleaseStatus"] | null;
+                status?: components["schemas"]["ReleaseStatus-Input"] | null;
             };
             header?: never;
             path?: never;
@@ -6593,7 +8657,7 @@ export interface operations {
     list_seed_requests_api_v1_seeds_requests_get: {
         parameters: {
             query?: {
-                status?: components["schemas"]["SeedRequestStatus"] | null;
+                status?: components["schemas"]["app__schemas__seed__SeedRequestStatus"] | null;
             };
             header?: never;
             path?: never;
@@ -6607,7 +8671,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SeedRequestResponse"][];
+                    "application/json": components["schemas"]["app__schemas__seed__SeedRequestResponse"][];
                 };
             };
             /** @description Validation Error */
@@ -6639,7 +8703,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["SeedRequestCreate"];
+                "application/json": components["schemas"]["app__schemas__seed__SeedRequestCreate"];
             };
         };
         responses: {
@@ -6649,7 +8713,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SeedRequestResponse"];
+                    "application/json": components["schemas"]["app__schemas__seed__SeedRequestResponse"];
                 };
             };
             /** @description Validation Error */
@@ -6683,7 +8747,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["SeedRequestUpdate"];
+                "application/json": components["schemas"]["app__schemas__seed__SeedRequestUpdate"];
             };
         };
         responses: {
@@ -6693,7 +8757,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SeedRequestResponse"];
+                    "application/json": components["schemas"]["app__schemas__seed__SeedRequestResponse"];
                 };
             };
             /** @description Validation Error */
@@ -6703,6 +8767,174 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_seed_request_api_v1_seed_requests_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["app__schemas__seed_request__SeedRequestCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["app__schemas__seed_request__SeedRequestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_seed_requests_api_v1_admin_seed_requests_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+                status?: components["schemas"]["app__models__seed_request__SeedRequestStatus"] | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeedRequestListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_seed_request_api_v1_admin_seed_requests__request_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                request_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["app__schemas__seed_request__SeedRequestUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["app__schemas__seed_request__SeedRequestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    content_snapshot_api_v1_content_snapshot_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -7012,6 +9244,515 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SignedUrlResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_news_api_v1_news_get: {
+        parameters: {
+            query?: {
+                category?: string | null;
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NewsListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    featured_news_api_v1_news_featured_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NewsFeaturedResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_news_api_v1_news__slug__get: {
+        parameters: {
+            query?: {
+                preview?: string | null;
+                exp?: number | null;
+            };
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NewsDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_notifications_api_v1_notifications_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_unread_count_api_v1_notifications_unread_count_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnreadCountResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    mark_notifications_read_api_v1_notifications_read_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarkReadRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarkReadResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_release_api_v1_admin_releases_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReleaseCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    validate_admin_release_api_v1_admin_releases__release_id__validate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                release_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    ready_admin_release_api_v1_admin_releases__release_id__ready_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                release_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReleaseReadyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    publish_admin_release_api_v1_admin_releases__release_id__publish_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                release_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReleaseActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    rollback_admin_release_api_v1_admin_releases__release_id__rollback_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                release_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReleaseActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_admin_release_api_v1_admin_releases__release_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                release_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */
@@ -7874,6 +10615,259 @@ export interface operations {
             };
         };
     };
+    list_news_admin_api_v1_admin_news_get: {
+        parameters: {
+            query?: {
+                /** @description Filter by status: draft, published, archived (case-insensitive). */
+                status_filter?: string | null;
+                /** @description Filter by category (exact match). */
+                category?: string | null;
+                /** @description Case-insensitive title search. */
+                search?: string | null;
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NewsListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_news_api_v1_admin_news_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewsCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NewsDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_news_api_v1_admin_news__news_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                news_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NewsDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    delete_news_api_v1_admin_news__news_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                news_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    reorder_news_api_v1_admin_news_reorder_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewsReorderRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NewsReorderResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    preview_token_api_v1_admin_news__news_id__preview_token_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                news_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreviewTokenResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     list_imports_api_v1_admin_imports_get: {
         parameters: {
             query?: {
@@ -7929,9 +10923,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
+                "application/json": components["schemas"]["ImportCreateRequest"];
             };
         };
         responses: {
@@ -8056,6 +11048,96 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    start_multipart_upload_api_v1_admin_imports_uploads_multipart_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MultipartStartRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    finish_multipart_upload_api_v1_admin_imports_uploads_multipart__upload_id__complete_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                upload_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MultipartCompletePathRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -8293,6 +11375,48 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_upload_presign_api_v1_admin_uploads_presign_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UploadPresignRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadPresignResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
             /** @description Internal Server Error */
@@ -8608,6 +11732,82 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_about_content_api_v1_site_about_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AboutContentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_home_content_api_v1_site_home_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HomeContentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
