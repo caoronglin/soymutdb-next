@@ -1,12 +1,16 @@
 /**
- * Physical location search — second-level catalog of the /search portal
- * (PPTX V2 slide 4). Form: genome version + chromosome + start–end interval.
- * Queries GET /variants/region (assembly name) and renders the portal table
- * layout: the gene ID acts as the row title (first column, linked to
- * /genes/{id} when present) followed by the five PPTX columns — genome
- * version / chromosome / mutation feature / Gbrowse / position.
+ * Physical location search — second-level catalog of the /search portal.
+ *
+ * URL-backed and shareable (Phase 4): reads `assembly`, `chromosome`,
+ * `start`, `end`, and `run` search params. A parameterized URL restores form
+ * state and runs once; the form submit opens a parameterized `/search/location`
+ * URL in a new tab with `noopener`.
+ *
+ * Result columns follow the approved reference order:
+ *   Genome assembly → Chromosome → Position → Mutation feature → Gene ID →
+ *   JBrowse 2 action.
  */
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import * as React from "react";
@@ -32,9 +36,25 @@ import {
 } from "@soymutdb/api-client";
 import { FadeUp } from "../../components/route-motion";
 import { formatNumber, compactGeneId } from "../../lib/format";
+import { buildJbrowseLocusUrl } from "../../lib/deployment";
+
+interface LocationSearchParams {
+  assembly?: string;
+  chromosome?: string;
+  start?: number;
+  end?: number;
+  run?: boolean;
+}
 
 export const Route = createFileRoute("/search/location")({
   component: LocationSearchComponent,
+  validateSearch: (search: Record<string, unknown>): LocationSearchParams => ({
+    assembly: search.assembly ? String(search.assembly) : undefined,
+    chromosome: search.chromosome ? String(search.chromosome) : undefined,
+    start: search.start != null && search.start !== "" ? Number(search.start) : undefined,
+    end: search.end != null && search.end !== "" ? Number(search.end) : undefined,
+    run: search.run === "1" || search.run === 1 || search.run === true,
+  }),
 });
 
 const MAX_RESULTS = 1000;
@@ -48,6 +68,9 @@ interface RegionQuery {
 
 function LocationSearchComponent() {
   const { t } = useTranslation();
+  const router = useRouter();
+  const { assembly: urlAssembly, chromosome: urlChromosome, start: urlStart, end: urlEnd, run } =
+    Route.useSearch();
   const [assemblyId, setAssemblyId] = React.useState<string | undefined>(undefined);
   const [chromosome, setChromosome] = React.useState<string | undefined>(undefined);
   const [start, setStart] = React.useState<number | null>(null);
@@ -84,6 +107,37 @@ function LocationSearchComponent() {
     }
   }, [chromosome, chromosomes]);
 
+  // Deep link: restore form state from URL once assemblies/chromosomes load.
+  const restoredRef = React.useRef(false);
+  React.useEffect(() => {
+    if (restoredRef.current) return;
+    // Resolve assembly id from URL name/id.
+    if (urlAssembly && assemblies.length > 0) {
+      const match = assemblies.find((a) => String(a.id) === urlAssembly || a.name === urlAssembly);
+      if (match) setAssemblyId(String(match.id));
+    }
+    if (urlChromosome) setChromosome(urlChromosome);
+    if (urlStart != null) setStart(urlStart);
+    if (urlEnd != null) setEnd(urlEnd);
+  }, [urlAssembly, urlChromosome, urlStart, urlEnd, assemblies]);
+
+  const autoRun = (assembly: string, chr: string, s: number, e: number): RegionQuery | null => {
+    if (s < 1 || e < s) return null;
+    return { assembly, chromosome: chr, start: s, end: e };
+  };
+
+  // Auto-submit once when `run=1` arrives with a complete, valid region.
+  React.useEffect(() => {
+    if (restoredRef.current) return;
+    if (run !== true) return;
+    const assembly = selectedAssembly?.name;
+    if (!assembly || !urlChromosome || urlStart == null || urlEnd == null) return;
+    const query = autoRun(assembly, urlChromosome, urlStart, urlEnd);
+    if (!query) return;
+    restoredRef.current = true;
+    setSubmitted(query);
+  }, [run, selectedAssembly, urlChromosome, urlStart, urlEnd]);
+
   const regionQuery = useQuery({
     queryKey: ["search-region-variants", submitted],
     queryFn: () =>
@@ -100,20 +154,53 @@ function LocationSearchComponent() {
 
   const data = regionQuery.data ?? [];
 
-  const onSubmit = () => {
+  const submitInNewTab = () => {
     if (!selectedAssembly || !chromosome || start == null || end == null) return;
     if (start < 1 || end < start) return;
-    setSubmitted({
-      assembly: selectedAssembly.name,
-      chromosome,
-      start,
-      end,
+    const location = router.buildLocation({
+      to: "/search/location",
+      search: { assembly: selectedAssembly.name, chromosome, start, end, run: true },
     });
+    window.open(location.href, "_blank", "noopener");
   };
 
   const columns: TableColumnsType<VariantSummary> = [
     {
-      // Gene ID as row title — linked to the gene detail page when present.
+      // 1. Genome assembly
+      title: t("search.location.colAssembly"),
+      dataIndex: "assembly",
+      key: "assembly",
+      render: () => <span className="font-mono text-xs">{selectedAssembly?.name ?? "—"}</span>,
+    },
+    {
+      // 2. Chromosome
+      title: t("search.location.colChromosome"),
+      dataIndex: "chromosome",
+      key: "chromosome",
+      render: (_, row) => <span className="font-mono text-xs">{row.chromosome}</span>,
+    },
+    {
+      // 3. Position
+      title: t("search.location.colPosition"),
+      dataIndex: "position",
+      key: "position",
+      render: (_, row) => (
+        <span className="font-mono text-xs text-muted-foreground">
+          {row.chromosome}:{formatNumber(row.position)}
+        </span>
+      ),
+    },
+    {
+      // 4. Mutation feature
+      title: t("search.location.colMutation"),
+      dataIndex: "mutation",
+      key: "mutation",
+      render: (_, row) => (
+        <span className="font-mono text-xs">{row.impact ?? row.variant_type ?? "—"}</span>
+      ),
+    },
+    {
+      // 5. Gene ID (linked to detail when present)
       title: t("search.location.colGeneId"),
       dataIndex: "gene_id",
       key: "gene_id",
@@ -132,32 +219,7 @@ function LocationSearchComponent() {
         ),
     },
     {
-      title: t("search.location.colAssembly"),
-      dataIndex: "assembly",
-      key: "assembly",
-      render: () => (
-        <span className="font-mono text-xs">{selectedAssembly?.name ?? "—"}</span>
-      ),
-    },
-    {
-      title: t("search.location.colChromosome"),
-      dataIndex: "chromosome",
-      key: "chromosome",
-      render: (_, row) => (
-        <span className="font-mono text-xs">{row.chromosome}</span>
-      ),
-    },
-    {
-      title: t("search.location.colMutation"),
-      dataIndex: "mutation",
-      key: "mutation",
-      render: (_, row) => (
-        <span className="font-mono text-xs">
-          {row.impact ?? row.variant_type ?? "—"}
-        </span>
-      ),
-    },
-    {
+      // 6. JBrowse 2 action (base-aware, new tab)
       title: t("search.location.colGbrowse"),
       dataIndex: "gbrowse",
       key: "gbrowse",
@@ -167,26 +229,17 @@ function LocationSearchComponent() {
           disabled={!selectedAssembly}
           href={
             selectedAssembly
-              ? `/browser?assembly=${encodeURIComponent(selectedAssembly.name)}&locus=${encodeURIComponent(
-                  `${row.chromosome}:${row.position}-${row.position}`,
-                )}`
+              ? buildJbrowseLocusUrl(import.meta.env.BASE_URL, {
+                  assembly: selectedAssembly.name,
+                  locus: `${row.chromosome}:${row.position}-${row.position}`,
+                }).href
               : undefined
           }
           target="_blank"
-          rel="noreferrer"
+          rel="noopener noreferrer"
         >
           {t("search.location.openBrowser")}
         </Button>
-      ),
-    },
-    {
-      title: t("search.location.colPosition"),
-      dataIndex: "position",
-      key: "position",
-      render: (_, row) => (
-        <span className="font-mono text-xs text-muted-foreground">
-          {row.chromosome}:{formatNumber(row.position)}
-        </span>
       ),
     },
   ];
@@ -208,7 +261,7 @@ function LocationSearchComponent() {
         </h2>
 
         <Card className="mt-6 max-w-3xl">
-          <Form layout="vertical" onFinish={onSubmit}>
+          <Form layout="vertical" onFinish={submitInNewTab}>
             <div className="grid gap-4 sm:grid-cols-[240px_1fr]">
               <Form.Item label={t("search.location.assembly")} className="mb-0">
                 <Select
@@ -286,28 +339,29 @@ function LocationSearchComponent() {
             <p className="mb-3 text-sm text-muted-foreground">
               {t("search.location.found", { count: data.length })}
             </p>
-            <Table<VariantSummary>
-              rowKey="variant_id"
-              columns={columns}
-              dataSource={data}
-              loading={regionQuery.isLoading}
-              pagination={
-                data.length > 25
-                  ? { pageSize: 25, showSizeChanger: false }
-                  : false
-              }
-              locale={{
-                emptyText: (
-                  <Empty
-                    description={
-                      <Typography.Text type="secondary">
-                        {t("search.location.noResults")}
-                      </Typography.Text>
-                    }
-                  />
-                ),
-              }}
-            />
+            <div className="-mx-4 overflow-x-auto sm:mx-0">
+              <Table<VariantSummary>
+                rowKey="variant_id"
+                columns={columns}
+                dataSource={data}
+                loading={regionQuery.isLoading}
+                pagination={
+                  data.length > 25 ? { pageSize: 25, showSizeChanger: false } : false
+                }
+                scroll={{ x: 720 }}
+                locale={{
+                  emptyText: (
+                    <Empty
+                      description={
+                        <Typography.Text type="secondary">
+                          {t("search.location.noResults")}
+                        </Typography.Text>
+                      }
+                    />
+                  ),
+                }}
+              />
+            </div>
           </div>
         ) : null}
       </div>

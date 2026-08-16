@@ -1,9 +1,14 @@
 import { test, expect } from '@playwright/test';
 
 /**
- * SoyMutDB Homepage E2E Tests
+ * SoyMutDB Homepage E2E Tests (Phase 4 layout)
  *
- * Tests: Hero section, statistics display, navigation menu
+ * The home page follows the approved reference layout:
+ *   - 2:3 latest-news / featured-carousel grid
+ *   - five direct task entries (Gene ID, Physical Location, JBrowse 2, BLAST,
+ *     Primer Design)
+ *   - sanitized CMS content block
+ * The legacy hero search and statistics strip are removed.
  */
 
 test.describe('Homepage', () => {
@@ -11,50 +16,34 @@ test.describe('Homepage', () => {
     await page.goto('/');
   });
 
-  test('displays hero section with title', async ({ page }) => {
-    const hero = page.locator('[data-testid="hero"]');
-    await expect(hero).toBeVisible();
-    await expect(hero).toContainText(/SoyMutDB/i);
-  });
-
-  test('displays statistics summary cards', async ({ page }) => {
-    const stats = page.locator('[data-testid="stats-summary"]');
-    await expect(stats).toBeVisible();
-
-    // Check for variant count stat
-    const variantStat = page.locator('[data-testid="stat-variants"]');
-    await expect(variantStat).toBeVisible();
-
-    // Check for gene count stat
-    const geneStat = page.locator('[data-testid="stat-genes"]');
-    await expect(geneStat).toBeVisible();
-
-    // Check for mutant line count stat
-    const mutantStat = page.locator('[data-testid="stat-mutants"]');
-    await expect(mutantStat).toBeVisible();
-  });
-
-  test('displays navigation menu with key links', async ({ page }) => {
-    const nav = page.locator('nav, [data-testid="navigation"]');
+  test('renders the primary navigation in approved order', async ({ page }) => {
+    // Primary nav: Home / Search / Tools / Latest News / Contact.
+    const nav = page.locator('nav[aria-label="Primary"]').first();
     await expect(nav).toBeVisible();
 
-    // Check for key navigation links
-    await expect(page.locator('a[href*="genes"], a[href*="/genes"]')).toBeVisible();
-    await expect(page.locator('a[href*="variants"], a[href*="/variants"]')).toBeVisible();
-    await expect(page.locator('a[href*="search"], a[href*="/search"]')).toBeVisible();
-    await expect(page.locator('a[href*="browser"], a[href*="/browser"]')).toBeVisible();
+    const labels = await nav.locator('a').allTextContents();
+    const joined = labels.join(' ');
+    expect(joined).toMatch(/Home/i);
+    expect(joined).toMatch(/Search/i);
+    expect(joined).toMatch(/Latest News/i);
+    expect(joined).toMatch(/Contact/i);
   });
 
-  test('navigation to genes page works', async ({ page }) => {
-    await page.locator('a[href*="genes"], a[href*="/genes"]').first().click();
-    await page.waitForURL('**/genes**');
-    await expect(page).toHaveURL(/.*\/genes.*/);
+  test('renders the latest-news and carousel grid', async ({ page }) => {
+    // The 2:3 grid is the top module; news list and carousel are present.
+    await expect(page.locator('a[href*="/news/"]').first()).toBeVisible();
   });
 
-  test('navigation to search page works', async ({ page }) => {
-    await page.locator('a[href*="search"], a[href*="/search"]').first().click();
-    await page.waitForURL('**/search**');
-    await expect(page).toHaveURL(/.*\/search.*/);
+  test('renders the five direct task entries', async ({ page }) => {
+    // Task entries: Gene ID, Physical Location, JBrowse 2, BLAST, Primer Design.
+    await expect(page.locator('a[href*="/search/genes"]').first()).toBeVisible();
+    await expect(page.locator('a[href*="/search/location"]').first()).toBeVisible();
+    await expect(page.locator('a[href*="/blast"]').first()).toBeVisible();
+    await expect(page.locator('a[href*="/search/primer"]').first()).toBeVisible();
+  });
+
+  test('the legacy hero search is removed', async ({ page }) => {
+    await expect(page.locator('[data-testid="hero"]')).toHaveCount(0);
   });
 
   test('footer is visible', async ({ page }) => {
@@ -66,7 +55,6 @@ test.describe('Homepage', () => {
     const startTime = Date.now();
     await page.goto('/', { waitUntil: 'networkidle' });
     const loadTime = Date.now() - startTime;
-    // Page should load within 5 seconds
     expect(loadTime).toBeLessThan(5000);
   });
 });

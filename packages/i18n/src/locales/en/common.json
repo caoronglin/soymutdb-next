@@ -32,7 +32,8 @@
     "resources": "Resources",
     "allTools": "All tools",
     "contact": "Contact Us",
-    "latestNews": "Latest News"
+    "latestNews": "Latest News",
+    "tools": "Tools"
   },
   "home": {
     "newRelease": "New Release Available",
@@ -45,7 +46,7 @@
     "tryExamples": "Try:",
     "taskGenes": "Browse genes",
     "taskVariants": "Explore variants",
-    "taskBlast": "Run BLAST",
+    "taskBlast": "BLAST",
     "statsSource": "Source: SoyMutDB API",
     "browseGenome": "Genome Browser",
     "blastSearch": "BLAST Search",
@@ -93,7 +94,12 @@
     "seeds": "Seeds",
     "statsUnavailable": "Statistics temporarily unavailable",
     "assembly": "Genome assembly",
-    "welcome": "Welcome"
+    "welcome": "Welcome",
+    "taskGeneId": "Gene ID",
+    "taskLocation": "Physical Location",
+    "taskJbrowse": "JBrowse 2",
+    "taskPrimer": "Primer Design",
+    "taskEntries": "Quick tools"
   },
   "genes": {
     "title": "Gene Search",
@@ -246,7 +252,8 @@
     "sortByImpact": "Impact",
     "snp_count": "SNPs",
     "indel_count": "Indels",
-    "sv_count": "SVs"
+    "sv_count": "SVs",
+    "totalCount": "{count} results"
   },
   "mutantLines": {
     "title": "Mutant Lines",
@@ -360,7 +367,7 @@
     "hitCoverage": "Coverage",
     "hitLength": "Length",
     "actions": {
-      "gbrowse": "Gbrowse",
+      "gbrowse": "JBrowse 2",
       "geneSearch": "Gene search"
     }
   },
@@ -648,7 +655,7 @@
       "colAssembly": "Genome version",
       "colChromosome": "Chromosome",
       "colMutation": "Mutation feature",
-      "colGbrowse": "Gbrowse",
+      "colGbrowse": "JBrowse 2",
       "colGeneId": "Gene ID",
       "colPosition": "Position",
       "mutations": "{count} variants",
@@ -666,7 +673,7 @@
     "min_fpkm": "Min FPKM",
     "tabGenes": "Gene ID",
     "tabLocation": "Physical Location",
-    "tabGbrowse": "Gbrowse",
+    "tabGbrowse": "JBrowse 2",
     "tabPrimer": "Primer Design",
     "tabBlast": "BLAST",
     "tabTools": "Search Tools",
@@ -688,18 +695,18 @@
       "colAssembly": "Genome version",
       "colChromosome": "Chromosome",
       "colMutation": "Mutation feature",
-      "colGbrowse": "Gbrowse",
+      "colGbrowse": "JBrowse 2",
       "colGeneId": "Gene ID",
       "colPosition": "Position",
       "openBrowser": "Open in browser",
       "openGene": "Open gene {geneId}"
     },
     "gbrowse": {
-      "title": "Gbrowse",
-      "subtitle": "Browse the genome in Gbrowse",
-      "desc": "Select a genome version and open the Gbrowse browser. Search results also link to specific loci directly.",
+      "title": "JBrowse 2",
+      "subtitle": "Browse the genome in JBrowse 2",
+      "desc": "Select a genome version and open the JBrowse 2 browser. Search results also link to specific loci directly.",
       "assembly": "Genome version",
-      "open": "Open Gbrowse"
+      "open": "Open JBrowse 2"
     },
     "primer": {
       "title": "Primer Design",
@@ -740,7 +747,7 @@
       "clamp": "3' GC",
       "score": "Score",
       "actions": "Actions",
-      "gbrowse": "Gbrowse",
+      "gbrowse": "JBrowse 2",
       "geneSearch": "Gene search"
     },
     "blast": {

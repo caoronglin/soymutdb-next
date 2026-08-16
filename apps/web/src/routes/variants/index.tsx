@@ -7,6 +7,7 @@
  */
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { Download } from "lucide-react";
 import {
@@ -14,16 +15,17 @@ import {
   Empty,
   Form,
   Select,
+  Space,
   Table,
   Tag,
   Typography,
   type TableColumnsType,
   type TableProps,
 } from "antd";
-import { ReloadOutlined } from "@ant-design/icons";
+import { LeftOutlined, ReloadOutlined, RightOutlined } from "@ant-design/icons";
 import { searchVariants, type VariantSummary } from "@soymutdb/api-client";
 import { FadeUp } from "../../components/route-motion";
-import { SOYBEAN_CHROMOSOMES, formatPosition, formatNumber } from "../../lib/format";
+import { SOYBEAN_CHROMOSOMES, formatPosition } from "../../lib/format";
 
 export const Route = createFileRoute("/variants/")({
   component: VariantsComponent,
@@ -31,7 +33,7 @@ export const Route = createFileRoute("/variants/")({
     chromosome: String(search.chromosome ?? ""),
     variant_type: String(search.variant_type ?? ""),
     impact: String(search.impact ?? ""),
-    page: Number(search.page ?? 1),
+    cursor: search.cursor ? String(search.cursor) : undefined,
     sort_by: String(search.sort_by ?? "position"),
     sort_dir: (search.sort_dir as "asc" | "desc") ?? "asc",
   }),
@@ -51,6 +53,15 @@ function VariantsComponent() {
   const search = Route.useSearch();
   const navigate = useNavigate();
 
+  // Cursor-history stack for page-like prev/next navigation. `undefined`
+  // represents the first page (no cursor). Pushed on "Next", popped on
+  // "Previous". Reset whenever a filter/sort changes the underlying query.
+  const [cursorStack, setCursorStack] = React.useState<Array<string | undefined>>([
+    undefined,
+  ]);
+  const prevCursor = cursorStack.length > 1 ? cursorStack[cursorStack.length - 2] : undefined;
+  const atFirstPage = search.cursor == null;
+
   const query = useQuery({
     queryKey: ["variants", search],
     queryFn: () =>
@@ -58,8 +69,8 @@ function VariantsComponent() {
         chromosome: search.chromosome || undefined,
         variant_type: search.variant_type ? [search.variant_type] : undefined,
         impact: search.impact ? [search.impact] : undefined,
-        page: search.page,
-        page_size: PAGE_SIZE,
+        cursor: search.cursor,
+        limit: PAGE_SIZE,
         sort_by: search.sort_by,
         sort_dir: search.sort_dir,
       }),
@@ -67,7 +78,7 @@ function VariantsComponent() {
   });
 
   const data = query.data?.items ?? [];
-  const total = query.data?.total ?? 0;
+  const total = query.data?.total_count ?? null;
 
   const currentSort: SortState = { sort_by: search.sort_by, sort_dir: search.sort_dir };
 
@@ -155,8 +166,8 @@ function VariantsComponent() {
     navigate({
       to: "/variants",
       search: next
-        ? { ...search, ...next, page: 1 }
-        : { ...search, sort_by: "position", sort_dir: "asc", page: 1 },
+        ? { ...search, ...next, cursor: undefined }
+        : { ...search, sort_by: "position", sort_dir: "asc", cursor: undefined },
     });
   };
 
@@ -164,7 +175,7 @@ function VariantsComponent() {
   const reset = () =>
     navigate({
       to: "/variants",
-      search: { chromosome: "", variant_type: "", impact: "", page: 1, sort_by: "position", sort_dir: "asc" },
+      search: { chromosome: "", variant_type: "", impact: "", cursor: undefined, sort_by: "position", sort_dir: "asc" },
     });
 
   return (
@@ -187,7 +198,7 @@ function VariantsComponent() {
             <Select
               value={search.chromosome || "all"}
               onChange={(v) =>
-                navigate({ to: "/variants", search: { ...search, chromosome: v === "all" ? "" : v, page: 1 } })
+                navigate({ to: "/variants", search: { ...search, chromosome: v === "all" ? "" : v, cursor: undefined } })
               }
               style={{ width: 170 }}
               options={[
@@ -200,7 +211,7 @@ function VariantsComponent() {
             <Select
               value={search.variant_type || "all"}
               onChange={(v) =>
-                navigate({ to: "/variants", search: { ...search, variant_type: v === "all" ? "" : v, page: 1 } })
+                navigate({ to: "/variants", search: { ...search, variant_type: v === "all" ? "" : v, cursor: undefined } })
               }
               style={{ width: 170 }}
               options={[
@@ -213,7 +224,7 @@ function VariantsComponent() {
             <Select
               value={search.impact || "all"}
               onChange={(v) =>
-                navigate({ to: "/variants", search: { ...search, impact: v === "all" ? "" : v, page: 1 } })
+                navigate({ to: "/variants", search: { ...search, impact: v === "all" ? "" : v, cursor: undefined } })
               }
               style={{ width: 170 }}
               options={[
@@ -236,15 +247,7 @@ function VariantsComponent() {
             dataSource={data}
             loading={query.isLoading}
             onChange={handleTableChange}
-            pagination={{
-              current: search.page,
-              pageSize: PAGE_SIZE,
-              total,
-              showSizeChanger: false,
-              showTotal: (n, range) =>
-                `${formatNumber(range[0])}–${formatNumber(range[1])} of ${formatNumber(n)}`,
-              onChange: (page) => navigate({ to: "/variants", search: { ...search, page } }),
-            }}
+            pagination={false}
             locale={{
               emptyText: (
                 <Empty
@@ -259,6 +262,38 @@ function VariantsComponent() {
               ),
             }}
           />
+          <Space className="mt-3" size="small">
+            <Button
+              size="small"
+              icon={<LeftOutlined />}
+              disabled={atFirstPage}
+              onClick={() => {
+                navigate({ to: "/variants", search: { ...search, cursor: prevCursor } });
+                setCursorStack((stack) => (stack.length > 1 ? stack.slice(0, -1) : stack));
+              }}
+            >
+              {t("common.previous")}
+            </Button>
+            <Button
+              size="small"
+              icon={<RightOutlined />}
+              iconPosition="end"
+              disabled={!query.data?.has_more || !query.data?.next_cursor}
+              onClick={() => {
+                const next = query.data?.next_cursor;
+                if (!next) return;
+                setCursorStack((stack) => [...stack, search.cursor]);
+                navigate({ to: "/variants", search: { ...search, cursor: next } });
+              }}
+            >
+              {t("common.next")}
+            </Button>
+            {total != null ? (
+              <Typography.Text type="secondary" className="text-xs">
+                {t("variants.totalCount", { count: total })}
+              </Typography.Text>
+            ) : null}
+          </Space>
         </div>
       </div>
     </FadeUp>

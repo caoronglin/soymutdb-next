@@ -16,21 +16,23 @@ import { ConfirmDialog } from "../components/confirm-dialog";
 import { widgetApi, type WidgetDefinition } from "../lib/widget-api";
 
 const WIDGET_CATEGORIES: Record<string, string> = {
-  stats: "Stats",
-  chart: "Chart",
-  table: "Table",
-  list: "List",
-  search: "Search",
+  hero: "Hero",
   navigation: "Navigation",
-  content: "Content",
+  search: "Search",
+  data_table: "Data Table",
+  detail: "Detail",
+  visualization: "Visualization",
+  stats: "Stats",
+  external: "External",
+  layout: "Layout",
   custom: "Custom",
 };
 
 function categoryBadgeColor(category: string): "default" | "secondary" | "outline" | "success" | "warning" {
   switch (category) {
     case "stats": return "default";
-    case "chart": return "success";
-    case "table": return "warning";
+    case "visualization": return "success";
+    case "data_table": return "warning";
     case "search": return "secondary";
     default: return "outline";
   }
@@ -39,8 +41,7 @@ function categoryBadgeColor(category: string): "default" | "secondary" | "outlin
 function permissionBadge(perm: string): "default" | "secondary" | "outline" | "destructive" {
   switch (perm) {
     case "public": return "outline";
-    case "user": return "secondary";
-    case "editor": return "default";
+    case "authenticated": return "secondary";
     case "admin": return "destructive";
     default: return "outline";
   }

@@ -6,7 +6,7 @@
  * validation logic unchanged.
  *
  * Completed jobs expose a hits table (GET /blast/jobs/{id}/hits) with an
- * actions column: "Gbrowse" opens /browser at the hit's subject coordinates
+ * actions column: "JBrowse 2" opens /browser at the hit's subject coordinates
  * (new tab) and "Gene search" deep-links /search/genes?q=<subject id>.
  */
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
@@ -41,6 +41,7 @@ import {
   type BlastJob,
 } from "@soymutdb/api-client";
 import { FadeUp } from "../components/route-motion";
+import { buildJbrowseLocusUrl } from "../lib/deployment";
 import { ensurePermission, showNotification } from "../lib/use-browser-notifications";
 import { z } from "zod";
 
@@ -107,6 +108,44 @@ const blastSchema = z.object({
   e_value: z.number().min(0).default(1e-5),
   max_hits: z.number().int().min(1).max(1000).default(50),
 });
+
+/**
+ * Client-side FASTA structure check (defence in depth on top of backend
+ * validation). Accepts a plain sequence or one-or-more FASTA records; rejects
+ * a `>` header with no following sequence and non-sequence characters.
+ *
+ * @returns an error message, or null when the input is acceptable.
+ */
+function validateFastaStructure(input: string): string | null {
+  const hasHeader = />/.test(input.trim());
+  if (!hasHeader) return null; // plain sequence — backend validates.
+  const lines = input.split(/\r?\n/).map((l) => l.trim());
+  let currentHasHeader = false;
+  let currentHasSeq = false;
+  let sawAny = false;
+  for (const line of lines) {
+    if (!line) continue;
+    if (line.startsWith(">")) {
+      if (currentHasHeader && !currentHasSeq) {
+        return "FASTA header without a sequence";
+      }
+      currentHasHeader = true;
+      currentHasSeq = false;
+      sawAny = true;
+    } else {
+      // Sequence line — allow letters and common gap/stop symbols.
+      if (currentHasHeader && !/[^A-Za-z*.-]/.test(line.replace(/\s+/g, ""))) {
+        currentHasSeq = true;
+      } else if (!currentHasHeader) {
+        return "Sequence data before a FASTA header";
+      }
+    }
+  }
+  if (sawAny && !currentHasSeq) {
+    return "FASTA header without a sequence";
+  }
+  return null;
+}
 
 function BlastComponent() {
   const { t } = useTranslation();
@@ -263,6 +302,11 @@ function BlastComponent() {
       setErrors(fieldErrors);
       return;
     }
+    const fastaError = validateFastaStructure(parsed.data.sequence);
+    if (fastaError) {
+      setErrors({ sequence: fastaError });
+      return;
+    }
     setErrors({});
     // The select stores the database id; the backend accepts the database
     // *name* (or numeric database_id) — map back so the job carries a
@@ -280,7 +324,7 @@ function BlastComponent() {
   const jobs = jobsQuery.data?.items ?? [];
 
   // -------------------------------------------------------------------------
-  // Hits table (completed jobs) — with Gbrowse / gene-search cross links
+  // Hits table (completed jobs) — with JBrowse 2 / gene-search cross links
   // -------------------------------------------------------------------------
   const navigate = useNavigate();
   const [selectedJob, setSelectedJob] = React.useState<BlastJob | null>(null);
@@ -288,7 +332,7 @@ function BlastComponent() {
   const hitsQuery = useQuery({
     queryKey: ["blast-hits", selectedJob?.id],
     queryFn: async () => {
-      const res = await getBlastHits(selectedJob!.id, { page: 1, page_size: 100 });
+      const res = await getBlastHits(selectedJob!.id, { limit: 100, offset: 0 });
       return (res.items ?? []) as unknown as BlastHitLoose[];
     },
     enabled: selectedJob != null,
@@ -296,7 +340,7 @@ function BlastComponent() {
   });
 
   // The job stores the database *name*; map back to its assembly for the
-  // Gbrowse deep link (name match first, then id match).
+  // JBrowse 2 deep link (name match first, then id match).
   const assemblyForJob = (job: BlastJob): string | undefined => {
     const byName = databases.find((d) => d.name === job.database);
     if (byName?.assembly_name) return byName.assembly_name;
@@ -318,11 +362,10 @@ function BlastComponent() {
     const start = hitStart(hit);
     const end = hitEnd(hit);
     if (!assembly || !chr || start == null || end == null) return null;
-    const params = new URLSearchParams({
+    return buildJbrowseLocusUrl(import.meta.env.BASE_URL, {
       assembly,
       locus: `${chr}:${start}-${end}`,
-    });
-    return `/browser?${params.toString()}`;
+    }).href;
   };
 
   const hits = hitsQuery.data ?? [];
@@ -428,7 +471,7 @@ function BlastComponent() {
               disabled={!browserUrl}
               href={browserUrl ?? undefined}
               target="_blank"
-              rel="noreferrer"
+              rel="noopener noreferrer"
             >
               {t("blast.actions.gbrowse")}
             </Button>
@@ -439,7 +482,7 @@ function BlastComponent() {
                 if (!geneId) return;
                 navigate({
                   to: "/search/genes",
-                  search: { q: geneId, tissue: undefined, treatment: undefined, min_fpkm: undefined },
+                  search: { q: geneId, run: true },
                 });
               }}
             >
@@ -600,7 +643,7 @@ function BlastComponent() {
           )}
         </Card>
 
-        {/* Hits table for the selected completed job — with Gbrowse /
+        {/* Hits table for the selected completed job — with JBrowse 2 /
             gene-search cross links (PPTX V2). */}
         {selectedJob ? (
           <Card

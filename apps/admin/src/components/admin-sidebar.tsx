@@ -15,6 +15,7 @@ import {
   LayoutTemplate,
   Activity,
   Eye,
+  Layers,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@soymutdb/ui";
@@ -60,6 +61,7 @@ const NAV_SECTIONS: NavSection[] = [
       { path: "/layout", label: "Layout Editor", icon: LayoutTemplate },
       { path: "/widget-preview", label: "Widget Preview", icon: Eye },
       { path: "/widget-health", label: "Widget Health", icon: Activity },
+      { path: "/page-builder", label: "Page Builder", icon: Layers },
     ],
   },
   {

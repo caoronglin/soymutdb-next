@@ -32,7 +32,8 @@
     "resources": "资源",
     "allTools": "全部工具",
     "contact": "联系我们",
-    "latestNews": "最新动态"
+    "latestNews": "最新动态",
+    "tools": "工具"
   },
   "home": {
     "newRelease": "新版本可用",
@@ -45,7 +46,7 @@
     "tryExamples": "试试：",
     "taskGenes": "浏览基因",
     "taskVariants": "探索变异",
-    "taskBlast": "运行 BLAST",
+    "taskBlast": "BLAST",
     "statsSource": "数据来源：SoyMutDB API",
     "browseGenome": "基因组浏览器",
     "blastSearch": "BLAST 搜索",
@@ -93,7 +94,12 @@
     "seeds": "种子",
     "statsUnavailable": "统计数据暂不可用",
     "assembly": "基因组版本",
-    "welcome": "欢迎"
+    "welcome": "欢迎",
+    "taskGeneId": "基因 ID",
+    "taskLocation": "物理位置",
+    "taskJbrowse": "JBrowse 2",
+    "taskPrimer": "引物设计",
+    "taskEntries": "快速工具"
   },
   "genes": {
     "title": "基因搜索",
@@ -246,7 +252,8 @@
     "sortByImpact": "影响",
     "snp_count": "SNP",
     "indel_count": "Indel",
-    "sv_count": "结构变异"
+    "sv_count": "结构变异",
+    "totalCount": "共 {count} 条"
   },
   "mutantLines": {
     "title": "突变系",
@@ -360,7 +367,7 @@
     "hitCoverage": "覆盖率",
     "hitLength": "长度",
     "actions": {
-      "gbrowse": "Gbrowse",
+      "gbrowse": "JBrowse 2",
       "geneSearch": "基因搜索"
     }
   },
@@ -648,7 +655,7 @@
       "colAssembly": "基因组版本",
       "colChromosome": "染色体号",
       "colMutation": "突变特征",
-      "colGbrowse": "Gbrowse",
+      "colGbrowse": "JBrowse 2",
       "colGeneId": "基因 ID",
       "colPosition": "位点",
       "mutations": "{count} 个变异",
@@ -666,7 +673,7 @@
     "min_fpkm": "最低FPKM",
     "tabGenes": "基因 ID",
     "tabLocation": "物理位置",
-    "tabGbrowse": "Gbrowse",
+    "tabGbrowse": "JBrowse 2",
     "tabPrimer": "引物设计",
     "tabBlast": "BLAST",
     "tabTools": "搜索工具",
@@ -688,18 +695,18 @@
       "colAssembly": "基因组版本",
       "colChromosome": "染色体号",
       "colMutation": "突变特征",
-      "colGbrowse": "Gbrowse",
+      "colGbrowse": "JBrowse 2",
       "colGeneId": "基因 ID",
       "colPosition": "位点",
       "openBrowser": "浏览器中打开",
       "openGene": "打开基因 {geneId}"
     },
     "gbrowse": {
-      "title": "Gbrowse",
-      "subtitle": "在 Gbrowse 中浏览基因组",
-      "desc": "选择基因组版本后打开 Gbrowse 浏览器；搜索结果也可直接跳转到具体位点。",
+      "title": "JBrowse 2",
+      "subtitle": "在 JBrowse 2 中浏览基因组",
+      "desc": "选择基因组版本后打开 JBrowse 2 浏览器；搜索结果也可直接跳转到具体位点。",
       "assembly": "基因组版本",
-      "open": "打开 Gbrowse"
+      "open": "打开 JBrowse 2"
     },
     "primer": {
       "title": "引物设计",
@@ -740,7 +747,7 @@
       "clamp": "3' GC",
       "score": "评分",
       "actions": "操作",
-      "gbrowse": "Gbrowse",
+      "gbrowse": "JBrowse 2",
       "geneSearch": "基因搜索"
     },
     "blast": {

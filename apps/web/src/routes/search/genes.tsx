@@ -1,16 +1,16 @@
 /**
- * Gene ID search — second-level catalog of the /search portal (PPTX V2
- * slide 2/3). Form: genome version select (GET /genes/assemblies, default =
- * is_default) + multi-line gene ID input. Results use the portal table
- * layout: the gene ID acts as the row title (first column, linked to
- * /genes/{id}) followed by the five PPTX columns — genome version /
- * chromosome / mutation feature / Gbrowse / position.
+ * Gene ID search — second-level catalog of the /search portal.
  *
- * A `?q=` search param (e.g. from the BLAST result "gene search" cross
- * link) pre-fills the input and submits automatically once the assembly
- * is known.
+ * URL-backed and shareable (Phase 4): the result view reads `q`, `assembly`,
+ * and `run` search params. A parameterized URL restores the form state and
+ * runs once; the form submit opens a new tab via
+ * `window.open(router.buildLocation(...).href, "_blank", "noopener")`.
+ *
+ * Result columns follow the approved reference order:
+ *   Genome assembly → Chromosome → Position → Mutation feature → Gene ID →
+ *   JBrowse 2 action.
  */
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import * as React from "react";
@@ -24,9 +24,21 @@ import {
 } from "@soymutdb/api-client";
 import { FadeUp } from "../../components/route-motion";
 import { compactGeneId, formatNumber } from "../../lib/format";
+import { buildJbrowseLocusUrl } from "../../lib/deployment";
+
+interface GeneSearchParams {
+  q?: string;
+  assembly?: string;
+  run?: boolean;
+}
 
 export const Route = createFileRoute("/search/genes")({
   component: GeneIdSearchComponent,
+  validateSearch: (search: Record<string, unknown>): GeneSearchParams => ({
+    q: search.q ? String(search.q) : undefined,
+    assembly: search.assembly ? String(search.assembly) : undefined,
+    run: search.run === "1" || search.run === 1 || search.run === true,
+  }),
 });
 
 const PAGE_SIZE = 20;
@@ -38,7 +50,8 @@ interface Submitted {
 
 function GeneIdSearchComponent() {
   const { t } = useTranslation();
-  const { q: urlQ } = Route.useSearch();
+  const router = useRouter();
+  const { q: urlQ, assembly: urlAssembly, run } = Route.useSearch();
   const [geneIdsRaw, setGeneIdsRaw] = React.useState(urlQ ?? "");
   const [submitted, setSubmitted] = React.useState<Submitted | null>(null);
   const [page, setPage] = React.useState(1);
@@ -61,18 +74,27 @@ function GeneIdSearchComponent() {
     if (def) setAssemblyId(String(def.id));
   }, [assemblies, assemblyId]);
 
-  // Deep link: `?q=` (BLAST cross-link) pre-fills the input and submits once
-  // the assembly is loaded. Only the initial URL value triggers this.
+  // Deep link: `?q=` + `?run=1` (or `?assembly=`) restores form state and
+  // submits exactly once the assembly is loaded. Only the initial URL value
+  // triggers this; subsequent form edits do not re-run.
   const autoSubmittedRef = React.useRef(false);
   React.useEffect(() => {
     if (autoSubmittedRef.current) return;
     const trimmed = urlQ?.trim();
-    if (!trimmed || !assemblyId) return;
+    if (!trimmed) return;
+    // Resolve the assembly from the URL when supplied.
+    let targetAssembly = assemblyId;
+    if (urlAssembly) {
+      const match = assemblies.find((a) => String(a.id) === urlAssembly || a.name === urlAssembly);
+      if (match) targetAssembly = String(match.id);
+    }
+    if (!targetAssembly) return;
+    if (run !== true && urlAssembly == null) return;
     autoSubmittedRef.current = true;
     setGeneIdsRaw(trimmed);
-    setSubmitted({ q: trimmed, assemblyId });
+    setSubmitted({ q: trimmed, assemblyId: targetAssembly });
     setPage(1);
-  }, [urlQ, assemblyId]);
+  }, [urlQ, urlAssembly, run, assemblyId, assemblies]);
 
   const resultsQuery = useQuery({
     queryKey: ["search-genes", submitted, page],
@@ -82,7 +104,7 @@ function GeneIdSearchComponent() {
         assembly_id: submitted?.assemblyId || undefined,
         page,
         page_size: PAGE_SIZE,
-      }),
+      } as Parameters<typeof searchGenes>[0]),
     enabled: submitted != null,
     placeholderData: (prev) => prev,
   });
@@ -90,16 +112,61 @@ function GeneIdSearchComponent() {
   const data = resultsQuery.data?.items ?? [];
   const total = resultsQuery.data?.total ?? 0;
 
-  const onSubmit = () => {
+  const submitInNewTab = () => {
     const q = geneIdsRaw.trim();
     if (!q || !assemblyId) return;
-    setSubmitted({ q, assemblyId });
-    setPage(1);
+    const location = router.buildLocation({
+      to: "/search/genes",
+      search: { q, assembly: assemblyId, run: true },
+    });
+    window.open(location.href, "_blank", "noopener");
   };
+
 
   const columns: TableColumnsType<GeneSummary> = [
     {
-      // Gene ID as row title — linked to the gene detail page (PPTX).
+      // 1. Genome assembly
+      title: t("search.genes.colAssembly"),
+      dataIndex: "assembly",
+      key: "assembly",
+      render: () => (
+        <span className="font-mono text-xs">{selectedAssembly?.name ?? "—"}</span>
+      ),
+    },
+    {
+      // 2. Chromosome
+      title: t("search.genes.colChromosome"),
+      dataIndex: "chromosome",
+      key: "chromosome",
+      render: (_, row) => <span className="font-mono text-xs">{row.chromosome}</span>,
+    },
+    {
+      // 3. Position
+      title: t("search.genes.colPosition"),
+      dataIndex: "position",
+      key: "position",
+      render: (_, row) => (
+        <span className="font-mono text-xs text-muted-foreground">
+          {row.chromosome}:{formatNumber(row.start_pos)}-{formatNumber(row.end_pos)}
+        </span>
+      ),
+    },
+    {
+      // 4. Mutation feature
+      title: t("search.genes.colMutation"),
+      dataIndex: "variant_count",
+      key: "mutation",
+      render: (_, row) =>
+        row.variant_count != null ? (
+          <span className="font-mono text-xs">
+            {t("search.genes.mutations", { count: row.variant_count })}
+          </span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        ),
+    },
+    {
+      // 5. Gene ID (linked to detail)
       title: t("search.genes.colGeneId"),
       dataIndex: "gene_id",
       key: "gene_id",
@@ -115,64 +182,27 @@ function GeneIdSearchComponent() {
       ),
     },
     {
-      title: t("search.genes.colAssembly"),
-      dataIndex: "assembly",
-      key: "assembly",
-      render: () => (
-        <span className="font-mono text-xs">{selectedAssembly?.name ?? "—"}</span>
-      ),
-    },
-    {
-      title: t("search.genes.colChromosome"),
-      dataIndex: "chromosome",
-      key: "chromosome",
-      render: (_, row) => (
-        <span className="font-mono text-xs">{row.chromosome}</span>
-      ),
-    },
-    {
-      title: t("search.genes.colMutation"),
-      dataIndex: "variant_count",
-      key: "mutation",
-      render: (_, row) =>
-        row.variant_count != null ? (
-          <span className="font-mono text-xs">
-            {t("search.genes.mutations", { count: row.variant_count })}
-          </span>
-        ) : (
-          <span className="text-muted-foreground">—</span>
-        ),
-    },
-    {
+      // 6. JBrowse 2 action (base-aware, new tab)
       title: t("search.genes.colGbrowse"),
-      dataIndex: "gbrowse",
-      key: "gbrowse",
+      dataIndex: "jbrowse",
+      key: "jbrowse",
       render: (_, row) => (
         <Button
           size="small"
           disabled={!selectedAssembly}
           href={
             selectedAssembly
-              ? `/browser?assembly=${encodeURIComponent(selectedAssembly.name)}&locus=${encodeURIComponent(
-                  `${row.chromosome}:${row.start_pos}-${row.end_pos}`,
-                )}`
+              ? buildJbrowseLocusUrl(import.meta.env.BASE_URL, {
+                  assembly: selectedAssembly.name,
+                  locus: `${row.chromosome}:${row.start_pos}-${row.end_pos}`,
+                }).href
               : undefined
           }
           target="_blank"
-          rel="noreferrer"
+          rel="noopener noreferrer"
         >
           {t("search.genes.openBrowser")}
         </Button>
-      ),
-    },
-    {
-      title: t("search.genes.colPosition"),
-      dataIndex: "position",
-      key: "position",
-      render: (_, row) => (
-        <span className="font-mono text-xs text-muted-foreground">
-          {row.chromosome}:{formatNumber(row.start_pos)}-{formatNumber(row.end_pos)}
-        </span>
       ),
     },
   ];
@@ -186,7 +216,7 @@ function GeneIdSearchComponent() {
         </h2>
 
         <Card className="mt-6 max-w-3xl">
-          <Form layout="vertical" onFinish={onSubmit}>
+          <Form layout="vertical" onFinish={submitInNewTab}>
             <div className="grid gap-4 sm:grid-cols-[240px_1fr]">
               <Form.Item label={t("search.genes.assembly")} className="mb-0">
                 <Select
@@ -242,32 +272,35 @@ function GeneIdSearchComponent() {
               {" · "}
               {formatNumber(total)}
             </p>
-            <Table<GeneSummary>
-              rowKey="gene_id"
-              columns={columns}
-              dataSource={data}
-              loading={resultsQuery.isLoading}
-              pagination={{
-                current: page,
-                pageSize: PAGE_SIZE,
-                total,
-                showSizeChanger: false,
-                showTotal: (n, range) =>
-                  `${formatNumber(range[0])}–${formatNumber(range[1])} of ${formatNumber(n)}`,
-                onChange: (p) => setPage(p),
-              }}
-              locale={{
-                emptyText: (
-                  <Empty
-                    description={
-                      <Typography.Text type="secondary">
-                        {t("search.genes.noResults")}
-                      </Typography.Text>
-                    }
-                  />
-                ),
-              }}
-            />
+            <div className="-mx-4 overflow-x-auto sm:mx-0">
+              <Table<GeneSummary>
+                rowKey="gene_id"
+                columns={columns}
+                dataSource={data}
+                loading={resultsQuery.isLoading}
+                pagination={{
+                  current: page,
+                  pageSize: PAGE_SIZE,
+                  total,
+                  showSizeChanger: false,
+                  showTotal: (n, range) =>
+                    `${formatNumber(range[0])}–${formatNumber(range[1])} of ${formatNumber(n)}`,
+                  onChange: (p) => setPage(p),
+                }}
+                scroll={{ x: 720 }}
+                locale={{
+                  emptyText: (
+                    <Empty
+                      description={
+                        <Typography.Text type="secondary">
+                          {t("search.genes.noResults")}
+                        </Typography.Text>
+                      }
+                    />
+                  ),
+                }}
+              />
+            </div>
           </div>
         ) : null}
       </div>

@@ -37,17 +37,19 @@ import { widgetApi, type WidgetCategory, type WidgetPermission } from "../../lib
 // ---------------------------------------------------------------------------
 
 const WIDGET_CATEGORIES: WidgetCategory[] = [
-  "stats",
-  "chart",
-  "table",
-  "list",
-  "search",
+  "hero",
   "navigation",
-  "content",
+  "search",
+  "data_table",
+  "detail",
+  "visualization",
+  "stats",
+  "external",
+  "layout",
   "custom",
 ];
 
-const WIDGET_PERMISSIONS: WidgetPermission[] = ["public", "user", "editor", "admin"];
+const WIDGET_PERMISSIONS: WidgetPermission[] = ["public", "authenticated", "admin"];
 
 function isValidJson(s: string): boolean {
   if (!s.trim()) return true; // empty is OK (null)
@@ -67,13 +69,15 @@ const widgetSchema = z.object({
   display_name: z.string().min(1, "Display name is required"),
   description: z.string().max(500).optional().or(z.literal("")),
   category: z.enum([
-    "stats",
-    "chart",
-    "table",
-    "list",
-    "search",
+    "hero",
     "navigation",
-    "content",
+    "search",
+    "data_table",
+    "detail",
+    "visualization",
+    "stats",
+    "external",
+    "layout",
     "custom",
   ]),
   template_path: z.string().min(1, "Template path is required"),
@@ -93,7 +97,7 @@ const widgetSchema = z.object({
     .refine(isValidJson, "Must be valid JSON or empty")
     .optional()
     .or(z.literal("")),
-  permissions: z.enum(["public", "user", "editor", "admin"]),
+  permissions: z.enum(["public", "authenticated", "admin"]),
   is_active: z.boolean().default(true),
 });
 

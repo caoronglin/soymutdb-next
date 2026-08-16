@@ -1,7 +1,6 @@
 /**
- * Gbrowse — second-level catalog of the /search portal (PPTX V2 slide 5).
- * A transfer page: pick a genome version, then open the genome browser
- * (/browser?assembly=...) in a new tab.
+ * JBrowse 2 — a transfer page: pick a genome version, then open the JBrowse 2
+ * browser (/browser?assembly=...) in a new tab.
  */
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
@@ -11,6 +10,7 @@ import { Button, Card, Form, Select, Tag, Typography } from "antd";
 import { GlobalOutlined } from "@ant-design/icons";
 import { getAssemblies } from "@soymutdb/api-client";
 import { FadeUp } from "../../components/route-motion";
+import { buildJbrowseLocusUrl } from "../../lib/deployment";
 
 export const Route = createFileRoute("/search/gbrowse")({
   component: GbrowseComponent,
@@ -38,11 +38,11 @@ function GbrowseComponent() {
 
   const openBrowser = () => {
     if (!selectedAssembly) return;
-    const params = new URLSearchParams({
+    const { href } = buildJbrowseLocusUrl(import.meta.env.BASE_URL, {
       assembly: selectedAssembly.name,
       locus: DEFAULT_LOCUS,
     });
-    window.open(`/browser?${params.toString()}`, "_blank", "noopener");
+    window.open(href, "_blank", "noopener");
   };
 
   return (

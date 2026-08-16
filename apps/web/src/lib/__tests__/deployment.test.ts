@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildCsp,
+  buildJbrowseLocusUrl,
   normalizeBasePath,
   resolveAppUrl,
   resolveAssetUrl,
@@ -17,6 +18,20 @@ describe("deployment URL contract", () => {
       "/soymutdb-next/assets/app.js",
     );
     expect(resolveAppUrl("/soymutdb-next/", "/login")).toBe("/soymutdb-next/login");
+  });
+
+  it("builds a base-aware JBrowse 2 locus deep link", () => {
+    const { href } = buildJbrowseLocusUrl("/soymutdb-next/", {
+      assembly: "Wm82.a4.v1",
+      locus: "chr01:100-200",
+    });
+    expect(href).toBe("/soymutdb-next/browser?assembly=Wm82.a4.v1&locus=chr01%3A100-200");
+  });
+
+  it("builds a JBrowse 2 deep link for a root deployment", () => {
+    expect(
+      buildJbrowseLocusUrl("/", { assembly: "Wm82.a4.v1", locus: "chr01" }).href,
+    ).toBe("/browser?assembly=Wm82.a4.v1&locus=chr01");
   });
 
   it("builds CSP from real API and JBrowse origins", () => {

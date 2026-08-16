@@ -36,14 +36,16 @@ describe("BLAST client contract", () => {
   });
 
   it("uses the implemented jobs list and result routes", async () => {
-    await getBlastJobs({ cursor: "c1", limit: 10 });
-    await getBlastHits("job-1", { cursor: "c1", limit: 25 });
+    await getBlastJobs({ page: 1, page_size: 20 });
+    await getBlastHits("job-1", { limit: 25, offset: 0 });
 
     const [jobsUrl] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit];
     const [hitsUrl] = vi.mocked(fetch).mock.calls[1] as [string, RequestInit];
     expect(jobsUrl).toContain("/blast/jobs?");
     expect(hitsUrl).toContain("/blast/jobs/job-1/results?");
-    expect(new URL(hitsUrl, "http://localhost").searchParams.get("cursor")).toBe("c1");
+    expect(new URL(jobsUrl, "http://localhost").searchParams.get("page")).toBe("1");
+    expect(new URL(jobsUrl, "http://localhost").searchParams.get("page_size")).toBe("20");
     expect(new URL(hitsUrl, "http://localhost").searchParams.get("limit")).toBe("25");
+    expect(new URL(hitsUrl, "http://localhost").searchParams.get("offset")).toBe("0");
   });
 });

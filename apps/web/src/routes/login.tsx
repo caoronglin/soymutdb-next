@@ -42,7 +42,10 @@ function LoginComponent() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const search = useRouterState({ select: (s) => s.location.search });
-  const redirectRaw = typeof search === "object" && search !== null ? (search as Record<string, unknown>).redirect : undefined;
+  const redirectRaw =
+    typeof search === "object" && search !== null
+      ? (search as unknown as { redirect?: unknown }).redirect
+      : undefined;
   const redirect = typeof redirectRaw === "string" && redirectRaw.startsWith("/") ? redirectRaw : "/";
 
   const [email, setEmail] = React.useState("");

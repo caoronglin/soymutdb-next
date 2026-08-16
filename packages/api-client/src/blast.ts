@@ -56,10 +56,9 @@ export interface BlastJobParams {
 
 export interface BlastJobListResponse {
   items: BlastJob[];
-  cursor: string | null;
-  next_cursor: string | null;
-  has_more: boolean;
-  total_count: number | null;
+  total: number;
+  page: number;
+  page_size: number;
 }
 
 export interface BlastHitListResponse {
@@ -88,8 +87,8 @@ export function submitBlastJob(params: BlastJobParams): Promise<BlastJob> {
 }
 
 export function getBlastJobs(params: {
-  cursor?: string;
-  limit?: number;
+  page?: number;
+  page_size?: number;
   status?: string;
 } = {}): Promise<BlastJobListResponse> {
   return http.get<BlastJobListResponse & { items: BlastJobApi[] }>("/blast/jobs", { params }).then(
@@ -104,10 +103,8 @@ export function getBlastJob(jobId: string): Promise<BlastJob> {
 export function getBlastHits(
   jobId: string,
   params: {
-    cursor?: string;
     limit?: number;
-    min_e_value?: number;
-    min_identity?: number;
+    offset?: number;
   } = {},
 ): Promise<BlastHitListResponse> {
   return http.get<BlastResultApi>(`/blast/jobs/${jobId}/results`, {

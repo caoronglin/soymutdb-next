@@ -20,16 +20,18 @@ import { http } from "@soymutdb/api-client";
 // ---------------------------------------------------------------------------
 
 export type WidgetCategory =
-  | "stats"
-  | "chart"
-  | "table"
-  | "list"
-  | "search"
+  | "hero"
   | "navigation"
-  | "content"
+  | "search"
+  | "data_table"
+  | "detail"
+  | "visualization"
+  | "stats"
+  | "external"
+  | "layout"
   | "custom";
 
-export type WidgetPermission = "public" | "user" | "editor" | "admin";
+export type WidgetPermission = "public" | "authenticated" | "admin";
 
 export interface WidgetDefinition {
   name: string;
@@ -76,6 +78,12 @@ export interface WidgetHealthItem {
 }
 
 export interface WidgetHealthResponse {
+  total_widgets: number;
+  active_widgets: number;
+  total_layouts: number;
+  active_layouts: number;
+  builtin_templates: string[];
+  cache_backend: string;
   widgets: WidgetHealthItem[];
   generated_at: string;
 }

@@ -27,6 +27,8 @@ const WidgetEditorPage = lazy(() => import("./routes/widgets/$name"));
 const LayoutEditorPage = lazy(() => import("./routes/layout"));
 const WidgetPreviewPage = lazy(() => import("./routes/widget-preview"));
 const WidgetHealthPage = lazy(() => import("./routes/widget-health"));
+const PageBuilderIndexPage = lazy(() => import("./routes/page-builder/index"));
+const PageBuilderEditPage = lazy(() => import("./routes/page-builder/$pageId"));
 
 /** Loading fallback for lazy-loaded routes. */
 function RouteLoading() {
@@ -184,6 +186,18 @@ const widgetHealthRoute = createRoute({
   component: () => withSuspense(WidgetHealthPage),
 });
 
+const pageBuilderIndexRoute = createRoute({
+  getParentRoute: () => authLayoutRoute,
+  path: "/page-builder",
+  component: () => withSuspense(PageBuilderIndexPage),
+});
+
+const pageBuilderEditRoute = createRoute({
+  getParentRoute: () => authLayoutRoute,
+  path: "/page-builder/$pageId",
+  component: () => withSuspense(PageBuilderEditPage),
+});
+
 const routeTree = rootRoute.addChildren([
   loginRoute,
   authLayoutRoute.addChildren([
@@ -202,6 +216,8 @@ const routeTree = rootRoute.addChildren([
     layoutRoute,
     widgetPreviewRoute,
     widgetHealthRoute,
+    pageBuilderIndexRoute,
+    pageBuilderEditRoute,
   ]),
 ]);
 

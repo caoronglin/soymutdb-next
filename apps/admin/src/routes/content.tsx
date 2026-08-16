@@ -1075,25 +1075,78 @@ function NewsPublicationTab({ type }: { type: "news" | "publication" }) {
   const [deleteTarget, setDeleteTarget] = React.useState<ContentItem | null>(
     null,
   );
+  const isNews = type === "news";
 
   const { data, isLoading } = useQuery<{ items: ContentItem[]; total: number }>(
     {
       queryKey: ["admin-content", type],
-      queryFn: () =>
-        http.get("/admin/content", { params: { type, page_size: 20 } }),
+      queryFn: async () => {
+        if (isNews) {
+          const response = await http.get<{
+            items: Array<{
+              id: string;
+              title_en: string;
+              slug: string;
+              status: string;
+              published_at: string | null;
+              updated_at: string;
+            }>;
+            total: number;
+          }>("/admin/news", { params: { page: 1, page_size: 20 } });
+          return {
+            items: response.items.map((item): ContentItem => ({
+              id: item.id,
+              type: "news",
+              title: item.title_en,
+              slug: item.slug,
+              status: (item.status as PageStatus) || "draft",
+              author: "—",
+              publishedAt: item.published_at ?? null,
+              updatedAt: item.updated_at,
+            })),
+            total: response.total,
+          };
+        }
+
+        const response = await http.get<{
+          items: Array<{
+            id: string;
+            title: string;
+            authors: string;
+            year: number | null;
+            doi: string | null;
+            created_at: string;
+          }>;
+          total: number;
+        }>("/admin/publications", { params: { page: 1, page_size: 20 } });
+        return {
+          items: response.items.map((item): ContentItem => ({
+            id: item.id,
+            type: "publication",
+            title: item.title,
+            slug: item.doi ?? item.title,
+            status: "published",
+            author: item.authors,
+            publishedAt: item.year != null ? String(item.year) : null,
+            updatedAt: item.created_at,
+          })),
+          total: response.total,
+        };
+      },
       placeholderData: { items: [], total: 0 },
     },
   );
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => http.delete(`/admin/content/${id}`),
+    mutationFn: (id: string) =>
+      http.delete(isNews ? `/admin/news/${id}` : `/admin/publications/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-content"] });
       setDeleteTarget(null);
     },
   });
 
-  const items = (data?.items ?? []).filter((i) => i.type === type);
+  const items = data?.items ?? [];
   const config = TYPE_CONFIG[type];
 
   const columns: DataTableColumn<ContentItem>[] = [

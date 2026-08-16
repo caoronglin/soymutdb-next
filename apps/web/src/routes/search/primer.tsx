@@ -5,7 +5,7 @@
  * directly or extracted from the reference via /tools/seqfetch
  * (seqFetchRegion), then designPrimerPair() slides 18-25 nt windows over
  * the 5'/3' thirds and ranks candidate pairs by Tm/GC/length/clamp.
- * Results are shown in a table with copy buttons and a Gbrowse link.
+ * Results are shown in a table with copy buttons and a JBrowse 2 link.
  *
  * No Primer3 backend is involved — this is a simplified heuristic tool;
  * the UI notes that wet-lab validation is still required.
@@ -413,12 +413,7 @@ function PrimerComponent() {
               source ? (
                 <Link
                   to="/search/genes"
-                  search={{
-                    q: undefined,
-                    tissue: undefined,
-                    treatment: undefined,
-                    min_fpkm: undefined,
-                  }}
+                  search={{ q: undefined, run: undefined }}
                 >
                   {t("search.primer.geneSearch")}
                 </Link>

@@ -32,10 +32,12 @@ export interface GeneDetail extends GeneSummary {
 
 export interface GeneSearchResponse {
   items: GeneSummary[];
-  cursor: string | null;
   next_cursor: string | null;
   has_more: boolean;
-  total_count: number | null;
+  page: number;
+  page_size: number;
+  total: number;
+  total_pages: number;
 }
 
 export interface GeneSearchParams {
@@ -47,6 +49,8 @@ export interface GeneSearchParams {
   end_pos?: number;
   cursor?: string;
   limit?: number;
+  page?: number;
+  page_size?: number;
   sort_by?: string;
   sort_dir?: "asc" | "desc";
 }

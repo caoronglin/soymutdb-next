@@ -30,6 +30,7 @@ import { useTheme } from "../lib/theme-provider";
 import { useI18n, type SupportedLanguage } from "../lib/i18n";
 import { AnimationControl } from "./animation-control";
 import { NotificationBell } from "./notifications/notification-bell";
+import { NAVIGATION_ORDER } from "../page-builder/seed";
 
 /** True at the AntD/Tailwind `lg` breakpoint (>=1024px). */
 function useIsDesktop(): boolean {
@@ -51,17 +52,16 @@ interface NavItem {
 }
 
 /**
- * Primary navigation — five flat items in PPTX order. The order is fixed
- * this iteration; a future admin setting may make it editable (the array is
- * the single source of truth for both desktop and mobile drawers).
+ * Primary navigation — five flat items in the approved reference order
+ * (Home / Search / Tools / Latest News / Contact). The order comes from the
+ * PageDefinition navigation (page-builder/seed.ts) and is a single source of
+ * truth for both desktop and mobile drawers. On definition/API failure the
+ * same immutable five-item order is the fallback.
  */
-const NAV_ITEMS: NavItem[] = [
-  { to: "/", labelKey: "nav.home" },
-  { to: "/search", labelKey: "nav.search" },
-  { to: "/tools", labelKey: "nav.tools" },
-  { to: "/help", labelKey: "nav.contact" },
-  { to: "/news", labelKey: "nav.latestNews" },
-];
+const NAV_ITEMS: NavItem[] = NAVIGATION_ORDER.map((item) => ({
+  to: item.to,
+  labelKey: item.labelKey,
+}));
 
 export function SiteHeader() {
   const { t } = useTranslation();
