@@ -85,6 +85,7 @@ async def create_import_command(
             "kind": import_type,
             "release_id": str(release_id) if release_id is not None else "",
             "file_key": object_key or filename,
+            "filename": filename,
             "assembly": assembly or "",
             "module_key": module_key,
             "schema_version": schema_version,

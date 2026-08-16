@@ -2737,7 +2737,11 @@ export interface paths {
         };
         /**
          * Download Module Template
-         * @description Download a TSV template for a module schema.
+         * @description Download a starter template for a module schema.
+         *
+         *     ``format`` is one of ``tsv`` / ``txt`` / ``csv`` / ``xlsx`` (default
+         *     ``tsv``).  ``xlsx`` returns a binary workbook; the text formats return
+         *     plain text with the matching media type and ``Content-Disposition``.
          */
         get: operations["download_module_template_api_v1_admin_modules__module_key__template_get"];
         put?: never;
@@ -12705,7 +12709,9 @@ export interface operations {
     };
     download_module_template_api_v1_admin_modules__module_key__template_get: {
         parameters: {
-            query?: never;
+            query?: {
+                format?: string;
+            };
             header?: never;
             path: {
                 module_key: string;
@@ -12720,7 +12726,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "text/plain": string;
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

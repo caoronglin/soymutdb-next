@@ -90,7 +90,8 @@ pnpm --filter @soymutdb/jbrowse build
 ## Deployment
 
 > 架构、状态机、接口契约与 Pages 拓扑见 **[开发者文档](docs/dev/architecture-and-deployment.md)**；
-> Admin 数据导入、Release、不可变静态发布、回滚与备份恢复见 **[运维手册](docs/ops/README.md)**。
+> Admin 数据导入（Module 数据支持 `.tsv`/`.txt`/`.csv`/`.xlsx` 多格式 + 模板下载）、Release、
+> 不可变静态发布、回滚与备份恢复见 **[运维手册](docs/ops/README.md)**。
 
 **当前生产部署现状：**
 

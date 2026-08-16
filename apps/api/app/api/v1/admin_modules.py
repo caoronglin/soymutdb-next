@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Query, Response
 from fastapi.responses import PlainTextResponse
+from fastapi.responses import Response as _Response
 
-from ...core.exceptions import NotFoundError
+from ...core.exceptions import NotFoundError, ValidationError
 from ...core.security import RoleName, has_role
 from ...models.auth import User
-from ...services.module_schema_registry import get_schema
+from ...services.module_schema_registry import get_schema, render_module_template
 from .deps import get_current_user, get_user_roles
 
 router = APIRouter(prefix="/admin/modules", tags=["admin-modules"])
@@ -22,36 +23,36 @@ def _require_admin(user: User) -> None:
         raise AuthorizationError("Administrator access required")
 
 
-@router.get("/{module_key}/template", response_class=PlainTextResponse)
+@router.get("/{module_key}/template")
 async def download_module_template(
     module_key: str,
+    format: str = Query(default="tsv"),
     current_user: User = Depends(get_current_user),
 ) -> Response:
-    """Download a TSV template for a module schema."""
+    """Download a starter template for a module schema.
+
+    ``format`` is one of ``tsv`` / ``txt`` / ``csv`` / ``xlsx`` (default
+    ``tsv``).  ``xlsx`` returns a binary workbook; the text formats return
+    plain text with the matching media type and ``Content-Disposition``.
+    """
     _require_admin(current_user)
     schema = get_schema(module_key)
     if schema is None:
         raise NotFoundError(f"Unknown module schema '{module_key}'")
 
-    headers = [col.name for col in schema.columns]
-    example: list[str] = []
-    for col in schema.columns:
-        if col.name == "gene_id":
-            example.append("Glyma.01G000100")
-        elif col.name == "chromosome":
-            example.append("Chr01")
-        elif col.name == "start":
-            example.append("1")
-        elif col.name == "end":
-            example.append("1000")
-        elif col.name == "mutation_feature":
-            example.append("")
-        else:
-            example.append("")
+    try:
+        content, media_type, filename = render_module_template(module_key, format)
+    except ValueError as exc:
+        raise ValidationError(str(exc)) from exc
 
-    content = "\t".join(headers) + "\n" + "\t".join(example) + "\n"
+    if isinstance(content, bytes):
+        return _Response(
+            content=content,
+            media_type=media_type,
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
     return PlainTextResponse(
         content,
-        media_type="text/tab-separated-values",
-        headers={"Content-Disposition": f'attachment; filename="{module_key}.tsv"'},
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

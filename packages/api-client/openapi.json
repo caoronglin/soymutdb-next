@@ -9194,7 +9194,7 @@
           "admin-modules"
         ],
         "summary": "Download Module Template",
-        "description": "Download a TSV template for a module schema.",
+        "description": "Download a starter template for a module schema.\n\n``format`` is one of ``tsv`` / ``txt`` / ``csv`` / ``xlsx`` (default\n``tsv``).  ``xlsx`` returns a binary workbook; the text formats return\nplain text with the matching media type and ``Content-Disposition``.",
         "operationId": "download_module_template_api_v1_admin_modules__module_key__template_get",
         "security": [
           {
@@ -9210,16 +9210,24 @@
               "type": "string",
               "title": "Module Key"
             }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "tsv",
+              "title": "Format"
+            }
           }
         ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
+              "application/json": {
+                "schema": {}
               }
             }
           },

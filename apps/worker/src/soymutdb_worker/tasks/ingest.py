@@ -680,7 +680,8 @@ def run_import_adapter(import_task_id: int, data_set_id: int, kind: str,
                        release_id: str, file_key: str, assembly: str = "",
                        module_key: str | None = None,
                        schema_version: int | None = None,
-                       checksum: str | None = None) -> dict[str, Any]:
+                       checksum: str | None = None,
+                       filename: str | None = None) -> dict[str, Any]:
     context = ImportContext(
         import_task_id,
         data_set_id,
@@ -690,6 +691,7 @@ def run_import_adapter(import_task_id: int, data_set_id: int, kind: str,
         module_key=module_key,
         schema_version=schema_version,
         checksum=checksum,
+        filename=filename,
     )
     try:
         update_import_progress(import_task_id, status="ingesting", progress=0)

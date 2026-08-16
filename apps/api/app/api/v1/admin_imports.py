@@ -208,10 +208,20 @@ async def create_import(
             raise ValidationError("module_key is required for module_tsv imports")
         if not body.checksum:
             raise ValidationError("checksum is required for module_tsv imports")
-        from ...services.module_schema_registry import get_schema
+        from ...services.module_schema_registry import (
+            SUPPORTED_MODULE_FORMATS,
+            detect_format,
+            get_schema,
+        )
 
         if get_schema(body.module_key) is None:
             raise ValidationError(f"Unknown module schema '{body.module_key}'")
+        # 为什么：多格式导入只接受 .txt/.tsv/.csv/.xlsx，其它扩展名 422。
+        if detect_format(body.filename) is None:
+            raise ValidationError(
+                f"Unsupported module file format for '{body.filename}'; "
+                f"expected one of {', '.join(SUPPORTED_MODULE_FORMATS)}"
+            )
 
     task = await create_import_command(
         db,

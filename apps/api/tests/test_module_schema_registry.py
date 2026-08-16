@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from app.services.module_schema_registry import validate_tsv
 
 
@@ -49,3 +51,99 @@ def test_unknown_schema_is_rejected() -> None:
     result = validate_tsv("not_a_module", b"a\nb\n")
     assert result.ok is False
     assert result.errors[0].code == "unknown_schema"
+
+
+def test_supported_formats_and_format_detection() -> None:
+    from app.services.module_schema_registry import (
+        SUPPORTED_MODULE_FORMATS,
+        detect_format,
+    )
+
+    assert SUPPORTED_MODULE_FORMATS == (".txt", ".tsv", ".csv", ".xlsx")
+    assert detect_format("genes.tsv") == ".tsv"
+    assert detect_format("genes.CSV") == ".csv"
+    assert detect_format("genes.xlsx") == ".xlsx"
+    assert detect_format("genes.txt") == ".txt"
+    assert detect_format("genes.pdf") is None
+    assert detect_format("noext") is None
+
+
+def test_csv_module_is_accepted() -> None:
+    from app.services.module_schema_registry import validate_module_file
+
+    data = b"gene_id,chromosome,start,end\nG1,Chr01,1,9\n"
+    result = validate_module_file("genes", "genes.csv", data)
+    assert result.ok is True
+    assert result.rows[0]["gene_id"] == "G1"
+    assert result.rows[0]["start"] == 1
+
+
+def test_txt_module_is_accepted_as_tsv() -> None:
+    from app.services.module_schema_registry import validate_module_file
+
+    data = b"gene_id\tchromosome\tstart\tend\nG1\tChr01\t1\t9\n"
+    result = validate_module_file("genes", "genes.txt", data)
+    assert result.ok is True
+
+
+def test_unsupported_format_is_rejected() -> None:
+    from app.services.module_schema_registry import validate_module_file
+
+    result = validate_module_file("genes", "genes.pdf", b"whatever")
+    assert result.ok is False
+    assert result.errors[0].code == "unsupported_format"
+
+
+def test_xlsx_module_is_accepted_and_round_trips() -> None:
+    try:
+        import openpyxl  # noqa: F401
+    except ImportError:
+        pytest.skip("openpyxl not installed")
+
+    from app.services.module_schema_registry import (
+        render_module_template,
+        validate_module_file,
+    )
+
+    content, media_type, filename = render_module_template("genes", "xlsx")
+    assert filename == "genes.xlsx"
+    assert media_type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    result = validate_module_file("genes", filename, content)
+    assert result.ok is True
+    assert result.rows[0]["gene_id"] == "Glyma.01G000100"
+
+
+def test_xlsx_template_has_header_and_example_row() -> None:
+    try:
+        import openpyxl  # noqa: F401
+    except ImportError:
+        pytest.skip("openpyxl not installed")
+
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    from app.services.module_schema_registry import render_module_template
+
+    content, _, _ = render_module_template("genes", "xlsx")
+    book = load_workbook(BytesIO(content), read_only=True)
+    sheet = book.worksheets[0]
+    rows = list(sheet.iter_rows(values_only=True))
+    assert rows[0] == ("gene_id", "chromosome", "start", "end", "mutation_feature")
+    assert rows[1][0] == "Glyma.01G000100"
+
+
+def test_template_text_formats_have_correct_delimiter() -> None:
+    from app.services.module_schema_registry import render_module_template
+
+    tsv, _, _ = render_module_template("genes", "tsv")
+    csv_, _, _ = render_module_template("genes", "csv")
+    assert "\t" in tsv and "," not in tsv.splitlines()[0]
+    assert "," in csv_ and "\t" not in csv_.splitlines()[0]
+
+
+def test_template_unknown_format_raises() -> None:
+    from app.services.module_schema_registry import render_module_template
+
+    with pytest.raises(ValueError):
+        render_module_template("genes", "pdf")

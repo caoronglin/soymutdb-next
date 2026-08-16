@@ -30,6 +30,36 @@ uploading → validating → ingesting → ready → published → rolled_back
 每个适配器更新进度和状态，记录工具版本、来源和 checksum。GWAS 对象使用 `gwas` bucket；fastp/scanpy
 等分析对象使用 `analyses` bucket，由 `worker-analyses` 消费 `analyses` 队列。
 
+## Module 数据导入（多格式）
+
+Module（如 `genes`）数据按服务端 schema 做严格行级校验，写入 release-scoped `module_data_rows`。输入文件
+支持四种格式，同一份 schema 校验逻辑由 API 与 worker 共享（`soymutdb_jobs.module_schema`）：
+
+| 扩展名 | 分隔/结构 | 说明 |
+|---|---|---|
+| `.txt` / `.tsv` | 制表符 | 首行表头，原有 TSV 路径 |
+| `.csv` | 逗号 | 首行表头 |
+| `.xlsx` | Excel 首个 worksheet | 首行为表头；worker 需 `openpyxl` |
+
+未知扩展名在 Admin 创建导入时返回 422（`unsupported_format`）。模板下载端点
+`GET /api/v1/admin/modules/{module_key}/template?format=<tsv|csv|txt|xlsx>`（默认 `tsv`）返回对应
+media type 与 `Content-Disposition` 文件：
+
+```bash
+# TSV（默认）
+curl -H "Authorization: Bearer $TOKEN" \
+  "http://<HOST>:8080/api/v1/admin/modules/genes/template?format=tsv" -o genes.tsv
+# CSV
+curl -H "Authorization: Bearer $TOKEN" \
+  "http://<HOST>:8080/api/v1/admin/modules/genes/template?format=csv" -o genes.csv
+# XLSX（二进制，需 worker 端 openpyxl 才能导入 .xlsx）
+curl -H "Authorization: Bearer $TOKEN" \
+  "http://<HOST>:8080/api/v1/admin/modules/genes/template?format=xlsx" -o genes.xlsx
+```
+
+Admin「Data Imports」页在创建 Module Data 导入时校验扩展名（`.tsv`/`.txt`/`.csv`/`.xlsx`），并提供
+模板下载入口（Module Key + TSV/CSV/XLSX 格式选择）直接拉取对应模板。
+
 ## Release 组装、发布与回滚
 
 1. 创建 draft Release，指定 name、assembly 和理由。

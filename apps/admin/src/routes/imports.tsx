@@ -8,8 +8,9 @@ import {
   XCircle,
   CheckCircle2,
   Loader2,
+  Download,
 } from "lucide-react";
-import { http } from "@soymutdb/api-client";
+import { http, apiBaseUrl, getAccessToken } from "@soymutdb/api-client";
 import {
   Button,
   Input,
@@ -45,7 +46,8 @@ type ImportType =
   | "blast_db"
   | "seed_data"
   | "expression_csv"
-  | "homolog_csv";
+  | "homolog_csv"
+  | "module_tsv";
 
 /** Task status extended with ``queued`` (backend returns it). */
 type ImportTaskStatus = TaskStatus | "queued";
@@ -95,6 +97,7 @@ const TYPE_LABELS: Record<ImportType, string> = {
   seed_data: "Seed Data",
   expression_csv: "Expression CSV",
   homolog_csv: "Homolog CSV",
+  module_tsv: "Module Data",
 };
 
 const ALL_IMPORT_TYPES: ImportType[] = [
@@ -105,7 +108,18 @@ const ALL_IMPORT_TYPES: ImportType[] = [
   "seed_data",
   "expression_csv",
   "homolog_csv",
+  "module_tsv",
 ];
+
+/** File extensions accepted for ``module_tsv`` (multi-format module import). */
+const MODULE_FORMAT_EXTENSIONS = [".tsv", ".txt", ".csv", ".xlsx"] as const;
+
+/** Available template download formats (backend ``format`` query param). */
+const MODULE_TEMPLATE_FORMATS = [
+  { value: "tsv", label: "TSV" },
+  { value: "csv", label: "CSV" },
+  { value: "xlsx", label: "XLSX" },
+] as const;
 
 // ---------------------------------------------------------------------------
 // Component
@@ -123,6 +137,15 @@ export default function ImportsPage() {
   const [uploadType, setUploadType] = useState<ImportType>("vcf");
   const [uploadFilename, setUploadFilename] = useState("");
   const [uploadFilePath, setUploadFilePath] = useState("");
+  const [uploadModuleKey, setUploadModuleKey] = useState("genes");
+  const [uploadChecksum, setUploadChecksum] = useState("");
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  // Module template download state
+  const [templateModuleKey, setTemplateModuleKey] = useState("genes");
+  const [templateFormat, setTemplateFormat] = useState<string>("tsv");
+  const [templateDownloading, setTemplateDownloading] = useState(false);
+  const [templateError, setTemplateError] = useState<string | null>(null);
 
   // Live status updates for running tasks
   const [liveStatuses, setLiveStatuses] = useState<
@@ -157,6 +180,8 @@ export default function ImportsPage() {
       type: ImportType;
       file_path: string;
       submitted_by: string;
+      module_key?: string;
+      checksum?: string;
     }) =>
       http.post("/admin/imports", {
         json: body,
@@ -167,6 +192,9 @@ export default function ImportsPage() {
       setUploadFilename("");
       setUploadFilePath("");
       setUploadType("vcf");
+      setUploadModuleKey("genes");
+      setUploadChecksum("");
+      setUploadError(null);
       queryClient.invalidateQueries({ queryKey: ["admin-imports"] });
     },
   });
@@ -252,12 +280,36 @@ export default function ImportsPage() {
   );
 
   function handleUploadSubmit() {
-    if (!uploadFilename.trim() || !uploadFilePath.trim()) return;
+    const filename = uploadFilename.trim();
+    if (!filename || !uploadFilePath.trim()) return;
+    setUploadError(null);
+
+    // Module data imports must use a supported multi-format extension.
+    if (uploadType === "module_tsv") {
+      const ext = filename.toLowerCase().match(/\.[a-z0-9]+$/)?.[0];
+      if (!ext || !(MODULE_FORMAT_EXTENSIONS as readonly string[]).includes(ext)) {
+        setUploadError(
+          `Module data files must use one of ${MODULE_FORMAT_EXTENSIONS.join(" / ")}.`,
+        );
+        return;
+      }
+      if (!uploadModuleKey.trim()) {
+        setUploadError("Module key is required for module data imports.");
+        return;
+      }
+      if (!uploadChecksum.trim()) {
+        setUploadError("Checksum is required for module data imports.");
+        return;
+      }
+    }
+
     submitMutation.mutate({
-      filename: uploadFilename.trim(),
+      filename,
       type: uploadType,
       file_path: uploadFilePath.trim(),
       submitted_by: user?.username ?? "unknown",
+      module_key: uploadType === "module_tsv" ? uploadModuleKey.trim() : undefined,
+      checksum: uploadType === "module_tsv" ? uploadChecksum.trim() : undefined,
     });
   }
 
@@ -269,6 +321,46 @@ export default function ImportsPage() {
 
   function handleRetry(taskId: number) {
     retryMutation.mutate(taskId);
+  }
+
+  /** Download a module starter template in the selected format. */
+  async function handleTemplateDownload() {
+    const key = templateModuleKey.trim();
+    if (!key) {
+      setTemplateError("Module key is required.");
+      return;
+    }
+    setTemplateDownloading(true);
+    setTemplateError(null);
+    try {
+      const url = `${apiBaseUrl}/admin/modules/${encodeURIComponent(key)}/template?format=${encodeURIComponent(templateFormat)}`;
+      const headers: Record<string, string> = {
+        Accept: "application/octet-stream, application/json",
+      };
+      const token = getAccessToken();
+      if (token) headers.Authorization = `Bearer ${token}`;
+
+      const res = await fetch(url, { headers, credentials: "include" });
+      if (!res.ok) {
+        throw new Error(`Template download failed (${res.status})`);
+      }
+      const blob = await res.blob();
+      const disposition = res.headers.get("content-disposition") ?? "";
+      const match = disposition.match(/filename="?([^";]+)"?/);
+      const filename = match?.[1] ?? `${key}.${templateFormat}`;
+      const downloadUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = downloadUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(downloadUrl);
+    } catch (err) {
+      setTemplateError(err instanceof Error ? err.message : "Template download failed.");
+    } finally {
+      setTemplateDownloading(false);
+    }
   }
 
   // -----------------------------------------------------------------------
@@ -447,6 +539,59 @@ export default function ImportsPage() {
         }
       />
 
+      {/* Module template download */}
+      <div className="rounded-lg border bg-card p-4">
+        <div className="mb-3 flex items-center gap-2">
+          <Database className="size-4 text-muted-foreground" />
+          <span className="text-sm font-medium">Module template download</span>
+        </div>
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="template-module-key">Module Key</Label>
+            <Input
+              id="template-module-key"
+              value={templateModuleKey}
+              onChange={(e) => setTemplateModuleKey(e.target.value)}
+              className="w-40"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="template-format">Format</Label>
+            <Select value={templateFormat} onValueChange={setTemplateFormat}>
+              <SelectTrigger id="template-format" className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {MODULE_TEMPLATE_FORMATS.map((f) => (
+                  <SelectItem key={f.value} value={f.value}>
+                    {f.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleTemplateDownload}
+            disabled={templateDownloading || !templateModuleKey.trim()}
+          >
+            {templateDownloading ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Download className="size-4" />
+            )}
+            Download
+          </Button>
+        </div>
+        {templateError ? (
+          <p className="mt-2 text-sm text-destructive">{templateError}</p>
+        ) : null}
+        <p className="mt-2 text-xs text-muted-foreground">
+          Starter template for a module schema (genes). Format: TSV / CSV / XLSX.
+        </p>
+      </div>
+
       {/* Stats */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Total Tasks" value={stats.total} icon={<Database className="size-5" />} />
@@ -518,9 +663,16 @@ export default function ImportsPage() {
               <Label htmlFor="import-filename">Filename</Label>
               <Input
                 id="import-filename"
-                placeholder="e.g. expression_data.csv"
+                placeholder={
+                  uploadType === "module_tsv"
+                    ? "e.g. genes.tsv / genes.txt / genes.csv / genes.xlsx"
+                    : "e.g. expression_data.csv"
+                }
                 value={uploadFilename}
-                onChange={(e) => setUploadFilename(e.target.value)}
+                onChange={(e) => {
+                  setUploadFilename(e.target.value);
+                  setUploadError(null);
+                }}
               />
             </div>
 
@@ -537,6 +689,37 @@ export default function ImportsPage() {
                 The S3 URI where the file has already been uploaded.
               </p>
             </div>
+
+            {/* Module-specific fields */}
+            {uploadType === "module_tsv" ? (
+              <>
+                <div className="space-y-1.5">
+                  <Label htmlFor="import-module-key">Module Key</Label>
+                  <Input
+                    id="import-module-key"
+                    placeholder="genes"
+                    value={uploadModuleKey}
+                    onChange={(e) => setUploadModuleKey(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Server-owned schema key. Supports .tsv / .txt / .csv / .xlsx.
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="import-checksum">Checksum</Label>
+                  <Input
+                    id="import-checksum"
+                    placeholder="sha256 of the source file (required)"
+                    value={uploadChecksum}
+                    onChange={(e) => setUploadChecksum(e.target.value)}
+                  />
+                </div>
+              </>
+            ) : null}
+
+            {uploadError ? (
+              <p className="text-sm text-destructive">{uploadError}</p>
+            ) : null}
           </div>
 
           <DialogFooter>

@@ -45,3 +45,9 @@ EBI 分组并显示来源状态；单一来源降级不应阻止本地结果。�
 下载和引用至少记录：访问日期、Release/version、assembly、Gene ID 或区间、BLAST 数据库版本、文件名、
 checksum、来源，以及外部联邦结果的来源标识。Release 切换后，搜索、API、JBrowse、BLAST 和下载应一致
 使用新的 active release，不要混用不同版本结果。
+
+## 数据导入格式（提交方）
+
+门户数据由管理员在 Admin 导入。Module 数据（如 `genes`）支持四种文件格式：`.txt` / `.tsv`（制表符）、
+`.csv`（逗号）、`.xlsx`（Excel 首个 worksheet），均要求首行表头并按服务端 schema 行级校验；模板可从
+Admin 下载（TSV / CSV / XLSX）。详见 [运维手册](../ops/README.md) 的「Module 数据导入」一节。

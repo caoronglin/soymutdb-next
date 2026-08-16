@@ -16,7 +16,7 @@ from soymutdb_worker.shared import _ensure_jobs_package
 
 _ensure_jobs_package()
 
-from soymutdb_jobs.module_schema import validate_tsv  # noqa: E402
+from soymutdb_jobs.module_schema import validate_module_file  # noqa: E402
 
 ProgressCallback = Callable[..., Any]
 
@@ -31,6 +31,7 @@ class ImportContext:
     module_key: str | None = None
     schema_version: int | None = None
     checksum: str | None = None
+    filename: str | None = None
 
 
 @dataclass(frozen=True)
@@ -190,7 +191,7 @@ class ModuleTsvAdapter(_TextAdapter):
 
     def validate(self, context: ImportContext) -> dict[str, Any]:
         data = _read_module_bytes(context)
-        result = validate_tsv(context.module_key or "", data)
+        result = self._validate_bytes(context, data)
         if not result.ok:
             raise ValueError(f"TSV validation failed: {result.first_error()}")
         return {
@@ -199,11 +200,16 @@ class ModuleTsvAdapter(_TextAdapter):
             "checksum": context.checksum,
         }
 
+    @staticmethod
+    def _validate_bytes(context: ImportContext, data: bytes):
+        rl_filename = context.filename or str(Path(context.file_key).name)
+        return validate_module_file(context.module_key or "", rl_filename, data)
+
     def run(self, context: ImportContext, *, progress=None) -> AdapterResult:
         if not context.module_key:
             raise ValueError("module_key is required for module_tsv imports")
         data = _read_module_bytes(context)
-        result = validate_tsv(context.module_key, data)
+        result = self._validate_bytes(context, data)
         if not result.ok:
             raise ValueError(f"TSV validation failed: {result.first_error()}")
         rows = result.rows
