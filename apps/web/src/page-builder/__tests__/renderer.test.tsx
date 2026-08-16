@@ -105,7 +105,7 @@ describe("page-builder renderer (shared DTO)", () => {
     ]);
   });
 
-  it("home definition root is columns with navigation + tools + news + rich text", () => {
+  it("home definition root is columns with navigation + tools + news + carousel + rich text", () => {
     const root = HOME_DEFINITION.root;
     expect(root.type).toBe("columns");
     if (root.type === "columns") {
@@ -113,6 +113,7 @@ describe("page-builder renderer (shared DTO)", () => {
         "navigation",
         "tool_entries",
         "news_list",
+        "media_carousel",
         "rich_text",
       ]);
     }

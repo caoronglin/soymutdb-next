@@ -36,8 +36,10 @@ NAV_ITEMS = [
     {"label": "Home", "route": "/"},
     {"label": "Search", "route": "/search"},
     {"label": "Tools", "route": "/tools"},
-    {"label": "Latest News", "route": "/latest-news"},
-    {"label": "Contact", "route": "/contact"},
+    # 为什么：导航项指向 SPA 真实路由（/news、/help），而非通用 page-definition
+    # 路由（/latest-news、/contact），与 apps/web/src/page-builder/seed.ts 同构。
+    {"label": "Latest News", "route": "/news"},
+    {"label": "Contact", "route": "/help"},
 ]
 
 # route -> (title_key, root component tree)
@@ -75,6 +77,12 @@ SEED_PAGES: list[tuple[str, str, dict]] = [
                     {
                         "type": "news_list",
                         "props": {"limit": 5},
+                    },
+                    # 为什么：首页按规格含 featured carousel（新闻驱动），media_carousel
+                    # 组件与 news_list 组成 2:3 新闻/轮播区。
+                    {
+                        "type": "media_carousel",
+                        "props": {"items": []},
                     },
                     {
                         "type": "rich_text",
@@ -141,8 +149,8 @@ SEED_PAGES: list[tuple[str, str, dict]] = [
         },
     ),
     (
-        "/latest-news",
-        "nav.latest_news",
+        "/news",
+        "nav.news",
         {
             "root": {
                 "type": "columns",
@@ -157,8 +165,8 @@ SEED_PAGES: list[tuple[str, str, dict]] = [
         },
     ),
     (
-        "/contact",
-        "nav.contact",
+        "/help",
+        "nav.help",
         {
             "root": {
                 "type": "columns",

@@ -314,13 +314,27 @@ def test_seed_has_five_navigation_items_and_seven_pages():
     assert len(NAV_ITEMS) == 5
     labels = [i["label"] for i in NAV_ITEMS]
     assert labels == ["Home", "Search", "Tools", "Latest News", "Contact"]
+    # 为什么：导航项必须指向 SPA 真实路由（/news、/help），与 web seed 同构。
+    nav_routes = [i["route"] for i in NAV_ITEMS]
+    assert nav_routes == ["/", "/search", "/tools", "/news", "/help"]
 
     assert len(SEED_PAGES) == 7
     routes = [r for r, _t, _d in SEED_PAGES]
     # BLAST and JBrowse routes are reserved, never seeded as generic pages.
     assert "/blast" not in routes
     assert "/browser" not in routes
+    # News/Contact published definitions target the real SPA routes.
+    assert "/news" in routes
+    assert "/help" in routes
+    assert "/latest-news" not in routes
+    assert "/contact" not in routes
 
     # Every seed definition must pass the registry.
     for route, title_key, definition in SEED_PAGES:
         validate_definition({**definition, "title_key": title_key})
+
+    # 为什么：首页按规格含 news_list + media_carousel（新闻 2:3 + 轮播）。
+    home = next(d for r, _t, d in SEED_PAGES if r == "/")
+    child_types = [c["type"] for c in home["root"]["children"]]
+    assert "news_list" in child_types
+    assert "media_carousel" in child_types

@@ -15,9 +15,8 @@ import type { PageDefinition } from "@soymutdb/shared";
 /**
  * Fixed primary navigation order (single source of truth for the header).
  * Routes point at the app's real React routes in the approved IA order
- * (Home / Search / Tools / Latest News / Contact). NOTE: the backend seed
- * names these target routes `/latest-news` and `/contact` (generic
- * page-definition routes); the SPA maps them to `/news` and `/help`.
+ * (Home / Search / Tools / Latest News / Contact). The backend seed is
+ * aligned to the same target routes (`/news`, `/help`).
  */
 export const NAVIGATION_ORDER = [
   { label: "Home", route: "/" },
@@ -69,6 +68,8 @@ export const HOME_DEFINITION: PageDefinition = {
         props: { entries: [...TOOL_ENTRY_LABELS] },
       },
       { type: "news_list", props: { limit: 5 } },
+      // Featured carousel (news-driven) — mirrors the backend home seed.
+      { type: "media_carousel", props: { items: [] } },
       { type: "rich_text", props: { content: "<p>SoyMutDB home content</p>" } },
     ],
   },
