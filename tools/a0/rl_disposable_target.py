@@ -11,16 +11,17 @@ import asyncio
 import hashlib
 import inspect
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Mapping, Protocol
+from typing import Protocol
 
 from .rl_prepare_pg_profile import (
-    rl_ProfileRecord,
-    rl_ProfileRegistry,
     rl_digest,
     rl_prepare_pg_profile,
+    rl_ProfileRecord,
+    rl_ProfileRegistry,
 )
 
 
@@ -108,26 +109,33 @@ def rl_redacted_guard_evidence(
     rl_observed_port = observed.rl_endpoint_port if observed is not None else None
     rl_system_identifier_digest = (
         rl_digest(observed.rl_system_identifier)
-        if observed is not None and isinstance(observed.rl_system_identifier, str)
+        if observed is not None
+        and isinstance(observed.rl_system_identifier, str)
         and observed.rl_system_identifier
         else None
     )
     rl_marker_digest = (
         rl_digest(observed.rl_marker)
-        if observed is not None and isinstance(observed.rl_marker, str) and observed.rl_marker
+        if observed is not None
+        and isinstance(observed.rl_marker, str)
+        and observed.rl_marker
         else None
     )
     rl_registry_digest = None
-    if expected is not None and all(
-        isinstance(rl_value, str)
-        for rl_value in (
-            expected.rl_system_identifier,
-            expected.rl_database,
-            expected.rl_role,
-            expected.rl_marker,
-            expected.rl_run_id,
+    if (
+        expected is not None
+        and all(
+            isinstance(rl_value, str)
+            for rl_value in (
+                expected.rl_system_identifier,
+                expected.rl_database,
+                expected.rl_role,
+                expected.rl_marker,
+                expected.rl_run_id,
+            )
         )
-    ) and hasattr(expected.rl_expires_at, "isoformat"):
+        and hasattr(expected.rl_expires_at, "isoformat")
+    ):
         rl_registry_digest = rl_json_digest(
             {
                 "system_identifier_digest": rl_digest(expected.rl_system_identifier),
@@ -157,7 +165,9 @@ def rl_redacted_guard_evidence(
             rl_json_digest(
                 {
                     "configured_host": profile.rl_host if profile is not None else None,
-                    "observed_host": observed.rl_endpoint_host if observed is not None else None,
+                    "observed_host": observed.rl_endpoint_host
+                    if observed is not None
+                    else None,
                     "port": rl_observed_port,
                 }
             )
@@ -205,7 +215,9 @@ def rl_blocked(
 
 def rl_guard_event_id(rl_event: Mapping[str, object]) -> str:
     rl_payload = {
-        rl_key: rl_value for rl_key, rl_value in rl_event.items() if rl_key != "guard_event_id"
+        rl_key: rl_value
+        for rl_key, rl_value in rl_event.items()
+        if rl_key != "guard_event_id"
     }
     return rl_json_digest(rl_payload)
 
@@ -273,7 +285,12 @@ async def rl_open_connection(rl_resource):
         rl_resource = await rl_resource
     rl_enter = getattr(rl_resource, "__aenter__", None)
     rl_exit = getattr(rl_resource, "__aexit__", None)
-    if rl_enter is None or rl_exit is None or not callable(rl_enter) or not callable(rl_exit):
+    if (
+        rl_enter is None
+        or rl_exit is None
+        or not callable(rl_enter)
+        or not callable(rl_exit)
+    ):
         raise rl_GuardError("connection_factory_contract")
     rl_connection = rl_enter()
     if not inspect.isawaitable(rl_connection):
@@ -303,7 +320,9 @@ def rl_caller_has_pg_override(rl_caller_env: Mapping[str, str] | None) -> bool:
     return any(rl_name.upper().startswith("PG") for rl_name in rl_caller_env)
 
 
-async def rl_read_observed_identity(rl_connection: rl_AsyncConnection) -> rl_ObservedIdentity:
+async def rl_read_observed_identity(
+    rl_connection: rl_AsyncConnection,
+) -> rl_ObservedIdentity:
     # 为什么：一次只读查询绑定 database、endpoint、cluster identity 与 marker。
     rl_statement = """
         SELECT current_database(),
@@ -375,18 +394,20 @@ async def rl_preflight_disposable_target(
                     run_id=run_id,
                     role=role,
                 )
-            elif not isinstance(rl_expected, rl_ExpectedTuple):
-                raise rl_GuardError("expected_tuple_contract")
-            elif not all(
-                isinstance(rl_value, str)
-                for rl_value in (
-                    rl_expected.rl_system_identifier,
-                    rl_expected.rl_database,
-                    rl_expected.rl_role,
-                    rl_expected.rl_marker,
-                    rl_expected.rl_run_id,
+            elif (
+                not isinstance(rl_expected, rl_ExpectedTuple)
+                or not all(
+                    isinstance(rl_value, str)
+                    for rl_value in (
+                        rl_expected.rl_system_identifier,
+                        rl_expected.rl_database,
+                        rl_expected.rl_role,
+                        rl_expected.rl_marker,
+                        rl_expected.rl_run_id,
+                    )
                 )
-            ) or not isinstance(rl_expected.rl_expires_at, datetime):
+                or not isinstance(rl_expected.rl_expires_at, datetime)
+            ):
                 raise rl_GuardError("expected_tuple_contract")
             else:
                 rl_now = now or rl_now_utc()
@@ -455,7 +476,9 @@ async def rl_preflight_disposable_target(
                 try:
                     await rl_release_connection(rl_connection, rl_context)
                 except BaseException as rl_close_error:
-                    raise rl_GuardError("connection_cleanup_failure") from rl_close_error
+                    raise rl_GuardError(
+                        "connection_cleanup_failure"
+                    ) from rl_close_error
 
         if rl_outcome is None and rl_observed is not None:
             rl_observed_reason = None
@@ -465,7 +488,10 @@ async def rl_preflight_disposable_target(
                 rl_observed_reason = "missing_database"
             elif rl_observed.rl_database != rl_expected.rl_database:
                 rl_observed_reason = "database_mismatch"
-            elif rl_observed.rl_endpoint_host is None or rl_observed.rl_endpoint_port is None:
+            elif (
+                rl_observed.rl_endpoint_host is None
+                or rl_observed.rl_endpoint_port is None
+            ):
                 rl_observed_reason = "missing_endpoint"
             elif rl_observed.rl_system_identifier != rl_expected.rl_system_identifier:
                 rl_observed_reason = "system_identifier_mismatch"
@@ -543,7 +569,9 @@ async def rl_preflight_disposable_target(
         try:
             Path(evidence_path).parent.mkdir(parents=True, exist_ok=True)
             with Path(evidence_path).open("a", encoding="utf-8") as rl_stream:
-                rl_stream.write(json.dumps(rl_persisted_event.rl_evidence, sort_keys=True) + "\n")
+                rl_stream.write(
+                    json.dumps(rl_persisted_event.rl_evidence, sort_keys=True) + "\n"
+                )
             rl_outcome = rl_persisted_event
         except BaseException:
             rl_original_reason = rl_outcome.rl_reason
@@ -568,7 +596,8 @@ def rl_compare_observed_identity(
     rl_source: rl_ObservedIdentity,
     rl_restore: rl_ObservedIdentity,
 ) -> rl_GuardOutcome:
-    # 为什么：hostname、IP 和 service alias 可能指向同一 cluster；只有实际 system identifier 加 current_database 才能证明 distinctness。
+    # 为什么：hostname、IP 和 service alias 可能指向同一 cluster；只有实际
+    # system identifier 加 current_database 才能证明 distinctness。
     rl_same_key = (
         rl_source.rl_system_identifier,
         rl_source.rl_database,
@@ -613,7 +642,7 @@ def rl_parse_args(rl_argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def rl_main(rl_argv: list[str] | None = None) -> int:
-    rl_namespace = rl_parse_args(rl_argv)
+    rl_parse_args(rl_argv)
     raise rl_GuardError("profile, registry, and connection must be injected")
 
 

@@ -5,11 +5,11 @@ import json
 import os
 import re
 import stat
+from collections.abc import Mapping
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Mapping, Protocol
-
+from typing import Any, Protocol
 
 rl_MANIFEST_VERSION = "a0.gate.v2"
 rl_ATTESTATION_VERSION = "a0.reviewer-attestation.v2"
@@ -445,8 +445,7 @@ class rl_ManifestScopeError(ValueError):
 class rl_TrustedAssertionVerifier(Protocol):
     """External provisioner contract; local JSON is never authoritative."""
 
-    def __call__(self, rl_request: Mapping[str, Any]) -> Mapping[str, Any] | None:
-        ...
+    def __call__(self, rl_request: Mapping[str, Any]) -> Mapping[str, Any] | None: ...
 
 
 def rl_canonical_json(rl_value: Any) -> bytes:
@@ -486,7 +485,7 @@ def rl_parse_timestamp(rl_value: Any) -> datetime | None:
         return None
     if rl_timestamp.tzinfo is None:
         return None
-    return rl_timestamp.astimezone(timezone.utc)
+    return rl_timestamp.astimezone(UTC)
 
 
 def rl_normalize_manifest(rl_manifest: Mapping[str, Any]) -> dict[str, Any]:
@@ -529,9 +528,7 @@ def rl_normalize_manifest(rl_manifest: Mapping[str, Any]) -> dict[str, Any]:
             and rl_normalized["actions"] != rl_normalized["database_actions"]
         ):
             raise ValueError("conflicting action indexes")
-        rl_normalized.setdefault(
-            "database_actions", deepcopy(rl_normalized["actions"])
-        )
+        rl_normalized.setdefault("database_actions", deepcopy(rl_normalized["actions"]))
         del rl_normalized["actions"]
     return rl_normalized
 
@@ -882,9 +879,7 @@ def rl_build_trusted_assertion_request(
             "project_root_digest": rl_manifest.get("project_root_digest"),
             "plan_source_sha256": rl_manifest.get("plan_source_sha256"),
             "spec_source_sha256": rl_manifest.get("spec_source_sha256"),
-            "review_tool_source_sha256": rl_manifest.get(
-                "review_tool_source_sha256"
-            ),
+            "review_tool_source_sha256": rl_manifest.get("review_tool_source_sha256"),
             "gate_tool_source_sha256": rl_manifest.get("gate_tool_source_sha256"),
             "actions": rl_source_actions,
         },
@@ -900,10 +895,13 @@ def rl_verify_trusted_assertion(
         return None, ["trusted-boundary-unverified"]
     try:
         rl_verifier_object = rl_trusted_verifier
+        # 为什么：verifier 既可 callable 也可带 .verify()（兼容两种 provisioner），
+        # 用 getattr 派发以避免 mypy union-attr，同时保持 fail-closed except 兜底。
+        rl_verify = getattr(rl_verifier_object, "verify", None)
         rl_result = (
-            getattr(rl_verifier_object, "verify")(rl_request)
-            if hasattr(rl_trusted_verifier, "verify")
-            else rl_trusted_verifier(rl_request)
+            rl_verify(rl_request)
+            if rl_verify is not None
+            else rl_verifier_object(rl_request)
         )
     except Exception:
         return None, ["trusted-boundary-unverified"]
@@ -977,9 +975,7 @@ def rl_verify_trusted_assertion(
         rl_findings.append("trusted-assertion-reviewer-control")
     if rl_assertion.get("access_control_verified") is not True:
         rl_findings.append("trusted-assertion-acl")
-    if rl_assertion.get("producer_principal") == rl_assertion.get(
-        "reviewer_principal"
-    ):
+    if rl_assertion.get("producer_principal") == rl_assertion.get("reviewer_principal"):
         rl_findings.append("trusted-assertion-principal")
     if not rl_is_opaque_ref(rl_assertion.get("assertion_id")) or not rl_is_opaque_ref(
         rl_assertion.get("assertion_ref")
@@ -997,16 +993,16 @@ def rl_verify_trusted_assertion(
         rl_findings.append("trusted-assertion-replay")
     rl_issued_at = rl_parse_timestamp(rl_assertion.get("issued_at"))
     rl_expires_at = rl_parse_timestamp(rl_assertion.get("expires_at"))
-    rl_now = datetime.now(timezone.utc)
+    rl_now = datetime.now(UTC)
     if rl_issued_at is None or rl_expires_at is None or rl_expires_at <= rl_issued_at:
         rl_findings.append("trusted-assertion-time")
     elif rl_issued_at > rl_now:
         rl_findings.append("trusted-assertion-future")
     elif rl_expires_at <= rl_now:
         rl_findings.append("trusted-assertion-expired")
-    if rl_assertion.get("payload_digest") != rl_compute_trusted_assertion_payload_digest(
-        rl_assertion
-    ):
+    if rl_assertion.get(
+        "payload_digest"
+    ) != rl_compute_trusted_assertion_payload_digest(rl_assertion):
         rl_findings.append("trusted-assertion-payload-digest")
     return rl_assertion, list(dict.fromkeys(rl_findings))
 
@@ -1014,10 +1010,14 @@ def rl_verify_trusted_assertion(
 def rl_recursive_keys(rl_value: Any) -> set[str]:
     if isinstance(rl_value, Mapping):
         return {str(rl_key) for rl_key in rl_value} | {
-            rl_key for rl_child in rl_value.values() for rl_key in rl_recursive_keys(rl_child)
+            rl_key
+            for rl_child in rl_value.values()
+            for rl_key in rl_recursive_keys(rl_child)
         }
     if isinstance(rl_value, list):
-        return {rl_key for rl_child in rl_value for rl_key in rl_recursive_keys(rl_child)}
+        return {
+            rl_key for rl_child in rl_value for rl_key in rl_recursive_keys(rl_child)
+        }
     return set()
 
 
@@ -1035,7 +1035,10 @@ def rl_validate_semantic_payload(
     rl_required = set(rl_contract["required"])
     if set(rl_payload) != rl_COMMON_PAYLOAD_FIELDS | rl_required:
         rl_findings.append("artifact-payload-contract")
-    if rl_payload.get("semantic_gate_contract_version") != rl_SEMANTIC_GATE_CONTRACT_VERSION:
+    if (
+        rl_payload.get("semantic_gate_contract_version")
+        != rl_SEMANTIC_GATE_CONTRACT_VERSION
+    ):
         rl_findings.append("semantic-gate-contract-version")
     if rl_payload.get("section_name") != rl_section_name:
         rl_findings.append("artifact-section-mismatch")
@@ -1098,7 +1101,15 @@ def rl_validate_semantic_payload(
     ):
         if rl_field in rl_payload and not rl_is_sha256(rl_payload.get(rl_field)):
             rl_findings.append("artifact-payload-digest")
-    for rl_field in ("runtime_facts_ref", "same_version_init_ref", "snapshot_ref", "archive_ref", "list_ref", "records_ref", "sidecar_ref"):
+    for rl_field in (
+        "runtime_facts_ref",
+        "same_version_init_ref",
+        "snapshot_ref",
+        "archive_ref",
+        "list_ref",
+        "records_ref",
+        "sidecar_ref",
+    ):
         if rl_field in rl_payload and not rl_is_opaque_ref(rl_payload.get(rl_field)):
             rl_findings.append("artifact-payload-ref")
     if rl_section_name == "context_contract" and not (
@@ -1122,8 +1133,7 @@ def rl_validate_semantic_payload(
             not isinstance(rl_category_digests, Mapping)
             or set(rl_category_digests) != set(rl_CATALOG_CATEGORIES)
             or any(
-                not rl_is_sha256(rl_value)
-                for rl_value in rl_category_digests.values()
+                not rl_is_sha256(rl_value) for rl_value in rl_category_digests.values()
             )
             or rl_payload.get("unknown_count") != 0
             or rl_payload.get("read_failures") != []
@@ -1213,8 +1223,7 @@ def rl_validate_semantic_payload(
     ):
         rl_findings.append("restore-semantic-failure")
     if rl_section_name == "legacy_release_classification" and not (
-        rl_payload.get("unresolved_count") == 0
-        and rl_payload.get("items") == []
+        rl_payload.get("unresolved_count") == 0 and rl_payload.get("items") == []
     ):
         rl_findings.append("legacy-classification-failure")
 
@@ -1241,7 +1250,9 @@ def rl_validate_artifact_index(
             continue
         rl_kind = rl_entry.get("kind")
         rl_schema = rl_entry.get("schema_version")
-        rl_primary_kinds = {rl_contract["kind"] for rl_contract in rl_SECTION_CONTRACTS.values()}
+        rl_primary_kinds = {
+            rl_contract["kind"] for rl_contract in rl_SECTION_CONTRACTS.values()
+        }
         if rl_kind not in rl_primary_kinds | {rl_SIDECAR_KIND, rl_ACTION_OUTPUT_KIND}:
             rl_findings.append("artifact-kind")
         if rl_kind in rl_primary_kinds:
@@ -1252,9 +1263,12 @@ def rl_validate_artifact_index(
             )
             if rl_schema != rl_contract["schema"]:
                 rl_findings.append("artifact-schema")
-        elif rl_kind == rl_SIDECAR_KIND and rl_schema != rl_SIDECAR_SCHEMA:
-            rl_findings.append("artifact-schema")
-        elif rl_kind == rl_ACTION_OUTPUT_KIND and rl_schema != rl_ACTION_OUTPUT_SCHEMA:
+        elif (
+            rl_kind == rl_SIDECAR_KIND
+            and rl_schema != rl_SIDECAR_SCHEMA
+            or rl_kind == rl_ACTION_OUTPUT_KIND
+            and rl_schema != rl_ACTION_OUTPUT_SCHEMA
+        ):
             rl_findings.append("artifact-schema")
         if not rl_is_sha256(rl_entry.get("sha256")):
             rl_findings.append("artifact-digest")
@@ -1310,10 +1324,15 @@ def rl_validate_artifact_index(
         elif rl_kind == rl_SIDECAR_KIND:
             rl_validate_sidecar_payload(rl_payload, rl_manifest, rl_findings)
         elif rl_kind == rl_ACTION_OUTPUT_KIND:
-            if not isinstance(rl_payload, Mapping) or rl_payload.get("status") != "passed":
+            if (
+                not isinstance(rl_payload, Mapping)
+                or rl_payload.get("status") != "passed"
+            ):
                 rl_findings.append("artifact-payload-contract")
         rl_entries[str(rl_ref)] = rl_entry
-    rl_validate_canonical_sidecars(rl_entries, rl_artifact_root, rl_manifest, rl_findings)
+    rl_validate_canonical_sidecars(
+        rl_entries, rl_artifact_root, rl_manifest, rl_findings
+    )
     return rl_entries
 
 
@@ -1400,7 +1419,10 @@ def rl_validate_canonical_sidecars(
         rl_findings.append("canonical-sidecar-kind")
     if rl_sidecar_payload.get("child_schema_version") != "a0.canonical-snapshot.v1":
         rl_findings.append("canonical-sidecar-schema")
-    if rl_sidecar_entry.get("parent_ref") is not None or rl_sidecar_entry.get("sidecar_ref") is not None:
+    if (
+        rl_sidecar_entry.get("parent_ref") is not None
+        or rl_sidecar_entry.get("sidecar_ref") is not None
+    ):
         rl_findings.append("canonical-sidecar-cycle")
 
 
@@ -1455,7 +1477,13 @@ def rl_validate_event(
         rl_findings.append("event-contract")
     if rl_event.get("action_id") != rl_action.get("action_id"):
         rl_findings.append("event-action-mismatch")
-    for rl_field in ("recipe_id", "phase_id", "sequence_no", "planned_binding_digest", "completed_binding_digest"):
+    for rl_field in (
+        "recipe_id",
+        "phase_id",
+        "sequence_no",
+        "planned_binding_digest",
+        "completed_binding_digest",
+    ):
         if rl_event.get(rl_field) != rl_action.get(rl_field):
             rl_findings.append("event-binding-mismatch")
     if rl_event.get("kind") != rl_event_role:
@@ -1481,7 +1509,9 @@ def rl_validate_action_graph(
     rl_action_ids: set[str] = set()
     rl_event_ids: set[str] = set()
     rl_event_map = rl_event_index(rl_manifest, rl_findings)
-    rl_completion = rl_parse_timestamp(rl_manifest.get("producer_evidence_completed_at"))
+    rl_completion = rl_parse_timestamp(
+        rl_manifest.get("producer_evidence_completed_at")
+    )
     rl_outputs: dict[str, str] = {}
     rl_phase_to_action: dict[str, Mapping[str, Any]] = {}
     for rl_index, rl_raw_action in enumerate(rl_actions, start=1):
@@ -1490,7 +1520,11 @@ def rl_validate_action_graph(
             continue
         rl_action = dict(rl_raw_action)
         rl_action_id = rl_action.get("action_id")
-        if not isinstance(rl_action_id, str) or not rl_action_id or rl_action_id in rl_action_ids:
+        if (
+            not isinstance(rl_action_id, str)
+            or not rl_action_id
+            or rl_action_id in rl_action_ids
+        ):
             rl_findings.append("action-duplicate")
         else:
             rl_action_ids.add(rl_action_id)
@@ -1507,14 +1541,17 @@ def rl_validate_action_graph(
             rl_findings.append("action-recipe-version")
         if rl_action.get("run_id") != rl_run_id:
             rl_findings.append("run-id-mismatch")
-        if rl_action.get("action_type") not in rl_PHASE_ACTION_TYPES.get(str(rl_phase_id), set()):
+        if rl_action.get("action_type") not in rl_PHASE_ACTION_TYPES.get(
+            str(rl_phase_id), set()
+        ):
             rl_findings.append("recipe-action-type")
         if rl_action.get("attestation_kind") == "not_applicable":
             rl_findings.append("not-applicable-for-database-action")
         if (
             str(rl_action.get("action_type", "")).startswith("alembic")
             or str(rl_action.get("phase_id", "")).startswith("M")
-            and rl_action.get("action_type") in {"migration_forward", "migration_downgrade", "migration_reupgrade"}
+            and rl_action.get("action_type")
+            in {"migration_forward", "migration_downgrade", "migration_reupgrade"}
         ) and rl_action.get("attestation_kind") != "actual_engine":
             rl_findings.append("alembic-attestation")
         rl_required_fields = (
@@ -1570,7 +1607,11 @@ def rl_validate_action_graph(
         ):
             if not rl_is_sha256(rl_action.get(rl_digest_field)):
                 rl_findings.append("missing-source-digest")
-        if rl_action.get("plan_source_sha256") != rl_manifest.get("plan_source_sha256") or rl_action.get("spec_source_sha256") != rl_manifest.get("spec_source_sha256"):
+        if rl_action.get("plan_source_sha256") != rl_manifest.get(
+            "plan_source_sha256"
+        ) or rl_action.get("spec_source_sha256") != rl_manifest.get(
+            "spec_source_sha256"
+        ):
             rl_findings.append("action-plan-spec-mismatch")
         if rl_action.get("exit_code") != 0:
             rl_findings.append("nonzero-exit")
@@ -1579,19 +1620,36 @@ def rl_validate_action_graph(
         rl_expiry = rl_parse_timestamp(rl_action.get("expiry"))
         if rl_started is None or rl_finished is None or rl_expiry is None:
             rl_findings.append("timestamp-invalid")
-        elif rl_finished < rl_started or (rl_completion is not None and rl_finished > rl_completion) or rl_expiry < rl_finished:
+        elif (
+            rl_finished < rl_started
+            or (rl_completion is not None and rl_finished > rl_completion)
+            or rl_expiry < rl_finished
+        ):
             rl_findings.append("timestamp-order")
-        if rl_action.get("identity_digest_version") != rl_manifest.get("identity_digest_version"):
+        if rl_action.get("identity_digest_version") != rl_manifest.get(
+            "identity_digest_version"
+        ):
             rl_findings.append("identity-digest-version")
-        if rl_compute_action_binding_digest(rl_action) != rl_action.get("action_binding_digest"):
+        if rl_compute_action_binding_digest(rl_action) != rl_action.get(
+            "action_binding_digest"
+        ):
             rl_findings.append("action-binding-digest")
-        for rl_event_field, rl_role in (("preceding_guard_event_id", "guard"), ("attestation_event_id", "attestation")):
+        for rl_event_field, rl_role in (
+            ("preceding_guard_event_id", "guard"),
+            ("attestation_event_id", "attestation"),
+        ):
             rl_event_id = rl_action.get(rl_event_field)
-            if not isinstance(rl_event_id, str) or rl_event_id in rl_event_ids or rl_event_id not in rl_event_map:
+            if (
+                not isinstance(rl_event_id, str)
+                or rl_event_id in rl_event_ids
+                or rl_event_id not in rl_event_map
+            ):
                 rl_findings.append("event-reuse-or-unresolved")
                 continue
             rl_event_ids.add(rl_event_id)
-            rl_validate_event(rl_event_map[rl_event_id], rl_action, rl_role, rl_findings)
+            rl_validate_event(
+                rl_event_map[rl_event_id], rl_action, rl_role, rl_findings
+            )
         rl_action_artifacts = rl_action.get("artifact_refs_and_sha256")
         if not isinstance(rl_action_artifacts, list) or not rl_action_artifacts:
             rl_findings.append("action-artifacts")
@@ -1601,14 +1659,25 @@ def rl_validate_action_graph(
                     rl_findings.append("action-artifacts")
                     continue
                 rl_ref = rl_artifact_ref.get("opaque_ref")
-                rl_entry = rl_artifact_entries.get(rl_ref) if isinstance(rl_ref, str) else None
+                rl_entry = (
+                    rl_artifact_entries.get(rl_ref) if isinstance(rl_ref, str) else None
+                )
                 if rl_entry is None:
                     rl_findings.append("action-artifact-unresolved")
                     continue
-                for rl_field in ("sha256", "kind", "schema_version", "owner", "reviewer"):
+                for rl_field in (
+                    "sha256",
+                    "kind",
+                    "schema_version",
+                    "owner",
+                    "reviewer",
+                ):
                     if rl_artifact_ref.get(rl_field) != rl_entry.get(rl_field):
                         rl_findings.append("action-artifact-mismatch")
-                if rl_artifact_ref.get("direction") not in {"input", "output"} or not isinstance(rl_artifact_ref.get("binding_role"), str):
+                if rl_artifact_ref.get("direction") not in {
+                    "input",
+                    "output",
+                } or not isinstance(rl_artifact_ref.get("binding_role"), str):
                     rl_findings.append("action-artifact-typing")
                 if rl_artifact_ref.get("direction") == "output":
                     if rl_ref in rl_outputs and rl_outputs[rl_ref] != rl_action_id:
@@ -1640,13 +1709,21 @@ def rl_validate_action_graph(
     rl_migration = rl_manifest.get("migration_trajectory")
     if isinstance(rl_migration, Mapping):
         rl_edges = rl_migration.get("edges")
-        if not isinstance(rl_edges, list) or len(rl_edges) != rl_migration.get("edge_count") or not rl_edges:
+        if (
+            not isinstance(rl_edges, list)
+            or len(rl_edges) != rl_migration.get("edge_count")
+            or not rl_edges
+        ):
             rl_findings.append("migration-edge-contract")
         else:
             for rl_edge in rl_edges:
                 if not isinstance(rl_edge, Mapping) or not all(
                     isinstance(rl_edge.get(rl_key), str)
-                    for rl_key in ("forward_action_id", "downgrade_action_id", "reupgrade_action_id")
+                    for rl_key in (
+                        "forward_action_id",
+                        "downgrade_action_id",
+                        "reupgrade_action_id",
+                    )
                 ):
                     rl_findings.append("migration-edge-contract")
     return rl_action_ids
@@ -1674,23 +1751,47 @@ def rl_validate_section_evidence(
             rl_findings.append("section-artifact-missing")
             continue
         rl_contract = rl_SECTION_CONTRACTS[rl_section_name]
-        if rl_section.get("evidence_sha256") != rl_entry.get("sha256") or rl_section.get("evidence_kind") != rl_contract["kind"] or rl_section.get("evidence_schema_version") != rl_contract["schema"]:
+        if (
+            rl_section.get("evidence_sha256") != rl_entry.get("sha256")
+            or rl_section.get("evidence_kind") != rl_contract["kind"]
+            or rl_section.get("evidence_schema_version") != rl_contract["schema"]
+        ):
             rl_findings.append("section-artifact-mismatch")
-        if rl_entry.get("kind") != rl_contract["kind"] or rl_entry.get("schema_version") != rl_contract["schema"]:
+        if (
+            rl_entry.get("kind") != rl_contract["kind"]
+            or rl_entry.get("schema_version") != rl_contract["schema"]
+        ):
             rl_findings.append("section-index-contract")
-        if rl_entry.get("owner") != rl_manifest.get("producer_principal") or rl_section.get("owner") != rl_manifest.get("producer_principal"):
+        if rl_entry.get("owner") != rl_manifest.get(
+            "producer_principal"
+        ) or rl_section.get("owner") != rl_manifest.get("producer_principal"):
             rl_findings.append("section-owner")
-        if rl_entry.get("reviewer") != rl_manifest.get("reviewer_principal") or rl_section.get("reviewer") != rl_manifest.get("reviewer_principal"):
+        if rl_entry.get("reviewer") != rl_manifest.get(
+            "reviewer_principal"
+        ) or rl_section.get("reviewer") != rl_manifest.get("reviewer_principal"):
             rl_findings.append("section-reviewer")
-        if rl_manifest.get("producer_principal") == rl_manifest.get("reviewer_principal"):
+        if rl_manifest.get("producer_principal") == rl_manifest.get(
+            "reviewer_principal"
+        ):
             rl_findings.append("principal-distinctness")
         rl_mirror_fields = {
             rl_key: rl_value
             for rl_key, rl_value in rl_section.items()
-            if rl_key not in {"status", "owner", "reviewer", "evidence_ref", "evidence_sha256", "evidence_kind", "evidence_schema_version"}
+            if rl_key
+            not in {
+                "status",
+                "owner",
+                "reviewer",
+                "evidence_ref",
+                "evidence_sha256",
+                "evidence_kind",
+                "evidence_schema_version",
+            }
         }
         if rl_mirror_fields:
-            rl_file = rl_safe_regular_file(Path(rl_manifest["artifact_root_path"]), str(rl_ref))
+            rl_file = rl_safe_regular_file(
+                Path(rl_manifest["artifact_root_path"]), str(rl_ref)
+            )
             if rl_file is None:
                 rl_findings.append("section-artifact-missing")
             else:
@@ -1698,7 +1799,10 @@ def rl_validate_section_evidence(
                     rl_payload = json.loads(rl_file[1].decode("utf-8"))
                 except (UnicodeDecodeError, json.JSONDecodeError):
                     rl_payload = {}
-                if not isinstance(rl_payload, Mapping) or any(rl_payload.get(rl_key) != rl_value for rl_key, rl_value in rl_mirror_fields.items()):
+                if not isinstance(rl_payload, Mapping) or any(
+                    rl_payload.get(rl_key) != rl_value
+                    for rl_key, rl_value in rl_mirror_fields.items()
+                ):
                     rl_findings.append("section-payload-mirror-mismatch")
 
 
@@ -1715,7 +1819,10 @@ def rl_validate_manifest_contract(
         rl_findings.append("manifest-version")
     if rl_manifest.get("run_id") != rl_run_id:
         rl_findings.append("run-id-mismatch")
-    if rl_manifest.get("semantic_gate_contract_version") != rl_SEMANTIC_GATE_CONTRACT_VERSION:
+    if (
+        rl_manifest.get("semantic_gate_contract_version")
+        != rl_SEMANTIC_GATE_CONTRACT_VERSION
+    ):
         rl_findings.append("semantic-gate-contract-version")
     if rl_manifest.get("action_recipe_version") != rl_ACTION_RECIPE_VERSION:
         rl_findings.append("action-recipe-version")
@@ -1740,13 +1847,19 @@ def rl_validate_manifest_contract(
     rl_action_ids = {
         str(rl_action.get("action_id"))
         for rl_action in rl_manifest.get("database_actions", [])
-        if isinstance(rl_action, Mapping) and isinstance(rl_action.get("action_id"), str)
+        if isinstance(rl_action, Mapping)
+        and isinstance(rl_action.get("action_id"), str)
     }
-    rl_entries = rl_validate_artifact_index(rl_manifest, rl_artifact_root, rl_action_ids, rl_findings)
+    rl_entries = rl_validate_artifact_index(
+        rl_manifest, rl_artifact_root, rl_action_ids, rl_findings
+    )
     rl_validate_section_evidence(rl_manifest, rl_entries, rl_action_ids, rl_findings)
     rl_validate_action_graph(rl_manifest, rl_run_id, rl_entries, rl_findings)
     rl_unresolved = rl_manifest.get("unresolved_queue")
-    if not isinstance(rl_unresolved, Mapping) or rl_unresolved.get("blocking_count") != 0:
+    if (
+        not isinstance(rl_unresolved, Mapping)
+        or rl_unresolved.get("blocking_count") != 0
+    ):
         rl_findings.append("unresolved-blocking")
     return rl_entries
 
@@ -1824,16 +1937,24 @@ def rl_create_reviewer_attestation(
     rl_manifest: dict[str, Any] = {}
     rl_expected_ref = "review-attestation-blocked.json"
     try:
-        if not isinstance(rl_manifest_path, Path) or not isinstance(rl_review_root, Path):
+        if not isinstance(rl_manifest_path, Path) or not isinstance(
+            rl_review_root, Path
+        ):
             raise ValueError("path arguments required")
         rl_manifest = rl_normalize_manifest(rl_load_json(rl_manifest_path))
-        rl_expected_ref = str(rl_manifest.get("review_attestation_ref", rl_expected_ref))
+        rl_expected_ref = str(
+            rl_manifest.get("review_attestation_ref", rl_expected_ref)
+        )
         if not rl_is_opaque_ref(rl_expected_ref):
             rl_findings.append("attestation-ref")
             rl_expected_ref = "review-attestation-blocked.json"
-        if rl_artifact_root is None and isinstance(rl_manifest.get("artifact_root_path"), str):
+        if rl_artifact_root is None and isinstance(
+            rl_manifest.get("artifact_root_path"), str
+        ):
             rl_artifact_root = Path(rl_manifest["artifact_root_path"])
-        if rl_producer_root is None and isinstance(rl_manifest.get("producer_root_path"), str):
+        if rl_producer_root is None and isinstance(
+            rl_manifest.get("producer_root_path"), str
+        ):
             rl_producer_root = Path(rl_manifest["producer_root_path"])
         try:
             rl_manifest_sha256 = rl_compute_manifest_digest(rl_manifest)
@@ -1842,7 +1963,9 @@ def rl_create_reviewer_attestation(
             rl_manifest_sha256 = None
             rl_bundle_sha256 = None
             rl_findings.append("self-hash-scope")
-        rl_validate_manifest_contract(rl_manifest, rl_run_id, rl_artifact_root, rl_findings)
+        rl_validate_manifest_contract(
+            rl_manifest, rl_run_id, rl_artifact_root, rl_findings
+        )
         rl_root_digests = rl_root_identity_bindings(
             rl_manifest,
             rl_producer_root,
@@ -1851,7 +1974,11 @@ def rl_create_reviewer_attestation(
             rl_findings,
         )
         rl_assertion: dict[str, Any] | None = None
-        if rl_root_digests is None or rl_manifest_sha256 is None or rl_bundle_sha256 is None:
+        if (
+            rl_root_digests is None
+            or rl_manifest_sha256 is None
+            or rl_bundle_sha256 is None
+        ):
             rl_findings.append("trusted-boundary-unverified")
         else:
             rl_request = rl_build_trusted_assertion_request(
@@ -1867,7 +1994,7 @@ def rl_create_reviewer_attestation(
             rl_findings.extend(rl_assertion_findings)
         rl_completion_raw = rl_manifest.get("producer_evidence_completed_at")
         rl_completion = rl_parse_timestamp(rl_completion_raw)
-        rl_review_now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        rl_review_now = datetime.now(UTC).isoformat().replace("+00:00", "Z")
         if rl_completion is None:
             rl_findings.append("producer-completion")
         rl_attestation_fields: dict[str, Any] = {
@@ -1884,26 +2011,34 @@ def rl_create_reviewer_attestation(
                     "reviewer_identity": rl_assertion.get("reviewer_principal"),
                     "trusted_assertion": rl_assertion,
                     "trusted_assertion_ref": rl_assertion.get("assertion_ref"),
-                    "trusted_assertion_payload_digest": rl_assertion.get("payload_digest"),
+                    "trusted_assertion_payload_digest": rl_assertion.get(
+                        "payload_digest"
+                    ),
                     "trusted_boundary_reference": {
                         "root_identity_digests": rl_root_digests,
                         "assertion_ref": rl_assertion.get("assertion_ref"),
                     },
                 }
             )
-            rl_attestation_fields["review_source_sha256"] = rl_compute_review_source_digest(
-                str(rl_manifest_sha256),
-                str(rl_bundle_sha256),
-                str(rl_assertion.get("reviewer_principal")),
-                str(rl_completion_raw),
-                rl_trusted_boundary=rl_manifest.get("trusted_boundary") if isinstance(rl_manifest.get("trusted_boundary"), Mapping) else None,
-                rl_root_identity_digests=rl_root_digests,
-                rl_assertion_payload_digest=str(rl_assertion.get("payload_digest")),
-                rl_review_attestation_ref=rl_expected_ref,
-                rl_review_started_at=rl_review_now,
-                rl_review_finished_at=rl_review_now,
+            rl_attestation_fields["review_source_sha256"] = (
+                rl_compute_review_source_digest(
+                    str(rl_manifest_sha256),
+                    str(rl_bundle_sha256),
+                    str(rl_assertion.get("reviewer_principal")),
+                    str(rl_completion_raw),
+                    rl_trusted_boundary=rl_manifest.get("trusted_boundary")
+                    if isinstance(rl_manifest.get("trusted_boundary"), Mapping)
+                    else None,
+                    rl_root_identity_digests=rl_root_digests,
+                    rl_assertion_payload_digest=str(rl_assertion.get("payload_digest")),
+                    rl_review_attestation_ref=rl_expected_ref,
+                    rl_review_started_at=rl_review_now,
+                    rl_review_finished_at=rl_review_now,
+                )
             )
-        rl_attestation = rl_attestation_result(rl_run_id, rl_findings, **rl_attestation_fields)
+        rl_attestation = rl_attestation_result(
+            rl_run_id, rl_findings, **rl_attestation_fields
+        )
     except Exception:
         rl_attestation = rl_attestation_result(
             rl_run_id,
@@ -1914,12 +2049,16 @@ def rl_create_reviewer_attestation(
         rl_review_root_canonical = rl_prepare_safe_directory(rl_review_root)
         if rl_review_root_canonical is None:
             rl_attestation["decision"] = "BLOCKED"
-            rl_attestation.setdefault("blocking_findings", []).append("root-symlink-or-invalid")
+            rl_attestation.setdefault("blocking_findings", []).append(
+                "root-symlink-or-invalid"
+            )
         else:
             rl_target_path = rl_review_root_canonical / rl_expected_ref
             if not rl_write_json_exclusive(rl_target_path, rl_attestation):
                 rl_attestation["decision"] = "BLOCKED"
-                rl_attestation.setdefault("blocking_findings", []).append("attestation-exists-or-unsafe")
+                rl_attestation.setdefault("blocking_findings", []).append(
+                    "attestation-exists-or-unsafe"
+                )
             rl_attestation["blocking_findings"] = list(
                 dict.fromkeys(rl_attestation.get("blocking_findings", []))
             )
@@ -1932,7 +2071,9 @@ def rl_create_reviewer_attestation(
 def rl_main() -> int:
     import argparse
 
-    rl_parser = argparse.ArgumentParser(description="Write an independent A0 reviewer attestation")
+    rl_parser = argparse.ArgumentParser(
+        description="Write an independent A0 reviewer attestation"
+    )
     rl_parser.add_argument("--manifest-ref", required=True)
     rl_parser.add_argument("--review-root-ref", required=True)
     rl_parser.add_argument("--run-id", required=True)

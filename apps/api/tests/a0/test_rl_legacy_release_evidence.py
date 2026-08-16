@@ -191,9 +191,7 @@ def test_rl_public_metadata_mutations_cannot_promote_incomplete_release(
         for rl_field in ("ref", rl_identity_field, "digest")
     ],
 )
-def test_rl_missing_each_evidence_field_blocks(
-    rl_kind: str, rl_field: str
-):
+def test_rl_missing_each_evidence_field_blocks(rl_kind: str, rl_field: str):
     rl_input = rl_complete_input()
     rl_input["evidence"][rl_kind].pop(rl_field)
 
@@ -201,9 +199,7 @@ def test_rl_missing_each_evidence_field_blocks(
 
     assert rl_result["classification"] == "DatasetRelease"
     assert rl_result["blocking"] is True
-    assert f"rl_missing_{rl_kind}_{rl_field.removesuffix('_id')}" in rl_result[
-        "unresolved_codes"
-    ]
+    assert f"rl_missing_{rl_kind}_{rl_field.removesuffix('_id')}" in rl_result["unresolved_codes"]
 
 
 @pytest.mark.parametrize("rl_kind", tuple(rl_evidence_identity_fields))
@@ -234,9 +230,7 @@ def test_rl_empty_each_evidence_field_blocks(rl_kind: str, rl_field: str):
 
     assert rl_result["classification"] == "DatasetRelease"
     assert rl_result["blocking"] is True
-    assert f"rl_missing_{rl_kind}_{rl_field.removesuffix('_id')}" in rl_result[
-        "unresolved_codes"
-    ]
+    assert f"rl_missing_{rl_kind}_{rl_field.removesuffix('_id')}" in rl_result["unresolved_codes"]
 
 
 @pytest.mark.parametrize("rl_kind", tuple(rl_evidence_identity_fields))
@@ -354,9 +348,7 @@ def test_rl_linkage_identity_version_and_ref_mismatch_block(
 
 def test_rl_extra_unknown_linkage_digest_field_blocks():
     rl_input = rl_complete_input()
-    rl_input["evidence"]["digest_linkage"]["unknown_digest"] = (
-        "sha256:" + "f" * 64
-    )
+    rl_input["evidence"]["digest_linkage"]["unknown_digest"] = "sha256:" + "f" * 64
 
     rl_result = rl_get_module().rl_classify_release(rl_input)
 
@@ -460,4 +452,4 @@ def test_rl_classifier_does_not_mutate_input_and_is_deterministic():
 def test_rl_module_has_fixture_only_boundary_without_positional_cli():
     rl_module_source = Path(rl_get_module().__file__).read_text(encoding="utf-8")
 
-    assert "if __name__ == \"__main__\"" not in rl_module_source
+    assert 'if __name__ == "__main__"' not in rl_module_source

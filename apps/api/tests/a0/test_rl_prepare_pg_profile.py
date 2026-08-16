@@ -7,17 +7,16 @@ from pathlib import Path
 
 import pytest
 import tools.a0.rl_prepare_pg_profile as rl_profile_module
-
 from tools.a0.rl_prepare_pg_profile import (
-    rl_InMemoryProfileRegistry,
-    rl_ProfileSpec,
     rl_build_sanitized_env,
     rl_cleanup_runtime,
     rl_create_pgpass,
     rl_escape_pgpass_field,
+    rl_InMemoryProfileRegistry,
     rl_parse_args,
     rl_prepare_pg_profile,
     rl_ProfileError,
+    rl_ProfileSpec,
     rl_render_pgpass_line,
 )
 
@@ -92,7 +91,9 @@ def test_profile_env_resolves_an_opaque_value_without_shell_exports() -> None:
         ("rl_profile_id", "profile/../../secret"),
     ],
 )
-def test_profile_components_fail_closed_on_control_or_invalid_name(rl_field: str, rl_value: str) -> None:
+def test_profile_components_fail_closed_on_control_or_invalid_name(
+    rl_field: str, rl_value: str
+) -> None:
     rl_registry = rl_make_registry(**{rl_field: rl_value})
 
     with pytest.raises(rl_ProfileError):

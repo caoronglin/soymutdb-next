@@ -17,7 +17,6 @@ if str(rl_a0_test_root) not in sys.path:
 from tools.a0.rl_reviewer_attestation import (  # noqa: E402
     rl_compute_bundle_digest,
     rl_compute_manifest_digest,
-    rl_compute_root_identity_digest,
     rl_compute_trusted_assertion_payload_digest,
     rl_create_reviewer_attestation,
 )

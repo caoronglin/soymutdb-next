@@ -13,14 +13,13 @@ rl_a0_test_root = Path(__file__).resolve().parent
 if str(rl_a0_test_root) not in sys.path:
     sys.path.insert(0, str(rl_a0_test_root))
 
-from tools.a0.rl_emit_gate_evidence import (  # noqa: E402
-    rl_emit_gate_evidence,
-)
-
 # Shared v2 fixture (33-phase recipe + 16 section contracts + v2 trusted assertion).
 from fixtures.rl_v2_fixture import (  # noqa: E402
     build_manifest,
     rl_fake_trusted_verifier,
+)
+from tools.a0.rl_emit_gate_evidence import (  # noqa: E402
+    rl_emit_gate_evidence,
 )
 
 
@@ -163,7 +162,6 @@ def test_rl_gate_blocks_missing_artifact_and_sensitive_raw_inputs(tmp_path: Path
 
 
 def test_rl_gate_rejects_raw_archive_magic_and_url_inputs(tmp_path: Path) -> None:
-    import hashlib as _hashlib
 
     rl_manifest_path, rl_artifact_root, rl_attestation_path = rl_prepare_reviewed_manifest(tmp_path)
     # Raw archive magic bytes (PGDMP) in an artifact must be rejected.

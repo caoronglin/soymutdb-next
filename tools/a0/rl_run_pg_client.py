@@ -7,19 +7,20 @@ import hashlib
 import json
 import shutil
 import subprocess
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Callable, Mapping, Protocol, Sequence
+from typing import Protocol
 
 from .rl_prepare_pg_profile import (
-    rl_CleanupOutcome,
-    rl_ProfileRecord,
-    rl_ProfileRegistry,
     rl_build_sanitized_env,
     rl_cleanup_runtime,
+    rl_CleanupOutcome,
     rl_create_pgpass,
     rl_prepare_pg_profile,
+    rl_ProfileRecord,
+    rl_ProfileRegistry,
 )
 
 
@@ -74,7 +75,9 @@ def rl_validate_archive_ref(rl_archive_ref: str) -> str:
         not isinstance(rl_archive_ref, str)
         or not rl_archive_ref
         or len(rl_archive_ref) > 128
-        or any(ord(rl_char) < 0x21 or ord(rl_char) == 0x7F for rl_char in rl_archive_ref)
+        or any(
+            ord(rl_char) < 0x21 or ord(rl_char) == 0x7F for rl_char in rl_archive_ref
+        )
         or "/" in rl_archive_ref
         or "\\" in rl_archive_ref
     ):
@@ -140,8 +143,10 @@ def rl_clock_value(rl_clock: Callable[[], object] | None) -> str:
         return "clock-error"
     if isinstance(rl_value, datetime):
         return rl_value.isoformat()
-    if not isinstance(rl_value, str) or not rl_value or any(
-        ord(rl_char) < 0x20 or ord(rl_char) == 0x7F for rl_char in rl_value
+    if (
+        not isinstance(rl_value, str)
+        or not rl_value
+        or any(ord(rl_char) < 0x20 or ord(rl_char) == 0x7F for rl_char in rl_value)
     ):
         return "clock-invalid"
     return rl_value
@@ -151,7 +156,8 @@ def rl_safe_launcher_token(rl_value: object) -> str | None:
     if not isinstance(rl_value, str) or not 1 <= len(rl_value) <= 128:
         return None
     if any(
-        rl_char not in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.:-"
+        rl_char
+        not in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.:-"
         for rl_char in rl_value
     ):
         return None
@@ -196,7 +202,9 @@ def rl_launcher_record(
         else:
             rl_redacted_argv.append(rl_arg)
 
-    rl_safe_operation = operation if operation in {"dump", "list", "restore"} else "unknown"
+    rl_safe_operation = (
+        operation if operation in {"dump", "list", "restore"} else "unknown"
+    )
     return {
         "launcher_record_version": "a0.launcher.v1",
         "operation": rl_safe_operation,
@@ -222,7 +230,9 @@ def rl_launcher_record(
 
 def rl_launcher_record_id(rl_record: Mapping[str, object]) -> str:
     rl_payload = {
-        rl_key: rl_value for rl_key, rl_value in rl_record.items() if rl_key != "launcher_record_id"
+        rl_key: rl_value
+        for rl_key, rl_value in rl_record.items()
+        if rl_key != "launcher_record_id"
     }
     rl_bytes = json.dumps(rl_payload, sort_keys=True, separators=(",", ":")).encode()
     return "sha256:" + hashlib.sha256(rl_bytes).hexdigest()
@@ -380,12 +390,16 @@ def rl_run_pg_client(
         rl_reason = rl_reason_for_error(rl_error)
     finally:
         if rl_material is not None:
-            rl_cleanup_outcome = rl_cleanup_runtime(rl_material, remove_tree=shutil.rmtree)
+            rl_cleanup_outcome = rl_cleanup_runtime(
+                rl_material, remove_tree=shutil.rmtree
+            )
             if cleanup is not None:
                 try:
                     cleanup(rl_cleanup_outcome)
                 except BaseException:
-                    rl_cleanup_outcome = rl_CleanupOutcome(rl_blocked=True, rl_error_kind="cleanup")
+                    rl_cleanup_outcome = rl_CleanupOutcome(
+                        rl_blocked=True, rl_error_kind="cleanup"
+                    )
             if rl_cleanup_outcome.rl_blocked:
                 rl_cleanup_status = "failed"
                 rl_status = "BLOCKED"
@@ -427,7 +441,9 @@ class rl_SafeArgumentParser(argparse.ArgumentParser):
 
 def rl_parse_args(rl_argv: list[str] | None = None) -> argparse.Namespace:
     rl_parser = rl_SafeArgumentParser(add_help=True)
-    rl_parser.add_argument("--operation", choices=("dump", "list", "restore"), required=True)
+    rl_parser.add_argument(
+        "--operation", choices=("dump", "list", "restore"), required=True
+    )
     rl_selector = rl_parser.add_mutually_exclusive_group(required=True)
     rl_selector.add_argument("--profile-env")
     rl_selector.add_argument("--profile-id")

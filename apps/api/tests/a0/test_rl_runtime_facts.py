@@ -21,10 +21,7 @@ from pathlib import Path as rl_Path
 import pytest as rl_pytest
 
 rl_collector_path = (
-    rl_Path(__file__).resolve().parents[4]
-    / "tools"
-    / "a0"
-    / "rl_collect_runtime_facts.py"
+    rl_Path(__file__).resolve().parents[4] / "tools" / "a0" / "rl_collect_runtime_facts.py"
 )
 rl_collector_spec = rl_importlib_util.spec_from_file_location(
     "rl_test_runtime_facts_collector", rl_collector_path
@@ -47,8 +44,7 @@ def rl_seed_project(rl_root: rl_Path) -> None:
 cd apps/api && uvicorn app.main:app --reload --port 8000
 """,
         "package.json": (
-            '{"engines":{"node":">=20.0.0","pnpm":">=10.0.0"},'
-            '"packageManager":"pnpm@10.0.0"}'
+            '{"engines":{"node":">=20.0.0","pnpm":">=10.0.0"},"packageManager":"pnpm@10.0.0"}'
         ),
         "apps/api/pyproject.toml": """
 [project]
@@ -183,14 +179,8 @@ def test_rl_collects_static_facts_and_redacts_sensitive_values(tmp_path: rl_Path
     rl_serialized = rl_json.dumps(rl_report, ensure_ascii=False, sort_keys=True)
 
     assert rl_report["rl_schema_version"] == "a0.runtime-facts.v1"
-    assert (
-        rl_report["rl_facts"]["rl_requirements"]["rl_api"]["rl_requires_python"]
-        == ">=3.14"
-    )
-    assert (
-        rl_report["rl_facts"]["rl_requirements"]["rl_worker"]["rl_requires_python"]
-        == ">=3.13"
-    )
+    assert rl_report["rl_facts"]["rl_requirements"]["rl_api"]["rl_requires_python"] == ">=3.14"
+    assert rl_report["rl_facts"]["rl_requirements"]["rl_worker"]["rl_requires_python"] == ">=3.13"
     assert rl_report["rl_facts"]["rl_node"]["rl_node_requirement"] == ">=20.0.0"
     assert rl_report["rl_facts"]["rl_compose"]["rl_postgresql_image"] == "postgres:18.4-alpine"
     assert rl_report["rl_facts"]["rl_api_asyncpg"]["rl_present"] is True
@@ -205,8 +195,7 @@ def test_rl_collects_static_facts_and_redacts_sensitive_values(tmp_path: rl_Path
     assert rl_report["rl_facts"]["rl_database"]["rl_module_level_settings_capture"] is True
     assert rl_report["rl_facts"]["rl_migrations_env"]["rl_async_engine_from_config"] is True
     assert [
-        rl_context["rl_context"]
-        for rl_context in rl_report["rl_facts"]["rl_execution_contexts"]
+        rl_context["rl_context"] for rl_context in rl_report["rl_facts"]["rl_execution_contexts"]
     ] == ["OpenAPI/API cwd", "Worker/root cwd", "Alembic/API cwd", "A0/root cwd"]
     assert rl_report["rl_facts"]["rl_path_drift"]
 
@@ -231,9 +220,7 @@ def test_rl_missing_parse_and_command_failures_are_explicit(tmp_path: rl_Path) -
         ),
     )
 
-    rl_blocking_ids = {
-        rl_fact["rl_fact_id"] for rl_fact in rl_report["rl_blocking_facts"]
-    }
+    rl_blocking_ids = {rl_fact["rl_fact_id"] for rl_fact in rl_report["rl_blocking_facts"]}
     assert "rl_missing_file:README.md" in rl_blocking_ids
     assert "rl_parse:apps/api/pyproject.toml" in rl_blocking_ids
     assert "rl_command_unavailable:rl_missing_python" in rl_blocking_ids
@@ -351,9 +338,7 @@ def test_rl_empty_required_python_source_is_blocking_via_cli(
     assert rl_result.returncode != 0, rl_result.stderr
     assert rl_output.exists()
     rl_report = rl_json.loads(rl_output.read_text(encoding="utf-8"))
-    rl_blocking_ids = {
-        rl_fact["rl_fact_id"] for rl_fact in rl_report["rl_blocking_facts"]
-    }
+    rl_blocking_ids = {rl_fact["rl_fact_id"] for rl_fact in rl_report["rl_blocking_facts"]}
     assert rl_expected_missing_facts <= rl_blocking_ids
     assert "postgresql+asyncpg://" not in rl_output.read_text(encoding="utf-8")
 
@@ -420,9 +405,7 @@ def test_rl_nonempty_required_python_source_missing_structure_is_blocking_via_cl
 
     assert rl_result.returncode != 0, rl_result.stderr
     rl_report = rl_json.loads(rl_output.read_text(encoding="utf-8"))
-    rl_blocking_ids = {
-        rl_fact["rl_fact_id"] for rl_fact in rl_report["rl_blocking_facts"]
-    }
+    rl_blocking_ids = {rl_fact["rl_fact_id"] for rl_fact in rl_report["rl_blocking_facts"]}
     assert rl_expected_missing_facts <= rl_blocking_ids
 
 
@@ -445,10 +428,7 @@ def test_rl_redaction_does_not_emit_typical_secret_fragments(
 def rl_blocking_ids(rl_report: dict) -> set[str]:
     """Return blocking identifiers without coupling tests to report ordering."""
 
-    return {
-        rl_fact["rl_fact_id"]
-        for rl_fact in rl_report["rl_blocking_facts"]
-    }
+    return {rl_fact["rl_fact_id"] for rl_fact in rl_report["rl_blocking_facts"]}
 
 
 def rl_run_cli(
@@ -675,9 +655,7 @@ def test_rl_database_ast_helper_matrix_rejects_spoofed_wiring(
     """The constrained resolver rejects wrong keywords, shadowing, and dead code."""
 
     rl_seed_project(tmp_path)
-    (tmp_path / "apps/api/app/core/database.py").write_text(
-        rl_database_source, encoding="utf-8"
-    )
+    (tmp_path / "apps/api/app/core/database.py").write_text(rl_database_source, encoding="utf-8")
 
     rl_report = rl_collect_runtime_facts(tmp_path)
 
@@ -746,9 +724,7 @@ def test_rl_critical_runtime_inputs_unparseable_are_blocking(
 def test_rl_collection_is_deterministic_for_identical_static_tree(tmp_path: rl_Path) -> None:
     rl_seed_project(tmp_path)
 
-    rl_first = rl_json.dumps(
-        rl_collect_runtime_facts(tmp_path), ensure_ascii=False, sort_keys=True
-    )
+    rl_first = rl_json.dumps(rl_collect_runtime_facts(tmp_path), ensure_ascii=False, sort_keys=True)
     rl_second = rl_json.dumps(
         rl_collect_runtime_facts(tmp_path), ensure_ascii=False, sort_keys=True
     )
@@ -768,12 +744,7 @@ def test_rl_env_is_presence_only_and_sentinel_never_leaves_report(tmp_path: rl_P
     rl_report = rl_collect_runtime_facts(tmp_path)
     rl_serialized = rl_json.dumps(rl_report, ensure_ascii=False, sort_keys=True)
     rl_output = tmp_path / "env-output.json"
-    assert (
-        rl_main(
-            ["--project-root", str(tmp_path), "--output", str(rl_output)]
-        )
-        == 0
-    )
+    assert rl_main(["--project-root", str(tmp_path), "--output", str(rl_output)]) == 0
     rl_output_serialized = rl_output.read_text(encoding="utf-8")
 
     assert rl_report["rl_facts"]["rl_config"]["rl_env_file"] == {
@@ -801,9 +772,7 @@ def test_rl_config_database_migration_and_ini_defaults_are_classified_and_redact
     assert rl_config_facts["rl_lru_cache"] is True
     assert "jwt_secret" in rl_config_facts["rl_secret_default_fields"]
     assert "admin_password" in rl_config_facts["rl_secret_default_fields"]
-    assert (
-        rl_report["rl_facts"]["rl_database"]["rl_settings_capture_scope"] == "module"
-    )
+    assert rl_report["rl_facts"]["rl_database"]["rl_settings_capture_scope"] == "module"
     assert rl_report["rl_facts"]["rl_migrations_env"]["rl_settings_override"] is True
     assert rl_report["rl_facts"]["rl_alembic"]["rl_script_location"]["rl_is_relative"] is True
     assert "unsafe-value" not in rl_serialized
@@ -939,9 +908,7 @@ def test_rl_report_has_source_provenance_roles_and_blocked_runtime_status(
         "sha256:" + rl_hashlib.sha256((tmp_path / "README.md").read_bytes()).hexdigest()
     )
     rl_missing_provenance = next(
-        rl_item
-        for rl_item in rl_provenance
-        if rl_item["rl_path"] == "apps/api/app/main.py"
+        rl_item for rl_item in rl_provenance if rl_item["rl_path"] == "apps/api/app/main.py"
     )
     assert rl_missing_provenance["rl_status"] == "missing"
     assert "rl_digest" not in rl_missing_provenance
@@ -975,9 +942,7 @@ def test_rl_read_source_provenance_uses_original_bytes_and_strict_digest() -> No
     )
 
     assert rl_re.fullmatch(r"sha256:[0-9a-f]{64}", rl_record["rl_digest"])
-    assert rl_record["rl_digest"] == (
-        "sha256:" + rl_hashlib.sha256(rl_raw_bytes).hexdigest()
-    )
+    assert rl_record["rl_digest"] == ("sha256:" + rl_hashlib.sha256(rl_raw_bytes).hexdigest())
     assert "raw source bytes" not in rl_json.dumps(rl_record, ensure_ascii=False)
 
 

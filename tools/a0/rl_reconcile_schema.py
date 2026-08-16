@@ -6,9 +6,7 @@ import hashlib as rl_hashlib
 import json as rl_json
 import re as rl_re
 from collections.abc import Mapping as rl_Mapping
-from collections.abc import Sequence as rl_Sequence
 from typing import Any as rl_Any
-
 
 RL_SCHEMA_REGIONS: tuple[str, ...] = (
     "alembic",
@@ -140,7 +138,11 @@ _RL_NON_RELKIND_CATEGORIES: set[str] = _RL_REQUIRED_CATALOG_CATEGORIES - {
 _RL_FACT_DIGEST_FIELDS: tuple[tuple[str, tuple[str, ...], str], ...] = (
     ("fields", ("fields", "rl_fields_digest"), "field_drift"),
     ("columns", ("columns", "rl_columns_digest"), "column_drift"),
-    ("defaults", ("defaults", "default", "default_expression", "rl_default_digest"), "default_drift"),
+    (
+        "defaults",
+        ("defaults", "default", "default_expression", "rl_default_digest"),
+        "default_drift",
+    ),
     ("indexes", ("indexes", "rl_indexes_digest"), "index_drift"),
     ("constraints", ("constraints", "rl_constraints_digest"), "constraint_drift"),
     ("rules", ("rules", "rl_rules_digest"), "rule_drift"),
@@ -148,7 +150,11 @@ _RL_FACT_DIGEST_FIELDS: tuple[tuple[str, tuple[str, ...], str], ...] = (
     ("domains", ("domains", "rl_domains_digest"), "domain_drift"),
     ("composites", ("composites", "rl_composites_digest"), "composite_drift"),
     ("enums", ("enum", "enums", "rl_enums_digest", "rl_enum_digest"), "enum_drift"),
-    ("extensions", ("extension", "extensions", "rl_extensions_digest", "rl_extension_digest"), "extension_drift"),
+    (
+        "extensions",
+        ("extension", "extensions", "rl_extensions_digest", "rl_extension_digest"),
+        "extension_drift",
+    ),
     ("owner", ("owner", "rl_owner_digest"), "owner_drift"),
     ("acl", ("acl", "privileges", "rl_acl_digest"), "acl_drift"),
     ("tablespace", ("tablespace", "rl_tablespace_digest"), "tablespace_drift"),
@@ -163,7 +169,10 @@ def _rl_canonical_json(rl_value: rl_Any) -> str:
             for rl_key in sorted(rl_value, key=lambda rl_key: str(rl_key))
         }
         return rl_json.dumps(
-            {rl_key: _rl_canonical_value(rl_item) for rl_key, rl_item in rl_value.items()},
+            {
+                rl_key: _rl_canonical_value(rl_item)
+                for rl_key, rl_item in rl_value.items()
+            },
             sort_keys=True,
             separators=(",", ":"),
             ensure_ascii=False,
@@ -182,7 +191,9 @@ def _rl_canonical_value(rl_value: rl_Any) -> rl_Any:
     if isinstance(rl_value, rl_Mapping):
         return {
             str(rl_key): _rl_canonical_value(rl_item)
-            for rl_key, rl_item in sorted(rl_value.items(), key=lambda rl_pair: str(rl_pair[0]))
+            for rl_key, rl_item in sorted(
+                rl_value.items(), key=lambda rl_pair: str(rl_pair[0])
+            )
         }
     if isinstance(rl_value, (list, tuple, set, frozenset)):
         rl_items = [_rl_canonical_value(rl_item) for rl_item in rl_value]
@@ -198,9 +209,14 @@ def _rl_canonical_value(rl_value: rl_Any) -> rl_Any:
         )
     if isinstance(rl_value, (str, int, bool)) or rl_value is None:
         return rl_value
-    if isinstance(rl_value, float) and rl_value == rl_value and rl_value not in (
-        float("inf"),
-        float("-inf"),
+    if (
+        isinstance(rl_value, float)
+        and rl_value == rl_value
+        and rl_value
+        not in (
+            float("inf"),
+            float("-inf"),
+        )
     ):
         return rl_value
     raise TypeError("non_json_value")
@@ -235,7 +251,9 @@ def _rl_catalog_object_to_fact(rl_object: rl_Any) -> dict[str, rl_Any] | None:
         return None
     rl_category = rl_object.get("rl_category", rl_object.get("category"))
     rl_identity_digest = rl_object.get("rl_identity_digest")
-    if not isinstance(rl_identity_digest, str) or not rl_identity_digest.startswith("sha256:"):
+    if not isinstance(rl_identity_digest, str) or not rl_identity_digest.startswith(
+        "sha256:"
+    ):
         rl_schema = rl_object.get("schema", rl_object.get("namespace"))
         rl_name = rl_object.get("name", rl_object.get("object_name"))
         if (
@@ -252,7 +270,10 @@ def _rl_catalog_object_to_fact(rl_object: rl_Any) -> dict[str, rl_Any] | None:
         rl_identity_token = rl_object.get("identity", rl_object.get("rl_identity"))
         if rl_identity_token is not None:
             rl_identity_token_digest = _rl_digest(rl_identity_token)
-    if not isinstance(rl_category, str) or rl_category not in _RL_REQUIRED_CATALOG_CATEGORIES:
+    if (
+        not isinstance(rl_category, str)
+        or rl_category not in _RL_REQUIRED_CATALOG_CATEGORIES
+    ):
         return {
             "category": "unknown",
             "relkind": "unknown",
@@ -260,7 +281,9 @@ def _rl_catalog_object_to_fact(rl_object: rl_Any) -> dict[str, rl_Any] | None:
             "rl_name_digest": rl_identity_digest,
             "rl_identity_token_digest": rl_identity_token_digest,
             "rl_reason_codes": list(rl_object.get("rl_reason_codes", []))
-            if isinstance(rl_object.get("rl_reason_codes", []), (list, tuple, set, frozenset))
+            if isinstance(
+                rl_object.get("rl_reason_codes", []), (list, tuple, set, frozenset)
+            )
             else ["invalid_object"],
         }
     rl_fact: dict[str, rl_Any] = {
@@ -283,7 +306,8 @@ def _rl_catalog_object_to_fact(rl_object: rl_Any) -> dict[str, rl_Any] | None:
     rl_object_reasons = rl_object.get("rl_reason_codes", [])
     if isinstance(rl_object_reasons, (list, tuple, set, frozenset)):
         rl_fact["rl_reason_codes"] = [
-            rl_reason for rl_reason in rl_object_reasons
+            rl_reason
+            for rl_reason in rl_object_reasons
             if isinstance(rl_reason, str) and rl_reason
         ]
     return rl_fact
@@ -319,7 +343,9 @@ def _rl_baseline_facts(rl_region: rl_Any) -> tuple[list[rl_Any], list[str]]:
     return rl_facts, sorted(set(rl_reasons))
 
 
-def _rl_region_facts(rl_region_name: str, rl_region: rl_Any) -> tuple[str, list[rl_Any], list[str]]:
+def _rl_region_facts(
+    rl_region_name: str, rl_region: rl_Any
+) -> tuple[str, list[rl_Any], list[str]]:
     if rl_region_name == "catalog_baseline":
         if rl_region is None:
             return "BLOCKED", [], ["catalog_baseline_unavailable"]
@@ -379,11 +405,17 @@ def _rl_fact_identity(rl_fact: rl_Any) -> tuple[str, bool, str, str | None]:
         or not bool(rl_schema)
         or not bool(rl_name)
     ):
-        if isinstance(rl_identity_digest, str) and rl_identity_digest.startswith("sha256:"):
+        if isinstance(rl_identity_digest, str) and rl_identity_digest.startswith(
+            "sha256:"
+        ):
             rl_name_digest = rl_fact.get("rl_name_digest", rl_identity_digest)
-            if not isinstance(rl_name_digest, str) or not rl_name_digest.startswith("sha256:"):
+            if not isinstance(rl_name_digest, str) or not rl_name_digest.startswith(
+                "sha256:"
+            ):
                 rl_name_digest = rl_identity_digest
-            if isinstance(rl_existing_token_digest, str) and not rl_existing_token_digest.startswith("sha256:"):
+            if isinstance(
+                rl_existing_token_digest, str
+            ) and not rl_existing_token_digest.startswith("sha256:"):
                 rl_existing_token_digest = _rl_digest(rl_existing_token_digest)
             return rl_identity_digest, True, rl_name_digest, rl_existing_token_digest
     if not (
@@ -395,7 +427,9 @@ def _rl_fact_identity(rl_fact: rl_Any) -> tuple[str, bool, str, str | None]:
         rl_invalid_digest = _rl_digest({"rl_invalid_identity": True})
         return rl_invalid_digest, False, rl_invalid_digest, None
     rl_name_digest = _rl_digest({"schema": rl_schema, "name": rl_name})
-    if not isinstance(rl_identity_digest, str) or not rl_identity_digest.startswith("sha256:"):
+    if not isinstance(rl_identity_digest, str) or not rl_identity_digest.startswith(
+        "sha256:"
+    ):
         rl_identity_digest = rl_name_digest
     rl_explicit_identity = rl_fact.get("identity", rl_fact.get("rl_identity"))
     if rl_explicit_identity is None:
@@ -437,11 +471,16 @@ def _rl_fact_signature(rl_fact: rl_Any) -> dict[str, rl_Any]:
                 {"rl_missing": rl_field_name}
             )
         return rl_signature
-    rl_identity_digest, rl_valid_identity, rl_name_digest, rl_identity_token_digest = _rl_fact_identity(rl_fact)
+    rl_identity_digest, rl_valid_identity, rl_name_digest, rl_identity_token_digest = (
+        _rl_fact_identity(rl_fact)
+    )
     rl_category = rl_fact.get("category", rl_fact.get("rl_category", "relations"))
     # 为什么：catalog 类别必须在已知词汇表内；未识别类别 canonical 为 "unknown"，
     # 不保留 raw 字面量（防止回显 + 触发 unknown_object_category finding）。
-    if not isinstance(rl_category, str) or rl_category not in _RL_REQUIRED_CATALOG_CATEGORIES:
+    if (
+        not isinstance(rl_category, str)
+        or rl_category not in _RL_REQUIRED_CATALOG_CATEGORIES
+    ):
         rl_category = "unknown"
     rl_relkind = rl_fact.get("relkind", rl_fact.get("rl_relkind", "unknown"))
     if not isinstance(rl_relkind, str) or rl_relkind not in _RL_KNOWN_RELKINDS:
@@ -449,8 +488,13 @@ def _rl_fact_signature(rl_fact: rl_Any) -> dict[str, rl_Any]:
     rl_class = rl_fact.get("class", rl_fact.get("rl_class", rl_category))
     if not isinstance(rl_class, str) or not rl_class:
         rl_class = "unknown"
-    rl_object_kind = rl_fact.get("kind", rl_fact.get("object_kind", rl_fact.get("rl_object_kind", "unknown")))
-    if not isinstance(rl_object_kind, str) or rl_object_kind not in _RL_KNOWN_OBJECT_KINDS:
+    rl_object_kind = rl_fact.get(
+        "kind", rl_fact.get("object_kind", rl_fact.get("rl_object_kind", "unknown"))
+    )
+    if (
+        not isinstance(rl_object_kind, str)
+        or rl_object_kind not in _RL_KNOWN_OBJECT_KINDS
+    ):
         rl_object_kind = "unknown"
     rl_signature = {
         "rl_identity_digest": rl_identity_digest,
@@ -477,23 +521,41 @@ def _rl_pair_reason_codes(
 ) -> list[str]:
     rl_reasons: list[str] = []
     if rl_left["rl_category"] != rl_right["rl_category"]:
-        rl_reasons.append("unknown_object_category" if "unknown" in (
-            rl_left["rl_category"],
-            rl_right["rl_category"],
-        ) else "category_drift")
+        rl_reasons.append(
+            "unknown_object_category"
+            if "unknown"
+            in (
+                rl_left["rl_category"],
+                rl_right["rl_category"],
+            )
+            else "category_drift"
+        )
     if rl_left["rl_class"] != rl_right["rl_class"]:
-        rl_reasons.append("unknown_object_class" if "unknown" in (
-            rl_left["rl_class"],
-            rl_right["rl_class"],
-        ) else "class_drift")
+        rl_reasons.append(
+            "unknown_object_class"
+            if "unknown"
+            in (
+                rl_left["rl_class"],
+                rl_right["rl_class"],
+            )
+            else "class_drift"
+        )
     if rl_left["rl_object_kind"] != rl_right["rl_object_kind"]:
-        rl_reasons.append("unknown_object_class" if "unknown" in (
-            rl_left["rl_object_kind"],
-            rl_right["rl_object_kind"],
-        ) else "object_kind_drift")
+        rl_reasons.append(
+            "unknown_object_class"
+            if "unknown"
+            in (
+                rl_left["rl_object_kind"],
+                rl_right["rl_object_kind"],
+            )
+            else "object_kind_drift"
+        )
     if (
-        (rl_left["rl_relkind"] == "unknown" and rl_left["rl_category"] not in _RL_NON_RELKIND_CATEGORIES)
-        or (rl_right["rl_relkind"] == "unknown" and rl_right["rl_category"] not in _RL_NON_RELKIND_CATEGORIES)
+        rl_left["rl_relkind"] == "unknown"
+        and rl_left["rl_category"] not in _RL_NON_RELKIND_CATEGORIES
+    ) or (
+        rl_right["rl_relkind"] == "unknown"
+        and rl_right["rl_category"] not in _RL_NON_RELKIND_CATEGORIES
     ):
         rl_reasons.append("unknown_relkind")
     elif rl_left["rl_relkind"] != rl_right["rl_relkind"]:
@@ -512,7 +574,9 @@ def _rl_pair_reason_codes(
     return sorted(set(rl_reasons))
 
 
-def _rl_region_output(rl_region_name: str, rl_status: str, rl_facts: list[rl_Any], rl_reasons: list[str]) -> dict[str, rl_Any]:
+def _rl_region_output(
+    rl_region_name: str, rl_status: str, rl_facts: list[rl_Any], rl_reasons: list[str]
+) -> dict[str, rl_Any]:
     return {
         "rl_source": rl_region_name,
         "rl_status": rl_status,
@@ -536,7 +600,9 @@ def rl_reconcile_schema(rl_input: rl_Any) -> dict[str, rl_Any]:
     rl_all_facts: dict[str, list[dict[str, rl_Any]]] = {}
     for rl_region_name in RL_SCHEMA_REGIONS:
         rl_region_value = rl_input_mapping.get(rl_region_name)
-        rl_status, rl_facts, rl_reasons = _rl_region_facts(rl_region_name, rl_region_value)
+        rl_status, rl_facts, rl_reasons = _rl_region_facts(
+            rl_region_name, rl_region_value
+        )
         if rl_region_name == "deployed" and rl_region_value is None:
             rl_reasons.append("deployed_unavailable")
         rl_regions[rl_region_name] = _rl_region_output(
@@ -546,8 +612,7 @@ def rl_reconcile_schema(rl_input: rl_Any) -> dict[str, rl_Any]:
             rl_reasons,
         )
         rl_all_facts[rl_region_name] = [
-            _rl_fact_signature(rl_fact)
-            for rl_fact in rl_facts
+            _rl_fact_signature(rl_fact) for rl_fact in rl_facts
         ]
         for rl_fact in rl_all_facts[rl_region_name]:
             if rl_fact["rl_category"] == "unknown":
@@ -557,7 +622,10 @@ def rl_reconcile_schema(rl_input: rl_Any) -> dict[str, rl_Any]:
                 and rl_fact["rl_category"] not in _RL_NON_RELKIND_CATEGORIES
             ):
                 rl_reasons.append("unknown_relkind")
-            if rl_fact["rl_class"] == "unknown" or rl_fact["rl_object_kind"] == "unknown":
+            if (
+                rl_fact["rl_class"] == "unknown"
+                or rl_fact["rl_object_kind"] == "unknown"
+            ):
                 rl_reasons.append("unknown_object_class")
         rl_reasons = sorted(set(rl_reasons))
         rl_regions[rl_region_name]["rl_status"] = (
@@ -576,7 +644,9 @@ def rl_reconcile_schema(rl_input: rl_Any) -> dict[str, rl_Any]:
     for rl_region_name, rl_facts in rl_all_facts.items():
         for rl_fact in rl_facts:
             rl_identity = rl_fact["rl_identity_digest"]
-            rl_keyed.setdefault(rl_identity, {}).setdefault(rl_region_name, []).append(rl_fact)
+            rl_keyed.setdefault(rl_identity, {}).setdefault(rl_region_name, []).append(
+                rl_fact
+            )
 
     for rl_identity, rl_by_region in rl_keyed.items():
         rl_has_orm = bool(rl_by_region.get("orm"))
@@ -608,7 +678,8 @@ def rl_reconcile_schema(rl_input: rl_Any) -> dict[str, rl_Any]:
         for rl_candidate in rl_same_name_candidates:
             if (
                 rl_reference_facts
-                and rl_candidate["rl_name_digest"] == rl_reference_facts[0]["rl_name_digest"]
+                and rl_candidate["rl_name_digest"]
+                == rl_reference_facts[0]["rl_name_digest"]
                 and rl_candidate["rl_identity_token_digest"] is not None
                 and rl_reference_facts[0]["rl_identity_token_digest"] is not None
                 and rl_candidate["rl_identity_token_digest"]
@@ -616,15 +687,12 @@ def rl_reconcile_schema(rl_input: rl_Any) -> dict[str, rl_Any]:
             ):
                 rl_global_reasons.append("same_name_identity_mismatch")
 
-    rl_baseline_region = rl_regions["catalog_baseline"]
     rl_baseline_input = rl_input_mapping.get("catalog_baseline")
     if isinstance(rl_baseline_input, rl_Mapping):
         rl_baseline_reasons = rl_regions["catalog_baseline"]["rl_reason_codes"]
         rl_global_reasons.extend(rl_baseline_reasons)
         if rl_baseline_input.get("rl_status") == "BLOCKED":
-            if not rl_baseline_reasons:
-                rl_global_reasons.append("baseline_mismatch")
-            elif any(
+            if not rl_baseline_reasons or any(
                 "mismatch" in rl_reason
                 or "failure" in rl_reason
                 or "missing" in rl_reason
@@ -641,7 +709,8 @@ def rl_reconcile_schema(rl_input: rl_Any) -> dict[str, rl_Any]:
             if any(
                 rl_reason.endswith("_drift")
                 or rl_reason.endswith("_mismatch")
-                or rl_reason in {
+                or rl_reason
+                in {
                     "unexpected_object",
                     "unexpected_identity",
                     "missing_expected_object",

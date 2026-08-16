@@ -7,13 +7,12 @@ import json
 from pathlib import Path
 
 import pytest
-
-from tools.a0.rl_prepare_pg_profile import rl_ProfileSpec, rl_InMemoryProfileRegistry
+from tools.a0.rl_prepare_pg_profile import rl_InMemoryProfileRegistry, rl_ProfileSpec
 from tools.a0.rl_run_pg_client import (
     rl_ArchiveHandle,
-    rl_InMemoryArchiveRegistry,
     rl_build_client_argv,
     rl_ClientError,
+    rl_InMemoryArchiveRegistry,
     rl_run_pg_client,
 )
 
@@ -27,7 +26,9 @@ def rl_canonical_digest(rl_record: dict[str, object], rl_id_field: str) -> str:
 
 
 class rl_Completed:
-    def __init__(self, rl_returncode: int = 0, rl_stdout: bytes = b"", rl_stderr: bytes = b"", **rl_extra):
+    def __init__(
+        self, rl_returncode: int = 0, rl_stdout: bytes = b"", rl_stderr: bytes = b"", **rl_extra
+    ):
         self.returncode = rl_returncode
         self.stdout = rl_stdout
         self.stderr = rl_stderr
@@ -53,9 +54,7 @@ def rl_make_archive_registry(tmp_path: Path) -> tuple[rl_InMemoryArchiveRegistry
     rl_archive = tmp_path / "archive.dump"
     rl_archive.write_bytes(b"custom archive")
     return (
-        rl_InMemoryArchiveRegistry(
-            {"archive-a0": rl_ArchiveHandle("archive-a0", rl_archive)}
-        ),
+        rl_InMemoryArchiveRegistry({"archive-a0": rl_ArchiveHandle("archive-a0", rl_archive)}),
         rl_archive,
     )
 
@@ -115,7 +114,9 @@ def test_restore_uses_exact_internal_argv_and_redacted_evidence(tmp_path: Path) 
         rl_Completed(rl_partial_restore=True),
     ],
 )
-def test_restore_failures_are_blocking_and_never_emit_raw_streams(tmp_path: Path, rl_result) -> None:
+def test_restore_failures_are_blocking_and_never_emit_raw_streams(
+    tmp_path: Path, rl_result
+) -> None:
     rl_archive_registry, _ = rl_make_archive_registry(tmp_path)
 
     def rl_runner(*_rl_args, **_rl_kwargs):
@@ -166,7 +167,9 @@ def test_missing_archive_blocks_before_runner(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize("rl_operation", ["dump", "list", "restore"])
-def test_operation_argv_has_no_destructive_or_arbitrary_flags(tmp_path: Path, rl_operation: str) -> None:
+def test_operation_argv_has_no_destructive_or_arbitrary_flags(
+    tmp_path: Path, rl_operation: str
+) -> None:
     rl_archive_registry, rl_archive = rl_make_archive_registry(tmp_path)
     rl_record = __import__(
         "tools.a0.rl_prepare_pg_profile", fromlist=["rl_prepare_pg_profile"]

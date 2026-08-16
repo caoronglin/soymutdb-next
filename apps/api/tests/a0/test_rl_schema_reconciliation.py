@@ -7,7 +7,6 @@ import inspect as rl_inspect
 import json as rl_json
 
 import pytest
-
 from tools.a0 import rl_reconcile_schema as rl_module
 from tools.a0.rl_reconcile_schema import rl_reconcile_schema
 
@@ -158,9 +157,7 @@ def test_static_only_inputs_are_blocking_and_do_not_claim_a_live_snapshot() -> N
         {
             "alembic": [rl_fact("public", "orders")],
             "orm": [rl_fact("public", "orders")],
-            "catalog_baseline": rl_catalog_baseline(
-                rl_catalog_object("public", "orders")
-            ),
+            "catalog_baseline": rl_catalog_baseline(rl_catalog_object("public", "orders")),
         }
     )
     rl_serialized = rl_json.dumps(rl_result, ensure_ascii=False, sort_keys=True)
@@ -378,8 +375,7 @@ def test_reconciliation_module_is_stdlib_only_and_has_no_action_surface() -> Non
         isinstance(rl_node, rl_ast.If)
         and isinstance(rl_node.test, rl_ast.Compare)
         and any(
-            isinstance(rl_comparator, rl_ast.Constant)
-            and rl_comparator.value == "__main__"
+            isinstance(rl_comparator, rl_ast.Constant) and rl_comparator.value == "__main__"
             for rl_comparator in rl_node.test.comparators
         )
         for rl_node in rl_tree.body
@@ -387,7 +383,9 @@ def test_reconciliation_module_is_stdlib_only_and_has_no_action_surface() -> Non
     assert any(isinstance(rl_node, rl_ast.FunctionDef) for rl_node in rl_tree.body)
 
 
-def test_reconciler_consumes_producer_comparison_status_without_promoting_top_level_blocked() -> None:
+def test_reconciler_consumes_producer_comparison_status_without_promoting_top_level_blocked() -> (
+    None
+):
     for rl_comparison_status in ("MATCH", "DRIFT", "BLOCKED"):
         rl_result = rl_reconcile_schema(
             {
@@ -457,7 +455,9 @@ def test_nonrelation_relkind_is_not_applicable_but_relation_and_index_require_ma
         assert "unknown_relkind" in rl_result["rl_reason_codes"]
 
 
-def test_identity_digest_binds_category_parent_and_overload_discriminators_without_leakage() -> None:
+def test_identity_digest_binds_category_parent_and_overload_discriminators_without_leakage() -> (
+    None
+):
     rl_result = rl_reconcile_schema(
         {
             "orm": [

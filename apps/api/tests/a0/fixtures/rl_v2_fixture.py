@@ -47,6 +47,7 @@ def rl_distinct(rl_counter: int) -> str:
 # trusted-assertion v2 verifier (fake)
 # ---------------------------------------------------------------------------
 
+
 def rl_trusted_assertion_required() -> tuple[str, ...]:
     return (
         "version",
@@ -107,7 +108,9 @@ def rl_fake_trusted_verifier(rl_request: dict) -> dict:
         "nonce": "unit-nonce-1",
         "replay_guard": {"kind": "unit", "id": "rg-1"},
     }
-    rl_assertion["payload_digest"] = rl_att.rl_compute_trusted_assertion_payload_digest(rl_assertion)
+    rl_assertion["payload_digest"] = rl_att.rl_compute_trusted_assertion_payload_digest(
+        rl_assertion
+    )
     return rl_assertion
 
 
@@ -116,21 +119,151 @@ def rl_fake_trusted_verifier(rl_request: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 rl_SECTION_REQUIRED: dict[str, tuple[str, ...]] = {
-    "context_contract": ("project_root_digest", "runtime_facts_ref", "runtime_facts_digest", "cwd_digest", "absolute_paths", "fresh_process", "in_process_settings_switch"),
-    "profile_contract": ("registry_digest", "profile_only", "sanitized_env", "shell_false", "interactive_password", "mode_0700", "mode_0600"),
-    "catalog_baseline": ("same_version_init_ref", "same_version_init_digest", "reference_digest", "server_digest", "category_digests", "unknown_count", "read_failures", "match"),
-    "canonical_snapshot_contract": ("canonical_version", "structural_policy_digest", "count_independent", "raw_rows", "self_digest_forbidden", "parent_sidecar_required", "sidecar_ref", "sidecar_sha256"),
-    "semantic_projection_contract": ("semantic_version", "policy_digest", "stable_key_digest", "exclusion_digest", "positive_table_count", "content_digests_only", "raw_rows", "sequence_state", "unknown_fields"),
-    "migration_trajectory": ("initial_revision", "downgrade_revision", "final_revision", "edge_count", "edges", "nonempty_edges", "strict_ancestor", "downgrade_rehearsal", "seed_semantic", "revision_snapshot_refs", "revision_snapshot_digests"),
-    "empty_before_rebuild": ("identity_digest", "empty", "user_object_count", "snapshot_ref", "snapshot_sha256", "catalog_baseline_match", "guard_event_ids", "action_ids"),
-    "empty_before_restore": ("identity_digest", "empty", "user_object_count", "snapshot_ref", "snapshot_sha256", "catalog_baseline_match", "guard_event_ids", "action_ids"),
-    "source_stability": ("pre_binding_digest", "post_binding_digest", "structural_match", "semantic_match", "sequence_match", "drift_detected"),
-    "synthetic_source_policy": ("classification", "approval_digest", "policy_digest", "seed_digest", "raw_sensitive"),
-    "restricted_archive_policy": ("root_identity_digest", "acl_claim_digest", "mode_0700", "mode_0600", "opaque_only", "raw_ordinary", "retention_outcome", "cleanup_status"),
-    "archive_summary": ("archive_ref", "archive_sha256", "item_count", "opaque_only", "raw_archive", "unknown_count", "failures"),
-    "list_summary": ("list_ref", "list_sha256", "item_count", "opaque_only", "raw_full_list", "unknown_count", "failures"),
-    "restore_semantic_result": ("structural_match", "content_match", "count_match", "sequence_match", "extensions_match", "enums_match", "revision_match", "mismatches"),
-    "legacy_release_classification": ("classifier", "input_digest", "dataset_count", "release_count", "records_ref", "records_sha256", "unresolved_count", "items"),
+    "context_contract": (
+        "project_root_digest",
+        "runtime_facts_ref",
+        "runtime_facts_digest",
+        "cwd_digest",
+        "absolute_paths",
+        "fresh_process",
+        "in_process_settings_switch",
+    ),
+    "profile_contract": (
+        "registry_digest",
+        "profile_only",
+        "sanitized_env",
+        "shell_false",
+        "interactive_password",
+        "mode_0700",
+        "mode_0600",
+    ),
+    "catalog_baseline": (
+        "same_version_init_ref",
+        "same_version_init_digest",
+        "reference_digest",
+        "server_digest",
+        "category_digests",
+        "unknown_count",
+        "read_failures",
+        "match",
+    ),
+    "canonical_snapshot_contract": (
+        "canonical_version",
+        "structural_policy_digest",
+        "count_independent",
+        "raw_rows",
+        "self_digest_forbidden",
+        "parent_sidecar_required",
+        "sidecar_ref",
+        "sidecar_sha256",
+    ),
+    "semantic_projection_contract": (
+        "semantic_version",
+        "policy_digest",
+        "stable_key_digest",
+        "exclusion_digest",
+        "positive_table_count",
+        "content_digests_only",
+        "raw_rows",
+        "sequence_state",
+        "unknown_fields",
+    ),
+    "migration_trajectory": (
+        "initial_revision",
+        "downgrade_revision",
+        "final_revision",
+        "edge_count",
+        "edges",
+        "nonempty_edges",
+        "strict_ancestor",
+        "downgrade_rehearsal",
+        "seed_semantic",
+        "revision_snapshot_refs",
+        "revision_snapshot_digests",
+    ),
+    "empty_before_rebuild": (
+        "identity_digest",
+        "empty",
+        "user_object_count",
+        "snapshot_ref",
+        "snapshot_sha256",
+        "catalog_baseline_match",
+        "guard_event_ids",
+        "action_ids",
+    ),
+    "empty_before_restore": (
+        "identity_digest",
+        "empty",
+        "user_object_count",
+        "snapshot_ref",
+        "snapshot_sha256",
+        "catalog_baseline_match",
+        "guard_event_ids",
+        "action_ids",
+    ),
+    "source_stability": (
+        "pre_binding_digest",
+        "post_binding_digest",
+        "structural_match",
+        "semantic_match",
+        "sequence_match",
+        "drift_detected",
+    ),
+    "synthetic_source_policy": (
+        "classification",
+        "approval_digest",
+        "policy_digest",
+        "seed_digest",
+        "raw_sensitive",
+    ),
+    "restricted_archive_policy": (
+        "root_identity_digest",
+        "acl_claim_digest",
+        "mode_0700",
+        "mode_0600",
+        "opaque_only",
+        "raw_ordinary",
+        "retention_outcome",
+        "cleanup_status",
+    ),
+    "archive_summary": (
+        "archive_ref",
+        "archive_sha256",
+        "item_count",
+        "opaque_only",
+        "raw_archive",
+        "unknown_count",
+        "failures",
+    ),
+    "list_summary": (
+        "list_ref",
+        "list_sha256",
+        "item_count",
+        "opaque_only",
+        "raw_full_list",
+        "unknown_count",
+        "failures",
+    ),
+    "restore_semantic_result": (
+        "structural_match",
+        "content_match",
+        "count_match",
+        "sequence_match",
+        "extensions_match",
+        "enums_match",
+        "revision_match",
+        "mismatches",
+    ),
+    "legacy_release_classification": (
+        "classifier",
+        "input_digest",
+        "dataset_count",
+        "release_count",
+        "records_ref",
+        "records_sha256",
+        "unresolved_count",
+        "items",
+    ),
 }
 
 rl_SECTION_KIND: dict[str, str] = {
@@ -152,31 +285,80 @@ rl_SECTION_KIND: dict[str, str] = {
 }
 
 _SHA_FIELDS = {
-    "project_root_digest", "runtime_facts_digest", "cwd_digest", "registry_digest",
-    "same_version_init_digest", "reference_digest", "server_digest",
-    "structural_policy_digest", "policy_digest", "stable_key_digest",
-    "exclusion_digest", "identity_digest", "snapshot_sha256", "pre_binding_digest",
-    "post_binding_digest", "approval_digest", "seed_digest", "root_identity_digest",
-    "acl_claim_digest", "archive_sha256", "list_sha256", "input_digest",
-    "records_sha256", "sidecar_sha256",
+    "project_root_digest",
+    "runtime_facts_digest",
+    "cwd_digest",
+    "registry_digest",
+    "same_version_init_digest",
+    "reference_digest",
+    "server_digest",
+    "structural_policy_digest",
+    "policy_digest",
+    "stable_key_digest",
+    "exclusion_digest",
+    "identity_digest",
+    "snapshot_sha256",
+    "pre_binding_digest",
+    "post_binding_digest",
+    "approval_digest",
+    "seed_digest",
+    "root_identity_digest",
+    "acl_claim_digest",
+    "archive_sha256",
+    "list_sha256",
+    "input_digest",
+    "records_sha256",
+    "sidecar_sha256",
 }
 _TRUE_FIELDS = {
-    "absolute_paths", "fresh_process", "profile_only", "sanitized_env",
-    "shell_false", "mode_0700", "mode_0600", "count_independent",
-    "self_digest_forbidden", "parent_sidecar_required", "content_digests_only",
-    "sequence_state", "nonempty_edges", "strict_ancestor", "downgrade_rehearsal",
-    "seed_semantic", "empty", "catalog_baseline_match", "structural_match",
-    "semantic_match", "sequence_match", "opaque_only", "content_match",
-    "count_match", "extensions_match", "enums_match", "revision_match", "match",
+    "absolute_paths",
+    "fresh_process",
+    "profile_only",
+    "sanitized_env",
+    "shell_false",
+    "mode_0700",
+    "mode_0600",
+    "count_independent",
+    "self_digest_forbidden",
+    "parent_sidecar_required",
+    "content_digests_only",
+    "sequence_state",
+    "nonempty_edges",
+    "strict_ancestor",
+    "downgrade_rehearsal",
+    "seed_semantic",
+    "empty",
+    "catalog_baseline_match",
+    "structural_match",
+    "semantic_match",
+    "sequence_match",
+    "opaque_only",
+    "content_match",
+    "count_match",
+    "extensions_match",
+    "enums_match",
+    "revision_match",
+    "match",
 }
 _FALSE_FIELDS = {
-    "raw_rows", "in_process_settings_switch", "interactive_password",
-    "raw_ordinary", "drift_detected", "raw_archive", "raw_full_list", "raw_sensitive",
+    "raw_rows",
+    "in_process_settings_switch",
+    "interactive_password",
+    "raw_ordinary",
+    "drift_detected",
+    "raw_archive",
+    "raw_full_list",
+    "raw_sensitive",
 }
 _LIST_FIELDS = {"read_failures", "unknown_fields", "mismatches", "failures", "items"}
 _REF_FIELDS = {
-    "runtime_facts_ref", "same_version_init_ref", "snapshot_ref", "sidecar_ref",
-    "archive_ref", "list_ref", "records_ref",
+    "runtime_facts_ref",
+    "same_version_init_ref",
+    "snapshot_ref",
+    "sidecar_ref",
+    "archive_ref",
+    "list_ref",
+    "records_ref",
 }
 
 
@@ -224,7 +406,14 @@ def rl_section_values(rl_section: str, rl_counter: int) -> dict[str, Any]:
             rl_values[rl_field] = "synthetic-non-sensitive"
         elif rl_field in ("cleanup_status", "retention_outcome"):
             rl_values[rl_field] = "passed"
-        elif rl_field in ("canonical_version", "semantic_version", "initial_revision", "downgrade_revision", "final_revision", "classifier"):
+        elif rl_field in (
+            "canonical_version",
+            "semantic_version",
+            "initial_revision",
+            "downgrade_revision",
+            "final_revision",
+            "classifier",
+        ):
             rl_values[rl_field] = "a0-fixture-v1"
         else:
             rl_values[rl_field] = True
@@ -357,7 +546,15 @@ def build_manifest(
     rl_canon["sidecar_sha256"] = rl_sidecar_sha
     # Rebuild the snapshot artifact payload from common fields + semantic fields
     # (NOT from the section object, which carries evidence_* metadata).
-    rl_meta = {"status", "owner", "reviewer", "evidence_ref", "evidence_sha256", "evidence_kind", "evidence_schema_version"}
+    rl_meta = {
+        "status",
+        "owner",
+        "reviewer",
+        "evidence_ref",
+        "evidence_sha256",
+        "evidence_kind",
+        "evidence_schema_version",
+    }
     rl_snap_semantic = {k: v for k, v in rl_canon.items() if k not in rl_meta}
     rl_snap_payload: dict[str, Any] = {
         "semantic_gate_contract_version": rl_SEMANTIC_GATE_CONTRACT_VERSION,
@@ -382,17 +579,19 @@ def build_manifest(
     rl_canon["evidence_sha256"] = rl_snap_sha
 
     # Add the sidecar index entry (child_sha256 lives in the index, not in file bytes).
-    rl_artifact_index.append({
-        "opaque_ref": rl_sidecar_ref,
-        "kind": rl_att.rl_SIDECAR_KIND,
-        "schema_version": rl_att.rl_SIDECAR_SCHEMA,
-        "sha256": rl_sidecar_sha,
-        "run_id": rl_run_id,
-        "owner": rl_PRODUCER,
-        "reviewer": rl_REVIEWER,
-        "producer_action_ids": ["action-1"],
-        "child_sha256": rl_snap_sha,
-    })
+    rl_artifact_index.append(
+        {
+            "opaque_ref": rl_sidecar_ref,
+            "kind": rl_att.rl_SIDECAR_KIND,
+            "schema_version": rl_att.rl_SIDECAR_SCHEMA,
+            "sha256": rl_sidecar_sha,
+            "run_id": rl_run_id,
+            "owner": rl_PRODUCER,
+            "reviewer": rl_REVIEWER,
+            "producer_action_ids": ["action-1"],
+            "child_sha256": rl_snap_sha,
+        }
+    )
 
     # --- action_output artifact (generic per-action output) ---
     rl_action_output_ref = "action-output-1.json"
@@ -467,28 +666,32 @@ def build_manifest(
             rl_ref = f"evidence-{rl_order2}.json"
             rl_entry = next(e for e in rl_artifact_index if e["opaque_ref"] == rl_ref)
             rl_direction = "output" if rl_kind == rl_section_kind else "input"
-            rl_action["artifact_refs_and_sha256"].append({
-                "opaque_ref": rl_ref,
-                "sha256": rl_entry["sha256"],
-                "kind": rl_section_kind,
-                "schema_version": rl_entry["schema_version"],
-                "owner": rl_PRODUCER,
-                "reviewer": rl_REVIEWER,
-                "direction": rl_direction,
-                "binding_role": f"role-{rl_section}",
-            })
+            rl_action["artifact_refs_and_sha256"].append(
+                {
+                    "opaque_ref": rl_ref,
+                    "sha256": rl_entry["sha256"],
+                    "kind": rl_section_kind,
+                    "schema_version": rl_entry["schema_version"],
+                    "owner": rl_PRODUCER,
+                    "reviewer": rl_REVIEWER,
+                    "direction": rl_direction,
+                    "binding_role": f"role-{rl_section}",
+                }
+            )
         # bind the generic action_output artifact as the primary output when required
         if rl_kind == rl_att.rl_ACTION_OUTPUT_KIND:
-            rl_action["artifact_refs_and_sha256"].append({
-                "opaque_ref": rl_action_output_ref,
-                "sha256": rl_action_output_entry["sha256"],
-                "kind": rl_att.rl_ACTION_OUTPUT_KIND,
-                "schema_version": rl_att.rl_ACTION_OUTPUT_SCHEMA,
-                "owner": rl_PRODUCER,
-                "reviewer": rl_REVIEWER,
-                "direction": "output",
-                "binding_role": "role-action-output",
-            })
+            rl_action["artifact_refs_and_sha256"].append(
+                {
+                    "opaque_ref": rl_action_output_ref,
+                    "sha256": rl_action_output_entry["sha256"],
+                    "kind": rl_att.rl_ACTION_OUTPUT_KIND,
+                    "schema_version": rl_att.rl_ACTION_OUTPUT_SCHEMA,
+                    "owner": rl_PRODUCER,
+                    "reviewer": rl_REVIEWER,
+                    "direction": "output",
+                    "binding_role": "role-action-output",
+                }
+            )
         # compute action binding digest
         rl_action["action_binding_digest"] = rl_att.rl_compute_action_binding_digest(rl_action)
 
@@ -559,15 +762,23 @@ def build_manifest(
     for rl_section in rl_att.rl_STATUS_FIELDS:
         rl_manifest[rl_section] = rl_sections[rl_section]
 
-    rl_manifest["producer_root_identity_digest"] = rl_att.rl_compute_root_identity_digest(rl_producer_root)
-    rl_manifest["artifact_root_identity_digest"] = rl_att.rl_compute_root_identity_digest(rl_artifact_root)
-    rl_manifest["review_root_identity_digest"] = rl_att.rl_compute_root_identity_digest(rl_review_root)
+    rl_manifest["producer_root_identity_digest"] = rl_att.rl_compute_root_identity_digest(
+        rl_producer_root
+    )
+    rl_manifest["artifact_root_identity_digest"] = rl_att.rl_compute_root_identity_digest(
+        rl_artifact_root
+    )
+    rl_manifest["review_root_identity_digest"] = rl_att.rl_compute_root_identity_digest(
+        rl_review_root
+    )
 
     if rl_action_overrides:
         # apply to the first action (the tests mutate the primary action)
         rl_manifest["database_actions"][0].update(rl_action_overrides)
         # recompute binding digest after mutation
-        rl_manifest["database_actions"][0]["action_binding_digest"] = rl_att.rl_compute_action_binding_digest(rl_manifest["database_actions"][0])
+        rl_manifest["database_actions"][0]["action_binding_digest"] = (
+            rl_att.rl_compute_action_binding_digest(rl_manifest["database_actions"][0])
+        )
     if rl_top_overrides:
         rl_manifest.update(rl_top_overrides)
 

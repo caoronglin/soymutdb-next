@@ -1,19 +1,18 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from .rl_reviewer_attestation import (
     rl_ACTION_RECIPE_VERSION,
     rl_ATTESTATION_VERSION,
-    rl_GATE_RESULT_VERSION,
-    rl_SEMANTIC_GATE_CONTRACT_VERSION,
-    rl_TrustedAssertionVerifier,
     rl_build_trusted_assertion_request,
     rl_compute_bundle_digest,
     rl_compute_manifest_digest,
     rl_compute_review_source_digest,
+    rl_GATE_RESULT_VERSION,
     rl_is_opaque_ref,
     rl_load_json,
     rl_manifest_scope,
@@ -22,6 +21,8 @@ from .rl_reviewer_attestation import (
     rl_root_identity_bindings,
     rl_safe_canonical_directory,
     rl_safe_regular_file,
+    rl_SEMANTIC_GATE_CONTRACT_VERSION,
+    rl_TrustedAssertionVerifier,
     rl_validate_manifest_contract,
     rl_verify_trusted_assertion,
 )
@@ -82,7 +83,10 @@ def rl_validate_attestation(
         return
     if rl_attestation.get("review_attestation_version") != rl_ATTESTATION_VERSION:
         rl_finding(rl_findings, "attestation-version")
-    if rl_attestation.get("semantic_gate_contract_version") != rl_SEMANTIC_GATE_CONTRACT_VERSION:
+    if (
+        rl_attestation.get("semantic_gate_contract_version")
+        != rl_SEMANTIC_GATE_CONTRACT_VERSION
+    ):
         rl_finding(rl_findings, "semantic-gate-contract-version")
     if rl_attestation.get("run_id") != rl_run_id:
         rl_finding(rl_findings, "attestation-run-id")
@@ -90,7 +94,9 @@ def rl_validate_attestation(
         rl_finding(rl_findings, "attestation-decision")
     if rl_attestation.get("blocking_findings") != []:
         rl_finding(rl_findings, "attestation-findings")
-    if rl_attestation.get("review_attestation_ref") != rl_manifest.get("review_attestation_ref"):
+    if rl_attestation.get("review_attestation_ref") != rl_manifest.get(
+        "review_attestation_ref"
+    ):
         rl_finding(rl_findings, "attestation-ref-mismatch")
     try:
         rl_manifest_sha256 = rl_compute_manifest_digest(rl_manifest)
@@ -104,7 +110,9 @@ def rl_validate_attestation(
         rl_finding(rl_findings, "attestation-manifest-digest")
     if rl_attestation.get("recomputed_bundle_sha256") != rl_bundle_sha256:
         rl_finding(rl_findings, "attestation-bundle-digest")
-    rl_completion = rl_parse_timestamp(rl_manifest.get("producer_evidence_completed_at"))
+    rl_completion = rl_parse_timestamp(
+        rl_manifest.get("producer_evidence_completed_at")
+    )
     rl_attestation_completion = rl_parse_timestamp(
         rl_attestation.get("producer_evidence_completed_at")
     )
@@ -137,7 +145,9 @@ def rl_validate_attestation(
         return
     if rl_attestation.get("trusted_assertion") != rl_verified_assertion:
         rl_finding(rl_findings, "attestation-assertion-mismatch")
-    if rl_attestation.get("reviewer_identity") != rl_verified_assertion.get("reviewer_principal"):
+    if rl_attestation.get("reviewer_identity") != rl_verified_assertion.get(
+        "reviewer_principal"
+    ):
         rl_finding(rl_findings, "reviewer-identity")
     rl_expected_review_source = rl_compute_review_source_digest(
         rl_manifest_sha256,
@@ -180,7 +190,9 @@ def rl_emit_gate_evidence(
     rl_review_root = rl_review_root or rl_attestation_path.parent
     try:
         rl_manifest = rl_normalize_manifest(rl_load_json(rl_manifest_path))
-        if rl_producer_root is None and isinstance(rl_manifest.get("producer_root_path"), str):
+        if rl_producer_root is None and isinstance(
+            rl_manifest.get("producer_root_path"), str
+        ):
             rl_producer_root = Path(rl_manifest["producer_root_path"])
         if rl_safe_canonical_directory(rl_artifact_root) is None:
             rl_finding(rl_findings, "artifact-root")
@@ -208,7 +220,9 @@ def rl_emit_gate_evidence(
         else:
             try:
                 rl_manifest_sha256 = rl_compute_manifest_digest(rl_manifest)
-                rl_bundle_sha256 = rl_compute_bundle_digest(rl_manifest, rl_artifact_root)
+                rl_bundle_sha256 = rl_compute_bundle_digest(
+                    rl_manifest, rl_artifact_root
+                )
                 rl_request = rl_build_trusted_assertion_request(
                     rl_manifest,
                     rl_run_id,
@@ -275,7 +289,9 @@ def rl_emit_gate_evidence(
 def rl_main() -> int:
     import argparse
 
-    rl_parser = argparse.ArgumentParser(description="Emit an observational A0 gate result")
+    rl_parser = argparse.ArgumentParser(
+        description="Emit an observational A0 gate result"
+    )
     rl_parser.add_argument("--manifest-ref", required=True)
     rl_parser.add_argument("--artifact-root-ref", required=True)
     rl_parser.add_argument("--attestation-ref", required=True)

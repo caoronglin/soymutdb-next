@@ -10,10 +10,8 @@ import ast as rl_ast
 import hashlib as rl_hashlib
 import inspect as rl_inspect
 import json as rl_json
-from pathlib import Path as rl_Path
 
 import pytest
-
 from tools.a0 import rl_catalog_baseline as rl_module
 from tools.a0.rl_catalog_baseline import (
     RL_RELKIND_MAPPING,
@@ -24,7 +22,6 @@ from tools.a0.rl_catalog_baseline import (
     rl_sha256_digest,
     rl_validate_catalog_contract,
 )
-
 
 rl_EXPECTED_REQUIRED_CATEGORIES = {
     "schemas",
@@ -87,8 +84,7 @@ def rl_orders_object(**rl_overrides: object) -> dict[str, object]:
         "acl": ["owner-a=arwdDxt/owner-a"],
         "tablespace": "pg_default",
         "definition": (
-            "CREATE TABLE public.orders (id integer DEFAULT "
-            "rl_sensitive_default_20260730_8f1c)"
+            "CREATE TABLE public.orders (id integer DEFAULT rl_sensitive_default_20260730_8f1c)"
         ),
         "default": "rl_sensitive_default_20260730_8f1c",
     }
@@ -174,15 +170,14 @@ def test_required_category_contract_is_explicit_and_not_an_empty_table_shortcut(
     rl_empty_shortcut = {"relations": []}
     rl_empty_result = rl_validate_catalog_contract(rl_empty_shortcut)
     assert rl_empty_result["rl_status"] == "BLOCKED"
-    assert set(rl_empty_result["rl_missing_categories"]) >= rl_EXPECTED_REQUIRED_CATEGORIES - {"relations"}
+    assert set(rl_empty_result["rl_missing_categories"]) >= rl_EXPECTED_REQUIRED_CATEGORIES - {
+        "relations"
+    }
 
 
 def test_baseline_objects_are_digest_only_and_static_match_stays_blocked() -> None:
     rl_secret_values = (
-        (
-            "CREATE TABLE public.orders (id integer DEFAULT "
-            "rl_sensitive_default_20260730_8f1c)"
-        ),
+        ("CREATE TABLE public.orders (id integer DEFAULT rl_sensitive_default_20260730_8f1c)"),
         "owner-a=arwdDxt/owner-a",
         "rl_sensitive_default_20260730_8f1c",
         "/var/lib/postgresql/16/main/rl_sensitive_catalog_20260730_8f1c",
@@ -600,8 +595,7 @@ def test_catalog_baseline_module_is_stdlib_only_and_has_no_action_surface() -> N
         isinstance(rl_node, rl_ast.If)
         and isinstance(rl_node.test, rl_ast.Compare)
         and any(
-            isinstance(rl_comparator, rl_ast.Constant)
-            and rl_comparator.value == "__main__"
+            isinstance(rl_comparator, rl_ast.Constant) and rl_comparator.value == "__main__"
             for rl_comparator in rl_node.test.comparators
         )
         for rl_node in rl_tree.body

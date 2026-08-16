@@ -13,7 +13,6 @@ import re
 from collections.abc import Iterable, Mapping
 from typing import Any
 
-
 rl_sha256_pattern = re.compile(r"^sha256:[0-9a-fA-F]{64}$")
 rl_evidence_kinds = (
     "content_revision",
@@ -42,7 +41,9 @@ rl_linkage_allowed_fields = frozenset(
 )
 
 
-def rl_classify_legacy_releases(rl_releases: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
+def rl_classify_legacy_releases(
+    rl_releases: Iterable[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
     """Classify supplied fixture rows without mutation or external side effects."""
 
     return [rl_classify_release(rl_release) for rl_release in rl_releases]
@@ -62,7 +63,9 @@ def rl_classify_release(rl_release: Mapping[str, Any]) -> dict[str, Any]:
         rl_item = rl_evidence.get(rl_kind)
         if not isinstance(rl_item, Mapping):
             rl_unresolved_codes.add(
-                "rl_missing_deployment_evidence" if rl_kind == "deployment" else f"rl_missing_{rl_kind}"
+                "rl_missing_deployment_evidence"
+                if rl_kind == "deployment"
+                else f"rl_missing_{rl_kind}"
             )
             if rl_item is not None:
                 rl_unresolved_codes.add(f"rl_invalid_{rl_kind}_type")
@@ -94,10 +97,16 @@ def rl_classify_release(rl_release: Mapping[str, Any]) -> dict[str, Any]:
         "legacy_release_id": rl_release.get("legacy_id"),
         "version": rl_release.get("legacy_version"),
         "dataset_default": "DatasetRelease",
-        "content_revision_evidence": rl_find_evidence_ref(rl_evidence_refs, "content_revision"),
-        "frozen_build_input": rl_find_evidence_ref(rl_evidence_refs, "frozen_build_input"),
+        "content_revision_evidence": rl_find_evidence_ref(
+            rl_evidence_refs, "content_revision"
+        ),
+        "frozen_build_input": rl_find_evidence_ref(
+            rl_evidence_refs, "frozen_build_input"
+        ),
         "final_manifest": rl_find_evidence_ref(rl_evidence_refs, "immutable_manifest"),
-        "publication_approval": rl_find_evidence_ref(rl_evidence_refs, "publication_approval"),
+        "publication_approval": rl_find_evidence_ref(
+            rl_evidence_refs, "publication_approval"
+        ),
         "deployment_attempt": rl_find_evidence_ref(rl_evidence_refs, "deployment"),
         "classification": rl_classification,
         "unresolved_codes": sorted(rl_unresolved_codes),
@@ -129,7 +138,11 @@ def rl_validate_evidence_item(rl_kind: str, rl_item: Mapping[str, Any]) -> set[s
             # 保守规则：字段为空或类型不符时，不能从其他 metadata 猜出 evidence identity。
             rl_codes.add(f"rl_missing_{rl_kind}_{rl_field.removesuffix('_id')}")
     rl_digest = rl_item.get("digest")
-    if isinstance(rl_digest, str) and rl_digest and not rl_sha256_pattern.fullmatch(rl_digest):
+    if (
+        isinstance(rl_digest, str)
+        and rl_digest
+        and not rl_sha256_pattern.fullmatch(rl_digest)
+    ):
         rl_codes.add(f"rl_invalid_{rl_kind}_digest")
 
     if rl_kind == "publication_approval":
@@ -227,8 +240,12 @@ def rl_build_evidence_ref(rl_kind: str, rl_item: Mapping[str, Any]) -> dict[str,
     return rl_ref
 
 
-def rl_find_evidence_ref(rl_evidence_refs: list[dict[str, Any]], rl_kind: str) -> dict[str, Any] | None:
-    return next((rl_ref for rl_ref in rl_evidence_refs if rl_ref["kind"] == rl_kind), None)
+def rl_find_evidence_ref(
+    rl_evidence_refs: list[dict[str, Any]], rl_kind: str
+) -> dict[str, Any] | None:
+    return next(
+        (rl_ref for rl_ref in rl_evidence_refs if rl_ref["kind"] == rl_kind), None
+    )
 
 
 def rl_canonical_json_sha256(rl_value: Mapping[str, Any]) -> str:
@@ -266,7 +283,9 @@ def rl_build_unresolved_records(rl_result: Mapping[str, Any]) -> list[dict[str, 
             "legacy_release_id": rl_result.get("legacy_release_id"),
             "source": rl_result.get("source_relation_ref"),
             "blocking": True,
-            "reason": rl_reason_map.get(rl_code, f"evidence requirement unresolved: {rl_code}"),
+            "reason": rl_reason_map.get(
+                rl_code, f"evidence requirement unresolved: {rl_code}"
+            ),
             "evidence_digest": rl_result.get("evidence_digest"),
             "owner": rl_result.get("owner", ""),
             "reviewer": rl_result.get("reviewer", ""),

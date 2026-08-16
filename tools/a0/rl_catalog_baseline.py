@@ -9,9 +9,7 @@ from __future__ import annotations
 import hashlib as rl_hashlib
 import json as rl_json
 from collections.abc import Mapping as rl_Mapping
-from collections.abc import Sequence as rl_Sequence
 from typing import Any as rl_Any
-
 
 RL_RELKIND_MAPPING: dict[str, str] = {
     "r": "ordinary_table",
@@ -187,9 +185,9 @@ def _rl_sortable_value(rl_value: rl_Any) -> rl_Any:
         }
         return {rl_key: rl_items[rl_key] for rl_key in sorted(rl_items)}
     if isinstance(rl_value, (list, tuple, set, frozenset)):
-        rl_items = [_rl_sortable_value(rl_item) for rl_item in rl_value]
+        rl_list_items = [_rl_sortable_value(rl_item) for rl_item in rl_value]
         return sorted(
-            rl_items,
+            rl_list_items,
             key=lambda rl_item: rl_json.dumps(
                 rl_item,
                 ensure_ascii=False,
@@ -249,7 +247,9 @@ def _rl_row_shape_reasons(rl_category: str, rl_row: rl_Any) -> list[str]:
         return ["invalid_row", "invalid_object"]
 
     rl_reasons: list[str] = []
-    rl_row_category_present, rl_row_category = _rl_first(rl_row, "category", "rl_category")
+    rl_row_category_present, rl_row_category = _rl_first(
+        rl_row, "category", "rl_category"
+    )
     if not rl_row_category_present or rl_row_category != rl_category:
         rl_reasons.append("category_mismatch")
     _, rl_identity_valid = _rl_identity_digest(rl_row)
@@ -316,9 +316,13 @@ def rl_validate_catalog_contract(rl_catalog: rl_Any) -> dict[str, rl_Any]:
     if rl_missing_categories:
         rl_reason_codes.extend(["missing_category", "catalog_contract_incomplete"])
     if rl_invalid_categories:
-        rl_reason_codes.extend(["category_not_collection", "catalog_contract_incomplete"])
+        rl_reason_codes.extend(
+            ["category_not_collection", "catalog_contract_incomplete"]
+        )
     for rl_category in RL_REQUIRED_CATALOG_CATEGORIES:
-        if rl_category not in rl_catalog or not isinstance(rl_catalog[rl_category], (list, tuple)):
+        if rl_category not in rl_catalog or not isinstance(
+            rl_catalog[rl_category], (list, tuple)
+        ):
             continue
         for rl_row in rl_catalog[rl_category]:
             rl_row_reasons = _rl_row_shape_reasons(rl_category, rl_row)
@@ -373,7 +377,9 @@ def _rl_identity_digest(rl_row: rl_Mapping[str, rl_Any]) -> tuple[str, bool]:
     return rl_sha256_digest({"rl_invalid_identity": True}), False
 
 
-def _rl_relation_kind(rl_row: rl_Mapping[str, rl_Any]) -> tuple[str | None, str, list[str]]:
+def _rl_relation_kind(
+    rl_row: rl_Mapping[str, rl_Any],
+) -> tuple[str | None, str, list[str]]:
     rl_present, rl_relkind = _rl_first(rl_row, "relkind", "rl_relkind")
     if not rl_present:
         rl_relkind = None
@@ -383,7 +389,9 @@ def _rl_relation_kind(rl_row: rl_Mapping[str, rl_Any]) -> tuple[str | None, str,
     return "unknown", "unknown", list(rl_result["rl_reason_codes"])
 
 
-def _rl_nonrelation_kind(rl_category: str, rl_row: rl_Mapping[str, rl_Any]) -> tuple[str, list[str]]:
+def _rl_nonrelation_kind(
+    rl_category: str, rl_row: rl_Mapping[str, rl_Any]
+) -> tuple[str, list[str]]:
     rl_present, rl_kind = _rl_first(
         rl_row,
         "kind",
@@ -405,7 +413,10 @@ def _rl_nonrelation_kind(rl_category: str, rl_row: rl_Mapping[str, rl_Any]) -> t
             return rl_relkind, []
         return "unknown", ["unknown_relkind"]
     if rl_category in _RL_ALLOWED_NONRELATION_KINDS and rl_present:
-        if isinstance(rl_kind, str) and rl_kind in _RL_ALLOWED_NONRELATION_KINDS[rl_category]:
+        if (
+            isinstance(rl_kind, str)
+            and rl_kind in _RL_ALLOWED_NONRELATION_KINDS[rl_category]
+        ):
             return rl_kind, []
         return "unknown", ["unknown_object_class"]
     return "unknown", ["unknown_object_class"]
@@ -439,17 +450,23 @@ def _rl_prepare_object(
             try:
                 rl_identity_token_digest = rl_sha256_digest(rl_identity_token)
             except (TypeError, ValueError):
-                rl_identity_token_digest = rl_sha256_digest({"rl_invalid_identity_token": True})
+                rl_identity_token_digest = rl_sha256_digest(
+                    {"rl_invalid_identity_token": True}
+                )
     if not rl_identity_valid:
         rl_reason_codes.append("invalid_identity")
 
     if rl_category == "relations":
-        rl_relkind, rl_object_kind, rl_relkind_reasons = _rl_relation_kind(rl_row_mapping)
+        rl_relkind, rl_object_kind, rl_relkind_reasons = _rl_relation_kind(
+            rl_row_mapping
+        )
         rl_reason_codes.extend(rl_relkind_reasons)
         rl_class = "relation"
     else:
         rl_relkind = None
-        rl_object_kind, rl_kind_reasons = _rl_nonrelation_kind(rl_category, rl_row_mapping)
+        rl_object_kind, rl_kind_reasons = _rl_nonrelation_kind(
+            rl_category, rl_row_mapping
+        )
         rl_reason_codes.extend(rl_kind_reasons)
         rl_class = _RL_CATEGORY_CLASS.get(rl_category, "unknown")
         if rl_category in _RL_RELKIND_CATEGORY_ALLOWLIST:
@@ -478,7 +495,9 @@ def _rl_prepare_object(
     return rl_object, sorted(set(rl_reason_codes)), rl_identity
 
 
-def _rl_reference_value(rl_reference: rl_Mapping[str, rl_Any], *rl_keys: str) -> tuple[bool, rl_Any]:
+def _rl_reference_value(
+    rl_reference: rl_Mapping[str, rl_Any], *rl_keys: str
+) -> tuple[bool, rl_Any]:
     for rl_key in rl_keys:
         if rl_key in rl_reference:
             return True, rl_reference[rl_key]
@@ -515,7 +534,9 @@ def _rl_compare_reference_entry(
                 "category",
                 "rl_category",
             )
-            if rl_expected_category_present and isinstance(rl_expected_category_value, str):
+            if rl_expected_category_present and isinstance(
+                rl_expected_category_value, str
+            ):
                 rl_expected_category = rl_expected_category_value
         rl_expected, rl_expected_reasons, _ = _rl_reference_signature(
             rl_expected_category,
@@ -575,7 +596,9 @@ def _rl_reference_context(
 
     if not rl_reference_version_present:
         rl_reason_codes.append("reference_version_missing")
-    elif rl_postgres_version is not None and rl_postgres_version != rl_reference_version:
+    elif (
+        rl_postgres_version is not None and rl_postgres_version != rl_reference_version
+    ):
         rl_reason_codes.append("reference_version_mismatch")
 
     if not rl_reference_init_present:
@@ -597,7 +620,9 @@ def _rl_reference_context(
                 "category",
                 "rl_category",
             )
-            if not rl_expected_category_present or not isinstance(rl_expected_category, str):
+            if not rl_expected_category_present or not isinstance(
+                rl_expected_category, str
+            ):
                 rl_reason_codes.extend(["malformed_allowlist", "category_mismatch"])
                 continue
             rl_expected, rl_expected_reasons, rl_identity = _rl_reference_signature(
@@ -607,7 +632,10 @@ def _rl_reference_context(
             rl_reason_codes.extend(rl_expected_reasons)
             if rl_expected_reasons:
                 rl_reason_codes.append("malformed_allowlist")
-            if not rl_expected["rl_identity_digest"] or rl_identity in rl_identity_digests:
+            if (
+                not rl_expected["rl_identity_digest"]
+                or rl_identity in rl_identity_digests
+            ):
                 rl_reason_codes.append("duplicate_reference_identity")
             rl_identity_digests.append(rl_identity)
 
@@ -629,10 +657,12 @@ def rl_build_catalog_baseline(
     if rl_catalog_read_error is not None:
         rl_reason_codes.append("catalog_read_failure")
 
-    rl_reference_allowlist, rl_reference_reasons, rl_reference_ready = _rl_reference_context(
-        rl_reference,
-        rl_postgres_version,
-        rl_init_digest,
+    rl_reference_allowlist, rl_reference_reasons, rl_reference_ready = (
+        _rl_reference_context(
+            rl_reference,
+            rl_postgres_version,
+            rl_init_digest,
+        )
     )
     rl_reason_codes.extend(rl_reference_reasons)
 
@@ -654,7 +684,9 @@ def rl_build_catalog_baseline(
         if not isinstance(rl_rows, (list, tuple)):
             continue
         for rl_row in rl_rows:
-            rl_object, rl_row_reasons, rl_identity = _rl_prepare_object(rl_category, rl_row)
+            rl_object, rl_row_reasons, rl_identity = _rl_prepare_object(
+                rl_category, rl_row
+            )
             rl_objects.append(rl_object)
             rl_object_records.append((rl_category, rl_row, rl_object, rl_row_reasons))
             rl_reason_codes.extend(rl_row_reasons)
@@ -682,11 +714,13 @@ def rl_build_catalog_baseline(
         if not isinstance(rl_reference, rl_Mapping) or rl_allowlist_unusable:
             rl_object["rl_expected_system_baseline"] = "BLOCKED"
             continue
-        rl_expected_status, rl_compare_reasons, rl_reference_index = _rl_compare_reference_entry(
-            rl_object,
-            rl_row,
-            rl_category,
-            rl_reference_allowlist,
+        rl_expected_status, rl_compare_reasons, rl_reference_index = (
+            _rl_compare_reference_entry(
+                rl_object,
+                rl_row,
+                rl_category,
+                rl_reference_allowlist,
+            )
         )
         rl_object["rl_expected_system_baseline"] = rl_expected_status
         rl_reason_codes.extend(rl_compare_reasons)

@@ -14,9 +14,10 @@ import re
 import shutil
 import stat
 import tempfile
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Mapping, Protocol
+from typing import Protocol
 from urllib.parse import quote
 
 
@@ -25,7 +26,7 @@ class rl_ProfileError(ValueError):
 
 
 class rl_ProfileRegistry(Protocol):
-    def get(self, rl_profile_id: str) -> "rl_ProfileSpec | None":
+    def get(self, rl_profile_id: str) -> rl_ProfileSpec | None:
         """Return one restricted profile specification, or ``None``."""
 
 
@@ -160,7 +161,11 @@ def rl_validate_host(rl_host: str) -> str:
 
 
 def rl_validate_port(rl_port: int) -> int:
-    if isinstance(rl_port, bool) or not isinstance(rl_port, int) or not 1 <= rl_port <= 65535:
+    if (
+        isinstance(rl_port, bool)
+        or not isinstance(rl_port, int)
+        or not 1 <= rl_port <= 65535
+    ):
         raise rl_ProfileError("invalid port")
     return rl_port
 
@@ -221,7 +226,9 @@ def rl_prepare_pg_profile(
     rl_validate_profile_spec(rl_spec)
 
     rl_expected_role = rl_validate_role(role) if role is not None else rl_spec.rl_role
-    rl_expected_run_id = rl_validate_run_id(run_id) if run_id is not None else rl_spec.rl_run_id
+    rl_expected_run_id = (
+        rl_validate_run_id(run_id) if run_id is not None else rl_spec.rl_run_id
+    )
     if rl_expected_role != rl_spec.rl_role or rl_expected_run_id != rl_spec.rl_run_id:
         raise rl_ProfileError("profile context mismatch")
 
@@ -346,10 +353,13 @@ def rl_render_pgpass_line(
     rl_user: str,
     rl_password: str,
 ) -> str:
-    return ":".join(
-        rl_escape_pgpass_field(rl_field)
-        for rl_field in (rl_host, rl_port, rl_database, rl_user, rl_password)
-    ) + "\n"
+    return (
+        ":".join(
+            rl_escape_pgpass_field(rl_field)
+            for rl_field in (rl_host, rl_port, rl_database, rl_user, rl_password)
+        )
+        + "\n"
+    )
 
 
 def rl_create_pgpass(

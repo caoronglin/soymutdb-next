@@ -7,12 +7,11 @@ import json
 from datetime import UTC, datetime, timedelta
 
 import pytest
-
 from tools.a0.rl_disposable_target import (
+    rl_compare_observed_identity,
     rl_ExpectedTuple,
     rl_InMemoryExpectedTupleRegistry,
     rl_ObservedIdentity,
-    rl_compare_observed_identity,
     rl_preflight_disposable_target,
 )
 from tools.a0.rl_prepare_pg_profile import rl_InMemoryProfileRegistry, rl_ProfileSpec
@@ -275,7 +274,17 @@ async def test_preflight_failures_are_fail_closed(
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "rl_name",
-    ["PGSERVICE", "PGOPTIONS", "PGPASSWORD", "pghost", "PGPORT", "pguser", "PGDATABASE", "PGPASSFILE", "PGAPPNAME"],
+    [
+        "PGSERVICE",
+        "PGOPTIONS",
+        "PGPASSWORD",
+        "pghost",
+        "PGPORT",
+        "pguser",
+        "PGDATABASE",
+        "PGPASSFILE",
+        "PGAPPNAME",
+    ],
 )
 async def test_preflight_rejects_caller_profile_overrides_before_connection(rl_name: str) -> None:
     rl_connection_factory, rl_connection = rl_make_connection_factory()

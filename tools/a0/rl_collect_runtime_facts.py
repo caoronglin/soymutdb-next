@@ -15,12 +15,11 @@ import json as rl_json
 import re as rl_re
 import subprocess as rl_subprocess
 import tomllib as rl_tomllib
+from collections.abc import Callable as rl_Callable
+from collections.abc import Mapping as rl_Mapping
+from collections.abc import Sequence as rl_Sequence
 from pathlib import Path as rl_Path
 from typing import Any as rl_Any
-from typing import Callable as rl_Callable
-from typing import Mapping as rl_Mapping
-from typing import Sequence as rl_Sequence
-
 
 rl_SCHEMA_VERSION = "a0.runtime-facts.v1"
 rl_RUNTIME_EVIDENCE_STATUS = "BLOCKED"
@@ -131,19 +130,23 @@ def rl_safe_source_value(
         rl_ABSOLUTE_PATH_RE.search(rl_clean)
     )
     rl_safe = (
-        rl_kind == "image"
-        and bool(rl_SAFE_IMAGE_RE.fullmatch(rl_clean))
-        and not rl_has_forbidden_shape
-    ) or (
-        rl_kind == "entrypoint"
-        and bool(rl_SAFE_ENTRYPOINT_RE.fullmatch(rl_clean))
-        and not rl_has_forbidden_shape
-    ) or (
-        rl_kind == "relative_path"
-        and bool(rl_SAFE_RELATIVE_PATH_RE.fullmatch(rl_clean))
-        and not rl_clean.startswith(("/", "../"))
-        and ".." not in rl_clean.split("/")
-        and not rl_has_forbidden_shape
+        (
+            rl_kind == "image"
+            and bool(rl_SAFE_IMAGE_RE.fullmatch(rl_clean))
+            and not rl_has_forbidden_shape
+        )
+        or (
+            rl_kind == "entrypoint"
+            and bool(rl_SAFE_ENTRYPOINT_RE.fullmatch(rl_clean))
+            and not rl_has_forbidden_shape
+        )
+        or (
+            rl_kind == "relative_path"
+            and bool(rl_SAFE_RELATIVE_PATH_RE.fullmatch(rl_clean))
+            and not rl_clean.startswith(("/", "../"))
+            and ".." not in rl_clean.split("/")
+            and not rl_has_forbidden_shape
+        )
     )
     if rl_safe:
         return {"rl_classification": "observed", "rl_value": rl_clean}
@@ -190,7 +193,9 @@ def rl_source_provenance_record(
             rl_digest_input = rl_text.encode("utf-8")
         else:
             rl_digest_input = rl_bytes
-        rl_result["rl_digest"] = f"sha256:{rl_hashlib.sha256(rl_digest_input).hexdigest()}"
+        rl_result["rl_digest"] = (
+            f"sha256:{rl_hashlib.sha256(rl_digest_input).hexdigest()}"
+        )
     return rl_result
 
 
@@ -205,10 +210,13 @@ def rl_url_metadata(rl_value: str) -> dict[str, rl_Any]:
     return {
         "rl_present": True,
         "rl_scheme": rl_scheme,
-        "rl_has_credentials": rl_has_password or bool(rl_NO_SCHEME_CREDENTIAL_RE.search(rl_stripped)),
+        "rl_has_credentials": rl_has_password
+        or bool(rl_NO_SCHEME_CREDENTIAL_RE.search(rl_stripped)),
         "rl_has_password": rl_has_password,
         # 中文 why：开发默认 URL 带凭据时只能记录为 poisoned/default，不能当作可用目标。
-        "rl_classification": "poisoned_default" if rl_is_poisoned else "observed_default",
+        "rl_classification": "poisoned_default"
+        if rl_is_poisoned
+        else "observed_default",
         "rl_redacted_value": "<redacted-url>",
     }
 
@@ -268,7 +276,9 @@ def rl_collect_runtime_facts(
     ) -> None:
         if rl_fact_id not in rl_seen_difference:
             rl_seen_difference.add(rl_fact_id)
-            rl_difference_facts.append(rl_fact(rl_fact_id, rl_source, rl_why, rl_detail))
+            rl_difference_facts.append(
+                rl_fact(rl_fact_id, rl_source, rl_why, rl_detail)
+            )
 
     if not rl_root.exists() or not rl_root.is_dir():
         rl_add_blocking(
@@ -415,12 +425,8 @@ def rl_collect_runtime_facts(
     rl_parse_python("apps/api/app/main.py")
     rl_parse_python("apps/worker/src/soymutdb_worker/main.py")
     rl_config_structure = rl_extract_config_structure(rl_config_tree)
-    rl_database_structure = rl_extract_database_structure(
-        rl_database_tree
-    )
-    rl_migrations_structure = rl_extract_migrations_structure(
-        rl_migrations_tree
-    )
+    rl_database_structure = rl_extract_database_structure(rl_database_tree)
+    rl_migrations_structure = rl_extract_migrations_structure(rl_migrations_tree)
     rl_add_extraction_blocking_facts(
         "apps/api/app/core/config.py", rl_config_structure, rl_add_blocking
     )
@@ -448,9 +454,13 @@ def rl_collect_runtime_facts(
             )
 
     rl_project_api = rl_api_pyproject.get("project", {}) if rl_api_pyproject else {}
-    rl_project_worker = rl_worker_pyproject.get("project", {}) if rl_worker_pyproject else {}
+    rl_project_worker = (
+        rl_worker_pyproject.get("project", {}) if rl_worker_pyproject else {}
+    )
     rl_api_dependencies = rl_dependency_names(rl_project_api.get("dependencies", []))
-    rl_worker_dependencies = rl_dependency_names(rl_project_worker.get("dependencies", []))
+    rl_worker_dependencies = rl_dependency_names(
+        rl_project_worker.get("dependencies", [])
+    )
     rl_asyncpg_requirements = rl_dependency_matches(
         rl_project_api.get("dependencies", []), "asyncpg"
     )
@@ -475,7 +485,10 @@ def rl_collect_runtime_facts(
     rl_script_location = (
         rl_script_location_match.group(1) if rl_script_location_match else None
     )
-    if rl_script_location is None and rl_sources.get("apps/api/alembic.ini") is not None:
+    if (
+        rl_script_location is None
+        and rl_sources.get("apps/api/alembic.ini") is not None
+    ):
         rl_add_blocking(
             "rl_missing_fact:alembic.ini.script_location",
             "apps/api/alembic.ini",
@@ -484,7 +497,9 @@ def rl_collect_runtime_facts(
 
     rl_validate_readme_source("README.md", rl_readme, rl_add_blocking)
     rl_validate_worker_readme_source(
-        "apps/worker/README.md", rl_sources.get("apps/worker/README.md"), rl_add_blocking
+        "apps/worker/README.md",
+        rl_sources.get("apps/worker/README.md"),
+        rl_add_blocking,
     )
     rl_validate_compose_source("docker-compose.yml", rl_compose_text, rl_add_blocking)
     rl_validate_compose_source(
@@ -536,10 +551,14 @@ def rl_collect_runtime_facts(
             "rl_requirements": sorted(
                 rl_safe_dependency(rl_value) for rl_value in rl_asyncpg_requirements
             ),
-            "rl_why": "API 使用 async SQLAlchemy 时需要 asyncpg 方言/驱动；这里只记录声明，不安装或导入。",
+            "rl_why": "API 使用 async SQLAlchemy 时需要 asyncpg 方言/驱动；这里只记录声明，不安装或导入。",  # noqa: E501
         },
         "rl_config": rl_config_facts(
-            rl_root, rl_config_structure, rl_config_defaults, rl_database_url_default, rl_add_difference
+            rl_root,
+            rl_config_structure,
+            rl_config_defaults,
+            rl_database_url_default,
+            rl_add_difference,
         ),
         "rl_database": rl_database_facts(rl_database_structure),
         "rl_migrations_env": rl_migrations_facts(rl_migrations_structure),
@@ -702,7 +721,9 @@ def rl_readme_requirements(
     rl_result = {
         "rl_present": True,
         "rl_node_requirement": f">={rl_node_match.group(1)}" if rl_node_match else None,
-        "rl_python_requirement": f">={rl_python_match.group(1)}" if rl_python_match else None,
+        "rl_python_requirement": f">={rl_python_match.group(1)}"
+        if rl_python_match
+        else None,
         "rl_pnpm_requirement": f">={rl_pnpm_match.group(1)}" if rl_pnpm_match else None,
     }
     for rl_key, rl_value in (
@@ -749,9 +770,9 @@ def rl_validate_worker_readme_source(
 
     if rl_text is None:
         return
-    if not rl_re.search(r"(?m)(?:apps/worker/)?src/soymutdb_worker", rl_text) or not rl_re.search(
-        r"(?m)celery\s+-A\s+soymutdb_worker\.main", rl_text
-    ):
+    if not rl_re.search(
+        r"(?m)(?:apps/worker/)?src/soymutdb_worker", rl_text
+    ) or not rl_re.search(r"(?m)celery\s+-A\s+soymutdb_worker\.main", rl_text):
         rl_add_blocking(
             f"rl_parse:{rl_source}",
             rl_source,
@@ -863,7 +884,9 @@ def rl_module_import_aliases(rl_tree: rl_ast.AST | None) -> dict[str, str]:
                 )
             elif isinstance(rl_node.target, rl_ast.Name):
                 rl_assigned_names.add(rl_node.target.id)
-        elif isinstance(rl_node, (rl_ast.FunctionDef, rl_ast.AsyncFunctionDef, rl_ast.ClassDef)):
+        elif isinstance(
+            rl_node, (rl_ast.FunctionDef, rl_ast.AsyncFunctionDef, rl_ast.ClassDef)
+        ):
             rl_assigned_names.add(rl_node.name)
     for rl_assigned_name in rl_assigned_names:
         rl_aliases.pop(rl_assigned_name, None)
@@ -910,7 +933,9 @@ def rl_effective_statements(rl_body: list[rl_ast.stmt]) -> list[rl_ast.stmt]:
 
     rl_effective: list[rl_ast.stmt] = []
     for rl_statement in rl_body:
-        if isinstance(rl_statement, rl_ast.If) and rl_condition_is_static_false(rl_statement.test):
+        if isinstance(rl_statement, rl_ast.If) and rl_condition_is_static_false(
+            rl_statement.test
+        ):
             continue
         rl_effective.append(rl_statement)
         if isinstance(rl_statement, (rl_ast.Return, rl_ast.Raise)):
@@ -918,7 +943,9 @@ def rl_effective_statements(rl_body: list[rl_ast.stmt]) -> list[rl_ast.stmt]:
     return rl_effective
 
 
-def rl_direct_assignments(rl_body: list[rl_ast.stmt]) -> list[rl_ast.Assign | rl_ast.AnnAssign]:
+def rl_direct_assignments(
+    rl_body: list[rl_ast.stmt],
+) -> list[rl_ast.Assign | rl_ast.AnnAssign]:
     """Return only direct assignment statements from one explicit body."""
 
     return [
@@ -937,7 +964,9 @@ def rl_extract_config_structure(rl_tree: rl_ast.AST | None) -> dict[str, rl_Any]
         for rl_node in (rl_tree.body if isinstance(rl_tree, rl_ast.Module) else [])
         if isinstance(rl_node, rl_ast.ClassDef) and rl_node.name == "Settings"
     ]
-    rl_settings_class = rl_settings_classes[0] if len(rl_settings_classes) == 1 else None
+    rl_settings_class = (
+        rl_settings_classes[0] if len(rl_settings_classes) == 1 else None
+    )
     rl_settings_body = rl_settings_class.body if rl_settings_class else []
     rl_base_ok = bool(
         rl_settings_class
@@ -952,7 +981,9 @@ def rl_extract_config_structure(rl_tree: rl_ast.AST | None) -> dict[str, rl_Any]
         if isinstance(rl_statement, rl_ast.Assign):
             rl_targets = rl_statement.targets
             rl_target_names = [rl_dotted_name(rl_target) for rl_target in rl_targets]
-            if "model_config" in rl_target_names and isinstance(rl_statement.value, rl_ast.Call):
+            if "model_config" in rl_target_names and isinstance(
+                rl_statement.value, rl_ast.Call
+            ):
                 if rl_canonical_name(rl_statement.value.func, rl_aliases) == (
                     "pydantic_settings.SettingsConfigDict"
                 ):
@@ -962,14 +993,17 @@ def rl_extract_config_structure(rl_tree: rl_ast.AST | None) -> dict[str, rl_Any]
                 rl_database_url_field = rl_statement
     rl_model_keywords = {
         rl_keyword.arg: rl_literal_string(rl_keyword.value)
-        for rl_keyword in (rl_model_config_call.keywords if rl_model_config_call else [])
+        for rl_keyword in (
+            rl_model_config_call.keywords if rl_model_config_call else []
+        )
         if rl_keyword.arg is not None
     }
     rl_factory = next(
         (
             rl_node
             for rl_node in (rl_tree.body if isinstance(rl_tree, rl_ast.Module) else [])
-            if isinstance(rl_node, rl_ast.FunctionDef) and rl_node.name == "get_settings"
+            if isinstance(rl_node, rl_ast.FunctionDef)
+            and rl_node.name == "get_settings"
         ),
         None,
     )
@@ -977,7 +1011,9 @@ def rl_extract_config_structure(rl_tree: rl_ast.AST | None) -> dict[str, rl_Any]
         rl_factory
         and any(
             rl_canonical_name(
-                rl_decorator.func if isinstance(rl_decorator, rl_ast.Call) else rl_decorator,
+                rl_decorator.func
+                if isinstance(rl_decorator, rl_ast.Call)
+                else rl_decorator,
                 rl_aliases,
             )
             == "functools.lru_cache"
@@ -994,7 +1030,9 @@ def rl_extract_config_structure(rl_tree: rl_ast.AST | None) -> dict[str, rl_Any]
     )
     rl_factory_returns = [
         rl_statement.value
-        for rl_statement in (rl_effective_statements(rl_factory.body) if rl_factory else [])
+        for rl_statement in (
+            rl_effective_statements(rl_factory.body) if rl_factory else []
+        )
         if isinstance(rl_statement, rl_ast.Return) and rl_statement.value is not None
     ]
     rl_factory_body_ok = bool(rl_factory_returns) and all(
@@ -1078,13 +1116,21 @@ def rl_extract_database_structure(rl_tree: rl_ast.AST | None) -> dict[str, rl_An
 def rl_direct_call_nodes(rl_statement: rl_ast.stmt) -> list[rl_ast.Call]:
     """Inspect only direct return/call expression positions, not nested walks."""
 
-    if isinstance(rl_statement, rl_ast.Return) and isinstance(rl_statement.value, rl_ast.Call):
+    if isinstance(rl_statement, rl_ast.Return) and isinstance(
+        rl_statement.value, rl_ast.Call
+    ):
         return [rl_statement.value]
-    if isinstance(rl_statement, rl_ast.Expr) and isinstance(rl_statement.value, rl_ast.Call):
+    if isinstance(rl_statement, rl_ast.Expr) and isinstance(
+        rl_statement.value, rl_ast.Call
+    ):
         return [rl_statement.value]
-    if isinstance(rl_statement, rl_ast.Assign) and isinstance(rl_statement.value, rl_ast.Call):
+    if isinstance(rl_statement, rl_ast.Assign) and isinstance(
+        rl_statement.value, rl_ast.Call
+    ):
         return [rl_statement.value]
-    if isinstance(rl_statement, rl_ast.AnnAssign) and isinstance(rl_statement.value, rl_ast.Call):
+    if isinstance(rl_statement, rl_ast.AnnAssign) and isinstance(
+        rl_statement.value, rl_ast.Call
+    ):
         return [rl_statement.value]
     return []
 
@@ -1125,16 +1171,19 @@ def rl_extract_migrations_structure(rl_tree: rl_ast.AST | None) -> dict[str, rl_
     rl_settings_capture = None
     rl_config_role = None
     for rl_statement in rl_direct_assignments(rl_body):
-        if not isinstance(rl_statement, rl_ast.Assign) or len(rl_statement.targets) != 1:
+        if (
+            not isinstance(rl_statement, rl_ast.Assign)
+            or len(rl_statement.targets) != 1
+        ):
             continue
         rl_target = rl_dotted_name(rl_statement.targets[0])
         if rl_target == "settings" and rl_is_zero_arg_call(
             rl_statement.value, "app.core.config.get_settings", rl_aliases
         ):
             rl_settings_capture = rl_statement
-        if rl_target == "config" and rl_canonical_name(rl_statement.value, rl_aliases) == (
-            "alembic.context.config"
-        ):
+        if rl_target == "config" and rl_canonical_name(
+            rl_statement.value, rl_aliases
+        ) == ("alembic.context.config"):
             rl_config_role = rl_statement
     rl_override_calls: list[rl_ast.Call] = []
     for rl_statement in rl_direct_assignments(rl_body):
@@ -1144,15 +1193,21 @@ def rl_extract_migrations_structure(rl_tree: rl_ast.AST | None) -> dict[str, rl_
             rl_override_calls.append(rl_statement.value)
     rl_valid_override_count = 0
     for rl_statement in rl_body:
-        if not isinstance(rl_statement, rl_ast.Expr) or not isinstance(rl_statement.value, rl_ast.Call):
+        if not isinstance(rl_statement, rl_ast.Expr) or not isinstance(
+            rl_statement.value, rl_ast.Call
+        ):
             continue
         rl_call = rl_statement.value
         rl_call_name = rl_dotted_name(rl_call.func)
         if rl_call_name != "config.set_main_option":
             continue
-        if rl_call.args or any(rl_keyword.arg is None for rl_keyword in rl_call.keywords):
+        if rl_call.args or any(
+            rl_keyword.arg is None for rl_keyword in rl_call.keywords
+        ):
             continue
-        rl_keywords = {rl_keyword.arg: rl_keyword.value for rl_keyword in rl_call.keywords}
+        rl_keywords = {
+            rl_keyword.arg: rl_keyword.value for rl_keyword in rl_call.keywords
+        }
         rl_option_node = rl_keywords.get("option")
         if rl_option_node is None:
             rl_option_node = rl_keywords.get("name")
@@ -1182,7 +1237,9 @@ def rl_extract_migrations_structure(rl_tree: rl_ast.AST | None) -> dict[str, rl_
                 ):
                     rl_valid_override_count += 1
             elif len(rl_call.args) == 0:
-                rl_keywords = {rl_keyword.arg: rl_keyword.value for rl_keyword in rl_call.keywords}
+                rl_keywords = {
+                    rl_keyword.arg: rl_keyword.value for rl_keyword in rl_call.keywords
+                }
                 rl_option_node = rl_keywords.get("option") or rl_keywords.get("name")
                 rl_value_node = rl_keywords.get("value")
                 if (
@@ -1294,7 +1351,9 @@ def rl_validate_config_structure(
             and rl_re.search(r"(?m)BaseSettings", rl_text)
         ),
         "rl_env_prefix": "SOYMUTDB_" in rl_text,
-        "rl_env_file": bool(rl_re.search(r"(?m)env_file\s*=\s*['\"]\.env['\"]", rl_text)),
+        "rl_env_file": bool(
+            rl_re.search(r"(?m)env_file\s*=\s*['\"]\.env['\"]", rl_text)
+        ),
         "rl_cache": "lru_cache" in rl_text,
         "rl_database_url": bool(rl_re.search(r"(?m)\bdatabase_url\b", rl_text)),
     }
@@ -1369,7 +1428,9 @@ def rl_migrations_import_facts(rl_tree: rl_ast.AST | None) -> dict[str, bool]:
     }
 
 
-def rl_node_facts(rl_package: dict[str, rl_Any] | None, rl_readme: str | None) -> dict[str, rl_Any]:
+def rl_node_facts(
+    rl_package: dict[str, rl_Any] | None, rl_readme: str | None
+) -> dict[str, rl_Any]:
     """Collect Node and pnpm requirements from package metadata."""
 
     if rl_package is None:
@@ -1470,7 +1531,7 @@ def rl_service_block(rl_text: str, rl_service_name: str) -> str | None:
     """Return a bounded, indentation-based service block for simple YAML facts."""
 
     rl_match = rl_re.search(
-        rf"(?ms)^  {rl_re.escape(rl_service_name)}:\s*\n(.*?)(?=^  [A-Za-z0-9][A-Za-z0-9_-]*:\s*$|\Z)",
+        rf"(?ms)^  {rl_re.escape(rl_service_name)}:\s*\n(.*?)(?=^  [A-Za-z0-9][A-Za-z0-9_-]*:\s*$|\Z)",  # noqa: E501
         rl_text,
     )
     return rl_match.group(1) if rl_match else None
@@ -1506,9 +1567,7 @@ def rl_docker_facts(rl_sources: dict[str, str | None]) -> dict[str, rl_Any]:
         )
     return {
         "rl_files": rl_records,
-        "rl_image_refs": [
-            rl_all_images[rl_key] for rl_key in sorted(rl_all_images)
-        ],
+        "rl_image_refs": [rl_all_images[rl_key] for rl_key in sorted(rl_all_images)],
         "rl_values_emitted": False,
     }
 
@@ -1547,7 +1606,10 @@ def rl_extract_python_string_assignments(
             if isinstance(rl_statement, rl_ast.AnnAssign):
                 rl_name = rl_dotted_name(rl_statement.target)
                 rl_value_node = rl_statement.value
-            elif isinstance(rl_statement, rl_ast.Assign) and len(rl_statement.targets) == 1:
+            elif (
+                isinstance(rl_statement, rl_ast.Assign)
+                and len(rl_statement.targets) == 1
+            ):
                 rl_name = rl_dotted_name(rl_statement.targets[0])
                 rl_value_node = rl_statement.value
             if rl_name is None or rl_value_node is None:
@@ -1566,7 +1628,9 @@ def rl_extract_python_string_assignments(
             if isinstance(rl_node.targets[0], rl_ast.Name):
                 rl_name = rl_node.targets[0].id
                 rl_value_node = rl_node.value
-        elif isinstance(rl_node, rl_ast.AnnAssign) and isinstance(rl_node.target, rl_ast.Name):
+        elif isinstance(rl_node, rl_ast.AnnAssign) and isinstance(
+            rl_node.target, rl_ast.Name
+        ):
             rl_name = rl_node.target.id
             rl_value_node = rl_node.value
         if rl_name is None or rl_value_node is None:
@@ -1598,7 +1662,7 @@ def rl_config_facts(
         rl_add_difference(
             "rl_missing_optional_file:.env",
             "apps/api/app/core/config.py",
-            "config 声明读取 .env，但仓库根目录没有该可选文件；运行时环境仍可能通过外部注入提供值。",
+            "config 声明读取 .env，但仓库根目录没有该可选文件；运行时环境仍可能通过外部注入提供值。",  # noqa: E501
         )
     if rl_env_path.exists() and not rl_env_path.is_file():
         rl_add_difference(
@@ -1641,7 +1705,7 @@ def rl_config_facts(
         "rl_database_url_default": rl_default_url_fact(rl_database_url_default),
         "rl_secret_default_fields": rl_secret_fields,
         "rl_default_values_emitted": False,
-        "rl_why": "SOYMUTDB_、.env 与 lru_cache 会改变配置来源/时机；A0 只记录风险，不切换进程配置。",
+        "rl_why": "SOYMUTDB_、.env 与 lru_cache 会改变配置来源/时机；A0 只记录风险，不切换进程配置。",  # noqa: E501
         "rl_parseable": bool(rl_config_structure.get("rl_parseable")),
         "rl_settings_factory": {
             "rl_present": bool(rl_config_structure.get("rl_factory")),
@@ -1674,18 +1738,18 @@ def rl_database_facts(rl_database_structure: dict[str, rl_Any]) -> dict[str, rl_
         "rl_create_async_engine": rl_async_engine,
         "rl_database_url_from_captured_settings": rl_database_url_reference,
         "rl_settings_capture_scope": "module" if rl_module_capture else "unobserved",
-        "rl_why": "module-level settings capture fixes the observed settings object before lazy engine creation; A0 does not import it to test behavior.",
+        "rl_why": "module-level settings capture fixes the observed settings object before lazy engine creation; A0 does not import it to test behavior.",  # noqa: E501
     }
 
 
-def rl_migrations_facts(rl_migrations_structure: dict[str, rl_Any]) -> dict[str, rl_Any]:
+def rl_migrations_facts(
+    rl_migrations_structure: dict[str, rl_Any],
+) -> dict[str, rl_Any]:
     """Record Alembic import order, settings override, and async engine path."""
 
     rl_imports = rl_migrations_structure.get("rl_import_events", [])
     rl_import_order = (
-        rl_imports[:3]
-        if rl_migrations_structure.get("rl_import_order")
-        else rl_imports
+        rl_imports[:3] if rl_migrations_structure.get("rl_import_order") else rl_imports
     )
     return {
         "rl_parseable": bool(rl_migrations_structure.get("rl_parseable")),
@@ -1693,10 +1757,16 @@ def rl_migrations_facts(rl_migrations_structure: dict[str, rl_Any]) -> dict[str,
         "rl_imports_settings": "app.core.config" in rl_imports,
         "rl_imports_database_base": "app.core.database" in rl_imports,
         "rl_imports_models": "app.models" in rl_imports,
-        "rl_settings_override": bool(rl_migrations_structure.get("rl_settings_override")),
-        "rl_async_engine_from_config": bool(rl_migrations_structure.get("rl_async_engine")),
-        "rl_async_engine_online_path": bool(rl_migrations_structure.get("rl_async_online_path")),
-        "rl_why": "env.py 以 cached settings 覆盖 ini URL，再构造 async engine；这解释迁移配置来源差异，但不证明目标连接可用。",
+        "rl_settings_override": bool(
+            rl_migrations_structure.get("rl_settings_override")
+        ),
+        "rl_async_engine_from_config": bool(
+            rl_migrations_structure.get("rl_async_engine")
+        ),
+        "rl_async_engine_online_path": bool(
+            rl_migrations_structure.get("rl_async_online_path")
+        ),
+        "rl_why": "env.py 以 cached settings 覆盖 ini URL，再构造 async engine；这解释迁移配置来源差异，但不证明目标连接可用。",  # noqa: E501
     }
 
 
@@ -1709,7 +1779,9 @@ def rl_alembic_facts(
 ) -> dict[str, rl_Any]:
     """Record relative migration path and poisoned development URL metadata."""
 
-    rl_is_relative = bool(rl_script_location) and not rl_Path(rl_script_location or "").is_absolute()
+    rl_is_relative = (
+        bool(rl_script_location) and not rl_Path(rl_script_location or "").is_absolute()
+    )
     rl_resolved_path = None
     if rl_script_location and rl_is_relative:
         rl_resolved_path = rl_safe_path(str(rl_Path("apps/api") / rl_script_location))
@@ -1729,7 +1801,9 @@ def rl_alembic_facts(
         )
     rl_url_fact = rl_default_url_fact(rl_ini_url)
     if rl_ini_url and rl_url_fact["rl_classification"] == "poisoned_default":
-        rl_url_fact["rl_why"] = "alembic.ini 的 password-bearing development URL 只能作为 poisoned/default fact，不能作为 target fallback。"
+        rl_url_fact["rl_why"] = (
+            "alembic.ini 的 password-bearing development URL 只能作为 poisoned/default fact，不能作为 target fallback。"  # noqa: E501
+        )
     return {
         "rl_script_location": {
             "rl_value": (
@@ -1746,7 +1820,7 @@ def rl_alembic_facts(
         },
         "rl_sqlalchemy_url": rl_url_fact,
         "rl_values_emitted": False,
-        "rl_why": "relative script_location 依赖 Alembic/API cwd；ini 中的开发 URL 不代表实际 settings 或安全目标。",
+        "rl_why": "relative script_location 依赖 Alembic/API cwd；ini 中的开发 URL 不代表实际 settings 或安全目标。",  # noqa: E501
     }
 
 
@@ -1849,7 +1923,9 @@ def rl_path_drift_facts(
             + rl_json.dumps(rl_expected_safe, ensure_ascii=False, sort_keys=True),
         )
 
-    rl_api_actual = "app.main:app" if (rl_root / "apps/api/app/main.py").is_file() else None
+    rl_api_actual = (
+        "app.main:app" if (rl_root / "apps/api/app/main.py").is_file() else None
+    )
     rl_worker_actual = (
         "soymutdb_worker.main:celery_app"
         if (rl_root / "apps/worker/src/soymutdb_worker/main.py").is_file()
@@ -1862,13 +1938,17 @@ def rl_path_drift_facts(
         for rl_entrypoint in rl_extract_entrypoints(rl_text):
             rl_entrypoint_observations.append((rl_relative_path, rl_entrypoint))
     for rl_source, rl_entrypoint in rl_entrypoint_observations:
-        if rl_api_actual and rl_entrypoint.endswith(":app") and rl_entrypoint != rl_api_actual:
+        if (
+            rl_api_actual
+            and rl_entrypoint.endswith(":app")
+            and rl_entrypoint != rl_api_actual
+        ):
             rl_add_drift(
                 f"api-entrypoint:{rl_safe_path(rl_source)}",
                 rl_source,
                 rl_entrypoint,
                 rl_api_actual,
-                "API 入口模块名与实际 app/main.py 路径不同，cwd 或 package 安装方式会改变可导入性。",
+                "API 入口模块名与实际 app/main.py 路径不同，cwd 或 package 安装方式会改变可导入性。",  # noqa: E501
                 "entrypoint",
             )
         if rl_worker_actual and rl_entrypoint.startswith("soymutdb_worker."):
@@ -1894,9 +1974,15 @@ def rl_path_drift_facts(
             rl_mount_path = rl_mount[2:]
             if not (rl_root / rl_mount_path).exists():
                 rl_replacement = None
-                if rl_mount_path == "apps/api/src" and (rl_root / "apps/api/app").exists():
+                if (
+                    rl_mount_path == "apps/api/src"
+                    and (rl_root / "apps/api/app").exists()
+                ):
                     rl_replacement = "apps/api/app"
-                elif rl_mount_path == "apps/api/alembic" and (rl_root / "apps/api/migrations").exists():
+                elif (
+                    rl_mount_path == "apps/api/alembic"
+                    and (rl_root / "apps/api/migrations").exists()
+                ):
                     rl_replacement = "apps/api/migrations"
                 if rl_replacement:
                     rl_add_drift(
@@ -1916,7 +2002,7 @@ def rl_path_drift_facts(
             "docker-compose.dev.yml",
             "worker",
             "worker-default/worker-blast/worker-ingestion",
-            "开发 Compose 使用聚合 worker 名称而生产 Compose 使用分队列服务，不能互换地推断 entrypoint。",
+            "开发 Compose 使用聚合 worker 名称而生产 Compose 使用分队列服务，不能互换地推断 entrypoint。",  # noqa: E501
             "relative_path",
         )
     return sorted(rl_drifts, key=lambda rl_item: rl_item["rl_drift_id"])
@@ -1963,7 +2049,7 @@ def rl_collect_command_facts(
             rl_add_blocking(
                 f"rl_command_invalid:{rl_safe_name}",
                 "command-version input",
-                "command-version 只允许 shell-free 的 version flag；拒绝任意 argv/SQL/target 输入。",
+                "command-version 只允许 shell-free 的 version flag；拒绝任意 argv/SQL/target 输入。",  # noqa: E501
             )
             rl_results.append({"rl_name": rl_safe_name, "rl_status": "invalid"})
             continue
@@ -1979,21 +2065,30 @@ def rl_collect_command_facts(
                 text=True,
                 timeout=5,
             )
-        except (FileNotFoundError, PermissionError, OSError, rl_subprocess.TimeoutExpired) as rl_exc:
+        except (
+            FileNotFoundError,
+            PermissionError,
+            OSError,
+            rl_subprocess.TimeoutExpired,
+        ) as rl_exc:
             rl_add_blocking(
                 f"rl_command_unavailable:{rl_safe_name}",
                 "command-version input",
                 "command unavailable/timeout；不能猜测版本，也不保存 command output。",
                 type(rl_exc).__name__,
             )
-            rl_results.append({
-                "rl_name": rl_safe_name,
-                "rl_command": rl_safe_command,
-                "rl_status": "unavailable",
-            })
+            rl_results.append(
+                {
+                    "rl_name": rl_safe_name,
+                    "rl_command": rl_safe_command,
+                    "rl_status": "unavailable",
+                }
+            )
             continue
         rl_output = "\n".join(
-            rl_part for rl_part in (rl_completed.stdout or "", rl_completed.stderr or "") if rl_part
+            rl_part
+            for rl_part in (rl_completed.stdout or "", rl_completed.stderr or "")
+            if rl_part
         )
         rl_version_match = rl_VERSION_RE.search(rl_output)
         rl_status = "available" if rl_completed.returncode == 0 else "failed"
@@ -2026,9 +2121,9 @@ def rl_collect_command_facts(
 def rl_safe_command_name(rl_name: str) -> str:
     """Keep command labels opaque when a caller supplies unsafe text."""
 
-    if rl_re.fullmatch(r"[A-Za-z0-9_.-]+", rl_name) and not rl_SECRET_ASSIGNMENT_RE.search(
-        rl_name
-    ):
+    if rl_re.fullmatch(
+        r"[A-Za-z0-9_.-]+", rl_name
+    ) and not rl_SECRET_ASSIGNMENT_RE.search(rl_name):
         return rl_name
     return "<redacted-command-name>"
 

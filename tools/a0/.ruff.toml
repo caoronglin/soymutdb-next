@@ -1,0 +1,18 @@
+# A0 release-lifecycle gate lint policy.
+#
+# Matches apps/api's lint standard (select E/F/I/W/UP, line-length 100) so the
+# A0 tools are checked under the same rules as the rest of the API, rather than
+# ruff's much broader default rule set (BLE/TRY/SIM/PLR/PIE/C4/ASYNC) whose
+# "fixes" would change fail-closed gate semantics:
+#   - BLE001 (blind except): the catch-all `except Exception/BaseException` is
+#     the *intended* fail-closed behaviour (any unexpected error => BLOCKED).
+#   - TRY004 (raise ValueError): the gate raises ValueError on invalid input and
+#     its tests assert `pytest.raises(ValueError)`; switching to TypeError would
+#     break the contract.
+#   - PLR0124 (`x != x`): the NaN self-comparison idiom for finite-float checks.
+# Those rules are intentionally NOT selected here.
+target-version = "py314"
+line-length = 100
+
+[lint]
+select = ["E", "F", "I", "W", "UP"]

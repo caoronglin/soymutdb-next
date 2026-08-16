@@ -12,18 +12,18 @@ import ast as rl_ast
 import hashlib as rl_hashlib
 import json as rl_json
 import re as rl_re
+from collections.abc import Iterable as rl_Iterable
 from pathlib import Path as rl_Path
 from typing import Any as rl_Any
-from typing import Iterable as rl_Iterable
-from typing import Mapping as rl_Mapping
-
 
 rl_SCHEMA_VERSION = "a0.contract-reconciliation.v1"
 rl_STATUS_BLOCKED = "BLOCKED"
 rl_STATUS_OBSERVED = "observed"
 rl_STATUS_MISSING = "missing"
 rl_STATUS_UNRESOLVED = "unresolved"
-rl_SUPPORTED_METHODS = frozenset({"get", "post", "put", "patch", "delete", "options", "head"})
+rl_SUPPORTED_METHODS = frozenset(
+    {"get", "post", "put", "patch", "delete", "options", "head"}
+)
 rl_SENSITIVE_RE = rl_re.compile(
     r"(?i)(?:https?://\S+|\b(?:password|passwd|secret|token|api[_-]?key|authorization)\b\s*[=:]\s*[^\s,;]+)"
 )
@@ -31,7 +31,9 @@ rl_ROUTE_DECORATOR_RE = rl_re.compile(
     r"@router\.(?P<method>get|post|put|patch|delete|options|head)\(\s*(?P<path>[\"'][^\"']*[\"'])",
     rl_re.IGNORECASE,
 )
-rl_ROUTER_PREFIX_RE = rl_re.compile(r"\brouter\s*=\s*APIRouter\([^\n]*?prefix\s*=\s*([\"'][^\"']*[\"'])")
+rl_ROUTER_PREFIX_RE = rl_re.compile(
+    r"\brouter\s*=\s*APIRouter\([^\n]*?prefix\s*=\s*([\"'][^\"']*[\"'])"
+)
 rl_CLIENT_CALL_RE = rl_re.compile(
     r"\b(?:http|api|client)\.(?P<method>get|post|put|patch|delete)\(\s*(?P<path>[\"'`][^\"'`]*[\"'`])",
     rl_re.IGNORECASE,
@@ -45,7 +47,9 @@ rl_WORKER_DECORATOR_RE = rl_re.compile(
     rl_re.IGNORECASE,
 )
 rl_SEND_TASK_RE = rl_re.compile(r"\bsend_task\(\s*[\"'](?P<name>[^\"']+)[\"']")
-rl_DEFAULT_IGNORES = frozenset({".git", "node_modules", "__pycache__", ".pytest_cache", ".venv"})
+rl_DEFAULT_IGNORES = frozenset(
+    {".git", "node_modules", "__pycache__", ".pytest_cache", ".venv"}
+)
 
 
 def rl_sha256_json(rl_value: rl_Any) -> str:
@@ -106,7 +110,9 @@ def rl_literal_string(rl_node: rl_ast.AST) -> str | None:
     return None
 
 
-def rl_parse_python_routes(rl_text: str, rl_path: str) -> tuple[list[dict[str, rl_Any]], list[str]]:
+def rl_parse_python_routes(
+    rl_text: str, rl_path: str
+) -> tuple[list[dict[str, rl_Any]], list[str]]:
     """Extract only literal router declarations/decorators from Python source."""
 
     rl_findings: list[str] = []
@@ -119,12 +125,17 @@ def rl_parse_python_routes(rl_text: str, rl_path: str) -> tuple[list[dict[str, r
     rl_routes: list[dict[str, rl_Any]] = []
     for rl_node in rl_ast.walk(rl_tree):
         if isinstance(rl_node, rl_ast.Assign):
-            if len(rl_node.targets) != 1 or not isinstance(rl_node.targets[0], rl_ast.Name):
+            if len(rl_node.targets) != 1 or not isinstance(
+                rl_node.targets[0], rl_ast.Name
+            ):
                 continue
             rl_target = rl_node.targets[0].id
             if not isinstance(rl_node.value, rl_ast.Call):
                 continue
-            if not isinstance(rl_node.value.func, rl_ast.Name) or rl_node.value.func.id != "APIRouter":
+            if (
+                not isinstance(rl_node.value.func, rl_ast.Name)
+                or rl_node.value.func.id != "APIRouter"
+            ):
                 continue
             rl_prefix = ""
             for rl_keyword in rl_node.value.keywords:
@@ -141,16 +152,23 @@ def rl_parse_python_routes(rl_text: str, rl_path: str) -> tuple[list[dict[str, r
             if not isinstance(rl_node, (rl_ast.FunctionDef, rl_ast.AsyncFunctionDef)):
                 continue
             for rl_decorator in rl_node.decorator_list:
-                if not isinstance(rl_decorator, rl_ast.Call) or not isinstance(rl_decorator.func, rl_ast.Attribute):
+                if not isinstance(rl_decorator, rl_ast.Call) or not isinstance(
+                    rl_decorator.func, rl_ast.Attribute
+                ):
                     continue
-                if not isinstance(rl_decorator.func.value, rl_ast.Name) or rl_decorator.func.value.id != "router":
+                if (
+                    not isinstance(rl_decorator.func.value, rl_ast.Name)
+                    or rl_decorator.func.value.id != "router"
+                ):
                     continue
                 rl_method = rl_decorator.func.attr.lower()
                 if rl_method not in rl_SUPPORTED_METHODS or not rl_decorator.args:
                     continue
                 rl_route_path = rl_literal_string(rl_decorator.args[0])
                 if rl_route_path is None:
-                    rl_findings.append(f"rl_unresolved_route_path:{rl_path}:{rl_node.name}")
+                    rl_findings.append(
+                        f"rl_unresolved_route_path:{rl_path}:{rl_node.name}"
+                    )
                     continue
                 rl_routes.append(
                     {
@@ -159,7 +177,10 @@ def rl_parse_python_routes(rl_text: str, rl_path: str) -> tuple[list[dict[str, r
                         "rl_source": rl_path,
                         "rl_function": rl_node.name,
                         "rl_authorization": "unverified",
-                        "rl_summary": f"{rl_method.upper()} {rl_route_path or '/'} ({rl_node.name})",
+                        "rl_summary": (
+                            f"{rl_method.upper()} {rl_route_path or '/'} "
+                            f"({rl_node.name})"
+                        ),
                     }
                 )
         if rl_routes:
@@ -169,7 +190,9 @@ def rl_parse_python_routes(rl_text: str, rl_path: str) -> tuple[list[dict[str, r
         if not isinstance(rl_node, (rl_ast.FunctionDef, rl_ast.AsyncFunctionDef)):
             continue
         for rl_decorator in rl_node.decorator_list:
-            if not isinstance(rl_decorator, rl_ast.Call) or not isinstance(rl_decorator.func, rl_ast.Attribute):
+            if not isinstance(rl_decorator, rl_ast.Call) or not isinstance(
+                rl_decorator.func, rl_ast.Attribute
+            ):
                 continue
             if not isinstance(rl_decorator.func.value, rl_ast.Name):
                 continue
@@ -185,11 +208,16 @@ def rl_parse_python_routes(rl_text: str, rl_path: str) -> tuple[list[dict[str, r
             if rl_route_path is None:
                 rl_findings.append(f"rl_unresolved_route_path:{rl_path}:{rl_node.name}")
                 continue
-            rl_route = rl_join_route(rl_prefixes[rl_decorator.func.value.id], rl_route_path)
+            rl_route = rl_join_route(
+                rl_prefixes[rl_decorator.func.value.id], rl_route_path
+            )
             rl_authorization = "unverified"
             rl_decorator_text = rl_ast.get_source_segment(rl_text, rl_decorator) or ""
             rl_function_text = rl_ast.get_source_segment(rl_text, rl_node) or ""
-            if "require_role" in rl_decorator_text or "_require_admin" in rl_function_text:
+            if (
+                "require_role" in rl_decorator_text
+                or "_require_admin" in rl_function_text
+            ):
                 rl_authorization = "observed_guard_reference"
             rl_routes.append(
                 {
@@ -204,7 +232,9 @@ def rl_parse_python_routes(rl_text: str, rl_path: str) -> tuple[list[dict[str, r
     return rl_routes, rl_findings
 
 
-def rl_parse_client_calls(rl_text: str, rl_path: str) -> tuple[list[dict[str, str]], list[str]]:
+def rl_parse_client_calls(
+    rl_text: str, rl_path: str
+) -> tuple[list[dict[str, str]], list[str]]:
     rl_calls: list[dict[str, str]] = []
     rl_findings: list[str] = []
     for rl_match in rl_CLIENT_CALL_RE.finditer(rl_text):
@@ -226,7 +256,9 @@ def rl_parse_client_calls(rl_text: str, rl_path: str) -> tuple[list[dict[str, st
     return rl_calls, rl_findings
 
 
-def rl_parse_worker_tasks(rl_text: str, rl_path: str) -> tuple[list[dict[str, str]], list[str]]:
+def rl_parse_worker_tasks(
+    rl_text: str, rl_path: str
+) -> tuple[list[dict[str, str]], list[str]]:
     rl_tasks: list[dict[str, str]] = []
     rl_findings: list[str] = []
     rl_seen: set[str] = set()
@@ -236,7 +268,11 @@ def rl_parse_worker_tasks(rl_text: str, rl_path: str) -> tuple[list[dict[str, st
             continue
         rl_seen.add(rl_name)
         rl_tasks.append(
-            {"rl_task_name": rl_name, "rl_source": rl_path, "rl_summary": f"registered {rl_name}"}
+            {
+                "rl_task_name": rl_name,
+                "rl_source": rl_path,
+                "rl_summary": f"registered {rl_name}",
+            }
         )
     if "@" in rl_text and "task" in rl_text and not rl_tasks:
         rl_findings.append(f"rl_unresolved_worker_registry:{rl_path}")
@@ -245,7 +281,9 @@ def rl_parse_worker_tasks(rl_text: str, rl_path: str) -> tuple[list[dict[str, st
 
 def rl_iter_source_files(rl_root: rl_Path) -> rl_Iterable[rl_Path]:
     for rl_path in sorted(rl_root.rglob("*")):
-        if not rl_path.is_file() or any(rl_part in rl_DEFAULT_IGNORES for rl_part in rl_path.parts):
+        if not rl_path.is_file() or any(
+            rl_part in rl_DEFAULT_IGNORES for rl_part in rl_path.parts
+        ):
             continue
         if rl_path.suffix.lower() in {".py", ".ts", ".tsx", ".js", ".jsx"}:
             yield rl_path
@@ -273,18 +311,28 @@ def rl_reconcile_contracts(rl_project_root: str | rl_Path) -> dict[str, rl_Any]:
                 rl_unresolved.add(f"rl_unreadable_source:{rl_relative}")
                 continue
             rl_source_kind = (
-                "api" if rl_relative.startswith("apps/api/") and rl_path.suffix == ".py" else
-                "worker" if rl_relative.startswith("apps/worker/") and rl_path.suffix == ".py" else
-                "client" if rl_relative.startswith("packages/api-client/") else
-                "web" if rl_relative.startswith("apps/web/") else
-                "admin" if rl_relative.startswith("apps/admin/") else None
+                "api"
+                if rl_relative.startswith("apps/api/") and rl_path.suffix == ".py"
+                else "worker"
+                if rl_relative.startswith("apps/worker/") and rl_path.suffix == ".py"
+                else "client"
+                if rl_relative.startswith("packages/api-client/")
+                else "web"
+                if rl_relative.startswith("apps/web/")
+                else "admin"
+                if rl_relative.startswith("apps/admin/")
+                else None
             )
             if rl_source_kind is None:
                 continue
             rl_source_counts[rl_source_kind] += 1
-            rl_sources.append(rl_source_record(rl_relative, rl_text, f"{rl_source_kind} source"))
+            rl_sources.append(
+                rl_source_record(rl_relative, rl_text, f"{rl_source_kind} source")
+            )
             if rl_source_kind == "api":
-                rl_found_routes, rl_findings = rl_parse_python_routes(rl_text, rl_relative)
+                rl_found_routes, rl_findings = rl_parse_python_routes(
+                    rl_text, rl_relative
+                )
                 rl_routes.extend(rl_found_routes)
                 rl_unresolved.update(rl_findings)
                 for rl_send_match in rl_SEND_TASK_RE.finditer(rl_text):
@@ -296,16 +344,19 @@ def rl_reconcile_contracts(rl_project_root: str | rl_Path) -> dict[str, rl_Any]:
                         }
                     )
             elif rl_source_kind == "worker":
-                rl_found_workers, rl_findings = rl_parse_worker_tasks(rl_text, rl_relative)
+                rl_found_workers, rl_findings = rl_parse_worker_tasks(
+                    rl_text, rl_relative
+                )
                 rl_workers.extend(rl_found_workers)
                 rl_unresolved.update(rl_findings)
             else:
-                rl_found_clients, rl_findings = rl_parse_client_calls(rl_text, rl_relative)
+                rl_found_clients, rl_findings = rl_parse_client_calls(
+                    rl_text, rl_relative
+                )
                 rl_clients.extend(rl_found_clients)
                 rl_unresolved.update(rl_findings)
 
     rl_route_keys = {(rl_row["rl_method"], rl_row["rl_route"]) for rl_row in rl_routes}
-    rl_client_keys = {(rl_row["rl_method"], rl_row["rl_route"]) for rl_row in rl_clients}
     rl_rows: list[dict[str, rl_Any]] = []
     rl_required_relations = (
         ("search", "GET", "/api/v1/search"),
@@ -323,7 +374,12 @@ def rl_reconcile_contracts(rl_project_root: str | rl_Path) -> dict[str, rl_Any]:
         rl_api_match = rl_method, rl_route
         rl_route_observed = rl_api_match in rl_route_keys
         rl_client_match = next(
-            (rl_row for rl_row in rl_clients if rl_row["rl_method"] == rl_method and rl_row["rl_route"] == rl_route.removeprefix("/api/v1")),
+            (
+                rl_row
+                for rl_row in rl_clients
+                if rl_row["rl_method"] == rl_method
+                and rl_row["rl_route"] == rl_route.removeprefix("/api/v1")
+            ),
             None,
         )
         rl_row_unresolved: list[str] = []
@@ -337,9 +393,15 @@ def rl_reconcile_contracts(rl_project_root: str | rl_Path) -> dict[str, rl_Any]:
             {
                 "rl_relation": rl_relation,
                 "rl_route": (
-                    {"rl_status": rl_STATUS_OBSERVED, "rl_method": rl_method, "rl_path": rl_route}
+                    {
+                        "rl_status": rl_STATUS_OBSERVED,
+                        "rl_method": rl_method,
+                        "rl_path": rl_route,
+                    }
                     if rl_route_observed
-                    else rl_empty_fact(rl_STATUS_MISSING, "route 未在静态 API source 中证明")
+                    else rl_empty_fact(
+                        rl_STATUS_MISSING, "route 未在静态 API source 中证明"
+                    )
                 ),
                 "rl_client": (
                     rl_source_record(
@@ -347,20 +409,40 @@ def rl_reconcile_contracts(rl_project_root: str | rl_Path) -> dict[str, rl_Any]:
                         rl_client_match["rl_summary"],
                         rl_client_match["rl_summary"],
                     )
-                    | {"rl_status": rl_STATUS_OBSERVED, "rl_method": rl_method, "rl_path": rl_client_match["rl_route"]}
+                    | {
+                        "rl_status": rl_STATUS_OBSERVED,
+                        "rl_method": rl_method,
+                        "rl_path": rl_client_match["rl_route"],
+                    }
                     if rl_client_match
-                    else rl_empty_fact(rl_STATUS_MISSING, "client consumer 未被静态 source 证明")
+                    else rl_empty_fact(
+                        rl_STATUS_MISSING, "client consumer 未被静态 source 证明"
+                    )
                 ),
-                "rl_admin": rl_empty_fact(rl_STATUS_UNRESOLVED, "Admin call-site relationship requires exact route evidence"),
-                "rl_worker": rl_empty_fact(rl_STATUS_UNRESOLVED, "Worker relationship requires exact task registry evidence"),
-                "rl_authorization": {"rl_status": "unverified", "rl_summary": "静态 source 未提供可独立验证的 capability proof"},
+                "rl_admin": rl_empty_fact(
+                    rl_STATUS_UNRESOLVED,
+                    "Admin call-site relationship requires exact route evidence",
+                ),
+                "rl_worker": rl_empty_fact(
+                    rl_STATUS_UNRESOLVED,
+                    "Worker relationship requires exact task registry evidence",
+                ),
+                "rl_authorization": {
+                    "rl_status": "unverified",
+                    "rl_summary": "静态 source 未提供可独立验证的 capability proof",
+                },
                 "rl_unresolved": sorted(rl_row_unresolved),
             }
         )
 
-    rl_task_names = {rl_task["rl_task_name"] for rl_task in rl_workers if "rl_task_name" in rl_task}
+    rl_task_names = {
+        rl_task["rl_task_name"] for rl_task in rl_workers if "rl_task_name" in rl_task
+    }
     rl_static_task = "soymutdb_worker.tasks.static_pages.build_static_pages"
-    if any(rl_static_task in rl_worker["rl_summary"] for rl_worker in rl_workers) and rl_static_task not in rl_task_names:
+    if (
+        any(rl_static_task in rl_worker["rl_summary"] for rl_worker in rl_workers)
+        and rl_static_task not in rl_task_names
+    ):
         rl_unresolved.add("rl_static_dispatch_task_name_mismatch")
     if not rl_task_names:
         rl_unresolved.add("rl_worker_registry_unverified")
@@ -373,14 +455,23 @@ def rl_reconcile_contracts(rl_project_root: str | rl_Path) -> dict[str, rl_Any]:
 
     rl_sources.sort(key=lambda rl_source: rl_source["rl_path"])
     rl_rows.sort(key=lambda rl_row: rl_row["rl_relation"])
-    rl_unresolved_list = sorted(rl_unresolved | {rl_code for rl_row in rl_rows for rl_code in rl_row["rl_unresolved"]})
+    rl_unresolved_list = sorted(
+        rl_unresolved
+        | {rl_code for rl_row in rl_rows for rl_code in rl_row["rl_unresolved"]}
+    )
     rl_report: dict[str, rl_Any] = {
         "rl_schema_version": rl_SCHEMA_VERSION,
         "rl_status": rl_STATUS_BLOCKED if rl_unresolved_list else "PASS",
         "rl_sources": rl_sources,
         "rl_source_counts": rl_source_counts,
         "rl_rows": rl_rows,
-        "rl_worker_tasks": sorted(rl_workers, key=lambda rl_worker: (rl_worker.get("rl_task_name", ""), rl_worker["rl_source"])),
+        "rl_worker_tasks": sorted(
+            rl_workers,
+            key=lambda rl_worker: (
+                rl_worker.get("rl_task_name", ""),
+                rl_worker["rl_source"],
+            ),
+        ),
         "rl_unresolved": rl_unresolved_list,
         "rl_runtime_live_evidence": {
             "rl_status": "BLOCKED",
@@ -397,7 +488,9 @@ def rl_main(rl_argv: list[str] | None = None) -> int:
     rl_parser.add_argument("--output")
     rl_args = rl_parser.parse_args(rl_argv)
     rl_report = rl_reconcile_contracts(rl_args.project_root)
-    rl_payload = rl_json.dumps(rl_report, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
+    rl_payload = (
+        rl_json.dumps(rl_report, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
+    )
     if rl_args.output:
         rl_output = rl_Path(rl_args.output)
         rl_output.parent.mkdir(parents=True, exist_ok=True)
@@ -411,4 +504,4 @@ if __name__ == "__main__":
     raise SystemExit(rl_main())
 
 
-__all__ = ["rl_reconcile_contracts", "rl_main", "rl_sha256_json"]
+__all__ = ["rl_main", "rl_reconcile_contracts", "rl_sha256_json"]
