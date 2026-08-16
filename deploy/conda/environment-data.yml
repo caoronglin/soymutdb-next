@@ -1,0 +1,28 @@
+# =====================================================================
+# SoyMutDB Conda 数据层环境定义（完全无 Docker 探索用）
+# =====================================================================
+# 用途：在无 Docker 的机器上用 conda 管理数据层服务（PG / ClickHouse / Redis）。
+# 注意：
+#   - MinIO 通常没有稳定的 conda-forge 包，建议直接下载官方二进制
+#     （见 deploy/conda/no-docker-data-layer.md §3.4）。
+#   - 本文件不自动启动服务；创建环境后用系统 systemd 或手动命令启动。
+#
+# 用法：
+#   conda env create -f deploy/conda/environment-data.yml
+#   # 更新：
+#   conda env update -f deploy/conda/environment-data.yml --prune
+name: soymutdb-data
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  # PostgreSQL 服务端 + 客户端（如需在 conda 内跑 PG）
+  - postgresql>=16
+  # ClickHouse 服务端 + 客户端
+  - clickhouse-server>=24
+  - clickhouse-client>=24
+  # Redis（单二进制；可同时跑 cache/celery 两个实例）
+  - redis>=7
+  # 运维小工具
+  - curl
+  - bash

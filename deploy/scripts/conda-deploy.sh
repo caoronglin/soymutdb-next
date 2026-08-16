@@ -116,12 +116,18 @@ ENV_FILE="${INSTALL_DIR}/.env"
 if [[ -f "${ENV_FILE}" ]]; then
     echo -e "${YELLOW}  ${ENV_FILE} exists - keeping as is.${NC}"
 else
-    cp "${PROJECT_ROOT}/deploy/.env.example" "${ENV_FILE}"
-    # conda 模式无镜像概念：注释掉 compose 专用镜像 tag 行，避免误导
-    sed -i 's/^\(API_IMAGE_TAG=\|WORKER_IMAGE_TAG=\)/# conda 模式无需镜像 tag（由源码/editable 安装提供）：\1/' "${ENV_FILE}"
-    echo -e "${GREEN}  Created ${ENV_FILE} from deploy/.env.example.${NC}"
+    CONDA_ENV_TEMPLATE="${PROJECT_ROOT}/deploy/conda/env.example"
+    if [[ -f "${CONDA_ENV_TEMPLATE}" ]]; then
+        cp "${CONDA_ENV_TEMPLATE}" "${ENV_FILE}"
+        echo -e "${GREEN}  Created ${ENV_FILE} from deploy/conda/env.example.${NC}"
+    else
+        cp "${PROJECT_ROOT}/deploy/.env.example" "${ENV_FILE}"
+        # conda 模式无镜像概念：注释掉 compose 专用镜像 tag 行，避免误导
+        sed -i 's/^\(API_IMAGE_TAG=\|WORKER_IMAGE_TAG=\)/# conda 模式无需镜像 tag（由源码/editable 安装提供）：\1/' "${ENV_FILE}"
+        echo -e "${GREEN}  Created ${ENV_FILE} from deploy/.env.example (fallback).${NC}"
+    fi
     echo -e "${YELLOW}  >>> 请编辑 ${ENV_FILE}：SOYMUTDB_JWT_SECRET / SOYMUTDB_CORS_ORIGINS /"
-    echo -e "${YELLOW}      数据存储凭据（POSTGRES_PASSWORD 等）与连接地址（SOYMUTDB_DATABASE_URL /"
+    echo -e "${YELLOW}      数据层连接（SOYMUTDB_DATABASE_URL / SOYMUTDB_CLICKHOUSE_* /"
     echo -e "${YELLOW}      SOYMUTDB_REDIS_URL / SOYMUTDB_CELERY_BROKER_URL / SOYMUTDB_S3_ENDPOINT）<<<${NC}"
 fi
 
@@ -145,6 +151,17 @@ if [[ -z "${SOYMUTDB_CORS_ORIGINS:-}" ]]; then
 fi
 if [[ "${SOYMUTDB_CORS_ORIGINS}" == *"*"* ]]; then
     fail "SOYMUTDB_CORS_ORIGINS cannot contain '*' when credentials are enabled (API fail-fast)"
+fi
+for required_var in     SOYMUTDB_DATABASE_URL SOYMUTDB_CLICKHOUSE_HOST SOYMUTDB_CLICKHOUSE_PASSWORD     SOYMUTDB_REDIS_URL SOYMUTDB_CELERY_BROKER_URL SOYMUTDB_CELERY_RESULT_BACKEND     SOYMUTDB_S3_ENDPOINT SOYMUTDB_S3_ACCESS_KEY SOYMUTDB_S3_SECRET_KEY; do
+    if [[ -z "${!required_var:-}" ]]; then
+        fail "${required_var} is required in ${ENV_FILE} for conda deployment"
+    fi
+done
+if [[ "${SOYMUTDB_DATABASE_URL:-}" != postgresql+asyncpg://* ]]; then
+    fail "SOYMUTDB_DATABASE_URL must use the postgresql+asyncpg:// scheme for the API"
+fi
+if [[ "${SOYMUTDB_S3_ACCESS_KEY:-}" == *change-me* || "${SOYMUTDB_S3_SECRET_KEY:-}" == *change-me* ]]; then
+    echo -e "${YELLOW}  [WARN] SOYMUTDB_S3_ACCESS_KEY/SECRET_KEY still look like template placeholders.${NC}"
 fi
 if [[ "${POSTGRES_PASSWORD:-soymutdb_dev_password}" == "soymutdb_dev_password" || \
       "${CLICKHOUSE_PASSWORD:-soymutdb_dev_password}" == "soymutdb_dev_password" || \

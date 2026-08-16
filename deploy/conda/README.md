@@ -3,7 +3,8 @@
 > **主路径是 docker compose**（`docker-compose.yml` + `deploy/linux/install.sh` + `deploy/scripts/upgrade.sh`）。
 > 本文档描述 **conda 裸进程部署**（备选路径，D6 重新启用）：无 docker / 离线 / 本地开发服务器使用。
 > 环境定义：`deploy/conda/environment-api.yml`、`deploy/conda/environment-worker.yml`；
-> 一键脚本：`deploy/scripts/conda-deploy.sh`。
+> 一键脚本：`deploy/scripts/conda-deploy.sh`；
+> 完全无 Docker 的数据层探索见 [no-docker-data-layer.md](no-docker-data-layer.md)。
 
 ---
 
@@ -63,8 +64,12 @@ bash deploy/scripts/conda-deploy.sh
 #    非 root 时指定可写安装目录：
 #    SOYMUTDB_INSTALL_DIR=/home/soymutdb bash deploy/scripts/conda-deploy.sh
 
-# 2) 编辑环境变量（模板已生成；必填项见 §5）
+# 2) 编辑环境变量（模板已生成：deploy/conda/env.example；必填项见 §5）
 vim /opt/soymutdb/.env        # 或 $SOYMUTDB_INSTALL_DIR/.env
+
+# 2.1) （可选）数据层为本机服务时，幂等初始化 PG/CH/MinIO 桶：
+#      bash deploy/scripts/conda-data-init.sh --check
+#      bash deploy/scripts/conda-data-init.sh
 
 # 3) 一次性迁移（首次 / 每次升级后）
 cd apps/api && conda run -n soymutdb-api alembic upgrade head
@@ -74,6 +79,9 @@ cd apps/api && conda run -n soymutdb-api uvicorn app.main:app \
     --host 0.0.0.0 --port 8000 --workers 4 --proxy-headers --forwarded-allow-ips=*
 
 # 5) 启动 Celery worker + beat（见 §6 多队列命令）
+#    也可用 systemd 生成器一键生成/安装单元：
+#    bash deploy/scripts/conda-services.sh --print
+#    sudo bash deploy/scripts/conda-services.sh --install
 ```
 
 推荐用 **systemd 或 supervisor** 托管裸进程（开机自启、崩溃拉起、日志轮转），示例（systemd unit 最小模板）：
@@ -100,7 +108,7 @@ WantedBy=multi-user.target
 
 ## 5. 环境变量（`SOYMUTDB_` 前缀，对齐 config.py）
 
-模板：`deploy/.env.example` → 复制为 `$INSTALL_DIR/.env`（conda-deploy.sh 自动完成，并注释掉 compose 专用的 `API_IMAGE_TAG` / `WORKER_IMAGE_TAG`）。
+模板：`deploy/conda/env.example` → 复制为 `$INSTALL_DIR/.env`（conda-deploy.sh 自动完成；compose 专用 `API_IMAGE_TAG` / `WORKER_IMAGE_TAG` 不在 conda 模板中）。
 
 **必填（API prod 模式 fail-fast，缺失拒绝启动）：**
 
