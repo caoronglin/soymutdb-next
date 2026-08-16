@@ -178,3 +178,6 @@ reports/
 # COPY .npmrc works and local installs stay fast.
 !/.npmrc
 apps/api/.venv
+
+# AgentTeams runtime state
+.agent-teams/
