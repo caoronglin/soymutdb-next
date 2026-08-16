@@ -19,9 +19,9 @@ def test_rl_contract_mapper_reports_route_and_unresolved_consumer(tmp_path: rl_P
         """
 from fastapi import APIRouter
 
-router = APIRouter(prefix="/search", tags=["search"])
+router = APIRouter(prefix="/api/v1", tags=["search"])
 
-@router.get("")
+@router.get("/search")
 async def global_search():
     return {}
 """,

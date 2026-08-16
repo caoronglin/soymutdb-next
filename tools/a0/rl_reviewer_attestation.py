@@ -1065,7 +1065,10 @@ def rl_validate_semantic_payload(
     if rl_recursive_keys(rl_payload) & rl_SELF_DIGEST_KEYS:
         rl_findings.append("snapshot-self-digest")
     for rl_required_field in rl_required:
-        if rl_payload.get(rl_required_field) in (None, "", [], {}):
+        # 为什么：空 list/dict 是合法的空集合（read_failures/failures/mismatches/
+        # items/unknown_fields 等语义检查明确要求 == []），只有缺字段(None)或
+        # 空串才是真正的 missing。
+        if rl_payload.get(rl_required_field) in (None, ""):
             rl_findings.append("artifact-payload-contract")
     for rl_field in (
         "project_root_digest",
@@ -1319,9 +1322,12 @@ def rl_validate_sidecar_payload(
     rl_manifest: Mapping[str, Any],
     rl_findings: list[str],
 ) -> None:
+    # 为什么（单向摘要 (a)）：child_sha256 不进 sidecar 文件字节，改由 sidecar 的
+    # index entry 携带，避免 canonical-snapshot↔sidecar 互认证摘要形成哈希不动点
+    # 循环（snapshot.sidecar_sha256 依赖 sidecar 字节，sidecar.child_sha256 依赖
+    # snapshot 字节）。sidecar payload 只单向引用 child_ref。
     rl_required = {
         "child_ref",
-        "child_sha256",
         "child_kind",
         "child_schema_version",
         "run_id",
@@ -1336,8 +1342,6 @@ def rl_validate_sidecar_payload(
         rl_findings.append("sidecar-payload-contract")
     if not rl_is_opaque_ref(rl_payload.get("child_ref")):
         rl_findings.append("sidecar-child-ref")
-    if not rl_is_sha256(rl_payload.get("child_sha256")):
-        rl_findings.append("sidecar-child-digest")
     if rl_payload.get("run_id") != rl_manifest.get("run_id"):
         rl_findings.append("sidecar-run-id")
     if rl_payload.get("owner") != rl_manifest.get("producer_principal"):
@@ -1389,7 +1393,8 @@ def rl_validate_canonical_sidecars(
         rl_findings.append("canonical-sidecar-digest")
     if rl_sidecar_payload.get("child_ref") != rl_snapshot_ref:
         rl_findings.append("canonical-sidecar-binding")
-    if rl_sidecar_payload.get("child_sha256") != rl_snapshot_entry.get("sha256"):
+    # 为什么（单向摘要 (a)）：child_sha256 由 sidecar 的 index entry 提供，不进文件字节。
+    if rl_sidecar_entry.get("child_sha256") != rl_snapshot_entry.get("sha256"):
         rl_findings.append("canonical-sidecar-digest")
     if rl_sidecar_payload.get("child_kind") != "canonical_snapshot":
         rl_findings.append("canonical-sidecar-kind")
@@ -1446,7 +1451,7 @@ def rl_validate_event(
         "completed_at",
         "output_tuples",
     )
-    if any(rl_event.get(rl_field) in (None, "", [], {}) for rl_field in rl_event_required):
+    if any(rl_event.get(rl_field) in (None, "") for rl_field in rl_event_required):
         rl_findings.append("event-contract")
     if rl_event.get("action_id") != rl_action.get("action_id"):
         rl_findings.append("event-action-mismatch")
@@ -1540,7 +1545,16 @@ def rl_validate_action_graph(
             "owner",
             "reviewer",
         )
-        if any(rl_action.get(rl_field) in (None, "", [], {}) for rl_field in rl_required_fields):
+        rl_action_missing = False
+        for rl_field in rl_required_fields:
+            rl_value = rl_action.get(rl_field)
+            # 为什么：required_primary_output_kind 可以为 None（非 primary phase
+            # 无必需 primary output），其余字段缺失/空值才是 action-contract。
+            if rl_field == "required_primary_output_kind":
+                continue
+            if rl_value in (None, "", [], {}):
+                rl_action_missing = True
+        if rl_action_missing:
             rl_findings.append("action-contract")
         for rl_digest_field in (
             "system_identifier_digest",
@@ -1615,7 +1629,13 @@ def rl_validate_action_graph(
         if rl_action is None:
             rl_findings.append("primary-action-missing")
             continue
-        if rl_action.get("required_primary_output_kind") != rl_SECTION_CONTRACTS[rl_section_name]["kind"]:
+        # 为什么：R02 的 primary output 是 action_output（非 section contract），
+        # 其 kind 固定为 rl_ACTION_OUTPUT_KIND，不在 rl_SECTION_CONTRACTS 内。
+        if rl_section_name == "action_output":
+            rl_expected_kind: str | None = rl_ACTION_OUTPUT_KIND
+        else:
+            rl_expected_kind = rl_SECTION_CONTRACTS[rl_section_name]["kind"]
+        if rl_action.get("required_primary_output_kind") != rl_expected_kind:
             rl_findings.append("primary-output-kind")
     rl_migration = rl_manifest.get("migration_trajectory")
     if isinstance(rl_migration, Mapping):

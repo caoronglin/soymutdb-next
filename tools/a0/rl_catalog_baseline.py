@@ -670,8 +670,16 @@ def rl_build_catalog_baseline(
     )
 
     rl_seen_reference_indexes: set[int] = set()
+    # 为什么：allowlist 缺失/格式错时 reference authority 不成立，任何 object 决策
+    # 都必须 BLOCKED；但 version/init mismatch 不掩盖 observed DRIFT（仍要比较）。
+    rl_allowlist_unusable = (
+        "reference_allowlist_invalid" in rl_reason_codes
+        or "malformed_allowlist" in rl_reason_codes
+        or "duplicate_reference_identity" in rl_reason_codes
+        or "invalid_row" in rl_reason_codes
+    )
     for rl_category, rl_row, rl_object, rl_row_reasons in rl_object_records:
-        if not isinstance(rl_reference, rl_Mapping):
+        if not isinstance(rl_reference, rl_Mapping) or rl_allowlist_unusable:
             rl_object["rl_expected_system_baseline"] = "BLOCKED"
             continue
         rl_expected_status, rl_compare_reasons, rl_reference_index = _rl_compare_reference_entry(

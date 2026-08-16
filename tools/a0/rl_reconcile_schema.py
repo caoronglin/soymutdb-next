@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib as rl_hashlib
 import json as rl_json
+import re as rl_re
 from collections.abc import Mapping as rl_Mapping
 from collections.abc import Sequence as rl_Sequence
 from typing import Any as rl_Any
@@ -18,6 +19,11 @@ RL_SCHEMA_REGIONS: tuple[str, ...] = (
 )
 
 
+# 为什么：region/fact 传入的 reason code 只接受 canonical snake_case 词表；
+# 其它 raw 字面量（URL、SQL 片段、带连字符/空格的串）一律 wipe，不回显。
+_RL_CANONICAL_REASON_RE = rl_re.compile(r"^[a-z][a-z0-9_]*$")
+
+
 _RL_KNOWN_RELKINDS: set[str] = {
     "r",
     "i",
@@ -29,6 +35,55 @@ _RL_KNOWN_RELKINDS: set[str] = {
     "f",
     "p",
     "I",
+}
+
+
+# 为什么：object kind 是 catalog 类别的单数对象形态；未识别的 kind 一律
+# canonical 为 "unknown"，避免 raw 字面量（如 "untrusted-kind"）回显。
+_RL_KNOWN_OBJECT_KINDS: set[str] = {
+    "schema",
+    "namespace",
+    "relation",
+    "table",
+    "view",
+    "matview",
+    "sequence",
+    "column",
+    "default",
+    "index",
+    "constraint",
+    "rule",
+    "type",
+    "domain",
+    "composite",
+    "enum",
+    "range",
+    "proc",
+    "function",
+    "procedure",
+    "trigger",
+    "policy",
+    "extension",
+    "language",
+    "collation",
+    "fdw",
+    "server",
+    "user_mapping",
+    "publication",
+    "subscription",
+    "large_object",
+    "event_trigger",
+    "text_search",
+    "cast",
+    "operator",
+    "opclass",
+    "opfamily",
+    "transform",
+    "statistic",
+    "security_label",
+    "owner",
+    "acl",
+    "tablespace",
 }
 
 
@@ -70,6 +125,15 @@ _RL_REQUIRED_CATALOG_CATEGORIES: set[str] = {
     "ownership",
     "acl",
     "tablespace",
+}
+
+
+# 为什么：relkind 只在表/索引类 catalog 对象上有意义；schema/column/type/
+# extension 等「已知非关系」对象无 relkind 概念，缺失 relkind 不应记为
+# unknown_relkind。关系类（relations/indexes）与「未知类别」对象仍 fail-closed。
+_RL_NON_RELKIND_CATEGORIES: set[str] = _RL_REQUIRED_CATALOG_CATEGORIES - {
+    "relations",
+    "indexes",
 }
 
 
@@ -156,11 +220,14 @@ def _rl_reason_codes_from_region(rl_region: rl_Any) -> list[str]:
     rl_reasons = rl_region.get("rl_reason_codes", rl_region.get("reason_codes", []))
     if not isinstance(rl_reasons, (list, tuple, set, frozenset)):
         return ["invalid_region_reason_codes"]
-    return [
-        rl_reason
-        for rl_reason in rl_reasons
-        if isinstance(rl_reason, str) and rl_reason
-    ]
+    rl_canonical: list[str] = []
+    for rl_reason in rl_reasons:
+        if not isinstance(rl_reason, str) or not rl_reason:
+            continue
+        # 为什么：只保留 canonical snake_case 词表 code，raw 字面量不回显。
+        if _RL_CANONICAL_REASON_RE.fullmatch(rl_reason):
+            rl_canonical.append(rl_reason)
+    return rl_canonical
 
 
 def _rl_catalog_object_to_fact(rl_object: rl_Any) -> dict[str, rl_Any] | None:
@@ -372,7 +439,9 @@ def _rl_fact_signature(rl_fact: rl_Any) -> dict[str, rl_Any]:
         return rl_signature
     rl_identity_digest, rl_valid_identity, rl_name_digest, rl_identity_token_digest = _rl_fact_identity(rl_fact)
     rl_category = rl_fact.get("category", rl_fact.get("rl_category", "relations"))
-    if not isinstance(rl_category, str) or not rl_category:
+    # 为什么：catalog 类别必须在已知词汇表内；未识别类别 canonical 为 "unknown"，
+    # 不保留 raw 字面量（防止回显 + 触发 unknown_object_category finding）。
+    if not isinstance(rl_category, str) or rl_category not in _RL_REQUIRED_CATALOG_CATEGORIES:
         rl_category = "unknown"
     rl_relkind = rl_fact.get("relkind", rl_fact.get("rl_relkind", "unknown"))
     if not isinstance(rl_relkind, str) or rl_relkind not in _RL_KNOWN_RELKINDS:
@@ -381,7 +450,7 @@ def _rl_fact_signature(rl_fact: rl_Any) -> dict[str, rl_Any]:
     if not isinstance(rl_class, str) or not rl_class:
         rl_class = "unknown"
     rl_object_kind = rl_fact.get("kind", rl_fact.get("object_kind", rl_fact.get("rl_object_kind", "unknown")))
-    if not isinstance(rl_object_kind, str) or not rl_object_kind:
+    if not isinstance(rl_object_kind, str) or rl_object_kind not in _RL_KNOWN_OBJECT_KINDS:
         rl_object_kind = "unknown"
     rl_signature = {
         "rl_identity_digest": rl_identity_digest,
@@ -422,7 +491,10 @@ def _rl_pair_reason_codes(
             rl_left["rl_object_kind"],
             rl_right["rl_object_kind"],
         ) else "object_kind_drift")
-    if rl_left["rl_relkind"] == "unknown" or rl_right["rl_relkind"] == "unknown":
+    if (
+        (rl_left["rl_relkind"] == "unknown" and rl_left["rl_category"] not in _RL_NON_RELKIND_CATEGORIES)
+        or (rl_right["rl_relkind"] == "unknown" and rl_right["rl_category"] not in _RL_NON_RELKIND_CATEGORIES)
+    ):
         rl_reasons.append("unknown_relkind")
     elif rl_left["rl_relkind"] != rl_right["rl_relkind"]:
         rl_reasons.append("relkind_drift")
@@ -480,7 +552,10 @@ def rl_reconcile_schema(rl_input: rl_Any) -> dict[str, rl_Any]:
         for rl_fact in rl_all_facts[rl_region_name]:
             if rl_fact["rl_category"] == "unknown":
                 rl_reasons.append("unknown_object_category")
-            if rl_fact["rl_relkind"] == "unknown":
+            if (
+                rl_fact["rl_relkind"] == "unknown"
+                and rl_fact["rl_category"] not in _RL_NON_RELKIND_CATEGORIES
+            ):
                 rl_reasons.append("unknown_relkind")
             if rl_fact["rl_class"] == "unknown" or rl_fact["rl_object_kind"] == "unknown":
                 rl_reasons.append("unknown_object_class")
