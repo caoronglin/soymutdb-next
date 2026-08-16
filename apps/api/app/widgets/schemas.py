@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from datetime import datetime
-from ..core.compat import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field
 
+from ..core.compat import StrEnum
 
 # ---------------------------------------------------------------------------
 # Enums
@@ -124,6 +124,25 @@ class WidgetPreviewRequest(BaseModel):
     params: dict[str, Any] = Field(default_factory=dict)
 
 
+class WidgetHealthItem(BaseModel):
+    """Per-widget health/metrics summary.
+
+    The API does not yet collect per-widget latency/history, so current
+    deployments return an empty ``widgets`` list; the shape is kept stable so
+    Admin can render the same contract once metrics collection exists.
+    """
+
+    name: str
+    display_name: str
+    p50_ms: float = 0.0
+    p95_ms: float = 0.0
+    cache_hit_rate: float = 0.0
+    error_count: int = 0
+    request_count: int = 0
+    cache_hit_history: list[dict[str, object]] = Field(default_factory=list)
+    latency_history: list[dict[str, object]] = Field(default_factory=list)
+
+
 class WidgetHealthResponse(BaseModel):
     total_widgets: int
     active_widgets: int
@@ -131,6 +150,13 @@ class WidgetHealthResponse(BaseModel):
     active_layouts: int
     builtin_templates: list[str]
     cache_backend: str = "redis"
+    widgets: list[WidgetHealthItem] = Field(default_factory=list)
+    generated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class WidgetListResponse(BaseModel):
+    items: list[WidgetResponse] = Field(default_factory=list)
+    total: int = 0
 
 
 __all__ = [
@@ -139,7 +165,9 @@ __all__ = [
     "WidgetCategoryEnum",
     "WidgetCreate",
     "WidgetDescriptor",
+    "WidgetHealthItem",
     "WidgetHealthResponse",
+    "WidgetListResponse",
     "WidgetPermissionEnum",
     "WidgetPreviewRequest",
     "WidgetResponse",

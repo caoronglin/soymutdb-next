@@ -46,3 +46,54 @@ def test_clickhouse_fixture_sends_single_queries_and_keeps_error_body() -> None:
     assert "response body:" in script
     assert 'awk -v prefix="${statement_dir}/statement-"' in script
     assert 'run_query "${statement}" "${DATABASE}"' in script
+
+
+def test_pages_deploys_an_explicit_public_demo() -> None:
+    workflow = (ROOT / ".github/workflows/pages.yml").read_text(encoding="utf-8")
+
+    assert "VITE_DEPLOYMENT_MODE: demo" in workflow
+    assert "VITE_BASE_URL: /soymutdb-next/" in workflow
+    assert "github.repository_owner" in workflow
+    assert "github.event.repository.name }}/api/v1" in workflow
+    assert "github.event.repository.name }}/soymutdb-jbrowse/" in workflow
+    assert "secrets.API_BASE_URL" not in workflow
+    assert "secrets.JBROWSE_URL" not in workflow
+    assert "secrets.CONTENT_SNAPSHOT_URL" not in workflow
+    assert "@soymutdb/admin build:web" not in workflow
+
+
+def test_jbrowse_honors_its_pages_base_path() -> None:
+    config = (ROOT / "apps/jbrowse/vite.config.ts").read_text(encoding="utf-8")
+
+    assert "loadEnv" in config
+    assert "base:" in config
+    assert "VITE_BASE_URL" in config
+
+
+def test_web_vite_entry_is_not_prefixed_by_deployment_base() -> None:
+    index = (ROOT / "apps/web/index.html").read_text(encoding="utf-8")
+
+    assert 'src="/src/main.tsx"' in index
+    assert '%BASE_URL%src/main.tsx' not in index
+
+
+def test_pages_accepts_publication_dispatch_inputs() -> None:
+    workflow = (ROOT / ".github/workflows/pages.yml").read_text(encoding="utf-8")
+
+    assert "publication_id:" in workflow
+    assert "artifact_url:" in workflow
+    assert "manifest_digest:" in workflow
+    assert "inputs.publication_id" in workflow
+    assert "inputs.artifact_url" in workflow
+    assert "inputs.manifest_digest" in workflow
+
+
+def test_pages_verifies_digest_before_ref_update() -> None:
+    workflow = (ROOT / ".github/workflows/pages.yml").read_text(encoding="utf-8")
+
+    assert "sha256sum -c -" in workflow
+    assert '"$MANIFEST_DIGEST' in workflow
+    # Digest verification must run BEFORE the gh-pages ref update.
+    assert workflow.index("Verify immutable artifact digest") < workflow.index(
+        "Deploy all apps to pages"
+    )

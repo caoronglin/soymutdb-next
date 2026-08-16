@@ -8,7 +8,7 @@ from soymutdb_worker.tasks.data_adapters import (
 
 
 @pytest.mark.parametrize(
-    "kind", ["fasta", "gff3", "vcf", "blast_db", "seed_data", "expression_csv", "homolog_csv"]
+    "kind", ["fasta", "gff3", "vcf", "blast_db", "seed_data", "expression_csv", "homolog_csv", "module_tsv"]
 )
 def test_all_approved_types_are_registered(kind):
     assert get_adapter(kind).kind == kind
@@ -16,7 +16,7 @@ def test_all_approved_types_are_registered(kind):
 
 def test_registry_contains_only_approved_types():
     assert registered_kinds() == (
-        "blast_db", "expression_csv", "fasta", "gff3", "homolog_csv", "seed_data", "vcf"
+        "blast_db", "expression_csv", "fasta", "gff3", "homolog_csv", "module_tsv", "seed_data", "vcf"
     )
 
 

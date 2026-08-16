@@ -6,17 +6,18 @@ evidence and advances the PostgreSQL state machine.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 import hashlib
 import json
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..core.task_contract import RELEASE_POINTER_CHANGED_TASK
 from ..models.auth import AuditLog
 from ..models.content import Release, ReleaseStatus
 from ..models.data_publishing import ActiveRelease, DataSet, ImportStatus, ReleaseDataSet
-from .outbox_service import create_outbox_event
+from .outbox_service import enqueue_task_event
 
 
 class ReleaseNotReady(ValueError):
@@ -96,7 +97,14 @@ async def publish_release(db: AsyncSession, *, release_id: int, actor_id, reason
         target.published_by = actor_id
         target.reason = reason
         db.add(AuditLog(user_id=actor_id, action="release_published", resource_type="release", resource_id=str(target.id), old_value={"active_release_id": previous_id}, new_value={"active_release_id": target.id, "reason": reason, "manifest_sha256": manifest_digest(target.manifest)}))
-        await create_outbox_event(db, aggregate_type="release", aggregate_id=str(target.id), event_type="release_pointer_changed", payload={"previous_release_id": previous_id, "release_id": target.id, "request_id": request_id})
+        await enqueue_task_event(
+            db,
+            aggregate_type="release",
+            aggregate_id=str(target.id),
+            event_type="release_pointer_changed",
+            task_name=RELEASE_POINTER_CHANGED_TASK,
+            kwargs={"previous_release_id": previous_id, "release_id": target.id, "request_id": request_id},
+        )
         await db.flush()
         return target
 
@@ -117,7 +125,14 @@ async def rollback_release(db: AsyncSession, *, release_id: int, actor_id, reaso
         current.rolled_back_at = datetime.now(UTC)
         current.reason = reason
         db.add(AuditLog(user_id=actor_id, action="release_rolled_back", resource_type="release", resource_id=str(current.id), old_value={"from": release_id}, new_value={"to": previous.id, "reason": reason}))
-        await create_outbox_event(db, aggregate_type="release", aggregate_id=str(current.id), event_type="release_pointer_changed", payload={"previous_release_id": release_id, "release_id": previous.id, "request_id": request_id})
+        await enqueue_task_event(
+            db,
+            aggregate_type="release",
+            aggregate_id=str(current.id),
+            event_type="release_pointer_changed",
+            task_name=RELEASE_POINTER_CHANGED_TASK,
+            kwargs={"previous_release_id": release_id, "release_id": previous.id, "request_id": request_id},
+        )
         await db.flush()
         return previous, current
 

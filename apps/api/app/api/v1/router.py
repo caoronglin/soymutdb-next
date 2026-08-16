@@ -12,7 +12,11 @@ from . import (
     admin,
     admin_content,
     admin_imports,
+    admin_modules,
     admin_news,
+    admin_page_builder,
+    admin_publication,
+    admin_publications,
     admin_settings,
     admin_static,
     admin_uploads,
@@ -30,6 +34,7 @@ from . import (
     mutants,
     news,
     notifications,
+    page_definitions,
     popgen,
     releases,
     search,
@@ -74,10 +79,15 @@ api_router.include_router(seed_requests.router)
 api_router.include_router(content.router)
 api_router.include_router(news.router)
 api_router.include_router(notifications.router)
+api_router.include_router(page_definitions.router)
 api_router.include_router(admin.router)
 api_router.include_router(admin_content.router)
 api_router.include_router(admin_news.router)
+api_router.include_router(admin_page_builder.router)
+api_router.include_router(admin_publication.router)
+api_router.include_router(admin_publications.router)
 api_router.include_router(admin_imports.router)
+api_router.include_router(admin_modules.router)
 api_router.include_router(admin_settings.router)
 api_router.include_router(admin_static.router)
 api_router.include_router(admin_uploads.router)

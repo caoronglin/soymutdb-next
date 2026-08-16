@@ -63,8 +63,23 @@ class ContentSnapshotService:
     def __init__(self) -> None:
         self._news_service = NewsService()
 
-    async def build_snapshot(self, db: AsyncSession) -> dict:
-        """Return the full snapshot payload (JSON-serialisable)."""
+    async def build_snapshot(
+        self,
+        db: AsyncSession,
+        *,
+        release_id: int | None = None,
+        page_definition_version: int | None = None,
+        source_checksums: dict[str, str] | None = None,
+    ) -> dict:
+        """Return the full snapshot payload (JSON-serialisable).
+
+        ``release_id`` / ``page_definition_version`` make the snapshot
+        *release-aware*: builds for an explicit release pin those identifiers
+        so the generated tree and manifest can be matched to the source data
+        they were built from.  Immutable build keys therefore differ by
+        release, while the mutable active-release alias (read without an
+        explicit release) stays available for interactive public reads.
+        """
         now = _utcnow()
         conditions = self._news_service._visible_conditions(now)
 
@@ -106,7 +121,7 @@ class ContentSnapshotService:
             else:
                 news_detail[row.slug] = None
 
-        return {
+        snapshot: dict[str, object] = {
             "schema_version": 1,
             "generated_at": now.isoformat(),
             "news": {
@@ -118,6 +133,17 @@ class ContentSnapshotService:
             "news_detail": news_detail,
             "about": await self._load_about(db),
         }
+
+        # Release-aware metadata: present for explicit builds, absent for the
+        # mutable active-release alias used by interactive public reads.
+        if release_id is not None:
+            snapshot["release_id"] = release_id
+        if page_definition_version is not None:
+            snapshot["page_definition_version"] = page_definition_version
+        if source_checksums:
+            snapshot["source_checksums"] = source_checksums
+
+        return snapshot
 
     async def _load_about(self, db: AsyncSession) -> dict[str, str | None]:
         """Load the ``about.*`` settings (missing keys degrade to None)."""

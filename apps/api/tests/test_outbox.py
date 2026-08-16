@@ -309,3 +309,90 @@ async def test_dispatcher_survives_poll_errors_and_stops_on_event() -> None:
     stop = __import__("asyncio").Event()
     stop.set()
     await outbox_dispatcher.run_outbox_dispatcher(stop_event=stop)
+
+
+async def test_enqueue_task_event_requires_task_name_and_stores_kwargs() -> None:
+    session = FakeSession()
+    event = await outbox_service.enqueue_task_event(
+        session,
+        event_type="import_requested",
+        aggregate_type="import_task",
+        aggregate_id="import-1",
+        task_name="soymutdb_worker.tasks.ingest.run_import_adapter",
+        kwargs={"import_task_id": 1},
+    )
+    assert session.added == [event]
+    assert event.payload["task_name"] == "soymutdb_worker.tasks.ingest.run_import_adapter"
+    assert event.payload["kwargs"] == {"import_task_id": 1}
+    assert event.status == OutboxEventStatus.PENDING
+
+
+async def test_enqueue_task_event_rejects_empty_task_name() -> None:
+    session = FakeSession()
+    try:
+        await outbox_service.enqueue_task_event(
+            session,
+            event_type="import_requested",
+            aggregate_type="import_task",
+            aggregate_id="import-1",
+            task_name="   ",
+            kwargs={"import_task_id": 1},
+        )
+    except ValueError as exc:
+        assert "task_name" in str(exc)
+    else:  # pragma: no cover - defensive
+        raise AssertionError("expected ValueError")
+
+
+async def test_poll_marks_malformed_event_failed_without_sending(monkeypatch) -> None:
+    event = OutboxEvent(
+        id=2,
+        event_id=uuid.uuid4(),
+        aggregate_type="release",
+        aggregate_id="release-1",
+        event_type="release_pointer_changed",
+        payload={"release_id": 1},  # missing task_name / kwargs
+        status=OutboxEventStatus.PENDING,
+        attempt_count=0,
+        created_at=datetime.now(UTC),
+    )
+    session = FakeSession(events=[event])
+    monkeypatch.setattr(
+        outbox_dispatcher, "get_session_factory", _fake_factory(session)
+    )
+    sender = _SendRecorder()
+    processed = await outbox_dispatcher.poll_outbox_once(send=sender)
+
+    assert processed == 1
+    assert sender.calls == []
+    assert event.status == OutboxEventStatus.FAILED
+    assert event.last_error == "missing task_name"
+
+
+async def test_poll_uses_typed_kwargs_when_present(monkeypatch) -> None:
+    event = OutboxEvent(
+        id=3,
+        event_id=uuid.uuid4(),
+        aggregate_type="import_task",
+        aggregate_id="import-1",
+        event_type="import_requested",
+        payload={
+            "task_name": "soymutdb_worker.tasks.ingest.run_import_adapter",
+            "kwargs": {"import_task_id": 1, "kind": "vcf"},
+        },
+        status=OutboxEventStatus.PENDING,
+        attempt_count=0,
+        created_at=datetime.now(UTC),
+    )
+    session = FakeSession(events=[event])
+    monkeypatch.setattr(
+        outbox_dispatcher, "get_session_factory", _fake_factory(session)
+    )
+    sender = _SendRecorder()
+    processed = await outbox_dispatcher.poll_outbox_once(send=sender)
+
+    assert processed == 1
+    assert len(sender.calls) == 1
+    assert sender.calls[0]["task_name"] == "soymutdb_worker.tasks.ingest.run_import_adapter"
+    assert sender.calls[0]["kwargs"] == {"import_task_id": 1, "kind": "vcf"}
+    assert event.status == OutboxEventStatus.SENT

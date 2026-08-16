@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import re
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 
 class MultipartStartRequest(BaseModel):
@@ -39,6 +38,11 @@ class ImportCreateRequest(BaseModel):
     file_path: str | None = None
     object_key: str | None = None
     data_set_id: int | None = Field(default=None, ge=1)
+    release_id: int | None = Field(default=None, ge=1)
+    assembly: str | None = Field(default=None, max_length=128)
+    module_key: str | None = Field(default=None, max_length=80)
+    schema_version: int | None = Field(default=None, ge=1)
+    checksum: str | None = Field(default=None, max_length=256)
     idempotency_key: str = Field(min_length=1, max_length=256)
 
 

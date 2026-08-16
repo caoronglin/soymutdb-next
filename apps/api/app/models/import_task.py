@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import enum
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base, TimestampMixin, enum_values
@@ -28,6 +27,7 @@ class ImportTaskType(str, enum.Enum):
     SEED_DATA = "seed_data"
     EXPRESSION_CSV = "expression_csv"
     HOMOLOG_CSV = "homolog_csv"
+    MODULE_TSV = "module_tsv"
 
 
 ImportTaskStatus = ImportStatus
@@ -57,10 +57,10 @@ class ImportTask(Base, TimestampMixin):
     processed_records: Mapped[int] = mapped_column(
         Integer, default=0, server_default="0", nullable=False
     )
-    celery_task_id: Mapped[Optional[str]] = mapped_column(
+    celery_task_id: Mapped[str | None] = mapped_column(
         String(36), nullable=True
     )
-    submitted_by: Mapped[Optional[str]] = mapped_column(
+    submitted_by: Mapped[str | None] = mapped_column(
         String(64), nullable=True
     )
     submitted_at: Mapped[datetime] = mapped_column(
@@ -68,10 +68,10 @@ class ImportTask(Base, TimestampMixin):
         server_default=func.now(),
         nullable=False,
     )
-    completed_at: Mapped[Optional[datetime]] = mapped_column(
+    completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     file_path: Mapped[str] = mapped_column(String(512), nullable=False)
     data_set_id: Mapped[int | None] = mapped_column(ForeignKey("data_sets.id", ondelete="SET NULL"), nullable=True)
     release_id: Mapped[int | None] = mapped_column(ForeignKey("releases.id", ondelete="SET NULL"), nullable=True)

@@ -17,6 +17,25 @@
 /** In-memory access token (module singleton; never written to storage). */
 let accessToken: string | null = null;
 
+/**
+ * Release id pinned by the current static page (Phase 3).
+ *
+ * When a static page is generated for release A, it sets this value so all
+ * subsequent dynamic API requests keep querying release A even after the
+ * active release pointer moves to B.  Sent as `X-SoyMutDB-Release` header.
+ */
+let releaseId: string | null = null;
+
+/** Set the pinned release id for dynamic requests (from bootstrap data). */
+export function setReleaseId(value: string | number | null | undefined): void {
+    releaseId = value != null && value !== "" ? String(value) : null;
+}
+
+/** Return the currently pinned release id, if any. */
+export function getReleaseId(): string | null {
+    return releaseId;
+}
+
 /** Resolved API base URL. Empty env (CI unset secret) falls back to the
  * relative /api/v1 base, matching the undefined case. */
 export const apiBaseUrl =
@@ -170,6 +189,9 @@ export async function request<T>(
     if (auth) {
         const token = getAccessToken();
         if (token) requestHeaders.set("Authorization", `Bearer ${token}`);
+    }
+    if (releaseId && !requestHeaders.has("X-SoyMutDB-Release")) {
+        requestHeaders.set("X-SoyMutDB-Release", releaseId);
     }
 
     let body: BodyInit | undefined;

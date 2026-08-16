@@ -26,7 +26,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import ValidationError as PydanticValidationError
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.database import get_db, get_redis
@@ -44,6 +44,7 @@ from .schemas import (
     WidgetCreate,
     WidgetDescriptor,
     WidgetHealthResponse,
+    WidgetListResponse,
     WidgetPreviewRequest,
     WidgetResponse,
     WidgetUpdate,
@@ -299,14 +300,30 @@ async def render_widget(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/admin/widgets", response_model=list[WidgetResponse])
+@router.get("/admin/widgets", response_model=WidgetListResponse)
 async def admin_list_widgets(
     _admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
-) -> list[WidgetResponse]:
-    """List all widgets (including inactive)."""
-    result = await db.execute(select(Widget).order_by(Widget.category, Widget.name))
-    return [_widget_to_response(w) for w in result.scalars().all()]
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=200),
+    category: str | None = Query(default=None),
+) -> WidgetListResponse:
+    """List all widgets (including inactive) with pagination."""
+    conditions = []
+    if category:
+        conditions.append(Widget.category == category)
+    where_clause = conditions[0] if conditions else None
+    total_stmt = select(func.count()).select_from(Widget)
+    if where_clause is not None:
+        total_stmt = total_stmt.where(where_clause)
+    total = int((await db.execute(total_stmt)).scalar() or 0)
+    stmt = select(Widget).order_by(Widget.category, Widget.name)
+    if where_clause is not None:
+        stmt = stmt.where(where_clause)
+    stmt = stmt.offset((page - 1) * page_size).limit(page_size)
+    result = await db.execute(stmt)
+    items = [_widget_to_response(w) for w in result.scalars().all()]
+    return WidgetListResponse(items=items, total=total)
 
 
 @router.post("/admin/widgets", response_model=WidgetResponse, status_code=201)
@@ -470,6 +487,7 @@ async def admin_widget_health(
     engine = get_engine()
     builtin_templates = engine.list_builtin_templates()
 
+    from datetime import UTC, datetime
     return WidgetHealthResponse(
         total_widgets=total_widgets,
         active_widgets=active_widgets,
@@ -477,6 +495,8 @@ async def admin_widget_health(
         active_layouts=active_layouts,
         builtin_templates=builtin_templates,
         cache_backend="redis",
+        widgets=[],
+        generated_at=datetime.now(UTC),
     )
 
 

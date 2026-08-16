@@ -2,21 +2,30 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.database import get_db
-from ...core.exceptions import NotFoundError
+from ...core.exceptions import NotFoundError, ValidationError
 from ...core.security import require_admin_roles
 from ...core.task_dispatch import get_celery_client
-from ...schemas.data_publishing import ImportCreateRequest, MultipartCompleteRequest, MultipartStartRequest
-from ...services.outbox_service import create_import_command
-from ...services.presign import CompletedPart, complete_multipart_upload, initiate_multipart_upload, sign_multipart_part
 from ...models.auth import User
 from ...models.import_task import ImportTask, ImportTaskStatus
+from ...schemas.data_publishing import (
+    ImportCreateRequest,
+    MultipartCompleteRequest,
+    MultipartStartRequest,
+)
+from ...services.outbox_service import create_import_command
+from ...services.presign import (
+    CompletedPart,
+    complete_multipart_upload,
+    initiate_multipart_upload,
+    sign_multipart_part,
+)
 from .deps import get_current_user, get_user_roles
 
 router = APIRouter(prefix="/admin/imports", tags=["admin-imports"])
@@ -194,7 +203,30 @@ async def create_import(
     """
     _require_admin(current_user)
 
-    task = await create_import_command(db, actor_id=current_user.id, idempotency_key=body.idempotency_key, data_set_id=body.data_set_id or 1, import_type=body.type, filename=body.filename, object_key=body.object_key or body.file_path)
+    if body.type == "module_tsv":
+        if not body.module_key:
+            raise ValidationError("module_key is required for module_tsv imports")
+        if not body.checksum:
+            raise ValidationError("checksum is required for module_tsv imports")
+        from ...services.module_schema_registry import get_schema
+
+        if get_schema(body.module_key) is None:
+            raise ValidationError(f"Unknown module schema '{body.module_key}'")
+
+    task = await create_import_command(
+        db,
+        actor_id=current_user.id,
+        idempotency_key=body.idempotency_key,
+        data_set_id=body.data_set_id or 1,
+        import_type=body.type,
+        filename=body.filename,
+        object_key=body.object_key or body.file_path,
+        release_id=body.release_id,
+        assembly=body.assembly,
+        module_key=body.module_key,
+        schema_version=body.schema_version,
+        checksum=body.checksum,
+    )
     await db.commit()
     await db.refresh(task)
 
@@ -229,7 +261,7 @@ async def delete_import(
 
     task.status = ImportTaskStatus.FAILED.value
     task.error_message = "Cancelled by user"
-    task.completed_at = datetime.now(timezone.utc)
+    task.completed_at = datetime.now(UTC)
     await db.commit()
 
 

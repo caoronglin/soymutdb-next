@@ -40,6 +40,8 @@ async def content_snapshot(
     request: Request,
     response: Response,
     db: AsyncSession = Depends(get_db),
+    release_id: int | None = Query(default=None, ge=1),
+    page_definition_version: int | None = Query(default=None, ge=1),
 ) -> dict:
     """Public content snapshot for static builds (E2-2).
 
@@ -47,13 +49,27 @@ async def content_snapshot(
     §4.1: schema_version/generated_at/news{source_total,included_total,
     truncated,items}/news_detail{slug: detail|null}/about.
 
+    Release-aware: pass ``release_id`` (and optionally
+    ``page_definition_version``) to build an immutable, release-pinned
+    snapshot whose cache key differs by release.  Without an explicit
+    ``release_id`` the mutable active-release alias is served, for interactive
+    public reads only.
+
     Aggregation is cached in Redis for 60 s (cache.py); the response carries
     an ETag so build-time fetchers can short-circuit with 304.
     """
+    if release_id is not None:
+        cache_key = f"content:snapshot:release:{release_id}:pv:{page_definition_version}"
+    else:
+        cache_key = "content:snapshot"
     payload = await get_or_set(
-        "content:snapshot",
+        cache_key,
         60,
-        loader=lambda: _build_snapshot(db),
+        loader=lambda: _build_snapshot(
+            db,
+            release_id=release_id,
+            page_definition_version=page_definition_version,
+        ),
     )
     etag = '"' + hashlib.sha256(
         payload["generated_at"].encode("utf-8")
@@ -65,9 +81,18 @@ async def content_snapshot(
     return payload
 
 
-async def _build_snapshot(db: AsyncSession) -> dict:
+async def _build_snapshot(
+    db: AsyncSession,
+    *,
+    release_id: int | None = None,
+    page_definition_version: int | None = None,
+) -> dict:
     service = ContentSnapshotService()
-    return await service.build_snapshot(db)
+    return await service.build_snapshot(
+        db,
+        release_id=release_id,
+        page_definition_version=page_definition_version,
+    )
 
 
 # ---------------------------------------------------------------------------

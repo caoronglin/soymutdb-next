@@ -23,15 +23,24 @@ from .content import (
     ReleaseStatus,
     StaticPage,
 )
+from .data_publishing import ActiveRelease, DataSet, ImportStatus, Provenance, ReleaseDataSet
 from .expression import ExpressionData, ExpressionLibrary
 from .gene_data_cache import GeneDataCache
 from .genomic import Assembly, Chromosome, Exon, Gene, GeneAlias, Transcript
 from .gwas import GwasFileType, GwasJob, GwasJobStatus, GwasMethod
 from .homolog import GeneHomolog
-from .data_publishing import ActiveRelease, DataSet, ImportStatus, Provenance, ReleaseDataSet
 from .import_task import ImportTask, ImportTaskStatus, ImportTaskType
+from .module_data import ModuleDataRow, ModuleSchema
 from .notification import Notification
 from .outbox import OutboxEvent
+from .page_builder import PageDefinition, PageDefinitionStatus, PageDefinitionVersion
+from .publication import (
+    PublicationCounter,
+    PublicationStatus,
+    PublicationTarget,
+    PublicationTargetLease,
+    StaticPublication,
+)
 from .seed import SeedInventory, SeedRequest
 from .seed_request import SeedRequestContact, SeedRequestStatus
 from .system_settings import SystemSetting
@@ -70,17 +79,26 @@ __all__ = [
     "ReleaseDataSet",
     "ActiveRelease",
     "Provenance",
+    "ModuleDataRow",
+    "ModuleSchema",
     "MutantLine",
     "NewsArticle",
     "NewsStatus",
     "Notification",
     "Organization",
     "OutboxEvent",
+    "PageDefinition",
+    "PageDefinitionStatus",
+    "PageDefinitionVersion",
     "PageLayout",
     "Phenotype",
     "Project",
     "ProjectMember",
     "Publication",
+    "PublicationCounter",
+    "PublicationStatus",
+    "PublicationTarget",
+    "PublicationTargetLease",
     "RefreshToken",
     "Release",
     "ReleaseStatus",
@@ -91,6 +109,7 @@ __all__ = [
     "SeedRequestStatus",
     "SoftDeleteMixin",
     "StaticPage",
+    "StaticPublication",
     "SystemSetting",
     "TimestampMixin",
     "Track",

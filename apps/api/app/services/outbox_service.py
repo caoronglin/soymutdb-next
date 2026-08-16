@@ -17,9 +17,10 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.config import get_settings
-from ..models.outbox import OutboxEvent, OutboxEventStatus
+from ..core.task_contract import IMPORT_ADAPTER_TASK
 from ..models.data_publishing import DataSet
 from ..models.import_task import ImportTask, ImportTaskType
+from ..models.outbox import OutboxEvent, OutboxEventStatus
 
 settings = get_settings()
 
@@ -32,7 +33,26 @@ async def get_or_create_idempotent_event(db: AsyncSession, *, aggregate_type: st
     return await create_outbox_event(db, aggregate_type=aggregate_type, aggregate_id=aggregate_id, event_type=event_type, payload={**payload, "idempotency_key": idempotency_key}), True
 
 
-async def create_import_command(db: AsyncSession, *, actor_id, idempotency_key: str, data_set_id: int, import_type: str, filename: str, object_key: str | None = None) -> ImportTask:
+async def create_import_command(
+    db: AsyncSession,
+    *,
+    actor_id,
+    idempotency_key: str,
+    data_set_id: int,
+    import_type: str,
+    filename: str,
+    object_key: str | None = None,
+    release_id: int | None = None,
+    assembly: str | None = None,
+    module_key: str | None = None,
+    schema_version: int | None = None,
+    checksum: str | None = None,
+) -> ImportTask:
+    """Create an import task and enqueue the canonical import-adapter event.
+
+    The outbox event carries a typed ``task_name`` and ``kwargs`` so the
+    dispatcher can forward exactly the arguments the worker task expects.
+    """
     existing = await db.scalar(select(ImportTask).where(ImportTask.idempotency_key == idempotency_key))
     if existing:
         return existing
@@ -41,11 +61,36 @@ async def create_import_command(db: AsyncSession, *, actor_id, idempotency_key: 
         dataset = DataSet(id=data_set_id, type=import_type)
         db.add(dataset)
         await db.flush()
-    task = ImportTask(filename=filename, type=ImportTaskType(import_type), file_path=object_key or "", data_set_id=data_set_id, object_key=object_key, idempotency_key=idempotency_key, submitted_by=str(actor_id) if actor_id else None)
+    task = ImportTask(
+        filename=filename,
+        type=ImportTaskType(import_type),
+        file_path=object_key or "",
+        data_set_id=data_set_id,
+        release_id=release_id,
+        object_key=object_key,
+        idempotency_key=idempotency_key,
+        submitted_by=str(actor_id) if actor_id else None,
+    )
     db.add(task)
     await db.flush()
-    payload = {"import_task_id": task.id, "data_set_id": data_set_id, "type": import_type, "object_key": object_key, "payload_version": 1}
-    await get_or_create_idempotent_event(db, aggregate_type="import_task", aggregate_id=str(task.id), event_type="import_requested", idempotency_key=idempotency_key, payload=payload)
+    await enqueue_task_event(
+        db,
+        event_type="import_requested",
+        aggregate_type="import_task",
+        aggregate_id=str(task.id),
+        task_name=IMPORT_ADAPTER_TASK,
+        kwargs={
+            "import_task_id": task.id,
+            "data_set_id": data_set_id,
+            "kind": import_type,
+            "release_id": str(release_id) if release_id is not None else "",
+            "file_key": object_key or filename,
+            "assembly": assembly or "",
+            "module_key": module_key,
+            "schema_version": schema_version,
+            "checksum": checksum,
+        },
+    )
     return task
 
 
@@ -79,6 +124,35 @@ async def create_outbox_event(
     db.add(event)
     await db.flush()
     return event
+
+
+async def enqueue_task_event(
+    db: AsyncSession,
+    *,
+    event_type: str,
+    aggregate_type: str,
+    aggregate_id: str,
+    task_name: str,
+    kwargs: dict,
+) -> OutboxEvent:
+    """Enqueue a typed task event with an explicit Celery task name.
+
+    The payload is ``{"task_name": ..., "kwargs": ...}``.  The dispatcher
+    forwards ``kwargs`` directly to the worker task, while legacy job events
+    (which carry a versioned ``JobPayload`` under ``payload``) remain
+    supported through the dispatcher's backward-compatible fallback.
+    """
+    if not task_name or not task_name.strip():
+        raise ValueError("task_name is required")
+    if not isinstance(kwargs, dict):
+        raise ValueError("kwargs must be a dict")
+    return await create_outbox_event(
+        db,
+        event_type=event_type,
+        aggregate_type=aggregate_type,
+        aggregate_id=aggregate_id,
+        payload={"task_name": task_name, "kwargs": kwargs},
+    )
 
 
 async def claim_pending(
@@ -171,4 +245,5 @@ __all__ = [
     "new_event_id",
     "get_or_create_idempotent_event",
     "create_import_command",
+    "enqueue_task_event",
 ]

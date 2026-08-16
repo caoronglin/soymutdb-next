@@ -108,5 +108,44 @@ class TestContentSnapshot:
         assert resp.status_code == 200
 
 
-async def _fake_build(db: object) -> dict:
+async def _fake_build(db: object, **kwargs: object) -> dict:
     return _FIXTURE_SNAPSHOT
+
+
+class TestReleaseAwareSnapshot:
+    def setup_method(self) -> None:
+        import app.api.v1.content as content_module
+        from app.core.database import get_db
+
+        self._orig_build = content_module._build_snapshot
+        self._seen: dict = {}
+
+        async def recording_build(db, *, release_id=None, page_definition_version=None):
+            self._seen["release_id"] = release_id
+            self._seen["page_definition_version"] = page_definition_version
+            return _FIXTURE_SNAPSHOT
+
+        content_module._build_snapshot = recording_build
+
+        async def _fake_db():
+            yield None
+
+        app.dependency_overrides[get_db] = _fake_db
+        self.client = TestClient(app)
+
+    def teardown_method(self) -> None:
+        import app.api.v1.content as content_module
+        from app.core.database import get_db
+
+        content_module._build_snapshot = self._orig_build
+        app.dependency_overrides.pop(get_db, None)
+
+    def test_snapshot_accepts_release_and_page_version(self) -> None:
+        resp = self.client.get(
+            "/api/v1/content/snapshot?release_id=7&page_definition_version=3"
+        )
+        assert resp.status_code == 200
+        assert self._seen["release_id"] == 7
+        assert self._seen["page_definition_version"] == 3
+        assert "release_id" not in resp.json()  # fixture has no release_id key
+

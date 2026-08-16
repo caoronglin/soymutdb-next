@@ -228,6 +228,21 @@ class Settings(BaseSettings):
         """Effective admin notification address (``smtp_admin_to`` or ``admin_email``)."""
         return self.smtp_admin_to or self.admin_email
 
+    # --------------------------------------------------- Static publication
+    # Credentials / locations for the three immutable-publication targets are
+    # read here (env / secret config) and never persisted to the database.
+    # They are redacted from API responses and audit logs by
+    # ``services.publication_targets``.
+    publication_local_root: str | None = None
+    publication_artifact_bucket: str = "static-publications"
+    github_pages_token: str | None = None
+    github_pages_repo: str | None = None
+    github_repository: str | None = None
+    github_api_origin: str = "https://api.github.com"
+    cloudflare_pages_api_token: str | None = None
+    cloudflare_pages_account_id: str | None = None
+    cloudflare_pages_project: str | None = None
+
     # --------------------------------------------------------------- CDN
     cdn_enabled: bool = False
     cdn_urls: list[str] = Field(default_factory=lambda: [])

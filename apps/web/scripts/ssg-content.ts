@@ -132,13 +132,16 @@ function renderNewsList(snapshot: Snapshot): string {
   const cards = items
     .map((it) => {
       const titleText = it.title_zh ?? it.title_en;
-      const cover = it.cover_url
-        ? `<img class="news-card-cover" src="${it.cover_url}" alt="" loading="lazy" />`
+      const safeCover = safeCoverUrl(it.cover_url);
+      const safeSlug = validateSlug(it.slug);
+      const cover = safeCover
+        ? `<img class="news-card-cover" src="${escapeAttr(safeCover)}" alt="" loading="lazy" />`
         : "";
-      return `<a class="news-card" href="news/${it.slug}.html">
+      const href = safeSlug ? `news/${safeSlug}.html` : "#";
+      return `<a class="news-card" href="${href}">
         ${cover}
         <div class="news-card-body">
-          <span class="news-card-cat">${it.category}</span>
+          <span class="news-card-cat">${escapeAttr(it.category)}</span>
           <h3>${escapeAttr(titleText)}</h3>
           <time>${formatDate(it.published_at)}</time>
         </div>
@@ -173,8 +176,9 @@ function renderNewsDetail(slug: string, detail: NewsDetail, snapshot: Snapshot):
   const titleText = detail.title_zh ?? detail.title_en;
   const title = `${titleText} — SoyMutDB News`;
   const description = truncate(stripTags(detail.content_en));
-  const cover = detail.cover_url
-    ? `<img class="news-cover" src="${detail.cover_url}" alt="" />`
+  const safeCover = safeCoverUrl(detail.cover_url);
+  const cover = safeCover
+    ? `<img class="news-cover" src="${escapeAttr(safeCover)}" alt="" />`
     : "";
   const bodyHtml = sanitizeHtml(detail.content_en);
 
@@ -242,6 +246,29 @@ function escapeAttr(value: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+/** URL protocol allowlist for attribute interpolation (image src, links). */
+const ALLOWED_URL_PROTOCOLS = new Set(["http:", "https:", "data:"]);
+
+/** Validate a ``cover_url``: relative or http(s)/data only; reject javascript:. */
+function safeCoverUrl(url: string | null): string | null {
+  if (!url) return null;
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith("/") && !trimmed.startsWith("//")) return trimmed;
+  try {
+    const parsed = new URL(trimmed);
+    if (!ALLOWED_URL_PROTOCOLS.has(parsed.protocol)) return null;
+    return trimmed;
+  } catch {
+    return null;
+  }
+}
+
+/** Validate a news slug against the safe ``[a-z0-9-]+`` pattern. */
+function validateSlug(slug: string): string | null {
+  return SLUG_RE.test(slug) ? slug : null;
 }
 
 /* ------------------------------------------------------------------ */

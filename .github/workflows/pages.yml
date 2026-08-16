@@ -1,13 +1,10 @@
 # =============================================================================
-# SoyMutDB Next — Deploy public web to GitHub Pages (pages (gh-pages) branch)
+# SoyMutDB Next — Deploy public demo to GitHub Pages (gh-pages branch)
 #
-# Trigger: push to main + manual dispatch. Builds web/admin/JBrowse and force-pushes
-# the static dist to the `pages` branch (Pages source = pages (gh-pages) branch, /).
-# Only static hosting — no API proxying (API stays on the self-hosted backend).
-#
-# NOTE: set the production API origin as a repository secret named
-# API_BASE_URL (e.g. https://api.example.com). If unset, the app falls back
-# to its compiled-in default.
+# Trigger: push to main + manual dispatch. Builds the public portal and JBrowse,
+# then force-pushes the static demo to `gh-pages`. No API/worker is deployed;
+# API requests use the same-origin /api/v1 demo URL and render existing
+# unavailable/empty states on GitHub Pages.
 # =============================================================================
 name: Deploy Web to Pages
 
@@ -15,6 +12,19 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      publication_id:
+        description: "Immutable static publication id (Phase 3)."
+        required: true
+        default: ""
+      artifact_url:
+        description: "URL of the immutable artifact to download + verify."
+        required: true
+        default: ""
+      manifest_digest:
+        description: "SHA-256 of the artifact's manifest.json (digest verification)."
+        required: true
+        default: ""
 
 permissions:
   contents: write
@@ -53,29 +63,35 @@ jobs:
 
       - name: Build web (SSG + assets)
         env:
-          VITE_API_BASE_URL: ${{ secrets.API_BASE_URL }}
+          VITE_DEPLOYMENT_MODE: demo
+          VITE_BASE_URL: /soymutdb-next/
+          VITE_API_BASE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/api/v1
           VITE_CDN_ENABLED: "false"
-          # JBrowse app URL (must match CSP frame-src). Set the repository
-          # secret JBROWSE_URL (e.g. https://<site>/soymutdb-jbrowse/).
-          # Unset -> iframe falls back to localhost:5175 (blocked by CSP).
-          VITE_JBROWSE_URL: ${{ secrets.JBROWSE_URL }}
-          # Content snapshot for SSG content pages (news/about).
-          # Set the repository secret CONTENT_SNAPSHOT_URL to the production
-          # API endpoint (e.g. https://api.example.com/api/v1/content/snapshot).
-          # Missing URL -> fetch-content-snapshot.ts exits 1 (fail-fast) so
-          # CI never silently ships stale content pages.
-          CONTENT_SNAPSHOT_URL: ${{ secrets.CONTENT_SNAPSHOT_URL }}
+          VITE_JBROWSE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/soymutdb-jbrowse/
         run: pnpm --filter @soymutdb/web build
 
-      - name: Build admin and JBrowse
-        run: |
-          pnpm --filter @soymutdb/admin build:web
-          pnpm --filter @soymutdb/jbrowse build
+      - name: Build JBrowse demo
+        env:
+          VITE_BASE_URL: /soymutdb-next/soymutdb-jbrowse/
+          VITE_JBROWSE_DATA_URL: /soymutdb-next/jbrowse-data
+        run: pnpm --filter @soymutdb/jbrowse build
 
       - name: Smoke test static content (news/about/sitemap)
-        env:
-          CONTENT_SNAPSHOT_URL: ${{ secrets.CONTENT_SNAPSHOT_URL }}
         run: pnpm --filter @soymutdb/web exec tsx scripts/smoke-pages.ts
+
+      - name: Verify immutable artifact digest (workflow_dispatch only)
+        if: github.event_name == 'workflow_dispatch' && inputs.manifest_digest != ''
+        env:
+          PUBLICATION_ID: ${{ inputs.publication_id }}
+          ARTIFACT_URL: ${{ inputs.artifact_url }}
+          MANIFEST_DIGEST: ${{ inputs.manifest_digest }}
+        run: |
+          set -euo pipefail
+          curl -fsSL "$ARTIFACT_URL" -o /tmp/artifact.tar.gz
+          mkdir -p /tmp/artifact
+          tar -xzf /tmp/artifact.tar.gz -C /tmp/artifact
+          echo "$MANIFEST_DIGEST  /tmp/artifact/manifest.json" | sha256sum -c -
+          echo "verified artifact $PUBLICATION_ID ($MANIFEST_DIGEST)"
 
       - name: Deploy all apps to pages (gh-pages) branch
         run: |
@@ -85,8 +101,7 @@ jobs:
           # the untracked (gitignored) dist folder.
           mkdir -p /tmp/pages-dist
           cp -r apps/web/dist/. /tmp/pages-dist/
-          mkdir -p /tmp/pages-dist/soymutdb-admin /tmp/pages-dist/soymutdb-jbrowse
-          cp -r apps/admin/dist/. /tmp/pages-dist/soymutdb-admin/
+          mkdir -p /tmp/pages-dist/soymutdb-jbrowse
           # Publish the dist-jbrowse artifact under the stable JBrowse path.
           cp -r apps/jbrowse/dist/. /tmp/pages-dist/soymutdb-jbrowse/
           git checkout --orphan gh-pages
@@ -99,7 +114,6 @@ jobs:
           cp /tmp/pages-dist/index.html ./404.html
           # Pure static hosting — skip Jekyll processing.
           test -f index.html
-          test -f soymutdb-admin/index.html
           test -f soymutdb-jbrowse/index.html
           touch .nojekyll
           git add -A

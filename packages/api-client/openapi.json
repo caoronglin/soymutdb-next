@@ -4251,16 +4251,52 @@
           "content"
         ],
         "summary": "Content Snapshot",
-        "description": "Public content snapshot for static builds (E2-2).\n\nFrozen contract in ``docs/design/static-content-richtext-2026-08.md``\n\u00a74.1: schema_version/generated_at/news{source_total,included_total,\ntruncated,items}/news_detail{slug: detail|null}/about.\n\nAggregation is cached in Redis for 60 s (cache.py); the response carries\nan ETag so build-time fetchers can short-circuit with 304.",
+        "description": "Public content snapshot for static builds (E2-2).\n\nFrozen contract in ``docs/design/static-content-richtext-2026-08.md``\n\u00a74.1: schema_version/generated_at/news{source_total,included_total,\ntruncated,items}/news_detail{slug: detail|null}/about.\n\nRelease-aware: pass ``release_id`` (and optionally\n``page_definition_version``) to build an immutable, release-pinned\nsnapshot whose cache key differs by release.  Without an explicit\n``release_id`` the mutable active-release alias is served, for interactive\npublic reads only.\n\nAggregation is cached in Redis for 60 s (cache.py); the response carries\nan ETag so build-time fetchers can short-circuit with 304.",
         "operationId": "content_snapshot_api_v1_content_snapshot_get",
+        "parameters": [
+          {
+            "name": "release_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Id"
+            }
+          },
+          {
+            "name": "page_definition_version",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Page Definition Version"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response Content Snapshot Api V1 Content Snapshot Get"
                 }
               }
@@ -4271,7 +4307,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -4431,7 +4467,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/PublicationResponse"
+                    "$ref": "#/components/schemas/app__schemas__content__PublicationResponse"
                   },
                   "title": "Response List Publications Api V1 Content Publications Get"
                 }
@@ -4485,7 +4521,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PublicationResponse"
+                  "$ref": "#/components/schemas/app__schemas__content__PublicationResponse"
                 }
               }
             }
@@ -5103,6 +5139,76 @@
             "HTTPBearer": []
           }
         ]
+      }
+    },
+    "/api/v1/page-definitions/{route}": {
+      "get": {
+        "tags": [
+          "page-definitions"
+        ],
+        "summary": "Get Page Definition",
+        "description": "Return a published definition for *route* (optionally pinned version).",
+        "operationId": "get_page_definition_api_v1_page_definitions__route__get",
+        "parameters": [
+          {
+            "name": "route",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Route"
+            }
+          },
+          {
+            "name": "version",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageDefinitionVersionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/admin/releases": {
@@ -7446,6 +7552,1107 @@
         }
       }
     },
+    "/api/v1/admin/page-builder/registry": {
+      "get": {
+        "tags": [
+          "admin-page-builder"
+        ],
+        "summary": "Get Registry",
+        "description": "Expose the server-owned component registry to the Admin editor.",
+        "operationId": "get_registry_api_v1_admin_page_builder_registry_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/page-builder/pages": {
+      "get": {
+        "tags": [
+          "admin-page-builder"
+        ],
+        "summary": "List Pages",
+        "operationId": "list_pages_api_v1_admin_page_builder_pages_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 20,
+              "title": "Page Size"
+            }
+          },
+          {
+            "name": "route",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Route"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageDefinitionListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "admin-page-builder"
+        ],
+        "summary": "Create Page",
+        "operationId": "create_page_api_v1_admin_page_builder_pages_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PageDefinitionCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageDefinitionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/page-builder/pages/{page_id}": {
+      "get": {
+        "tags": [
+          "admin-page-builder"
+        ],
+        "summary": "Get Page",
+        "operationId": "get_page_api_v1_admin_page_builder_pages__page_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Page Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageDefinitionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/page-builder/pages/{page_id}/draft": {
+      "put": {
+        "tags": [
+          "admin-page-builder"
+        ],
+        "summary": "Update Draft",
+        "operationId": "update_draft_api_v1_admin_page_builder_pages__page_id__draft_put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Page Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PageDefinitionUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageDefinitionVersionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/page-builder/pages/{page_id}/preview": {
+      "post": {
+        "tags": [
+          "admin-page-builder"
+        ],
+        "summary": "Preview Page",
+        "operationId": "preview_page_api_v1_admin_page_builder_pages__page_id__preview_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Page Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/page-builder/pages/{page_id}/versions": {
+      "get": {
+        "tags": [
+          "admin-page-builder"
+        ],
+        "summary": "List Versions",
+        "operationId": "list_versions_api_v1_admin_page_builder_pages__page_id__versions_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Page Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PageDefinitionVersionResponse"
+                  },
+                  "title": "Response List Versions Api V1 Admin Page Builder Pages  Page Id  Versions Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/page-builder/pages/{page_id}/publish-request": {
+      "post": {
+        "tags": [
+          "admin-page-builder"
+        ],
+        "summary": "Publish Request",
+        "operationId": "publish_request_api_v1_admin_page_builder_pages__page_id__publish_request_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Page Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishRequestResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/publication/targets": {
+      "get": {
+        "tags": [
+          "admin-publication"
+        ],
+        "summary": "List Targets",
+        "description": "List configured publication targets (credentials redacted).",
+        "operationId": "list_targets_api_v1_admin_publication_targets_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicationTargetListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/publication/request": {
+      "post": {
+        "tags": [
+          "admin-publication"
+        ],
+        "summary": "Request",
+        "description": "Allocate a publication request for a target and enqueue the build.",
+        "operationId": "request_api_v1_admin_publication_request_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/app__schemas__publication__PublicationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/publication": {
+      "get": {
+        "tags": [
+          "admin-publication"
+        ],
+        "summary": "List Publications Admin",
+        "description": "List publications (most recent first), optionally filtered by target.",
+        "operationId": "list_publications_admin_api_v1_admin_publication_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "target",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Target"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 20,
+              "title": "Page Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/app__schemas__publication__PublicationListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/publication/{publication_id}": {
+      "get": {
+        "tags": [
+          "admin-publication"
+        ],
+        "summary": "Get Publication",
+        "description": "Inspect a single publication's evidence.",
+        "operationId": "get_publication_api_v1_admin_publication__publication_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "publication_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Publication Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/app__schemas__publication__PublicationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/publication/{publication_id}/rollback": {
+      "post": {
+        "tags": [
+          "admin-publication"
+        ],
+        "summary": "Rollback Publication",
+        "description": "Roll back a published publication, restoring the previous one.",
+        "operationId": "rollback_publication_api_v1_admin_publication__publication_id__rollback_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "publication_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Publication Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicationRollbackRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/app__schemas__publication__PublicationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/publications": {
+      "get": {
+        "tags": [
+          "admin-publications"
+        ],
+        "summary": "List Publications Admin",
+        "description": "List publications (admin).",
+        "operationId": "list_publications_admin_api_v1_admin_publications_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 20,
+              "title": "Page Size"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "name": "is_featured",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Is Featured"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/app__schemas__content__PublicationListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "admin-publications"
+        ],
+        "summary": "Create Publication",
+        "description": "Create a publication (admin).",
+        "operationId": "create_publication_api_v1_admin_publications_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicationCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/app__schemas__content__PublicationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/publications/{publication_id}": {
+      "put": {
+        "tags": [
+          "admin-publications"
+        ],
+        "summary": "Update Publication",
+        "description": "Update a publication (admin).",
+        "operationId": "update_publication_api_v1_admin_publications__publication_id__put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "publication_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Publication Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicationUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/app__schemas__content__PublicationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "admin-publications"
+        ],
+        "summary": "Delete Publication",
+        "description": "Delete a publication (admin).",
+        "operationId": "delete_publication_api_v1_admin_publications__publication_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "publication_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Publication Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/imports": {
       "get": {
         "tags": [
@@ -7954,6 +9161,64 @@
                   "type": "object",
                   "additionalProperties": true,
                   "title": "Response Retry Import Api V1 Admin Imports  Import Id  Retry Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/modules/{module_key}/template": {
+      "get": {
+        "tags": [
+          "admin-modules"
+        ],
+        "summary": "Download Module Template",
+        "description": "Download a TSV template for a module schema.",
+        "operationId": "download_module_template_api_v1_admin_modules__module_key__template_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "module_key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Module Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -9415,19 +10680,61 @@
           "widgets"
         ],
         "summary": "Admin List Widgets",
-        "description": "List all widgets (including inactive).",
+        "description": "List all widgets (including inactive) with pagination.",
         "operationId": "admin_list_widgets_api_v1_admin_widgets_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 20,
+              "title": "Page Size"
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/WidgetResponse"
-                  },
-                  "type": "array",
-                  "title": "Response Admin List Widgets Api V1 Admin Widgets Get"
+                  "$ref": "#/components/schemas/WidgetListResponse"
                 }
               }
             }
@@ -9437,7 +10744,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -9452,12 +10759,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
+        }
       },
       "post": {
         "tags": [
@@ -9466,15 +10768,20 @@
         "summary": "Admin Create Widget",
         "description": "Create a new widget definition.",
         "operationId": "admin_create_widget_api_v1_admin_widgets_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/WidgetCreate"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "201": {
@@ -9507,12 +10814,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/admin/widgets/{name}": {
@@ -11311,6 +12613,38 @@
           "length"
         ],
         "title": "ChromosomeResponse"
+      },
+      "ComponentDescriptor": {
+        "properties": {
+          "renderer_key": {
+            "type": "string",
+            "title": "Renderer Key"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "config_schema": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Config Schema"
+          },
+          "allowed_children": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Allowed Children"
+          }
+        },
+        "type": "object",
+        "required": [
+          "renderer_key",
+          "label",
+          "config_schema"
+        ],
+        "title": "ComponentDescriptor",
+        "description": "A registry component exposed to Admin for the palette/property panel."
       },
       "ConsequenceType": {
         "type": "string",
@@ -13184,6 +14518,66 @@
             ],
             "title": "Data Set Id"
           },
+          "release_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release Id"
+          },
+          "assembly": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assembly"
+          },
+          "module_key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Module Key"
+          },
+          "schema_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schema Version"
+          },
+          "checksum": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 256
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checksum"
+          },
           "idempotency_key": {
             "type": "string",
             "maxLength": 256,
@@ -14691,6 +16085,274 @@
         "title": "NotificationResponse",
         "description": "One notification entry (list item)."
       },
+      "PageDefinitionCreate": {
+        "properties": {
+          "route": {
+            "type": "string",
+            "maxLength": 160,
+            "title": "Route"
+          },
+          "title_key": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Title Key"
+          },
+          "definition": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Definition"
+          }
+        },
+        "type": "object",
+        "required": [
+          "route",
+          "title_key",
+          "definition"
+        ],
+        "title": "PageDefinitionCreate"
+      },
+      "PageDefinitionListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PageDefinitionSummary"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "default": 0
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page",
+            "default": 1
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size",
+            "default": 20
+          }
+        },
+        "type": "object",
+        "title": "PageDefinitionListResponse"
+      },
+      "PageDefinitionResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "route": {
+            "type": "string",
+            "title": "Route"
+          },
+          "title_key": {
+            "type": "string",
+            "title": "Title Key"
+          },
+          "versions": {
+            "items": {
+              "$ref": "#/components/schemas/PageDefinitionVersionResponse"
+            },
+            "type": "array",
+            "title": "Versions"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "route",
+          "title_key",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "PageDefinitionResponse"
+      },
+      "PageDefinitionStatusEnum": {
+        "type": "string",
+        "enum": [
+          "draft",
+          "preview",
+          "requested",
+          "published"
+        ],
+        "title": "PageDefinitionStatusEnum"
+      },
+      "PageDefinitionSummary": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "route": {
+            "type": "string",
+            "title": "Route"
+          },
+          "title_key": {
+            "type": "string",
+            "title": "Title Key"
+          },
+          "latest_version": {
+            "type": "integer",
+            "title": "Latest Version"
+          },
+          "latest_status": {
+            "$ref": "#/components/schemas/PageDefinitionStatusEnum"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "route",
+          "title_key",
+          "latest_version",
+          "latest_status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "PageDefinitionSummary"
+      },
+      "PageDefinitionUpdate": {
+        "properties": {
+          "base_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Base Version"
+          },
+          "definition": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Definition"
+          },
+          "edit_comment": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 512
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edit Comment"
+          }
+        },
+        "type": "object",
+        "required": [
+          "base_version",
+          "definition"
+        ],
+        "title": "PageDefinitionUpdate",
+        "description": "Update a draft: version conflict is signalled by ``base_version``."
+      },
+      "PageDefinitionVersionResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "page_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Page Id"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PageDefinitionStatusEnum"
+          },
+          "definition": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Definition"
+          },
+          "edited_by": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edited By"
+          },
+          "edit_comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edit Comment"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "page_id",
+          "version",
+          "status",
+          "definition",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "PageDefinitionVersionResponse"
+      },
       "PageStatus": {
         "type": "string",
         "enum": [
@@ -14783,6 +16445,39 @@
         "title": "PhenotypeResponse",
         "description": "Public representation of a phenotype observation."
       },
+      "PreviewRequest": {
+        "properties": {
+          "definition": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Definition"
+          }
+        },
+        "type": "object",
+        "required": [
+          "definition"
+        ],
+        "title": "PreviewRequest"
+      },
+      "PreviewResponse": {
+        "properties": {
+          "definition": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Definition"
+          },
+          "version_preview": {
+            "type": "integer",
+            "title": "Version Preview"
+          }
+        },
+        "type": "object",
+        "required": [
+          "definition",
+          "version_preview"
+        ],
+        "title": "PreviewResponse"
+      },
       "PreviewTokenResponse": {
         "properties": {
           "preview": {
@@ -14807,24 +16502,24 @@
         "title": "PreviewTokenResponse",
         "description": "Short-lived HMAC preview token (15 min, stateless, NOT a JWT)."
       },
-      "PublicationResponse": {
+      "PublicationCreate": {
         "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
           "title": {
             "type": "string",
+            "maxLength": 1024,
+            "minLength": 1,
             "title": "Title"
           },
           "authors": {
             "type": "string",
+            "minLength": 1,
             "title": "Authors"
           },
           "journal": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 256
               },
               {
                 "type": "null"
@@ -14835,7 +16530,9 @@
           "year": {
             "anyOf": [
               {
-                "type": "integer"
+                "type": "integer",
+                "maximum": 3000.0,
+                "minimum": 1000.0
               },
               {
                 "type": "null"
@@ -14846,7 +16543,8 @@
           "doi": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 256
               },
               {
                 "type": "null"
@@ -14857,7 +16555,8 @@
           "pmid": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 32
               },
               {
                 "type": "null"
@@ -14880,21 +16579,295 @@
             "type": "boolean",
             "title": "Is Featured",
             "default": false
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Created At"
           }
         },
         "type": "object",
         "required": [
-          "id",
           "title",
-          "authors",
-          "created_at"
+          "authors"
         ],
-        "title": "PublicationResponse"
+        "title": "PublicationCreate"
+      },
+      "PublicationRequest": {
+        "properties": {
+          "target": {
+            "$ref": "#/components/schemas/PublicationTarget"
+          },
+          "release_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Release Id"
+          },
+          "page_definition_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Definition Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "target",
+          "release_id"
+        ],
+        "title": "PublicationRequest"
+      },
+      "PublicationRollbackRequest": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "title": "PublicationRollbackRequest"
+      },
+      "PublicationStatus": {
+        "type": "string",
+        "enum": [
+          "requested",
+          "building",
+          "validating",
+          "deploying",
+          "published",
+          "failed",
+          "rolled_back",
+          "superseded"
+        ],
+        "title": "PublicationStatus",
+        "description": "State machine for a static publication request."
+      },
+      "PublicationTarget": {
+        "type": "string",
+        "enum": [
+          "local",
+          "github_pages",
+          "cloudflare_pages"
+        ],
+        "title": "PublicationTarget",
+        "description": "Where a static artifact is published."
+      },
+      "PublicationTargetListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PublicationTargetResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "PublicationTargetListResponse"
+      },
+      "PublicationTargetResponse": {
+        "properties": {
+          "target": {
+            "type": "string",
+            "title": "Target"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "is_configured": {
+            "type": "boolean",
+            "title": "Is Configured"
+          }
+        },
+        "type": "object",
+        "required": [
+          "target",
+          "description",
+          "is_configured"
+        ],
+        "title": "PublicationTargetResponse"
+      },
+      "PublicationUpdate": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "authors": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authors"
+          },
+          "journal": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 256
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Journal"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 3000.0,
+                "minimum": 1000.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "doi": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 256
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doi"
+          },
+          "pmid": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 32
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pmid"
+          },
+          "abstract": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Abstract"
+          },
+          "is_featured": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Featured"
+          }
+        },
+        "type": "object",
+        "title": "PublicationUpdate"
+      },
+      "PublishRequest": {
+        "properties": {
+          "version_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version Id"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 512
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "title": "PublishRequest",
+        "description": "Request publication of the latest draft/preview version."
+      },
+      "PublishRequestResponse": {
+        "properties": {
+          "page_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Page Id"
+          },
+          "version_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Version Id"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PageDefinitionStatusEnum"
+          },
+          "event_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "page_id",
+          "version_id",
+          "version",
+          "status"
+        ],
+        "title": "PublishRequestResponse"
       },
       "QueryLatencyPoint": {
         "properties": {
@@ -14927,6 +16900,19 @@
         ],
         "title": "QueryLatencyPoint",
         "description": "Daily query-latency percentiles (ms)."
+      },
+      "RegistryResponse": {
+        "properties": {
+          "components": {
+            "items": {
+              "$ref": "#/components/schemas/ComponentDescriptor"
+            },
+            "type": "array",
+            "title": "Components"
+          }
+        },
+        "type": "object",
+        "title": "RegistryResponse"
       },
       "ReleaseActionRequest": {
         "properties": {
@@ -17101,6 +19087,66 @@
         "title": "WidgetDescriptor",
         "description": "Lightweight widget descriptor served to the public layout endpoint."
       },
+      "WidgetHealthItem": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "p50_ms": {
+            "type": "number",
+            "title": "P50 Ms",
+            "default": 0.0
+          },
+          "p95_ms": {
+            "type": "number",
+            "title": "P95 Ms",
+            "default": 0.0
+          },
+          "cache_hit_rate": {
+            "type": "number",
+            "title": "Cache Hit Rate",
+            "default": 0.0
+          },
+          "error_count": {
+            "type": "integer",
+            "title": "Error Count",
+            "default": 0
+          },
+          "request_count": {
+            "type": "integer",
+            "title": "Request Count",
+            "default": 0
+          },
+          "cache_hit_history": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Cache Hit History"
+          },
+          "latency_history": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Latency History"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "display_name"
+        ],
+        "title": "WidgetHealthItem",
+        "description": "Per-widget health/metrics summary.\n\nThe API does not yet collect per-widget latency/history, so current\ndeployments return an empty ``widgets`` list; the shape is kept stable so\nAdmin can render the same contract once metrics collection exists."
+      },
       "WidgetHealthResponse": {
         "properties": {
           "total_widgets": {
@@ -17130,6 +19176,18 @@
             "type": "string",
             "title": "Cache Backend",
             "default": "redis"
+          },
+          "widgets": {
+            "items": {
+              "$ref": "#/components/schemas/WidgetHealthItem"
+            },
+            "type": "array",
+            "title": "Widgets"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
           }
         },
         "type": "object",
@@ -17141,6 +19199,24 @@
           "builtin_templates"
         ],
         "title": "WidgetHealthResponse"
+      },
+      "WidgetListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/WidgetResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "WidgetListResponse"
       },
       "WidgetPermissionEnum": {
         "type": "string",
@@ -17387,6 +19463,285 @@
         ],
         "title": "SeedRequestStatus",
         "description": "Lifecycle of a contact-style seed request."
+      },
+      "app__schemas__content__PublicationListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/app__schemas__content__PublicationResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "default": 0
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page",
+            "default": 1
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size",
+            "default": 20
+          }
+        },
+        "type": "object",
+        "title": "PublicationListResponse"
+      },
+      "app__schemas__content__PublicationResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "authors": {
+            "type": "string",
+            "title": "Authors"
+          },
+          "journal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Journal"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "doi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doi"
+          },
+          "pmid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pmid"
+          },
+          "abstract": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Abstract"
+          },
+          "is_featured": {
+            "type": "boolean",
+            "title": "Is Featured",
+            "default": false
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "authors",
+          "created_at"
+        ],
+        "title": "PublicationResponse"
+      },
+      "app__schemas__publication__PublicationListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/app__schemas__publication__PublicationResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "PublicationListResponse"
+      },
+      "app__schemas__publication__PublicationResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "publication_id": {
+            "type": "integer",
+            "title": "Publication Id"
+          },
+          "target": {
+            "$ref": "#/components/schemas/PublicationTarget"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PublicationStatus"
+          },
+          "release_id": {
+            "type": "integer",
+            "title": "Release Id"
+          },
+          "page_definition_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Definition Version"
+          },
+          "manifest_digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manifest Digest"
+          },
+          "artifact_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artifact Url"
+          },
+          "remote_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remote Id"
+          },
+          "previous_publication_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Publication Id"
+          },
+          "superseded_by_publication_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Superseded By Publication Id"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          },
+          "requested_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested By"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "publication_id",
+          "target",
+          "status",
+          "release_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "PublicationResponse"
       },
       "app__schemas__seed__SeedRequestCreate": {
         "properties": {

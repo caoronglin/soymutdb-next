@@ -94,7 +94,35 @@ import_tasks = Table(
     Column("total_records", Integer),
     Column("processed_records", Integer),
     Column("error_message", Text),
+    Column("error_detail", JSON),
+    Column("failed_batch", Integer),
     Column("completed_at", DateTime(timezone=True)),
+)
+
+data_sets = Table(
+    "data_sets",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("type", String(32)),
+    Column("release_id", Integer),
+    Column("source_objects", JSON),
+    Column("status", String(32)),
+    Column("validation_evidence", JSON),
+    Column("manifest", JSON),
+    Column("created_at", DateTime(timezone=True)),
+    Column("updated_at", DateTime(timezone=True)),
+)
+
+module_data_rows = Table(
+    "module_data_rows",
+    metadata,
+    Column("id", UUID(as_uuid=True), primary_key=True),
+    Column("module_key", String(80)),
+    Column("release_id", Integer),
+    Column("row_key", String(512)),
+    Column("data", JSON),
+    Column("created_at", DateTime(timezone=True)),
+    Column("updated_at", DateTime(timezone=True)),
 )
 
 blast_jobs = Table(
@@ -186,6 +214,38 @@ notifications = Table(
     Column("created_at", DateTime(timezone=True)),
 )
 
+#: Immutable static publication rows (Phase 3).  The worker reads/writes the
+#: status columns only; the API owns the migration.  Column set mirrors
+#: ``app.models.publication.StaticPublication``.
+static_publications = Table(
+    "static_publications",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("publication_id", Integer),
+    Column("target", String(32)),
+    Column("status", String(32)),
+    Column("release_id", Integer),
+    Column("page_definition_version", Integer),
+    Column("manifest_digest", String(64)),
+    Column("artifact_url", Text),
+    Column("remote_id", Text),
+    Column("previous_publication_id", Integer),
+    Column("evidence", JSON),
+    Column("error_message", Text),
+    Column("requested_by", String(64)),
+    Column("superseded_by_publication_id", Integer),
+    Column("created_at", DateTime(timezone=True)),
+    Column("updated_at", DateTime(timezone=True)),
+)
+
+#: Target-scoped lease row (latest request id per target, Phase 3).
+publication_target_leases = Table(
+    "publication_target_leases",
+    metadata,
+    Column("target", String(32), primary_key=True),
+    Column("latest_publication_id", Integer),
+)
+
 
 def utcnow() -> datetime:
     """Timezone-aware current time for status timestamps."""
@@ -207,5 +267,7 @@ __all__ = [
     "import_tasks",
     "metadata",
     "notifications",
+    "publication_target_leases",
+    "static_publications",
     "utcnow",
 ]

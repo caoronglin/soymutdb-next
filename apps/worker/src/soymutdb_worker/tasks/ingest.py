@@ -23,18 +23,18 @@ import csv
 import hashlib
 import io
 import logging
-import os
 import re
-from datetime import datetime, timezone
-from typing import Any, Iterator
+from datetime import UTC
+from typing import Any
 
 import clickhouse_connect
-from clickhouse_connect.driver import Client
 from celery import Task
+from clickhouse_connect.driver import Client
 
 from soymutdb_worker.config import get_setting
 from soymutdb_worker.main import celery_app
 from soymutdb_worker.utils.s3 import download_file, stream_s3_file
+
 from .data_adapters import ImportContext, get_adapter
 
 logger = logging.getLogger(__name__)
@@ -43,8 +43,47 @@ BATCH_SIZE = 50_000
 
 
 def update_import_progress(import_task_id: int, **values: Any) -> None:
-    """Narrow integration point for the API/import-state repository."""
+    """Persist import task progress/state to PostgreSQL.
+
+    This is the worker-side state write used by every import adapter.  It is
+    intentionally best-effort: a metrics/state write failure must not abort
+    the underlying ingestion work.
+    """
     logger.info("import progress", import_task_id=import_task_id, **values)
+    try:
+        from sqlalchemy import update
+
+        from soymutdb_worker.tables import import_tasks
+        from soymutdb_worker.utils.db import get_db
+
+        update_values: dict[str, Any] = {}
+        if "status" in values:
+            update_values["status"] = values["status"]
+        if "progress" in values:
+            update_values["progress"] = int(values["progress"])
+        if "processed" in values:
+            update_values["processed_records"] = int(values["processed"])
+        if "total" in values:
+            update_values["total_records"] = int(values["total"])
+        if "error_detail" in values:
+            update_values["error_detail"] = values["error_detail"]
+        if "failed_batch" in values:
+            update_values["failed_batch"] = values["failed_batch"]
+        if values.get("status") == "failed":
+            update_values["error_message"] = str(values.get("error_detail", "import failed"))[:4000]
+            from datetime import datetime
+
+            update_values["completed_at"] = datetime.now(UTC)
+        if not update_values:
+            return
+        with get_db() as session:
+            session.execute(
+                update(import_tasks)
+                .where(import_tasks.c.id == import_task_id)
+                .values(**update_values)
+            )
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("import_progress_persist_failed", import_task_id=import_task_id, error=str(exc))
 
 
 def current_batch() -> int | None:
@@ -638,8 +677,20 @@ def import_mutant_lines(
 
 @celery_app.task(name="soymutdb_worker.tasks.ingest.run_import_adapter", queue="ingest")
 def run_import_adapter(import_task_id: int, data_set_id: int, kind: str,
-                       release_id: str, file_key: str, assembly: str = "") -> dict[str, Any]:
-    context = ImportContext(import_task_id, data_set_id, release_id, file_key, assembly or None)
+                       release_id: str, file_key: str, assembly: str = "",
+                       module_key: str | None = None,
+                       schema_version: int | None = None,
+                       checksum: str | None = None) -> dict[str, Any]:
+    context = ImportContext(
+        import_task_id,
+        data_set_id,
+        release_id,
+        file_key,
+        assembly or None,
+        module_key=module_key,
+        schema_version=schema_version,
+        checksum=checksum,
+    )
     try:
         update_import_progress(import_task_id, status="ingesting", progress=0)
         result = get_adapter(kind).run(context, progress=lambda **values: update_import_progress(import_task_id, **values))

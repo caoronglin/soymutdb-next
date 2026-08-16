@@ -16,6 +16,7 @@ from typing import Final
 BLAST_RUN_TASK: Final[str] = "soymutdb_worker.tasks.blast.run_blast"
 BUILD_STATIC_PAGES_TASK: Final[str] = "soymutdb_worker.tasks.static_pages.build_static_pages"
 EXPORT_VARIANTS_TASK: Final[str] = "soymutdb_worker.tasks.export.export_variants"
+IMPORT_ADAPTER_TASK: Final[str] = "soymutdb_worker.tasks.ingest.run_import_adapter"
 IMPORT_EXPRESSION_TASK: Final[str] = "soymutdb_worker.tasks.expression.import_expression_csv"
 IMPORT_HOMOLOG_TASK: Final[str] = "soymutdb_worker.tasks.homolog.import_homolog_csv"
 IMPORT_FASTA_TASK: Final[str] = "soymutdb_worker.tasks.ingest.import_fasta"
@@ -30,6 +31,11 @@ GWAS_RUN_TASK: Final[str] = "soymutdb_worker.tasks.gwas.run_gwas"
 #: ``default`` queue (no task_routes entry needed).
 SEED_REQUEST_EMAIL_TASK: Final[str] = (
     "soymutdb_worker.tasks.email.send_seed_request_email"
+)
+#: Cache/notification refresh after the active release pointer changes.
+STATIC_PUBLISH_TASK: Final[str] = "soymutdb_worker.tasks.static_publish.build_static_release"
+RELEASE_POINTER_CHANGED_TASK: Final[str] = (
+    "soymutdb_worker.tasks.release.refresh_release_pointer"
 )
 
 # ---------------------------------------------------------------------------
@@ -48,7 +54,9 @@ QUEUE_DEFAULT: Final[str] = "default"
 TASK_QUEUE_MAP: Final[dict[str, str]] = {
     BLAST_RUN_TASK: QUEUE_BLAST,
     BUILD_STATIC_PAGES_TASK: QUEUE_STATS,
+    STATIC_PUBLISH_TASK: QUEUE_STATS,
     EXPORT_VARIANTS_TASK: QUEUE_EXPORT,
+    IMPORT_ADAPTER_TASK: QUEUE_INGEST,
     IMPORT_EXPRESSION_TASK: QUEUE_INGEST,
     IMPORT_HOMOLOG_TASK: QUEUE_INGEST,
     ANALYSIS_FASTP_TASK: QUEUE_ANALYSES,
@@ -72,6 +80,7 @@ __all__ = [
     "GWAS_RUN_TASK",
     "BUILD_STATIC_PAGES_TASK",
     "EXPORT_VARIANTS_TASK",
+    "IMPORT_ADAPTER_TASK",
     "IMPORT_EXPRESSION_TASK",
     "IMPORT_HOMOLOG_TASK",
     "IMPORT_FASTA_TASK",
@@ -82,6 +91,7 @@ __all__ = [
     "PAYLOAD_VERSION",
     "QUEUE_ANALYSES",
     "SEED_REQUEST_EMAIL_TASK",
+    "RELEASE_POINTER_CHANGED_TASK",
     "QUEUE_BLAST",
     "QUEUE_CLEANUP",
     "QUEUE_DEFAULT",

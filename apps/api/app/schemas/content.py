@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
-from ..core.compat import StrEnum
+from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator
+
+from ..core.compat import StrEnum
 
 
 class ReleaseStatus(StrEnum):
@@ -89,6 +90,49 @@ class PublicationResponse(BaseModel):
         if v is not None and not v.startswith("10."):
             raise ValueError("DOI must start with '10.'")
         return v
+
+
+class PublicationCreate(BaseModel):
+    title: str = Field(..., min_length=1, max_length=1024)
+    authors: str = Field(..., min_length=1)
+    journal: str | None = Field(default=None, max_length=256)
+    year: int | None = Field(default=None, ge=1000, le=3000)
+    doi: str | None = Field(default=None, max_length=256)
+    pmid: str | None = Field(default=None, max_length=32)
+    abstract: str | None = None
+    is_featured: bool = False
+
+    @field_validator("doi")
+    @classmethod
+    def _validate_doi_format(cls, v: str | None) -> str | None:
+        if v is not None and not v.startswith("10."):
+            raise ValueError("DOI must start with '10.'")
+        return v
+
+
+class PublicationUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=1024)
+    authors: str | None = Field(default=None, min_length=1)
+    journal: str | None = Field(default=None, max_length=256)
+    year: int | None = Field(default=None, ge=1000, le=3000)
+    doi: str | None = Field(default=None, max_length=256)
+    pmid: str | None = Field(default=None, max_length=32)
+    abstract: str | None = None
+    is_featured: bool | None = None
+
+    @field_validator("doi")
+    @classmethod
+    def _validate_doi_format(cls, v: str | None) -> str | None:
+        if v is not None and not v.startswith("10."):
+            raise ValueError("DOI must start with '10.'")
+        return v
+
+
+class PublicationListResponse(BaseModel):
+    items: list[PublicationResponse] = Field(default_factory=list)
+    total: int = 0
+    page: int = 1
+    page_size: int = 20
 
 
 class PageStatus(StrEnum):

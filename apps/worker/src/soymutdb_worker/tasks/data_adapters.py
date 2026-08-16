@@ -6,10 +6,17 @@ import csv
 import hashlib
 import shutil
 import subprocess
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
+
+from soymutdb_worker.shared import _ensure_jobs_package
+
+_ensure_jobs_package()
+
+from soymutdb_jobs.module_schema import validate_tsv  # noqa: E402
 
 ProgressCallback = Callable[..., Any]
 
@@ -21,6 +28,9 @@ class ImportContext:
     release_id: str
     file_key: str
     assembly: str | None = None
+    module_key: str | None = None
+    schema_version: int | None = None
+    checksum: str | None = None
 
 
 @dataclass(frozen=True)
@@ -81,7 +91,9 @@ class FastaAdapter(_TextAdapter):
         )
         _progress(progress, processed=records, progress=100)
         return AdapterResult(
-            records, records, 0,
+            records,
+            records,
+            0,
             {"assembly": context.assembly, "chromosomes": lengths, "index": index},
         )
 
@@ -118,12 +130,12 @@ class VcfAdapter:
     def run(self, context, *, progress=None):
         from . import ingest
 
-        value = ingest.import_vcf.run(
-            context.release_id, context.file_key, context.assembly or ""
-        )
+        value = ingest.import_vcf.run(context.release_id, context.file_key, context.assembly or "")
         result = AdapterResult(
-            value.get("total_variants", 0), value.get("total_inserted", 0),
-            value.get("skipped", 0), value,
+            value.get("total_variants", 0),
+            value.get("total_inserted", 0),
+            value.get("skipped", 0),
+            value,
         )
         _progress(progress, processed=result.records, progress=100)
         return result
@@ -147,23 +159,132 @@ class BlastDbAdapter(_TextAdapter):
 
 
 class CsvUpsertAdapter(_TextAdapter):
-    def __init__(self, kind: str): self.kind = kind
+    def __init__(self, kind: str):
+        self.kind = kind
 
     def run(self, context, *, progress=None):
         with _path(context).open(newline="") as handle:
             rows = list(csv.DictReader(handle))
         _progress(progress, processed=len(rows), progress=100)
         return AdapterResult(
-            len(rows), len(rows), 0,
+            len(rows),
+            len(rows),
+            0,
             {"identity": "business-key", "rows": len(rows), "on_conflict": "update"},
         )
 
 
+def _read_module_bytes(context: ImportContext) -> bytes:
+    """Read module TSV bytes from a local path or S3 object."""
+    path = Path(context.file_key)
+    if path.exists():
+        return path.read_bytes()
+    from soymutdb_worker.utils.s3 import download_file
+
+    with download_file(context.file_key) as local_path:
+        return Path(local_path).read_bytes()
+
+
+class ModuleTsvAdapter(_TextAdapter):
+    kind = "module_tsv"
+
+    def validate(self, context: ImportContext) -> dict[str, Any]:
+        data = _read_module_bytes(context)
+        result = validate_tsv(context.module_key or "", data)
+        if not result.ok:
+            raise ValueError(f"TSV validation failed: {result.first_error()}")
+        return {
+            "module_key": context.module_key,
+            "rows": len(result.rows),
+            "checksum": context.checksum,
+        }
+
+    def run(self, context: ImportContext, *, progress=None) -> AdapterResult:
+        if not context.module_key:
+            raise ValueError("module_key is required for module_tsv imports")
+        data = _read_module_bytes(context)
+        result = validate_tsv(context.module_key, data)
+        if not result.ok:
+            raise ValueError(f"TSV validation failed: {result.first_error()}")
+        rows = result.rows
+
+        from sqlalchemy import delete
+
+        from soymutdb_worker.tables import data_sets, module_data_rows
+        from soymutdb_worker.utils.db import get_db
+
+        with get_db() as session:
+            # Remove any partial rows from a previous failed staging attempt.
+            session.execute(
+                delete(module_data_rows).where(
+                    module_data_rows.c.module_key == context.module_key,
+                    module_data_rows.c.release_id == int(context.release_id),
+                )
+            )
+            for row in rows:
+                key_parts = [
+                    str(row.get(col, "")) for col in _module_unique_key(context.module_key)
+                ]
+                session.execute(
+                    module_data_rows.insert().values(
+                        id=uuid.uuid4(),
+                        module_key=context.module_key,
+                        release_id=int(context.release_id),
+                        row_key="\x1f".join(key_parts),
+                        data=row,
+                    )
+                )
+            session.execute(
+                data_sets.update()
+                .where(data_sets.c.id == context.data_set_id)
+                .values(
+                    status="ready",
+                    validation_evidence={
+                        "module_key": context.module_key,
+                        "checksum": context.checksum,
+                        "row_count": len(rows),
+                    },
+                    manifest={
+                        "module_key": context.module_key,
+                        "release_id": context.release_id,
+                        "checksum": context.checksum,
+                        "row_count": len(rows),
+                    },
+                )
+            )
+
+        _progress(progress, processed=len(rows), progress=100)
+        return AdapterResult(
+            len(rows),
+            len(rows),
+            0,
+            {
+                "module_key": context.module_key,
+                "checksum": context.checksum,
+                "rows": len(rows),
+                "on_conflict": "replace",
+            },
+        )
+
+
+def _module_unique_key(module_key: str) -> tuple[str, ...]:
+    from soymutdb_jobs.module_schema import get_schema
+
+    schema = get_schema(module_key)
+    if schema is None:
+        raise ValueError(f"unknown module schema: {module_key}")
+    return schema.unique_key
+
+
 _ADAPTERS: dict[str, DataAdapter] = {
-    "fasta": FastaAdapter(), "gff3": Gff3Adapter(), "vcf": VcfAdapter(),
-    "blast_db": BlastDbAdapter(), "seed_data": CsvUpsertAdapter("seed_data"),
+    "fasta": FastaAdapter(),
+    "gff3": Gff3Adapter(),
+    "vcf": VcfAdapter(),
+    "blast_db": BlastDbAdapter(),
+    "seed_data": CsvUpsertAdapter("seed_data"),
     "expression_csv": CsvUpsertAdapter("expression_csv"),
     "homolog_csv": CsvUpsertAdapter("homolog_csv"),
+    "module_tsv": ModuleTsvAdapter(),
 }
 
 

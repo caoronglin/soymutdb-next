@@ -1432,6 +1432,12 @@ export interface paths {
          *     §4.1: schema_version/generated_at/news{source_total,included_total,
          *     truncated,items}/news_detail{slug: detail|null}/about.
          *
+         *     Release-aware: pass ``release_id`` (and optionally
+         *     ``page_definition_version``) to build an immutable, release-pinned
+         *     snapshot whose cache key differs by release.  Without an explicit
+         *     ``release_id`` the mutable active-release alias is served, for interactive
+         *     public reads only.
+         *
          *     Aggregation is cached in Redis for 60 s (cache.py); the response carries
          *     an ETag so build-time fetchers can short-circuit with 304.
          */
@@ -1724,6 +1730,26 @@ export interface paths {
          *     ``ids`` are always scoped to the caller; foreign ids are ignored.
          */
         post: operations["mark_notifications_read_api_v1_notifications_read_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/page-definitions/{route}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Page Definition
+         * @description Return a published definition for *route* (optionally pinned version).
+         */
+        get: operations["get_page_definition_api_v1_page_definitions__route__get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2296,6 +2322,277 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/page-builder/registry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Registry
+         * @description Expose the server-owned component registry to the Admin editor.
+         */
+        get: operations["get_registry_api_v1_admin_page_builder_registry_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/page-builder/pages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Pages */
+        get: operations["list_pages_api_v1_admin_page_builder_pages_get"];
+        put?: never;
+        /** Create Page */
+        post: operations["create_page_api_v1_admin_page_builder_pages_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/page-builder/pages/{page_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Page */
+        get: operations["get_page_api_v1_admin_page_builder_pages__page_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/page-builder/pages/{page_id}/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Draft */
+        put: operations["update_draft_api_v1_admin_page_builder_pages__page_id__draft_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/page-builder/pages/{page_id}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview Page */
+        post: operations["preview_page_api_v1_admin_page_builder_pages__page_id__preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/page-builder/pages/{page_id}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Versions */
+        get: operations["list_versions_api_v1_admin_page_builder_pages__page_id__versions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/page-builder/pages/{page_id}/publish-request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Publish Request */
+        post: operations["publish_request_api_v1_admin_page_builder_pages__page_id__publish_request_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/publication/targets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Targets
+         * @description List configured publication targets (credentials redacted).
+         */
+        get: operations["list_targets_api_v1_admin_publication_targets_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/publication/request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Request
+         * @description Allocate a publication request for a target and enqueue the build.
+         */
+        post: operations["request_api_v1_admin_publication_request_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/publication": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Publications Admin
+         * @description List publications (most recent first), optionally filtered by target.
+         */
+        get: operations["list_publications_admin_api_v1_admin_publication_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/publication/{publication_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Publication
+         * @description Inspect a single publication's evidence.
+         */
+        get: operations["get_publication_api_v1_admin_publication__publication_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/publication/{publication_id}/rollback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rollback Publication
+         * @description Roll back a published publication, restoring the previous one.
+         */
+        post: operations["rollback_publication_api_v1_admin_publication__publication_id__rollback_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/publications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Publications Admin
+         * @description List publications (admin).
+         */
+        get: operations["list_publications_admin_api_v1_admin_publications_get"];
+        put?: never;
+        /**
+         * Create Publication
+         * @description Create a publication (admin).
+         */
+        post: operations["create_publication_api_v1_admin_publications_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/publications/{publication_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Update Publication
+         * @description Update a publication (admin).
+         */
+        put: operations["update_publication_api_v1_admin_publications__publication_id__put"];
+        post?: never;
+        /**
+         * Delete Publication
+         * @description Delete a publication (admin).
+         */
+        delete: operations["delete_publication_api_v1_admin_publications__publication_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/imports": {
         parameters: {
             query?: never;
@@ -2425,6 +2722,26 @@ export interface paths {
          *     task (administrator-only).
          */
         post: operations["retry_import_api_v1_admin_imports__import_id__retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/modules/{module_key}/template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download Module Template
+         * @description Download a TSV template for a module schema.
+         */
+        get: operations["download_module_template_api_v1_admin_modules__module_key__template_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2873,7 +3190,7 @@ export interface paths {
         };
         /**
          * Admin List Widgets
-         * @description List all widgets (including inactive).
+         * @description List all widgets (including inactive) with pagination.
          */
         get: operations["admin_list_widgets_api_v1_admin_widgets_get"];
         put?: never;
@@ -3528,6 +3845,22 @@ export interface components {
              * @default 0
              */
             order: number;
+        };
+        /**
+         * ComponentDescriptor
+         * @description A registry component exposed to Admin for the palette/property panel.
+         */
+        ComponentDescriptor: {
+            /** Renderer Key */
+            renderer_key: string;
+            /** Label */
+            label: string;
+            /** Config Schema */
+            config_schema: {
+                [key: string]: unknown;
+            };
+            /** Allowed Children */
+            allowed_children?: string[];
         };
         /**
          * ConsequenceType
@@ -4342,6 +4675,16 @@ export interface components {
             object_key?: string | null;
             /** Data Set Id */
             data_set_id?: number | null;
+            /** Release Id */
+            release_id?: number | null;
+            /** Assembly */
+            assembly?: string | null;
+            /** Module Key */
+            module_key?: string | null;
+            /** Schema Version */
+            schema_version?: number | null;
+            /** Checksum */
+            checksum?: string | null;
             /** Idempotency Key */
             idempotency_key: string;
         };
@@ -4891,6 +5234,141 @@ export interface components {
              */
             created_at: string;
         };
+        /** PageDefinitionCreate */
+        PageDefinitionCreate: {
+            /** Route */
+            route: string;
+            /** Title Key */
+            title_key: string;
+            /** Definition */
+            definition: {
+                [key: string]: unknown;
+            };
+        };
+        /** PageDefinitionListResponse */
+        PageDefinitionListResponse: {
+            /** Items */
+            items?: components["schemas"]["PageDefinitionSummary"][];
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+            /**
+             * Page
+             * @default 1
+             */
+            page: number;
+            /**
+             * Page Size
+             * @default 20
+             */
+            page_size: number;
+        };
+        /** PageDefinitionResponse */
+        PageDefinitionResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Route */
+            route: string;
+            /** Title Key */
+            title_key: string;
+            /** Versions */
+            versions?: components["schemas"]["PageDefinitionVersionResponse"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * PageDefinitionStatusEnum
+         * @enum {string}
+         */
+        PageDefinitionStatusEnum: "draft" | "preview" | "requested" | "published";
+        /** PageDefinitionSummary */
+        PageDefinitionSummary: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Route */
+            route: string;
+            /** Title Key */
+            title_key: string;
+            /** Latest Version */
+            latest_version: number;
+            latest_status: components["schemas"]["PageDefinitionStatusEnum"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * PageDefinitionUpdate
+         * @description Update a draft: version conflict is signalled by ``base_version``.
+         */
+        PageDefinitionUpdate: {
+            /** Base Version */
+            base_version: number;
+            /** Definition */
+            definition: {
+                [key: string]: unknown;
+            };
+            /** Edit Comment */
+            edit_comment?: string | null;
+        };
+        /** PageDefinitionVersionResponse */
+        PageDefinitionVersionResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Page Id
+             * Format: uuid
+             */
+            page_id: string;
+            /** Version */
+            version: number;
+            status: components["schemas"]["PageDefinitionStatusEnum"];
+            /** Definition */
+            definition: {
+                [key: string]: unknown;
+            };
+            /** Edited By */
+            edited_by?: string | null;
+            /** Edit Comment */
+            edit_comment?: string | null;
+            /** Published At */
+            published_at?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
         /**
          * PageStatus
          * @enum {string}
@@ -4926,6 +5404,22 @@ export interface components {
             /** Description */
             description?: string | null;
         };
+        /** PreviewRequest */
+        PreviewRequest: {
+            /** Definition */
+            definition: {
+                [key: string]: unknown;
+            };
+        };
+        /** PreviewResponse */
+        PreviewResponse: {
+            /** Definition */
+            definition: {
+                [key: string]: unknown;
+            };
+            /** Version Preview */
+            version_preview: number;
+        };
         /**
          * PreviewTokenResponse
          * @description Short-lived HMAC preview token (15 min, stateless, NOT a JWT).
@@ -4938,10 +5432,8 @@ export interface components {
             /** Url */
             url: string;
         };
-        /** PublicationResponse */
-        PublicationResponse: {
-            /** Id */
-            id: string;
+        /** PublicationCreate */
+        PublicationCreate: {
             /** Title */
             title: string;
             /** Authors */
@@ -4961,11 +5453,92 @@ export interface components {
              * @default false
              */
             is_featured: boolean;
+        };
+        /** PublicationRequest */
+        PublicationRequest: {
+            target: components["schemas"]["PublicationTarget"];
+            /** Release Id */
+            release_id: number;
+            /** Page Definition Version */
+            page_definition_version?: number | null;
+        };
+        /** PublicationRollbackRequest */
+        PublicationRollbackRequest: {
+            /** Reason */
+            reason: string;
+        };
+        /**
+         * PublicationStatus
+         * @description State machine for a static publication request.
+         * @enum {string}
+         */
+        PublicationStatus: "requested" | "building" | "validating" | "deploying" | "published" | "failed" | "rolled_back" | "superseded";
+        /**
+         * PublicationTarget
+         * @description Where a static artifact is published.
+         * @enum {string}
+         */
+        PublicationTarget: "local" | "github_pages" | "cloudflare_pages";
+        /** PublicationTargetListResponse */
+        PublicationTargetListResponse: {
+            /** Items */
+            items: components["schemas"]["PublicationTargetResponse"][];
+        };
+        /** PublicationTargetResponse */
+        PublicationTargetResponse: {
+            /** Target */
+            target: string;
+            /** Description */
+            description: string;
+            /** Is Configured */
+            is_configured: boolean;
+        };
+        /** PublicationUpdate */
+        PublicationUpdate: {
+            /** Title */
+            title?: string | null;
+            /** Authors */
+            authors?: string | null;
+            /** Journal */
+            journal?: string | null;
+            /** Year */
+            year?: number | null;
+            /** Doi */
+            doi?: string | null;
+            /** Pmid */
+            pmid?: string | null;
+            /** Abstract */
+            abstract?: string | null;
+            /** Is Featured */
+            is_featured?: boolean | null;
+        };
+        /**
+         * PublishRequest
+         * @description Request publication of the latest draft/preview version.
+         */
+        PublishRequest: {
+            /** Version Id */
+            version_id?: string | null;
+            /** Reason */
+            reason?: string | null;
+        };
+        /** PublishRequestResponse */
+        PublishRequestResponse: {
             /**
-             * Created At
-             * Format: date-time
+             * Page Id
+             * Format: uuid
              */
-            created_at: string;
+            page_id: string;
+            /**
+             * Version Id
+             * Format: uuid
+             */
+            version_id: string;
+            /** Version */
+            version: number;
+            status: components["schemas"]["PageDefinitionStatusEnum"];
+            /** Event Id */
+            event_id?: string | null;
         };
         /**
          * QueryLatencyPoint
@@ -4989,6 +5562,11 @@ export interface components {
              * @default 0
              */
             p99: number;
+        };
+        /** RegistryResponse */
+        RegistryResponse: {
+            /** Components */
+            components?: components["schemas"]["ComponentDescriptor"][];
         };
         /** ReleaseActionRequest */
         ReleaseActionRequest: {
@@ -5837,6 +6415,53 @@ export interface components {
              */
             cache_ttl: number;
         };
+        /**
+         * WidgetHealthItem
+         * @description Per-widget health/metrics summary.
+         *
+         *     The API does not yet collect per-widget latency/history, so current
+         *     deployments return an empty ``widgets`` list; the shape is kept stable so
+         *     Admin can render the same contract once metrics collection exists.
+         */
+        WidgetHealthItem: {
+            /** Name */
+            name: string;
+            /** Display Name */
+            display_name: string;
+            /**
+             * P50 Ms
+             * @default 0
+             */
+            p50_ms: number;
+            /**
+             * P95 Ms
+             * @default 0
+             */
+            p95_ms: number;
+            /**
+             * Cache Hit Rate
+             * @default 0
+             */
+            cache_hit_rate: number;
+            /**
+             * Error Count
+             * @default 0
+             */
+            error_count: number;
+            /**
+             * Request Count
+             * @default 0
+             */
+            request_count: number;
+            /** Cache Hit History */
+            cache_hit_history?: {
+                [key: string]: unknown;
+            }[];
+            /** Latency History */
+            latency_history?: {
+                [key: string]: unknown;
+            }[];
+        };
         /** WidgetHealthResponse */
         WidgetHealthResponse: {
             /** Total Widgets */
@@ -5854,6 +6479,23 @@ export interface components {
              * @default redis
              */
             cache_backend: string;
+            /** Widgets */
+            widgets?: components["schemas"]["WidgetHealthItem"][];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at?: string;
+        };
+        /** WidgetListResponse */
+        WidgetListResponse: {
+            /** Items */
+            items?: components["schemas"]["WidgetResponse"][];
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
         };
         /**
          * WidgetPermissionEnum
@@ -5947,6 +6589,103 @@ export interface components {
          * @enum {string}
          */
         app__models__seed_request__SeedRequestStatus: "pending" | "approved" | "rejected" | "fulfilled";
+        /** PublicationListResponse */
+        app__schemas__content__PublicationListResponse: {
+            /** Items */
+            items?: components["schemas"]["app__schemas__content__PublicationResponse"][];
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+            /**
+             * Page
+             * @default 1
+             */
+            page: number;
+            /**
+             * Page Size
+             * @default 20
+             */
+            page_size: number;
+        };
+        /** PublicationResponse */
+        app__schemas__content__PublicationResponse: {
+            /** Id */
+            id: string;
+            /** Title */
+            title: string;
+            /** Authors */
+            authors: string;
+            /** Journal */
+            journal?: string | null;
+            /** Year */
+            year?: number | null;
+            /** Doi */
+            doi?: string | null;
+            /** Pmid */
+            pmid?: string | null;
+            /** Abstract */
+            abstract?: string | null;
+            /**
+             * Is Featured
+             * @default false
+             */
+            is_featured: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** PublicationListResponse */
+        app__schemas__publication__PublicationListResponse: {
+            /** Items */
+            items: components["schemas"]["app__schemas__publication__PublicationResponse"][];
+            /** Total */
+            total: number;
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+        };
+        /** PublicationResponse */
+        app__schemas__publication__PublicationResponse: {
+            /** Id */
+            id: number;
+            /** Publication Id */
+            publication_id: number;
+            target: components["schemas"]["PublicationTarget"];
+            status: components["schemas"]["PublicationStatus"];
+            /** Release Id */
+            release_id: number;
+            /** Page Definition Version */
+            page_definition_version?: number | null;
+            /** Manifest Digest */
+            manifest_digest?: string | null;
+            /** Artifact Url */
+            artifact_url?: string | null;
+            /** Remote Id */
+            remote_id?: string | null;
+            /** Previous Publication Id */
+            previous_publication_id?: number | null;
+            /** Superseded By Publication Id */
+            superseded_by_publication_id?: number | null;
+            /** Error Message */
+            error_message?: string | null;
+            /** Requested By */
+            requested_by?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
         /** SeedRequestCreate */
         app__schemas__seed__SeedRequestCreate: {
             /** Mutant Line Id */
@@ -8910,7 +9649,10 @@ export interface operations {
     };
     content_snapshot_api_v1_content_snapshot_get: {
         parameters: {
-            query?: never;
+            query?: {
+                release_id?: number | null;
+                page_definition_version?: number | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -8934,7 +9676,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
             /** @description Internal Server Error */
@@ -9045,7 +9787,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PublicationResponse"][];
+                    "application/json": components["schemas"]["app__schemas__content__PublicationResponse"][];
                 };
             };
             /** @description Validation Error */
@@ -9085,7 +9827,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PublicationResponse"];
+                    "application/json": components["schemas"]["app__schemas__content__PublicationResponse"];
                 };
             };
             /** @description Validation Error */
@@ -9487,6 +10229,48 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MarkReadResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_page_definition_api_v1_page_definitions__route__get: {
+        parameters: {
+            query?: {
+                version?: string | null;
+            };
+            header?: never;
+            path: {
+                route: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageDefinitionVersionResponse"];
                 };
             };
             /** @description Validation Error */
@@ -10868,6 +11652,713 @@ export interface operations {
             };
         };
     };
+    get_registry_api_v1_admin_page_builder_registry_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegistryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_pages_api_v1_admin_page_builder_pages_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+                route?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageDefinitionListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_page_api_v1_admin_page_builder_pages_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PageDefinitionCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageDefinitionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_page_api_v1_admin_page_builder_pages__page_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                page_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageDefinitionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_draft_api_v1_admin_page_builder_pages__page_id__draft_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                page_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PageDefinitionUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageDefinitionVersionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    preview_page_api_v1_admin_page_builder_pages__page_id__preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                page_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_versions_api_v1_admin_page_builder_pages__page_id__versions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                page_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageDefinitionVersionResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    publish_request_api_v1_admin_page_builder_pages__page_id__publish_request_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                page_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublishRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublishRequestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_targets_api_v1_admin_publication_targets_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationTargetListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    request_api_v1_admin_publication_request_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublicationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["app__schemas__publication__PublicationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_publications_admin_api_v1_admin_publication_get: {
+        parameters: {
+            query?: {
+                target?: string | null;
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["app__schemas__publication__PublicationListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_publication_api_v1_admin_publication__publication_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                publication_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["app__schemas__publication__PublicationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    rollback_publication_api_v1_admin_publication__publication_id__rollback_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                publication_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublicationRollbackRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["app__schemas__publication__PublicationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_publications_admin_api_v1_admin_publications_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+                search?: string | null;
+                is_featured?: boolean | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["app__schemas__content__PublicationListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_publication_api_v1_admin_publications_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublicationCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["app__schemas__content__PublicationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_publication_api_v1_admin_publications__publication_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                publication_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublicationUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["app__schemas__content__PublicationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    delete_publication_api_v1_admin_publications__publication_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                publication_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     list_imports_api_v1_admin_imports_get: {
         parameters: {
             query?: {
@@ -11190,6 +12681,46 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    download_module_template_api_v1_admin_modules__module_key__template_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                module_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
                 };
             };
             /** @description Validation Error */
@@ -12074,7 +13605,11 @@ export interface operations {
     };
     admin_list_widgets_api_v1_admin_widgets_get: {
         parameters: {
-            query?: never;
+            query?: {
+                page?: number;
+                page_size?: number;
+                category?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -12087,7 +13622,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["WidgetResponse"][];
+                    "application/json": components["schemas"]["WidgetListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -12096,7 +13631,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
             /** @description Internal Server Error */

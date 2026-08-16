@@ -43,13 +43,45 @@ async def poll_outbox_once(*, send: SendFn = dispatch_task) -> int:
 
         for event in events:
             event_id = str(event.event_id)
-            task_name = event.payload.get("task_name", "")
+            payload = event.payload or {}
+            task_name = payload.get("task_name", "")
+            if not task_name or not isinstance(task_name, str):
+                logger.warning(
+                    "outbox.malformed_event",
+                    event_id=event_id,
+                    event_type=event.event_type,
+                    reason="missing task_name",
+                )
+                await outbox_service.mark_failed(
+                    session, event.event_id, error="missing task_name"
+                )
+                processed += 1
+                continue
+
+            kwargs = payload.get("kwargs")
+            if kwargs is None:
+                # Backward compatibility: versioned JobPayload events carry
+                # the task payload directly under ``payload``.
+                kwargs = {"payload": payload}
+            elif not isinstance(kwargs, dict):
+                logger.warning(
+                    "outbox.malformed_event",
+                    event_id=event_id,
+                    event_type=event.event_type,
+                    reason="invalid kwargs",
+                )
+                await outbox_service.mark_failed(
+                    session, event.event_id, error="invalid kwargs"
+                )
+                processed += 1
+                continue
+
             queue = TASK_QUEUE_MAP.get(task_name, QUEUE_DEFAULT)
             try:
                 send(
                     task_name,
                     identifier=event_id,
-                    kwargs={"payload": event.payload},
+                    kwargs=kwargs,
                     queue=queue,
                     task_id=event_id,
                 )

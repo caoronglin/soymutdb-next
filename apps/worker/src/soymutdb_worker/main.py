@@ -47,6 +47,8 @@ celery_app = Celery(
         "soymutdb_worker.tasks.static_pages",
         "soymutdb_worker.tasks.analyses",
         "soymutdb_worker.tasks.email",
+        "soymutdb_worker.tasks.release",
+        "soymutdb_worker.tasks.static_publish",
     ],
 )
 
@@ -127,6 +129,8 @@ celery_app.autodiscover_tasks(
         "soymutdb_worker.tasks.gwas",
         "soymutdb_worker.tasks.notifications",
         "soymutdb_worker.tasks.static_pages",
+        "soymutdb_worker.tasks.release",
+        "soymutdb_worker.tasks.static_publish",
     ]
 )
 

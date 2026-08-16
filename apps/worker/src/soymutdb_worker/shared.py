@@ -29,6 +29,8 @@ __all__ = [
     "QUEUE_INGEST",
     "QUEUE_STATS",
     "SEED_REQUEST_EMAIL_TASK",
+    "RELEASE_POINTER_CHANGED_TASK",
+    "STATIC_PUBLISH_TASK",
     "TASK_QUEUE_MAP",
     "transition_allowed",
 ]
@@ -62,7 +64,9 @@ from soymutdb_jobs.contract import (  # noqa: E402
     QUEUE_EXPORT,
     QUEUE_INGEST,
     QUEUE_STATS,
+    RELEASE_POINTER_CHANGED_TASK,
     SEED_REQUEST_EMAIL_TASK,
+    STATIC_PUBLISH_TASK,
     TASK_QUEUE_MAP,
 )
 from soymutdb_jobs.schemas import JobPayload, JobRecordStore, JobStatusUpdate  # noqa: E402
