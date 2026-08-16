@@ -51,16 +51,25 @@ interface NavItem {
   labelKey: string;
 }
 
+/** Map the fixed seed labels to the app's i18n keys. */
+const NAV_LABEL_KEYS: Record<string, string> = {
+  Home: "nav.home",
+  Search: "nav.search",
+  Tools: "nav.tools",
+  "Latest News": "nav.latestNews",
+  Contact: "nav.contact",
+};
+
 /**
  * Primary navigation — five flat items in the approved reference order
  * (Home / Search / Tools / Latest News / Contact). The order comes from the
- * PageDefinition navigation (page-builder/seed.ts) and is a single source of
- * truth for both desktop and mobile drawers. On definition/API failure the
- * same immutable five-item order is the fallback.
+ * PageDefinition navigation (page-builder/seed.ts fallback) and is a single
+ * source of truth for both desktop and mobile drawers. On definition/API
+ * failure the same immutable five-item order is the fallback.
  */
 const NAV_ITEMS: NavItem[] = NAVIGATION_ORDER.map((item) => ({
-  to: item.to,
-  labelKey: item.labelKey,
+  to: item.route,
+  labelKey: NAV_LABEL_KEYS[item.label] ?? item.label,
 }));
 
 export function SiteHeader() {

@@ -47,3 +47,4 @@ export * from "./news";
 export * from "./site";
 export * from "./admin-news";
 export * from "./admin-uploads";
+export * from "./page-definitions";

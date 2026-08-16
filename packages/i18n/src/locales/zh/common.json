@@ -99,7 +99,8 @@
     "taskLocation": "物理位置",
     "taskJbrowse": "JBrowse 2",
     "taskPrimer": "引物设计",
-    "taskEntries": "快速工具"
+    "taskEntries": "快速工具",
+    "offlineFallback": "显示缓存页面（离线）"
   },
   "genes": {
     "title": "基因搜索",

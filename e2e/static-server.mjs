@@ -85,6 +85,74 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  // Mock genomes metadata: GET /<prefix>/api/v1/genes/assemblies → one
+  // default assembly, and /genes/assemblies/{id}/chromosomes → chr01..chr03.
+  // Enables the Gene ID / Physical Location search forms to be exercised
+  // offline (the submit path requires a selected assembly).
+  if (
+    req.method === "GET" &&
+    pathname.startsWith(`${PREFIX}/api/v1/genes/assemblies`)
+  ) {
+    const rest = pathname.slice(`${PREFIX}/api/v1/genes/assemblies`.length);
+    if (rest === "" || rest === "/") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(
+        JSON.stringify([
+          {
+            id: "1",
+            name: "Wm82.a4.v1",
+            species: "Glycine max",
+            version: "a4.v1",
+            is_default: true,
+          },
+        ]),
+      );
+    } else {
+      // /genes/assemblies/{id}/chromosomes
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(
+        JSON.stringify([
+          { id: "1", assembly_id: "1", name: "chr01", length: 100000, order: 0 },
+          { id: "2", assembly_id: "1", name: "chr02", length: 100000, order: 1 },
+          { id: "3", assembly_id: "1", name: "chr03", length: 100000, order: 2 },
+        ]),
+      );
+    }
+    return;
+  }
+
+  // Mock gene search: return an empty result envelope so the result table
+  // renders its column headers (never fake rows).
+  if (
+    req.method === "GET" &&
+    pathname.startsWith(`${PREFIX}/api/v1/genes`) &&
+    !pathname.startsWith(`${PREFIX}/api/v1/genes/assemblies`)
+  ) {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(
+      JSON.stringify({
+        items: [],
+        next_cursor: null,
+        has_more: false,
+        page: 1,
+        page_size: 20,
+        total: 0,
+        total_pages: 0,
+      }),
+    );
+    return;
+  }
+
+  // Mock region variant search: empty list (no fake rows).
+  if (
+    req.method === "GET" &&
+    pathname.startsWith(`${PREFIX}/api/v1/variants/region`)
+  ) {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify([]));
+    return;
+  }
+
   if (pathname === `${PREFIX}/` || pathname === PREFIX) {
     res.writeHead(200, { "Content-Type": MIME[".html"] });
     createReadStream(join(ROOT, "index.html")).pipe(res);

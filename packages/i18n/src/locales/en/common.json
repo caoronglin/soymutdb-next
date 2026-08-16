@@ -99,7 +99,8 @@
     "taskLocation": "Physical Location",
     "taskJbrowse": "JBrowse 2",
     "taskPrimer": "Primer Design",
-    "taskEntries": "Quick tools"
+    "taskEntries": "Quick tools",
+    "offlineFallback": "Showing cached page (offline)"
   },
   "genes": {
     "title": "Gene Search",
