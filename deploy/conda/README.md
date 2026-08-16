@@ -124,6 +124,11 @@ WantedBy=multi-user.target
 
 **常用可选：** `SOYMUTDB_CLICKHOUSE_HOST/PORT/USER/PASSWORD/DATABASE`、`SOYMUTDB_DB_POOL_SIZE`（默认 5，调大需同步 PG `max_connections`）、`SOYMUTDB_WORKER_DB_POOL_SIZE`（worker 同步 engine）、`SOYMUTDB_CELERY_RESULT_EXPIRES`（默认 604800）。
 
+**不可变静态发布目标（Phase 3，可选）：** 见本目录 `env.example` 注释段。`local` 用
+`SOYMUTDB_PUBLICATION_LOCAL_ROOT`；`github_pages` 用 `SOYMUTDB_GITHUB_PAGES_TOKEN/REPO`；
+`cloudflare_pages` 用 `SOYMUTDB_CLOUDFLARE_PAGES_API_TOKEN/ACCOUNT_ID/PROJECT`。未配置的
+目标 `is_configured=false`，不得发起发布；凭据只存 env，绝不落库。
+
 > worker 与 beat 只读 subset：`SOYMUTDB_DATABASE_URL`（worker 用 `psycopg` 驱动，URL scheme 由代码构造）、ClickHouse、S3、Celery 相关变量。全部字段见 `apps/api/app/core/config.py`。
 
 ## 6. 启动命令模板（uvicorn / celery multi）
@@ -135,7 +140,7 @@ cd apps/api && conda run -n soymutdb-api uvicorn app.main:app \
     --host 0.0.0.0 --port 8000 --workers 4 --proxy-headers --forwarded-allow-ips=*
 ```
 
-**Celery workers（队列契约：`ingest / export / stats / cleanup / blast / default`；与 compose 分工一致）：**
+**Celery workers（队列契约：`ingest / export / stats / cleanup / blast / analyses / default`；与 compose 分工一致）：**
 
 ```bash
 # 前台（调试）：
@@ -148,16 +153,24 @@ conda run -n soymutdb-worker celery -A soymutdb_worker.main:celery_app worker \
 conda run -n soymutdb-worker celery -A soymutdb_worker.main:celery_app worker \
     --loglevel=info --queues=ingest,export,stats,cleanup,default --concurrency=2 \
     --max-tasks-per-child=20 --hostname=worker-ingest@%h
+conda run -n soymutdb-worker celery -A soymutdb_worker.main:celery_app worker \
+    --loglevel=info --queues=analyses --concurrency=2 \
+    --max-tasks-per-child=20 --hostname=worker-analyses@%h
 
 # 后台（celery multi，日志写 $INSTALL_DIR/logs/）：
 conda run -n soymutdb-worker celery -A soymutdb_worker.main:celery_app multi start \
-    worker-default worker-blast worker-ingest \
+    worker-default worker-blast worker-ingest worker-analyses \
     -Q:worker-default ingest,export,stats,cleanup,default \
     -Q:worker-blast blast \
     -Q:worker-ingest ingest,export,stats,cleanup,default \
-    --concurrency:worker-default=4 --concurrency:worker-blast=2 --concurrency:worker-ingest=2 \
+    -Q:worker-analyses analyses \
+    --concurrency:worker-default=4 --concurrency:worker-blast=2 \
+    --concurrency:worker-ingest=2 --concurrency:worker-analyses=2 \
     --logfile=/opt/soymutdb/logs/worker-%n.log --pidfile=/opt/soymutdb/logs/worker-%n.pid
 ```
+
+> `analyses` 队列由 `worker-analyses` 独占，消费 fastp/scanpy/GWAS 分析任务；`stats` 队列含
+> 静态发布任务（`static_publish`）与静态页构建（`static_pages`），由 worker-default/worker-ingest 消费。
 
 **beat（定时任务）：**
 

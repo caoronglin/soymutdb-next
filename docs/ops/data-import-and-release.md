@@ -42,6 +42,23 @@ uploading → validating → ingesting → ready → published → rolled_back
 不得发布。回滚切回上一 active release，记录 `rolled_back_at`、理由和审计。ClickHouse schema 迁移可能
 不可逆；遇到此类故障停止自动回滚，转人工恢复并使用完整备份。
 
+## 静态发布（不可变多目标）
+
+Release 就绪后，静态门户可发布到三目标之一（`local` / `github_pages` / `cloudflare_pages`）。发布是一条
+不可变制品 + 目标状态记录，状态 `requested → building → validating → deploying → published`，失败进入
+`failed`，被更新请求覆盖进入 `superseded`，发布后可 `rolled_back`。
+
+1. 在 Admin 发布面板选择目标并发起请求（`POST /api/v1/admin/publication/request`），传入 `release_id`
+   与可选 `page_definition_version`；服务端分配目标作用域单调 `publication_id` 并派发构建任务。
+2. worker 生成全新制品树 `dist/releases/<release-id>/<digest>/`，写 `manifest.json`（逐文件 SHA-256），
+   校验摘要与静态树（`validate-static-tree.ts`）后调用目标适配器 stage → verify → promote。
+3. 晋升前校验该 `publication_id` 是否仍是目标最新请求；过期则标记 `superseded`，绝不覆盖新指针。
+4. 回滚 `POST /api/v1/admin/publication/{id}/rollback` 恢复上一条已发布制品（按 `remote_id` 与不可变 artifact）。
+
+失败/陈旧发布不改变当前发布指针；发布与回滚写结构化审计。凭据只从 env 读取，不落库、不进 API 响应。
+GitHub Pages 目标借助 `.github/workflows/pages.yml` 的 `workflow_dispatch`（输入 `publication_id` /
+`artifact_url` / `manifest_digest`）完成下载→摘要校验→烟雾→单次提交→更新 ref。
+
 ## 备份、恢复与验证
 
 默认 bucket 至少为 `genomic-data user-tracks blast-dbs exports gwas`。`analyses` 若按保留策略认定为可重建
