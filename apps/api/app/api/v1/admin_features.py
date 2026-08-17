@@ -37,7 +37,7 @@ async def list_features(
         features=[
             FeatureDefinitionResponse(
                 key=definition.key,
-                enabled=enabled[key],
+                enabled=enabled[definition.key],
                 default=definition.default,
                 public=definition.public,
                 description=definition.description,

@@ -15,6 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.database import get_db
+from ...core.features import FeatureFlagService
 from ...core.exceptions import NotFoundError
 from ...models.page_builder import PageDefinitionStatus, PageDefinitionVersion
 from ...page_builder import service as page_service
@@ -52,6 +53,8 @@ async def get_page_definition(
     """Return a published definition for *route* (optionally pinned version)."""
     # Normalise the leading slash (APIRouter strips it for ``{route:path}``).
     norm_route = route if route.startswith("/") else f"/{route}"
+    if not await FeatureFlagService.is_enabled(db, "page_builder"):
+        raise NotFoundError("Published page definitions are currently disabled")
 
     if version is not None:
         # A pinned version must belong to the route's page and be published.

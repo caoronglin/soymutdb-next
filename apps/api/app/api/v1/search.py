@@ -22,6 +22,7 @@ from fastapi.responses import JSONResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.database import get_db, get_redis
+from ...core.features import FeatureFlagService
 from ...schemas.search import GlobalSearchResponse, SearchResultType
 from ...search import ExternalSearchAggregator, ExternalSearchResponse, SearchSource, render_search_html
 from ...search.cache import SearchCache
@@ -135,6 +136,8 @@ async def global_search(
     """
     if _want_json(accept, format):
         if sources:
+            if not await FeatureFlagService.is_enabled(db, "search.external"):
+                raise HTTPException(status_code=503, detail="External search is currently disabled")
             selected_sources = _parse_sources(sources)
             aggregator = ExternalSearchAggregator(get_redis())
             ext_resp = await aggregator.search(
@@ -151,6 +154,8 @@ async def global_search(
         return JSONResponse(content=payload)
 
     # ---- External federated search -> HTML fragment -----------------------
+    if not await FeatureFlagService.is_enabled(db, "search.external"):
+        raise HTTPException(status_code=503, detail="External search is currently disabled")
     selected_sources = _parse_sources(sources)
     per_source_limit = max(3, min(10, limit))
 

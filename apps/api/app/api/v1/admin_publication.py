@@ -16,6 +16,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.database import get_db
+from ...core.features import FeatureFlagService
 from ...core.exceptions import AuthorizationError
 from ...core.security import RoleName, has_role
 from ...models.auth import User
@@ -69,6 +70,11 @@ async def request(
 ) -> PublicationResponse:
     """Allocate a publication request for a target and enqueue the build."""
     _require_admin(current_user)
+    target_key = getattr(payload.target, "value", payload.target)
+    if target_key == "github_pages" and not await FeatureFlagService.is_enabled(db, "publication.github_pages"):
+        raise HTTPException(status_code=503, detail="GitHub Pages publication is disabled")
+    if target_key == "cloudflare_pages" and not await FeatureFlagService.is_enabled(db, "publication.cloudflare_pages"):
+        raise HTTPException(status_code=503, detail="Cloudflare Pages publication is disabled")
     try:
         pub = await request_publication(
             db,
