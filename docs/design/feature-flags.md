@@ -15,7 +15,6 @@
 | `imports.local_upload` | on | 是 | 新浏览器直传拒绝，S3 URI 高级模式仍可按策略使用 |
 | `publication.github_pages` | on | 否 | 禁止选择 GitHub Pages target |
 | `publication.cloudflare_pages` | on | 否 | 禁止选择 Cloudflare Pages target |
-| `mcp.write_tools` | off | 否 | MCP 只读，禁止提交/修改型工具 |
 
 ## API
 
@@ -39,5 +38,5 @@ PUT body：
 - 默认值写在代码中；DB override 缺失或非法时回到安全默认。
 - 关闭只拒绝新请求，不杀死运行中任务；任务状态继续由状态机管理。
 - public capability 只返回标记为 public 的 key；内部发布/MCP 开关不泄露。
-- 高风险开关（MCP write、发布 target）后续应增加重新认证/二人审批。
+- 高风险开关（发布 target）后续应增加重新认证/二人审批；MCP write 等未接入 runtime 的能力不得提前注册。
 - feature flag 不是权限系统，也不是 release pointer；权限仍由 RBAC，发布仍由 Publication 状态机控制。

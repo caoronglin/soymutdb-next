@@ -49,9 +49,6 @@ FEATURES: Final[dict[str, FeatureDefinition]] = {
     "publication.cloudflare_pages": FeatureDefinition(
         "publication.cloudflare_pages", True, False, "Enable Cloudflare Pages publication target."
     ),
-    "mcp.write_tools": FeatureDefinition(
-        "mcp.write_tools", False, False, "Enable MCP tools that submit or mutate jobs."
-    ),
 }
 
 
