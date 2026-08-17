@@ -21,6 +21,7 @@ const NewsNewPage = lazy(() => import("./routes/news/new"));
 const NewsEditPage = lazy(() => import("./routes/news/$id"));
 const AuditPage = lazy(() => import("./routes/audit"));
 const SettingsPage = lazy(() => import("./routes/settings"));
+const FeaturesPage = lazy(() => import("./routes/features"));
 const AnalyticsSettingsPage = lazy(() => import("./routes/analytics-settings"));
 const WidgetsPage = lazy(() => import("./routes/widgets"));
 const WidgetEditorPage = lazy(() => import("./routes/widgets/$name"));
@@ -150,6 +151,12 @@ const settingsRoute = createRoute({
   component: () => withSuspense(SettingsPage),
 });
 
+const featuresRoute = createRoute({
+  getParentRoute: () => authLayoutRoute,
+  path: "/features",
+  component: () => withSuspense(FeaturesPage),
+});
+
 const analyticsSettingsRoute = createRoute({
   getParentRoute: () => authLayoutRoute,
   path: "/analytics-settings",
@@ -210,6 +217,7 @@ const routeTree = rootRoute.addChildren([
     newsEditRoute,
     auditRoute,
     settingsRoute,
+    featuresRoute,
     analyticsSettingsRoute,
     widgetsRoute,
     widgetEditorRoute,

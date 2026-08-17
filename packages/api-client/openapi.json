@@ -6493,6 +6493,106 @@
         }
       }
     },
+    "/api/v1/admin/features": {
+      "get": {
+        "tags": [
+          "admin-features"
+        ],
+        "summary": "List Features",
+        "operationId": "list_features_api_v1_admin_features_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminFeaturesResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "admin-features"
+        ],
+        "summary": "Update Features",
+        "operationId": "update_features_api_v1_admin_features_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeatureUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminFeaturesResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/admin/content/pages": {
       "get": {
         "tags": [
@@ -10346,6 +10446,47 @@
         }
       }
     },
+    "/api/v1/capabilities": {
+      "get": {
+        "tags": [
+          "capabilities"
+        ],
+        "summary": "Get Capabilities",
+        "operationId": "get_capabilities_api_v1_capabilities_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicCapabilitiesResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/sra/run/{accession}": {
       "get": {
         "tags": [
@@ -11380,6 +11521,24 @@
         "type": "object",
         "title": "AdminDashboardStats",
         "description": "System overview numbers for the admin dashboard.\n\nSerialised with camelCase keys (``totalUsers``, ``activeReleases``, \u2026)\nto match the admin frontend contract."
+      },
+      "AdminFeaturesResponse": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "title": "Version",
+            "default": 1
+          },
+          "features": {
+            "items": {
+              "$ref": "#/components/schemas/FeatureDefinitionResponse"
+            },
+            "type": "array",
+            "title": "Features"
+          }
+        },
+        "type": "object",
+        "title": "AdminFeaturesResponse"
       },
       "AlleleFreqRequest": {
         "properties": {
@@ -13581,6 +13740,57 @@
         ],
         "title": "ExportResponse",
         "description": "Response after submitting an export job."
+      },
+      "FeatureDefinitionResponse": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "default": {
+            "type": "boolean",
+            "title": "Default"
+          },
+          "public": {
+            "type": "boolean",
+            "title": "Public"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "disable_behavior": {
+            "type": "string",
+            "title": "Disable Behavior"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "enabled",
+          "default",
+          "public",
+          "description",
+          "disable_behavior"
+        ],
+        "title": "FeatureDefinitionResponse"
+      },
+      "FeatureUpdateRequest": {
+        "properties": {
+          "features": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "type": "object",
+            "title": "Features"
+          }
+        },
+        "type": "object",
+        "title": "FeatureUpdateRequest"
       },
       "GeneDetail": {
         "properties": {
@@ -16509,6 +16719,24 @@
         ],
         "title": "PreviewTokenResponse",
         "description": "Short-lived HMAC preview token (15 min, stateless, NOT a JWT)."
+      },
+      "PublicCapabilitiesResponse": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "title": "Version",
+            "default": 1
+          },
+          "features": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "type": "object",
+            "title": "Features"
+          }
+        },
+        "type": "object",
+        "title": "PublicCapabilitiesResponse"
       },
       "PublicationCreate": {
         "properties": {

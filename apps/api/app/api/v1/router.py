@@ -11,6 +11,7 @@ from fastapi import APIRouter
 from . import (
     admin,
     admin_content,
+    admin_features,
     admin_imports,
     admin_modules,
     admin_news,
@@ -25,6 +26,7 @@ from . import (
     auth,
     blast,
     content,
+    capabilities,
     expression,
     genes,
     gwas,
@@ -81,6 +83,7 @@ api_router.include_router(news.router)
 api_router.include_router(notifications.router)
 api_router.include_router(page_definitions.router)
 api_router.include_router(admin.router)
+api_router.include_router(admin_features.router)
 api_router.include_router(admin_content.router)
 api_router.include_router(admin_news.router)
 api_router.include_router(admin_page_builder.router)
@@ -95,6 +98,7 @@ api_router.include_router(expression.router)
 api_router.include_router(homolog.router)
 api_router.include_router(analytics.router)
 api_router.include_router(site.router)
+api_router.include_router(capabilities.router)
 api_router.include_router(sra.router)
 api_router.include_router(tools_enrichment.router)
 api_router.include_router(tools_exppattern.router)

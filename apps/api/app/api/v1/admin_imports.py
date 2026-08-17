@@ -9,6 +9,7 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.database import get_db
+from ...core.features import FeatureFlagService
 from ...core.exceptions import NotFoundError, ValidationError
 from ...core.security import require_admin_roles
 from ...core.task_dispatch import get_celery_client
@@ -170,8 +171,14 @@ async def get_import_status(
 
 
 @router.post("/uploads/multipart", status_code=status.HTTP_201_CREATED)
-async def start_multipart_upload(body: MultipartStartRequest, current_user: User = Depends(get_current_user)) -> dict:
+async def start_multipart_upload(
+    body: MultipartStartRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
     _require_admin(current_user)
+    if body.type == "module_tsv" and not await FeatureFlagService.is_enabled(db, "imports.local_upload"):
+        raise ValidationError("Local module uploads are currently disabled")
     data_set_id = body.data_set_id or 1
     session = initiate_multipart_upload(data_set_id=data_set_id, filename=body.filename, content_type=body.content_type)
     return {"upload_id": session.upload_id, "object_key": session.object_key, "parts": [{"part_number": n, "url": sign_multipart_part(object_key=session.object_key, upload_id=session.upload_id, part_number=n)} for n in range(1, body.part_count + 1)]}
@@ -204,6 +211,10 @@ async def create_import(
     _require_admin(current_user)
 
     if body.type == "module_tsv":
+        if not await FeatureFlagService.is_enabled(db, "imports.module_tsv"):
+            raise ValidationError("Module TSV imports are currently disabled")
+        if body.filename.lower().endswith(".xlsx") and not await FeatureFlagService.is_enabled(db, "imports.module_xlsx"):
+            raise ValidationError("XLSX module imports are currently disabled")
         if not body.module_key:
             raise ValidationError("module_key is required for module_tsv imports")
         if not body.checksum:

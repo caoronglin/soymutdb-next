@@ -7,6 +7,7 @@ import {
   Newspaper,
   ScrollText,
   Settings,
+  ToggleRight,
   BarChart3,
   ChevronLeft,
   ChevronRight,
@@ -69,6 +70,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { path: "/audit", label: "Audit Logs", icon: ScrollText },
       { path: "/settings", label: "Settings", icon: Settings },
+      { path: "/features", label: "Feature Flags", icon: ToggleRight },
       { path: "/analytics-settings", label: "Analytics", icon: BarChart3 },
     ],
   },

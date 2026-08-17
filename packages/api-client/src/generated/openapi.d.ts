@@ -2073,6 +2073,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/features": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Features */
+        get: operations["list_features_api_v1_admin_features_get"];
+        /** Update Features */
+        put: operations["update_features_api_v1_admin_features_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/content/pages": {
         parameters: {
             query?: never;
@@ -3050,6 +3068,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Capabilities */
+        get: operations["get_capabilities_api_v1_capabilities_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sra/run/{accession}": {
         parameters: {
             query?: never;
@@ -3396,6 +3431,16 @@ export interface components {
              * @default 0
              */
             queryP95Change: number;
+        };
+        /** AdminFeaturesResponse */
+        AdminFeaturesResponse: {
+            /**
+             * Version
+             * @default 1
+             */
+            version: number;
+            /** Features */
+            features?: components["schemas"]["FeatureDefinitionResponse"][];
         };
         /**
          * AlleleFreqRequest
@@ -4313,6 +4358,28 @@ export interface components {
             status: string;
             /** Message */
             message: string;
+        };
+        /** FeatureDefinitionResponse */
+        FeatureDefinitionResponse: {
+            /** Key */
+            key: string;
+            /** Enabled */
+            enabled: boolean;
+            /** Default */
+            default: boolean;
+            /** Public */
+            public: boolean;
+            /** Description */
+            description: string;
+            /** Disable Behavior */
+            disable_behavior: string;
+        };
+        /** FeatureUpdateRequest */
+        FeatureUpdateRequest: {
+            /** Features */
+            features?: {
+                [key: string]: boolean;
+            };
         };
         /** GeneDetail */
         GeneDetail: {
@@ -5435,6 +5502,18 @@ export interface components {
             exp: number;
             /** Url */
             url: string;
+        };
+        /** PublicCapabilitiesResponse */
+        PublicCapabilitiesResponse: {
+            /**
+             * Version
+             * @default 1
+             */
+            version: number;
+            /** Features */
+            features?: {
+                [key: string]: boolean;
+            };
         };
         /** PublicationCreate */
         PublicationCreate: {
@@ -10992,6 +11071,86 @@ export interface operations {
             };
         };
     };
+    list_features_api_v1_admin_features_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminFeaturesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_features_api_v1_admin_features_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeatureUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminFeaturesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     list_pages_api_v1_admin_content_pages_get: {
         parameters: {
             query?: {
@@ -13336,6 +13495,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HomeContentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_capabilities_api_v1_capabilities_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicCapabilitiesResponse"];
                 };
             };
             /** @description Validation Error */
