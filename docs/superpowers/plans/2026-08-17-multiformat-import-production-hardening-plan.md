@@ -326,4 +326,4 @@ DataSet / ImportTask 保存：
 | E | expression/homolog/seed 统一 | 3–5 天 |
 | F | metrics/audit/e2e/docs | 2–3 天 |
 
-优先级：**B（内存/性能） > D（真实用户闭环） > A（安全） > E（清除 count-only） > C/F**。
+优先级：**A+B（安全与可扩展性并行） > D（真实用户闭环） > E（清除 count-only） > C/F**。
