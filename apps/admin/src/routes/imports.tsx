@@ -10,7 +10,7 @@ import {
   Loader2,
   Download,
 } from "lucide-react";
-import { http, apiBaseUrl, getAccessToken } from "@soymutdb/api-client";
+import { http, apiBaseUrl, getAccessToken, capabilitiesApi } from "@soymutdb/api-client";
 import {
   Button,
   Input,
@@ -179,6 +179,21 @@ export default function ImportsPage() {
       }),
     placeholderData: { items: [], total: 0, page, page_size: 20 },
   });
+
+  const { data: capabilities } = useQuery({
+    queryKey: ["public-capabilities"],
+    queryFn: capabilitiesApi.get,
+    staleTime: 30_000,
+  });
+  const featureEnabled = (key: string, fallback = true) =>
+    capabilities?.features?.[key] ?? fallback;
+  const moduleImportEnabled = featureEnabled("imports.module_tsv");
+  const xlsxImportEnabled = featureEnabled("imports.module_xlsx");
+  const localUploadEnabled = featureEnabled("imports.local_upload");
+
+  useEffect(() => {
+    if (!localUploadEnabled && uploadMode === "local") setUploadMode("s3");
+  }, [localUploadEnabled, uploadMode]);
 
   const tasks = data?.items ?? [];
   const hasRunning = tasks.some(
@@ -650,7 +665,11 @@ export default function ImportsPage() {
               </SelectTrigger>
               <SelectContent>
                 {MODULE_TEMPLATE_FORMATS.map((f) => (
-                  <SelectItem key={f.value} value={f.value}>
+                  <SelectItem
+                    key={f.value}
+                    value={f.value}
+                    disabled={f.value === "xlsx" && !xlsxImportEnabled}
+                  >
                     {f.label}
                   </SelectItem>
                 ))}
@@ -676,6 +695,7 @@ export default function ImportsPage() {
         ) : null}
         <p className="mt-2 text-xs text-muted-foreground">
           Starter template for a module schema (genes). Format: TSV / CSV / XLSX.
+          {" "}{!xlsxImportEnabled ? "XLSX is currently disabled by an administrator." : ""}
         </p>
       </div>
 
@@ -737,7 +757,11 @@ export default function ImportsPage() {
                 </SelectTrigger>
                 <SelectContent>
                   {ALL_IMPORT_TYPES.map((type) => (
-                    <SelectItem key={type} value={type}>
+                    <SelectItem
+                      key={type}
+                      value={type}
+                      disabled={type === "module_tsv" && !moduleImportEnabled}
+                    >
                       {TYPE_LABELS[type]}
                     </SelectItem>
                   ))}
@@ -756,7 +780,7 @@ export default function ImportsPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="local">Local file</SelectItem>
+                  <SelectItem value="local" disabled={!localUploadEnabled}>Local file</SelectItem>
                   <SelectItem value="s3">S3 URI (advanced)</SelectItem>
                 </SelectContent>
               </Select>
