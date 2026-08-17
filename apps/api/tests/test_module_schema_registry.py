@@ -147,3 +147,34 @@ def test_template_unknown_format_raises() -> None:
 
     with pytest.raises(ValueError):
         render_module_template("genes", "pdf")
+
+
+def test_preflight_rejects_legacy_and_signature_mismatch() -> None:
+    from app.services.module_schema_registry import preflight_module_file
+
+    assert preflight_module_file("genes.xlsm", b"PK\x03\x04").errors[0].code == "unsupported_format"
+    assert preflight_module_file("genes.xlsx", b"not-a-zip").errors[0].code == "format_signature_mismatch"
+    assert preflight_module_file("genes.csv", b"PK\x03\x04bad").errors[0].code == "format_signature_mismatch"
+
+
+def test_preflight_accepts_utf8_bom_and_streaming_rows() -> None:
+    from app.services.module_schema_registry import (
+        iter_module_rows,
+        validate_module_file_streaming,
+    )
+
+    data = b"\xef\xbb\xbfgene_id\tchromosome\tstart\tend\nG1\tChr01\t1\t9\n"
+    summary = validate_module_file_streaming("genes", "genes.tsv", data)
+    assert summary.ok is True
+    assert summary.row_count == 1
+    rows = list(iter_module_rows("genes", "genes.tsv", data))
+    assert rows[0][0]["gene_id"] == "G1"
+    assert rows[0][1] is None
+
+
+def test_preflight_rejects_control_character() -> None:
+    from app.services.module_schema_registry import validate_module_file
+
+    result = validate_module_file("genes", "genes.csv", b"gene_id,chromosome,start,end\nG1,Chr01,1,9\x01\n")
+    assert result.ok is False
+    assert result.errors[0].code == "control_character"

@@ -34,6 +34,11 @@ import {
 import { DataTable, type DataTableColumn } from "../components/data-table";
 import { StatusBadge, type TaskStatus } from "../components/status-badge";
 import { useAuth } from "../lib/auth-context";
+import {
+  uploadModuleFile,
+  fetchModulePreview,
+  type ModulePreviewResult,
+} from "../lib/module-import-upload";
 
 // ---------------------------------------------------------------------------
 // Types – matches the backend API response shape (snake_case)
@@ -141,6 +146,16 @@ export default function ImportsPage() {
   const [uploadChecksum, setUploadChecksum] = useState("");
   const [uploadError, setUploadError] = useState<string | null>(null);
 
+  // Local file upload state (Phase D). ``uploadMode`` selects local multipart
+  // direct-upload vs. the advanced S3 URI flow.
+  const [uploadMode, setUploadMode] = useState<"local" | "s3">("local");
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [previewState, setPreviewState] = useState<
+    ModulePreviewResult | { status: "checking" } | null
+  >(null);
+
   // Module template download state
   const [templateModuleKey, setTemplateModuleKey] = useState("genes");
   const [templateFormat, setTemplateFormat] = useState<string>("tsv");
@@ -178,7 +193,8 @@ export default function ImportsPage() {
     mutationFn: (body: {
       filename: string;
       type: ImportType;
-      file_path: string;
+      file_path?: string;
+      object_key?: string;
       submitted_by: string;
       module_key?: string;
       checksum?: string;
@@ -195,6 +211,11 @@ export default function ImportsPage() {
       setUploadModuleKey("genes");
       setUploadChecksum("");
       setUploadError(null);
+      setUploadFile(null);
+      setUploadProgress(0);
+      setUploading(false);
+      setUploadMode("local");
+      setPreviewState(null);
       queryClient.invalidateQueries({ queryKey: ["admin-imports"] });
     },
   });
@@ -279,12 +300,64 @@ export default function ImportsPage() {
     [liveStatuses],
   );
 
-  function handleUploadSubmit() {
-    const filename = uploadFilename.trim();
-    if (!filename || !uploadFilePath.trim()) return;
+  async function handleUploadSubmit() {
     setUploadError(null);
 
-    // Module data imports must use a supported multi-format extension.
+    if (uploadMode === "local") {
+      if (!uploadFile) {
+        setUploadError("Choose a file to upload.");
+        return;
+      }
+      const filename = uploadFile.name;
+      // Module data imports must use a supported multi-format extension.
+      if (uploadType === "module_tsv") {
+        const ext = filename.toLowerCase().match(/\.[a-z0-9]+$/)?.[0];
+        if (!ext || !(MODULE_FORMAT_EXTENSIONS as readonly string[]).includes(ext)) {
+          setUploadError(
+            `Module data files must use one of ${MODULE_FORMAT_EXTENSIONS.join(" / ")}.`,
+          );
+          return;
+        }
+        if (!uploadModuleKey.trim()) {
+          setUploadError("Module key is required for module data imports.");
+          return;
+        }
+      }
+
+      setUploading(true);
+      setUploadProgress(0);
+      try {
+        // Browser-direct multipart upload — file bytes never hit the API.
+        const uploaded = await uploadModuleFile({
+          filename,
+          type: uploadType,
+          file: uploadFile,
+          onProgress: (p) => setUploadProgress(p.percent),
+        });
+        submitMutation.mutate({
+          filename,
+          type: uploadType,
+          object_key: uploaded.object_key,
+          submitted_by: user?.username ?? "unknown",
+          module_key: uploadType === "module_tsv" ? uploadModuleKey.trim() : undefined,
+          checksum: uploadType === "module_tsv" ? uploaded.sha256 : undefined,
+        });
+      } catch (err) {
+        setUploadError(
+          err instanceof Error ? err.message : "Upload failed.",
+        );
+      } finally {
+        setUploading(false);
+      }
+      return;
+    }
+
+    // Advanced S3 URI mode.
+    const filename = uploadFilename.trim();
+    if (!filename || !uploadFilePath.trim()) {
+      setUploadError("Filename and S3 path are required in S3 mode.");
+      return;
+    }
     if (uploadType === "module_tsv") {
       const ext = filename.toLowerCase().match(/\.[a-z0-9]+$/)?.[0];
       if (!ext || !(MODULE_FORMAT_EXTENSIONS as readonly string[]).includes(ext)) {
@@ -310,6 +383,20 @@ export default function ImportsPage() {
       submitted_by: user?.username ?? "unknown",
       module_key: uploadType === "module_tsv" ? uploadModuleKey.trim() : undefined,
       checksum: uploadType === "module_tsv" ? uploadChecksum.trim() : undefined,
+    });
+  }
+
+  /** Refresh the preview state — the backend has no preview endpoint yet. */
+  function checkPreview() {
+    if (!uploadFile || uploadType !== "module_tsv") return;
+    setPreviewState({ status: "checking" });
+    void fetchModulePreview({
+      filename: uploadFile.name,
+      module_key: uploadModuleKey.trim() || "genes",
+    }).then((result) => {
+      setPreviewState(
+        result.status === "available" ? result : { status: "unavailable" },
+      );
     });
   }
 
@@ -632,8 +719,8 @@ export default function ImportsPage() {
           <DialogHeader>
             <DialogTitle>New Import</DialogTitle>
             <DialogDescription>
-              Submit a new data import task. The file should already be uploaded
-              to S3 — provide the S3 URI below.
+              Upload a local file (browser-direct to object storage) or reference
+              an already-uploaded S3 object.
             </DialogDescription>
           </DialogHeader>
 
@@ -658,37 +745,89 @@ export default function ImportsPage() {
               </Select>
             </div>
 
-            {/* Filename */}
+            {/* Upload mode */}
             <div className="space-y-1.5">
-              <Label htmlFor="import-filename">Filename</Label>
-              <Input
-                id="import-filename"
-                placeholder={
-                  uploadType === "module_tsv"
-                    ? "e.g. genes.tsv / genes.txt / genes.csv / genes.xlsx"
-                    : "e.g. expression_data.csv"
-                }
-                value={uploadFilename}
-                onChange={(e) => {
-                  setUploadFilename(e.target.value);
-                  setUploadError(null);
-                }}
-              />
+              <Label htmlFor="import-mode">Source</Label>
+              <Select
+                value={uploadMode}
+                onValueChange={(v) => setUploadMode(v as "local" | "s3")}
+              >
+                <SelectTrigger id="import-mode">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="local">Local file</SelectItem>
+                  <SelectItem value="s3">S3 URI (advanced)</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
-            {/* S3 file path */}
-            <div className="space-y-1.5">
-              <Label htmlFor="import-filepath">S3 File Path</Label>
-              <Input
-                id="import-filepath"
-                placeholder="s3://bucket-name/path/to/file.csv"
-                value={uploadFilePath}
-                onChange={(e) => setUploadFilePath(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                The S3 URI where the file has already been uploaded.
-              </p>
-            </div>
+            {uploadMode === "local" ? (
+              <div className="space-y-1.5">
+                <Label>File</Label>
+                <FileDropInput
+                  file={uploadFile}
+                  onSelect={(f) => {
+                    setUploadFile(f);
+                    setUploadFilename(f.name);
+                    setUploadError(null);
+                    setPreviewState(null);
+                  }}
+                  accept=".txt,.tsv,.csv,.xlsx,.vcf,.gff3,.fasta"
+                />
+                {uploadFile ? (
+                  <p className="text-xs text-muted-foreground">
+                    {uploadFile.name} · {formatBytes(uploadFile.size)}
+                    {uploadType === "module_tsv" ? " · format " + extensionOf(uploadFile.name).toUpperCase() : ""}
+                  </p>
+                ) : null}
+                {uploading ? (
+                  <div className="space-y-1" role="progressbar" aria-valuenow={uploadProgress} aria-valuemin={0} aria-valuemax={100}>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                      <div
+                        className="h-full rounded-full bg-primary transition-all"
+                        style={{ width: `${uploadProgress}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">Uploading… {uploadProgress}%</p>
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <>
+                {/* Filename */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="import-filename">Filename</Label>
+                  <Input
+                    id="import-filename"
+                    placeholder={
+                      uploadType === "module_tsv"
+                        ? "e.g. genes.tsv / genes.txt / genes.csv / genes.xlsx"
+                        : "e.g. expression_data.csv"
+                    }
+                    value={uploadFilename}
+                    onChange={(e) => {
+                      setUploadFilename(e.target.value);
+                      setUploadError(null);
+                    }}
+                  />
+                </div>
+
+                {/* S3 file path */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="import-filepath">S3 File Path</Label>
+                  <Input
+                    id="import-filepath"
+                    placeholder="s3://bucket-name/path/to/file.csv"
+                    value={uploadFilePath}
+                    onChange={(e) => setUploadFilePath(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    The S3 URI where the file has already been uploaded.
+                  </p>
+                </div>
+              </>
+            )}
 
             {/* Module-specific fields */}
             {uploadType === "module_tsv" ? (
@@ -705,14 +844,36 @@ export default function ImportsPage() {
                     Server-owned schema key. Supports .tsv / .txt / .csv / .xlsx.
                   </p>
                 </div>
+                {uploadMode === "s3" ? (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="import-checksum">Checksum</Label>
+                    <Input
+                      id="import-checksum"
+                      placeholder="sha256 of the source file (required)"
+                      value={uploadChecksum}
+                      onChange={(e) => setUploadChecksum(e.target.value)}
+                    />
+                  </div>
+                ) : null}
+                {/* Preview is unavailable — no backend preview endpoint yet. */}
                 <div className="space-y-1.5">
-                  <Label htmlFor="import-checksum">Checksum</Label>
-                  <Input
-                    id="import-checksum"
-                    placeholder="sha256 of the source file (required)"
-                    value={uploadChecksum}
-                    onChange={(e) => setUploadChecksum(e.target.value)}
-                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={!uploadFile || uploadType !== "module_tsv"}
+                    onClick={checkPreview}
+                  >
+                    {previewState?.status === "checking" ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : null}
+                    Preview
+                  </Button>
+                  {previewState?.status === "unavailable" ? (
+                    <p className="text-xs text-muted-foreground">
+                      Preview is not available yet — no backend preview endpoint.
+                    </p>
+                  ) : null}
                 </div>
               </>
             ) : null}
@@ -734,8 +895,10 @@ export default function ImportsPage() {
               onClick={handleUploadSubmit}
               disabled={
                 submitMutation.isPending ||
-                !uploadFilename.trim() ||
-                !uploadFilePath.trim()
+                uploading ||
+                (uploadMode === "local"
+                  ? !uploadFile
+                  : !uploadFilename.trim() || !uploadFilePath.trim())
               }
             >
               {submitMutation.isPending ? (
@@ -765,3 +928,41 @@ export default function ImportsPage() {
   );
 }
 
+
+
+interface FileDropInputProps {
+  file: File | null;
+  accept: string;
+  onSelect: (file: File) => void;
+}
+
+function FileDropInput({ file, accept, onSelect }: FileDropInputProps) {
+  return (
+    <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-dashed border-border p-4 text-sm hover:border-primary">
+      <FileSpreadsheet className="size-5 text-primary" aria-hidden />
+      <span className="min-w-0 flex-1 truncate">{file?.name ?? "Choose a local file"}</span>
+      <input
+        type="file"
+        className="sr-only"
+        accept={accept}
+        onChange={(event) => {
+          const selected = event.target.files?.[0];
+          if (selected) onSelect(selected);
+          event.currentTarget.value = "";
+        }}
+      />
+      <span className="text-xs font-medium text-primary">Browse</span>
+    </label>
+  );
+}
+
+function formatBytes(size: number): string {
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function extensionOf(filename: string): string {
+  const match = filename.toLowerCase().match(/\.[a-z0-9]+$/);
+  return match?.[0] ?? "";
+}

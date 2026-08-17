@@ -15,8 +15,11 @@ from soymutdb_jobs.module_schema import (  # noqa: F401
     ValidationResult,
     detect_format,
     get_schema,
+    iter_module_rows,
+    preflight_module_file,
     render_module_template,
     validate_module_file,
+    validate_module_file_streaming,
     validate_tsv,
 )
 
@@ -29,7 +32,10 @@ __all__ = [
     "ValidationResult",
     "detect_format",
     "get_schema",
+    "iter_module_rows",
+    "preflight_module_file",
     "render_module_template",
     "validate_module_file",
+    "validate_module_file_streaming",
     "validate_tsv",
 ]

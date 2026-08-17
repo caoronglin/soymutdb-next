@@ -16,7 +16,7 @@ from soymutdb_worker.shared import _ensure_jobs_package
 
 _ensure_jobs_package()
 
-from soymutdb_jobs.module_schema import validate_module_file  # noqa: E402
+from soymutdb_jobs.module_schema import iter_module_rows, validate_module_file  # noqa: E402
 
 ProgressCallback = Callable[..., Any]
 
@@ -209,37 +209,71 @@ class ModuleTsvAdapter(_TextAdapter):
         if not context.module_key:
             raise ValueError("module_key is required for module_tsv imports")
         data = _read_module_bytes(context)
-        result = self._validate_bytes(context, data)
-        if not result.ok:
-            raise ValueError(f"TSV validation failed: {result.first_error()}")
-        rows = result.rows
+        filename = context.filename or str(Path(context.file_key).name)
+        batch_size = 10_000
+        rows_seen = 0
+        inserted = 0
+        skipped = 0
+        diagnostics: list[str] = []
+        batch: list[dict[str, Any]] = []
 
         from sqlalchemy import delete
 
         from soymutdb_worker.tables import data_sets, module_data_rows
         from soymutdb_worker.utils.db import get_db
 
+        def flush_batch(session, values: list[dict[str, Any]]) -> int:
+            if not values:
+                return 0
+            payload = []
+            for row in values:
+                key_parts = [
+                    str(row.get(col, "")) for col in _module_unique_key(context.module_key)
+                ]
+                payload.append(
+                    {
+                        "id": uuid.uuid4(),
+                        "module_key": context.module_key,
+                        "release_id": int(context.release_id),
+                        "row_key": "\x1f".join(key_parts),
+                        "data": row,
+                    }
+                )
+            session.execute(module_data_rows.insert(), payload)
+            return len(payload)
+
         with get_db() as session:
-            # Remove any partial rows from a previous failed staging attempt.
+            # A single transaction protects the public view: any validation
+            # error raises below and rolls back deletes/inserts together.
             session.execute(
                 delete(module_data_rows).where(
                     module_data_rows.c.module_key == context.module_key,
                     module_data_rows.c.release_id == int(context.release_id),
                 )
             )
-            for row in rows:
-                key_parts = [
-                    str(row.get(col, "")) for col in _module_unique_key(context.module_key)
-                ]
-                session.execute(
-                    module_data_rows.insert().values(
-                        id=uuid.uuid4(),
-                        module_key=context.module_key,
-                        release_id=int(context.release_id),
-                        row_key="\x1f".join(key_parts),
-                        data=row,
-                    )
+            for typed, error in iter_module_rows(context.module_key, filename, data):
+                if error is not None:
+                    skipped += 1
+                    if len(diagnostics) < 200:
+                        diagnostics.append(f"row {error.row or '?'}: {error.code}: {error.message}")
+                    continue
+                if typed is None:
+                    continue
+                rows_seen += 1
+                batch.append(typed)
+                if len(batch) >= batch_size:
+                    inserted += flush_batch(session, batch)
+                    batch.clear()
+                    _progress(progress, processed=rows_seen, total=rows_seen, progress=0)
+            inserted += flush_batch(session, batch)
+
+            if diagnostics:
+                raise ValueError(
+                    "module validation failed: "
+                    + "; ".join(diagnostics[:5])
+                    + (f" (+{len(diagnostics) - 5} more)" if len(diagnostics) > 5 else "")
                 )
+
             session.execute(
                 data_sets.update()
                 .where(data_sets.c.id == context.data_set_id)
@@ -247,27 +281,36 @@ class ModuleTsvAdapter(_TextAdapter):
                     status="ready",
                     validation_evidence={
                         "module_key": context.module_key,
+                        "filename": filename,
                         "checksum": context.checksum,
-                        "row_count": len(rows),
+                        "row_count": rows_seen,
+                        "rows_seen": rows_seen,
+                        "rows_inserted": inserted,
+                        "rows_skipped": skipped,
                     },
                     manifest={
                         "module_key": context.module_key,
                         "release_id": context.release_id,
+                        "filename": filename,
                         "checksum": context.checksum,
-                        "row_count": len(rows),
+                        "row_count": rows_seen,
                     },
                 )
             )
 
-        _progress(progress, processed=len(rows), progress=100)
+        _progress(progress, processed=rows_seen, total=rows_seen, progress=100)
         return AdapterResult(
-            len(rows),
-            len(rows),
-            0,
+            rows_seen,
+            inserted,
+            skipped,
             {
                 "module_key": context.module_key,
+                "filename": filename,
                 "checksum": context.checksum,
-                "rows": len(rows),
+                "rows_seen": rows_seen,
+                "rows_inserted": inserted,
+                "rows_skipped": skipped,
+                "batch_size": batch_size,
                 "on_conflict": "replace",
             },
         )

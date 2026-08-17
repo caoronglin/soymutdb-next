@@ -83,7 +83,11 @@ def update_import_progress(import_task_id: int, **values: Any) -> None:
                 .values(**update_values)
             )
     except Exception as exc:  # pragma: no cover - defensive
-        logger.warning("import_progress_persist_failed", import_task_id=import_task_id, error=str(exc))
+        logger.warning(
+            "import_progress_persist_failed",
+            import_task_id=import_task_id,
+            error=str(exc),
+        )
 
 
 def current_batch() -> int | None:
@@ -92,7 +96,10 @@ def current_batch() -> int | None:
 
 def _surrogate_id(key: str) -> int:
     """Return a deterministic unsigned UInt32 surrogate ID."""
-    return int.from_bytes(hashlib.sha256(key.encode()).digest()[:4], "big", signed=False) & 0xFFFFFFFF
+    return (
+        int.from_bytes(hashlib.sha256(key.encode()).digest()[:4], "big", signed=False)
+        & 0xFFFFFFFF
+    )
 
 
 def _pick_mutant_line(sample_names: list[str], gt_types: Any, alt_idx: int) -> tuple[str, int]:
@@ -695,10 +702,23 @@ def run_import_adapter(import_task_id: int, data_set_id: int, kind: str,
     )
     try:
         update_import_progress(import_task_id, status="ingesting", progress=0)
-        result = get_adapter(kind).run(context, progress=lambda **values: update_import_progress(import_task_id, **values))
-        update_import_progress(import_task_id, status="ready", progress=100, evidence=result.evidence)
+        result = get_adapter(kind).run(
+            context,
+            progress=lambda **values: update_import_progress(import_task_id, **values),
+        )
+        update_import_progress(
+            import_task_id,
+            status="ready",
+            progress=100,
+            evidence=result.evidence,
+        )
         from dataclasses import asdict
         return asdict(result)
     except Exception as exc:
-        update_import_progress(import_task_id, status="failed", error_detail=str(exc), failed_batch=current_batch())
+        update_import_progress(
+            import_task_id,
+            status="failed",
+            error_detail=str(exc),
+            failed_batch=current_batch(),
+        )
         raise
