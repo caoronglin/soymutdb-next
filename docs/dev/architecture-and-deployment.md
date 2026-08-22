@@ -6,14 +6,19 @@
 ## 目标拓扑
 
 ```text
-浏览器 → GitHub Pages（web 根目录、soymutdb-admin/、soymutdb-jbrowse/）
-       → nginx → API / MCP / MinIO
+浏览器 → GitHub Pages（公开 demo）或 Cloudflare Pages（可选生产静态托管）
+       → Cloudflare Tunnel（仅公开 API/基因组数据）→ tunnel-origin → API / MinIO
+       → nginx → API / MCP / MinIO（自管/内部入口）
 API → PostgreSQL（权威）/ ClickHouse（分析）/ MinIO（对象）/ Redis
 worker-analyses → analyses 队列 → analyses bucket
 ```
 
 生产 Compose 保留 API、worker、ClickHouse、PostgreSQL、MinIO、Redis、MCP 和 nginx。GWAS 使用 `gwas`
 bucket，fastp/scanpy 等分析使用 `analyses` bucket。
+
+Cloudflare Pages/Tunnel 是可选生产边缘方案：`cloudflare-tunnel` profile 使用 `cloudflared` 连接仅含 API、
+公开基因组数据和健康检查的 `tunnel-origin`。管理端/API、MCP、数据库、MinIO 控制台和监控不经过该 Tunnel；
+管理端须使用独立的受保护 origin。完整变量、上线、回滚与验证步骤见 [Cloudflare 部署手册](../../deploy/cloudflare.md)。
 
 ## 模型与状态机
 
@@ -61,10 +66,19 @@ Admin 端点：`/admin/publication/targets`（列目标，redacted）、`/admin/
 
 ## CI、Compose 与 MCP
 
-API、worker、MCP 使用不可变显式 tag；发布路径执行 `docker manifest inspect`。PR 没有远端 tag 时只做本地
-build/scan/smoke。升级顺序为预检、manifest、拉取、备份、停止/迁移、启动、readiness、smoke 和状态记录。
-ClickHouse 迁移输入封装在 worker 镜像内，不可逆迁移进入人工恢复门槛。MCP 使用 `MCP_IMAGE_TAG`，分析
-任务由 `worker-analyses` 消费。
+生产 Compose 使用 `core` / `jbrowse` / `blast` / `analyses` / `mcp` / `cloudflare-tunnel` 能力 profile；
+默认启用 `core,blast,analyses,mcp`。API、worker、MCP、JBrowse 的 CI tag 只用于发现，发布后解析远端
+manifest 并输出 `image@sha256` 合同，生产仅接受 `*_IMAGE_REF` digest 引用。PR 只在 CI 做本地
+build/scan/runtime smoke 与全部 profile 的 `docker compose config` 验收；开发机合同测试不要求 Docker。
+升级顺序为预检、manifest、拉取、备份、停止/迁移、启动、readiness、smoke 和 digest 状态记录。
+ClickHouse 迁移输入封装在 worker 镜像内，不可逆迁移进入人工恢复门槛。完整决策见
+[ADR-0001](../adr/0001-platform-delivery-contract.md)。
+
+OCI 发布的 amd64/arm64 在原生 runner 上分别 build、runtime smoke、Trivy 与 SPDX，只有两份验证制品都成功
+才合并 manifest；最终 index、平台 digest、SBOM、SLSA provenance 与 release manifest 使用 GitHub OIDC/Cosign
+签名并立即验证。blue/green 不复用固定端口 Compose 伪装双槽，而由
+[外部 slot adapter 合同](../../deploy/blue-green.md)完成 stage/verify/switch/current；实际负载均衡器、ARM runner、
+Sigstore/GHCR 可用性和生产演练仍是外部验收项。
 
 ## Pages 单次发布
 
@@ -76,8 +90,10 @@ ClickHouse 迁移输入封装在 worker 镜像内，不可逆迁移进入人工�
 /soymutdb-jbrowse/        # JBrowse
 ```
 
-只执行一次 `git push origin gh-pages --force`，保留 `concurrency.group: pages`，发布前断言三个 index 存在
-并运行 news/about smoke。GitHub Pages 不解析 Cloudflare `_headers`；安全头由托管层配置。
+自动发布由 CI 在 main 上成功后经 `workflow_run` 驱动：pages.yml 的 gate 只放行本仓库 main 分支的成功
+CI（失败/取消/PR 运行被拦截），deploy job 再 checkout `workflow_run.head_sha` 构建发布；`workflow_dispatch`
+仍可手动绕过门禁（运维专用）。只执行一次 `git push origin gh-pages --force`，保留 `concurrency.group: pages`，
+发布前断言三个 index 存在并运行 news/about smoke。GitHub Pages 不解析 Cloudflare `_headers`；安全头由托管层配置。
 
 ## 清理范围（已清理）
 

@@ -68,7 +68,7 @@ ClickHouse          → 匿名分析
 - SQL 使用参数化；密钥只通过环境变量；外部 API 必须限流、缓存和 circuit breaker。
 - 当前公开端已有 Web Worker 搜索、View Transition、Web Components、性能观测、CSS Container Queries 和 reduced-motion 方向。
 - 性能目标：静态页面低 TTFB、缓存组件 P95 < 50ms、内部 API P95 < 200ms、核心 Web Vitals 均为 Good。
-- Node >= 20，pnpm 10；根仓库使用 pnpm/Turbo。API 与 Worker 的 Python 版本、依赖和测试边界不同；管理端含 Web 模式与 Tauri 模式。
+- Node >= 20，pnpm 11.21.0；根仓库使用 pnpm/Turbo。API 与 Worker 的 Python 版本、依赖和测试边界不同；管理端含 Web 模式与 Tauri 模式。
 - `pnpm review` 是仓库内部的确定性审查，不等同于 Alibaba Open Code Review。
 
 ## 资料 B：docs/design/architecture.md 已知设计资产

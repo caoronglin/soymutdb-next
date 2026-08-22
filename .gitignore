@@ -181,3 +181,8 @@ apps/api/.venv
 
 # AgentTeams runtime state
 .agent-teams/
+
+# Local AI work logs (project-level conventions/checkpoints remain trackable)
+.ai-memory/*/
+!.ai-memory/project_memory.md
+!.ai-memory/handoff.md

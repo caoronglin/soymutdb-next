@@ -15,16 +15,18 @@
 | --- | --- | --- |
 | 后端 + 数据面 | docker compose（api / worker×3 / beat / postgres / clickhouse / redis×2 / minio / mcp-server / nginx / prometheus / grafana / exporters） | ✅ 主路径，systemd 编排 compose 项目 |
 | 后端 + 数据面（备选） | **conda 裸进程**（api / worker×3 / beat）+ 数据层可仍由 docker compose 提供（推荐组合：docker 起数据层，conda 跑应用层） | ✅ 备选（D6 重新启用），见 `deploy/conda/README.md`，一键脚本 `deploy/scripts/conda-deploy.sh` |
-| 前端静态托管 | **GitHub Pages（gh-pages 分支）**，`push main → CI 自动构建发布` | ✅ 已上线 https://caoronglin.github.io/soymutdb-next/ |
-| 前端静态托管（旧方案） | Cloudflare Pages（web/jbrowse/admin 三个项目） | ⛔ 已放弃，见 `deploy/cloudflare.md` 顶部标注（非主路径） |
+| 前端静态托管（demo） | **GitHub Pages（gh-pages 分支）**，`CI 在 main 上成功（workflow_run）→ pages.yml 构建发布` | ✅ 已上线 https://caoronglin.github.io/soymutdb-next/ |
+| 前端静态托管（可选生产） | Cloudflare Pages（web / JBrowse；管理端需独立受保护 origin） | ✅ 受支持，见 `deploy/cloudflare.md` |
+| API 边缘入口（可选生产） | Cloudflare Tunnel → `cloudflared` → `tunnel-origin` | ✅ `cloudflare-tunnel` profile；仅公开 API/基因组数据 |
 | 旧部署链路 | Windows 服务 | ⛔ 已废弃（非主路径），`deploy/linux/install.sh` 已有标注 |
 
 **关键约束（compose 内已固化，运维需知晓）：**
 
 - 所有传给 api/worker/beat/migrate 的变量使用 `SOYMUTDB_` 前缀，字段与 `apps/api/app/core/config.py` 的 pydantic-settings 对齐；`APP_ENV` 仅 `dev|staging|prod`，生产用 `prod`。
-- 镜像 tag 必须显式注入（`API_IMAGE_TAG` / `WORKER_IMAGE_TAG`），**禁止裸 `latest`**（compose 内 `:?` 强校验，缺失直接拒绝）。
+- 应用镜像必须注入 `API_IMAGE_REF` / `WORKER_IMAGE_REF` / `MCP_IMAGE_REF` / `JBROWSE_IMAGE_REF`，且值为 CI 发布合同中的 `image@sha256`；tag 和本地 build 不能作为生产回退。
 - 一次性迁移由 `migrate` 服务负责（alembic upgrade head）；api/worker 依赖其 `service_completed_successfully` 才启动。
-- 前端静态站点已移出 compose；nginx 仅反代 API / MinIO / MCP。`web/admin/jbrowse` 上游容器已移除，`extra_hosts` 将三个名字钉到 `127.0.0.1`，相关 location 返回 502/504 属**预期行为**（前端在 gh-pages）。
+- 前端静态站点以 Pages 为主；可选 `jbrowse` profile 提供 loopback 自托管 JBrowse。nginx 仍仅反代 API / MinIO / MCP，既有 `web/admin/jbrowse` 占位上游不自动切换到可选容器。
+- `cloudflare-tunnel` 是可选 profile：`cloudflared` 不接入默认业务网络，只能经 `tunnel-origin` 到达 API 与公开 MinIO bucket；管理 API、MCP、监控与数据存储均不暴露。
 - 数据存储镜像全部固定版本（无 `:latest`）。
 
 ---
@@ -107,7 +109,7 @@ flowchart LR
     PROM --> GRAF
 
     CI -.->|"push main → 构建 → 发布"| PAGES
-    CI -.->|"构建并推送镜像 tag"| HOST
+    CI -.->|"验证镜像并发布 image@sha256 合同"| HOST
 ```
 
 **依赖链速记（compose `depends_on`）：**
@@ -164,12 +166,15 @@ minio-init ──► minio(healthy)（一次性建 4 个 bucket + genomic-data �
 
 ### 4.1 项目变量（compose 读取，模板 `deploy/.env.example` → 服务器 `/opt/soymutdb/.env`）
 
-#### A. 镜像 tag（必填，禁止裸 latest）
+#### A. OCI 镜像 digest 引用（必填）
 
 | 变量 | 示例 | 说明 |
 | --- | --- | --- |
-| `API_IMAGE_TAG` | `ghcr.io/soymutdb/api:2026.08.07-1` | api / migrate 镜像；缺失时 compose 拒绝启动 |
-| `WORKER_IMAGE_TAG` | `ghcr.io/soymutdb/worker:2026.08.07-1` | worker-default / worker-blast / worker-ingest / beat 镜像 |
+| `API_IMAGE_REF` | `ghcr.io/soymutdb/api@sha256:<64-hex>` | api / migrate；非 digest 时 upgrade 拒绝 |
+| `WORKER_IMAGE_REF` | `ghcr.io/soymutdb/worker@sha256:<64-hex>` | 全部 worker / beat / ClickHouse migration |
+| `MCP_IMAGE_REF` | `ghcr.io/soymutdb/mcp-server@sha256:<64-hex>` | MCP adapter |
+| `JBROWSE_IMAGE_REF` | `ghcr.io/soymutdb/jbrowse@sha256:<64-hex>` | 可选 `jbrowse` profile |
+| `COMPOSE_PROFILES` | `core,blast,analyses,mcp` | 默认生产能力；JBrowse/Tunnel 显式追加 |
 
 #### B. 数据存储凭据（生产必须修改，`upgrade.sh` 预检会拦截默认值）
 
@@ -295,7 +300,7 @@ git checkout <release-tag-or-branch>
 # 3) 安装（创建 soymutdb 系统用户、/opt/soymutdb 目录结构、复制 .env 模板）
 sudo bash deploy/linux/install.sh
 
-# 4) 填写生产环境变量（必改：镜像 tag、全部凭据、JWT、CORS、Grafana）
+# 4) 填写生产环境变量（必改：镜像 digest refs、全部凭据、JWT、CORS、Grafana）
 sudo vi /opt/soymutdb/.env     # 模板来自 deploy/.env.example
 
 # 5) 生成 JWT secret（≥32 字符）
@@ -309,7 +314,7 @@ sudo bash deploy/scripts/upgrade.sh
 bash deploy/scripts/healthcheck.sh
 ```
 
-**镜像 tag 获取**：当前 CI（`.github/workflows/ci.yml`）只构建本地 `:ci` tag 并做安全扫描，**未推送 registry**；生产 tag 需由发布流程人工/脚本推送（如 `docker tag soymutdb-api:ci ghcr.io/soymutdb/api:<date>-<n>` 后 push），并把 tag 写进 `/opt/soymutdb/.env`。参见遗留项 R2。
+**镜像引用获取**：CI 在原生 amd64/arm64 runner 分别完成 runtime smoke、阻断式 Trivy 与 SPDX 后，发布 job 才加载两份已校验镜像包并合并 manifest。最终 index、平台 digest、SBOM、SLSA provenance 与 `release-manifest.json` 使用 GitHub OIDC/Cosign 签名并立即验证；workflow artifact 和 summary 给出四个最终 `image@sha256` 与合同 SHA-256。将最终 index 引用写入 `/opt/soymutdb/.env`，不要复制发现 tag 或架构临时 tag。blue/green 由 [外部 slot adapter 合同](../../deploy/blue-green.md)执行，当前固定端口 Compose 不宣称同机双槽。
 
 **迁移说明**：`upgrade.sh` 第 5 步执行一次性迁移（`docker compose run --rm migrate`，alembic upgrade head）；api/worker 自身 `depends_on` 也强制 migrate 成功。迁移失败会中止发布并回滚镜像。
 
@@ -320,11 +325,13 @@ bash deploy/scripts/healthcheck.sh
 ## 6. 前端发布流程（GitHub Pages）
 
 ```
-push main（或 workflow_dispatch 手动触发）
+CI 在 main 上成功（workflow_run 触发）或 workflow_dispatch 手动触发
    │
    ▼
 .github/workflows/pages.yml（仅此文件负责 gh-pages）
-   ├─ pnpm 10 + Node 22，官方 npm registry（覆盖仓库 .npmrc 的 npmmirror）
+   ├─ gate：workflow_run 仅接受本仓库 main 分支的成功 CI；失败/取消/PR 运行在此拦截，deploy 被跳过
+   ├─ checkout 触发 CI 的同一 commit（workflow_run.head_sha），确保发布经过验证的代码
+   ├─ pnpm 11.21.0 + Node 24.19.0，官方 npm registry（覆盖仓库 .npmrc 的 npmmirror）
    ├─ pnpm install --frozen-lockfile
    ├─ build：VITE_API_BASE_URL=${{ secrets.API_BASE_URL }}，VITE_CDN_ENABLED=false
    ├─ pnpm --filter @soymutdb/web build（SSG + assets）
@@ -342,7 +349,7 @@ GitHub Pages 站点刷新：https://caoronglin.github.io/soymutdb-next/
 - `API_BASE_URL` 为 **repository secret**（Settings → Secrets and variables → Actions），值为生产 API origin；**未设置时构建不失败，但产物会使用编译内默认 API 地址**——发布后务必验证前端请求指向正确后端。
 - `.nojekyll` 由 CI 写入，避免 Jekyll 吞掉 `_` 开头文件/目录。
 - 404.html 兜底 SPA 客户端路由（GitHub Pages 对未知路径返回 404.html，TanStack Router 接手渲染）。
-- 手动重发：仓库 Actions → Deploy Web to Pages → Run workflow。
+- 手动重发：仓库 Actions → Deploy Web to Pages → Run workflow（手动 dispatch 绕过 CI 门禁，仅限运维使用）。
 - 前端与后端解耦：gh-pages 只承载静态产物，所有动态请求回源 nginx 的 `/api/v1/*`。
 
 ---
@@ -357,7 +364,7 @@ GitHub Pages 站点刷新：https://caoronglin.github.io/soymutdb-next/
 | 4 | 任务不进队列（API 正常但无任务） | ① outbox 表行 `failed`（`outbox_max_attempts=5` 用尽）——dispatcher 每 1s 轮询转发；② 消息被路由到 `analyses` 等无 worker 的队列；③ redis-celery 超内存被 noeviction 拒绝写入 | `docker compose exec postgres psql -U soymutdb -d soymutdb -c "select * from outbox order by id desc limit 10;"`；`docker compose exec redis-celery redis-cli -a $REDIS_PASSWORD xlen celery`；检查 `docker compose logs worker-default` |
 | 5 | MCP SSE 断流/消息截断 | nginx 代理 SSE 必须 `proxy_buffering off`（`/mcp/` 已配置）；长连接 600s read timeout 后需客户端重连；mcp-server 依赖 api healthy，API 重启会断开现有流 | `curl -N http://<HOST>:8080/mcp/ -H "Accept: text/event-stream"` 观察流；检查 nginx 日志是否出现 buffering/upstream timeout；确认 `/mcp/` location 未被子级规则覆盖 |
 | 6 | 请求被 429 限流误伤 | nginx limit_req：API 100r/s（burst 200）、BLAST 1r/s（burst 5）、auth 10r/s（burst 20）；爬虫/批量脚本/共享出口 IP 会触发 | 响应体为 `{"error":"rate_limit_exceeded",...}`（`@ratelimit`）；`docker compose exec nginx grep -c limit /var/log/nginx/*.log`；非 BLAST 请求确认没打 `/api/v1/blast/` |
-| 7 | gh-pages 站点不更新 | ① 未 push main（仅 main 触发）；② 旧产物缓存（Pages CDN 约 10 分钟）；③ CI 失败（npmmirror 覆盖、build 门禁、dist 过大） | 仓库 Actions 查看 Deploy Web to Pages 运行；本地 `curl -sI https://caoronglin.github.io/soymutdb-next/ | grep -i last-modified`；确认 `secrets.API_BASE_URL` 已设置（否则产物 API 地址错误） |
+| 7 | gh-pages 站点不更新 | ① CI 未通过（build/test/lint/typecheck/contract 等硬门禁失败 → workflow_run gate 拦截发布，Pages 运行显示 gate 失败）；② 旧产物缓存（Pages CDN 约 10 分钟）；③ CI 尚未跑完（发布在 CI 完成后才触发） | 仓库 Actions 查看 CI 与 Deploy Web to Pages 运行；本地 `curl -sI https://caoronglin.github.io/soymutdb-next/ | grep -i last-modified`；确认 `secrets.API_BASE_URL` 已设置（否则产物 API 地址错误） |
 | 8 | 容器起不来：ulimit/pids 报错 | ClickHouse 要求 `nofile=262144`（compose 已设 ulimits）；宿主 `fs.file-max`/systemd 服务 LimitNOFILE 不足时容器启动即失败 | `docker compose logs clickhouse`；`sysctl fs.file-max`、`ulimit -n`；宿主调大后 `systemctl daemon-reload && systemctl restart soymutdb.target` |
 | 9 | 访问 `/`、`/admin/`、`/browser/` 得到 502/504 | **预期行为**：前端容器已移出 compose，nginx 上游 `web/admin/jbrowse` 由 extra_hosts 钉到 127.0.0.1 | 不用处理；前端走 gh-pages。仅当需要临时自托管时再恢复相应容器（属未来任务，勿改现有 compose 行为） |
 | 10 | PostgreSQL 连接耗尽（`too many connections`） | pool 预算默认 40/100；调大 `SOYMUTDB_DB_POOL_SIZE` 等后未同步调大 PG `max_connections`；worker 并发瞬时重启尖峰 | `docker compose exec postgres psql -U soymutdb -d soymutdb -c "select count(*) from pg_stat_activity;"`；按 compose 头部注释预算调整，勿超 80 |
@@ -414,12 +421,12 @@ bash deploy/scripts/verify-restore.sh /opt/soymutdb/backups/<id>.tar.gz
 
 ---
 
-## 9. 遗留项与现状不符点（D7 更新：R3/R4 已完成，状态同步；R1/R2/R5/R6/R7 仍遗留）
+## 9. 遗留项与现状不符点（平台交付更新：R2/R3/R4 已完成；R1/R5/R6/R7 仍遗留）
 
 | # | 项 | 状态 | 说明 |
 | --- | --- | --- | --- |
 | R1 | gh-pages 子路径 base | ⏳ 遗留 | 站点托管在 `https://caoronglin.github.io/soymutdb-next/`（子路径），但 `apps/web/vite.config.ts` 未配置 `base`；如子路径部署生效依赖相对资源路径/当前产物实际状态，需在发布流程中确认（本项目未改动）。若未来换自定义域名根路径托管，需同步调整。 |
-| R2 | 镜像 tag 无自动推送 | ⏳ 遗留 | `.github/workflows/ci.yml` 的 docker-build 只构建 `:ci` 本地 tag + Trivy 扫描，**未推送 registry**；`deploy/.env.example` 中的 `ghcr.io/...` tag 需发布流程人工/脚本推送并维护版本号。 |
+| R2 | OCI 发布身份 | ✅ 静态合同已实现，外部运行待验 | amd64/arm64 原生 job 各自 build/smoke/Trivy/SPDX；`publish-images` 仅加载这两份包，合并精确平台集合并用 OIDC/Cosign 签名 index、SBOM、provenance 与 release manifest。生产只接受 digest refs；ARM runner、GHCR/Sigstore 和真实签名运行仍须 CI 证明。 |
 | R3 | CF beacon token | ✅ 已实现（C3） | `apps/web/vite.config.ts` 的 `transformIndexHtml` 已在构建时按 `VITE_CF_WEB_ANALYTICS_TOKEN` 注入 `static.cloudflareinsights.com/beacon.min.js`；`index.html` 留有占位注释。**注意**：CSP（`index.html` meta 与部署 `_headers`）需在启用 token 时同步放行 `script-src https://static.cloudflareinsights.com` 与 `connect-src https://cloudflareinsights.com`。 |
 | R4 | MCP 限流 | ✅ 已实现（G3） | `apps/mcp-server/src/mcp_server/ratelimit.py` 在传输层实现：全局 60 req/min/客户端 + `blast_submit` 10 次/hr；超限返回 `429 {"error":"rate_limited","retry_after":N}`；`SOYMUTDB_MCP_API_TOKEN` 通过 `Authorization: Bearer` 鉴权（server.py + manifest.py）。 |
 | R5 | 历史文档过时 | ⏳ 遗留（部分跟进） | `deploy/cloudflare.md`（CF Pages 方案，已放弃）、`deploy/windows/` 为非主路径，仅做标注；`deploy/conda/` 已由 D6 重新启用为备选路径（见 `deploy/conda/README.md`）；`README.md` 顶部架构图仍描述 nginx 托管前端静态（旧三层隔离），未重写架构图。 |

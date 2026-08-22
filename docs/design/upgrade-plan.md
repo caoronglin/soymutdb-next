@@ -141,7 +141,7 @@ Python FastMCP + Streamable HTTP，apps/mcp-server 新增，docker-compose 新�
 ## 七、三大门禁（首批 PR 必带）
 
 - **G1**：Playwright 截图基线 4 场景（表单/表格/弹窗/暗色）+ `@layer` 顺序验证
-- **G2**：体积分块预算（antd≤280KB / pro≤180KB / 主入口≤200KB gzip），vite.config manualChunks + CI 脚本
+- **G2**：体积分块预算（antd≤320KB / pro≤180KB / 主入口≤200KB gzip，依据 2026-08-21 实测与 ADR 0002 调整为 320KB），vite.config manualChunks + CI 脚本
 - **G3**：MCP 限流压测（429+异步配额）+ SSE 反代冒烟 + IDOR 拒绝 — ✅ 已实现：`scripts/g3-mcp-stress.sh`（4 项检查，`--dry-run` 支持）+ `apps/mcp-server/src/mcp_server/ratelimit.py` Redis 双后端（`SOYMUTDB_MCP_REDIS_URL`，无 Redis 回退内存）
 
 ## 八、执行顺序

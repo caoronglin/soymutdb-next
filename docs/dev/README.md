@@ -2,6 +2,8 @@
 
 当前主链由 Web 门户、Web-only Admin、FastAPI、Celery、PostgreSQL/ClickHouse、MinIO、Redis、MCP 和
 GitHub Pages 组成。架构、状态机、契约、CI 和部署见 [`architecture-and-deployment.md`](architecture-and-deployment.md)。
+人类可读的服务、包、数据库、队列与插件关系图，以及 CI 机器依赖图合同见
+[`../design/dependency-graphs.md`](../design/dependency-graphs.md)。
 
 ```bash
 pnpm --filter @soymutdb/web build
