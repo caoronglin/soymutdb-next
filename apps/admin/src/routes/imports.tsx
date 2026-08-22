@@ -43,6 +43,7 @@ import { resolveFeatureState } from "../lib/capability-state";
 import {
   buildImportSubmission,
   createImportIdempotencyKey,
+  parseDataSetId,
   parseModuleReleaseId,
   type ImportSubmission,
 } from "../lib/import-submission";
@@ -149,6 +150,7 @@ export default function ImportsPage() {
   const [uploadFilename, setUploadFilename] = useState("");
   const [uploadFilePath, setUploadFilePath] = useState("");
   const [uploadModuleKey, setUploadModuleKey] = useState("genes");
+  const [uploadDataSetId, setUploadDataSetId] = useState("1");
   const [uploadReleaseId, setUploadReleaseId] = useState("");
   const [uploadChecksum, setUploadChecksum] = useState("");
   const [uploadIdempotencyKey, setUploadIdempotencyKey] = useState("");
@@ -230,6 +232,7 @@ export default function ImportsPage() {
       setUploadFilePath("");
       setUploadType("vcf");
       setUploadModuleKey("genes");
+      setUploadDataSetId("1");
       setUploadReleaseId("");
       setUploadChecksum("");
       setUploadIdempotencyKey("");
@@ -304,11 +307,15 @@ export default function ImportsPage() {
   // -----------------------------------------------------------------------
 
   function openUploadDialog() {
+    setUploadDataSetId("1");
     setUploadIdempotencyKey(createImportIdempotencyKey());
     setShowUpload(true);
   }
 
-  function submitImport(input: Omit<ImportSubmission, "idempotency_key" | "release_id">) {
+  function submitImport(
+    input: Omit<ImportSubmission, "data_set_id" | "idempotency_key" | "release_id">,
+    dataSetId: number,
+  ) {
     const idempotencyKey = uploadIdempotencyKey || createImportIdempotencyKey();
     if (!uploadIdempotencyKey) setUploadIdempotencyKey(idempotencyKey);
     try {
@@ -320,6 +327,7 @@ export default function ImportsPage() {
           objectKey: input.object_key,
           moduleKey: input.module_key,
           checksum: input.checksum,
+          dataSetIdInput: String(dataSetId),
           releaseIdInput: uploadReleaseId,
           idempotencyKey,
         }),
@@ -365,6 +373,13 @@ export default function ImportsPage() {
         return;
       }
     }
+    let dataSetId: number;
+    try {
+      dataSetId = parseDataSetId(uploadDataSetId);
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "A data set ID is required.");
+      return;
+    }
 
     if (effectiveUploadMode === "local") {
       if (!uploadFile) {
@@ -395,15 +410,19 @@ export default function ImportsPage() {
           filename,
           type: uploadType,
           file: uploadFile,
+          dataSetId,
           onProgress: (p) => setUploadProgress(p.percent),
         });
-        submitImport({
-          filename,
-          type: uploadType,
-          object_key: uploaded.object_key,
-          module_key: uploadType === "module_tsv" ? uploadModuleKey.trim() : undefined,
-          checksum: uploadType === "module_tsv" ? uploaded.sha256 : undefined,
-        });
+        submitImport(
+          {
+            filename,
+            type: uploadType,
+            object_key: uploaded.object_key,
+            module_key: uploadType === "module_tsv" ? uploadModuleKey.trim() : undefined,
+            checksum: uploadType === "module_tsv" ? uploaded.sha256 : undefined,
+          },
+          dataSetId,
+        );
       } catch (err) {
         setUploadError(
           err instanceof Error ? err.message : "Upload failed.",
@@ -438,13 +457,16 @@ export default function ImportsPage() {
       }
     }
 
-    submitImport({
-      filename,
-      type: uploadType,
-      file_path: uploadFilePath.trim(),
-      module_key: uploadType === "module_tsv" ? uploadModuleKey.trim() : undefined,
-      checksum: uploadType === "module_tsv" ? uploadChecksum.trim() : undefined,
-    });
+    submitImport(
+      {
+        filename,
+        type: uploadType,
+        file_path: uploadFilePath.trim(),
+        module_key: uploadType === "module_tsv" ? uploadModuleKey.trim() : undefined,
+        checksum: uploadType === "module_tsv" ? uploadChecksum.trim() : undefined,
+      },
+      dataSetId,
+    );
   }
 
   function invalidatePreview() {
@@ -856,6 +878,22 @@ export default function ImportsPage() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="import-data-set-id">Data Set ID</Label>
+              <Input
+                id="import-data-set-id"
+                type="number"
+                min="1"
+                inputMode="numeric"
+                placeholder="e.g. 17"
+                value={uploadDataSetId}
+                onChange={(e) => setUploadDataSetId(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Required. This binds the import and its object key to one data set.
+              </p>
             </div>
 
             {/* Upload mode */}

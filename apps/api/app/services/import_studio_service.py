@@ -8,6 +8,7 @@ only persists validated state and must never bypass these checks.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import re
 from datetime import UTC, datetime
@@ -19,6 +20,7 @@ MAX_GENERIC_ROWS = 100_000
 MAX_GENERIC_COLUMNS = 50
 MAX_SCIENCE_ROWS = 2_000_000
 MAX_SCIENCE_COLUMNS = 256
+MAX_DATA_PATCHES = 10_000
 
 _FORMULA_PREFIXES = ("=", "+", "-", "@")
 _DANGEROUS_RE = re.compile(
@@ -146,8 +148,9 @@ def validate_data_patches(patches: list[dict[str, Any]]) -> None:
     """Reject unsafe or unbounded cell edits before persistence."""
     if not isinstance(patches, list):
         raise ValidationError("Patches must be a list")
-    if len(patches) > 10_000:
+    if len(patches) > MAX_DATA_PATCHES:
         raise ValidationError("A draft cannot contain more than 10,000 patches")
+    cells: set[tuple[str, str]] = set()
     for patch in patches:
         row_key = patch.get("row_key")
         column = patch.get("column_name")
@@ -155,8 +158,48 @@ def validate_data_patches(patches: list[dict[str, Any]]) -> None:
             raise ValidationError("Each patch must declare a bounded row_key")
         if not isinstance(column, str) or not column or len(column) > 256:
             raise ValidationError("Each patch must declare a bounded column_name")
+        cell = (row_key, column)
+        if cell in cells:
+            raise ValidationError("A patch request may contain only one value per cell")
+        cells.add(cell)
         _reject_patch_value(patch.get("old_value"))
         _reject_patch_value(patch.get("new_value"))
+
+
+def validate_import_draft_snapshot(
+    draft: Any,
+    dataset_version: Any,
+    *,
+    data_set_id: int,
+    release_id: int | None,
+    module_key: str | None,
+    file_key: str,
+    checksum: str | None,
+) -> None:
+    """Ensure a queued module task exactly matches its frozen edit source.
+
+    An :class:`ImportDraft` is an immutable edit record only after commit.
+    Dispatching it against a different dataset, release, object, or digest
+    would make the patches ambiguous, so reject every mismatch before an
+    outbox event is created.
+    """
+    draft_status = str(getattr(getattr(draft, "status", None), "value", getattr(draft, "status", "")))
+    if draft_status != "committed":
+        raise ValidationError("Import draft must be committed before dispatch")
+    if getattr(dataset_version, "dataset_id", None) != data_set_id:
+        raise ValidationError("Import draft dataset does not match the import data set")
+    if getattr(draft, "module_key", None) != module_key:
+        raise ValidationError("Import draft module schema does not match the import")
+    if getattr(draft, "release_id", None) != release_id:
+        raise ValidationError("Import draft release does not match the import")
+    if getattr(draft, "object_key", None) != file_key:
+        raise ValidationError("Import draft object key does not match the import source")
+
+    expected_checksum = getattr(draft, "checksum_sha256", None)
+    if not isinstance(expected_checksum, str) or not isinstance(checksum, str):
+        raise ValidationError("Import draft checksum does not match the import source")
+    if not hmac.compare_digest(expected_checksum.lower(), checksum.strip().lower()):
+        raise ValidationError("Import draft checksum does not match the import source")
 
 
 def apply_data_patches(
@@ -166,7 +209,7 @@ def apply_data_patches(
     """Apply bounded cell patches to a mutable working copy of rows."""
     if not isinstance(rows, list) or not isinstance(patches, list):
         raise ValidationError("Rows and patches must be lists")
-    if len(patches) > 10_000:
+    if len(patches) > MAX_DATA_PATCHES:
         raise ValidationError("A draft cannot contain more than 10,000 patches")
 
     result = [
@@ -196,32 +239,60 @@ def build_publication_manifest(
     row_count: int,
     column_count: int,
     module_key: str | None,
+    field_mapping: list[dict[str, Any]] | None = None,
+    patches: list[dict[str, Any]] | None = None,
+    generated_at: datetime | None = None,
 ) -> dict[str, Any]:
-    """Build a deterministic, source-bound publication manifest."""
-    payload = {
-        "schema_version": 1,
+    """Build immutable publication evidence for source and transformation state.
+
+    ``manifest_sha256`` deliberately excludes the generation timestamp.  It is
+    therefore stable for an identical source and edit state, while
+    ``generated_at`` remains useful audit metadata.
+    """
+
+    def canonical_records(records: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+        normalized = [
+            json.loads(json.dumps(record, sort_keys=True, separators=(",", ":")))
+            for record in records or []
+        ]
+        return sorted(
+            normalized,
+            key=lambda record: json.dumps(record, sort_keys=True, separators=(",", ":")),
+        )
+
+    content = {
+        "schema_version": 2,
         "draft_id": draft_id,
         "dataset_version_id": dataset_version_id,
         "checksum_sha256": checksum_sha256,
         "row_count": row_count,
         "column_count": column_count,
         "module_key": module_key,
-        "generated_at": datetime.now(UTC).isoformat(),
+        "transformations": {
+            "field_mapping": canonical_records(field_mapping),
+            "patches": canonical_records(patches),
+        },
     }
-    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode(
+    canonical = json.dumps(content, sort_keys=True, separators=(",", ":")).encode(
         "utf-8"
     )
-    payload["manifest_sha256"] = hashlib.sha256(canonical).hexdigest()
+    payload = {
+        **content,
+        "generated_at": (generated_at or datetime.now(UTC)).isoformat(),
+        "manifest_sha256": hashlib.sha256(canonical).hexdigest(),
+    }
     return payload
 
 
 __all__ = [
     "MAX_GENERIC_COLUMNS",
     "MAX_GENERIC_ROWS",
+    "MAX_DATA_PATCHES",
     "MAX_SCIENCE_COLUMNS",
     "MAX_SCIENCE_ROWS",
     "apply_data_patches",
     "build_publication_manifest",
+    "validate_import_draft_snapshot",
     "validate_data_patches",
     "validate_field_mapping",
     "validate_import_shape",

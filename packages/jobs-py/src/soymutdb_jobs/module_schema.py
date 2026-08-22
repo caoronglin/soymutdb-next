@@ -1362,9 +1362,23 @@ def iter_typed_rows(
         return
 
     seen_keys: set[str] = set()
-    accepted_rows = 0
+    physical_rows = 0
     for parsed in reader.iter_rows():
         row_number = parsed.row_number
+        # Bound every input record, not only accepted records.  Otherwise a
+        # stream of unique invalid keys keeps growing ``seen_keys`` without
+        # ever reaching the accepted-row limit.
+        if physical_rows >= schema.max_rows:
+            yield (
+                None,
+                ValidationError(
+                    "max_rows",
+                    row_number,
+                    f"Exceeds maximum rows ({schema.max_rows})",
+                ),
+            )
+            return
+        physical_rows += 1
         # XLSX returns worksheet-dimension padding as trailing ``None``. A
         # missing optional tail is therefore indistinguishable from padding;
         # let the regular required-column validation decide whether it is
@@ -1379,16 +1393,6 @@ def iter_typed_rows(
                 _row_width_error(row_number, len(fieldnames), parsed.field_count),
             )
             continue
-        if accepted_rows >= schema.max_rows:
-            yield (
-                None,
-                ValidationError(
-                    "max_rows",
-                    row_number,
-                    f"Exceeds maximum rows ({schema.max_rows})",
-                ),
-            )
-            return
         row = parsed.values
         errors: list[ValidationError] = []
         typed: dict[str, Any] = {}
@@ -1440,7 +1444,6 @@ def iter_typed_rows(
                 row_valid = False
 
         if row_valid:
-            accepted_rows += 1
             yield typed, None
         else:
             yield (

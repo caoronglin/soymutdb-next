@@ -115,6 +115,16 @@ def test_0019_converts_legacy_enums_and_seeds_every_application_role() -> None:
     assert {role.value for role in RoleName} <= {value for value in sql.split("'")[1::2]}
 
 
+def test_testcontainer_fixture_seeds_the_role_catalog_after_create_all() -> None:
+    """A ``create_all`` test database must match the migration's RBAC baseline."""
+    fixture = (API_ROOT / "tests" / "conftest.py").read_text(encoding="utf-8")
+
+    assert "from app.core.security import RoleName" in fixture
+    assert "from app.models.auth import Role" in fixture
+    assert "insert(Role)" in fixture
+    assert "for role in RoleName" in fixture
+
+
 def test_0021_creates_import_studio_version_chain() -> None:
     path = MIGRATIONS_ROOT / "versions" / "0021_import_studio_chain.py"
     assert path.exists(), "0021 import-studio migration is required"

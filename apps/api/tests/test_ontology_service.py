@@ -2,22 +2,54 @@
 
 from __future__ import annotations
 
-import pytest
+import json
 
+import pytest
 from app.core.exceptions import ServiceUnavailableError, ValidationError
 from app.services import ontology_service
 from app.services.ontology_service import search_ontology
 
 
 class _Response:
-    def __init__(self, payload: object) -> None:
+    def __init__(
+        self,
+        payload: object,
+        *,
+        headers: dict[str, str] | None = None,
+        chunks: list[bytes] | None = None,
+    ) -> None:
         self.payload = payload
+        self.headers = headers or {}
+        self._chunks = chunks if chunks is not None else [json.dumps(payload).encode("utf-8")]
+        self.streamed_bytes = 0
 
     def raise_for_status(self) -> None:
         return None
 
     def json(self) -> object:
         return self.payload
+
+    async def aiter_bytes(self, chunk_size: int | None = None):
+        for chunk in self._chunks:
+            if chunk_size is None:
+                self.streamed_bytes += len(chunk)
+                yield chunk
+                continue
+            for start in range(0, len(chunk), chunk_size):
+                fragment = chunk[start : start + chunk_size]
+                self.streamed_bytes += len(fragment)
+                yield fragment
+
+
+class _StreamContext:
+    def __init__(self, response: _Response) -> None:
+        self.response = response
+
+    async def __aenter__(self) -> _Response:
+        return self.response
+
+    async def __aexit__(self, *args: object) -> None:
+        return None
 
 
 class _Client:
@@ -34,6 +66,11 @@ class _Client:
     async def get(self, url: str, **kwargs: object) -> _Response:
         self.request = (url, kwargs)
         return self.response
+
+    def stream(self, method: str, url: str, **kwargs: object) -> _StreamContext:
+        self.request = (url, kwargs)
+        assert method == "GET"
+        return _StreamContext(self.response)
 
 
 @pytest.mark.asyncio
@@ -145,6 +182,59 @@ async def test_relationship_graph_rejects_limits_above_the_server_caps() -> None
             max_nodes=1,
             max_edges=101,
         )
+
+
+@pytest.mark.asyncio
+async def test_relationship_graph_rejects_an_advertised_oversized_upstream_body(
+    monkeypatch,
+) -> None:
+    root = "http://example.test/ROOT"
+    byte_limit = 100
+    monkeypatch.setattr(ontology_service, "MAX_GRAPH_RESPONSE_BYTES", byte_limit, raising=False)
+    client = _Client(
+        _Response(
+            {"nodes": [{"iri": root, "label": "Root"}], "edges": []},
+            headers={"content-length": str(byte_limit + 1)},
+        )
+    )
+    monkeypatch.setattr(ontology_service.httpx, "AsyncClient", lambda *a, **k: client)
+
+    with pytest.raises(ServiceUnavailableError) as raised:
+        await ontology_service.get_relationship_graph(
+            ontology="go",
+            iri=root,
+            max_nodes=1,
+            max_edges=1,
+        )
+
+    assert raised.value.details == {"reason": "upstream_error"}
+    assert client.response.streamed_bytes == 0
+
+
+@pytest.mark.asyncio
+async def test_relationship_graph_rejects_chunked_upstream_body_over_byte_limit(
+    monkeypatch,
+) -> None:
+    root = "http://example.test/ROOT"
+    byte_limit = 100
+    monkeypatch.setattr(ontology_service, "MAX_GRAPH_RESPONSE_BYTES", byte_limit, raising=False)
+    client = _Client(
+        _Response(
+            {"nodes": [{"iri": root, "label": "Root"}], "edges": []},
+            chunks=[b"x" * (byte_limit + 1)],
+        )
+    )
+    monkeypatch.setattr(ontology_service.httpx, "AsyncClient", lambda *a, **k: client)
+
+    with pytest.raises(ServiceUnavailableError) as raised:
+        await ontology_service.get_relationship_graph(
+            ontology="go",
+            iri=root,
+            max_nodes=1,
+            max_edges=1,
+        )
+
+    assert raised.value.details == {"reason": "upstream_error"}
 
 
 @pytest.mark.asyncio

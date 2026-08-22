@@ -8,9 +8,15 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.api.v1.import_studio import create_dataset_version, create_draft
+from app.api.v1.import_studio import add_patches, commit_draft, create_dataset_version, create_draft
+from app.core.exceptions import ConflictError
 from app.models.import_studio import ImportDraftStatus
-from app.schemas.import_studio import DatasetVersionCreateRequest, ImportDraftCreateRequest
+from app.schemas.import_studio import (
+    DataPatchCreateRequest,
+    DatasetVersionCreateRequest,
+    ImportCommitRequest,
+    ImportDraftCreateRequest,
+)
 
 
 class _FakeDB:
@@ -105,3 +111,74 @@ async def test_create_dataset_version_and_draft_offline() -> None:
     assert draft.module_key is None
     assert draft.row_count == 10
     assert db.committed == 2
+
+
+class _Result:
+    def __init__(self, row: object) -> None:
+        self._row = row
+
+    def scalar_one_or_none(self) -> object:
+        return self._row
+
+
+class _CommittedDraftDB:
+    def __init__(self) -> None:
+        self.row = SimpleNamespace(
+            id=uuid.uuid4(),
+            dataset_version_id=uuid.uuid4(),
+            module_key=None,
+            checksum_sha256="a" * 64,
+            row_count=1,
+            column_count=1,
+            field_mapping=[],
+            status=ImportDraftStatus.COMMITTED.value,
+            committed_at=datetime.now(UTC),
+        )
+        self.statements: list[str] = []
+        self.committed = 0
+
+    async def get(self, _model: object, _value: object) -> object:
+        return self.row
+
+    async def execute(self, statement: object) -> _Result:
+        self.statements.append(str(statement))
+        return _Result(self.row)
+
+    def add(self, _row: object) -> None:
+        raise AssertionError("a committed draft must not create more records")
+
+    async def commit(self) -> None:
+        self.committed += 1
+
+
+@pytest.mark.asyncio
+async def test_committed_drafts_reject_patch_mutation_before_persistence() -> None:
+    db = _CommittedDraftDB()
+
+    with pytest.raises(ConflictError, match="committed"):
+        await add_patches(
+            db.row.id,
+            DataPatchCreateRequest(
+                patches=[{"row_key": "r1", "column_name": "gene_id", "new_value": "GX"}]
+            ),
+            db=db,  # type: ignore[arg-type]
+            current_user=_admin(),  # type: ignore[arg-type]
+        )
+
+    assert db.committed == 0
+
+
+@pytest.mark.asyncio
+async def test_commit_locks_the_draft_and_rejects_a_second_commit() -> None:
+    db = _CommittedDraftDB()
+
+    with pytest.raises(ConflictError, match="already committed"):
+        await commit_draft(
+            db.row.id,
+            ImportCommitRequest(confirm=True),
+            db=db,  # type: ignore[arg-type]
+            current_user=_admin(),  # type: ignore[arg-type]
+        )
+
+    assert any("FOR UPDATE" in statement for statement in db.statements)
+    assert db.committed == 0

@@ -80,3 +80,25 @@ def test_payload_roundtrip_preserves_idempotency_key() -> None:
     key = "blast:job-7"
     p = _make_payload(idempotency_key=key)
     assert JobPayload.model_validate(p.model_dump(mode="json")).idempotency_key == key
+
+
+def test_import_draft_source_row_key_is_stable_and_scoped_to_the_physical_row() -> None:
+    """Editable source identity must not depend on mutable business values."""
+    from soymutdb_jobs.import_studio import source_row_key
+
+    draft_id = uuid.UUID("de2593ee-ff7f-4074-b2e1-b0f727c66177")
+
+    first = source_row_key(draft_id, 2)
+
+    assert first == source_row_key(str(draft_id), 2)
+    assert first != source_row_key(draft_id, 3)
+    assert first != source_row_key(uuid.uuid4(), 2)
+    assert len(first) == 64
+
+
+@pytest.mark.parametrize("row_number", [0, -1])
+def test_import_draft_source_row_key_rejects_non_physical_rows(row_number: int) -> None:
+    from soymutdb_jobs.import_studio import source_row_key
+
+    with pytest.raises(ValueError, match="row_number"):
+        source_row_key(uuid.uuid4(), row_number)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -115,6 +116,7 @@ class ImportCreateRequest(BaseModel):
     module_key: str | None = Field(default=None, max_length=80)
     schema_version: int | None = Field(default=None, ge=1)
     checksum: str | None = Field(default=None, max_length=256)
+    import_draft_id: uuid.UUID | None = None
     idempotency_key: str = Field(min_length=1, max_length=256)
 
     @field_validator("filename")

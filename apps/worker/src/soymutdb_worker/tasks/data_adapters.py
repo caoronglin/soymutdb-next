@@ -8,6 +8,8 @@ inserted.
 from __future__ import annotations
 
 import hashlib
+import hmac
+import re
 import uuid
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -61,6 +63,39 @@ class DataAdapter(Protocol):
 
 class UnsupportedImportError(RuntimeError):
     """Raised when an import cannot satisfy the pipeline's safety contract."""
+
+
+class _HashingReader:
+    """Record a SHA-256 while the existing bounded parser consumes a source."""
+
+    def __init__(self, source: Any) -> None:
+        self._source = source
+        self._digest = hashlib.sha256()
+
+    def read(self, size: int = -1) -> bytes:
+        if size < 0:
+            raise ValueError("module checksum calculation requires bounded reads")
+        chunk = self._source.read(size)
+        if not isinstance(chunk, bytes):
+            raise ValueError("module stream must yield bytes")
+        self._digest.update(chunk)
+        return chunk
+
+    @property
+    def checksum_sha256(self) -> str:
+        return self._digest.hexdigest()
+
+
+def _verify_module_checksum(context: ImportContext, actual: str) -> bool:
+    """Verify an optional caller declaration against the streamed object bytes."""
+    if context.checksum is None:
+        return False
+    expected = context.checksum.strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", expected):
+        raise ValueError("module checksum must be a SHA-256 hex digest")
+    if not hmac.compare_digest(expected, actual):
+        raise ValueError("module source checksum mismatch")
+    return True
 
 
 def _path(context: ImportContext) -> Path:
@@ -199,17 +234,21 @@ class ModuleTsvAdapter(_TextAdapter):
         _validate_module_data_object_key(context)
         filename = context.filename or str(Path(context.file_key).name)
         with _open_module_source(context) as source:
+            hashing_source = _HashingReader(source)
             result = validate_module_file_streaming_from_stream(
                 context.module_key or "",
                 filename,
-                source,
+                hashing_source,
             )
         if not result.ok:
             raise ValueError(f"TSV validation failed: {result.first_error()}")
+        checksum = hashing_source.checksum_sha256
+        checksum_verified = _verify_module_checksum(context, checksum)
         return {
             "module_key": context.module_key,
             "rows": result.row_count,
-            "checksum": context.checksum,
+            "checksum": checksum,
+            "checksum_verified": checksum_verified,
         }
 
     def run(self, context: ImportContext, *, progress=None) -> AdapterResult:
@@ -224,6 +263,8 @@ class ModuleTsvAdapter(_TextAdapter):
         skipped = 0
         diagnostics: list[str] = []
         batch: list[dict[str, Any]] = []
+        checksum = ""
+        checksum_verified = False
 
         from sqlalchemy import delete, select
 
@@ -279,10 +320,11 @@ class ModuleTsvAdapter(_TextAdapter):
                 )
             )
             with _open_module_source(context) as source:
+                hashing_source = _HashingReader(source)
                 for typed, error in iter_module_rows_from_stream(
                     context.module_key,
                     filename,
-                    source,
+                    hashing_source,
                 ):
                     if error is not None:
                         skipped += 1
@@ -300,6 +342,8 @@ class ModuleTsvAdapter(_TextAdapter):
                         batch.clear()
                         _progress(progress, processed=rows_seen, total=rows_seen, progress=0)
             inserted += flush_batch(session, batch)
+            checksum = hashing_source.checksum_sha256
+            checksum_verified = _verify_module_checksum(context, checksum)
 
             if diagnostics:
                 raise ValueError(
@@ -316,7 +360,8 @@ class ModuleTsvAdapter(_TextAdapter):
                     validation_evidence={
                         "module_key": context.module_key,
                         "filename": filename,
-                        "checksum": context.checksum,
+                        "checksum": checksum,
+                        "checksum_verified": checksum_verified,
                         "row_count": rows_seen,
                         "rows_seen": rows_seen,
                         "rows_inserted": inserted,
@@ -326,7 +371,8 @@ class ModuleTsvAdapter(_TextAdapter):
                         "module_key": context.module_key,
                         "release_id": release_id,
                         "filename": filename,
-                        "checksum": context.checksum,
+                        "checksum": checksum,
+                        "checksum_verified": checksum_verified,
                         "row_count": rows_seen,
                     },
                 )
@@ -340,7 +386,8 @@ class ModuleTsvAdapter(_TextAdapter):
             {
                 "module_key": context.module_key,
                 "filename": filename,
-                "checksum": context.checksum,
+                "checksum": checksum,
+                "checksum_verified": checksum_verified,
                 "rows_seen": rows_seen,
                 "rows_inserted": inserted,
                 "rows_skipped": skipped,

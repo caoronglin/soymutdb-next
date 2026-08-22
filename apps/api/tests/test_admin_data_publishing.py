@@ -1,4 +1,5 @@
 import hashlib
+import uuid
 
 import pytest
 from pydantic import ValidationError as PydanticValidationError
@@ -137,6 +138,26 @@ def test_module_import_request_requires_an_explicit_release_id():
             checksum="a" * 64,
             idempotency_key="module-import-without-release",
         )
+
+
+def test_module_import_request_preserves_a_frozen_import_draft_id():
+    """The API must carry the edit snapshot through to the worker command."""
+    from app.schemas.data_publishing import ImportCreateRequest
+
+    draft_id = uuid.uuid4()
+    request = ImportCreateRequest(
+        filename="genes.tsv",
+        type="module_tsv",
+        object_key="data/1/genes.tsv",
+        data_set_id=1,
+        release_id=7,
+        module_key="genes",
+        checksum="a" * 64,
+        import_draft_id=draft_id,
+        idempotency_key="module-import-with-draft",
+    )
+
+    assert request.import_draft_id == draft_id
 
 
 @pytest.mark.asyncio

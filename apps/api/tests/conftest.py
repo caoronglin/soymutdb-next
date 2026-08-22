@@ -20,7 +20,9 @@ from typing import AsyncGenerator
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import insert
 from sqlalchemy.ext.asyncio import (
+    AsyncConnection,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
@@ -33,7 +35,9 @@ os.environ.setdefault("SOYMUTDB_ACCESS_TOKEN_EXPIRE_MINUTES", "30")
 os.environ.setdefault("SOYMUTDB_REFRESH_TOKEN_EXPIRE_DAYS", "1")
 
 from app.core.database import get_db  # noqa: E402
+from app.core.security import RoleName  # noqa: E402
 from app.models.base import Base  # noqa: E402
+from app.models.auth import Role  # noqa: E402
 from app.models import *  # noqa: E402,F401,F403
 
 # Try to import testcontainers; skip tests if unavailable
@@ -43,6 +47,18 @@ try:
     HAS_TESTCONTAINERS = True
 except ImportError:
     HAS_TESTCONTAINERS = False
+
+
+async def _seed_test_roles(connection: AsyncConnection) -> None:
+    """Seed the RBAC catalog normally supplied by the Alembic migration.
+
+    Testcontainers starts from ``Base.metadata.create_all()``, not Alembic, so
+    it otherwise misses the role rows that public registration requires.
+    """
+    await connection.execute(
+        insert(Role),
+        [{"name": role.value} for role in RoleName],
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -94,6 +110,7 @@ async def test_engine(postgres_container: str):
     # Create all tables from model metadata
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await _seed_test_roles(conn)
 
     yield engine
 

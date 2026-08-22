@@ -96,6 +96,8 @@ describe("ImportsPage module submit contract", () => {
 
     await user.type(screen.getByLabelText("Filename"), "genes.tsv");
     await user.type(screen.getByLabelText("S3 File Path"), "s3://archive/genes.tsv");
+    await user.clear(screen.getByLabelText("Data Set ID"));
+    await user.type(screen.getByLabelText("Data Set ID"), "17");
     await user.type(screen.getByLabelText("Release ID"), "42");
     await user.type(screen.getByLabelText("Checksum"), "a".repeat(64));
     await user.click(screen.getByRole("button", { name: "Submit Import" }));
@@ -110,6 +112,7 @@ describe("ImportsPage module submit contract", () => {
             file_path: "s3://archive/genes.tsv",
             module_key: "genes",
             checksum: "a".repeat(64),
+            data_set_id: 17,
             release_id: 42,
             idempotency_key: expect.stringMatching(/^import-/),
           }),

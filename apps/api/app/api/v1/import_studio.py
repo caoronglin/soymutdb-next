@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.database import get_db
-from ...core.exceptions import AuthorizationError, NotFoundError
+from ...core.exceptions import AuthorizationError, ConflictError, NotFoundError, ValidationError
 from ...core.security import RoleName, has_role
 from ...models.auth import User
 from ...models.data_publishing import DataSet
@@ -36,6 +36,7 @@ from ...schemas.import_studio import (
     PublicationManifestResponse,
 )
 from ...services.import_studio_service import (
+    MAX_DATA_PATCHES,
     build_publication_manifest,
     validate_data_patches,
     validate_field_mapping,
@@ -54,6 +55,36 @@ def _require_admin(current_user: User) -> None:
 
 def _status_value(value: object) -> str:
     return str(getattr(value, "value", value))
+
+
+async def _load_draft_for_update(
+    db: AsyncSession, draft_id: uuid.UUID
+) -> ImportDraft:
+    """Lock one draft across an edit or commit state transition."""
+    row = (
+        await db.execute(
+            select(ImportDraft)
+            .where(ImportDraft.id == draft_id)
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise NotFoundError(f"Import draft {draft_id} not found")
+    return row
+
+
+def _require_mutable_draft(row: ImportDraft) -> None:
+    """Permit edits only before a draft has been validated or published."""
+    current_status = _status_value(row.status)
+    if current_status == ImportDraftStatus.COMMITTED.value:
+        raise ConflictError(
+            f"Import draft {row.id} is already committed and immutable"
+        )
+    if current_status != ImportDraftStatus.DRAFT.value:
+        raise ConflictError(
+            f"Import draft {row.id} is {current_status} and cannot be edited; "
+            "create a new draft instead"
+        )
 
 
 def _version_response(row: DatasetVersion) -> DatasetVersionResponse:
@@ -223,9 +254,8 @@ async def update_mapping(
     current_user: User = Depends(get_current_user),
 ) -> ImportDraftResponse:
     _require_admin(current_user)
-    row = await db.get(ImportDraft, draft_id)
-    if row is None:
-        raise NotFoundError(f"Import draft {draft_id} not found")
+    row = await _load_draft_for_update(db, draft_id)
+    _require_mutable_draft(row)
     mappings = [item.model_dump(mode="python") for item in payload.mappings]
     validate_field_mapping(mappings)
 
@@ -263,13 +293,33 @@ async def add_patches(
     current_user: User = Depends(get_current_user),
 ) -> ImportDraftResponse:
     _require_admin(current_user)
-    row = await db.get(ImportDraft, draft_id)
-    if row is None:
-        raise NotFoundError(f"Import draft {draft_id} not found")
-    validate_data_patches(
-        [item.model_dump(mode="python") for item in payload.patches]
-    )
+    row = await _load_draft_for_update(db, draft_id)
+    _require_mutable_draft(row)
+    patches = [item.model_dump(mode="python") for item in payload.patches]
+    validate_data_patches(patches)
+    existing = (
+        await db.execute(
+            select(DataPatch).where(DataPatch.import_draft_id == row.id)
+        )
+    ).scalars().all()
+    existing_by_cell = {
+        (patch.row_key, patch.column_name): patch for patch in existing
+    }
+    new_cells = {
+        (patch["row_key"], patch["column_name"])
+        for patch in patches
+        if (patch["row_key"], patch["column_name"]) not in existing_by_cell
+    }
+    if len(existing) + len(new_cells) > MAX_DATA_PATCHES:
+        raise ValidationError("A draft cannot contain more than 10,000 patches")
     for item in payload.patches:
+        existing_patch = existing_by_cell.get((item.row_key, item.column_name))
+        if existing_patch is not None:
+            existing_patch.old_value = item.old_value
+            existing_patch.new_value = item.new_value
+            existing_patch.patch_type = item.patch_type
+            existing_patch.updated_by = current_user.id
+            continue
         db.add(
             DataPatch(
                 import_draft_id=row.id,
@@ -296,9 +346,8 @@ async def validate_draft(
     current_user: User = Depends(get_current_user),
 ) -> ImportDraftResponse:
     _require_admin(current_user)
-    row = await db.get(ImportDraft, draft_id)
-    if row is None:
-        raise NotFoundError(f"Import draft {draft_id} not found")
+    row = await _load_draft_for_update(db, draft_id)
+    _require_mutable_draft(row)
     mappings = [item.model_dump(mode="python") for item in payload.field_mapping]
     validate_import_shape(
         row_count=payload.row_count,
@@ -326,22 +375,62 @@ async def commit_draft(
 ) -> ImportDraftResponse:
     """Atomically commit a validated draft and create publication evidence."""
     _require_admin(current_user)
-    row = await db.get(ImportDraft, draft_id)
-    if row is None:
-        raise NotFoundError(f"Import draft {draft_id} not found")
+    row = await _load_draft_for_update(db, draft_id)
+    current_status = _status_value(row.status)
+    if current_status == ImportDraftStatus.COMMITTED.value:
+        raise ConflictError(f"Import draft {draft_id} is already committed")
     validate_import_shape(
         row_count=row.row_count,
         column_count=row.column_count,
         module_key=row.module_key,
     )
     validate_field_mapping(row.field_mapping)
-    if row.status not in {
+    if current_status not in {
         ImportDraftStatus.VALIDATED.value,
         ImportDraftStatus.READY.value,
     }:
-        raise NotFoundError(
+        raise ValidationError(
             f"Import draft {draft_id} must be validated before commit"
         )
+    existing_manifest = await db.scalar(
+        select(PublicationManifest.id)
+        .where(PublicationManifest.import_draft_id == row.id)
+        .limit(1)
+    )
+    if existing_manifest is not None:
+        raise ConflictError(
+            f"Import draft {draft_id} already has publication evidence and "
+            "cannot be committed again"
+        )
+    patch_rows = (
+        await db.execute(
+            select(DataPatch)
+            .where(DataPatch.import_draft_id == row.id)
+            .order_by(DataPatch.row_key, DataPatch.column_name)
+        )
+    ).scalars().all()
+    patches = [
+        {
+            "row_key": patch.row_key,
+            "column_name": patch.column_name,
+            "old_value": patch.old_value,
+            "new_value": patch.new_value,
+            "patch_type": patch.patch_type,
+        }
+        for patch in patch_rows
+    ]
+    validate_data_patches(patches)
+
+    manifest = build_publication_manifest(
+        draft_id=str(row.id),
+        dataset_version_id=str(row.dataset_version_id),
+        checksum_sha256=row.checksum_sha256,
+        row_count=row.row_count,
+        column_count=row.column_count,
+        module_key=row.module_key,
+        field_mapping=row.field_mapping,
+        patches=patches,
+    )
     if payload.page_id is not None:
         page = await db.get(PageDefinition, payload.page_id)
         if page is None:
@@ -352,20 +441,16 @@ async def commit_draft(
                 dataset_version_id=row.dataset_version_id,
                 source_id=payload.source_id,
                 kind=payload.kind,
-                config=payload.config,
+                config={
+                    **payload.config,
+                    "import_draft_id": str(row.id),
+                    "publication_manifest_sha256": manifest["manifest_sha256"],
+                },
                 created_by=current_user.id,
                 updated_by=current_user.id,
             )
         )
 
-    manifest = build_publication_manifest(
-        draft_id=str(row.id),
-        dataset_version_id=str(row.dataset_version_id),
-        checksum_sha256=row.checksum_sha256,
-        row_count=row.row_count,
-        column_count=row.column_count,
-        module_key=row.module_key,
-    )
     db.add(
         PublicationManifest(
             import_draft_id=row.id,

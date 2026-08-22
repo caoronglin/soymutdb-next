@@ -1,3 +1,4 @@
+import hashlib
 import os
 import time
 from contextlib import contextmanager, nullcontext
@@ -328,6 +329,128 @@ def test_module_tsv_adapter_reads_s3_source_in_bounded_chunks(monkeypatch):
     assert opened_paths == ["s3://genomic-data/imports/genes.tsv"]
     assert body.read_sizes
     assert body.closed is True
+
+
+def test_module_tsv_adapter_records_the_streamed_object_checksum(monkeypatch):
+    """Validation evidence must use the bytes read from S3, not caller input."""
+    from soymutdb_worker.utils import s3
+
+    content = b"gene_id\tchromosome\tstart\tend\nG1\tChr01\t1\t9\n"
+    body = _BoundedReadStream(content)
+
+    @contextmanager
+    def stream_source(_key: str):
+        try:
+            yield body
+        finally:
+            body.close()
+
+    monkeypatch.setattr(s3, "stream_s3_file", stream_source)
+
+    result = get_adapter("module_tsv").validate(
+        ImportContext(
+            1,
+            2,
+            "1",
+            "s3://genomic-data/imports/genes.tsv",
+            module_key="genes",
+            filename="genes.tsv",
+            checksum=hashlib.sha256(content).hexdigest().upper(),
+        )
+    )
+
+    assert result["checksum"] == hashlib.sha256(content).hexdigest()
+    assert result["checksum_verified"] is True
+
+
+def test_module_tsv_adapter_rejects_a_mismatched_s3_checksum(monkeypatch):
+    from soymutdb_worker.utils import s3
+
+    body = _BoundedReadStream(
+        b"gene_id\tchromosome\tstart\tend\nG1\tChr01\t1\t9\n"
+    )
+
+    @contextmanager
+    def stream_source(_key: str):
+        try:
+            yield body
+        finally:
+            body.close()
+
+    monkeypatch.setattr(s3, "stream_s3_file", stream_source)
+
+    with pytest.raises(ValueError, match="checksum mismatch"):
+        get_adapter("module_tsv").validate(
+            ImportContext(
+                1,
+                2,
+                "1",
+                "s3://genomic-data/imports/genes.tsv",
+                module_key="genes",
+                filename="genes.tsv",
+                checksum="a" * 64,
+            )
+        )
+
+
+def test_module_tsv_run_persists_the_streamed_checksum_not_the_caller_value(
+    tmp_path, monkeypatch
+):
+    """The durable evidence written by a module import is source-derived."""
+    from soymutdb_worker.utils import db as worker_db
+
+    content = b"gene_id\tchromosome\tstart\tend\nG1\tChr01\t1\t9\n"
+    source = tmp_path / "genes.tsv"
+    source.write_bytes(content)
+    updates: list[object] = []
+
+    class Result:
+        def __init__(self, value=None):
+            self.value = value
+
+        def scalar_one_or_none(self):
+            return self.value
+
+        def one_or_none(self):
+            return self.value
+
+    class Session:
+        def execute(self, statement, _params=None):
+            rendered = str(statement)
+            if "SELECT releases.status" in rendered:
+                return Result("draft")
+            if "SELECT data_sets.type, data_sets.release_id" in rendered:
+                return Result(("module_tsv", 1))
+            if rendered.startswith("UPDATE data_sets"):
+                updates.append(statement)
+            return Result()
+
+    @contextmanager
+    def fake_db():
+        yield Session()
+
+    monkeypatch.setattr(worker_db, "get_db", fake_db)
+
+    result = get_adapter("module_tsv").run(
+        ImportContext(
+            1,
+            2,
+            "1",
+            str(source),
+            module_key="genes",
+            filename=source.name,
+            checksum=hashlib.sha256(content).hexdigest().upper(),
+        )
+    )
+
+    values = {
+        getattr(column, "key", str(column)): value.value
+        for column, value in updates[-1]._values.items()
+    }
+    assert result.evidence["checksum"] == hashlib.sha256(content).hexdigest()
+    assert result.evidence["checksum_verified"] is True
+    assert values["validation_evidence"]["checksum"] == hashlib.sha256(content).hexdigest()
+    assert values["validation_evidence"]["checksum_verified"] is True
 
 
 def test_module_tsv_adapter_reads_bare_data_object_key_from_analyses_bucket(monkeypatch):

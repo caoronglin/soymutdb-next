@@ -7,6 +7,7 @@ it reaches the API response.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 from urllib.parse import quote
 
@@ -41,6 +42,9 @@ MAX_RESULTS = 50
 MAX_FIELD_LENGTH = 1_000
 MAX_GRAPH_NODES = 50
 MAX_GRAPH_EDGES = 100
+#: Hard ceiling for the untrusted OLS4 relationship-graph HTTP body.
+MAX_GRAPH_RESPONSE_BYTES = 1 * 1024 * 1024
+_GRAPH_RESPONSE_READ_CHUNK_BYTES = 64 * 1024
 
 
 def _clean_string(value: Any) -> str | None:
@@ -122,6 +126,25 @@ def _graph_iri(value: Any) -> str | None:
     if not text or len(text) > 2_048:
         return None
     return text
+
+
+async def _read_bounded_relationship_graph_payload(response: httpx.Response) -> Any:
+    """Read one OLS4 graph body without materialising an unbounded response."""
+    declared_length = response.headers.get("content-length")
+    if declared_length is not None:
+        try:
+            content_length = int(declared_length)
+        except ValueError:
+            content_length = None
+        if content_length is not None and content_length > MAX_GRAPH_RESPONSE_BYTES:
+            raise ValueError("OLS4 relationship graph response exceeds the byte limit")
+
+    body = bytearray()
+    async for chunk in response.aiter_bytes(chunk_size=_GRAPH_RESPONSE_READ_CHUNK_BYTES):
+        if len(body) + len(chunk) > MAX_GRAPH_RESPONSE_BYTES:
+            raise ValueError("OLS4 relationship graph response exceeds the byte limit")
+        body.extend(chunk)
+    return json.loads(body)
 
 
 def _bounded_relationship_graph(
@@ -298,11 +321,12 @@ async def get_relationship_graph(
     encoded_iri = quote(iri.strip(), safe="")
     try:
         async with httpx.AsyncClient(timeout=5.0, follow_redirects=True) as client:
-            response = await client.get(
-                f"{OLS4_BASE_URL}/ontologies/{ontology}/terms/{encoded_iri}/graph"
-            )
-            response.raise_for_status()
-            payload = response.json()
+            async with client.stream(
+                "GET",
+                f"{OLS4_BASE_URL}/ontologies/{ontology}/terms/{encoded_iri}/graph",
+            ) as response:
+                response.raise_for_status()
+                payload = await _read_bounded_relationship_graph_payload(response)
     except (httpx.HTTPError, ValueError) as exc:
         raise ServiceUnavailableError(
             "OLS4 ontology service is unavailable",
@@ -324,6 +348,7 @@ __all__ = [
     "ALLOWED_ONTOLOGIES",
     "MAX_GRAPH_EDGES",
     "MAX_GRAPH_NODES",
+    "MAX_GRAPH_RESPONSE_BYTES",
     "MAX_RESULTS",
     "OLS4_BASE_URL",
     "get_term",

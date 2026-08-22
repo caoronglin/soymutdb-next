@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from app.services.module_schema_registry import validate_tsv
@@ -170,6 +172,34 @@ def test_preflight_accepts_utf8_bom_and_streaming_rows() -> None:
     rows = list(iter_module_rows("genes", "genes.tsv", data))
     assert rows[0][0]["gene_id"] == "G1"
     assert rows[0][1] is None
+
+
+def test_streaming_stops_at_physical_row_limit_before_tracking_unbounded_invalid_keys(
+    monkeypatch,
+) -> None:
+    """Invalid unique rows must not bypass the schema's import-row resource cap."""
+    from soymutdb_jobs import module_schema
+
+    from app.services.module_schema_registry import iter_module_rows
+
+    schema = module_schema.get_schema("genes")
+    assert schema is not None
+    monkeypatch.setitem(module_schema.MODULE_SCHEMAS, "genes", replace(schema, max_rows=2))
+
+    data = (
+        b"gene_id\tchromosome\tstart\tend\n"
+        b"invalid-1\tChr01\t10\t9\n"
+        b"invalid-2\tChr01\t10\t9\n"
+        b"invalid-3\tChr01\t10\t9\n"
+    )
+
+    outcomes = list(iter_module_rows("genes", "genes.tsv", data))
+
+    assert [error.code for _row, error in outcomes if error is not None] == [
+        "end_before_start",
+        "end_before_start",
+        "max_rows",
+    ]
 
 
 def test_preflight_rejects_control_character() -> None:
