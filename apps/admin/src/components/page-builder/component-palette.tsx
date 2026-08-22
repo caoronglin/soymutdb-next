@@ -4,7 +4,7 @@
  */
 
 import { Plus } from "lucide-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@soymutdb/ui";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../lib/admin-ui";
 import type { ComponentDescriptor, PageComponentType } from "@soymutdb/shared";
 
 interface ComponentPaletteProps {

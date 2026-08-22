@@ -1,13 +1,13 @@
 /**
- * AntD 5 theme wiring for SoyMutDB Web (B2 — AntD 迁移基础).
+ * AntD 6-compatible theme wiring for SoyMutDB Web.
  *
  * 设计依据：docs/design/upgrade-plan.md §二（Ant Design 迁移策略）+ oracle 修正项。
  *
  * - OKLCH 覆盖方案：`colorPrimary` 只喂 hex seed `#2f6f4f`（tinycolor 生成链
  *   不报错），用户可见高频 token（Button/Tag/Menu 选中态）用 components 级
  *   `oklch(0.46 0.13 152)` 覆盖，暗色单独覆盖。ΔE < 1 验收由 G1 取色比对。
- * - reduced-motion（oracle R2）：matchMedia 命中时 `motion: false`（antd
- *   getAliasToken 会把 motionDurationFast/Mid/Slow 与 motionUnit 全部归零）。
+ * - motion 由 DesignSystemProvider 的统一决策传入；off 关闭 AntD motion，
+ *   minimal 缩短 timing token，standard 使用默认时序。
  * - 字体：HarmonyOS Sans SC（display/body 与 Tailwind 同源）。
  * - fontSizeHeading 映射（§二）：display 3.5rem 走 Tailwind（不引 AntD
  *   Typography），h1..h5 映射到 AntD heading token。
@@ -17,8 +17,9 @@
  *
  * 注意：本文件为纯 .ts（无 JSX），Provider 组件在 main.tsx（.tsx）。
  */
-import { theme as antdTheme, type ThemeConfig } from "antd";
+import { theme as antdTheme, type ThemeConfig } from "@/lib/antd";
 import type { Locale } from "antd/es/locale";
+import type { EffectiveMotionMode } from "./motion-policy";
 
 /** hex seed —— 只用于 tinycolor 生成链，避免 oklch 解析失败。 */
 export const ANTD_PRIMARY_HEX = "#2f6f4f";
@@ -30,20 +31,19 @@ export const ANTD_PRIMARY_OKLCH_DARK = "oklch(0.55 0.14 152)";
 export const ANTD_FONT_FAMILY =
     '"HarmonyOS Sans SC", ui-sans-serif, system-ui, sans-serif';
 
-function prefersReducedMotion(): boolean {
-    if (typeof window === "undefined") return false;
-    return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
-}
-
 /**
  * 构建 ConfigProvider theme。
  *
  * @param opts.dark 暗色：algorithm 切 darkAlgorithm + 独立 OKLCH 覆盖。
  */
-export function createAntdTheme(opts?: { dark?: boolean }): ThemeConfig {
+export function createAntdTheme(opts?: {
+    dark?: boolean;
+    motion?: EffectiveMotionMode;
+}): ThemeConfig {
     const dark = opts?.dark ?? false;
-    const reduced = prefersReducedMotion();
+    const motion = opts?.motion ?? "standard";
     const primaryOklch = dark ? ANTD_PRIMARY_OKLCH_DARK : ANTD_PRIMARY_OKLCH;
+    const minimalMotion = motion === "minimal";
 
     return {
         algorithm: dark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
@@ -63,7 +63,14 @@ export function createAntdTheme(opts?: { dark?: boolean }): ThemeConfig {
             // reduced-motion（oracle R2）：motion:false 时 antd 的 getAliasToken
             // 会把 motionDurationFast/Mid/Slow 与 motionUnit 全部归零
             // （见 antd theme/util/alias.ts），无需再显式传 duration。
-            motion: reduced ? false : undefined,
+            motion: motion !== "off",
+            ...(minimalMotion
+                ? {
+                    motionDurationFast: "0.08s",
+                    motionDurationMid: "0.1s",
+                    motionDurationSlow: "0.15s",
+                }
+                : {}),
         },
         components: {
             // 高频可见 token 的 OKLCH 覆盖（oracle 修正，亮/暗各自覆盖）

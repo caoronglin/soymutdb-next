@@ -29,15 +29,21 @@ const DIST_DIR = join(process.cwd(), "dist");
 const SNAPSHOT_URL = process.env.CONTENT_SNAPSHOT_URL ?? "";
 
 /**
- * Extract the rendered body region (inside #root) and assert it is free of
+ * Extract the independent static SSG region and assert it is free of
  * executable markup.  <script> blocks (bootstrap / JSON-LD / module scripts)
  * are stripped first so they do not false-positive.
  */
 function bodyRegionIsClean(html: string, context: string): boolean {
-  const rootMatch =
+  const staticMatch = html.match(
+    /<!-- ssg-content:start -->([\s\S]*?)<!-- ssg-content:end -->/i,
+  );
+  const legacyRootMatch =
     html.match(/<div id="root"([\s\S]*?)<\/div>\s*<\/main>/i) ??
     html.match(/<div id="root"([\s\S]*?)(?:<\/body>|<\/html>)/i);
-  const body = (rootMatch?.[1] as string | undefined) ?? html;
+  const body =
+    (staticMatch?.[1] as string | undefined) ??
+    (legacyRootMatch?.[1] as string | undefined) ??
+    html;
   const withoutScripts = body.replace(/<script[\s\S]*?<\/script>/gi, "");
   const dirty = /<(script|style|iframe|object|embed)\b|on\w+\s*=|javascript:/i.test(
     withoutScripts,
@@ -250,4 +256,3 @@ function main(): void {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main();
 }
-

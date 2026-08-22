@@ -6,7 +6,7 @@
  */
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Skeleton } from "antd";
+import { Skeleton } from "@/lib/antd";
 
 interface DocxViewerProps {
   url: string;

@@ -30,9 +30,9 @@ import {
   TableHead,
   TableRow,
   TableCell,
-} from "@soymutdb/ui";
+} from "../lib/admin-ui";
 import { DataTable, type DataTableColumn } from "../components/data-table";
-import { PageHeader, StatCard, formatNumber } from "@soymutdb/ui";
+import { PageHeader, StatCard, formatNumber } from "../lib/admin-ui";
 
 interface AuditLog {
   id: string;

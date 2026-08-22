@@ -11,7 +11,7 @@ import {
   Input,
   Label,
   cn,
-} from "@soymutdb/ui";
+} from "../lib/admin-ui";
 
 interface ConfirmDialogProps {
   open: boolean;

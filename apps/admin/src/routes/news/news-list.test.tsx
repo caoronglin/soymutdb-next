@@ -2,13 +2,12 @@
  * Admin news list component tests (B3).
  *
  * Covers:
- * 1. request-parameter mapping — ProTable form params (status/category/
+ * 1. request-parameter mapping — list form params (status/category/
  *    title_en/current/pageSize) are correctly forwarded to listAdminNews
  *    via buildAdminNewsQuery (pure-function unit tests) and through the
- *    rendered ProTable request callback (component test).
+ *    rendered list request lifecycle (component test).
  * 2. error-state rendering — when listAdminNews rejects, the component
- *    shows the load-error toast and returns success:false so ProTable
- *    renders the empty state.
+ *    shows the load-error toast and renders the empty state.
  */
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
@@ -172,18 +171,18 @@ describe("NewsListPage component", () => {
       page_size: 10,
     });
     renderPage();
-    // emptyText is the raw i18n key (t mock) — ProTable renders it.
+    // emptyText is the raw i18n key because the translation hook is mocked.
     expect(await screen.findByText("admin.news.empty")).toBeTruthy();
   });
 
-  it("shows load-error toast and success:false when the request rejects", async () => {
+  it("shows load-error toast and the empty state when the request rejects", async () => {
     listAdminNewsMock.mockRejectedValue(new Error("boom"));
     renderPage();
     // The error toast message is rendered by AntD App message (async).
     expect(
       await screen.findByText(/admin\.news\.messages\.loadError.*boom/s),
     ).toBeTruthy();
-    // Empty state renders after the failed request (success:false).
+    // Empty state renders after the failed request.
     expect(await screen.findByText("admin.news.empty")).toBeTruthy();
   });
 });

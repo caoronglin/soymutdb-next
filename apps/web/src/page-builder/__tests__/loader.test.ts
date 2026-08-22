@@ -45,7 +45,13 @@ describe("page-definition loader", () => {
     const boot = readPageDefinitionBootstrap();
     expect(boot?.route).toBe("/");
     expect(boot?.version).toBe(1);
-    expect(boot?.definition).toEqual(SAMPLE);
+    expect(boot?.definition).toEqual({
+      schema_version: 2,
+      ...SAMPLE,
+      data_sources: [],
+      theme_id: "scientific-light",
+      layouts: { desktop: {}, tablet: {}, mobile: {} },
+    });
     el.remove();
   });
 

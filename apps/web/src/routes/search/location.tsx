@@ -25,7 +25,7 @@ import {
   Tag,
   Typography,
   type TableColumnsType,
-} from "antd";
+} from "@/lib/antd";
 import { SearchOutlined } from "@ant-design/icons";
 import {
   searchRegionVariants,

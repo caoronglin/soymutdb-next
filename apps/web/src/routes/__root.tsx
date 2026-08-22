@@ -8,6 +8,7 @@ import { SiteHeader } from "../components/site-header";
 import { SiteFooter } from "../components/site-footer";
 import { ErrorBoundary } from "../components/error-boundary";
 import { CommandPalette } from "../components/command-palette";
+import { useAnimation } from "../lib/animation-context";
 const RouteMotionRuntime = React.lazy(() => import("../components/route-motion-runtime"));
 
 interface RouterContext {
@@ -28,8 +29,11 @@ function isStandaloneRoute(pathname: string): boolean {
 
 function RootComponent() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const { intensity } = useAnimation();
   const standalone = isStandaloneRoute(pathname);
-  const allowRouteMotion = pathname === "/" || pathname === "/guide" || pathname.startsWith("/news");
+  const allowRouteMotion =
+    intensity === "standard" &&
+    (pathname === "/" || pathname === "/guide" || pathname.startsWith("/news"));
 
   if (standalone) {
     return (

@@ -1,6 +1,30 @@
 export interface DeploymentOrigins {
   apiOrigin: string;
-  jbrowseOrigin: string;
+  /** Omitted for the web-only minimal deployment, which ships no iframe app. */
+  jbrowseOrigin?: string;
+}
+
+/** Build-time deployment modes accepted by the public portal. */
+export type DeploymentMode = "standard" | "demo" | "minimal";
+
+/**
+ * Normalize the optional Vite mode flag. Unknown values deliberately resolve to
+ * the standard mode, which keeps the normal JBrowse-origin build requirement
+ * rather than silently producing a reduced deployment.
+ */
+export function resolveDeploymentMode(value: string | undefined): DeploymentMode {
+  switch (value?.trim().toLowerCase()) {
+    case "demo":
+      return "demo";
+    case "minimal":
+      return "minimal";
+    default:
+      return "standard";
+  }
+}
+
+export function isMinimalDeploymentMode(value: string | undefined): boolean {
+  return resolveDeploymentMode(value) === "minimal";
 }
 
 export function normalizeBasePath(value: string): string {
@@ -55,7 +79,7 @@ export function buildCsp(origins: DeploymentOrigins, analytics = false): string 
     "img-src 'self' data: https:",
     "font-src 'self' data:",
     `connect-src 'self' ${origins.apiOrigin}${analytics ? " https://cloudflareinsights.com" : ""}`,
-    `frame-src 'self' ${origins.jbrowseOrigin}`,
+    `frame-src 'self'${origins.jbrowseOrigin ? ` ${origins.jbrowseOrigin}` : ""}`,
     "base-uri 'self'", "form-action 'self'", "frame-ancestors 'self'", "object-src 'none'", "worker-src 'self' blob:",
   ].join("; ");
 }

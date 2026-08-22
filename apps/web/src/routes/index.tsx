@@ -13,10 +13,8 @@
  */
 import { createFileRoute } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
-import * as React from "react";
-import { Skeleton } from "antd";
-import { FadeUp, MotionProvider, type MotionConfig } from "@soymutdb/motion";
-import { useAnimation } from "../lib/animation-context";
+import { Skeleton } from "@/lib/antd";
+import { FadeUp } from "../components/route-motion";
 import { PageDefinitionRenderer } from "../page-builder/renderer";
 import { usePageDefinition } from "../page-builder/loader";
 
@@ -25,26 +23,11 @@ export const Route = createFileRoute("/")({
 });
 
 function HomeComponent() {
-  const anim = useAnimation();
   const { t } = useTranslation();
   const { definition, isLoading, isFallback, hasError } = usePageDefinition("/");
 
-  const motionConfig = React.useMemo<MotionConfig>(
-    () => ({
-      duration: anim.duration,
-      durationFast: anim.durationFast,
-      durationSlow: anim.durationSlow,
-      easing: anim.easing,
-      easingSpring: anim.easingSpring,
-      stagger: anim.stagger,
-      reduced: anim.reduced,
-    }),
-    [anim],
-  );
-
   return (
-    <MotionProvider config={motionConfig}>
-      <div className="container-prose py-10">
+    <div className="container-prose py-10">
         {isLoading && !definition ? (
           <div className="space-y-4" aria-label={t("common.loading")}>
             <Skeleton active />
@@ -65,7 +48,6 @@ function HomeComponent() {
             </FadeUp>
           </>
         ) : null}
-      </div>
-    </MotionProvider>
+    </div>
   );
 }

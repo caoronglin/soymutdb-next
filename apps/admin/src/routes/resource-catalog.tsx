@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { FileArchive, FileText, ScrollText, Settings } from "lucide-react";
-import { PageHeader } from "@soymutdb/ui";
+import { PageHeader } from "../lib/admin-ui";
 
 const resources = [
   { to: "/imports", label: "Imports", description: "Monitor submitted data import tasks.", icon: FileArchive },

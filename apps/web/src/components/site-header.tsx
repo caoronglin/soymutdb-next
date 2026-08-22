@@ -24,8 +24,8 @@ import {
   ChevronDown,
   Dna,
 } from "lucide-react";
-import { Button, cn } from "@soymutdb/ui";
-import { Affix } from "antd";
+import { Button, cn } from "../lib/web-ui";
+import { Affix } from "@/lib/antd";
 import { useTheme } from "../lib/theme-provider";
 import { useI18n, type SupportedLanguage } from "../lib/i18n";
 import { AnimationControl } from "./animation-control";
@@ -237,7 +237,7 @@ export function SiteHeader() {
             variant="ghost"
             size="icon"
             className="md:hidden"
-            aria-label="Search"
+            aria-label={t("search.openPalette")}
             onClick={openPalette}
           >
             <Search className="size-5" aria-hidden />

@@ -9,7 +9,7 @@
  *        -> { upload_id, object_key, parts: [{ part_number, url }] }
  *   2. PUT each part's bytes to its pre-signed `url`, capturing the ETag.
  *   3. POST /admin/imports/uploads/multipart/{upload_id}/complete
- *        { object_key, parts: [{ part_number, etag }], sha256 }
+ *        { object_key, parts: [{ part_number, etag }] }
  *        -> { upload_id, object_key, sha256, parts }
  *
  * The file bytes never touch the API; only the pre-signed URLs are fetched.
@@ -26,16 +26,6 @@ export const MULTIPART_PART_SIZE = 5 * 1024 * 1024;
 export function partCountFor(size: number): number {
   if (size <= 0) return 1;
   return Math.max(1, Math.ceil(size / MULTIPART_PART_SIZE));
-}
-
-/** Compute the hex SHA-256 of raw bytes (for the multipart complete callout). */
-export async function sha256Hex(data: ArrayBuffer | Uint8Array): Promise<string> {
-  const buf = data instanceof Uint8Array ? data : new Uint8Array(data);
-  const normalized = new Uint8Array(buf);
-  const digest = await crypto.subtle.digest("SHA-256", normalized.buffer as ArrayBuffer);
-  return Array.from(new Uint8Array(digest))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
 }
 
 export interface MultipartStartRequest {
@@ -80,11 +70,11 @@ export function startMultipart(body: MultipartStartRequest): Promise<MultipartSt
 /** POST /admin/imports/uploads/multipart/{upload_id}/complete — finalize. */
 export function completeMultipart(
   uploadId: string,
-  body: { object_key: string; parts: MultipartCompletePart[]; sha256: string },
+  body: { object_key: string; parts: MultipartCompletePart[]; sha256?: string },
 ): Promise<MultipartCompleteResponse> {
   return http.post<MultipartCompleteResponse>(
     `/admin/imports/uploads/multipart/${encodeURIComponent(uploadId)}/complete`,
-    { json: body, timeoutMs: 60_000 },
+    { json: body, timeoutMs: 300_000 },
   );
 }
 
@@ -158,9 +148,6 @@ export async function uploadModuleFile(
     ...(dataSetId != null ? { data_set_id: dataSetId } : {}),
   });
 
-  const bytesBuffer = await file.arrayBuffer();
-  const sha256 = await sha256Hex(bytesBuffer);
-
   const parts: MultipartCompletePart[] = [];
   let uploadedBytes = 0;
 
@@ -168,7 +155,10 @@ export async function uploadModuleFile(
     if (signal?.aborted) throw new DOMException("Upload cancelled", "AbortError");
     const start = (part.part_number - 1) * MULTIPART_PART_SIZE;
     const end = Math.min(start + MULTIPART_PART_SIZE, file.size);
-    const slice = new Blob([bytesBuffer.slice(start, end)], { type: contentType });
+    // Blob/File#slice retains only this multipart range. In contrast to a
+    // whole-file ArrayBuffer this keeps peak browser memory bounded by one
+    // in-flight S3 part.
+    const slice = file.slice(start, end, contentType);
 
     const result = await putPart(part.url, slice, (percent) => {
       // part percent * part size / total, accumulated with prior parts.
@@ -183,36 +173,107 @@ export async function uploadModuleFile(
   const completed = await completeMultipart(session.upload_id, {
     object_key: session.object_key,
     parts,
-    sha256,
   });
 
   return { object_key: completed.object_key, sha256: completed.sha256 };
 }
 
 /* ------------------------------------------------------------------------ */
-/* Import preview (gap)                                                     */
+/* Import preview                                                            */
 /* ------------------------------------------------------------------------ */
 
 /**
- * Import preview is NOT yet provided by the backend. There is no endpoint
- * that returns a validated, row-level preview of a module file before commit,
- * so the Admin UI must not fabricate one. This type documents the intended
- * contract for when the backend adds it (see docs/agent-state/import-preview-gap.md)
- * and lets the UI render an explicit "preview unavailable" state instead of
- * fake results.
+ * Inspection is deliberately limited to one small local file. It never
+ * claims that a bounded preview is a preview of a larger remote object.
  */
+export const MAX_MODULE_PREVIEW_BYTES = 256 * 1024;
+
 export interface ModulePreviewRequest {
   filename: string;
-  module_key: string;
+  moduleKey: string;
+  file: File;
+}
+
+export interface ModulePreviewValidationError {
+  code: string;
+  row: number | null;
+  message: string;
 }
 
 export type ModulePreviewResult =
-  | { status: "available"; rows: Array<Record<string, unknown>>; truncated: boolean; warning?: string }
-  | { status: "unavailable" };
+  | {
+      status: "available";
+      headers: string[];
+      rows: Array<Record<string, unknown>>;
+      rowCount: number;
+      truncated: boolean;
+      checksumSha256: string;
+      validation: {
+        ok: boolean;
+        errorCount: number;
+        errors: ModulePreviewValidationError[];
+      };
+    }
+  | { status: "unavailable"; reason: string };
 
-/** Stub preview resolution that never invents data. */
+interface InspectionResponse {
+  headers: string[];
+  row_count: number;
+  rows: Array<Record<string, unknown>>;
+  truncated: boolean;
+  checksum_sha256: string;
+  validation: {
+    ok: boolean;
+    error_count: number;
+    errors: ModulePreviewValidationError[];
+  };
+}
+
+function base64Encode(bytes: Uint8Array): string {
+  const binaryChunks: string[] = [];
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binaryChunks.push(String.fromCharCode(...bytes.subarray(offset, offset + chunkSize)));
+  }
+  return btoa(binaryChunks.join(""));
+}
+
+/** Request a validated preview only when the complete local file is bounded. */
 export async function fetchModulePreview(
-  _req: ModulePreviewRequest,
+  req: ModulePreviewRequest,
 ): Promise<ModulePreviewResult> {
-  return { status: "unavailable" };
+  if (req.file.size === 0) {
+    return { status: "unavailable", reason: "Preview requires a non-empty local file." };
+  }
+  if (req.file.size > MAX_MODULE_PREVIEW_BYTES) {
+    return {
+      status: "unavailable",
+      reason: "Preview is available only for local module files up to 256 KiB.",
+    };
+  }
+
+  const bytes = new Uint8Array(await req.file.slice(0, req.file.size).arrayBuffer());
+  const inspected = await http.post<InspectionResponse>(
+    `/admin/modules/${encodeURIComponent(req.moduleKey)}/inspect`,
+    {
+      json: {
+        filename: req.filename,
+        content_base64: base64Encode(bytes),
+      },
+      timeoutMs: 30_000,
+    },
+  );
+  return {
+    status: "available",
+    headers: inspected.headers,
+    rows: inspected.rows,
+    rowCount: inspected.row_count,
+    truncated: inspected.truncated,
+    checksumSha256: inspected.checksum_sha256,
+    validation: {
+      ok: inspected.validation.ok,
+      errorCount: inspected.validation.error_count,
+      errors: inspected.validation.errors,
+    },
+  };
 }

@@ -19,7 +19,7 @@ import {
     Badge,
     Button,
     Skeleton,
-} from "@soymutdb/ui";
+} from "../lib/web-ui";
 import {
     BookOpen,
     ArrowLeft,

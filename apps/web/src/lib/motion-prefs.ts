@@ -1,4 +1,4 @@
-/** Resolve browser motion/data preferences without importing GSAP or Lenis. */
+/** Resolve browser motion/data preferences without third-party animation engines. */
 export interface MotionPrefs {
   reduced: boolean;
   saveData: boolean;

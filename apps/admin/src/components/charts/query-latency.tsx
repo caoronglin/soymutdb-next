@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import type * as echarts from "echarts";
-import { Card, CardHeader, CardTitle, CardContent, ChartEmptyState, cn } from "@soymutdb/ui";
+import { Card, CardHeader, CardTitle, CardContent, ChartEmptyState, cn } from "../../lib/admin-ui";
 
 
 export interface QueryLatencyDataPoint {

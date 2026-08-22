@@ -2,9 +2,8 @@
  * SRA Run Browser — query NCBI Sequence Read Archive metadata by
  * accession number, visualise run stats, browse curated runs for the default species (soybean).
  */
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useTranslation } from "react-i18next";
 import * as React from "react";
 import {
   Search,
@@ -32,7 +31,7 @@ import {
   Skeleton,
   Badge,
   EmptyState,
-} from "@soymutdb/ui";
+} from "../lib/web-ui";
 import { fetchSraRun, fetchSraSamples, type SraRunInfo } from "@soymutdb/api-client";
 import { FadeUp, useReveal } from "../components/route-motion";
 import { startViewTransition } from "../lib/view-transitions";
@@ -113,7 +112,6 @@ export const Route = createFileRoute("/sra")({
 });
 
 function SraBrowser() {
-  const { t } = useTranslation();
   const { run: initialRun } = Route.useSearch();
   const navigate = Route.useNavigate();
   const [input, setInput] = React.useState(initialRun || DEFAULT_RUN);

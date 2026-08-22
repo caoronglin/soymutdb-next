@@ -14,7 +14,7 @@ import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import * as React from "react";
-import { Button, Card, Empty, Form, Input, Select, Table, Tag, Typography, type TableColumnsType } from "antd";
+import { Button, Card, Empty, Form, Input, Select, Table, Tag, Typography, type TableColumnsType } from "@/lib/antd";
 import { SearchOutlined } from "@ant-design/icons";
 import {
   searchGenes,
@@ -52,8 +52,17 @@ function GeneIdSearchComponent() {
   const { t } = useTranslation();
   const router = useRouter();
   const { q: urlQ, assembly: urlAssembly, run } = Route.useSearch();
-  const [geneIdsRaw, setGeneIdsRaw] = React.useState(urlQ ?? "");
-  const [submitted, setSubmitted] = React.useState<Submitted | null>(null);
+  // This route intentionally consumes its URL once. Capturing the initial
+  // values keeps later form edits from re-running a shared deep link.
+  const [initialSearch] = React.useState(() => ({
+    q: urlQ,
+    assembly: urlAssembly,
+    run,
+  }));
+  const initialQuery = initialSearch.q?.trim();
+  const [geneIdsRaw, setGeneIdsRaw] = React.useState(
+    () => (initialSearch.run || initialSearch.assembly ? initialQuery ?? "" : initialSearch.q ?? ""),
+  );
   const [page, setPage] = React.useState(1);
 
   const assembliesQuery = useQuery({
@@ -61,43 +70,46 @@ function GeneIdSearchComponent() {
     queryFn: getAssemblies,
     staleTime: 30 * 60 * 1000,
   });
-  const assemblies = assembliesQuery.data ?? [];
+  const assemblies = assembliesQuery.data;
 
-  // Preselect the default assembly (is_default) — fallback to the first.
   const [assemblyId, setAssemblyId] = React.useState<string | undefined>(undefined);
-  const selectedAssembly: AssemblyInfo | undefined = assemblies.find(
-    (a) => String(a.id) === String(assemblyId),
-  );
-  React.useEffect(() => {
-    if (assemblyId || assemblies.length === 0) return;
-    const def = assemblies.find((a) => a.is_default) ?? assemblies[0];
-    if (def) setAssemblyId(String(def.id));
-  }, [assemblies, assemblyId]);
+  // Preselect the URL assembly when present; otherwise use the configured
+  // default (or first) assembly. These are derived values, not state that
+  // needs a follow-up effect after the assemblies request resolves.
+  const defaultAssembly = assemblies?.find((assembly) => assembly.is_default) ?? assemblies?.[0];
+  const defaultAssemblyId = defaultAssembly ? String(defaultAssembly.id) : undefined;
+  const linkedAssembly = initialSearch.assembly
+    ? assemblies?.find(
+        (assembly) =>
+          String(assembly.id) === initialSearch.assembly || assembly.name === initialSearch.assembly,
+      )
+    : undefined;
+  const linkedAssemblyId = linkedAssembly ? String(linkedAssembly.id) : undefined;
+  const initialAssemblyId = linkedAssemblyId ?? defaultAssemblyId;
+  const formAssemblyId = assemblyId ?? initialAssemblyId;
 
-  // Deep link: `?q=` + `?run=1` (or `?assembly=`) restores form state and
-  // submits exactly once the assembly is loaded. Only the initial URL value
-  // triggers this; subsequent form edits do not re-run.
-  const autoSubmittedRef = React.useRef(false);
-  React.useEffect(() => {
-    if (autoSubmittedRef.current) return;
-    const trimmed = urlQ?.trim();
-    if (!trimmed) return;
-    // Resolve the assembly from the URL when supplied.
-    let targetAssembly = assemblyId;
-    if (urlAssembly) {
-      const match = assemblies.find((a) => String(a.id) === urlAssembly || a.name === urlAssembly);
-      if (match) targetAssembly = String(match.id);
-    }
-    if (!targetAssembly) return;
-    if (run !== true && urlAssembly == null) return;
-    autoSubmittedRef.current = true;
-    setGeneIdsRaw(trimmed);
-    setSubmitted({ q: trimmed, assemblyId: targetAssembly });
-    setPage(1);
-  }, [urlQ, urlAssembly, run, assemblyId, assemblies]);
+  // Deep links run at most once from their initial URL values. The submitted
+  // context remains separate from the editable form selection so result
+  // labels and JBrowse links remain aligned with the original request.
+  const submitted: Submitted | null =
+    initialQuery &&
+    (initialSearch.run === true || initialSearch.assembly != null) &&
+    initialAssemblyId !== undefined
+      ? {
+          q: initialQuery,
+          assemblyId: initialAssemblyId,
+        }
+      : null;
+  // Once a search is submitted, its assembly is the result context. This
+  // keeps the request, result label, and JBrowse deep link aligned even if
+  // the form state changes later.
+  const resolvedAssemblyId = submitted?.assemblyId ?? formAssemblyId;
+  const selectedAssembly: AssemblyInfo | undefined = assemblies?.find(
+    (a) => String(a.id) === String(resolvedAssemblyId),
+  );
 
   const resultsQuery = useQuery({
-    queryKey: ["search-genes", submitted, page],
+    queryKey: ["search-genes", submitted?.q, submitted?.assemblyId, page],
     queryFn: () =>
       searchGenes({
         q: submitted?.q || undefined,
@@ -114,10 +126,10 @@ function GeneIdSearchComponent() {
 
   const submitInNewTab = () => {
     const q = geneIdsRaw.trim();
-    if (!q || !assemblyId) return;
+    if (!q || !formAssemblyId) return;
     const location = router.buildLocation({
       to: "/search/genes",
-      search: { q, assembly: assemblyId, run: true },
+      search: { q, assembly: formAssemblyId, run: true },
     });
     window.open(location.href, "_blank", "noopener");
   };
@@ -220,11 +232,11 @@ function GeneIdSearchComponent() {
             <div className="grid gap-4 sm:grid-cols-[240px_1fr]">
               <Form.Item label={t("search.genes.assembly")} className="mb-0">
                 <Select
-                  value={assemblyId}
+                  value={formAssemblyId}
                   onChange={(v) => setAssemblyId(v)}
                   placeholder={t("search.genes.assemblyPlaceholder")}
                   loading={assembliesQuery.isLoading}
-                  options={assemblies.map((a) => ({
+                  options={assemblies?.map((a) => ({
                     value: String(a.id),
                     label: (
                       <span className="flex items-center gap-2">
@@ -234,7 +246,7 @@ function GeneIdSearchComponent() {
                         ) : null}
                       </span>
                     ),
-                  }))}
+                  })) ?? []}
                 />
               </Form.Item>
               <Form.Item label={t("search.genes.geneId")} className="mb-0">

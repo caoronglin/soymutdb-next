@@ -5,8 +5,7 @@ export default defineConfig({
     environment: "jsdom",
     include: ["src/**/*.test.{ts,tsx}"],
     setupFiles: ["./src/test/setup.ts"],
-    // Node v26: forked pool with a single worker keeps the suite stable
-    // (same pattern as packages/ui and packages/api-client).
+    // Node v26: a forked pool with one worker keeps DOM-heavy tests stable.
     pool: "forks",
     maxWorkers: 1,
     css: false,

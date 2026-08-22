@@ -21,7 +21,7 @@ import {
   Typography,
   type TableColumnsType,
   type TableProps,
-} from "antd";
+} from "@/lib/antd";
 import { LeftOutlined, ReloadOutlined, RightOutlined } from "@ant-design/icons";
 import { searchVariants, type VariantSummary } from "@soymutdb/api-client";
 import { FadeUp } from "../../components/route-motion";

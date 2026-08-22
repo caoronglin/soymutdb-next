@@ -9,7 +9,7 @@
  */
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Carousel, Spin } from "antd";
+import { Carousel, Spin } from "@/lib/antd";
 import { useTranslation } from "react-i18next";
 import { getFeaturedNews, type NewsSummary } from "@soymutdb/api-client";
 import { pickNewsTitle } from "./news-card";

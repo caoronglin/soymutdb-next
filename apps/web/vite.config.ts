@@ -2,7 +2,7 @@ import { defineConfig, loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildCsp, normalizeBasePath, requireDeploymentOrigin } from "./src/lib/deployment";
+import { buildCsp, isMinimalDeploymentMode, normalizeBasePath, requireDeploymentOrigin } from "./src/lib/deployment";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
@@ -74,8 +74,16 @@ export default defineConfig(({ mode }) => {
     // github.io ROOT (404, app JS crashes).  Override per deployment via
     // VITE_BASE_URL (e.g. "/" for a Cloudflare root domain).
     const deployBase = normalizeBasePath(env.VITE_BASE_URL?.trim() || "/");
+    const minimalDeployment = isMinimalDeploymentMode(env.VITE_DEPLOYMENT_MODE);
+    // The portal still pins an explicit API origin in every production mode so
+    // its CSP stays narrow and API-unavailable states remain deterministic.
     const apiOrigin = requireDeploymentOrigin(env.VITE_API_BASE_URL || (mode === "development" ? "http://localhost:8000" : undefined), "API");
-    const jbrowseOrigin = requireDeploymentOrigin(env.VITE_JBROWSE_BASE_URL || env.VITE_JBROWSE_URL || (mode === "development" ? "http://localhost:5175" : undefined), "JBrowse");
+    // Minimal Pages releases intentionally contain no JBrowse bundle. Do not
+    // manufacture a localhost/placeholder frame origin: omit frame access
+    // altogether and let the public UI use its linear/unavailable fallbacks.
+    const jbrowseOrigin = minimalDeployment
+        ? undefined
+        : requireDeploymentOrigin(env.VITE_JBROWSE_BASE_URL || env.VITE_JBROWSE_URL || (mode === "development" ? "http://localhost:5175" : undefined), "JBrowse");
 
     return {
         base: deployBase,
@@ -102,25 +110,23 @@ export default defineConfig(({ mode }) => {
             chunkSizeWarningLimit: 2048,
             rollupOptions: {
                 output: {
-                    // G2 体积分块预算（docs/design/upgrade-plan.md §七）：
-                    //   antd ≤280KB / pro-components ≤180KB / 主入口 ≤200KB (gzip)
-                    // 阈值由 scripts/check-bundle-size.sh 硬门禁执行（CI + 本地）。
-                    // 注：@ant-design/vite-plugin 在 npm registry 上不存在（404，
-                    // 方案中列出的包名有误），antd v5 走 ESM + cssinjs 运行时按需，
-                    // 不需要构建期按需插件；如需 dayjs 优化可用 antd-dayjs-vite-plugin。
+                    // AntD and every rc-* runtime module stay together. Splitting
+                    // table internals created an antd -> table -> antd cycle and a
+                    // production blank-screen risk.
                     manualChunks(id: string) {
                         if (id.includes("node_modules")) {
-                            // pro-components 及其 @ant-design/pro-* 依赖 → 独立 chunk
-                            if (id.includes("@ant-design/pro")) return "pro-components";
-                            // rc-*（rc-table/rc-select/rc-pagination 等 antd 运行时
-                            // 依赖）→ 独立 chunk（G2 预算：拆出后 antd 本体 ≤280KB）
-                            if (id.includes("/rc-")) return "rc";
+                            // icons-svg has no dependency back into antd. Splitting it
+                            // keeps the core chunk inside the gzip budget while leaving
+                            // the @ant-design/icons runtime co-located with antd.
+                            if (id.includes("@ant-design/icons-svg")) return "antd-icons";
+                            // rc-* 与 antd 存在相互运行时依赖。拆成独立 chunk 会
+                            // 形成 ES module 初始化循环；同置优先保证生产制品可执行。
+                            if (id.includes("/rc-")) return "antd";
                             // antd + @ant-design/* → 独立 chunk
                             if (id.includes("/antd/") || id.includes("@ant-design")) {
                                 return "antd";
                             }
                             if (id.includes("echarts")) return "echarts";
-                            if (id.includes("gsap") || id.includes("lenis")) return "motion-vendor";
                             // @tanstack 必须先于 react 分支：@tanstack/react-* 的
                             // 路径含 "react"，若被 react 分支截胡会与 router chunk
                             // （@tanstack 主体依赖 react）形成循环依赖。

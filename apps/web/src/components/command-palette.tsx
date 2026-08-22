@@ -8,7 +8,7 @@
 import * as React from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Search, X, Dna, ArrowRight, Command as CmdIcon } from "lucide-react";
-import { cn } from "@soymutdb/ui";
+import { cn } from "../lib/web-ui";
 
 interface QuickAction {
   id: string;

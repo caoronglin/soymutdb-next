@@ -2,7 +2,7 @@ import { createFileRoute, Link, Outlet, useNavigate } from "@tanstack/react-rout
 import { useQuery } from "@tanstack/react-query";
 import * as React from "react";
 import { ArrowRight, Beaker, Dna, FileText, Globe2, Search as SearchIcon } from "lucide-react";
-import { Badge, Card, CardContent, EmptyState, Input, Skeleton } from "@soymutdb/ui";
+import { Badge, Card, CardContent, EmptyState, Input, Skeleton } from "../lib/web-ui";
 import { globalSearch, type FederatedSearchResponse, type SearchResponse, type SearchResult } from "@soymutdb/api-client";
 import { FadeUp } from "../components/route-motion";
 
@@ -30,9 +30,11 @@ function isInternal(data: SearchResponse | FederatedSearchResponse): data is Sea
   return "results" in data;
 }
 
-function resultIcon(type: string) {
-  return type === "gene" || type === "variant" ? Dna : type === "mutant_line" ? Beaker : FileText;
-}
+const RESULT_ICONS: Record<string, typeof Dna> = {
+  gene: Dna,
+  variant: Dna,
+  mutant_line: Beaker,
+};
 
 function SearchComponent() {
   const { q, types, cursor, limit, external } = Route.useSearch();
@@ -106,7 +108,7 @@ function SearchComponent() {
 }
 
 function ResultRow({ result }: { result: SearchResult }) {
-  const Icon = resultIcon(result.type);
+  const Icon = RESULT_ICONS[result.type] ?? FileText;
   const content = <Card data-testid={result.url ? "search-result-row" : "search-result-disabled"} data-url={result.url ?? undefined} className={!result.url ? "opacity-60" : "card-lift"} aria-disabled={!result.url}><CardContent className="flex items-center gap-4"><div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-foreground"><Icon className="size-5" aria-hidden /></div><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><Badge variant="secondary" className="font-mono text-[10px] uppercase">{result.type}</Badge><p className="truncate font-medium">{result.name ?? result.id}</p></div>{result.description ? <p className="mt-1 truncate text-sm text-muted-foreground">{result.description}</p> : null}</div><ArrowRight className="size-4 shrink-0 text-muted-foreground" aria-hidden /></CardContent></Card>;
   return result.url ? <Link to={result.url} className="block" aria-label={`View ${result.name ?? result.id}`}>{content}</Link> : <div tabIndex={-1}>{content}</div>;
 }

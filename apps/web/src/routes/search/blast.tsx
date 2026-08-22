@@ -7,7 +7,7 @@
  */
 import * as React from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Spin } from "antd";
+import { Spin } from "@/lib/antd";
 import { FadeUp } from "../../components/route-motion";
 import { useTranslation } from "react-i18next";
 

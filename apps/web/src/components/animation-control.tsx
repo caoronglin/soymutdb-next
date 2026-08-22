@@ -3,8 +3,8 @@
  * Mounted in the site header. Persists to localStorage.
  */
 import * as React from "react";
-import { Sparkles, Check, Zap, Gauge, Ban, SunMedium } from "lucide-react";
-import { Button, cn } from "@soymutdb/ui";
+import { Sparkles, Check, Gauge, Ban, SunMedium } from "lucide-react";
+import { Button, cn } from "../lib/web-ui";
 import { useAnimation, type AnimationIntensity } from "../lib/animation-context";
 
 const OPTIONS: ReadonlyArray<{
@@ -13,14 +13,14 @@ const OPTIONS: ReadonlyArray<{
     description: string;
     icon: React.ComponentType<{ className?: string }>;
 }> = [
-        { value: "off", label: "Off", description: "No motion. Best for accessibility.", icon: Ban },
+        { value: "auto", label: "Auto", description: "Adapt to accessibility and session resources.", icon: Sparkles },
+        { value: "standard", label: "Standard", description: "Standard ease-out (~300ms).", icon: SunMedium },
         { value: "minimal", label: "Minimal", description: "Only essential transitions (~100ms).", icon: Gauge },
-        { value: "normal", label: "Normal", description: "Standard ease-out (~300ms).", icon: SunMedium },
-        { value: "expressive", label: "Expressive", description: "Rich spring motion (~500ms).", icon: Zap },
+        { value: "off", label: "Off", description: "No motion. Best for accessibility.", icon: Ban },
     ];
 
 export function AnimationControl() {
-    const { intensity, setIntensity, reduced } = useAnimation();
+    const { preference, intensity, decisionReason, setIntensity } = useAnimation();
     const [open, setOpen] = React.useState(false);
     const popoverRef = React.useRef<HTMLDivElement | null>(null);
     const buttonRef = React.useRef<HTMLButtonElement | null>(null);
@@ -75,13 +75,17 @@ export function AnimationControl() {
                     <div className="px-3 py-2">
                         <p className="font-display text-sm font-semibold">Motion</p>
                         <p className="text-xs text-muted-foreground">
-                            {reduced ? "Reduced motion is on (OS setting)." : "Tune animation intensity."}
+                            {decisionReason === "reduced-motion"
+                                ? "Reduced motion is on (OS setting)."
+                                : preference !== intensity
+                                  ? `Session adjusted to ${intensity}.`
+                                  : "Tune animation intensity."}
                         </p>
                     </div>
                     <div className="mt-1 grid gap-1">
                         {OPTIONS.map((opt) => {
                             const Icon = opt.icon;
-                            const active = intensity === opt.value;
+                            const active = preference === opt.value;
                             return (
                                 <button
                                     key={opt.value}

@@ -3,7 +3,7 @@
  * overview, expression data, and homologs.
  *
  * AntD 5 migration (A1): Card/Descriptions/Tabs/Table/Skeleton/Tag/Empty
- * replace the frozen packages/ui components. TanStack Query data flow
+ * replace the frozen shared UI components. TanStack Query data flow
  * unchanged.
  */
 import { createFileRoute, Link } from "@tanstack/react-router";
@@ -22,7 +22,7 @@ import {
   Tag,
   Typography,
   type TableColumnsType,
-} from "antd";
+} from "@/lib/antd";
 import {
   getGene,
   getGeneExpression,

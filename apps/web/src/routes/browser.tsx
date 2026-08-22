@@ -22,7 +22,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import * as React from "react";
 import { ArrowLeft, Microscope, ExternalLink, Search, AlertCircle, Loader2 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, Input, Button } from "@soymutdb/ui";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, Input, Button } from "../lib/web-ui";
 import { FadeUp } from "../components/route-motion";
 import { SOYBEAN_CHROMOSOMES } from "../lib/format";
 import {

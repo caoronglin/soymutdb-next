@@ -4,7 +4,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { HelpCircle, BookOpen, Mail, Rocket, ChevronDown } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@soymutdb/ui";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../lib/web-ui";
 import { FadeUp, Stagger } from "../components/route-motion";
 import * as React from "react";
 
@@ -14,11 +14,11 @@ export const Route = createFileRoute("/help")({
 
 const FAQS: ReadonlyArray<{ q: string; a: string }> = [
   { q: "How do I search for a gene?", a: "Use the search bar at the top of any page, or visit the Genes page to filter by chromosome, biotype, or keyword. Gene IDs follow the Glyma.01G000100 format." },
-  { q: "How do I download variant data?", a: "Visit the Downloads page for pre-built VCF, GFF3, and FASTA files. For filtered exports, use the export button on the Variants page to submit an async export job." },
-  { q: "Can I request mutant seeds?", a: "Yes. Registered users can submit seed requests via the Seed Request page. You will need to agree to the Material Transfer Agreement (MTA)." },
-  { q: "How do I cite SoyMutDB?", a: "Please cite: Zhang Y, Li X, Wang H, et al. SoyMutDB: a comprehensive soybean mutant database. Plant Biotechnology Journal. 2025. DOI: 10.1111/pbi.70000" },
-  { q: "What genome assembly is used?", a: "SoyMutDB uses the Wm82.a4.v1 assembly (Glycine max Williams 82). All coordinates refer to this assembly unless stated otherwise." },
-  { q: "How often is the data updated?", a: "Major releases occur twice a year. The current release is v2.0 (June 2025). Check the News page for update announcements." },
+  { q: "How do I download variant data?", a: "Visit the Downloads page for the files currently published for a release. Check each item's format, assembly, release, and provenance metadata before using it in an analysis." },
+  { q: "Can I request mutant seeds?", a: "Open the Seed Request page to see whether requests are currently enabled and to review the eligibility and distribution terms shown during submission." },
+  { q: "How do I cite SoyMutDB?", a: "Use the citation and provenance metadata published with the exact data release you used. A journal citation or DOI is shown only after it has been verified by the project maintainers." },
+  { q: "What genome assembly is used?", a: "The assembly is part of the search, record, browser, and download context. Confirm the displayed assembly before comparing or combining genomic coordinates." },
+  { q: "How often is the data updated?", a: "Release versions and publication dates are announced on the News and Downloads pages. SoyMutDB does not promise a fixed release cadence on this Help page." },
 ];
 
 function HelpComponent() {
@@ -61,7 +61,6 @@ function HelpComponent() {
           <CardContent>
             <ul className="space-y-1.5 text-sm text-muted-foreground">
               <li>· REST API v1 reference</li>
-              <li>· GraphQL schema</li>
               <li>· JBrowse 2 configuration</li>
               <li>· BLAST usage guide</li>
             </ul>

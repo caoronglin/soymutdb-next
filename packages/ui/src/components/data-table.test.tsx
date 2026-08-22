@@ -236,7 +236,9 @@ describe("DataTable", () => {
         loadingSlot={<div>custom-loading</div>}
       />,
     );
-    expect(screen.getByText("custom-loading")).toBeInTheDocument();
+    const customLoading = screen.getByText("custom-loading");
+    expect(customLoading).toBeInTheDocument();
+    expect(customLoading.closest("td")).toHaveAttribute("colspan", String(columns.length));
   });
 
   it("renders an error state with retry and a custom error slot", () => {

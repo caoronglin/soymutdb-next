@@ -22,7 +22,7 @@ import {
   CardHeader,
   CardTitle,
   Badge,
-} from "@soymutdb/ui";
+} from "../lib/admin-ui";
 import { widgetApi, type WidgetHealthItem } from "../lib/widget-api";
 
 

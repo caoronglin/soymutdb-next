@@ -17,7 +17,6 @@ export interface MotionConfig {
     durationFast: number;
     durationSlow: number;
     easing: string;
-    easingSpring: string;
     stagger: number;
     /** True when motion should be avoided (off or reduced-motion). */
     reduced: boolean;
@@ -28,7 +27,6 @@ const DEFAULT_CONFIG: MotionConfig = {
     durationFast: 200,
     durationSlow: 500,
     easing: "cubic-bezier(0.16, 1, 0.3, 1)",
-    easingSpring: "cubic-bezier(0.34, 1.56, 0.64, 1)",
     stagger: 60,
     reduced: false,
 };

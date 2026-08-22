@@ -46,23 +46,10 @@ export default defineConfig({
                     }
                     if (id.includes("node_modules/react") || id.includes("node_modules/react-dom")) return "react";
                     if (id.includes("node_modules/@tanstack")) return "router";
-                    // AntD Pro split (G2 budget: antd ≤ 280KB / pro ≤ 180KB gzip).
-                    // pro-components depends on @ant-design/pro-* — check it
-                    // first so those land in the "pro" chunk, not "antd".
-                    if (
-                        id.includes("node_modules/@ant-design/pro-components") ||
-                        id.includes("node_modules/@ant-design/pro-")
-                    ) {
-                        return "pro";
-                    }
-                    // rc-* 基础组件（rc-table / rc-select / rc-pagination / rc-tree /
-                    // rc-picker / rc-virtual-list 等）拆到独立 rc chunk。
-                    // antd 与 pro-components 都依赖它们，合入 antd chunk 曾使
-                    // antd chunk 达 ~397KB gzip（G2 预算 280KB）；拆出后 antd
-                    // chunk 只含 antd 本体 + @ant-design/icons + cssinjs + dayjs。
-                    if (id.includes("node_modules/rc-")) {
-                        return "rc";
-                    }
+                    // rc-* 基础组件和 antd 存在相互依赖；拆成独立 chunk 会导致
+                    // ES module 初始化循环，并让生产登录页在加载时白屏。保持它们
+                    // 在同一个 antd chunk，优先保证 production artifact 可执行。
+                    if (id.includes("node_modules/rc-")) return "antd";
                     if (
                         id.includes("node_modules/antd") ||
                         id.includes("node_modules/@ant-design") ||

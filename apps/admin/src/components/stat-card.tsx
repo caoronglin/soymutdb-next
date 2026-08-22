@@ -1,1 +1,1 @@
-export { StatCard } from "@soymutdb/ui";
+export { StatCard } from "../lib/admin-ui";

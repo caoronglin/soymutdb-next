@@ -10,7 +10,7 @@ import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Bell, CheckCheck, CheckCircle2, Info, XCircle } from "lucide-react";
-import { Badge, Button, Empty, List, Popover, Skeleton, Tag, Tooltip, Typography } from "antd";
+import { Badge, Button, Empty, List, Popover, Skeleton, Tag, Tooltip, Typography } from "@/lib/antd";
 import { secureHttp } from "../../lib/api";
 import { useCurrentUser } from "../../lib/use-current-user";
 import { formatDate } from "../../lib/format";

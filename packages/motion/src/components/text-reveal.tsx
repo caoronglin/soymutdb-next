@@ -1,12 +1,12 @@
 import * as React from "react";
 import { cn } from "../utils";
-import { gsap } from "../gsap-setup";
 import { useMotion } from "../context";
+import { useReveal } from "../use-reveal";
 
 export interface TextRevealProps extends Omit<React.HTMLAttributes<HTMLSpanElement>, "children"> {
     text: string;
     baseDelay?: number;
-    /** Milliseconds between tokens — converted to seconds for GSAP stagger. */
+    /** Milliseconds between tokens. */
     step?: number;
     once?: boolean;
     split?: "word" | "char";
@@ -27,8 +27,8 @@ interface LineInfo {
 
 /**
  * TextReveal — splits text into lines and words (or chars), wraps each token
- * in a span on mount, and runs a GSAP blur-focus stagger driven by
- * ScrollTrigger. Whitespace tokens are preserved without animation. Honors
+ * in a span and reveals them using opacity/transform only. Whitespace tokens
+ * are preserved without animation. Honors
  * reduced motion (renders the plain text statically).
  */
 export function TextReveal({
@@ -43,8 +43,14 @@ export function TextReveal({
     ...rest
 }: TextRevealProps) {
     const Tag = as as React.ElementType;
-    const containerRef = React.useRef<HTMLSpanElement | null>(null);
     const { reduced } = useMotion();
+    const containerRef = useReveal<HTMLElement>({
+        variant: "fade-up",
+        delay: baseDelay,
+        once,
+        stagger: step / 1000,
+        childSelector: "[data-token]",
+    });
 
     const lines = React.useMemo(() => text.split("\n"), [text]);
 
@@ -67,53 +73,6 @@ export function TextReveal({
         });
     }, [lines, split, reduced]);
 
-    React.useEffect(() => {
-        if (reduced) return;
-        const el = containerRef.current;
-        if (!el) return;
-
-        const tokens = el.querySelectorAll<HTMLElement>("[data-token]");
-        if (tokens.length === 0) return;
-
-        const ctx = gsap.context(() => {
-            const mm = gsap.matchMedia();
-            mm.add(
-                {
-                    isReduced: "(prefers-reduced-motion: reduce)",
-                    isNormal: "(prefers-reduced-motion: no-preference)",
-                },
-                (context) => {
-                    if (context.conditions?.isReduced) {
-                        gsap.set(tokens, { opacity: 1, y: 0, filter: "blur(0px)" });
-                        return;
-                    }
-                    // Blur focus effect: opacity 0 → 1, blur 8px → 0, y 0.4em → 0
-                    gsap.fromTo(
-                        tokens,
-                        { opacity: 0, y: "0.4em", filter: "blur(8px)" },
-                        {
-                            opacity: 1,
-                            y: 0,
-                            filter: "blur(0px)",
-                            duration: 0.6,
-                            ease: "power2.out",
-                            stagger: step / 1000,
-                            delay: baseDelay / 1000,
-                            scrollTrigger: {
-                                trigger: el,
-                                start: "top 85%",
-                                once,
-                            },
-                        },
-                    );
-                },
-            );
-            return () => mm.revert();
-        }, el);
-
-        return () => ctx.revert();
-    }, [text, baseDelay, step, once, reduced, split]);
-
     return (
         <Tag
             ref={containerRef as unknown as React.Ref<HTMLElement>}
@@ -134,7 +93,7 @@ export function TextReveal({
                                       data-token={t.idx}
                                       style={{
                                           display: "inline-block",
-                                          willChange: "opacity, transform, filter",
+                                          willChange: "opacity, transform",
                                       }}
                                   >
                                       {t.token}

@@ -24,7 +24,7 @@ import {
   SelectValue,
   Textarea,
   Badge,
-} from "@soymutdb/ui";
+} from "../../lib/admin-ui";
 import type { ComponentDescriptor, PageComponentNode } from "@soymutdb/shared";
 
 type JsonSchema = Record<string, unknown>;

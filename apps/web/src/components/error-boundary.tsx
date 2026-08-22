@@ -1,6 +1,6 @@
 import * as React from "react";
 import { AlertTriangle, RotateCw } from "lucide-react";
-import { Button } from "@soymutdb/ui";
+import { Button } from "../lib/web-ui";
 
 export interface ErrorBoundaryProps {
     children: React.ReactNode;

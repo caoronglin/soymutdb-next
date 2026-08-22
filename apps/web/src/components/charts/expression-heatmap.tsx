@@ -5,7 +5,7 @@
 import { useMemo } from "react";
 import type { EChartsOption } from "echarts";
 import { useECharts } from "../../lib/use-echarts";
-import { ChartEmptyState, cn } from "@soymutdb/ui";
+import { ChartEmptyState, cn } from "../../lib/web-ui";
 
 export interface ExpressionHeatmapProps {
   data: Array<{ gene_id: string; library_name: string; fpkm: number }>;

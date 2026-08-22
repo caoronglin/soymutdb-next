@@ -9,7 +9,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import * as React from "react";
-import { Alert, Button, Form, Input, Result, Typography, type FormProps } from "antd";
+import { Alert, Button, Form, Input, Result, Typography, type FormProps } from "@/lib/antd";
 import { SendOutlined } from "@ant-design/icons";
 import { FadeUp } from "../components/route-motion";
 import { secureHttp } from "../lib/api";

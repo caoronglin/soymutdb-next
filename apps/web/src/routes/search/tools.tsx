@@ -5,7 +5,7 @@
  */
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
-import { Typography } from "antd";
+import { Typography } from "@/lib/antd";
 import {
   ExperimentOutlined,
   BarChartOutlined,

@@ -1,12 +1,13 @@
 /**
  * Markdown viewer — marked (lazy chunk) + DOMPurify sanitization.
  *
- * DOMPurify is an existing project dependency; marked is loaded on demand
- * so neither lands in the entry bundle.
+ * DOMPurify is already part of the app's static sanitization graph; marked is
+ * loaded on demand so markdown parsing stays out of the initial viewer path.
  */
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Skeleton } from "antd";
+import { Skeleton } from "@/lib/antd";
+import DOMPurify from "dompurify";
 
 interface MarkdownViewerProps {
   content: string;
@@ -27,10 +28,7 @@ export function MarkdownViewer({ content }: MarkdownViewerProps) {
 
     (async () => {
       try {
-        const [{ marked }, { default: DOMPurify }] = await Promise.all([
-          import("marked"),
-          import("dompurify"),
-        ]);
+        const { marked } = await import("marked");
         if (disposed) return;
         const rawHtml = await marked.parse(content);
         if (disposed) return;

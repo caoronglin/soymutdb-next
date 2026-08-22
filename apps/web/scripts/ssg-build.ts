@@ -15,7 +15,7 @@
 
 import { writeFileSync, mkdirSync, existsSync, copyFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { renderBaseTemplate, discoverAssets } from "./base-template";
+import { renderBaseTemplate, discoverAssets, renderRedirectTemplate } from "./base-template";
 import { FALLBACK_PAGES, type PageLayout, type WidgetLayout } from "./fallback-data";
 
 /* ------------------------------------------------------------------ */
@@ -27,7 +27,7 @@ const DIST_DIR = join(process.cwd(), "dist");
 const PAGES = [
     "index",
     "about",
-    "browse",
+    "browser",
     "guide",
     "downloads",
     "publications",
@@ -170,6 +170,15 @@ async function resolvePageLayout(page: string, useFallback: boolean): Promise<Pa
     };
 }
 
+/** Preserve historical static URLs while /browser remains the canonical SPA route. */
+function writeLegacyRedirect(from: string, to: string): void {
+    const html = renderRedirectTemplate(to);
+    writeFileSync(join(DIST_DIR, `${from}.html`), html, "utf8");
+    const directory = join(DIST_DIR, from);
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(join(directory, "index.html"), html, "utf8");
+}
+
 /* ------------------------------------------------------------------ */
 /*  i18n data injection                                               */
 /* ------------------------------------------------------------------ */
@@ -228,7 +237,9 @@ async function build() {
     for (const pageName of PAGES) {
         console.log(`[ssg-build] Building page: ${pageName}`);
 
-        const layout = await resolvePageLayout(pageName, useFallback);
+        // The API/fallback layout key predates the public /browser route.
+        const layoutPageName = pageName === "browser" ? "browse" : pageName;
+        const layout = await resolvePageLayout(layoutPageName, useFallback);
 
         // Resolve all widgets for this page
         const widgetHtmls = await Promise.all(
@@ -254,8 +265,10 @@ async function build() {
         console.log(`[ssg-build]   Wrote ${outPath} (${html.length} bytes)`);
     }
 
-    // Ensure index.html is the SPA root too — overwrite the Vite-generated
-    // index.html with our fully-rendered version (React will hydrate it).
+    writeLegacyRedirect("browse", "browser");
+
+    // Ensure index.html is the SPA root too. Build-time markup remains in its
+    // own container until the independently rendered React tree commits.
     const indexLayout = await resolvePageLayout("index", useFallback);
     const indexWidgetHtmls = await Promise.all(
         indexLayout.widgets.map((w) => resolveWidgetHtml(w, useFallback)),
@@ -270,7 +283,7 @@ async function build() {
         assets,
     });
     writeFileSync(join(DIST_DIR, "index.html"), indexHtml, "utf8");
-    console.log(`[ssg-build] Rewrote dist/index.html with SSR content.`);
+    console.log(`[ssg-build] Rewrote dist/index.html with static fallback content.`);
 
     console.log(`[ssg-build] Done. Built ${PAGES.length} pages to ${DIST_DIR}`);
 }

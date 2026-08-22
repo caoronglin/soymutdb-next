@@ -1,5 +1,5 @@
 /**
- * Shared news ProForm (B3) — used by both the create (/news/new) and edit
+ * Shared news form (B3) — used by both the create (/news/new) and edit
  * (/news/$id) pages. Rich-text content (E1 RichEditor, HTML value), cover
  * URL input, status select, featured/carousel ordering and optional
  * visibility window.
@@ -8,14 +8,7 @@
  * NewsCreate / NewsUpdate.
  */
 import { useTranslation } from "react-i18next";
-import { Button, Space } from "antd";
-import {
-  ProForm,
-  ProFormDateTimePicker,
-  ProFormDigit,
-  ProFormSelect,
-  ProFormText,
-} from "@ant-design/pro-components";
+import { Button, DatePicker, Form, Input, InputNumber, Select, Space } from "antd";
 import dayjs from "dayjs";
 import type { NewsStatus } from "@soymutdb/api-client";
 import FileUpload from "./file-upload";
@@ -64,37 +57,25 @@ export function NewsForm({
   const { t } = useTranslation();
 
   return (
-    <ProForm<NewsFormValues>
-      onFinish={onSubmit}
+    <Form<NewsFormValues>
+      onFinish={(values) => onSubmit(values)}
       initialValues={initialValues}
       layout="vertical"
-      submitter={{
-        render: (props) => (
-          <Space>
-            <Button onClick={onCancel}>{t("admin.news.form.cancel")}</Button>
-            <Button
-              type="primary"
-              loading={submitting}
-              onClick={() => props.form?.submit?.()}
-            >
-              {t("admin.news.form.save")}
-            </Button>
-          </Space>
-        ),
-      }}
     >
-      <ProFormText
+      <Form.Item
         name="title_en"
         label={t("admin.news.form.titleEn")}
         rules={[{ required: true, message: t("admin.news.form.titleEn") }]}
-        fieldProps={{ maxLength: 512 }}
-      />
-      <ProFormText
+      >
+        <Input maxLength={512} />
+      </Form.Item>
+      <Form.Item
         name="title_zh"
         label={t("admin.news.form.titleZh")}
-        fieldProps={{ maxLength: 512 }}
-      />
-      <ProFormText
+      >
+        <Input maxLength={512} />
+      </Form.Item>
+      <Form.Item
         name="slug"
         label={t("admin.news.form.slug")}
         tooltip={t("admin.news.form.slugHelp")}
@@ -105,61 +86,87 @@ export function NewsForm({
             message: t("admin.news.form.slugHelp"),
           },
         ]}
-      />
-      <ProForm.Item
+      >
+        <Input />
+      </Form.Item>
+      <Form.Item
         name="content_en"
         label={t("admin.news.form.contentEn")}
         rules={[{ required: true, message: t("admin.news.form.contentEn") }]}
       >
         <RichEditor placeholder={t("admin.editor.placeholder")} />
-      </ProForm.Item>
-      <ProForm.Item
+      </Form.Item>
+      <Form.Item
         name="content_zh"
         label={t("admin.news.form.contentZh")}
       >
         <RichEditor placeholder={t("admin.editor.placeholder")} />
-      </ProForm.Item>
-      <ProFormText
+      </Form.Item>
+      <Form.Item
         name="category"
         label={t("admin.news.form.category")}
-        placeholder={t("admin.news.form.categoryPlaceholder")}
-        fieldProps={{ maxLength: 64 }}
-      />
-      <ProForm.Item
+      >
+        <Input
+          maxLength={64}
+          placeholder={t("admin.news.form.categoryPlaceholder")}
+        />
+      </Form.Item>
+      <Form.Item
         name="cover_url"
         label={t("admin.news.form.coverUrl")}
         tooltip={t("admin.news.form.coverUrlHelp")}
         extra={t("admin.news.form.coverUrlUploadHint")}
       >
         <FileUpload purpose="news" maxSizeMB={10} accept="image/*" />
-      </ProForm.Item>
-      <ProFormSelect
+      </Form.Item>
+      <Form.Item
         name="status"
         label={t("admin.news.form.status")}
-        options={STATUS_OPTIONS}
         rules={[{ required: true }]}
-      />
-      <ProFormDigit
+      >
+        <Select options={STATUS_OPTIONS} />
+      </Form.Item>
+      <Form.Item
         name="featured_sort"
         label={t("admin.news.form.featuredSort")}
         tooltip={t("admin.news.form.featuredSortHelp")}
-        min={0}
-      />
-      <ProFormText
+      >
+        <InputNumber min={0} />
+      </Form.Item>
+      <Form.Item
         name="carousel_group"
         label={t("admin.news.form.carouselGroup")}
-        placeholder={t("admin.news.form.carouselGroupPlaceholder")}
-        fieldProps={{ maxLength: 64 }}
-      />
-      <ProFormDigit name="carousel_sort" label={t("admin.news.form.carouselSort")} min={0} />
-      <ProFormDateTimePicker
+      >
+        <Input
+          maxLength={64}
+          placeholder={t("admin.news.form.carouselGroupPlaceholder")}
+        />
+      </Form.Item>
+      <Form.Item name="carousel_sort" label={t("admin.news.form.carouselSort")}>
+        <InputNumber min={0} />
+      </Form.Item>
+      <Form.Item
         name="visible_from"
         label={t("admin.news.form.visibleFrom")}
-      />
-      <ProFormDateTimePicker
+      >
+        <DatePicker showTime />
+      </Form.Item>
+      <Form.Item
         name="visible_to"
         label={t("admin.news.form.visibleTo")}
-      />
-    </ProForm>
+      >
+        <DatePicker showTime />
+      </Form.Item>
+      <Form.Item>
+        <Space>
+          <Button htmlType="button" onClick={onCancel}>
+            {t("admin.news.form.cancel")}
+          </Button>
+          <Button type="primary" htmlType="submit" loading={submitting}>
+            {t("admin.news.form.save")}
+          </Button>
+        </Space>
+      </Form.Item>
+    </Form>
   );
 }

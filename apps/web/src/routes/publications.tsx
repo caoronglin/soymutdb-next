@@ -4,7 +4,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { BookOpen, ExternalLink } from "lucide-react";
-import { Card, CardContent, Badge, Button } from "@soymutdb/ui";
+import { Card, CardContent, Badge, Button } from "../lib/web-ui";
 import { FadeUp, Stagger } from "../components/route-motion";
 
 export const Route = createFileRoute("/publications")({

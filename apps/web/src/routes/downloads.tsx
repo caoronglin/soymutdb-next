@@ -23,7 +23,7 @@ import {
   Button,
   Badge,
   Skeleton,
-} from "@soymutdb/ui";
+} from "../lib/web-ui";
 import { FadeUp, Stagger } from "../components/route-motion";
 import { getDownloadFiles, getDownloadUrl } from "@soymutdb/api-client";
 import type { DownloadFile } from "@soymutdb/api-client";

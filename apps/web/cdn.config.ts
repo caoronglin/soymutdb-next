@@ -1,5 +1,5 @@
 /**
- * CDN configuration — optional external loading for GSAP, Lenis, ECharts.
+ * CDN configuration — optional external loading for ECharts.
  *
  * When VITE_CDN_ENABLED=true, these libraries are loaded from CDN script
  * tags instead of bundled. Falls back to bundled when disabled or when
@@ -8,9 +8,7 @@
  *
  * Env vars (read from .env files via Vite's loadEnv):
  *   VITE_CDN_ENABLED=true|false  (default: false — bundled)
- *   VITE_GSAP_CDN=<url>          (e.g. https://cdnjs.cloudflare.com/ajax/libs/gsap/3.15.0/gsap.min.js)
  *   VITE_ECHARTS_CDN=<url>       (e.g. https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js)
- *   VITE_LENIS_CDN=<url>         (e.g. https://cdn.jsdelivr.net/npm/lenis@1.3.23/dist/lenis.min.js)
  */
 
 export interface CdnConfig {
@@ -38,30 +36,11 @@ export function resolveCdnConfig(env: Record<string, string> = {}): CdnConfig {
     const globals: Record<string, string> = {};
     const scripts: Array<{ url: string; global: string }> = [];
 
-    const gsapCdn = env.VITE_GSAP_CDN;
-    if (gsapCdn) {
-        external.push("gsap", "gsap/ScrollTrigger");
-        globals["gsap"] = "gsap";
-        globals["gsap/ScrollTrigger"] = "ScrollTrigger";
-        scripts.push({ url: gsapCdn, global: "gsap" });
-        const stCdn = env.VITE_GSAP_SCROLLTRIGGER_CDN;
-        if (stCdn) {
-            scripts.push({ url: stCdn, global: "ScrollTrigger" });
-        }
-    }
-
     const echartsCdn = env.VITE_ECHARTS_CDN;
     if (echartsCdn) {
         external.push("echarts");
         globals["echarts"] = "echarts";
         scripts.push({ url: echartsCdn, global: "echarts" });
-    }
-
-    const lenisCdn = env.VITE_LENIS_CDN;
-    if (lenisCdn) {
-        external.push("lenis");
-        globals["lenis"] = "Lenis";
-        scripts.push({ url: lenisCdn, global: "Lenis" });
     }
 
     return { enabled: true, external, globals, scripts };

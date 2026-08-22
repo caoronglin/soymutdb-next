@@ -9,7 +9,7 @@
  */
 import * as React from "react";
 import { ArrowUpRight } from "lucide-react";
-import { cn } from "@soymutdb/ui";
+import { cn } from "../lib/web-ui";
 import { useAnimation } from "../lib/animation-context";
 import { CHROMOSOME_LENGTHS_BP, formatMb, jbrowseUrl } from "../lib/format";
 import { getMotionPrefs } from "../lib/motion-prefs";
@@ -60,7 +60,7 @@ interface TooltipData {
 }
 
 export function ChromosomeHero({ data, onSelectChromosome, className }: ChromosomeHeroProps) {
-  const { reduced } = useAnimation();
+  const { reduced, intensity } = useAnimation();
   const points = React.useMemo(() => resolveDensity(data), [data]);
   const maxCount = React.useMemo(() => Math.max(...points.map((p) => p.variantCount), 1), [points]);
 
@@ -75,7 +75,10 @@ export function ChromosomeHero({ data, onSelectChromosome, className }: Chromoso
     const container = svgContainerRef.current;
     if (!container) return;
     const { reduced: reducedMotion } = getMotionPrefs();
-    if (reducedMotion) { setVisible(true); return; }
+    if (reducedMotion) {
+      const frame = requestAnimationFrame(() => setVisible(true));
+      return () => cancelAnimationFrame(frame);
+    }
     const obs = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
@@ -114,39 +117,25 @@ export function ChromosomeHero({ data, onSelectChromosome, className }: Chromoso
     };
   }, [reduced]);
 
-  // GSAP stroke-draw animation
+  // Bounded opacity-only entry animation.
   React.useEffect(() => {
     if (!visible || reduced) return;
     const container = svgContainerRef.current;
     if (!container) return;
-    let disposed = false;
-    let revert: (() => void) | undefined;
-    void import("@soymutdb/motion").then(({ gsap }) => {
-      if (disposed) return;
-      const ctx = gsap.context(() => {
-        const paths = container.querySelectorAll<SVGPathElement | SVGRectElement>("[data-chrom-outline]");
-        if (paths.length === 0) return;
-        paths.forEach((p) => gsap.set(p, { opacity: 0 }));
-        gsap.to(paths, {
-          opacity: 1,
-          duration: 0.6,
-          ease: "power2.out",
-          stagger: 0.03,
-          delay: 0.1,
-        });
-        const bands = container.querySelectorAll<SVGRectElement>("[data-chrom-band]");
-        gsap.fromTo(bands,
-          { opacity: 0 },
-          { opacity: 1, duration: 0.4, ease: "power1.out", stagger: 0.006, delay: 0.3 },
-        );
-      }, container);
-      revert = () => ctx.revert();
-    });
-    return () => {
-      disposed = true;
-      revert?.();
-    };
-  }, [visible, reduced, points]);
+    const duration = intensity === "minimal" ? 140 : 180;
+    const elements = container.querySelectorAll<SVGElement>(
+      "[data-chrom-outline], [data-chrom-band]",
+    );
+    const animations = Array.from(elements, (element, index) =>
+      element.animate([{ opacity: 0 }, { opacity: 1 }], {
+        duration,
+        delay: Math.min(index * 8, 120),
+        easing: "ease-out",
+        fill: "both",
+      }),
+    );
+    return () => animations.forEach((animation) => animation.cancel());
+  }, [visible, reduced, intensity, points]);
 
   const handleChromosomeClick = React.useCallback(
     (point: ChromosomeDensityPoint) => {

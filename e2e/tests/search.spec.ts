@@ -21,11 +21,16 @@ async function captureWindowOpen(page: Page): Promise<void> {
   });
 }
 
+/** The form control, rather than the similarly named results landmark. */
+function geneIdInput(page: Page) {
+  return page.getByRole("textbox", { name: "Gene ID", exact: true });
+}
+
 test.describe("Gene ID search", () => {
   test("renders the assembly + gene-id form with labels", async ({ page }) => {
     await page.goto(`${BASE}/search/genes`);
     await expect(page.getByText(/gene id search/i).first()).toBeVisible();
-    await expect(page.getByLabel(/gene id/i)).toBeVisible();
+    await expect(geneIdInput(page)).toBeVisible();
     await expect(page.getByText(/genome version/i).first()).toBeVisible();
   });
 
@@ -33,7 +38,7 @@ test.describe("Gene ID search", () => {
     await captureWindowOpen(page);
     await page.goto(`${BASE}/search/genes`);
 
-    const input = page.getByLabel(/gene id/i);
+    const input = geneIdInput(page);
     await input.fill("Glyma.01G000100");
     await page.getByRole("button", { name: "Search", exact: true }).click();
 
@@ -49,7 +54,7 @@ test.describe("Gene ID search", () => {
 
   test("restores form state from a parameterized URL", async ({ page }) => {
     await page.goto(`${BASE}/search/genes?q=Glyma.01G000100&run=1`);
-    await expect(page.getByLabel(/gene id/i)).toHaveValue(/Glyma.01G000100/);
+    await expect(geneIdInput(page)).toHaveValue(/Glyma.01G000100/);
   });
 });
 
@@ -77,7 +82,7 @@ test.describe("Physical Location search", () => {
     await page.goto(`${BASE}/search/location`);
 
     // The mock assembly auto-selects; pick a chromosome so the form validates.
-    await page.locator(".ant-select-selector").nth(1).click();
+    await page.getByRole("combobox").nth(1).click();
     await page.locator(".ant-select-item-option").filter({ hasText: "chr01" }).click();
     await page.getByLabel(/^start$/i).fill("1");
     await page.getByLabel(/^end$/i).fill("2000");

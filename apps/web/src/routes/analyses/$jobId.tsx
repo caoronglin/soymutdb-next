@@ -16,9 +16,9 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import * as React from "react";
 import { FlaskConical, ScanSearch, Loader2, CircleCheck, CircleX, Download, FileText, Database } from "lucide-react";
-import { PageHeader, Card, CardHeader, CardTitle, CardDescription, CardContent, Badge, Button, LoadingState, ErrorState, StatCard } from "@soymutdb/ui";
+import { PageHeader, Card, CardHeader, CardTitle, CardDescription, CardContent, Badge, Button, LoadingState, ErrorState, StatCard } from "../../lib/web-ui";
 import { getAnalysis, getAnalysisDownload, type AnalysesJobResponse } from "@soymutdb/api-client";
-import { DataTable, type DataTableColumn } from "../../components/data-table";
+import { DataTable } from "../../components/data-table";
 import { ResearcherGate } from "../../components/analyses/researcher-gate";
 import { formatDate } from "../../lib/format";
 

@@ -20,7 +20,7 @@ import {
   Typography,
   type TableColumnsType,
   type TableProps,
-} from "antd";
+} from "@/lib/antd";
 import { ReloadOutlined } from "@ant-design/icons";
 import { searchGenes, type GeneSummary } from "@soymutdb/api-client";
 import { FadeUp } from "../../components/route-motion";

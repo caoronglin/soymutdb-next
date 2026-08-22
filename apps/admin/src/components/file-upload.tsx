@@ -2,8 +2,8 @@
  * Generic admin file upload (D4) — AntD Upload + presigned streaming upload.
  *
  * Flow (stateless, mirrors apps/api/app/api/v1/admin_uploads.py):
- *   1. POST /admin/uploads/presign  -> { upload_url, object_key, public_url }
- *   2. PUT the bytes straight to `upload_url` (S3/MinIO, XHR for progress).
+ *   1. Hash the file and request a size/MIME/SHA-256-bound presigned POST.
+ *   2. POST signed fields followed by the file (S3/MinIO, XHR for progress).
  *   3. onChange(public_url) — the caller persists it (e.g. cover_url).
  *
  * The component is CONTROLLED via the AntD ProForm field contract
@@ -11,7 +11,7 @@
  * directly (see news-form.tsx). Supports drag & drop, progress bar, size
  * limit, file-type filter and multi-file mode (maxCount > 1).
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Upload, type UploadFile, type UploadProps } from "antd";
 import { App } from "antd";
@@ -37,18 +37,36 @@ export interface FileUploadProps {
 
 interface PresignPayload {
   upload_url: string;
+  upload_method: string;
+  upload_fields: Record<string, string>;
   public_url: string;
 }
 
-/** PUT the raw bytes to the pre-signed URL with XHR upload progress. */
-function putWithProgress(
+/** Calculate the lowercase hexadecimal SHA-256 of the exact file bytes. */
+async function sha256Hex(file: Blob): Promise<string> {
+  const bytes = await file.arrayBuffer();
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
+/** POST signed fields and then the file with XHR upload progress. */
+function postWithProgress(
   url: string,
+  fields: Record<string, string>,
   file: File | Blob,
   onProgress: (percent: number) => void,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
+    const formData = new FormData();
+    for (const [name, value] of Object.entries(fields)) {
+      formData.append(name, value);
+    }
+    formData.append("file", file);
+
     const xhr = new XMLHttpRequest();
-    xhr.open("PUT", url);
+    xhr.open("POST", url);
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable && e.total > 0) {
         onProgress(Math.round((e.loaded / e.total) * 100));
@@ -62,7 +80,8 @@ function putWithProgress(
       }
     };
     xhr.onerror = () => reject(new Error("Network error during upload"));
-    xhr.send(file);
+    // Let the browser set multipart/form-data with its generated boundary.
+    xhr.send(formData);
   });
 }
 
@@ -87,19 +106,12 @@ export default function FileUpload({
 }: FileUploadProps) {
   const { t } = useTranslation();
   const { message } = App.useApp();
-  const [fileList, setFileList] = useState<UploadFile[]>(() =>
-    toFileList(value),
-  );
+  const fileList = toFileList(value);
   const valueRef = useRef(value);
-  valueRef.current = value;
 
-  // Keep the visual list in sync when the form value changes externally
-  // (e.g. edit page pre-fill / reset).
+  // In-flight uploads need the latest controlled value when they finish.
   useEffect(() => {
-    const prev = valueRef.current;
-    if (prev !== value) {
-      setFileList(toFileList(value));
-    }
+    valueRef.current = value;
   }, [value]);
 
   const emit = (next: string | string[] | undefined) => {
@@ -115,12 +127,24 @@ export default function FileUpload({
           t("admin.uploads.sizeExceeded", { size: String(maxSizeMB) }),
         );
       }
+      const contentType = raw.type.trim().toLowerCase();
+      if (!contentType) {
+        throw new Error("File MIME type is required");
+      }
+      const checksumSha256 = await sha256Hex(raw);
       const presign: PresignPayload = await uploadPresign({
         filename: raw.name,
         purpose,
+        size: raw.size,
+        content_type: contentType,
+        checksum_sha256: checksumSha256,
       });
-      await putWithProgress(
+      if (presign.upload_method !== "POST") {
+        throw new Error("Upload presign response must use POST");
+      }
+      await postWithProgress(
         presign.upload_url,
+        presign.upload_fields,
         raw,
         (percent) => onProgress?.({ percent }),
       );

@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { initI18n, detectLanguage } from "@soymutdb/i18n";
 import { addJbrowseI18nResources } from "./i18n-extra";
+import { DesignSystemProvider } from "./design-system-provider";
 import App from "./App";
 import "./index.css";
 
@@ -30,7 +31,9 @@ if (!rootEl) {
 createRoot(rootEl).render(
     <StrictMode>
         <QueryClientProvider client={queryClient}>
-            <App />
+            <DesignSystemProvider>
+                <App />
+            </DesignSystemProvider>
         </QueryClientProvider>
     </StrictMode>,
 );

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Upload,
@@ -30,15 +30,22 @@ import {
   SelectTrigger,
   SelectValue,
   StatCard,
-} from "@soymutdb/ui";
+} from "../lib/admin-ui";
 import { DataTable, type DataTableColumn } from "../components/data-table";
+import { ImportPreviewTable } from "../components/import-preview-table";
 import { StatusBadge, type TaskStatus } from "../components/status-badge";
-import { useAuth } from "../lib/auth-context";
 import {
   uploadModuleFile,
   fetchModulePreview,
   type ModulePreviewResult,
 } from "../lib/module-import-upload";
+import { resolveFeatureState } from "../lib/capability-state";
+import {
+  buildImportSubmission,
+  createImportIdempotencyKey,
+  parseModuleReleaseId,
+  type ImportSubmission,
+} from "../lib/import-submission";
 
 // ---------------------------------------------------------------------------
 // Types – matches the backend API response shape (snake_case)
@@ -131,7 +138,6 @@ const MODULE_TEMPLATE_FORMATS = [
 // ---------------------------------------------------------------------------
 
 export default function ImportsPage() {
-  const { user } = useAuth();
   const queryClient = useQueryClient();
 
   const [page, setPage] = useState(1);
@@ -143,7 +149,9 @@ export default function ImportsPage() {
   const [uploadFilename, setUploadFilename] = useState("");
   const [uploadFilePath, setUploadFilePath] = useState("");
   const [uploadModuleKey, setUploadModuleKey] = useState("genes");
+  const [uploadReleaseId, setUploadReleaseId] = useState("");
   const [uploadChecksum, setUploadChecksum] = useState("");
+  const [uploadIdempotencyKey, setUploadIdempotencyKey] = useState("");
   const [uploadError, setUploadError] = useState<string | null>(null);
 
   // Local file upload state (Phase D). ``uploadMode`` selects local multipart
@@ -155,6 +163,7 @@ export default function ImportsPage() {
   const [previewState, setPreviewState] = useState<
     ModulePreviewResult | { status: "checking" } | null
   >(null);
+  const previewRequestToken = useRef(0);
 
   // Module template download state
   const [templateModuleKey, setTemplateModuleKey] = useState("genes");
@@ -180,22 +189,27 @@ export default function ImportsPage() {
     placeholderData: { items: [], total: 0, page, page_size: 20 },
   });
 
-  const { data: capabilities } = useQuery({
+  const capabilitiesQuery = useQuery({
     queryKey: ["public-capabilities"],
     queryFn: capabilitiesApi.get,
     staleTime: 30_000,
   });
-  const featureEnabled = (key: string, fallback = true) =>
-    capabilities?.features?.[key] ?? fallback;
-  const moduleImportEnabled = featureEnabled("imports.module_tsv");
-  const xlsxImportEnabled = featureEnabled("imports.module_xlsx");
-  const localUploadEnabled = featureEnabled("imports.local_upload");
+  const capabilitySnapshot = {
+    pending: capabilitiesQuery.isPending,
+    error: capabilitiesQuery.isError,
+    features: capabilitiesQuery.data?.features,
+  };
+  const moduleImportState = resolveFeatureState(capabilitySnapshot, "imports.module_tsv");
+  const xlsxImportState = resolveFeatureState(capabilitySnapshot, "imports.module_xlsx");
+  const localUploadState = resolveFeatureState(capabilitySnapshot, "imports.local_upload");
+  const moduleImportEnabled = moduleImportState === "enabled";
+  const xlsxImportEnabled = xlsxImportState === "enabled";
+  const localUploadEnabled = localUploadState === "enabled";
+  // Capability loss does not need a synchronizing effect: the rendered and
+  // submitted source are derived from the current server snapshot.
+  const effectiveUploadMode = localUploadEnabled ? uploadMode : "s3";
 
-  useEffect(() => {
-    if (!localUploadEnabled && uploadMode === "local") setUploadMode("s3");
-  }, [localUploadEnabled, uploadMode]);
-
-  const tasks = data?.items ?? [];
+  const tasks = useMemo(() => data?.items ?? [], [data?.items]);
   const hasRunning = tasks.some(
     (t) => t.status === "running" || t.status === "queued",
   );
@@ -205,15 +219,7 @@ export default function ImportsPage() {
   // -----------------------------------------------------------------------
 
   const submitMutation = useMutation({
-    mutationFn: (body: {
-      filename: string;
-      type: ImportType;
-      file_path?: string;
-      object_key?: string;
-      submitted_by: string;
-      module_key?: string;
-      checksum?: string;
-    }) =>
+    mutationFn: (body: ImportSubmission) =>
       http.post("/admin/imports", {
         json: body,
         timeoutMs: 30_000,
@@ -224,7 +230,9 @@ export default function ImportsPage() {
       setUploadFilePath("");
       setUploadType("vcf");
       setUploadModuleKey("genes");
+      setUploadReleaseId("");
       setUploadChecksum("");
+      setUploadIdempotencyKey("");
       setUploadError(null);
       setUploadFile(null);
       setUploadProgress(0);
@@ -254,10 +262,7 @@ export default function ImportsPage() {
   // -----------------------------------------------------------------------
 
   useEffect(() => {
-    if (!hasRunning) {
-      setLiveStatuses(new Map());
-      return;
-    }
+    if (!hasRunning) return;
 
     const runningIds = tasks
       .filter((t) => t.status === "running" || t.status === "queued")
@@ -298,6 +303,32 @@ export default function ImportsPage() {
   // Helpers
   // -----------------------------------------------------------------------
 
+  function openUploadDialog() {
+    setUploadIdempotencyKey(createImportIdempotencyKey());
+    setShowUpload(true);
+  }
+
+  function submitImport(input: Omit<ImportSubmission, "idempotency_key" | "release_id">) {
+    const idempotencyKey = uploadIdempotencyKey || createImportIdempotencyKey();
+    if (!uploadIdempotencyKey) setUploadIdempotencyKey(idempotencyKey);
+    try {
+      submitMutation.mutate(
+        buildImportSubmission({
+          filename: input.filename,
+          type: input.type,
+          filePath: input.file_path,
+          objectKey: input.object_key,
+          moduleKey: input.module_key,
+          checksum: input.checksum,
+          releaseIdInput: uploadReleaseId,
+          idempotencyKey,
+        }),
+      );
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "Invalid import submission.");
+    }
+  }
+
   /** Merge live status data into a task row. */
   const enrichTask = useCallback(
     (task: ImportTask): ImportTask => {
@@ -318,7 +349,24 @@ export default function ImportsPage() {
   async function handleUploadSubmit() {
     setUploadError(null);
 
-    if (uploadMode === "local") {
+    if (!capabilitiesQuery.isSuccess) {
+      setUploadError("Import capabilities are unavailable. Refresh and try again.");
+      return;
+    }
+    if (uploadType === "module_tsv" && !moduleImportEnabled) {
+      setUploadError("Module imports are disabled.");
+      return;
+    }
+    if (uploadType === "module_tsv") {
+      try {
+        parseModuleReleaseId(uploadReleaseId);
+      } catch (error) {
+        setUploadError(error instanceof Error ? error.message : "A release ID is required.");
+        return;
+      }
+    }
+
+    if (effectiveUploadMode === "local") {
       if (!uploadFile) {
         setUploadError("Choose a file to upload.");
         return;
@@ -349,11 +397,10 @@ export default function ImportsPage() {
           file: uploadFile,
           onProgress: (p) => setUploadProgress(p.percent),
         });
-        submitMutation.mutate({
+        submitImport({
           filename,
           type: uploadType,
           object_key: uploaded.object_key,
-          submitted_by: user?.username ?? "unknown",
           module_key: uploadType === "module_tsv" ? uploadModuleKey.trim() : undefined,
           checksum: uploadType === "module_tsv" ? uploaded.sha256 : undefined,
         });
@@ -391,28 +438,43 @@ export default function ImportsPage() {
       }
     }
 
-    submitMutation.mutate({
+    submitImport({
       filename,
       type: uploadType,
       file_path: uploadFilePath.trim(),
-      submitted_by: user?.username ?? "unknown",
       module_key: uploadType === "module_tsv" ? uploadModuleKey.trim() : undefined,
       checksum: uploadType === "module_tsv" ? uploadChecksum.trim() : undefined,
     });
   }
 
-  /** Refresh the preview state — the backend has no preview endpoint yet. */
+  function invalidatePreview() {
+    previewRequestToken.current += 1;
+    setPreviewState(null);
+  }
+
+  /** Request a bounded, read-only validation preview for a local module file. */
   function checkPreview() {
     if (!uploadFile || uploadType !== "module_tsv") return;
+    const requestToken = ++previewRequestToken.current;
     setPreviewState({ status: "checking" });
     void fetchModulePreview({
       filename: uploadFile.name,
-      module_key: uploadModuleKey.trim() || "genes",
-    }).then((result) => {
-      setPreviewState(
-        result.status === "available" ? result : { status: "unavailable" },
-      );
-    });
+      moduleKey: uploadModuleKey.trim() || "genes",
+      file: uploadFile,
+    })
+      .then((result) => {
+        if (previewRequestToken.current === requestToken) {
+          setPreviewState(result);
+        }
+      })
+      .catch((error: unknown) => {
+        if (previewRequestToken.current === requestToken) {
+          setPreviewState({
+            status: "unavailable",
+            reason: error instanceof Error ? error.message : "Preview request failed.",
+          });
+        }
+      });
   }
 
   function handleCancel(taskId: number) {
@@ -634,12 +696,35 @@ export default function ImportsPage() {
         title="Data Imports"
         description="Monitor and manage data import tasks (VCF, GFF3, FASTA, BLAST databases, expression data, homologs)."
         actions={
-          <Button onClick={() => setShowUpload(true)}>
+          <Button
+            onClick={openUploadDialog}
+            disabled={!capabilitiesQuery.isSuccess}
+          >
             <Upload className="size-4" />
             New Import
           </Button>
         }
       />
+
+      {capabilitiesQuery.isPending ? (
+        <p role="status" className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
+          Loading import capabilities…
+        </p>
+      ) : null}
+      {capabilitiesQuery.isError ? (
+        <p
+          role="alert"
+          aria-label="Import capabilities unavailable"
+          className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
+        >
+          Unable to load import capabilities. Import actions remain unavailable.
+        </p>
+      ) : null}
+      {capabilitiesQuery.isSuccess && moduleImportState === "disabled" ? (
+        <p className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
+          Module imports are disabled.
+        </p>
+      ) : null}
 
       {/* Module template download */}
       <div className="rounded-lg border bg-card p-4">
@@ -680,7 +765,11 @@ export default function ImportsPage() {
             variant="outline"
             size="sm"
             onClick={handleTemplateDownload}
-            disabled={templateDownloading || !templateModuleKey.trim()}
+            disabled={
+              templateDownloading ||
+              !templateModuleKey.trim() ||
+              !moduleImportEnabled
+            }
           >
             {templateDownloading ? (
               <Loader2 className="size-4 animate-spin" />
@@ -695,7 +784,7 @@ export default function ImportsPage() {
         ) : null}
         <p className="mt-2 text-xs text-muted-foreground">
           Starter template for a module schema (genes). Format: TSV / CSV / XLSX.
-          {" "}{!xlsxImportEnabled ? "XLSX is currently disabled by an administrator." : ""}
+          {" "}{xlsxImportState === "disabled" ? "XLSX is currently disabled by an administrator." : ""}
         </p>
       </div>
 
@@ -773,7 +862,7 @@ export default function ImportsPage() {
             <div className="space-y-1.5">
               <Label htmlFor="import-mode">Source</Label>
               <Select
-                value={uploadMode}
+                value={effectiveUploadMode}
                 onValueChange={(v) => setUploadMode(v as "local" | "s3")}
               >
                 <SelectTrigger id="import-mode">
@@ -786,7 +875,7 @@ export default function ImportsPage() {
               </Select>
             </div>
 
-            {uploadMode === "local" ? (
+            {effectiveUploadMode === "local" ? (
               <div className="space-y-1.5">
                 <Label>File</Label>
                 <FileDropInput
@@ -795,7 +884,7 @@ export default function ImportsPage() {
                     setUploadFile(f);
                     setUploadFilename(f.name);
                     setUploadError(null);
-                    setPreviewState(null);
+                    invalidatePreview();
                   }}
                   accept=".txt,.tsv,.csv,.xlsx,.vcf,.gff3,.fasta"
                 />
@@ -857,18 +946,36 @@ export default function ImportsPage() {
             {uploadType === "module_tsv" ? (
               <>
                 <div className="space-y-1.5">
+                  <Label htmlFor="import-release-id">Release ID</Label>
+                  <Input
+                    id="import-release-id"
+                    type="number"
+                    min="1"
+                    inputMode="numeric"
+                    placeholder="e.g. 42"
+                    value={uploadReleaseId}
+                    onChange={(e) => setUploadReleaseId(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Required. Module rows are immutable within one existing release.
+                  </p>
+                </div>
+                <div className="space-y-1.5">
                   <Label htmlFor="import-module-key">Module Key</Label>
                   <Input
                     id="import-module-key"
                     placeholder="genes"
                     value={uploadModuleKey}
-                    onChange={(e) => setUploadModuleKey(e.target.value)}
+                    onChange={(e) => {
+                      setUploadModuleKey(e.target.value);
+                      invalidatePreview();
+                    }}
                   />
                   <p className="text-xs text-muted-foreground">
                     Server-owned schema key. Supports .tsv / .txt / .csv / .xlsx.
                   </p>
                 </div>
-                {uploadMode === "s3" ? (
+                {effectiveUploadMode === "s3" ? (
                   <div className="space-y-1.5">
                     <Label htmlFor="import-checksum">Checksum</Label>
                     <Input
@@ -879,7 +986,6 @@ export default function ImportsPage() {
                     />
                   </div>
                 ) : null}
-                {/* Preview is unavailable — no backend preview endpoint yet. */}
                 <div className="space-y-1.5">
                   <Button
                     type="button"
@@ -895,8 +1001,37 @@ export default function ImportsPage() {
                   </Button>
                   {previewState?.status === "unavailable" ? (
                     <p className="text-xs text-muted-foreground">
-                      Preview is not available yet — no backend preview endpoint.
+                      {previewState.reason}
                     </p>
+                  ) : null}
+                  {previewState?.status === "available" ? (
+                    <div className="space-y-2 rounded-md border border-border p-3">
+                      <p className="text-xs text-muted-foreground">
+                        Validated {previewState.rowCount} row{previewState.rowCount === 1 ? "" : "s"}
+                        {previewState.truncated ? "; only the first 100 rows are shown." : "."}
+                        {" "}This preview is read-only; edits are not included in the import.
+                      </p>
+                      {!previewState.validation.ok ? (
+                        <p className="text-xs text-destructive">
+                          {previewState.validation.errorCount} validation error{previewState.validation.errorCount === 1 ? "" : "s"}
+                          {previewState.validation.errors[0]
+                            ? `: ${previewState.validation.errors[0].message}`
+                            : "."}
+                        </p>
+                      ) : null}
+                      {previewState.rows.length > 0 && previewState.headers.length > 0 ? (
+                        <ImportPreviewTable
+                          ariaLabel="Validated module preview"
+                          columns={previewState.headers}
+                          rows={previewState.rows}
+                          rowKey={(row, index) => `${index}:${String(row.gene_id ?? row.id ?? "row")}`}
+                          editable={false}
+                          height={240}
+                        />
+                      ) : (
+                        <p className="text-xs text-muted-foreground">No valid preview rows were found.</p>
+                      )}
+                    </div>
                   ) : null}
                 </div>
               </>
@@ -920,7 +1055,8 @@ export default function ImportsPage() {
               disabled={
                 submitMutation.isPending ||
                 uploading ||
-                (uploadMode === "local"
+                !capabilitiesQuery.isSuccess ||
+                (effectiveUploadMode === "local"
                   ? !uploadFile
                   : !uploadFilename.trim() || !uploadFilePath.trim())
               }

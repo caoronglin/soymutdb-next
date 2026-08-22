@@ -1,35 +1,26 @@
 /**
- * useReveal — IntersectionObserver + GSAP viewport reveal hook.
+ * useReveal — IntersectionObserver viewport reveal hook.
  *
- * A simpler, lower-overhead alternative to useGsapReveal that uses the
- * browser's IntersectionObserver (no ScrollTrigger plugin needed, no scroll
- * listener). When the element enters the viewport, a GSAP tween plays from
- * a hidden state to the element's natural state.
- *
- * Why useReveal vs useGsapReveal:
- *   - useReveal uses IntersectionObserver (cheaper, no scroll event overhead)
- *   - useGsapReveal uses ScrollTrigger (more features: pin, scrub, callbacks)
- *   - For simple "fade in when visible" cases, useReveal is preferred.
+ * Uses the browser's IntersectionObserver without scroll listeners. The reveal is a
+ * bounded opacity/transform CSS transition and never uses blur or springs.
  *
  * Honors:
  *   - prefers-reduced-motion (immediate final state)
  *   - once: true by default (play once, no re-trigger on scroll back)
  *   - threshold + rootMargin for fine-grained visibility control
- *   - gsap.context() for proper cleanup on unmount
  */
 import * as React from "react";
-import { gsap } from "./gsap-setup";
 import { useMotion } from "./context";
-import { FROM_VARS, type RevealVariant } from "./types";
+import { FROM_STYLES, type RevealVariant } from "./types";
 
 export interface UseRevealOptions {
     /** Animation variant (default: 'fade-up'). */
     variant?: RevealVariant;
     /** Delay in ms before animation starts (default: 0). */
     delay?: number;
-    /** Duration in seconds (default: 0.6). */
+    /** Duration in seconds. */
     duration?: number;
-    /** Easing function (default: 'power2.out', or 'back.out(1.4)' for scale-in). */
+    /** CSS easing function. */
     ease?: string;
     /** Intersection threshold 0..1 — how much visible to trigger (default: 0.15). */
     threshold?: number;
@@ -37,7 +28,7 @@ export interface UseRevealOptions {
     rootMargin?: string;
     /** Only play once (default: true). */
     once?: boolean;
-    /** Stagger delay (in seconds) for child elements — if set, animates children of the ref. */
+    /** Stagger delay (in seconds) for child elements. */
     stagger?: number;
     /** CSS selector for children to stagger (default: ':scope > *'). */
     childSelector?: string;
@@ -65,9 +56,8 @@ export function useReveal<T extends HTMLElement = HTMLDivElement>(
     const { reduced, duration: contextDuration, easing } = useMotion();
     const hasPlayedRef = React.useRef(false);
 
-    // Default easing based on variant if not explicitly provided
-    const effectiveEase = ease ?? (variant === "scale-in" || variant === "blur-up" ? "back.out(1.4)" : "power2.out");
-    const effectiveDuration = dur ?? Math.max(0.2, contextDuration / 1000);
+    const effectiveEase = ease ?? easing;
+    const effectiveDuration = dur ?? contextDuration / 1000;
 
     React.useEffect(() => {
         const el = ref.current;
@@ -80,18 +70,26 @@ export function useReveal<T extends HTMLElement = HTMLDivElement>(
 
         if (targets.length === 0) return;
 
-        // Reduced motion: immediately show, no animation
+        const show = () => {
+            targets.forEach((target, index) => {
+                target.style.opacity = "1";
+                target.style.transform = "none";
+                target.style.transitionProperty = "opacity, transform";
+                target.style.transitionDuration = `${Math.min(180, effectiveDuration * 1000)}ms`;
+                target.style.transitionTimingFunction = effectiveEase;
+                target.style.transitionDelay = `${delay + index * (stagger ?? 0) * 1000}ms`;
+            });
+        };
+
         if (reduced) {
-            gsap.set(targets, { opacity: 1, y: 0, x: 0, scale: 1, filter: "blur(0px)", clearProps: "transform,opacity,filter" });
+            show();
             onComplete?.();
             return;
         }
 
-        // Set initial hidden state
-        const fromVars = FROM_VARS[variant] ?? FROM_VARS["fade-up"];
-        gsap.set(targets, fromVars);
+        const initial = FROM_STYLES[variant] ?? FROM_STYLES["fade-up"];
+        targets.forEach((target) => Object.assign(target.style, initial));
 
-        let ctx: gsap.Context | null = null;
         const observer = new IntersectionObserver(
             (entries) => {
                 for (const entry of entries) {
@@ -102,22 +100,13 @@ export function useReveal<T extends HTMLElement = HTMLDivElement>(
                         return;
                     }
 
-                    ctx = gsap.context(() => {
-                        gsap.to(targets, {
-                            opacity: 1,
-                            y: 0,
-                            x: 0,
-                            scale: 1,
-                            filter: "blur(0px)",
-                            duration: effectiveDuration,
-                            ease: effectiveEase,
-                            delay: delay / 1000,
-                            stagger: stagger ?? 0,
-                            clearProps: "transform,opacity,filter",
-                            onComplete,
-                            overwrite: "auto",
-                        });
-                    }, el);
+                    requestAnimationFrame(() => {
+                        show();
+                        window.setTimeout(
+                            () => onComplete?.(),
+                            delay + effectiveDuration * 1000,
+                        );
+                    });
 
                     hasPlayedRef.current = true;
 
@@ -133,7 +122,6 @@ export function useReveal<T extends HTMLElement = HTMLDivElement>(
 
         return () => {
             observer.disconnect();
-            ctx?.revert();
         };
     }, [variant, delay, effectiveDuration, effectiveEase, threshold, rootMargin, once, stagger, childSelector, reduced, onComplete]);
 

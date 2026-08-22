@@ -6,12 +6,13 @@
  * a plain table for full control over styling and virtualization hooks.
  */
 import * as React from "react";
-import { cn, Skeleton, Pagination } from "@soymutdb/ui";
+import { cn, Skeleton, Pagination } from "../lib/web-ui";
 import { ArrowDown, ArrowUp, ArrowUpDown, Inbox } from "lucide-react";
 
 export interface DataTableColumn<T> {
-  id: string;
-  header: string;
+  id?: string;
+  key?: string;
+  header: React.ReactNode;
   /** Render a cell for the row. */
   cell: (row: T) => React.ReactNode;
   /** Sortable column key (sent to the server). */
@@ -20,6 +21,10 @@ export interface DataTableColumn<T> {
   frozen?: boolean;
   /** Right-align numeric columns. */
   numeric?: boolean;
+  /** Package-compatible cell alignment. */
+  align?: "left" | "center" | "right";
+  /** Use this column as the compact-card heading. */
+  primary?: boolean;
   /** Optional class for the cell. */
   className?: string;
   /** Optional width hint. */
@@ -50,6 +55,10 @@ export interface DataTableProps<T> {
   onSortChange?: (sort: { key: string; dir: "asc" | "desc" } | null) => void;
   /** Row click handler. */
   onRowClick?: (row: T) => void;
+  /** Stable key accessor used by the package-compatible surface. */
+  rowKey?: (row: T) => string;
+  /** Render compact cards below the md breakpoint. */
+  responsive?: boolean;
   /** Accessible label for the table. */
   ariaLabel?: string;
   className?: string;
@@ -66,9 +75,15 @@ export function DataTable<T>({
   sort,
   onSortChange,
   onRowClick,
+  rowKey,
+  responsive = false,
   ariaLabel,
   className,
 }: DataTableProps<T>) {
+  const columnKey = (column: DataTableColumn<T>, index: number) =>
+    column.id ?? column.key ?? `column-${index}`;
+  const isRightAligned = (column: DataTableColumn<T>) =>
+    column.numeric || column.align === "right";
   const handleSort = (col: DataTableColumn<T>) => {
     if (!col.sortKey || !onSortChange) return;
     if (sort?.key === col.sortKey) {
@@ -80,19 +95,25 @@ export function DataTable<T>({
 
   return (
     <div className={cn("flex flex-col gap-4", className)}>
-      <div className="overflow-x-auto rounded-xl border bg-card shadow-sm">
+      <div
+        className={cn(
+          "overflow-x-auto rounded-xl border bg-card shadow-sm",
+          responsive && !loading && data.length > 0 && "hidden md:block",
+        )}
+      >
         <table className="w-full border-collapse text-sm" aria-label={ariaLabel}>
           <thead className="sticky top-0 z-10 bg-muted/50 backdrop-blur">
             <tr className="border-b">
-              {columns.map((col) => {
+              {columns.map((col, ci) => {
                 const isSorted = sort?.key === col.sortKey;
                 return (
                   <th
-                    key={col.id}
+                    key={columnKey(col, ci)}
                     scope="col"
                     className={cn(
                       "px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground",
-                      col.numeric && "text-right",
+                      isRightAligned(col) && "text-right",
+                      col.align === "center" && "text-center",
                       col.frozen && "sticky left-0 z-20 bg-muted/50 backdrop-blur",
                       col.sortKey && "cursor-pointer select-none",
                       col.className,
@@ -105,7 +126,7 @@ export function DataTable<T>({
                         type="button"
                         className={cn(
                           "inline-flex items-center gap-1 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                          col.numeric && "flex-row-reverse",
+                          isRightAligned(col) && "flex-row-reverse",
                           isSorted && "text-foreground",
                         )}
                         onClick={() => handleSort(col)}
@@ -133,12 +154,13 @@ export function DataTable<T>({
             {loading ? (
               Array.from({ length: skeletonRows }).map((_, ri) => (
                 <tr key={`skel-${ri}`} className="border-b last:border-0">
-                  {columns.map((col) => (
+                  {columns.map((col, ci) => (
                     <td
-                      key={col.id}
+                      key={columnKey(col, ci)}
                       className={cn(
                         "px-4 py-3",
-                        col.numeric && "text-right",
+                        isRightAligned(col) && "text-right",
+                        col.align === "center" && "text-center",
                         col.frozen && "sticky left-0 z-10 bg-card",
                       )}
                     >
@@ -162,7 +184,7 @@ export function DataTable<T>({
             ) : (
               data.map((row, ri) => (
                 <tr
-                  key={ri}
+                  key={rowKey?.(row) ?? ri}
                   className={cn(
                     "group/row border-b last:border-0 transition-colors hover:bg-muted/50",
                     onRowClick && "cursor-pointer",
@@ -180,12 +202,13 @@ export function DataTable<T>({
                       : undefined
                   }
                 >
-                  {columns.map((col) => (
+                  {columns.map((col, ci) => (
                     <td
-                      key={col.id}
+                      key={columnKey(col, ci)}
                       className={cn(
                         "px-4 py-3 align-middle",
-                        col.numeric && "text-right font-mono tabular-nums",
+                        isRightAligned(col) && "text-right font-mono tabular-nums",
+                        col.align === "center" && "text-center",
                         col.frozen && "sticky left-0 z-10 bg-card transition-colors group-hover/row:bg-muted/50",
                         col.className,
                       )}
@@ -199,6 +222,45 @@ export function DataTable<T>({
           </tbody>
         </table>
       </div>
+      {responsive && !loading && data.length > 0 ? (
+        <ul className="grid gap-3 md:hidden" aria-label={`${ariaLabel ?? "Data table"} compact view`}>
+          {data.map((row, ri) => {
+            const primary = columns.find((column) => column.primary) ?? columns[0];
+            return (
+              <li key={rowKey?.(row) ?? ri}>
+                <div
+                  className={cn(
+                    "rounded-xl border bg-card p-4 shadow-sm",
+                    onRowClick && "cursor-pointer",
+                  )}
+                  tabIndex={onRowClick ? 0 : undefined}
+                  onClick={onRowClick ? () => onRowClick(row) : undefined}
+                  onKeyDown={
+                    onRowClick
+                      ? (event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            onRowClick(row);
+                          }
+                        }
+                      : undefined
+                  }
+                >
+                  {primary ? <div className="font-medium">{primary.cell(row)}</div> : null}
+                  <dl className="mt-3 grid gap-2">
+                    {columns.filter((column) => column !== primary).map((column, ci) => (
+                      <div key={columnKey(column, ci)} className="flex items-baseline justify-between gap-3">
+                        <dt className="text-xs text-muted-foreground">{column.header}</dt>
+                        <dd className={cn("text-sm", isRightAligned(column) && "font-mono tabular-nums")}>{column.cell(row)}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
       {pagination ? (
         <Pagination
           page={pagination.page}

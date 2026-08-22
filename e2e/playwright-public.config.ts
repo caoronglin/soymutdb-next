@@ -2,8 +2,8 @@ import { defineConfig } from "@playwright/test";
 
 /**
  * Local E2E for the Phase 4/8 public UI (homepage/search/genes/accessibility/
- * BLAST). Offline-capable where possible; API-dependent assertions are marked
- * `test.skip` with an enablement note.
+ * BLAST/login). Offline-capable where possible; the static server supplies
+ * only the deterministic API mocks required by an interaction test.
  *
  * Requires a built dist (apps/web/dist) — the webServer starts
  * e2e/static-server.mjs which serves the dist at /soymutdb-next with SPA
@@ -16,7 +16,7 @@ const baseURL = "http://localhost:4173/soymutdb-next/";
 
 export default defineConfig({
   testDir: "./tests",
-  testMatch: /(homepage|search|genes|accessibility|blast)\.spec\.ts/,
+  testMatch: /(homepage|search|genes|accessibility|blast|public-login)\.spec\.ts/,
   workers: 1,
   fullyParallel: false,
   timeout: 45_000,

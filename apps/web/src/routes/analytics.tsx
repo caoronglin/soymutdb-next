@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import * as React from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, Skeleton, Button } from "@soymutdb/ui";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, Skeleton, Button } from "../lib/web-ui";
 import {
   fetchChromosomeDensity,
   fetchHomepageStats,

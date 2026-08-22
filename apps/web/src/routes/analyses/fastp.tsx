@@ -10,7 +10,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import * as React from "react";
 import { FlaskConical, Loader2, Play, RotateCcw, Info } from "lucide-react";
-import { PageHeader, Card, CardHeader, CardTitle, CardDescription, CardContent, Label, Input, Button } from "@soymutdb/ui";
+import { PageHeader, Card, CardHeader, CardTitle, CardDescription, CardContent, Label, Input, Button } from "../../lib/web-ui";
 import { UploadDropzone } from "../../components/analyses/upload-dropzone";
 import { ResearcherGate } from "../../components/analyses/researcher-gate";
 import { useAnalysisUpload } from "../../lib/analyses-upload";

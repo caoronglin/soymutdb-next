@@ -2,7 +2,7 @@
  * Admin news list interaction tests (B3) — pagination, filtering, reset,
  * and loading state.
  *
- * These exercise the rendered ProTable with @testing-library/user-event:
+ * These exercise the rendered AntD form/table with @testing-library/user-event:
  * - pagination: clicking a page triggers listAdminNews with the new page
  * - filter: typing in search fields + submitting maps params via
  *   buildAdminNewsQuery
@@ -59,10 +59,9 @@ function renderPage() {
   );
 }
 
-/** ProTable search form submit button — AntD renders "查 询" (query). */
-const QUERY_BTN = /查\s*询|quer/i;
-/** ProTable search form reset button — AntD renders "重 置" (reset). */
-const RESET_BTN = /重\s*置|reset/i;
+/** Translation keys are returned verbatim by this test's i18n mock. */
+const SEARCH_BUTTON = "common.search";
+const RESET_BUTTON = "common.reset";
 
 beforeEach(() => {
   listAdminNewsMock.mockReset();
@@ -102,11 +101,11 @@ describe("NewsListPage filtering", () => {
     renderPage();
     await screen.findByText("Article One");
 
-    // ProTable search form: title_en field (label association via htmlFor).
+    // Search form title_en field (label association via htmlFor).
     const titleInput = screen.getByLabelText("admin.news.columns.title");
     await user.type(titleInput, "EMS mutant");
 
-    const submit = screen.getByRole("button", { name: QUERY_BTN });
+    const submit = screen.getByRole("button", { name: SEARCH_BUTTON });
     await user.click(submit);
 
     await waitFor(() => {
@@ -124,7 +123,7 @@ describe("NewsListPage filtering", () => {
     const categoryInput = screen.getByLabelText("admin.news.columns.category");
     await user.type(categoryInput, "updates");
 
-    const submit = screen.getByRole("button", { name: QUERY_BTN });
+    const submit = screen.getByRole("button", { name: SEARCH_BUTTON });
     await user.click(submit);
 
     await waitFor(() => {
@@ -146,7 +145,7 @@ describe("NewsListPage reset", () => {
     // Apply a filter first.
     const titleInput = screen.getByLabelText("admin.news.columns.title");
     await user.type(titleInput, "EMS");
-    const submit = screen.getByRole("button", { name: QUERY_BTN });
+    const submit = screen.getByRole("button", { name: SEARCH_BUTTON });
     await user.click(submit);
     await waitFor(() => {
       expect(listAdminNewsMock).toHaveBeenLastCalledWith(
@@ -155,7 +154,7 @@ describe("NewsListPage reset", () => {
     });
 
     // Reset button clears the form and re-fetches with defaults.
-    const reset = screen.getByRole("button", { name: RESET_BTN });
+    const reset = screen.getByRole("button", { name: RESET_BUTTON });
     await user.click(reset);
 
     await waitFor(() => {
@@ -184,7 +183,7 @@ describe("NewsListPage loading state", () => {
     );
 
     renderPage();
-    // ProTable renders an antd Spin while loading (no ARIA role — the
+    // AntD Table renders a Spin while loading (no ARIA role — the
     // loading wrapper carries .ant-spin / aria-busy on the table).
     await waitFor(() => {
       expect(document.querySelector(".ant-spin")).not.toBeNull();

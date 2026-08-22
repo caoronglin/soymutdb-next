@@ -318,7 +318,10 @@
     "activeTracks": "{{count}} 个活动轨道",
     "activeTracks_plural": "{{count}} 个活动轨道",
     "showTracks": "显示轨道面板",
-    "hideTracks": "隐藏轨道面板"
+    "hideTracks": "隐藏轨道面板",
+    "unavailable": "此插件或装配未提供可用的基因组浏览器。",
+    "minimalUnavailableTitle": "最小化部署未包含基因组浏览器",
+    "minimalUnavailableDescription": "此仅含 Web 的部署不包含 JBrowse。请使用 demo 部署模式发布交互式基因组浏览器。"
   },
   "blast": {
     "title": "BLAST 搜索",
@@ -341,6 +344,7 @@
     "submit": "提交 BLAST",
     "clear": "清空",
     "myJobs": "我的任务",
+    "unavailable": "此插件或装配未提供可用的 BLAST 服务。",
     "jobHistory": "任务历史",
     "jobId": "任务 ID",
     "status": "状态",
@@ -638,6 +642,7 @@
   "search": {
     "title": "全局搜索",
     "subtitle": "搜索基因、变异、突变系和文档",
+    "openPalette": "打开搜索",
     "placeholder": "输入搜索关键词...",
     "searching": "搜索中...",
     "noResults": "未找到结果",

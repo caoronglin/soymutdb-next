@@ -419,7 +419,13 @@ export function DataTable<T>({
     if (loading) {
       return (
         <>
-          {loadingSlot ??
+          {loadingSlot != null ? (
+            <TableRow>
+              <TableCell colSpan={colSpan} className="p-0">
+                {loadingSlot}
+              </TableCell>
+            </TableRow>
+          ) : (
             Array.from({ length: skeletonRows }, (_, i) => (
               <TableRow key={`skeleton-${i}`} aria-hidden>
                 {selection ? (
@@ -433,7 +439,8 @@ export function DataTable<T>({
                   </TableCell>
                 ))}
               </TableRow>
-            ))}
+            ))
+          )}
         </>
       );
     }

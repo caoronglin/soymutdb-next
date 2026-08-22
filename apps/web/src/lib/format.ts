@@ -1,7 +1,7 @@
 /**
  * Shared formatting helpers for genomic data display.
  */
-export { formatNumber, formatPercent, formatFileSize, truncate } from "@soymutdb/ui";
+export { formatNumber, formatPercent, formatFileSize, truncate } from "./web-ui";
 
 /** Default species (soybean) has 20 chromosomes — canonical names used across the UI. */
 export const SOYBEAN_CHROMOSOMES = Array.from({ length: 20 }, (_, i) => `chr${String(i + 1).padStart(2, "0")}`) as readonly string[];

@@ -1,6 +1,6 @@
 import * as React from "react";
 import { cn } from "../utils";
-import { useGsapReveal } from "../use-gsap-reveal";
+import { useReveal } from "../use-reveal";
 import { type RevealVariant } from "../types";
 
 export interface RevealProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -21,7 +21,7 @@ export function Reveal({
     ...rest
 }: RevealProps) {
     const Tag = as as React.ElementType;
-    const ref = useGsapReveal<HTMLDivElement>({ variant, delay, once });
+    const ref = useReveal<HTMLDivElement>({ variant, delay, once });
     return (
         <Tag ref={ref} className={cn(className)} style={style} {...rest}>
             {children}

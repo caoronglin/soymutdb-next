@@ -37,7 +37,7 @@ import {
   SelectTrigger,
   SelectValue,
   Textarea,
-} from "@soymutdb/ui";
+} from "../lib/admin-ui";
 import { DataTable, type DataTableColumn } from "../components/data-table";
 import { ConfirmDialog } from "../components/confirm-dialog";
 

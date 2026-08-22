@@ -9,7 +9,7 @@ import {
   ChevronDown,
   type LucideIcon,
 } from "lucide-react";
-import { Button, cn } from "@soymutdb/ui";
+import { Button, cn } from "../lib/admin-ui";
 
 interface AdminHeaderProps {
   /** Mobile sidebar toggle. */

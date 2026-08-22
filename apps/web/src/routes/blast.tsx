@@ -2,7 +2,7 @@
  * BLAST route — sequence homology search form + recent jobs.
  *
  * AntD 5 migration (A1): Card/Form/Select/Input/List/Tag/Alert replace the
- * frozen packages/ui components. TanStack Query data flow and zod
+ * frozen shared UI components. TanStack Query data flow and zod
  * validation logic unchanged.
  *
  * Completed jobs expose a hits table (GET /blast/jobs/{id}/hits) with an
@@ -29,7 +29,7 @@ import {
   Tag,
   Typography,
   type TableColumnsType,
-} from "antd";
+} from "@/lib/antd";
 import {
   getBlastDatabases,
   submitBlastJob,

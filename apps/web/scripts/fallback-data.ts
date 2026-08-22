@@ -1,10 +1,11 @@
 /**
  * ============================================================================
- * ⚠️  SSG 构建期占位数据 — 仅离线构建使用，绝不用于运行时 API 失败回退！
+ * ⚠️  SSG 构建期占位数据 — 仅显式 demo 构建使用，绝不冒充发布数据！
  * ============================================================================
  *
  * 本文件只允许被 scripts/ 下的构建脚本（ssg-build.ts / generate-samples.ts）
- * 引用，用于在没有后端 API 的离线/CI 环境中产出完整的静态页面。
+ * 引用。FALLBACK_VARIANTS 只能在 VITE_DEPLOYMENT_MODE=demo 时生成带有
+ * noindex 和醒目标识的演示页面；标准/minimal 构建缺少 API 数据时必须失败。
  *
  * 以下红线，禁止违反：
  *   - ❌ 禁止在 apps/web/src/**（运行时组件/hooks/客户端代码）import 本文件。
@@ -24,9 +25,8 @@
  *   - 若未来 SSG 扩展到新闻页，请届时在此补充 FALLBACK_NEWS 占位并同步
  *     ssg-build.ts 的 PAGES 清单。
  *
- * Provides embedded sample variants, page layouts, and widget HTML so
- * that `ssg:build` can produce complete static pages even in an
- * offline / CI environment without a running backend.
+ * Provides embedded demo variants, page layouts, and widget HTML for explicit
+ * demo builds. Production sample pages must come from an immutable API release.
  */
 
 export interface SampleVariant {
@@ -41,10 +41,13 @@ export interface SampleVariant {
         | "SNP"
         | "INDEL"
         | "MNV"
+        | "INS"
+        | "DEL"
+        | "SV"
         | "insertion"
         | "deletion"
         | "substitution";
-    impact: "HIGH" | "MODERATE" | "LOW" | "MODIFIER";
+    impact: "HIGH" | "MODERATE" | "LOW" | "MODIFIER" | "UNKNOWN";
     phenotype: string;
     mutagen: string;
     cultivar: string;
@@ -761,7 +764,22 @@ export const FALLBACK_PAGES: PageLayout[] = [
 /*  Sample detail widget HTML (used by generate-samples)              */
 /* ------------------------------------------------------------------ */
 
-export function renderSampleDetailHtml(variant: SampleVariant): string {
+function escapeSampleText(value: string): string {
+    return value
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#x27;");
+}
+
+function sampleAppUrl(basePath: string, path: string): string {
+    const normalizedBase = basePath.trim().replace(/^\/+|\/+$/g, "");
+    const normalizedPath = path.replace(/^\/+/, "");
+    return `/${normalizedBase ? `${normalizedBase}/` : ""}${normalizedPath}`;
+}
+
+export function renderSampleDetailHtml(variant: SampleVariant, basePath = "/"): string {
     const impactColor =
         variant.impact === "HIGH"
             ? "#c0392b"
@@ -771,33 +789,37 @@ export function renderSampleDetailHtml(variant: SampleVariant): string {
                 ? "#f39c12"
                 : "#7f8c8d";
 
+    const text = (value: string) => escapeSampleText(value);
+    const browserUrl = escapeSampleText(sampleAppUrl(basePath, "browser"));
+    const searchUrl = escapeSampleText(sampleAppUrl(basePath, "search"));
+
     return `
 <article class="sample-detail" style="max-width:800px;margin:2rem auto;padding:0 1rem;line-height:1.7">
   <header style="margin-bottom:1.5rem">
-    <div style="font-family:'JetBrains Mono',monospace;font-size:0.875rem;color:#777">${variant.id}</div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:0.875rem;color:#777">${text(variant.id)}</div>
     <h1 style="font-family:'Fraunces',serif;font-size:2rem;color:#2F6F4F;margin:0.25rem 0">
-      ${variant.geneName} <span style="font-weight:400;color:#555">(${variant.gene})</span>
+      ${text(variant.geneName)} <span style="font-weight:400;color:#555">(${text(variant.gene)})</span>
     </h1>
     <span style="display:inline-block;padding:0.25rem 0.75rem;border-radius:999px;background:${impactColor};color:#fff;font-size:0.75rem;font-weight:600;text-transform:uppercase">
-      ${variant.impact} impact
+      ${text(variant.impact)} impact
     </span>
   </header>
 
-  <p style="font-size:1.1rem;color:#333">${variant.description}</p>
+  <p style="font-size:1.1rem;color:#333">${text(variant.description)}</p>
 
   <dl style="display:grid;grid-template-columns:max-content 1fr;gap:0.5rem 1.5rem;margin:1.5rem 0;padding:1rem;background:#f8f8f5;border-radius:8px">
-    <dt style="font-weight:600;color:#555">Chromosome</dt><dd style="font-family:'JetBrains Mono',monospace">${variant.chromosome}:${variant.position.toLocaleString()}</dd>
-    <dt style="font-weight:600;color:#555">Ref / Alt</dt><dd style="font-family:'JetBrains Mono',monospace">${variant.refAllele} → ${variant.altAllele} (${variant.mutationType})</dd>
-    ${variant.proteinChange ? `<dt style="font-weight:600;color:#555">Protein</dt><dd style="font-family:'JetBrains Mono',monospace">${variant.proteinChange}</dd>` : ""}
-    <dt style="font-weight:600;color:#555">Phenotype</dt><dd>${variant.phenotype}</dd>
-    <dt style="font-weight:600;color:#555">Mutagen</dt><dd>${variant.mutagen}</dd>
-    <dt style="font-weight:600;color:#555">Cultivar</dt><dd>${variant.cultivar}</dd>
-    <dt style="font-weight:600;color:#555">Reference</dt><dd>${variant.referenceGenome}</dd>
+    <dt style="font-weight:600;color:#555">Chromosome</dt><dd style="font-family:'JetBrains Mono',monospace">${text(variant.chromosome)}:${variant.position.toLocaleString()}</dd>
+    <dt style="font-weight:600;color:#555">Ref / Alt</dt><dd style="font-family:'JetBrains Mono',monospace">${text(variant.refAllele)} → ${text(variant.altAllele)} (${text(variant.mutationType)})</dd>
+    ${variant.proteinChange ? `<dt style="font-weight:600;color:#555">Protein</dt><dd style="font-family:'JetBrains Mono',monospace">${text(variant.proteinChange)}</dd>` : ""}
+    <dt style="font-weight:600;color:#555">Phenotype</dt><dd>${text(variant.phenotype)}</dd>
+    <dt style="font-weight:600;color:#555">Mutagen</dt><dd>${text(variant.mutagen)}</dd>
+    <dt style="font-weight:600;color:#555">Cultivar</dt><dd>${text(variant.cultivar)}</dd>
+    <dt style="font-weight:600;color:#555">Reference</dt><dd>${text(variant.referenceGenome)}</dd>
   </dl>
 
   <nav style="margin-top:2rem;display:flex;gap:1rem">
-    <a href="/browse" style="color:#2F6F4F;text-decoration:none;font-weight:600">← Browse all variants</a>
-    <a href="/search" style="color:#2F6F4F;text-decoration:none;font-weight:600">Search →</a>
+    <a href="${browserUrl}" style="color:#2F6F4F;text-decoration:none;font-weight:600">← Browse all variants</a>
+    <a href="${searchUrl}" style="color:#2F6F4F;text-decoration:none;font-weight:600">Search →</a>
   </nav>
 </article>`;
 }

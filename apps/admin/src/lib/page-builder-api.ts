@@ -17,39 +17,40 @@
 import { http } from "@soymutdb/api-client";
 import type {
   ComponentDescriptor,
-  PageDefinition,
+  CompatiblePageDefinition,
   PageDefinitionListResponse,
   PageDefinitionResponse,
   PageDefinitionStatus,
+  PageDefinitionV2,
   PageDefinitionVersion,
   RegistryResponse,
 } from "@soymutdb/shared";
 
 export type {
   ComponentDescriptor,
-  PageDefinition,
   PageDefinitionStatus,
   PageDefinitionVersion,
 };
+export type { CompatiblePageDefinition as PageDefinition, PageDefinitionV2 };
 
 export interface PageDefinitionCreatePayload {
   route: string;
   title_key: string;
-  definition: PageDefinition;
+  definition: CompatiblePageDefinition;
 }
 
 export interface DraftUpdatePayload {
   base_version: number;
-  definition: PageDefinition;
+  definition: CompatiblePageDefinition;
   edit_comment?: string | null;
 }
 
 export interface PreviewPayload {
-  definition: PageDefinition;
+  definition: CompatiblePageDefinition;
 }
 
 export interface PreviewResult {
-  definition: PageDefinition;
+  definition: CompatiblePageDefinition;
   version_preview: number;
 }
 

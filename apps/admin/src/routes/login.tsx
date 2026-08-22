@@ -12,7 +12,7 @@ import {
   Input,
   Label,
   cn,
-} from "@soymutdb/ui";
+} from "../lib/admin-ui";
 import { ApiError } from "@soymutdb/api-client";
 import { useAuth } from "../lib/auth-context";
 

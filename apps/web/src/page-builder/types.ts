@@ -17,6 +17,12 @@ export type {
   PageDefinitionStatus,
   PageComponentType,
   PageComponentNode,
+  PageDefinitionTheme,
+  PageDefinitionDataSource,
+  PageDefinitionLayouts,
+  PageDefinitionV1,
+  PageDefinitionV2,
+  CompatiblePageDefinition,
   PageDefinition,
   PageDefinitionSummary,
   PageDefinitionVersion,
@@ -25,8 +31,15 @@ export type {
   ComponentDescriptor,
   RegistryResponse,
 } from "@soymutdb/shared";
+export {
+  isPageComponentNode,
+  normalizePageDefinition,
+} from "@soymutdb/shared";
 
-import type { PageComponentNode, PageDefinition } from "@soymutdb/shared";
+import {
+  normalizePageDefinition,
+  type PageDefinition,
+} from "@soymutdb/shared";
 
 /** Renderer keys owned by the server registry, in registry order. */
 export const COMPONENT_TYPE_KEYS = [
@@ -47,6 +60,7 @@ export const COMPONENT_TYPE_KEYS = [
   "columns",
   "jbrowse_launcher",
   "blast_launcher",
+  "ontology_relationship_graph",
 ] as const;
 
 export type ComponentTypeKey = (typeof COMPONENT_TYPE_KEYS)[number];
@@ -61,21 +75,7 @@ export function isScriptLike(value: unknown): boolean {
   return /javascript\s*:/i.test(String(value));
 }
 
-/** True when `value` looks like a standalone page-definition component node. */
-export function isPageComponentNode(value: unknown): value is PageComponentNode {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    typeof (value as { type?: unknown }).type === "string"
-  );
-}
-
 /** True when `value` looks like a full page definition (has a `root`). */
 export function isPageDefinition(value: unknown): value is PageDefinition {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    typeof (value as { root?: unknown }).root === "object" &&
-    (value as { root?: unknown }).root !== null
-  );
+  return normalizePageDefinition(value) !== null;
 }

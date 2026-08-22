@@ -4,7 +4,7 @@
  */
 import type { EChartsOption } from "echarts";
 import { useECharts } from "../../lib/use-echarts";
-import { ChartEmptyState, cn } from "@soymutdb/ui";
+import { ChartEmptyState, cn } from "../../lib/web-ui";
 
 export interface ImpactDistributionProps {
   data: ReadonlyArray<{ impact: "HIGH" | "MODERATE" | "LOW" | "MODIFIER"; count: number }>;

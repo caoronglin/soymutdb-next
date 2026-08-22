@@ -3,7 +3,7 @@ import { Users, GitBranch, Microscope, Clock, Dna, FlaskConical, Sprout, ArrowRi
 import { Link } from "@tanstack/react-router";
 import { http } from "@soymutdb/api-client";
 import { fetchHomepageStats } from "@soymutdb/api-client";
-import { PageHeader, StatCard, formatNumber } from "@soymutdb/ui";
+import { PageHeader, StatCard, formatNumber } from "../lib/admin-ui";
 import { lazy, Suspense } from "react";
 
 const ImportThroughputChart = lazy(() => import("../components/charts/import-throughput").then((m) => ({ default: m.ImportThroughputChart })));

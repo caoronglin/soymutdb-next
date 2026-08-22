@@ -29,7 +29,7 @@ import {
   SelectValue,
   Textarea,
   Badge,
-} from "@soymutdb/ui";
+} from "../../lib/admin-ui";
 import { widgetApi, type WidgetCategory, type WidgetPermission } from "../../lib/widget-api";
 
 // ---------------------------------------------------------------------------

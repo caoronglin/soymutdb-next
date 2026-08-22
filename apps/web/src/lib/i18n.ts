@@ -307,9 +307,11 @@ export function initI18nOnce(): void {
     initI18n(detectLanguage());
     for (const [lng, bundle] of Object.entries(EXTRA_RESOURCES)) {
         i18n.addResourceBundle(lng, "common", bundle, true);
+        i18n.addResourceBundle(lng, "translation", bundle, true);
     }
     for (const [lng, bundle] of Object.entries(TOOLS_RESOURCES)) {
         i18n.addResourceBundle(lng, "common", bundle, true);
+        i18n.addResourceBundle(lng, "translation", bundle, true);
     }
     initialized = true;
 }

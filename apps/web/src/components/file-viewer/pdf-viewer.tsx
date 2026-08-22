@@ -7,7 +7,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Button, Skeleton } from "antd";
+import { Button, Skeleton } from "@/lib/antd";
 import { Minus, Plus } from "lucide-react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 

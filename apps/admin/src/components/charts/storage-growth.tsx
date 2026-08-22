@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import * as echarts from "echarts";
-import { Card, CardHeader, CardTitle, CardContent, ChartEmptyState, cn, formatFileSize } from "@soymutdb/ui";
+import { Card, CardHeader, CardTitle, CardContent, ChartEmptyState, cn, formatFileSize } from "../../lib/admin-ui";
 
 
 export interface StorageGrowthDataPoint {

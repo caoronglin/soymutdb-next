@@ -11,6 +11,7 @@
  */
 import * as React from "react";
 import { createFileRoute, Link, useRouterState, useNavigate } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
   LogIn,
@@ -31,38 +32,82 @@ import {
   CardContent,
   Input,
   Label,
-} from "@soymutdb/ui";
+} from "../lib/web-ui";
+import { ApiError, request, setAccessToken } from "@soymutdb/api-client";
 import { TextReveal, Reveal, Stagger } from "../components/route-motion";
 
 export const Route = createFileRoute("/login")({
   component: LoginComponent,
 });
 
+interface LoginResponse {
+  access_token: string;
+}
+
+function safeRedirect(value: unknown): string {
+  const containsControlCharacter =
+    typeof value === "string" && Array.from(value).some((character) => character.charCodeAt(0) < 0x20);
+  if (
+    typeof value !== "string" ||
+    !value.startsWith("/") ||
+    value.startsWith("//") ||
+    value.includes("\\") ||
+    containsControlCharacter
+  ) {
+    return "/";
+  }
+  return value;
+}
+
 function LoginComponent() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const search = useRouterState({ select: (s) => s.location.search });
   const redirectRaw =
     typeof search === "object" && search !== null
       ? (search as unknown as { redirect?: unknown }).redirect
       : undefined;
-  const redirect = typeof redirectRaw === "string" && redirectRaw.startsWith("/") ? redirectRaw : "/";
+  const redirect = safeRedirect(redirectRaw);
 
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
-  const [remember, setRemember] = React.useState(true);
   const [submitting, setSubmitting] = React.useState(false);
+  const [submissionError, setSubmissionError] = React.useState<string | null>(null);
 
-  const onSubmit = (e: React.FormEvent) => {
+  const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Auth is performed by the backend /auth endpoints; the public portal
-    // only forwards to the management console. Here we simulate a handshake
-    // and return the user to their previous page (or home).
+    if (submitting) return;
     setSubmitting(true);
-    window.setTimeout(() => {
+    setSubmissionError(null);
+
+    try {
+      // Login is deliberately a raw request, not `http.post`: a failed login
+      // must not attempt a cookie refresh or emit a global logout event.
+      // `withCredentials` accepts the HttpOnly refresh cookie; the access
+      // token remains in module memory via `setAccessToken`.
+      const session = await request<LoginResponse>("/auth/login", {
+        method: "POST",
+        json: { email: email.trim(), password },
+        auth: false,
+        withCredentials: true,
+      });
+      if (!session.access_token) throw new Error("Login response omitted access token");
+
+      setAccessToken(session.access_token);
+      // A previous anonymous /auth/me result must not remain visible after
+      // navigation; the next consumer refetches with the new access token.
+      queryClient.removeQueries({ queryKey: ["current-user"], exact: true });
+      await navigate({ to: redirect });
+    } catch (error) {
+      setSubmissionError(
+        error instanceof ApiError && (error.status === 401 || error.status === 403)
+          ? t("loginPage.invalidCredentials", { defaultValue: "Invalid email or password." })
+          : t("loginPage.loginUnavailable", { defaultValue: "Unable to sign in. Please try again." }),
+      );
+    } finally {
       setSubmitting(false);
-      navigate({ to: redirect });
-    }, 600);
+    }
   };
 
   return (
@@ -192,17 +237,19 @@ function LoginComponent() {
                     />
                   </div>
 
-                  <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
-                    <input
-                      type="checkbox"
-                      checked={remember}
-                      onChange={(e) => setRemember(e.target.checked)}
-                      className="size-4 rounded border-input accent-primary"
-                    />
-                    {t("loginPage.rememberMe")}
-                  </label>
+                  {submissionError ? (
+                    <p role="alert" className="text-sm text-destructive">
+                      {submissionError}
+                    </p>
+                  ) : null}
 
-                  <Button type="submit" size="lg" disabled={submitting} className="w-full">
+                  <Button
+                    type="submit"
+                    size="lg"
+                    disabled={submitting}
+                    aria-busy={submitting}
+                    className="w-full"
+                  >
                     {submitting ? (
                       <span className="inline-flex items-center gap-2">
                         <span className="size-4 animate-spin rounded-full border-2 border-primary-foreground/40 border-t-primary-foreground" aria-hidden />

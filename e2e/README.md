@@ -84,6 +84,29 @@ Point at any environment (staging, local dist preview):
 SMOKE_BASE_URL=http://localhost:4173 npx playwright test
 ```
 
+## Admin production-artifact gate
+
+This isolated smoke suite serves the already-built `apps/admin/dist` output
+from a minimal static server. It does not run a Vite development server and
+does not submit the login form, so it catches emitted-bundle regressions
+without requiring an API or test credentials.
+
+From the repository root, first create or refresh the production artifact,
+then run the gate:
+
+```bash
+pnpm --dir apps/admin build
+pnpm --dir e2e exec playwright test -c playwright-admin-production.config.ts
+```
+
+The gate requires `/login` to retain the `SoyMutDB Admin` title, render a
+visible username field, password field, and `Sign in` button, accept typed
+credentials locally, and produce no Playwright `pageerror` events. Its server
+listens on `127.0.0.1:4174`, serves only `apps/admin/dist`, and uses an SPA
+fallback for `/login`. Failure artifacts are written to
+`e2e/test-results-admin-production/` and
+`e2e/playwright-report-admin-production/`.
+
 Local static-server run (no network dependency) — **serve dist under the
 `/soymutdb-next` prefix**: the build bakes that base into dynamic-import
 chunk paths, so mounting at the root would produce fake "module script MIME"

@@ -10,7 +10,7 @@ import {
   XCircle,
   AlertCircle,
 } from "lucide-react";
-import { Badge, cn } from "@soymutdb/ui";
+import { Badge, cn } from "../lib/admin-ui";
 
 /** Badge variant names supported by the design system. */
 type BadgeVariant =

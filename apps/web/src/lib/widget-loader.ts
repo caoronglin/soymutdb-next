@@ -3,7 +3,7 @@
  *
  * Fetches server-rendered HTML widgets from /api/v1/widget/{name}, sanitises
  * them with DOMPurify, caches them in memory, and inserts them into the DOM
- * with a GSAP fade-in (respecting prefers-reduced-motion).
+ * with a bounded fade-in (respecting prefers-reduced-motion).
  *
  * Supports Trusted Types via createTrustedHtmlPolicy() for strict CSP
  * environments that disallow direct innerHTML assignment.
@@ -150,8 +150,8 @@ export function clearWidgetCache(): void {
 /* ------------------------------------------------------------------ */
 
 /**
- * Insert sanitised widget HTML into a container element, with a GSAP
- * fade-in animation that honours `prefers-reduced-motion`.
+ * Insert sanitised widget HTML with a bounded fade-in that honours
+ * `prefers-reduced-motion`.
  */
 export function insertWidget(container: HTMLElement, html: string): void {
     // Ensure Trusted Types policy exists (no-op if unsupported).
@@ -176,7 +176,7 @@ export function insertWidget(container: HTMLElement, html: string): void {
 
     if (!prefersReduced) {
         requestAnimationFrame(() => {
-            container.style.transition = "opacity 400ms ease, transform 400ms ease";
+            container.style.transition = "opacity 160ms ease-out, transform 160ms ease-out";
             container.style.opacity = "1";
             container.style.transform = "translateY(0)";
         });

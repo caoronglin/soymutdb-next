@@ -38,7 +38,7 @@ import {
   EmptyState,
   ToastProvider,
   useToast,
-} from "@soymutdb/ui";
+} from "../../lib/web-ui";
 import { seqFetchGenes, seqFetchRegion, getAssemblies, type SeqFetchResponse } from "./api";
 
 export const Route = createFileRoute("/tools/seqfetch")({

@@ -20,14 +20,67 @@ import {
   SelectItem,
   Textarea,
   Badge,
-} from "@soymutdb/ui";
+} from "../lib/admin-ui";
 import { ConfirmDialog } from "../components/confirm-dialog";
 import { RichEditor } from "../components/rich-editor/rich-editor";
+
+type SettingsSection =
+  | "general"
+  | "about"
+  | "data"
+  | "email"
+  | "security"
+  | "cdn"
+  | "filePreview";
+
+const initialSettingsLoadState: Record<SettingsSection, boolean> = {
+  general: false,
+  about: false,
+  data: false,
+  email: false,
+  security: false,
+  cdn: false,
+  filePreview: false,
+};
+
+const initialSettingsLoadErrorState: Record<SettingsSection, boolean> = {
+  general: false,
+  about: false,
+  data: false,
+  email: false,
+  security: false,
+  cdn: false,
+  filePreview: false,
+};
+
+const settingsSectionLabels: Record<SettingsSection, string> = {
+  general: "General settings",
+  about: "About settings",
+  data: "Data & Storage settings",
+  email: "Email & Notifications settings",
+  security: "Security settings",
+  cdn: "CDN Configuration settings",
+  filePreview: "File Preview settings",
+};
+
+function isConfigurationRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function SettingsLoadError({ section }: { section: SettingsSection }) {
+  return (
+    <p className="text-sm text-destructive" role="alert">
+      Unable to load {settingsSectionLabels[section]}. Refresh the page and try again.
+    </p>
+  );
+}
 
 export default function SettingsPage() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [saveTarget, setSaveTarget] = useState<string | null>(null);
+  const [sectionLoaded, setSectionLoaded] = useState(initialSettingsLoadState);
+  const [sectionLoadError, setSectionLoadError] = useState(initialSettingsLoadErrorState);
 
   const [general, setGeneral] = useState({
     siteName: "SoyMutDB",
@@ -59,8 +112,6 @@ export default function SettingsPage() {
 
   const [cdn, setCdn] = useState({
     cdn_enabled: "false",
-    gsap_url: "",
-    lenis_url: "",
     echarts_url: "",
   });
 
@@ -79,48 +130,141 @@ export default function SettingsPage() {
     content_zh: "",
   });
 
-  const [aboutLoaded, setAboutLoaded] = useState(false);
-
   useEffect(() => {
-    http.get("/admin/cdn-config").then((res: any) => {
-      if (res) {
-        setCdn({
-          cdn_enabled: String(res.cdn_enabled ?? false),
-          gsap_url: res.cdn_urls?.gsap ?? "",
-          lenis_url: res.cdn_urls?.lenis ?? "",
-          echarts_url: res.cdn_urls?.echarts ?? "",
-        });
+    http.get("/admin/settings/general").then((res: unknown) => {
+      if (!isConfigurationRecord(res)) {
+        setSectionLoadError((errors) => ({ ...errors, general: true }));
+        return;
       }
-    }).catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    http.get("/admin/settings/file_preview").then((res: any) => {
-      if (res && typeof res === "object") {
-        setFilePreview({
-          enabled: String(res.enabled ?? "true"),
-          max_size_mb: String(res.max_size_mb ?? "10"),
-          enabled_formats: String(res.enabled_formats ?? "fasta,vcf,gff3,csv,tsv,png,jpg,svg,txt"),
-        });
-      }
-    }).catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    http.get("/admin/settings/about").then((res: any) => {
-      if (res && typeof res === "object") {
-        setAbout({
-          title_en: String(res.title_en ?? ""),
-          title_zh: String(res.title_zh ?? ""),
-          summary_en: String(res.summary_en ?? ""),
-          summary_zh: String(res.summary_zh ?? ""),
-          content_en: String(res.content_en ?? ""),
-          content_zh: String(res.content_zh ?? ""),
-        });
-      }
-      setAboutLoaded(true);
+      setGeneral({
+        siteName: String(res.siteName ?? "SoyMutDB"),
+        siteDescription: String(
+          res.siteDescription ??
+            "Comprehensive multi-species mutant database for functional genomics research (soybean as the first/default species)",
+        ),
+        defaultLanguage: String(res.defaultLanguage ?? "en"),
+        defaultTheme: String(res.defaultTheme ?? "light"),
+      });
+      setSectionLoadError((errors) => ({ ...errors, general: false }));
+      setSectionLoaded((loaded) => ({ ...loaded, general: true }));
     }).catch(() => {
-      setAboutLoaded(true);
+      setSectionLoadError((errors) => ({ ...errors, general: true }));
+    });
+  }, []);
+
+  useEffect(() => {
+    http.get("/admin/settings/data").then((res: unknown) => {
+      if (!isConfigurationRecord(res)) {
+        setSectionLoadError((errors) => ({ ...errors, data: true }));
+        return;
+      }
+      setData({
+        defaultAssembly: String(res.defaultAssembly ?? "Wm82v4.0"),
+        maxExportRecords: String(res.maxExportRecords ?? "10000"),
+        cacheTtlSeconds: String(res.cacheTtlSeconds ?? "300"),
+        enableClickhouse: String(res.enableClickhouse ?? "true"),
+      });
+      setSectionLoadError((errors) => ({ ...errors, data: false }));
+      setSectionLoaded((loaded) => ({ ...loaded, data: true }));
+    }).catch(() => {
+      setSectionLoadError((errors) => ({ ...errors, data: true }));
+    });
+  }, []);
+
+  useEffect(() => {
+    http.get("/admin/settings/email").then((res: unknown) => {
+      if (!isConfigurationRecord(res)) {
+        setSectionLoadError((errors) => ({ ...errors, email: true }));
+        return;
+      }
+      setEmail({
+        smtpHost: String(res.smtpHost ?? ""),
+        smtpPort: String(res.smtpPort ?? "587"),
+        fromAddress: String(res.fromAddress ?? "noreply@soymutdb.org"),
+        enableNotifications: String(res.enableNotifications ?? "true"),
+      });
+      setSectionLoadError((errors) => ({ ...errors, email: false }));
+      setSectionLoaded((loaded) => ({ ...loaded, email: true }));
+    }).catch(() => {
+      setSectionLoadError((errors) => ({ ...errors, email: true }));
+    });
+  }, []);
+
+  useEffect(() => {
+    http.get("/admin/settings/security").then((res: unknown) => {
+      if (!isConfigurationRecord(res)) {
+        setSectionLoadError((errors) => ({ ...errors, security: true }));
+        return;
+      }
+      setSecurity({
+        sessionTimeoutMinutes: String(res.sessionTimeoutMinutes ?? "60"),
+        maxLoginAttempts: String(res.maxLoginAttempts ?? "5"),
+        requireTwoFactor: String(res.requireTwoFactor ?? "false"),
+        passwordMinLength: String(res.passwordMinLength ?? "8"),
+      });
+      setSectionLoadError((errors) => ({ ...errors, security: false }));
+      setSectionLoaded((loaded) => ({ ...loaded, security: true }));
+    }).catch(() => {
+      setSectionLoadError((errors) => ({ ...errors, security: true }));
+    });
+  }, []);
+
+  useEffect(() => {
+    http.get("/admin/cdn-config").then((res: unknown) => {
+      if (!isConfigurationRecord(res)) {
+        setSectionLoadError((errors) => ({ ...errors, cdn: true }));
+        return;
+      }
+      const cdnUrls = Array.isArray(res.urls)
+        ? res.urls.filter((url): url is string => typeof url === "string")
+        : [];
+      setCdn({
+        cdn_enabled: String(res.enabled ?? false),
+        echarts_url: cdnUrls[0] ?? "",
+      });
+      setSectionLoadError((errors) => ({ ...errors, cdn: false }));
+      setSectionLoaded((loaded) => ({ ...loaded, cdn: true }));
+    }).catch(() => {
+      setSectionLoadError((errors) => ({ ...errors, cdn: true }));
+    });
+  }, []);
+
+  useEffect(() => {
+    http.get("/admin/settings/file_preview").then((res: unknown) => {
+      if (!isConfigurationRecord(res)) {
+        setSectionLoadError((errors) => ({ ...errors, filePreview: true }));
+        return;
+      }
+      setFilePreview({
+        enabled: String(res.enabled ?? "true"),
+        max_size_mb: String(res.max_size_mb ?? "10"),
+        enabled_formats: String(res.enabled_formats ?? "fasta,vcf,gff3,csv,tsv,png,jpg,svg,txt"),
+      });
+      setSectionLoadError((errors) => ({ ...errors, filePreview: false }));
+      setSectionLoaded((loaded) => ({ ...loaded, filePreview: true }));
+    }).catch(() => {
+      setSectionLoadError((errors) => ({ ...errors, filePreview: true }));
+    });
+  }, []);
+
+  useEffect(() => {
+    http.get("/admin/settings/about").then((res: unknown) => {
+      if (!isConfigurationRecord(res)) {
+        setSectionLoadError((errors) => ({ ...errors, about: true }));
+        return;
+      }
+      setAbout({
+        title_en: String(res.title_en ?? ""),
+        title_zh: String(res.title_zh ?? ""),
+        summary_en: String(res.summary_en ?? ""),
+        summary_zh: String(res.summary_zh ?? ""),
+        content_en: String(res.content_en ?? ""),
+        content_zh: String(res.content_zh ?? ""),
+      });
+      setSectionLoadError((errors) => ({ ...errors, about: false }));
+      setSectionLoaded((loaded) => ({ ...loaded, about: true }));
+    }).catch(() => {
+      setSectionLoadError((errors) => ({ ...errors, about: true }));
     });
   }, []);
 
@@ -130,14 +274,14 @@ export default function SettingsPage() {
         json: params.values,
       });
     },
-    onSuccess: () => {
+    onSuccess: (_response, params) => {
       queryClient.invalidateQueries({ queryKey: ["admin-settings"] });
-      setSaveTarget(null);
+      setSaveTarget(params.section);
     },
   });
 
   const handleSave = (section: string, values: Record<string, string>) => {
-    setSaveTarget(section);
+    setSaveTarget(null);
     saveMutation.mutate({ section, values });
   };
 
@@ -145,12 +289,8 @@ export default function SettingsPage() {
     mutationFn: async () => {
       return http.put("/admin/cdn-config", {
         json: {
-          cdn_enabled: cdn.cdn_enabled === "true",
-          cdn_urls: {
-            gsap: cdn.gsap_url || undefined,
-            lenis: cdn.lenis_url || undefined,
-            echarts: cdn.echarts_url || undefined,
-          },
+          enabled: cdn.cdn_enabled === "true",
+          urls: cdn.echarts_url ? [cdn.echarts_url] : [],
         },
       });
     },
@@ -179,6 +319,7 @@ export default function SettingsPage() {
             General
           </CardTitle>
           <CardDescription>Site-wide configuration</CardDescription>
+          {sectionLoadError.general && <SettingsLoadError section="general" />}
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
@@ -216,7 +357,10 @@ export default function SettingsPage() {
             />
           </div>
           <div className="flex justify-end">
-            <Button onClick={() => handleSave("general", general)}>
+            <Button
+              onClick={() => handleSave("general", general)}
+              disabled={!sectionLoaded.general || saveMutation.isPending}
+            >
               <Save className="size-4" />
               Save Changes
             </Button>
@@ -232,6 +376,7 @@ export default function SettingsPage() {
             {t("admin.about.title")}
           </CardTitle>
           <CardDescription>{t("admin.about.description")}</CardDescription>
+          {sectionLoadError.about && <SettingsLoadError section="about" />}
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
@@ -293,7 +438,7 @@ export default function SettingsPage() {
           <div className="flex justify-end">
             <Button
               onClick={() => handleSave("about", about)}
-              disabled={!aboutLoaded}
+              disabled={!sectionLoaded.about || saveMutation.isPending}
             >
               <Save className="size-4" />
               Save Changes
@@ -310,6 +455,7 @@ export default function SettingsPage() {
             Data & Storage
           </CardTitle>
           <CardDescription>Database and storage configuration</CardDescription>
+          {sectionLoadError.data && <SettingsLoadError section="data" />}
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
@@ -361,7 +507,10 @@ export default function SettingsPage() {
             </div>
           </div>
           <div className="flex justify-end">
-            <Button onClick={() => handleSave("data", data)}>
+            <Button
+              onClick={() => handleSave("data", data)}
+              disabled={!sectionLoaded.data || saveMutation.isPending}
+            >
               <Save className="size-4" />
               Save Changes
             </Button>
@@ -377,6 +526,7 @@ export default function SettingsPage() {
             Email & Notifications
           </CardTitle>
           <CardDescription>SMTP configuration for system emails</CardDescription>
+          {sectionLoadError.email && <SettingsLoadError section="email" />}
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
@@ -409,7 +559,10 @@ export default function SettingsPage() {
             </div>
           </div>
           <div className="flex justify-end">
-            <Button onClick={() => handleSave("email", email)}>
+            <Button
+              onClick={() => handleSave("email", email)}
+              disabled={!sectionLoaded.email || saveMutation.isPending}
+            >
               <Save className="size-4" />
               Save Changes
             </Button>
@@ -425,6 +578,7 @@ export default function SettingsPage() {
             Security
           </CardTitle>
           <CardDescription>Authentication and access control</CardDescription>
+          {sectionLoadError.security && <SettingsLoadError section="security" />}
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
@@ -477,7 +631,10 @@ export default function SettingsPage() {
             </div>
           </div>
           <div className="flex justify-end">
-            <Button onClick={() => handleSave("security", security)}>
+            <Button
+              onClick={() => handleSave("security", security)}
+              disabled={!sectionLoaded.security || saveMutation.isPending}
+            >
               <Save className="size-4" />
               Save Changes
             </Button>
@@ -493,6 +650,7 @@ export default function SettingsPage() {
             CDN Configuration
           </CardTitle>
           <CardDescription>External CDN URLs for frontend assets</CardDescription>
+          {sectionLoadError.cdn && <SettingsLoadError section="cdn" />}
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
@@ -517,24 +675,6 @@ export default function SettingsPage() {
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="cdn-gsap">GSAP CDN URL</Label>
-              <Input
-                id="cdn-gsap"
-                value={cdn.gsap_url}
-                onChange={(e) => setCdn({ ...cdn, gsap_url: e.target.value })}
-                placeholder="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="cdn-lenis">Lenis CDN URL</Label>
-              <Input
-                id="cdn-lenis"
-                value={cdn.lenis_url}
-                onChange={(e) => setCdn({ ...cdn, lenis_url: e.target.value })}
-                placeholder="https://unpkg.com/lenis@1.1.18/dist/lenis.min.js"
-              />
-            </div>
-            <div className="space-y-1.5">
               <Label htmlFor="cdn-echarts">ECharts CDN URL</Label>
               <Input
                 id="cdn-echarts"
@@ -549,7 +689,10 @@ export default function SettingsPage() {
             production, consider nginx edge caching as a fallback.
           </p>
           <div className="flex justify-end">
-            <Button onClick={handleCdnSave}>
+            <Button
+              onClick={handleCdnSave}
+              disabled={!sectionLoaded.cdn || cdnMutation.isPending}
+            >
               <Save className="size-4" />
               Save Changes
             </Button>
@@ -565,6 +708,7 @@ export default function SettingsPage() {
             {t("admin.file_preview")}
           </CardTitle>
           <CardDescription>Configure inline file preview behavior</CardDescription>
+          {sectionLoadError.filePreview && <SettingsLoadError section="filePreview" />}
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
@@ -617,7 +761,10 @@ export default function SettingsPage() {
             </div>
           </div>
           <div className="flex justify-end">
-            <Button onClick={() => handleSave("file_preview", filePreview)}>
+            <Button
+              onClick={() => handleSave("file_preview", filePreview)}
+              disabled={!sectionLoaded.filePreview || saveMutation.isPending}
+            >
               <Save className="size-4" />
               Save Changes
             </Button>

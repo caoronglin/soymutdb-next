@@ -1,5 +1,4 @@
 @import "tailwindcss";
-@import "@soymutdb/ui/styles.css";
 
 /* ----------------------------------------------------------------------------
  * Cascade layer order (oracle R1 修正, 2026-08):
@@ -11,6 +10,91 @@
  * 保留该层名以稳定顺序，避免后续引入 @layer antd 内容时顺序漂移。
  * ------------------------------------------------------------------------- */
 @layer antd, theme, design, base, components, utilities;
+
+/* Web-owned color and surface tokens. Light mode is the default. */
+:root {
+    --radius: 0.625rem;
+    --radius-lg: 0.875rem;
+    --radius-xl: 1.125rem;
+    --background: oklch(0.991 0.004 148);
+    --foreground: oklch(0.195 0.028 152);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.195 0.028 152);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.195 0.028 152);
+    --primary: oklch(0.46 0.13 152);
+    --primary-foreground: oklch(0.988 0.004 148);
+    --primary-glow: oklch(0.46 0.13 152 / 0.35);
+    --primary-gradient-start: oklch(0.52 0.14 150);
+    --primary-gradient-end: oklch(0.40 0.12 154);
+    --secondary: oklch(0.955 0.028 148);
+    --secondary-foreground: oklch(0.29 0.07 152);
+    --muted: oklch(0.968 0.012 148);
+    --muted-foreground: oklch(0.48 0.028 152);
+    --accent: oklch(0.928 0.048 148);
+    --accent-foreground: oklch(0.28 0.075 152);
+    --border: oklch(0.905 0.02 148);
+    --input: oklch(0.905 0.02 148);
+    --ring: oklch(0.55 0.14 152);
+    --destructive: oklch(0.58 0.22 27);
+    --destructive-foreground: oklch(0.988 0.004 148);
+    --chart-1: oklch(0.55 0.14 152);
+    --chart-2: oklch(0.66 0.12 150);
+    --chart-3: oklch(0.76 0.09 148);
+    --chart-4: oklch(0.85 0.06 146);
+    --chart-5: oklch(0.46 0.11 156);
+    --impact-high: oklch(0.58 0.22 27);
+    --impact-moderate: oklch(0.72 0.16 65);
+    --impact-low: oklch(0.60 0.13 240);
+    --impact-modifier: oklch(0.62 0.025 152);
+    --shadow-sm: 0 1px 2px oklch(0.15 0.03 150 / 0.05);
+    --shadow-md: 0 1px 2px oklch(0.15 0.03 150 / 0.04), 0 8px 24px -12px oklch(0.15 0.03 150 / 0.12);
+    --shadow-lg: 0 2px 4px oklch(0.15 0.03 150 / 0.04), 0 12px 32px -12px oklch(0.15 0.03 150 / 0.16);
+    --shadow-glow: 0 0 0 1px var(--primary-glow), 0 8px 32px -8px var(--primary-glow);
+    --code-bg: oklch(0.26 0.015 250);
+    --code-fg: oklch(0.92 0.01 148);
+}
+
+[data-theme="dark"],
+.dark {
+    --background: oklch(0.155 0.014 152);
+    --foreground: oklch(0.955 0.01 148);
+    --card: oklch(0.195 0.018 152);
+    --card-foreground: oklch(0.955 0.01 148);
+    --popover: oklch(0.215 0.018 152);
+    --popover-foreground: oklch(0.955 0.01 148);
+    --primary: oklch(0.70 0.12 151);
+    --primary-foreground: oklch(0.155 0.014 152);
+    --primary-glow: oklch(0.70 0.12 151 / 0.25);
+    --primary-gradient-start: oklch(0.74 0.12 150);
+    --primary-gradient-end: oklch(0.64 0.11 154);
+    --secondary: oklch(0.26 0.03 152);
+    --secondary-foreground: oklch(0.955 0.01 148);
+    --muted: oklch(0.23 0.018 152);
+    --muted-foreground: oklch(0.68 0.025 152);
+    --accent: oklch(0.29 0.045 151);
+    --accent-foreground: oklch(0.955 0.01 148);
+    --border: oklch(0.30 0.02 152);
+    --input: oklch(0.30 0.02 152);
+    --ring: oklch(0.70 0.12 151);
+    --destructive: oklch(0.62 0.22 27);
+    --destructive-foreground: oklch(0.955 0.01 148);
+    --chart-1: oklch(0.70 0.12 151);
+    --chart-2: oklch(0.74 0.11 150);
+    --chart-3: oklch(0.79 0.09 148);
+    --chart-4: oklch(0.85 0.06 146);
+    --chart-5: oklch(0.62 0.10 156);
+    --impact-high: oklch(0.65 0.22 27);
+    --impact-moderate: oklch(0.78 0.16 65);
+    --impact-low: oklch(0.68 0.13 240);
+    --impact-modifier: oklch(0.70 0.025 152);
+    --shadow-sm: 0 1px 2px oklch(0 0 0 / 0.25);
+    --shadow-md: 0 1px 2px oklch(0 0 0 / 0.20), 0 8px 24px -12px oklch(0 0 0 / 0.45);
+    --shadow-lg: 0 2px 4px oklch(0 0 0 / 0.20), 0 12px 32px -12px oklch(0 0 0 / 0.50);
+    --shadow-glow: 0 0 0 1px var(--primary-glow), 0 8px 32px -8px var(--primary-glow);
+    --code-bg: oklch(0.18 0.012 250);
+    --code-fg: oklch(0.90 0.01 148);
+}
 
 /* NOTE: @fontsource/* 字体 CSS 已移至 src/main.tsx 以 JS import 方式引入。
    Tailwind v4 postcss 内联 node_modules CSS 时会错误改写其内部
@@ -31,7 +115,7 @@
     --font-sans: "HarmonyOS Sans SC", ui-sans-serif, system-ui, sans-serif;
     --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
 
-    /* Re-export OKLCH tokens from @soymutdb/ui so Tailwind utilities resolve. */
+    /* Expose the Web-owned OKLCH tokens to Tailwind utilities. */
     --color-background: var(--background);
     --color-foreground: var(--foreground);
     --color-card: var(--card);
@@ -138,15 +222,6 @@
     --anim-easing: ease-out;
     --anim-easing-spring: ease-out;
     --anim-stagger: 20ms;
-}
-
-[data-anim="expressive"] {
-    --anim-duration: 500ms;
-    --anim-duration-fast: 300ms;
-    --anim-duration-slow: 700ms;
-    --anim-easing: cubic-bezier(0.16, 1, 0.3, 1);
-    --anim-easing-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-    --anim-stagger: 90ms;
 }
 
 [data-anim="off"] *,
@@ -315,24 +390,6 @@
         text-rendering: optimizeLegibility;
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
-        scroll-behavior: smooth;
-    }
-
-    html.lenis,
-    html.lenis body {
-        height: auto;
-    }
-
-    .lenis.lenis-smooth {
-        scroll-behavior: auto !important;
-    }
-
-    .lenis.lenis-smooth [data-lenis-prevent] {
-        overscroll-behavior: contain;
-    }
-
-    .lenis.lenis-stopped {
-        overflow: hidden;
     }
 
     body {
@@ -674,7 +731,11 @@
         color: var(--muted-foreground);
         filter: grayscale(1);
         opacity: 0.7;
-        transition: all var(--anim-duration-fast) var(--anim-easing);
+        transition:
+            opacity var(--anim-duration-fast) var(--anim-easing),
+            filter var(--anim-duration-fast) var(--anim-easing),
+            border-color var(--anim-duration-fast) var(--anim-easing),
+            color var(--anim-duration-fast) var(--anim-easing);
     }
     .consortium-logo:hover {
         opacity: 1;
@@ -779,8 +840,6 @@
 
     .dna-bg { display: none; }
 
-    html.lenis body { height: auto !important; }
-    .lenis.lenis-smooth { scroll-behavior: auto !important; }
 }
 
 /* ----------------------------------------------------------------------------

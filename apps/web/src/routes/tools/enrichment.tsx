@@ -35,7 +35,6 @@ import {
   SelectItem,
   Button,
   Badge,
-  DataTable,
   Tabs,
   TabsList,
   TabsTrigger,
@@ -43,7 +42,8 @@ import {
   EmptyState,
   ToastProvider,
   useToast,
-} from "@soymutdb/ui";
+} from "../../lib/web-ui";
+import { DataTable } from "../../components/data-table";
 import { useECharts } from "../../lib/use-echarts";
 import { runEnrichment } from "./api";
 import type {

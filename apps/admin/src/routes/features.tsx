@@ -1,13 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ToggleLeft, ToggleRight } from "lucide-react";
-import { Button, Badge, Card, CardContent, CardHeader, CardTitle, PageHeader } from "@soymutdb/ui";
+import { Button, Badge, Card, CardContent, CardHeader, CardTitle, PageHeader } from "../lib/admin-ui";
 import { capabilitiesApi, type FeatureDefinitionResponse } from "@soymutdb/api-client";
+import { resolvePluginState } from "../lib/capability-state";
 
 export default function FeaturesPage() {
   const queryClient = useQueryClient();
-  const { data, isLoading, error } = useQuery({
+  const featuresQuery = useQuery({
     queryKey: ["admin-features"],
     queryFn: capabilitiesApi.adminGet,
+  });
+  const pluginsQuery = useQuery({
+    queryKey: ["public-capabilities"],
+    queryFn: capabilitiesApi.get,
+    staleTime: 30_000,
   });
   const mutation = useMutation({
     mutationFn: (feature: FeatureDefinitionResponse) =>
@@ -21,9 +27,9 @@ export default function FeaturesPage() {
         title="Feature Flags"
         description="Enable or disable registered capabilities atomically. Disabling rejects new requests and does not kill running jobs."
       />
-      {error ? (
+      {featuresQuery.error ? (
         <Card>
-          <CardContent className="flex items-center gap-2 p-4 text-sm text-destructive">
+          <CardContent role="alert" className="flex items-center gap-2 p-4 text-sm text-destructive">
             <AlertTriangle className="size-4" /> Failed to load feature flags.
           </CardContent>
         </Card>
@@ -31,7 +37,13 @@ export default function FeaturesPage() {
       <Card>
         <CardHeader><CardTitle>Registered capabilities</CardTitle></CardHeader>
         <CardContent className="space-y-3">
-          {(data?.features ?? []).map((feature) => (
+          {featuresQuery.isPending ? (
+            <p role="status" className="text-sm text-muted-foreground">Loading feature flags…</p>
+          ) : null}
+          {featuresQuery.isSuccess && featuresQuery.data.features.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No registered feature flags.</p>
+          ) : null}
+          {(featuresQuery.data?.features ?? []).map((feature) => (
             <div key={feature.key} className="flex items-center justify-between gap-4 rounded-lg border p-3">
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
@@ -44,7 +56,7 @@ export default function FeaturesPage() {
               <Button
                 variant={feature.enabled ? "default" : "outline"}
                 size="sm"
-                disabled={isLoading || mutation.isPending}
+                disabled={featuresQuery.isPending || mutation.isPending}
                 onClick={() => mutation.mutate(feature)}
                 aria-label={`${feature.enabled ? "Disable" : "Enable"} ${feature.key}`}
               >
@@ -53,6 +65,54 @@ export default function FeaturesPage() {
               </Button>
             </div>
           ))}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Plugin runtime</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          {pluginsQuery.isPending ? (
+            <p role="status" className="text-sm text-muted-foreground">Loading plugin status…</p>
+          ) : null}
+          {pluginsQuery.isError ? (
+            <div
+              role="alert"
+              aria-label="Plugin status unavailable"
+              className="flex items-center gap-2 text-sm text-destructive"
+            >
+              <AlertTriangle className="size-4" /> Unable to load plugin status.
+            </div>
+          ) : null}
+          {pluginsQuery.isSuccess
+            ? Array.from(new Set(["jbrowse", ...Object.keys(pluginsQuery.data.plugins ?? {})])).map(
+                (key) => {
+                  const plugin = pluginsQuery.data.plugins?.[key];
+                  const status = resolvePluginState(
+                    { plugins: pluginsQuery.data.plugins },
+                    key,
+                  );
+                  return (
+                    <div
+                      key={key}
+                      className="flex items-center justify-between gap-4 rounded-lg border p-3"
+                    >
+                      <div className="min-w-0">
+                        <code className="text-sm">{key}</code>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {status.reason ?? "ready"}
+                        </p>
+                      </div>
+                      <Badge variant={status.state === "available" ? "default" : "secondary"}>
+                        {status.state === "available" ? "Available" : "Unavailable"}
+                      </Badge>
+                      {plugin?.version ? (
+                        <span className="text-xs text-muted-foreground">v{plugin.version}</span>
+                      ) : null}
+                    </div>
+                  );
+                },
+              )
+            : null}
         </CardContent>
       </Card>
     </div>

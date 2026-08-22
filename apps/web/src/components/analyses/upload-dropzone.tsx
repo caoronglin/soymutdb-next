@@ -9,7 +9,7 @@
 
 import * as React from "react";
 import { UploadCloud, X, File as FileIcon, FileWarning } from "lucide-react";
-import { cn, useToast, Badge } from "@soymutdb/ui";
+import { cn, useToast, Badge } from "../../lib/web-ui";
 
 export interface UploadDropzoneProps {
   /** Accepted extensions (lowercase, leading dot) — e.g. [".fq", ".fq.gz"]. */

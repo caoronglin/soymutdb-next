@@ -11,7 +11,7 @@ import {
   EmptyState,
   Skeleton,
   cn,
-} from "@soymutdb/ui";
+} from "../lib/admin-ui";
 
 // ---------------------------------------------------------------------------
 // Types

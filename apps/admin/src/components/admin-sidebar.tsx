@@ -19,7 +19,7 @@ import {
   Layers,
   type LucideIcon,
 } from "lucide-react";
-import { cn } from "@soymutdb/ui";
+import { cn } from "../lib/admin-ui";
 
 interface NavItem {
   path: string;

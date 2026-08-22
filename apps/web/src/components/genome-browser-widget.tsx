@@ -20,8 +20,9 @@
  */
 import * as React from "react";
 import { ZoomIn, ZoomOut, Maximize2, ExternalLink, Loader2, Microscope, AlertCircle } from "lucide-react";
-import { cn } from "@soymutdb/ui";
+import { cn } from "../lib/web-ui";
 import { useAnimation } from "../lib/animation-context";
+import { isMinimalDeploymentMode } from "../lib/deployment";
 import { formatPosition, formatMb, jbrowseUrl, CHROMOSOME_LENGTHS_BP } from "../lib/format";
 import { getMotionPrefs } from "../lib/motion-prefs";
 
@@ -61,6 +62,9 @@ const DEFAULT_REGION: Region = {
 
 const JBROWSE_BASE =
   (typeof import.meta !== "undefined" && import.meta.env?.VITE_JBROWSE_URL) || "http://localhost:5175";
+const MINIMAL_DEPLOYMENT = isMinimalDeploymentMode(
+  typeof import.meta !== "undefined" ? import.meta.env?.VITE_DEPLOYMENT_MODE : undefined,
+);
 
 /** Generate deterministic pseudo-density histogram data for demo/fallback. */
 function generateDensity(chromosome: string, start: number, end: number, bins = 60): Array<{ position: number; count: number }> {
@@ -118,6 +122,9 @@ export function GenomeBrowserWidget({
 
   // Resolve effective mode
   const effectiveMode = React.useMemo<"iframe" | "linear">(() => {
+    // Minimal Pages releases do not publish the iframe application; force the
+    // existing lightweight implementation rather than trying localhost.
+    if (MINIMAL_DEPLOYMENT) return "linear";
     if (mode !== "auto") return mode;
     const { saveData, lowPower } = getMotionPrefs();
     return saveData || lowPower ? "linear" : "iframe";

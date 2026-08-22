@@ -8,15 +8,47 @@
 
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Eye, Loader2, Save, Send } from "lucide-react";
+import {
+  ArrowLeft,
+  Eye,
+  Loader2,
+  RotateCcw,
+  RotateCw,
+  Save,
+  Send,
+} from "lucide-react";
 import { Link } from "@tanstack/react-router";
-import { Button, cn } from "@soymutdb/ui";
+import {
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Input,
+  Label,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  cn,
+} from "../../lib/admin-ui";
 import type {
   ComponentDescriptor,
   PageComponentNode,
-  PageDefinition,
+  PageDefinitionTheme,
+  PageDefinitionV2,
 } from "@soymutdb/shared";
+import { normalizePageDefinition } from "@soymutdb/shared";
 import { pageBuilderApi } from "../../lib/page-builder-api";
+import { buildPreviewDocument } from "../../lib/page-preview";
+import {
+  emptyHistory,
+  pushHistory,
+  redoHistory,
+  undoHistory,
+  type PageBuilderHistory,
+} from "../../lib/page-builder-history";
 import { ComponentPalette } from "./component-palette";
 import { ComponentTree, type SelectionPath } from "./component-tree";
 import { PropertyPanel } from "./property-panel";
@@ -24,6 +56,16 @@ import { PropertyPanel } from "./property-panel";
 interface PageBuilderEditorProps {
   pageId: string;
 }
+
+const PAGE_THEMES: Array<{ value: PageDefinitionTheme; label: string }> = [
+  { value: "scientific-light", label: "Scientific Light" },
+  { value: "scientific-dark", label: "Scientific Dark" },
+  { value: "high-contrast", label: "High Contrast" },
+  { value: "compact-data", label: "Compact Data" },
+  { value: "print", label: "Print" },
+];
+
+const LAYOUT_DEVICES = ["desktop", "tablet", "mobile"] as const;
 
 function emptyNode(type: string): PageComponentNode {
   return { type: type as PageComponentNode["type"], props: {} };
@@ -72,9 +114,14 @@ function updateChildren(
 }
 
 export function PageBuilderEditor({ pageId }: PageBuilderEditorProps) {
-  const [draft, setDraft] = useState<PageDefinition | null>(null);
+  const [draftOverride, setDraftOverride] = useState<{
+    versionId: string;
+    definition: PageDefinitionV2;
+  } | null>(null);
   const [selectedPath, setSelectedPath] = useState<SelectionPath | null>(null);
   const [message, setMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [history, setHistory] = useState<PageBuilderHistory>(emptyHistory);
 
   const { data: pageData, isLoading } = useQuery({
     queryKey: ["page-builder", pageId],
@@ -98,12 +145,42 @@ export function PageBuilderEditor({ pageId }: PageBuilderEditorProps) {
     return versions.length > 0 ? versions[0] : null;
   }, [pageData]);
 
-  // Initialise the draft from the latest version exactly once.
-  const [initialized, setInitialized] = useState(false);
-  if (!initialized && latestVersion && !draft) {
-    setDraft(latestVersion.definition as PageDefinition);
-    setInitialized(true);
-  }
+  const latestVersionId = latestVersion?.id;
+  const baselineDraft = useMemo(
+    () => normalizePageDefinition(latestVersion?.definition),
+    [latestVersion],
+  );
+  const draft =
+    draftOverride && draftOverride.versionId === latestVersionId
+      ? draftOverride.definition
+      : baselineDraft;
+
+  const updateDraft = (update: (current: PageDefinitionV2) => PageDefinitionV2) => {
+    if (!draft || !latestVersionId) return;
+    const current =
+      draftOverride?.versionId === latestVersionId
+        ? draftOverride.definition
+        : draft;
+    const next = update(current);
+    setHistory((previous) => pushHistory(previous, current, next));
+    setDraftOverride({ versionId: latestVersionId, definition: next });
+  };
+
+  const undo = () => {
+    if (!draft || !latestVersionId) return;
+    const result = undoHistory(history, draft);
+    if (!result) return;
+    setHistory(result.history);
+    setDraftOverride({ versionId: latestVersionId, definition: result.draft });
+  };
+
+  const redo = () => {
+    if (!draft || !latestVersionId) return;
+    const result = redoHistory(history, draft);
+    if (!result) return;
+    setHistory(result.history);
+    setDraftOverride({ versionId: latestVersionId, definition: result.draft });
+  };
 
   const baseVersion = latestVersion?.version ?? 0;
 
@@ -174,20 +251,62 @@ export function PageBuilderEditor({ pageId }: PageBuilderEditorProps) {
 
   const updateSelectedProps = (props: Record<string, unknown>) => {
     if (!selectedPath) return;
-    setDraft((d) =>
-      d ? { ...d, root: setNodeProps(d.root, selectedPath.path, props) } : d,
-    );
+    updateDraft((current) => ({
+      ...current,
+      root: setNodeProps(current.root, selectedPath.path, props),
+    }));
+  };
+
+  const updateTheme = (theme: PageDefinitionTheme) => {
+    updateDraft((current) => ({ ...current, theme_id: theme }));
+  };
+
+  const updateLayout = (
+    device: (typeof LAYOUT_DEVICES)[number],
+    field: string,
+    value: number | null,
+  ) => {
+    updateDraft((current) => ({
+      ...current,
+      layouts: {
+        ...current.layouts,
+        [device]: {
+          ...current.layouts[device],
+          [field]: value,
+        },
+      },
+    }));
+  };
+
+  const addDataSource = () => {
+    updateDraft((current) => ({
+      ...current,
+      data_sources: [
+        ...current.data_sources,
+        {
+          id: `source-${Date.now()}`,
+          kind: "dataset",
+          config: {},
+        },
+      ],
+    }));
+  };
+
+  const removeDataSource = (id: string) => {
+    updateDraft((current) => ({
+      ...current,
+      data_sources: current.data_sources.filter((source) => source.id !== id),
+    }));
   };
 
   const addChild = (type: string) => {
-    setDraft((d) =>
-      d
-        ? {
-            ...d,
-            root: { ...d.root, children: [...(d.root.children ?? []), emptyNode(type)] },
-          }
-        : d,
-    );
+    updateDraft((current) => ({
+      ...current,
+      root: {
+        ...current.root,
+        children: [...(current.root.children ?? []), emptyNode(type)],
+      },
+    }));
   };
 
   const removeNode = (path: SelectionPath) => {
@@ -197,29 +316,21 @@ export function PageBuilderEditor({ pageId }: PageBuilderEditorProps) {
       return;
     }
     const idx = path.path[0];
-    setDraft((d) =>
-      d
-        ? {
-            ...d,
-            root: {
-              ...d.root,
-              children: (d.root.children ?? []).filter((_, i) => i !== idx),
-            },
-          }
-        : d,
-    );
+    updateDraft((current) => ({
+      ...current,
+      root: {
+        ...current.root,
+        children: (current.root.children ?? []).filter((_, i) => i !== idx),
+      },
+    }));
     setSelectedPath(null);
   };
 
   const reorder = (_children: PageComponentNode[], from: number, to: number) => {
-    setDraft((d) =>
-      d
-        ? {
-            ...d,
-            root: updateChildren(d.root, [], (c) => arrayMove(c, from, to)),
-          }
-        : d,
-    );
+    updateDraft((current) => ({
+      ...current,
+      root: updateChildren(current.root, [], (children) => arrayMove(children, from, to)),
+    }));
   };
 
   return (
@@ -243,9 +354,30 @@ export function PageBuilderEditor({ pageId }: PageBuilderEditorProps) {
         </div>
         <div className="flex items-center gap-2">
           <Button
+            variant="ghost"
+            size="sm"
+            onClick={undo}
+            disabled={history.past.length === 0}
+            aria-label="Undo"
+          >
+            <RotateCcw className="size-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={redo}
+            disabled={history.future.length === 0}
+            aria-label="Redo"
+          >
+            <RotateCw className="size-4" />
+          </Button>
+          <Button
             variant="outline"
             size="sm"
-            onClick={() => previewMutation.mutate()}
+            onClick={() => {
+              setPreviewOpen(true);
+              previewMutation.mutate();
+            }}
             disabled={previewMutation.isPending}
           >
             <Eye className="size-4" />
@@ -289,6 +421,100 @@ export function PageBuilderEditor({ pageId }: PageBuilderEditorProps) {
         </div>
       ) : null}
 
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Theme</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Label htmlFor="page-theme">Page theme</Label>
+            <Select
+              value={draft.theme_id}
+              onValueChange={(value) =>
+                updateTheme(value as PageDefinitionTheme)
+              }
+            >
+              <SelectTrigger id="page-theme">
+                <SelectValue placeholder="Select theme" />
+              </SelectTrigger>
+              <SelectContent>
+                {PAGE_THEMES.map((theme) => (
+                  <SelectItem key={theme.value} value={theme.value}>
+                    {theme.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Responsive Layout</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {LAYOUT_DEVICES.map((device) => (
+              <div key={device} className="space-y-2">
+                <Label htmlFor={`layout-${device}`} className="capitalize">
+                  {device}
+                </Label>
+                <Input
+                  id={`layout-${device}`}
+                  type="number"
+                  min={1}
+                  max={24}
+                  value={String(
+                    draft.layouts[device]?.columns ?? "",
+                  )}
+                  onChange={(event) => {
+                    const raw = event.target.value;
+                    updateLayout(
+                      device,
+                      "columns",
+                      raw === "" ? null : Number(raw),
+                    );
+                  }}
+                />
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Data Sources</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {draft.data_sources.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No bounded data source bound to this page yet.
+              </p>
+            ) : (
+              draft.data_sources.map((source) => (
+                <div
+                  key={source.id}
+                  className="flex items-center justify-between gap-2 rounded-md border border-border px-3 py-2 text-sm"
+                >
+                  <span className="min-w-0 truncate">
+                    {source.id} · {source.kind}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => removeDataSource(source.id)}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              ))
+            )}
+            <Button variant="outline" size="sm" onClick={addDataSource}>
+              Add data source
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+
       <div className="grid gap-4 lg:grid-cols-[240px_1fr_320px]">
         <ComponentPalette
           components={registryData?.components ?? []}
@@ -308,6 +534,28 @@ export function PageBuilderEditor({ pageId }: PageBuilderEditorProps) {
           onChangeProps={updateSelectedProps}
         />
       </div>
+
+      {previewOpen ? (
+        <div className="rounded-lg border border-border bg-muted/30 p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <h3 className="text-sm font-semibold">Live Preview</h3>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setPreviewOpen(false)}
+            >
+              Close
+            </Button>
+          </div>
+          <iframe
+            title="Page definition preview"
+            sandbox=""
+            srcDoc={buildPreviewDocument(draft)}
+            className="h-[70vh] w-full rounded-md border border-border bg-background"
+            data-testid="page-builder-preview"
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

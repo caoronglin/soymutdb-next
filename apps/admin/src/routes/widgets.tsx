@@ -10,7 +10,7 @@ import {
   Activity,
   LayoutTemplate,
 } from "lucide-react";
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, PageHeader } from "@soymutdb/ui";
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, PageHeader } from "../lib/admin-ui";
 import { DataTable, type DataTableColumn } from "../components/data-table";
 import { ConfirmDialog } from "../components/confirm-dialog";
 import { widgetApi, type WidgetDefinition } from "../lib/widget-api";

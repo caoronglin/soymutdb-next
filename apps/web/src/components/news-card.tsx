@@ -6,10 +6,10 @@
  * NewsSummaryResponse), so the card shows title/date/category + read-more.
  *
  * AntD Card for the surface, Tailwind for text/spacing (B2 pattern, no
- * @soymutdb/ui).
+ * the former shared component library).
  */
 import { Link } from "@tanstack/react-router";
-import { Card, Tag } from "antd";
+import { Card, Tag } from "@/lib/antd";
 import { ArrowRightOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import type { NewsSummary } from "@soymutdb/api-client";

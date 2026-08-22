@@ -15,8 +15,7 @@ import {
     ThemeProvider as JBrowseThemeProvider,
     JBrowseLinearGenomeView,
 } from "@jbrowse/react-linear-genome-view";
-import { Button, Skeleton, Input } from "@soymutdb/ui";
-import { cn, formatNumber } from "@soymutdb/ui";
+import { Button, Input, Select, Skeleton } from "antd";
 import { http } from "@soymutdb/api-client";
 import { useTranslation } from "react-i18next";
 import {
@@ -189,13 +188,15 @@ function JBrowseApp() {
         view: viewState as JBrowseViewState | null,
         config,
     });
-    stateRef.current = {
-        assembly: assemblyName,
-        tracks: activeTracks,
-        locus: currentLocus,
-        view: viewState,
-        config,
-    };
+    useEffect(() => {
+        stateRef.current = {
+            assembly: assemblyName,
+            tracks: activeTracks,
+            locus: currentLocus,
+            view: viewState,
+            config,
+        };
+    }, [activeTracks, assemblyName, config, currentLocus, viewState]);
 
     // Safe track types supported by @jbrowse/react-linear-genome-view corePlugins.
     // This is a runtime safety net complementing validateTrackTypes() in config.ts.
@@ -232,43 +233,45 @@ function JBrowseApp() {
     // etc.) are pre-bundled in @jbrowse/react-linear-genome-view corePlugins
     // and registered automatically by createModel().
     useEffect(() => {
-        try {
-            const assemblyConfig = config.assemblies[0] ?? DEFAULT_ASSEMBLY;
-            const state = createViewState({
-                assembly: assemblyConfig,
-                tracks: safeTracks,
-                aggregateTextSearchAdapters: config.aggregateTextSearchAdapters,
-                location: currentLocus,
-                configuration: {},
-                defaultSession: {
-                    name: "SoyMutDB",
-                    view: {
-                        id: "linear_genome_view",
-                        type: "LinearGenomeView",
-                        bpPerPx: 200,
-                        tracks: activeTracks.map((id) => {
-                            // Map "reference_sequence" to the assembly's actual trackId.
-                            const actualId =
-                                id === "reference_sequence"
-                                    ? assemblyConfig.sequence.trackId
-                                    : id;
-                            const track = safeTracks.find((t) => t.trackId === actualId);
-                            return {
-                                id: actualId,
-                                type: track?.type ?? "FeatureTrack",
-                                displays: [],
-                            };
-                        }),
+        const frame = requestAnimationFrame(() => {
+            try {
+                const assemblyConfig = config.assemblies[0] ?? DEFAULT_ASSEMBLY;
+                const state = createViewState({
+                    assembly: assemblyConfig,
+                    tracks: safeTracks,
+                    aggregateTextSearchAdapters: config.aggregateTextSearchAdapters,
+                    location: currentLocus,
+                    configuration: {},
+                    defaultSession: {
+                        name: "SoyMutDB",
+                        view: {
+                            id: "linear_genome_view",
+                            type: "LinearGenomeView",
+                            bpPerPx: 200,
+                            tracks: activeTracks.map((id) => {
+                                const actualId =
+                                    id === "reference_sequence"
+                                        ? assemblyConfig.sequence.trackId
+                                        : id;
+                                const track = safeTracks.find((t) => t.trackId === actualId);
+                                return {
+                                    id: actualId,
+                                    type: track?.type ?? "FeatureTrack",
+                                    displays: [],
+                                };
+                            }),
+                        },
                     },
-                },
-            }) as JBrowseViewState;
-            setViewState(state);
-            setInitError(null);
-        } catch (err) {
-            setInitError(
-                err instanceof Error ? err.message : "Failed to initialise genome browser",
-            );
-        }
+                }) as JBrowseViewState;
+                setViewState(state);
+                setInitError(null);
+            } catch (err) {
+                setInitError(
+                    err instanceof Error ? err.message : "Failed to initialise genome browser",
+                );
+            }
+        });
+        return () => cancelAnimationFrame(frame);
         // Only re-init when the assembly changes (or the bridge asks for a
         // full re-init via sessionNonce); track/locus updates are handled below.
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -511,21 +514,17 @@ function JBrowseApp() {
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2">
                     {isEmbedded && (
                         <Button
-                            variant="ghost"
-                            size="sm"
-                            asChild
+                            type="text"
+                            size="small"
+                            href={parentOrigin}
+                            target="_top"
+                            rel="noopener noreferrer"
+                            icon={<ArrowLeft className="size-4" aria-hidden />}
                             className="-ml-2 shrink-0"
+                            aria-label={t("browser.backToPortal")}
+                            title={t("browser.backToPortal")}
                         >
-                            <a
-                                href={parentOrigin}
-                                target="_top"
-                                rel="noopener noreferrer"
-                                aria-label={t("browser.backToPortal")}
-                                title={t("browser.backToPortal")}
-                            >
-                                <ArrowLeft className="size-4" aria-hidden />
-                                <span className="hidden md:inline">{t("browser.backToPortal")}</span>
-                            </a>
+                            <span className="hidden md:inline">{t("browser.backToPortal")}</span>
                         </Button>
                     )}
 
@@ -539,16 +538,17 @@ function JBrowseApp() {
                     </div>
 
                     {/* Assembly selector */}
-                    <select
+                    <Select
                         value={assemblyName}
-                        onChange={(e) => setAssemblyName(e.target.value)}
-                        className="h-9 shrink-0 rounded-md border border-border bg-card px-3 text-sm font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                        onChange={setAssemblyName}
+                        className="w-36 shrink-0 font-mono"
                         aria-label="Select reference assembly"
-                    >
-                        <option value="Wm82v4.0">Wm82 v4.0</option>
-                        <option value="Wm82.a4.v1">Wm82.a4.v1</option>
-                        <option value="Wm82.a2.v1">Wm82.a2.v1</option>
-                    </select>
+                        options={[
+                            { value: "Wm82v4.0", label: "Wm82 v4.0" },
+                            { value: "Wm82.a4.v1", label: "Wm82.a4.v1" },
+                            { value: "Wm82.a2.v1", label: "Wm82.a2.v1" },
+                        ]}
+                    />
 
                     <form
                         onSubmit={handleNavigate}
@@ -565,37 +565,35 @@ function JBrowseApp() {
                                 aria-label="Genomic location or gene search"
                             />
                         </div>
-                        <Button type="submit" size="sm" variant="default" className="shrink-0">
+                        <Button htmlType="submit" type="primary" size="small" className="shrink-0">
                             Go
                         </Button>
                     </form>
 
                     <div className="ml-auto flex shrink-0 items-center gap-1 sm:ml-0">
                         <Button
-                            variant="ghost"
-                            size="icon"
+                            type="text"
                             onClick={handleShare}
                             aria-label="Share current view"
                             title="Share this view"
-                        >
-                            {shareCopied ? (
+                            icon={shareCopied ? (
                                 <Check className="size-4 text-primary" />
                             ) : (
                                 <Share2 className="size-4" />
                             )}
+                        >
                         </Button>
                         <Button
-                            variant="ghost"
-                            size="icon"
+                            type="text"
                             onClick={toggleFullscreen}
                             aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
                             title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
-                        >
-                            {isFullscreen ? (
+                            icon={isFullscreen ? (
                                 <Minimize2 className="size-4" />
                             ) : (
                                 <Maximize2 className="size-4" />
                             )}
+                        >
                         </Button>
                     </div>
                 </div>
@@ -617,10 +615,9 @@ function JBrowseApp() {
             {/* JBrowse view container */}
             <main
                 ref={containerRef}
-                className={cn(
-                    "jbrowse-container relative flex-1 overflow-hidden bg-background",
-                    isFullscreen && "fixed inset-0 z-50",
-                )}
+                className={`jbrowse-container relative flex-1 overflow-hidden bg-background${
+                    isFullscreen ? " fixed inset-0 z-50" : ""
+                }`}
             >
                 {isLoading && <LoadingPlaceholder />}
                 {initError && (
@@ -644,7 +641,7 @@ function JBrowseApp() {
             <footer className="border-t border-border bg-card px-4 py-2 text-center text-xs text-muted-foreground">
                 Powered by JBrowse 2 · SoyMutDB Genome Browser ·{" "}
                 {activeTracks.length > 0 && (
-                    <span>{formatNumber(activeTracks.length)} tracks loaded</span>
+                    <span>{activeTracks.length.toLocaleString()} tracks loaded</span>
                 )}
             </footer>
         </div>
@@ -664,7 +661,7 @@ function LoadingPlaceholder() {
             aria-live="polite"
         >
             <Loader2 className="size-8 animate-spin text-primary" aria-hidden />
-            <Skeleton className="h-64 w-full max-w-3xl rounded-lg" />
+            <Skeleton.Node active className="h-64! w-full! max-w-3xl! rounded-lg!" />
             <p className="text-sm text-muted-foreground">
                 {t("browser.loading")}
             </p>
@@ -692,7 +689,7 @@ function ErrorPlaceholder({ message, onRetry }: ErrorPlaceholderProps) {
                 </h2>
                 <p className="mt-1 max-w-md text-sm text-muted-foreground">{message}</p>
             </div>
-            <Button variant="outline" size="sm" onClick={onRetry}>
+            <Button size="small" onClick={onRetry}>
                 Retry
             </Button>
         </div>

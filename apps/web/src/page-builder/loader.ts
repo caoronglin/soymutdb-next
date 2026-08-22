@@ -12,11 +12,14 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { getPageDefinition } from "@soymutdb/api-client";
-import type { PageDefinition, PageDefinitionVersion } from "@soymutdb/shared";
+import {
+  normalizePageDefinition,
+  type PageDefinitionV2,
+  type PageDefinitionVersion,
+} from "@soymutdb/shared";
 import {
   fallbackDefinitionFor,
 } from "./seed";
-import { isPageDefinition } from "./types";
 
 /** Bootstrap tag id for page definitions (distinct from `rl-bootstrap`). */
 const BOOTSTRAP_ID = "rl-page-definition";
@@ -26,7 +29,7 @@ export interface PageDefinitionBootstrap {
   route: string;
   version: number;
   version_id: string | null;
-  definition: PageDefinition;
+  definition: PageDefinitionV2;
   generated_at: string;
 }
 
@@ -43,8 +46,9 @@ export function readPageDefinitionBootstrap(): PageDefinitionBootstrap | null {
     const raw = JSON.parse(el.textContent ?? "") as Record<string, unknown>;
     if (!raw || typeof raw !== "object") return null;
     if (typeof raw.route !== "string" || typeof raw.version !== "number") return null;
-    if (!isPageDefinition(raw.definition)) return null;
-    return raw as unknown as PageDefinitionBootstrap;
+    const definition = normalizePageDefinition(raw.definition);
+    if (!definition) return null;
+    return { ...raw, definition } as unknown as PageDefinitionBootstrap;
   } catch {
     return null;
   }
@@ -78,7 +82,7 @@ export function usePageDefinition(route: string) {
   const query = useQuery({
     queryKey: pageDefinitionKey(routeKey),
     queryFn: () =>
-      getPageDefinition(routeKey).then((payload) => payload.definition),
+      getPageDefinition(routeKey).then((payload) => normalizePageDefinition(payload.definition)),
     // Bootstrap hydrated: no refetch needed — the pinned definition is exact.
     staleTime: bootstrapData ? Infinity : 5 * 60 * 1000,
     initialData: bootstrapData,
@@ -86,9 +90,9 @@ export function usePageDefinition(route: string) {
   });
 
   // Seed fallback when the API has no published definition for this route.
-  const fallback = fallbackDefinitionFor(routeKey);
+  const fallback = normalizePageDefinition(fallbackDefinitionFor(routeKey));
 
-  const definition: PageDefinition | null = query.data ?? fallback ?? null;
+  const definition: PageDefinitionV2 | null = query.data ?? fallback;
   return {
     ...query,
     definition,
@@ -105,4 +109,4 @@ function matchRoute(a: string, b: string): boolean {
 }
 
 // Re-export the shared version type for consumers that need to pin releases.
-export type { PageDefinition, PageDefinitionVersion };
+export type { PageDefinitionV2 as PageDefinition, PageDefinitionVersion };

@@ -32,9 +32,10 @@ export function setLanguage(lang: SupportedLanguage): void {
 export function initI18n(lang: SupportedLanguage = detectLanguage()): typeof i18n {
   if (!i18n.isInitialized) {
     i18n.use(initReactI18next).init({
+      initImmediate: false,
       resources: {
-        en: { common: en },
-        zh: { common: zh },
+        en: { translation: en, common: en },
+        zh: { translation: zh, common: zh },
       },
       lng: lang,
       fallbackLng: DEFAULT_LANGUAGE,

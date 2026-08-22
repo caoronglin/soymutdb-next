@@ -41,7 +41,7 @@ import {
   SelectTrigger,
   SelectValue,
   Badge,
-} from "@soymutdb/ui";
+} from "../lib/admin-ui";
 import { widgetApi, type LayoutWidget, type WidgetDefinition } from "../lib/widget-api";
 
 const PAGES = [
@@ -126,10 +126,16 @@ export default function LayoutEditorPage() {
   const queryClient = useQueryClient();
   const [pageName, setPageName] = useState<PageName>("index");
   const [widgets, setWidgets] = useState<LayoutWidget[]>([]);
+  const [baselinePage, setBaselinePage] = useState<PageName | null>(null);
   const [showAdd, setShowAdd] = useState(false);
 
   // Fetch current layout for selected page
-  const { data: layout, isLoading: layoutLoading } = useQuery({
+  const {
+    data: layout,
+    isError: layoutError,
+    isFetching: layoutLoading,
+    isSuccess: layoutLoaded,
+  } = useQuery({
     queryKey: ["admin-layout", pageName],
     queryFn: () => widgetApi.getLayout(pageName),
     enabled: pageName.length > 0,
@@ -145,12 +151,15 @@ export default function LayoutEditorPage() {
 
   // Sync widgets state with fetched layout
   useEffect(() => {
-    if (layout) {
+    if (layoutLoaded && Array.isArray(layout?.widgets)) {
       setWidgets(layout.widgets);
-    } else {
-      setWidgets([]);
+      setBaselinePage(pageName);
     }
-  }, [layout]);
+  }, [layout, layoutLoaded, pageName]);
+
+  const hasFetchedBaseline = layoutLoaded && Array.isArray(layout?.widgets);
+  const hasCurrentBaseline = hasFetchedBaseline && baselinePage === pageName;
+  const layoutUnavailable = layoutError || (!layoutLoading && !hasFetchedBaseline);
 
   const saveMutation = useMutation({
     mutationFn: () => widgetApi.saveLayout(pageName, widgets),
@@ -218,7 +227,7 @@ export default function LayoutEditorPage() {
           <Button
             size="sm"
             onClick={() => saveMutation.mutate()}
-            disabled={saveMutation.isPending}
+            disabled={!hasCurrentBaseline || layoutLoading || saveMutation.isPending}
           >
             {saveMutation.isPending ? (
               <Loader2 className="size-4 animate-spin" />
@@ -266,11 +275,21 @@ export default function LayoutEditorPage() {
               </div>
             </CardHeader>
             <CardContent className="space-y-3">
-              {layoutLoading ? (
+              {layoutLoading || (hasFetchedBaseline && !hasCurrentBaseline) ? (
                 <div className="space-y-2">
                   {Array.from({ length: 3 }).map((_, i) => (
                     <div key={i} className="h-14 animate-pulse rounded-lg bg-muted" />
                   ))}
+                </div>
+              ) : layoutUnavailable ? (
+                <div
+                  role="alert"
+                  className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive"
+                >
+                  <p className="font-medium">Unable to load the current layout.</p>
+                  <p className="mt-1 text-muted-foreground">
+                    Saving is disabled until a configuration baseline is available.
+                  </p>
                 </div>
               ) : (
                 <DndContext

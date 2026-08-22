@@ -17,15 +17,22 @@ import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import DOMPurify from "dompurify";
-import { Alert, Button, Divider, Tabs as AntTabs } from "antd";
+import { Alert, Button, Divider, Tabs as AntTabs } from "@/lib/antd";
 import { Search, MapPin, Microscope, FlaskConical, FlaskRound } from "lucide-react";
-import { getFeaturedNews } from "@soymutdb/api-client";
+import {
+  capabilitiesApi,
+  getFeaturedNews,
+  type PluginCapability,
+} from "@soymutdb/api-client";
 import type { PageComponentNode, PageDefinition } from "@soymutdb/shared";
 import { NewsCarousel, NEWS_FEATURED_KEY } from "../components/news-carousel";
+import { OntologyRelationshipGraph } from "../components/ontology/relationship-graph";
 import { pickNewsTitle } from "../components/news-card";
+import { isMinimalDeploymentMode } from "../lib/deployment";
 import { formatDate } from "../lib/format";
 import { isScriptLike } from "./types";
 import { hasRendererFor } from "./registry";
+import { resolveEmbeddedPlugin, resolvePluginLauncher } from "./plugin-launcher";
 
 /* ------------------------------------------------------------------------ */
 /* Helpers                                                                  */
@@ -54,6 +61,26 @@ const TOOL_TARGETS: Record<string, { to: string; icon: React.ComponentType<{ cla
   BLAST: { to: "/blast", icon: FlaskConical },
   "Primer Design": { to: "/search/primer", icon: FlaskRound },
 };
+
+const MINIMAL_DEPLOYMENT = isMinimalDeploymentMode(import.meta.env.VITE_DEPLOYMENT_MODE);
+const CAPABILITIES_QUERY_KEY = ["plugin-capabilities"];
+
+function usePluginCapability(key: string): PluginCapability | undefined {
+  const query = useQuery({
+    queryKey: CAPABILITIES_QUERY_KEY,
+    queryFn: capabilitiesApi.get,
+    staleTime: 60 * 1000,
+  });
+  return query.data?.plugins?.[key];
+}
+
+function usePluginLauncher(key: "jbrowse" | "blast", assembly: string) {
+  return resolvePluginLauncher(usePluginCapability(key), assembly);
+}
+
+function useEmbeddedPlugin(key: "ols4") {
+  return resolveEmbeddedPlugin(usePluginCapability(key));
+}
 
 /* ------------------------------------------------------------------------ */
 /* Adapters                                                                 */
@@ -137,7 +164,9 @@ function RichTextNode(props: { content?: string }) {
 
 function ToolEntriesNode(props: { entries?: string[] }) {
   const { t } = useTranslation();
-  const entries = (props.entries ?? []).filter((e) => TOOL_TARGETS[e]);
+  const entries = (props.entries ?? []).filter(
+    (entry) => TOOL_TARGETS[entry] && (!MINIMAL_DEPLOYMENT || entry !== "JBrowse 2"),
+  );
   if (entries.length === 0) return null;
   return (
     <div className="grid w-full gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -214,21 +243,72 @@ function NoticeNode(props: { kind?: string; content?: string }) {
   return <Alert type={kind} showIcon message={props.content ?? ""} />;
 }
 
-function JbrowseLauncherNode() {
+function JbrowseLauncherNode({ assembly }: { assembly: string }) {
   const { t } = useTranslation();
+  const state = usePluginLauncher("jbrowse", assembly);
+  if (MINIMAL_DEPLOYMENT) return null;
+  if (!state.available) {
+    return (
+      <span className="text-sm text-muted-foreground">
+        {t("browser.unavailable")}
+      </span>
+    );
+  }
   return (
-    <Link to="/search/gbrowse" className="link-underline text-primary">
+    <a
+      href={state.href ?? undefined}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="link-underline text-primary"
+    >
       {t("nav.browser")}
-    </Link>
+    </a>
   );
 }
 
-function BlastLauncherNode() {
+function BlastLauncherNode({ assembly }: { assembly: string }) {
   const { t } = useTranslation();
+  const state = usePluginLauncher("blast", assembly);
+  if (!state.available) {
+    return (
+      <span className="text-sm text-muted-foreground">
+        {t("blast.unavailable")}
+      </span>
+    );
+  }
   return (
-    <Link to="/blast" className="link-underline text-primary">
+    <a
+      href={state.href ?? undefined}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="link-underline text-primary"
+    >
       {t("nav.blast")}
-    </Link>
+    </a>
+  );
+}
+
+function OntologyRelationshipGraphNode(props: {
+  ontology: string;
+  iri: string;
+  maxNodes?: number;
+  maxEdges?: number;
+}) {
+  const state = useEmbeddedPlugin("ols4");
+  if (!state.available) {
+    return (
+      <span className="text-sm text-muted-foreground">
+        Ontology relationship graph is unavailable.
+      </span>
+    );
+  }
+  return (
+    <OntologyRelationshipGraph
+      ontology={props.ontology}
+      iri={props.iri}
+      maxNodes={props.maxNodes}
+      maxEdges={props.maxEdges}
+    />
   );
 }
 
@@ -339,9 +419,18 @@ export function RenderNode({ node }: { node: PageComponentNode }) {
     case "columns":
       return <ColumnsNode node={node} />;
     case "jbrowse_launcher":
-      return <JbrowseLauncherNode />;
+      return <JbrowseLauncherNode assembly={String(props.assembly ?? "")} />;
     case "blast_launcher":
-      return <BlastLauncherNode />;
+      return <BlastLauncherNode assembly={String(props.assembly ?? "")} />;
+    case "ontology_relationship_graph":
+      return (
+        <OntologyRelationshipGraphNode
+          ontology={String(props.ontology ?? "")}
+          iri={String(props.iri ?? "")}
+          maxNodes={props.max_nodes as number | undefined}
+          maxEdges={props.max_edges as number | undefined}
+        />
+      );
     default:
       return null;
   }

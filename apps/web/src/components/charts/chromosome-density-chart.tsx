@@ -3,7 +3,7 @@
  */
 import type { EChartsOption } from "echarts";
 import { useECharts } from "../../lib/use-echarts";
-import { ChartEmptyState, cn } from "@soymutdb/ui";
+import { ChartEmptyState, cn } from "../../lib/web-ui";
 
 export interface ChromosomeDensityChartProps {
   data: ReadonlyArray<{ chromosome: string; variantCount: number }>;

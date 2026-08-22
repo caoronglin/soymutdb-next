@@ -105,12 +105,11 @@ export function useECharts(option: EChartsOption, deps: React.DependencyList = [
   const chartRef = React.useRef<import("echarts").EChartsType | null>(null);
   const [loading, setLoading] = React.useState(true);
   const { theme } = useTheme();
-  const { reduced, durationSlow, easingSpring } = useAnimation();
-  const [palette, setPalette] = React.useState<ChartPalette>(() => buildPalette());
-
-  // Re-read palette when theme changes.
-  React.useEffect(() => {
-    setPalette(buildPalette());
+  const { reduced, intensity, durationSlow } = useAnimation();
+  const palette = React.useMemo(() => {
+    // Theme is the invalidation signal; colors are read from CSS variables.
+    void theme;
+    return buildPalette();
   }, [theme]);
 
   // Initialise the chart instance once the module loads.
@@ -134,7 +133,6 @@ export function useECharts(option: EChartsOption, deps: React.DependencyList = [
       chartRef.current?.dispose();
       chartRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [theme]);
 
   // Apply option when it changes — resolve CSS vars first.
@@ -154,17 +152,19 @@ export function useECharts(option: EChartsOption, deps: React.DependencyList = [
     const hasEmptyData = seriesArr.some((s) => !s.data || s.data.length === 0);
     const notMerge = !initialisedRef.current || hasEmptyData;
 
+    const chartDuration =
+      intensity === "minimal" ? Math.min(180, durationSlow) : durationSlow;
     const merged: EChartsOption = {
       ...resolved,
       animation: !reduced,
-      animationDuration: reduced ? 0 : durationSlow,
-      animationDurationUpdate: reduced ? 0 : durationSlow,
-      animationEasing: easingSpring as unknown as EChartsOption["animationEasing"],
+      animationDuration: reduced ? 0 : chartDuration,
+      animationDurationUpdate: reduced ? 0 : chartDuration,
+      animationEasing: "cubicOut",
     };
     chart.setOption(merged, { notMerge });
     initialisedRef.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [option, palette, reduced, durationSlow, easingSpring, ...deps]);
+  }, [option, palette, reduced, intensity, durationSlow, ...deps]);
 
   return { ref, palette, loading };
 }

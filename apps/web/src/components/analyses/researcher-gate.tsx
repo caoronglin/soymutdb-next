@@ -9,7 +9,7 @@
 import * as React from "react";
 import { Link } from "@tanstack/react-router";
 import { ShieldAlert, LogIn } from "lucide-react";
-import { LoadingState, EmptyState, Button } from "@soymutdb/ui";
+import { LoadingState, EmptyState, Button } from "../../lib/web-ui";
 import { useIsResearcher } from "../../lib/use-current-user";
 
 export function ResearcherGate({ children }: { children: React.ReactNode }) {

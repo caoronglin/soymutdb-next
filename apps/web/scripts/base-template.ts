@@ -10,13 +10,20 @@
  *   - Widget-loader script with Trusted Types policy
  *   - Reduced-motion support
  *
- * Pages built with this template hydrate the React SPA transparently
- * because the same JS/CSS bundles as the Vite build are included.
+ * Generated markup is not React server output. SPA-backed pages therefore
+ * keep it in an independent static container until the client tree commits;
+ * standalone pages can omit the SPA entrypoint entirely.
  */
 
 import { readdirSync, existsSync } from "node:fs";
 import { join, posix } from "node:path";
-import { buildCsp, normalizeBasePath, requireDeploymentOrigin, resolveAssetUrl } from "../src/lib/deployment";
+import {
+    buildCsp,
+    isMinimalDeploymentMode,
+    normalizeBasePath,
+    requireDeploymentOrigin,
+    resolveAssetUrl,
+} from "../src/lib/deployment";
 
 /* ------------------------------------------------------------------ */
 /*  Asset discovery                                                   */
@@ -93,14 +100,20 @@ export interface BaseTemplateOptions {
     htmlClass?: string;
     /** Additional <head> markup (page-specific meta, JSON-LD, etc.). */
     headExtra?: string;
-    /** Inlined widget HTML that will be placed inside #root for non-JS users. */
+    /** Inlined build-time HTML, owned by an independent static container. */
     widgetsHtml?: string;
+    /** Include the React SPA entrypoint. Disable for URLs with no SPA route. */
+    spaEntrypoint?: boolean;
     /** Additional body-end scripts or markup. */
     bodyScripts?: string;
     /** Canonical URL (optional). */
     canonical?: string;
     /** JSON-LD structured data (optional). */
     jsonLd?: Record<string, unknown>;
+    /** Search-engine directive, for example demo-only `noindex, nofollow`. */
+    robots?: string;
+    /** Base-aware path reported by the tracking pixel when canonical is omitted. */
+    pagePath?: string;
     /** Pre-discovered assets (or we auto-discover). */
     assets?: DiscoveredAssets;
 }
@@ -128,16 +141,15 @@ const THEME_INIT_SCRIPT = `
 /* ------------------------------------------------------------------ */
 /*  Widget loader bootstrap (inline script)                           */
 /* ------------------------------------------------------------------ */
-const WIDGET_LOADER_SNIPPET = `
+const WIDGET_LOADER_SNIPPET = `<script>
 // Widget loader: fetches dynamic widgets from /api/v1/widget/*.
-// Inlined to avoid a blocking network request during hydration.
+// Inlined to avoid a blocking network request before the SPA handoff.
 // Server HTML is double-sanitized (Jinja2 autoescape + bleach.clean);
 // this snippet provides additional DOM-based sanitization before insertion.
-<script>
 (function() {
   'use strict';
   // Minimal widget fetcher — the full TypeScript module is imported by main.tsx
-  // and will replace these placeholders once React hydrates. This minimal
+  // and will replace these placeholders once the SPA mounts. This minimal
   // version provides progressive enhancement for users without JS modules.
 
   // Trusted Types policy (CSP-compatible)
@@ -238,7 +250,7 @@ const CF_ANALYTICS_TOKEN = (process.env.VITE_CLOUDFLARE_ANALYTICS_TOKEN ?? "").t
 
 /** Full beacon <script> tag — empty string when no token is configured. */
 const CF_BEACON_HTML = CF_ANALYTICS_TOKEN
-    ? `<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='${JSON.stringify({ token: CF_ANALYTICS_TOKEN })}'></script>`
+    ? `<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon="${escapeHtmlAttribute(JSON.stringify({ token: CF_ANALYTICS_TOKEN }))}"></script>`
     : "";
 
 /**
@@ -247,26 +259,36 @@ const CF_BEACON_HTML = CF_ANALYTICS_TOKEN
  * Keep in sync with apps/web/public/_headers (browsers intersect both).
  */
 const BASE_PATH = normalizeBasePath(process.env.VITE_BASE_URL ?? "/");
+const MINIMAL_DEPLOYMENT = isMinimalDeploymentMode(process.env.VITE_DEPLOYMENT_MODE);
 const CSP_CONTENT = buildCsp({
     apiOrigin: requireDeploymentOrigin(process.env.VITE_API_BASE_URL ?? process.env.SOYMUTDB_API_URL, "API"),
-    jbrowseOrigin: requireDeploymentOrigin(process.env.VITE_JBROWSE_BASE_URL ?? process.env.VITE_JBROWSE_URL, "JBrowse"),
+    jbrowseOrigin: MINIMAL_DEPLOYMENT
+        ? undefined
+        : requireDeploymentOrigin(
+            process.env.VITE_JBROWSE_BASE_URL ?? process.env.VITE_JBROWSE_URL,
+            "JBrowse",
+        ),
 }, Boolean(CF_ANALYTICS_TOKEN));
 
 /* ------------------------------------------------------------------ */
 /*  Tracking pixel (noscript-friendly analytics)                      */
 /* ------------------------------------------------------------------ */
 
-const TRACKING_PIXEL = `
+function renderTrackingPixel(pagePath: string): string {
+    const pixelUrl = resolveAssetUrl(BASE_PATH, "track.gif");
+    const encodedPath = encodeURIComponent(pagePath);
+    return `
 <!-- Tracking pixel: server-side analytics via 1x1 GIF. Works without JS. -->
 <noscript>
-  <img src="track.gif?ns=1&p={{PAGE_PATH}}" alt="" width="1" height="1"
+  <img src="${escapeHtmlAttribute(`${pixelUrl}?ns=1&p=${encodedPath}`)}" alt="" width="1" height="1"
        style="position:absolute;width:1px;height:1px;overflow:hidden"
        referrerpolicy="no-referrer-when-downgrade" />
 </noscript>
-<img src="track.gif?p={{PAGE_PATH}}" alt="" width="1" height="1"
+<img src="${escapeHtmlAttribute(`${pixelUrl}?p=${encodedPath}`)}" alt="" width="1" height="1"
      style="position:absolute;width:1px;height:1px;overflow:hidden"
      referrerpolicy="no-referrer-when-downgrade"
      loading="lazy" aria-hidden="true" />`;
+}
 
 /* ------------------------------------------------------------------ */
 /*  Reduced-motion CSS                                                */
@@ -295,9 +317,12 @@ export function renderBaseTemplate(opts: BaseTemplateOptions): string {
         lang = "en",
         headExtra = "",
         widgetsHtml = "",
+        spaEntrypoint = true,
         bodyScripts = "",
         canonical,
         jsonLd,
+        robots,
+        pagePath: explicitPagePath,
     } = opts;
 
     const assets = opts.assets ?? discoverAssets();
@@ -320,12 +345,16 @@ export function renderBaseTemplate(opts: BaseTemplateOptions): string {
 
     // Canonical URL
     const canonicalHtml = canonical
-        ? `<link rel="canonical" href="${canonical}" />`
+        ? `<link rel="canonical" href="${escapeHtmlAttribute(canonical)}" />`
         : "";
 
     // JSON-LD
     const jsonLdHtml = jsonLd
-        ? `<script type="application/ld+json">${JSON.stringify(jsonLd)}</script>`
+        ? `<script type="application/ld+json">${serializeJsonLd(jsonLd)}</script>`
+        : "";
+
+    const robotsHtml = robots
+        ? `<meta name="robots" content="${escapeHtmlAttribute(robots)}" />`
         : "";
 
     // Open Graph
@@ -337,11 +366,12 @@ export function renderBaseTemplate(opts: BaseTemplateOptions): string {
     <meta name="twitter:card" content="summary" />`;
 
     // Inject page path into tracking pixel
-    const pagePath = canonical ? new URL(canonical).pathname : "/";
-    const trackingHtml = TRACKING_PIXEL.replaceAll("{{PAGE_PATH}}", pagePath);
+    const pagePath = explicitPagePath ?? (canonical ? new URL(canonical).pathname : "/");
+    if (!pagePath.startsWith("/")) throw new Error("pagePath must be an absolute application path");
+    const trackingHtml = renderTrackingPixel(pagePath);
 
     return `<!doctype html>
-<html lang="${lang}" data-theme="light">
+<html lang="${escapeHtmlAttribute(lang)}" data-theme="light">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="${resolveAssetUrl(BASE_PATH, "favicon.svg")}" />
@@ -349,6 +379,7 @@ export function renderBaseTemplate(opts: BaseTemplateOptions): string {
     <meta name="theme-color" content="#2F6F4F" />
     <meta name="description" content="${escapeHtml(description)}" />
     <meta name="author" content="SoyMutDB Consortium" />
+    ${robotsHtml}
 ${ogHtml}
     ${canonicalHtml}
 
@@ -356,12 +387,12 @@ ${ogHtml}
          apps/web/index.html. REPLACE the placeholder domains before going live:
          https://api.example.com -> production API origin,
          https://jbrowse.example.com -> deployed JBrowse origin (iframe on
-         /browse). Preview deployments: use the STAGING origins instead.
+         /browser). Preview deployments: use the STAGING origins instead.
          When VITE_CDN_ENABLED=true, add CDN domains to script-src in BOTH this
          meta tag and the _headers CSP (e.g. cdnjs.cloudflare.com, cdn.jsdelivr.net). -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="${CSP_CONTENT}"
+      content="${escapeHtmlAttribute(CSP_CONTENT)}"
     />
 
     <!-- Preconnect to font origins -->
@@ -387,17 +418,43 @@ ${ogHtml}
     <title>${escapeHtml(title)}</title>
   </head>
   <body>
-    <div id="root">${widgetsHtml}</div>
+    <!-- ssg-content:start -->
+    <div id="ssg-content" data-render-owner="static">${widgetsHtml}</div>
+    <!-- ssg-content:end -->
+    ${spaEntrypoint ? '<div id="root" hidden></div>' : ""}
 
     ${trackingHtml}
 
-    <!-- React SPA entrypoint -->
+    ${spaEntrypoint ? `<!-- React SPA entrypoint: replaces #ssg-content only after its first commit -->
     <script type="module" crossorigin src="${resolveAssetUrl(BASE_PATH, assets.jsEntry)}"></script>
-    ${modulePreloadHtml}
+    ${modulePreloadHtml}` : ""}
 
     ${WIDGET_LOADER_SNIPPET}
     ${bodyScripts}
   </body>
+</html>`;
+}
+
+/**
+ * Render a lightweight, base-aware compatibility redirect.
+ * JavaScript preserves query/hash deep links; meta refresh is the no-JS fallback.
+ */
+export function renderRedirectTemplate(targetPath: string): string {
+    const target = resolveAssetUrl(BASE_PATH, targetPath);
+    const escapedTarget = escapeHtml(target);
+    const scriptTarget = JSON.stringify(target);
+
+    return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="robots" content="noindex" />
+    <link rel="canonical" href="${escapedTarget}" />
+    <meta http-equiv="refresh" content="0;url=${escapedTarget}" />
+    <title>Redirecting — SoyMutDB</title>
+    <script>window.location.replace(${scriptTarget} + window.location.search + window.location.hash);</script>
+  </head>
+  <body><p>Redirecting to <a href="${escapedTarget}">${escapedTarget}</a>…</p></body>
 </html>`;
 }
 
@@ -412,4 +469,17 @@ function escapeHtml(s: string): string {
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#x27;");
+}
+
+function escapeHtmlAttribute(value: string): string {
+    return escapeHtml(value).replace(/`/g, "&#x60;");
+}
+
+function serializeJsonLd(value: Record<string, unknown>): string {
+    return JSON.stringify(value)
+        .replace(/</g, "\\u003c")
+        .replace(/>/g, "\\u003e")
+        .replace(/&/g, "\\u0026")
+        .replace(/\u2028/g, "\\u2028")
+        .replace(/\u2029/g, "\\u2029");
 }

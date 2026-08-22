@@ -22,7 +22,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, Trash2 } from "lucide-react";
-import { Button, Badge, cn } from "@soymutdb/ui";
+import { Button, Badge, cn } from "../../lib/admin-ui";
 import type { ComponentDescriptor, PageComponentNode } from "@soymutdb/shared";
 
 export interface SelectionPath {

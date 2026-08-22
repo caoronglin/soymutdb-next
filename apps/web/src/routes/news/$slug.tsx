@@ -18,7 +18,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { Button, Result, Skeleton, Tag } from "antd";
+import { Button, Result, Skeleton, Tag } from "@/lib/antd";
 import {
   ArrowLeftOutlined,
   ArrowRightOutlined,

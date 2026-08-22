@@ -23,7 +23,7 @@ import {
   CardDescription,
   Badge,
   EmptyState,
-} from "@soymutdb/ui";
+} from "../lib/web-ui";
 import { FadeUp, useReveal } from "../components/route-motion";
 import { startViewTransition } from "../lib/view-transitions";
 import { COMPARE_VARIANTS, type CompareVariant } from "../lib/compare-data";

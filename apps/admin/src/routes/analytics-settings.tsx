@@ -10,7 +10,7 @@ import {
   CardHeader,
   CardTitle,
   PageHeader,
-} from "@soymutdb/ui";
+} from "../lib/admin-ui";
 
 const ENV_VAR = "VITE_CLOUDFLARE_ANALYTICS_TOKEN";
 const BEACON_ORIGIN = "https://static.cloudflareinsights.com/beacon.min.js";

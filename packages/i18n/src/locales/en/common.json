@@ -31,7 +31,7 @@
     "explore": "Explore",
     "resources": "Resources",
     "allTools": "All tools",
-    "contact": "Contact Us",
+    "contact": "Contact",
     "latestNews": "Latest News",
     "tools": "Tools"
   },
@@ -318,7 +318,10 @@
     "activeTracks": "{{count}} active track",
     "activeTracks_plural": "{{count}} active tracks",
     "showTracks": "Show track panel",
-    "hideTracks": "Hide track panel"
+    "hideTracks": "Hide track panel",
+    "unavailable": "Genome browser is unavailable for this plugin/assembly.",
+    "minimalUnavailableTitle": "Genome browser unavailable in minimal deployment",
+    "minimalUnavailableDescription": "This web-only deployment does not include JBrowse. Run the demo deployment mode to publish the interactive genome browser."
   },
   "blast": {
     "title": "BLAST Search",
@@ -341,6 +344,7 @@
     "submit": "Submit BLAST",
     "clear": "Clear",
     "myJobs": "My Jobs",
+    "unavailable": "BLAST is unavailable for this plugin/assembly.",
     "jobHistory": "Job History",
     "jobId": "Job ID",
     "status": "Status",
@@ -638,6 +642,7 @@
   "search": {
     "title": "Global Search",
     "subtitle": "Search genes, variants, mutant lines, and documentation",
+    "openPalette": "Open search palette",
     "placeholder": "Enter search keywords...",
     "searching": "Searching...",
     "noResults": "No results found",

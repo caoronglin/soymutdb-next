@@ -1,17 +1,26 @@
 /**
- * News management list (B3) — ProTable with pagination + search + status
+ * News management list (B3) — AntD Table with pagination + search + status
  * filter, row actions (edit / delete / preview) and featured reorder.
  *
  * Data source: GET /api/v1/admin/news (researcher+) — sees ALL statuses
  * (draft/published/archived) with optional status_filter, category, and
- * title search.  Loading / error / empty states are handled by ProTable's
- * built-in request lifecycle.
+ * title search. Loading / error / empty states are handled explicitly.
  */
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { App, Button, Space, Tag, Typography } from "antd";
+import {
+  App,
+  Button,
+  Form,
+  Input,
+  Select,
+  Space,
+  Table,
+  Tag,
+  Typography,
+  type TableColumnsType,
+} from "antd";
 import { PlusOutlined } from "@ant-design/icons";
-import { ProTable, type ActionType, type ProColumns } from "@ant-design/pro-components";
 import { useRouter } from "@tanstack/react-router";
 import dayjs from "dayjs";
 import {
@@ -31,9 +40,9 @@ const STATUS_COLORS: Record<NewsStatus, string> = {
 };
 
 /**
- * Map ProTable request params to the backend admin-list query params.
+ * Map list request params to the backend admin-list query params.
  *
- * Pure function — extracted for unit testing. `status` (valueEnum select)
+ * Pure function — extracted for unit testing. `status` (filter select)
  * maps to `status_filter`; `title_en` (search input) maps to the backend
  * `search` (ILIKE); `category` passes through; `current`/`pageSize` map to
  * `page`/`page_size`. Empty/undefined values are dropped so the backend
@@ -56,25 +65,69 @@ export function buildAdminNewsQuery(params: {
   return query;
 }
 
+interface NewsListParams {
+  current: number;
+  pageSize: number;
+  title_en?: string;
+  category?: string;
+  status?: NewsStatus;
+}
+
+const DEFAULT_LIST_PARAMS: NewsListParams = {
+  current: 1,
+  pageSize: 10,
+};
+
 export default function NewsListPage() {
   const { t } = useTranslation();
   const { message, modal } = App.useApp();
   const router = useRouter();
-  const actionRef = useRef<ActionType>(null);
+  const [searchForm] = Form.useForm<
+    Omit<NewsListParams, "current" | "pageSize">
+  >();
+  const [requestParams, setRequestParams] = useState<NewsListParams>(DEFAULT_LIST_PARAMS);
+  const [articles, setArticles] = useState<NewsSummary[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [reloadVersion, setReloadVersion] = useState(0);
   const [previewArticle, setPreviewArticle] = useState<{
     id: number | string;
     slug: string;
   } | null>(null);
   const [reorderOpen, setReorderOpen] = useState(false);
+  const loadErrorLabel = t("admin.news.messages.loadError");
 
-  const statusEnum = useCallback(
-    () => ({
-      draft: { text: t("admin.news.status.draft") },
-      published: { text: t("admin.news.status.published") },
-      archived: { text: t("admin.news.status.archived") },
-    }),
-    [t],
-  );
+  useEffect(() => {
+    let active = true;
+
+    async function loadArticles() {
+      try {
+        const data = await listAdminNews(buildAdminNewsQuery(requestParams));
+        if (!active) return;
+        setArticles(data.items);
+        setTotal(data.total);
+      } catch (err) {
+        if (!active) return;
+        setArticles([]);
+        setTotal(0);
+        message.error(
+          `${loadErrorLabel}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    void loadArticles();
+    return () => {
+      active = false;
+    };
+  }, [loadErrorLabel, message, reloadVersion, requestParams]);
+
+  const reload = useCallback(() => {
+    setLoading(true);
+    setReloadVersion((version) => version + 1);
+  }, []);
 
   const confirmDelete = useCallback(
     (record: NewsSummary) => {
@@ -89,7 +142,7 @@ export default function NewsListPage() {
           try {
             await deleteNews(record.id);
             message.success(t("admin.news.messages.deleteSuccess"));
-            actionRef.current?.reload();
+            reload();
           } catch (err) {
             message.error(
               `${t("admin.news.messages.deleteError")}: ${err instanceof Error ? err.message : String(err)}`,
@@ -98,15 +151,14 @@ export default function NewsListPage() {
         },
       });
     },
-    [modal, message, t],
+    [modal, message, reload, t],
   );
 
-  const columns: ProColumns<NewsSummary>[] = [
+  const columns: TableColumnsType<NewsSummary> = [
     {
       title: t("admin.news.columns.id"),
       dataIndex: "id",
       width: 64,
-      search: false,
     },
     {
       title: t("admin.news.columns.title"),
@@ -131,8 +183,6 @@ export default function NewsListPage() {
       title: t("admin.news.columns.status"),
       dataIndex: "status",
       width: 110,
-      valueType: "select",
-      valueEnum: statusEnum(),
       render: (_, record) => (
         <Tag color={STATUS_COLORS[record.status]}>
           {t(`admin.news.status.${record.status}`)}
@@ -143,7 +193,6 @@ export default function NewsListPage() {
       title: t("admin.news.columns.publishedAt"),
       dataIndex: "published_at",
       width: 170,
-      search: false,
       render: (_, record) =>
         record.published_at ? dayjs(record.published_at).format("YYYY-MM-DD HH:mm") : "—",
     },
@@ -151,85 +200,128 @@ export default function NewsListPage() {
       title: t("admin.news.columns.featuredSort"),
       dataIndex: "featured_sort",
       width: 90,
-      search: false,
       sorter: (a, b) => a.featured_sort - b.featured_sort,
     },
     {
       title: t("admin.news.columns.actions"),
-      valueType: "option",
       key: "option",
       width: 190,
-      render: (_, record) => [
-        <Button
-          key="edit"
-          type="link"
-          size="small"
-          onClick={() => router.navigate({ to: "/news/$id", params: { id: record.id } })}
-        >
-          {t("admin.news.actions.edit")}
-        </Button>,
-        <Button
-          key="preview"
-          type="link"
-          size="small"
-          onClick={() => setPreviewArticle({ id: record.id, slug: record.slug })}
-        >
-          {t("admin.news.actions.preview")}
-        </Button>,
-        <Button
-          key="delete"
-          type="link"
-          size="small"
-          danger
-          onClick={() => confirmDelete(record)}
-        >
-          {t("admin.news.actions.delete")}
-        </Button>,
-      ],
+      render: (_, record) => (
+        <Space size="small">
+          <Button
+            type="link"
+            size="small"
+            onClick={() => router.navigate({ to: "/news/$id", params: { id: record.id } })}
+          >
+            {t("admin.news.actions.edit")}
+          </Button>
+          <Button
+            type="link"
+            size="small"
+            onClick={() => setPreviewArticle({ id: record.id, slug: record.slug })}
+          >
+            {t("admin.news.actions.preview")}
+          </Button>
+          <Button
+            type="link"
+            size="small"
+            danger
+            onClick={() => confirmDelete(record)}
+          >
+            {t("admin.news.actions.delete")}
+          </Button>
+        </Space>
+      ),
     },
   ];
 
+  const applyFilters = (values: Omit<NewsListParams, "current" | "pageSize">) => {
+    setLoading(true);
+    setRequestParams((current) => ({
+      ...values,
+      current: 1,
+      pageSize: current.pageSize,
+    }));
+  };
+
+  const resetFilters = () => {
+    searchForm.resetFields();
+    setLoading(true);
+    setRequestParams(DEFAULT_LIST_PARAMS);
+  };
+
   return (
     <div className="route-fade-in">
-      <ProTable<NewsSummary>
-        headerTitle={
+      <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <Space>
             <Typography.Text strong>{t("admin.news.title")}</Typography.Text>
           </Space>
-        }
-        actionRef={actionRef}
-        rowKey="id"
-        columns={columns}
-        search={{
-          labelWidth: "auto",
-        }}
-        request={async (params) => {
-          try {
-            const data = await listAdminNews(buildAdminNewsQuery(params));
-            return { data: data.items, total: data.total, success: true };
-          } catch (err) {
-            message.error(
-              `${t("admin.news.messages.loadError")}: ${err instanceof Error ? err.message : String(err)}`,
-            );
-            return { data: [], total: 0, success: false };
-          }
-        }}
-        pagination={{ defaultPageSize: 10, showSizeChanger: true }}
-        toolBarRender={() => [
-          <Button key="reorder" onClick={() => setReorderOpen(true)}>
-            {t("admin.news.actions.reorder")}
-          </Button>,
-          <Button
-            key="create"
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => router.navigate({ to: "/news/new" })}
-          >
-            {t("admin.news.createNew")}
-          </Button>,
-        ]}
-        locale={{ emptyText: t("admin.news.empty") }}
-      />
+          <Space>
+            <Button onClick={() => setReorderOpen(true)}>
+              {t("admin.news.actions.reorder")}
+            </Button>
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => router.navigate({ to: "/news/new" })}
+            >
+              {t("admin.news.createNew")}
+            </Button>
+          </Space>
+        </div>
+
+        <Form form={searchForm} layout="inline" onFinish={applyFilters}>
+          <Form.Item name="title_en" label={t("admin.news.columns.title")}>
+            <Input placeholder={t("admin.news.search.placeholder")} />
+          </Form.Item>
+          <Form.Item name="category" label={t("admin.news.columns.category")}>
+            <Input />
+          </Form.Item>
+          <Form.Item name="status" label={t("admin.news.columns.status")}>
+            <Select
+              allowClear
+              style={{ minWidth: 140 }}
+              options={([
+                "draft",
+                "published",
+                "archived",
+              ] as const).map((status) => ({
+                value: status,
+                label: t(`admin.news.status.${status}`),
+              }))}
+            />
+          </Form.Item>
+          <Form.Item>
+            <Space>
+              <Button type="primary" htmlType="submit">
+                {t("common.search")}
+              </Button>
+              <Button htmlType="button" onClick={resetFilters}>
+                {t("common.reset")}
+              </Button>
+            </Space>
+          </Form.Item>
+        </Form>
+
+        <Table<NewsSummary>
+          rowKey="id"
+          columns={columns}
+          dataSource={articles}
+          loading={loading}
+          pagination={{
+            current: requestParams.current,
+            pageSize: requestParams.pageSize,
+            total,
+            showSizeChanger: true,
+            onChange: (current, pageSize) => {
+              setLoading(true);
+              setRequestParams((params) => ({ ...params, current, pageSize }));
+            },
+          }}
+          locale={{ emptyText: t("admin.news.empty") }}
+        />
+      </Space>
 
       <NewsPreviewModal
         open={previewArticle !== null}
@@ -239,7 +331,7 @@ export default function NewsListPage() {
       <NewsReorderModal
         open={reorderOpen}
         onClose={() => setReorderOpen(false)}
-        onSaved={() => actionRef.current?.reload()}
+        onSaved={reload}
       />
     </div>
   );

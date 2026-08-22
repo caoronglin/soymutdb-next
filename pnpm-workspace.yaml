@@ -2,11 +2,28 @@ packages:
   - "packages/*"
   - "apps/*"
 
-# pnpm 10: workspace-level settings live here (the root package.json "pnpm"
+# CI and developers install explicitly; warn about stale node_modules instead
+# of mutating dependencies implicitly before every script.
+verifyDepsBeforeRun: warn
+
+# Shared platform versions. Consumers opt in with the `catalog:` protocol so a
+# framework-line change remains one reviewed workspace decision.
+catalog:
+  react: 19.2.0
+  react-dom: 19.2.0
+  typescript: 5.9.3
+  vite: 6.4.3
+  antd: 6.6.1
+
+# pnpm 11: workspace-level settings live here (the root package.json "pnpm"
 # field is no longer read). Overrides force the exact React 19.2.0 build for
-# every transitive peer (antd 5 / @ant-design/pro-components peer ranges are
-# wide, but we pin one react instance so @ant-design/* and @soymutdb/* share a
-# single React runtime — no React downgrade).
+# every transitive peer, so @ant-design/* and @soymutdb/* share a single React
+# runtime with no React downgrade.
 overrides:
   react: 19.2.0
   react-dom: 19.2.0
+
+allowBuilds:
+  # Vite's platform-specific binary is required at build time. All other
+  # dependency lifecycle scripts remain denied by default.
+  esbuild: true

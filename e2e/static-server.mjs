@@ -1,5 +1,5 @@
 /**
- * Minimal static server for LOCAL Playwright tests (primer-design.spec.ts).
+ * Minimal static server for LOCAL public-artifact Playwright tests.
  *
  * Serves `apps/web/dist` mounted at `/soymutdb-next` (mirrors the gh-pages
  * sub-path the build bakes into dynamic-import chunk paths), with:
@@ -7,6 +7,9 @@
  *     (mirrors GitHub Pages 404.html behaviour);
  *   - a real 404 for /assets/* and API-shaped paths (like GitHub Pages
  *     when the API_BASE_URL secret is unset);
+ *   - a mocked `POST /api/v1/auth/login` endpoint for deterministic
+ *     authentication; it accepts only documented test credentials and returns
+ *     a deliberately non-user-facing message for invalid attempts;
  *   - a mocked `POST /api/v1/tools/seqfetch` returning a fixed FASTA
  *     sequence, so the "from genome" primer mode is testable offline
  *     without a backend. The FASTA contains a GC-balanced 300 bp block
@@ -46,6 +49,11 @@ const MIME = {
 const MOCK_SEQ =
   "ACGTACGTACGTACGTACGT".repeat(15);
 
+const LOGIN_TEST_CREDENTIALS = Object.freeze({
+  email: "researcher@example.org",
+  password: "correct-horse-battery-staple",
+});
+
 const API_PATH_RE =
   /^\/(api|auth|stats|genes|variants|news|site|blast|tools|analyses|gwas|notifications|seed-requests|content|expression|homolog|releases|sra|downloads|mutants|health|admin|widget)\//;
 
@@ -58,6 +66,45 @@ async function readBody(req) {
 const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
   let pathname = decodeURIComponent(url.pathname);
+
+  // Mock login: POST /<prefix>/api/v1/auth/login. This exercises the emitted
+  // browser request rather than a route-level stub. Keep the test principal
+  // local to this static server; it is not a real account or a test fixture
+  // for API integration.
+  if (req.method === "POST" && pathname === `${PREFIX}/api/v1/auth/login`) {
+    let body = null;
+    try {
+      body = JSON.parse(await readBody(req));
+    } catch {
+      /* invalid JSON is an invalid credential attempt for this test server */
+    }
+
+    const valid =
+      body?.email === LOGIN_TEST_CREDENTIALS.email &&
+      body?.password === LOGIN_TEST_CREDENTIALS.password;
+
+    if (valid) {
+      res.writeHead(200, {
+        "Content-Type": "application/json",
+        // Mirrors the shape of the production session handoff without
+        // persisting a real secret in the repository.
+        "Set-Cookie": "soymutdb_e2e_refresh=mock; Path=/; HttpOnly; SameSite=Lax",
+      });
+      res.end(JSON.stringify({ access_token: "e2e-access-token", expires_in: 900 }));
+      return;
+    }
+
+    res.writeHead(401, { "Content-Type": "application/json" });
+    res.end(
+      JSON.stringify({
+        error: {
+          code: "INVALID_CREDENTIALS",
+          message: "Mock authentication detail must not be rendered to users.",
+        },
+      }),
+    );
+    return;
+  }
 
   // Mock seqfetch: POST /<prefix>/api/v1/tools/seqfetch → fixed FASTA.
   if (

@@ -4,7 +4,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { Dna, Network, Activity, ArrowRight } from "lucide-react";
-import { PageHeader, CardHeader, CardContent, Badge } from "@soymutdb/ui";
+import { PageHeader, CardHeader, CardContent, Badge } from "../../lib/web-ui";
 import type { LucideIcon } from "lucide-react";
 
 export const Route = createFileRoute("/tools/")({

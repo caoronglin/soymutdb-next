@@ -11,7 +11,7 @@
  * 演示「AntD 组件 + Tailwind 文本共存」：页面骨架/排版用 Tailwind 类，
  * 交互组件用 AntD，两者通过 index.css 顶部的 @layer 顺序共处。
  *
- * 注意：本文件不 import @soymutdb/ui（eslint no-restricted-imports 门禁）。
+ * 注意：本文件只通过 Web AntD facade 导入组件（eslint 门禁）。
  */
 import { createFileRoute } from "@tanstack/react-router";
 import * as React from "react";
@@ -26,7 +26,7 @@ import {
     Tag,
     Typography,
     type TableColumnsType,
-} from "antd";
+} from "@/lib/antd";
 import { ExperimentOutlined, MoonOutlined, SunOutlined } from "@ant-design/icons";
 import { createAntdTheme } from "../lib/antd-theme";
 

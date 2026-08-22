@@ -26,12 +26,6 @@
             "@/*": [
                 "./src/*"
             ],
-            "@soymutdb/ui": [
-                "../../packages/ui/src/index.ts"
-            ],
-            "@soymutdb/ui/styles.css": [
-                "../../packages/ui/src/styles.css"
-            ],
             "@soymutdb/api-client": [
                 "../../packages/api-client/src/index.ts"
             ],
@@ -40,9 +34,6 @@
             ],
             "@soymutdb/i18n": [
                 "../../packages/i18n/src/index.ts"
-            ],
-            "@soymutdb/motion": [
-                "../../packages/motion/src/index.ts"
             ]
         }
     },

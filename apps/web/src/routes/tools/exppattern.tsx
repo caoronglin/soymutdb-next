@@ -40,7 +40,7 @@ import {
   EmptyState,
   ToastProvider,
   useToast,
-} from "@soymutdb/ui";
+} from "../../lib/web-ui";
 import { useECharts } from "../../lib/use-echarts";
 import { runExpPattern, type ExpPatternResponse } from "./api";
 

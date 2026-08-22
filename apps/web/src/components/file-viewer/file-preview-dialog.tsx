@@ -15,7 +15,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Button, Dropdown, Modal, Skeleton, Tag, Tooltip, type MenuProps } from "antd";
+import { Button, Dropdown, Modal, Skeleton, Tag, Tooltip, type MenuProps } from "@/lib/antd";
 import {
   ChevronLeft,
   ChevronRight,
@@ -254,7 +254,7 @@ export function FilePreviewDialog({
       destroyOnHidden
       className={fullscreen ? "rl-preview-modal-fullscreen" : undefined}
       styles={{
-        content: {
+        container: {
           background: "var(--card)",
           color: "var(--foreground)",
           padding: 0,

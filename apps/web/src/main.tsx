@@ -14,9 +14,6 @@ import * as React from "react";
 import { createRoot } from "react-dom/client";
 import { RouterProvider, createRouter } from "@tanstack/react-router";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { ConfigProvider } from "antd";
-import type { Locale } from "antd/es/locale";
-import i18n from "@soymutdb/i18n";
 
 // Fonts — HarmonyOS Sans SC (local, covers Latin + CJK), JetBrains Mono (code).
 // Fraunces/Inter replaced by HarmonyOS Sans SC (2026-08 redesign).
@@ -29,14 +26,20 @@ import { routeTree } from "./routeTree.gen";
 import { createQueryClient } from "./lib/query-client";
 import { ThemeProvider } from "./lib/theme-provider";
 import { AnimationProvider } from "./lib/animation-context";
-import { ToastProvider } from "@soymutdb/ui";
-import { createAntdTheme, loadAntdLocale } from "./lib/antd-theme";
+import { ToastProvider } from "./lib/web-ui";
+import { DesignSystemProvider } from "./lib/design-system-provider";
 import { initI18nOnce } from "./lib/i18n";
 import { initWidgetLoader } from "./lib/widget-loader";
 import { registry, SERVICES } from "./lib/di";
 import { bus } from "./lib/event-bus";
 import { clearLegacyTokens, restoreSession, onAuthLogout } from "@soymutdb/api-client";
 import { resolveAppUrl } from "./lib/deployment";
+import { prepareSsgHandoff } from "../scripts/ssg-runtime";
+import {
+    parseMotionPreference,
+    resolveMotionDecision,
+    type MotionPreference,
+} from "./lib/motion-policy";
 
 // One-time migration: drop legacy persisted access/refresh tokens from
 // localStorage/sessionStorage (sessions now live in memory + HttpOnly cookie).
@@ -96,10 +99,22 @@ function vtSupported(): boolean {
 }
 function skipVT(): boolean {
     if (typeof window === "undefined") return true;
-    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return true;
     const conn = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
-    if (conn?.saveData) return true;
-    return false;
+    const memory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 4;
+    let preference: MotionPreference = "auto";
+    try {
+        preference = parseMotionPreference(localStorage.getItem("soymutdb-animation-prefs"));
+    } catch {
+        // Storage can be unavailable in privacy modes; auto remains safe.
+    }
+    return resolveMotionDecision(preference, {
+        reduced: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true,
+        saveData: conn?.saveData === true,
+        lowResource:
+            (navigator.hardwareConcurrency ?? 4) <= 4 ||
+            memory <= 2 ||
+            /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent),
+    }).effective !== "standard";
 }
 if (vtSupported()) {
     const originalLoad = router.load.bind(router);
@@ -122,55 +137,37 @@ declare module "@tanstack/react-router" {
 
 const rootEl = document.getElementById("root");
 if (!rootEl) throw new Error("#root element not found");
+const completeSsgHandoff = prepareSsgHandoff(rootEl, document);
 
-// ---------------------------------------------------------------------------
-// AntD ConfigProvider wrapper — children form, does not touch the router tree.
-// theme: createAntdTheme()（OKLCH 覆盖 + reduced-motion，见 lib/antd-theme.ts）
-// locale: i18next `languageChanged` 事件驱动（oracle 遗漏 #1），按需 import
-// dayjs/antd locale 包（约 8KB）。路由级懒加载占位见 loadAntdLocale 注释。
-// ---------------------------------------------------------------------------
-function AntdProvider({ children }: { children: React.ReactNode }) {
-    const [locale, setLocale] = React.useState<Locale | null>(null);
-
-    React.useEffect(() => {
-        let disposed = false;
-        const apply = (lng?: string) => {
-            void loadAntdLocale(lng ?? i18n.language).then((l) => {
-                if (!disposed) setLocale(l);
-            });
-        };
-        apply();
-        const onChange = (lng: string) => apply(lng);
-        i18n.on("languageChanged", onChange);
-        return () => {
-            disposed = true;
-            i18n.off("languageChanged", onChange);
-        };
+/**
+ * Build-time SSG markup is not the output of this React tree. Keep that static
+ * fallback visible until this independent tree commits, then swap ownership in
+ * a layout effect before paint. This is replacement, deliberately not hydration.
+ */
+function SsgHandoff({ children }: { children: React.ReactNode }) {
+    React.useLayoutEffect(() => {
+        completeSsgHandoff();
     }, []);
 
-    const theme = React.useMemo(() => createAntdTheme(), []);
-
-    return (
-        <ConfigProvider locale={locale ?? undefined} theme={theme}>
-            {children}
-        </ConfigProvider>
-    );
+    return children;
 }
 
 createRoot(rootEl).render(
     <React.StrictMode>
-        <AntdProvider>
+        <SsgHandoff>
             <QueryClientProvider client={queryClient}>
                 <ThemeProvider>
                     <AnimationProvider>
-                        <ToastProvider>
-                            <RouterProvider router={router} />
-                            {null /* devtools hidden */}
-                        </ToastProvider>
+                        <DesignSystemProvider>
+                            <ToastProvider>
+                                <RouterProvider router={router} />
+                                {null /* devtools hidden */}
+                            </ToastProvider>
+                        </DesignSystemProvider>
                     </AnimationProvider>
                 </ThemeProvider>
             </QueryClientProvider>
-        </AntdProvider>
+        </SsgHandoff>
     </React.StrictMode>,
 );
 

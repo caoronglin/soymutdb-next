@@ -1,5 +1,7 @@
 /** Shared types for motion primitives. */
 
+import type React from "react";
+
 export type RevealVariant =
     | "fade-up"
     | "fade-in"
@@ -9,19 +11,13 @@ export type RevealVariant =
     | "slide-in-left"
     | "blur-up";
 
-/** Hidden (pre-reveal) GSAP vars per variant. */
-export const FROM_VARS: Record<RevealVariant, {
-    opacity?: number;
-    y?: number;
-    x?: number;
-    scale?: number;
-    filter?: string;
-}> = {
-    "fade-up": { opacity: 0, y: 24 },
+/** Compositor-only initial styles for viewport reveals. */
+export const FROM_STYLES: Record<RevealVariant, React.CSSProperties> = {
+    "fade-up": { opacity: 0, transform: "translateY(16px)" },
     "fade-in": { opacity: 0 },
-    "fade-down": { opacity: 0, y: -16 },
-    "scale-in": { opacity: 0, scale: 0.94 },
-    "slide-in-right": { opacity: 0, x: 32 },
-    "slide-in-left": { opacity: 0, x: -32 },
-    "blur-up": { opacity: 0, y: 20, scale: 0.98, filter: "blur(12px)" },
+    "fade-down": { opacity: 0, transform: "translateY(-12px)" },
+    "scale-in": { opacity: 0, transform: "scale(0.98)" },
+    "slide-in-right": { opacity: 0, transform: "translateX(16px)" },
+    "slide-in-left": { opacity: 0, transform: "translateX(-16px)" },
+    "blur-up": { opacity: 0, transform: "translateY(12px)" },
 };

@@ -6,7 +6,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import * as React from "react";
-import { Button, Card, Form, Select, Tag, Typography } from "antd";
+import { Button, Card, Form, Select, Tag, Typography } from "@/lib/antd";
 import { GlobalOutlined } from "@ant-design/icons";
 import { getAssemblies } from "@soymutdb/api-client";
 import { FadeUp } from "../../components/route-motion";

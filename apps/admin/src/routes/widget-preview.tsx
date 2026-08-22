@@ -24,7 +24,7 @@ import {
   Textarea,
   Label,
   Badge,
-} from "@soymutdb/ui";
+} from "../lib/admin-ui";
 import { widgetApi, type WidgetPreviewResponse } from "../lib/widget-api";
 
 function isValidJson(s: string): boolean {

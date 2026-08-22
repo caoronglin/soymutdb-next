@@ -2,28 +2,34 @@
  * Animation control center — global intensity, device-adaptive defaults,
  * localStorage persistence, and reduced-motion compliance.
  *
- * Wraps @soymutdb/motion's MotionProvider with SoyMutDB-specific policy
- * (intensity levels, localStorage key, device detection). The motion
- * package's primitives read timing config from MotionProvider.
+ * Owns the portal policy for intensity, persistence and device detection.
  */
 import * as React from "react";
+import {
+    parseMotionPreference,
+    resolveMotionDecision,
+    type EffectiveMotionMode,
+    type MotionPreference,
+    type MotionSessionCeiling,
+    type MotionSignals,
+} from "./motion-policy";
 
-export type AnimationIntensity = "off" | "minimal" | "normal" | "expressive";
-
+export type AnimationIntensity = MotionPreference;
 export interface AnimationPrefs {
     intensity: AnimationIntensity;
-    /** Whether the user has explicitly chosen (overrides device auto-downgrade). */
-    explicit: boolean;
 }
 
 export interface AnimationContextValue {
-    intensity: AnimationIntensity;
+    /** Saved user choice. */
+    preference: MotionPreference;
+    /** Resolved mode after accessibility and session resource limits. */
+    intensity: EffectiveMotionMode;
+    decisionReason: ReturnType<typeof resolveMotionDecision>["reason"];
     /** Effective duration in ms for the current intensity. */
     duration: number;
     durationFast: number;
     durationSlow: number;
     easing: string;
-    easingSpring: string;
     stagger: number;
     /** True when motion should be avoided (off or reduced-motion). */
     reduced: boolean;
@@ -35,49 +41,32 @@ export interface AnimationContextValue {
 const STORAGE_KEY = "soymutdb-animation-prefs";
 
 const DEFAULT_PREFS: AnimationPrefs = {
-    intensity: "normal",
-    explicit: false,
+    intensity: "auto",
 };
 
 const INTENSITY_TOKENS: Record<
-    Exclude<AnimationIntensity, "off">,
-    { duration: number; durationFast: number; durationSlow: number; easing: string; easingSpring: string; stagger: number }
+    Exclude<EffectiveMotionMode, "off">,
+    { duration: number; durationFast: number; durationSlow: number; easing: string; stagger: number }
 > = {
     minimal: {
         duration: 100,
         durationFast: 80,
         durationSlow: 150,
         easing: "ease-out",
-        easingSpring: "ease-out",
         stagger: 20,
     },
-    normal: {
+    standard: {
         duration: 300,
         durationFast: 200,
         durationSlow: 500,
         easing: "cubic-bezier(0.16, 1, 0.3, 1)",
-        easingSpring: "cubic-bezier(0.34, 1.56, 0.64, 1)",
         stagger: 60,
     },
-    expressive: {
-        duration: 500,
-        durationFast: 300,
-        durationSlow: 700,
-        easing: "cubic-bezier(0.16, 1, 0.3, 1)",
-        easingSpring: "cubic-bezier(0.34, 1.56, 0.64, 1)",
-        stagger: 90,
-    },
 };
-
 function readPrefs(): AnimationPrefs {
     if (typeof localStorage === "undefined") return DEFAULT_PREFS;
     try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (!raw) return DEFAULT_PREFS;
-        const parsed = JSON.parse(raw) as Partial<AnimationPrefs>;
-        if (parsed.intensity && ["off", "minimal", "normal", "expressive"].includes(parsed.intensity)) {
-            return { intensity: parsed.intensity, explicit: parsed.explicit ?? true };
-        }
+        return { intensity: parseMotionPreference(localStorage.getItem(STORAGE_KEY)) };
     } catch {
         /* ignore malformed storage */
     }
@@ -93,21 +82,20 @@ function writePrefs(prefs: AnimationPrefs): void {
     }
 }
 
-/** Detect low-power devices and suggest a downgrade. */
-function detectDeviceTier(): "low" | "mid" | "high" {
-    if (typeof navigator === "undefined") return "mid";
+function readMotionSignals(reducedQuery?: MediaQueryList): MotionSignals {
+    if (typeof navigator === "undefined") return {};
     const cores = navigator.hardwareConcurrency ?? 4;
-    // deviceMemory is non-standard but widely available on Chromium.
     const memory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 4;
     const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
-    if (cores <= 4 || memory <= 2 || isMobile) return "low";
-    if (cores <= 8 || memory <= 4) return "mid";
-    return "high";
-}
-
-function prefersReducedMotion(): boolean {
-    if (typeof window === "undefined" || !window.matchMedia) return false;
-    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const connection = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
+    return {
+        reduced:
+            reducedQuery?.matches ??
+            (typeof window !== "undefined" &&
+                window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true),
+        saveData: connection?.saveData === true,
+        lowResource: cores <= 4 || memory <= 2 || isMobile,
+    };
 }
 
 function applyToDocument(intensity: AnimationIntensity): void {
@@ -123,48 +111,69 @@ export interface AnimationProviderProps {
 }
 
 export function AnimationProvider({ children }: AnimationProviderProps) {
-    const [prefs, setPrefs] = React.useState<AnimationPrefs>(() => {
-        const stored = readPrefs();
-        // If the user hasn't explicitly chosen, downgrade on low-power devices.
-        if (!stored.explicit) {
-            const tier = detectDeviceTier();
-            if (tier === "low") return { intensity: "minimal", explicit: false };
-        }
-        return stored;
+    const [prefs, setPrefs] = React.useState<AnimationPrefs>(readPrefs);
+    const [environment, setEnvironment] = React.useState<{
+        signals: MotionSignals;
+        ceiling: MotionSessionCeiling;
+    }>(() => {
+        const signals = readMotionSignals();
+        return {
+            signals,
+            ceiling: signals.saveData || signals.lowResource ? "minimal" : "standard",
+        };
     });
 
-    const osReducedMotion = React.useMemo(() => prefersReducedMotion(), []);
-
-    // Effective intensity: OS reduced-motion always wins.
-    const effective: AnimationIntensity = osReducedMotion ? "off" : prefs.intensity;
+    const decision = resolveMotionDecision(
+        prefs.intensity,
+        environment.signals,
+        environment.ceiling,
+    );
+    const effective = decision.effective;
 
     React.useEffect(() => {
         applyToDocument(effective);
     }, [effective]);
 
-    // React to OS-level reduced-motion changes.
+    // One subscription owns all environment changes. The ceiling can only
+    // move down during a session, even if Save-Data is later switched off.
     React.useEffect(() => {
         if (typeof window === "undefined" || !window.matchMedia) return;
         const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-        const handler = () => applyToDocument(mq.matches ? "off" : prefs.intensity);
+        const connection = (navigator as Navigator & {
+            connection?: EventTarget & { saveData?: boolean };
+        }).connection;
+        const handler = () => {
+            const signals = readMotionSignals(mq);
+            setEnvironment((previous) => ({
+                signals,
+                ceiling:
+                    previous.ceiling === "minimal" || signals.saveData || signals.lowResource
+                        ? "minimal"
+                        : "standard",
+            }));
+        };
         mq.addEventListener?.("change", handler);
-        return () => mq.removeEventListener?.("change", handler);
-    }, [prefs.intensity]);
-
+        connection?.addEventListener?.("change", handler);
+        return () => {
+            mq.removeEventListener?.("change", handler);
+            connection?.removeEventListener?.("change", handler);
+        };
+    }, []);
     const setIntensity = React.useCallback((next: AnimationIntensity) => {
-        setPrefs({ intensity: next, explicit: true });
-        writePrefs({ intensity: next, explicit: true });
+        const updated = { intensity: next };
+        setPrefs(updated);
+        writePrefs(updated);
     }, []);
 
     const recompute = React.useCallback(() => {
-        setPrefs((prev) => {
-            if (prev.explicit) return prev;
-            const tier = detectDeviceTier();
-            const next: AnimationIntensity = tier === "low" ? "minimal" : "normal";
-            const updated = { intensity: next, explicit: false };
-            writePrefs(updated);
-            return updated;
-        });
+        const signals = readMotionSignals();
+        setEnvironment((previous) => ({
+            signals,
+            ceiling:
+                previous.ceiling === "minimal" || signals.saveData || signals.lowResource
+                    ? "minimal"
+                    : "standard",
+        }));
     }, []);
 
     const tokens =
@@ -174,18 +183,19 @@ export function AnimationProvider({ children }: AnimationProviderProps) {
 
     const value: AnimationContextValue = React.useMemo(
         () => ({
+            preference: prefs.intensity,
             intensity: effective,
+            decisionReason: decision.reason,
             duration: tokens.duration,
             durationFast: tokens.durationFast,
             durationSlow: tokens.durationSlow,
             easing: tokens.easing,
-            easingSpring: tokens.easingSpring,
             stagger: tokens.stagger,
-            reduced: effective === "off" || osReducedMotion,
+            reduced: effective === "off",
             setIntensity,
             recompute,
         }),
-        [effective, tokens, osReducedMotion, setIntensity, recompute],
+        [prefs.intensity, effective, decision.reason, tokens, setIntensity, recompute],
     );
 
     return (

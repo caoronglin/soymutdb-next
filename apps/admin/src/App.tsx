@@ -6,10 +6,15 @@ import {
   RouterProvider,
   Outlet,
 } from "@tanstack/react-router";
-import { Skeleton } from "@soymutdb/ui";
+import { Skeleton } from "./lib/admin-ui";
 import AdminLayout from "./routes/__root";
 import LoginPage from "./routes/login";
 import { useAuth } from "./lib/auth-context";
+import {
+  parseMotionPreference,
+  resolveMotionDecision,
+  type MotionPreference,
+} from "./lib/motion-policy";
 
 // Lazy-loaded route components (code-splitting per route).
 const DashboardPage = lazy(() => import("./routes/index"));
@@ -238,9 +243,22 @@ const router = createRouter({
 // View Transitions API is the only route-change animation mechanism (admin).
 if (typeof document !== "undefined" && typeof document.startViewTransition === "function") {
   const origLoad = router.load.bind(router);
-  const skip =
-    (typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) ||
-    (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData;
+  const connection = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
+  const memory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 4;
+  let preference: MotionPreference = "auto";
+  try {
+    preference = parseMotionPreference(localStorage.getItem("soymutdb-animation-prefs"));
+  } catch {
+    // Storage can be unavailable in privacy modes; auto remains safe.
+  }
+  const skip = resolveMotionDecision(preference, {
+    reduced: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true,
+    saveData: connection?.saveData === true,
+    lowResource:
+      (navigator.hardwareConcurrency ?? 4) <= 4 ||
+      memory <= 2 ||
+      /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent),
+  }).effective !== "standard";
   if (!skip) {
     router.load = (async (opts: Parameters<typeof origLoad>[0]) => {
       const vt = document.startViewTransition!(() => origLoad(opts));

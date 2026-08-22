@@ -17,7 +17,7 @@
  *   - Data fetching is scheduled with requestIdleCallback and debounced per view
  */
 import * as React from "react";
-import { cn } from "@soymutdb/ui";
+import { cn } from "../lib/web-ui";
 import { useAnimation } from "../lib/animation-context";
 import { formatPosition, formatMb, CHROMOSOME_LENGTHS_BP } from "../lib/format";
 import { getMotionPrefs } from "../lib/motion-prefs";

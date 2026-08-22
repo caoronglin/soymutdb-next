@@ -29,7 +29,7 @@ import {
   Tag,
   Typography,
   message,
-} from "antd";
+} from "@/lib/antd";
 import {
   CopyOutlined,
   ExperimentOutlined,

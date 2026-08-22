@@ -14,7 +14,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { Empty, Result, Skeleton, Typography } from "antd";
+import { Empty, Result, Skeleton, Typography } from "@/lib/antd";
 import { ReloadOutlined } from "@ant-design/icons";
 import DOMPurify from "dompurify";
 import { ApiError, getSiteAbout } from "@soymutdb/api-client";

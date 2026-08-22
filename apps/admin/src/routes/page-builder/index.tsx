@@ -21,18 +21,21 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@soymutdb/ui";
-import type { PageComponentNode } from "@soymutdb/shared";
+} from "../../lib/admin-ui";
+import {
+  normalizePageDefinition,
+  type PageDefinitionV2,
+} from "@soymutdb/shared";
 import { pageBuilderApi } from "../../lib/page-builder-api";
 
-function defaultDefinition(): { root: PageComponentNode } {
-  return {
+function defaultDefinition(): PageDefinitionV2 {
+  return normalizePageDefinition({
     root: {
       type: "columns",
       props: { columns: 1 },
       children: [{ type: "rich_text", props: { content: "<p>New page</p>" } }],
     },
-  };
+  })!;
 }
 
 export default function PageBuilderIndexPage() {
