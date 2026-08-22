@@ -14,7 +14,7 @@
 | 面 | 方案 | 状态 |
 | --- | --- | --- |
 | 后端 + 数据面 | docker compose（api / worker×3 / beat / postgres / clickhouse / redis×2 / minio / mcp-server / nginx / prometheus / grafana / exporters） | ✅ 主路径，systemd 编排 compose 项目 |
-| 后端 + 数据面（备选） | **conda 裸进程**（api / worker×3 / beat）+ 数据层可仍由 docker compose 提供（推荐组合：docker 起数据层，conda 跑应用层） | ✅ 备选（D6 重新启用），见 `deploy/conda/README.md`，一键脚本 `deploy/scripts/conda-deploy.sh` |
+| 后端 + 数据面（备选） | **conda 裸进程**（api / worker×4 / beat）+ 数据层可仍由 docker compose 提供（推荐组合：docker 起数据层，conda 跑应用层） | ✅ 备选（D6 重新启用），见 `deploy/conda/README.md`，一键脚本 `deploy/scripts/conda-deploy.sh` |
 | 前端静态托管（demo） | **GitHub Pages（gh-pages 分支）**，`CI 在 main 上成功（workflow_run）→ pages.yml 构建发布` | ✅ 已上线 https://caoronglin.github.io/soymutdb-next/ |
 | 前端静态托管（可选生产） | Cloudflare Pages（web / JBrowse；管理端需独立受保护 origin） | ✅ 受支持，见 `deploy/cloudflare.md` |
 | API 边缘入口（可选生产） | Cloudflare Tunnel → `cloudflared` → `tunnel-origin` | ✅ `cloudflare-tunnel` profile；仅公开 API/基因组数据 |
@@ -51,11 +51,12 @@ flowchart LR
         end
 
         subgraph APP["应用层"]
-            API["api (FastAPI)<br/>容器 8000 / 宿主 8000"]
+            API["api (FastAPI)<br/>容器 8000（仅 compose 网络）"]
             MCP["mcp-server (FastMCP)<br/>容器 9000（仅内网）"]
             W1["worker-default<br/>queues: ingest,export,stats,cleanup,default"]
             W2["worker-blast<br/>queue: blast"]
             W3["worker-ingest<br/>queues: ingest,export,stats,cleanup,default"]
+            W4["worker-analyses<br/>queue: analyses"]
             BEAT["beat（定时任务）"]
         end
 
@@ -94,6 +95,7 @@ flowchart LR
     RCB -->|"broker 分发任务"| W1
     RCB -->|"broker 分发任务"| W2
     RCB -->|"broker 分发任务"| W3
+    RCB -->|"broker 分发任务"| W4
     BEAT --> RCB
 
     W1 -->|"业务库（psycopg 同步）"| PG
@@ -104,6 +106,9 @@ flowchart LR
     W3 -->|"ingest 数据"| PG
     W3 -->|"ingest 数据"| CH
     W3 -->|"ingest 对象"| MINIO
+    W4 -->|"分析任务"| PG
+    W4 -->|"分析数据"| CH
+    W4 -->|"分析对象"| MINIO
 
     EXP --> PROM
     PROM --> GRAF
@@ -121,17 +126,17 @@ worker* ──► postgres + clickhouse + redis-celery + minio(healthy) + migrat
 beat    ──► redis-celery(healthy) + migrate(completed)
 mcp-server ──► api(healthy)
 nginx   ──► api(healthy)
-minio-init ──► minio(healthy)（一次性建 4 个 bucket + genomic-data 公开策略）
+minio-init ──► minio(healthy)（一次性建 6 个 bucket + genomic-data 公开策略）
 ```
 
-**队列契约（六队列，compose 已固化）：**
+**队列契约（七队列，compose 已固化）：**
 
 | Worker | 队列 | 并发 | max-tasks-per-child |
 | --- | --- | --- | --- |
 | worker-default | ingest, export, stats, cleanup, default | 4（可调） | 100 |
 | worker-ingest | ingest, export, stats, cleanup, default | 2（可调） | 20 |
 | worker-blast | blast（独占，CPU 密集隔离） | 2（可调） | 50 |
-| （预留）analyses | 未接入任何 worker 服务，生产无流量 | — | — |
+| worker-analyses | analyses（独占，分析任务隔离） | 2（可调） | 20 |
 
 ---
 
@@ -143,7 +148,7 @@ minio-init ──► minio(healthy)（一次性建 4 个 bucket + genomic-data �
 | --- | --- | --- | --- | --- |
 | 门户网站（前端） | https://caoronglin.github.io/soymutdb-next/ | 公开 | GitHub Pages（gh-pages 分支） | API 调用走 `VITE_API_BASE_URL`（构建期注入） |
 | API（经 nginx） | `http://<HOST>:8080/api/v1/*` | JWT（Bearer） | compose：nginx → api | 生产前端 CORS 白名单需含 gh-pages origin |
-| API（直连，内网/排障） | `http://<HOST>:8000/api/v1/*` | JWT | compose：api | 健康检查 `GET /api/v1/health/live`、`/ready` |
+| API（容器内直连，排障） | `docker compose exec api curl http://localhost:8000/api/v1/health/ready` | JWT | compose：api | api 仅 expose 8000；宿主与公网入口均经 nginx:8080 |
 | MCP Server | `http://<HOST>:8080/mcp/*`（SSE） | Bearer `SOYMUTDB_MCP_API_TOKEN` | compose：nginx → mcp-server | 60/min 限流占位（G3 门禁未接）；**nginx 必须 `proxy_buffering off`** |
 | 基因组数据文件 | `http://<HOST>:8080/data/*` | 公开（genomic-data bucket） | compose：nginx → minio | 支持 Range（BAM/CRAM/tabix） |
 | MinIO S3 API | `http://<HOST>:9001` | `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` | compose | 宿主 9001 → 容器 9000 |
@@ -153,7 +158,7 @@ minio-init ──► minio(healthy)（一次性建 4 个 bucket + genomic-data �
 | PostgreSQL | `localhost:5432`（宿主） | `POSTGRES_PASSWORD` | compose | 勿暴露公网 |
 | ClickHouse | `localhost:8123`（HTTP）/ `9000`（native） | `CLICKHOUSE_PASSWORD` | compose | 宿主 9000 被 CH 占用，故 mcp-server 不发布端口 |
 | Redis 缓存 | `localhost:6379` | `REDIS_PASSWORD` | compose | allkeys-lru；勿暴露公网 |
-| redis-celery | 仅容器网络 | `REDIS_PASSWORD` | compose | noeviction；无宿主端口 |
+| redis-celery | `localhost:6380`（仅宿主回环） | `REDIS_PASSWORD` | compose | noeviction；供 conda 混合部署连接 |
 | 管理端（web 模式） | `http://<HOST>:8080/admin/*` | 内网 IP ACL（RFC1918）+ JWT | compose nginx（上游已移除） | **当前返回 502/504 属预期**；前端迁移到 gh-pages 后此入口不再承担静态托管 |
 | JBrowse | `http://<HOST>:8080/browser/*` | 公开 | 同上 | 同上（容器已移除） |
 | 站点静态资源 `/` `/samples/` | `http://<HOST>:8080/` | — | 同上 | 同上，当前 502/504 |
@@ -216,6 +221,7 @@ minio-init ──► minio(healthy)（一次性建 4 个 bucket + genomic-data �
 | `WORKER_DEFAULT_CONCURRENCY` | 4 | worker-default |
 | `WORKER_INGESTION_CONCURRENCY` | 2 | worker-ingest |
 | `WORKER_BLAST_CONCURRENCY` | 2 | worker-blast |
+| `WORKER_ANALYSES_CONCURRENCY` | 2 | worker-analyses |
 
 #### G. 监控（可选）
 
@@ -228,7 +234,7 @@ minio-init ──► minio(healthy)（一次性建 4 个 bucket + genomic-data �
 | 变量 | 默认 | 说明 |
 | --- | --- | --- |
 | `READY_RETRIES` | 60 | readiness 轮询次数（×5s = 300s 上限） |
-| `API_HOST` / `API_PORT` | localhost / 8000 | readiness 与 healthcheck 目标 |
+| `API_HOST` / `API_PORT` | localhost / 8080 | readiness 与 healthcheck 目标（经 nginx） |
 | `SOYMUTDB_INSTALL_DIR` | `/opt/soymutdb` | compose 项目定位（install.sh 布局） |
 | `NGINX_HOST` / `NGINX_PORT` | localhost / 8080 | healthcheck 的 nginx 探针 |
 
@@ -236,7 +242,7 @@ minio-init ──► minio(healthy)（一次性建 4 个 bucket + genomic-data �
 
 > 由 compose 写死（`${VAR:-default}` 形式可覆盖，但改错会导致服务间连不上）：
 
-`SOYMUTDB_APP_ENV=prod`、`SOYMUTDB_CLICKHOUSE_HOST/PORT/USER/PASSWORD/DATABASE`、`SOYMUTDB_REDIS_URL`（缓存实例）、`SOYMUTDB_CELERY_BROKER_URL` / `SOYMUTDB_CELERY_RESULT_BACKEND`（redis-celery 实例，DB 0/1）、`SOYMUTDB_S3_ENDPOINT=http://minio:9000`、`SOYMUTDB_S3_ACCESS_KEY/SECRET_KEY`、`SOYMUTDB_S3_PUBLIC/PRIVATE/BLAST/EXPORT_BUCKET`、`SOYMUTDB_DATABASE_URL`（api 用 asyncpg、worker 用 psycopg，host 均 `postgres`）。
+`SOYMUTDB_APP_ENV=prod`、`SOYMUTDB_CLICKHOUSE_HOST/PORT/USER/PASSWORD/DATABASE`、`SOYMUTDB_REDIS_URL`（缓存实例）、`SOYMUTDB_CELERY_BROKER_URL` / `SOYMUTDB_CELERY_RESULT_BACKEND`（redis-celery 实例，DB 0/1）、`SOYMUTDB_S3_ENDPOINT=http://minio:9000`、`SOYMUTDB_S3_ACCESS_KEY/SECRET_KEY`、六个 `SOYMUTDB_S3_*_BUCKET`、`SOYMUTDB_DATABASE_URL`（api 用 asyncpg、worker 用 psycopg，host 均 `postgres`）。
 
 ### 4.3 MCP Server（`mcp-server` 服务）
 

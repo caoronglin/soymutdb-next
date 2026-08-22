@@ -136,7 +136,8 @@ services:
     restart: unless-stopped
 
   # Celery broker/result Redis：noeviction（禁止任何驱逐——消息/结果不可丢），
-  # 开 AOF 持久化；broker 用 DB 0、result 用 DB 1。仅暴露给容器网络。
+  # 开 AOF 持久化；broker 用 DB 0、result 用 DB 1。仅发布 localhost:6380
+  # 供 conda 混合部署使用。
   redis-celery:
     profiles: [ "core" ]
     image: redis:7.4-alpine
@@ -144,6 +145,9 @@ services:
       redis-server --appendonly yes --maxmemory ${REDIS_CELERY_MAXMEMORY:-512mb} --maxmemory-policy noeviction --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
     volumes:
       - redis-celerydata:/data
+    # Conda hybrid deployments use this localhost-only broker endpoint.
+    ports:
+      - "127.0.0.1:6380:6379"
     healthcheck:
       test: [ "CMD", "redis-cli", "-a", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}", "ping" ]
       interval: 10s
@@ -240,6 +244,10 @@ services:
     environment:
       <<: *app-env
       SOYMUTDB_DATABASE_URL: postgresql+asyncpg://soymutdb:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/soymutdb
+      # Deployment-only plugin signing material is intentionally API-scoped;
+      # workers, beat, and migrations must not receive this secret.
+      SOYMUTDB_PLUGIN_MANIFEST_SIGNING_KEY: ${SOYMUTDB_PLUGIN_MANIFEST_SIGNING_KEY:-}
+      SOYMUTDB_PLUGIN_MANIFESTS_JSON: ${SOYMUTDB_PLUGIN_MANIFESTS_JSON:-[]}
     expose:
       - "8000"
     networks:

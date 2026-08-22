@@ -53,10 +53,39 @@ READY_URL="http://${API_HOST}:${API_PORT}/api/v1/health/ready"
 READY_RETRIES="${READY_RETRIES:-60}"   # 60 x 5s = 300s
 READY_INTERVAL=5
 STATE_FILE="${COMPOSE_DIR}/.release-state.json"
+APP_SERVICES=(api worker-default worker-analyses worker-blast worker-ingest beat mcp-server jbrowse nginx)
+PRE_UPGRADE_RUNNING_APP_SERVICES=()
+APPLICATION_SERVICES_QUIESCED=0
 
 fail() {
     echo -e "${RED}[ERROR] $*${NC}" >&2
     exit 1
+}
+
+capture_pre_upgrade_app_services() {
+    local running_services service
+    running_services="$("${COMPOSE[@]}" ps --status running --services)" \
+        || fail "could not list running application services before upgrade"
+    PRE_UPGRADE_RUNNING_APP_SERVICES=()
+    for service in "${APP_SERVICES[@]}"; do
+        if grep -Fxq -- "${service}" <<< "${running_services}"; then
+            PRE_UPGRADE_RUNNING_APP_SERVICES+=("${service}")
+        fi
+    done
+}
+
+stop_application_services() {
+    [[ "${APPLICATION_SERVICES_QUIESCED}" == "1" ]] && return 0
+    capture_pre_upgrade_app_services
+    "${COMPOSE[@]}" stop "${APP_SERVICES[@]}" || return 1
+    APPLICATION_SERVICES_QUIESCED=1
+}
+
+restart_pre_upgrade_services() {
+    [[ "${APPLICATION_SERVICES_QUIESCED}" == "1" ]] || return 0
+    [[ ${#PRE_UPGRADE_RUNNING_APP_SERVICES[@]} -gt 0 ]] || return 0
+    "${COMPOSE[@]}" up -d "${PRE_UPGRADE_RUNNING_APP_SERVICES[@]}" || return 1
+    APPLICATION_SERVICES_QUIESCED=0
 }
 
 if [[ -f "${COMPOSE_DIR}/.env" ]]; then
@@ -139,7 +168,13 @@ echo -e "${GREEN}  Images pulled.${NC}"
 # ---------------------------------------------------------------------
 echo -e "${CYAN}[5/10] Creating pre-upgrade backup...${NC}"
 if "${COMPOSE[@]}" ps --status running --services | grep -qx postgres; then
-    bash "${SCRIPT_DIR}/backup.sh" || fail "backup failed - aborting upgrade (see deploy/scripts/backup.sh)"
+    stop_application_services || fail "failed to stop application services before backup"
+    if ! BACKUP_WRITES_QUIESCED=1 bash "${SCRIPT_DIR}/backup.sh"; then
+        echo -e "${RED}[ERROR] backup failed; restoring services that were running before the upgrade${NC}" >&2
+        restart_pre_upgrade_services \
+            || echo -e "${RED}[ERROR] could not restore pre-upgrade application services${NC}" >&2
+        fail "backup failed - aborting upgrade (see deploy/scripts/backup.sh)"
+    fi
     echo -e "${GREEN}  Backup complete.${NC}"
 else
     echo -e "${YELLOW}  No running postgres container - first deploy, skipping backup.${NC}"
@@ -149,8 +184,7 @@ fi
 # Step 6: 停止应用并运行一次性迁移（alembic upgrade head）
 # ---------------------------------------------------------------------
 echo -e "${CYAN}[6/10] Stopping application services and running migrations...${NC}"
-APP_SERVICES=(api worker-default worker-analyses worker-blast worker-ingest beat mcp-server jbrowse nginx)
-"${COMPOSE[@]}" stop "${APP_SERVICES[@]}" || fail "failed to stop application services"
+stop_application_services || fail "failed to stop application services"
 "${COMPOSE[@]}" up -d postgres
 for _ in $(seq 1 30); do
     if "${COMPOSE[@]}" ps --status running postgres --format '{{.Health}}' 2>/dev/null | grep -q healthy; then
@@ -208,6 +242,7 @@ rollback() {
 # ---------------------------------------------------------------------
 echo -e "${CYAN}[7/10] Starting services...${NC}"
 "${COMPOSE[@]}" up -d
+APPLICATION_SERVICES_QUIESCED=0
 
 echo -e "${CYAN}[8/10] Waiting for readiness: ${READY_URL} (${READY_RETRIES} x ${READY_INTERVAL}s)...${NC}"
 ready=false

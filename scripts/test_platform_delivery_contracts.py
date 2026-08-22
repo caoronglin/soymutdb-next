@@ -8,6 +8,16 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 NODE_VERSION = "24.19.0"
 PROFILES = {"core", "jbrowse", "blast", "analyses", "mcp", "cloudflare-tunnel"}
+UPGRADE = ROOT / "deploy/scripts/upgrade.sh"
+BACKUP = ROOT / "deploy/scripts/backup.sh"
+HEALTHCHECK = ROOT / "deploy/scripts/healthcheck.sh"
+INSTALL = ROOT / "deploy/linux/install.sh"
+CONDA_ENV = ROOT / "deploy/conda/env.example"
+CONDA_README = ROOT / "deploy/conda/README.md"
+CONDA_DEPLOY = ROOT / "deploy/scripts/conda-deploy.sh"
+CONDA_SERVICES = ROOT / "deploy/scripts/conda-services.sh"
+CONDA_NO_DOCKER = ROOT / "deploy/conda/no-docker-data-layer.md"
+DEPLOYMENT_ARCHITECTURE = ROOT / "docs/design/deployment-architecture.md"
 PLATFORM_CATALOG = {
     "react": "19.2.0",
     "react-dom": "19.2.0",
@@ -168,7 +178,7 @@ def test_release_services_use_digest_refs_without_compose_build_fallbacks() -> N
 
 
 def test_upgrade_path_rejects_tags_and_records_digest_refs() -> None:
-    script = (ROOT / "deploy/scripts/upgrade.sh").read_text(encoding="utf-8")
+    script = UPGRADE.read_text(encoding="utf-8")
 
     for variable_name in (
         "API_IMAGE_REF",
@@ -185,6 +195,97 @@ def test_upgrade_path_rejects_tags_and_records_digest_refs() -> None:
     assert "API_IMAGE_TAG" not in script
     assert "WORKER_IMAGE_TAG" not in script
     assert "MCP_IMAGE_TAG" not in script
+
+
+def test_upgrade_quiesces_application_before_authoritative_backup() -> None:
+    script = UPGRADE.read_text(encoding="utf-8")
+    backup_command = 'BACKUP_WRITES_QUIESCED=1 bash "${SCRIPT_DIR}/backup.sh"'
+    stop_command = '"${COMPOSE[@]}" stop "${APP_SERVICES[@]}"'
+
+    assert backup_command in script
+    assert stop_command in script
+    assert script.index("APP_SERVICES=") < script.index(backup_command)
+    assert script.index(stop_command) < script.index(backup_command)
+
+    backup_section = script[
+        script.index(backup_command) : script.index("# Step 6", script.index(backup_command))
+    ]
+    assert "restart_pre_upgrade_services" in backup_section
+
+
+def test_backup_uses_minio_root_credentials_when_source_credentials_are_unset() -> None:
+    script = BACKUP.read_text(encoding="utf-8")
+
+    assert 'S3_ACCESS_KEY="${S3_ACCESS_KEY:-${MINIO_ROOT_USER:-minioadmin}}"' in script
+    assert 'S3_SECRET_KEY="${S3_SECRET_KEY:-${MINIO_ROOT_PASSWORD:-minioadmin}}"' in script
+
+
+def test_compose_healthcheck_defaults_to_the_published_nginx_port() -> None:
+    script = HEALTHCHECK.read_text(encoding="utf-8")
+
+    assert 'API_PORT="${API_PORT:-8080}"' in script
+    for path in ("/api/v1/health/live", "/api/v1/health/ready", "/metrics"):
+        assert path in script
+
+
+def test_compose_exposes_the_optional_signed_plugin_manifest_boundary() -> None:
+    compose = _compose()
+    env_template = (ROOT / "deploy/.env.example").read_text(encoding="utf-8")
+    app_env = compose["x-app-env"]
+    api_env = compose["services"]["api"]["environment"]
+
+    assert "SOYMUTDB_PLUGIN_MANIFEST_SIGNING_KEY" not in app_env
+    assert "SOYMUTDB_PLUGIN_MANIFESTS_JSON" not in app_env
+    assert (
+        api_env["SOYMUTDB_PLUGIN_MANIFEST_SIGNING_KEY"]
+        == "${SOYMUTDB_PLUGIN_MANIFEST_SIGNING_KEY:-}"
+    )
+    assert api_env["SOYMUTDB_PLUGIN_MANIFESTS_JSON"] == "${SOYMUTDB_PLUGIN_MANIFESTS_JSON:-[]}"
+    assert "SOYMUTDB_PLUGIN_MANIFEST_SIGNING_KEY" in env_template
+    assert "SOYMUTDB_PLUGIN_MANIFESTS_JSON" in env_template
+
+
+def test_ols4_manifest_renderer_uses_the_same_api_image_signer() -> None:
+    renderer = ROOT / "deploy/scripts/render-ols4-plugin-manifest.sh"
+
+    assert renderer.is_file()
+    script = renderer.read_text(encoding="utf-8")
+    assert '"${COMPOSE[@]}" run --rm --no-deps' in script
+    assert "sign_official_ols4_manifest" in script
+    assert "OLS4_PLUGIN_ENABLED" in script
+    assert "OLS4_PLUGIN_CONFIGURED" in script
+    assert "OLS4_PLUGIN_HEALTHY" in script
+
+
+def test_linux_install_keeps_deployment_scripts_at_their_expected_layout() -> None:
+    script = INSTALL.read_text(encoding="utf-8")
+
+    assert 'mkdir -p "${INSTALL_DIR}/deploy"' in script
+    assert 'cp -r "${PROJECT_ROOT}/deploy/scripts" "${INSTALL_DIR}/deploy/"' in script
+    assert '"${INSTALL_DIR}/scripts"' not in script
+
+
+def test_conda_hybrid_mode_exposes_real_data_layer_endpoints_and_all_queues() -> None:
+    compose = _compose()
+    env = CONDA_ENV.read_text(encoding="utf-8")
+    readme = CONDA_README.read_text(encoding="utf-8")
+    deploy = CONDA_DEPLOY.read_text(encoding="utf-8")
+    services = CONDA_SERVICES.read_text(encoding="utf-8")
+    no_docker = CONDA_NO_DOCKER.read_text(encoding="utf-8")
+    architecture = DEPLOYMENT_ARCHITECTURE.read_text(encoding="utf-8")
+
+    assert compose["services"]["redis-celery"]["ports"] == ["127.0.0.1:6380:6379"]
+    assert "SOYMUTDB_CELERY_BROKER_URL=redis://:change-me-redis@127.0.0.1:6380/0" in env
+    assert "SOYMUTDB_CELERY_RESULT_BACKEND=redis://:change-me-redis@127.0.0.1:6380/1" in env
+    assert "SOYMUTDB_S3_ENDPOINT=http://127.0.0.1:9001" in env
+    assert "localhost:6380/0" in readme
+    assert "http://localhost:9001" in readme
+    assert "unit_worker_analyses" in services
+    assert "UNITS=(api worker-default worker-blast worker-ingest worker-analyses beat)" in services
+    assert "--queues=analyses" in services
+    assert "worker-analyses" in deploy
+    assert "worker-analyses" in no_docker
+    assert "localhost:6380" in architecture
 
 
 def test_ci_validates_profiles_and_publishes_verifiable_digest_contract() -> None:

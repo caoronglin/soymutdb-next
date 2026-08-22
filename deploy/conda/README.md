@@ -38,10 +38,10 @@ docker compose ps
 | PostgreSQL | `postgres` | `SOYMUTDB_DATABASE_URL=postgresql+asyncpg://soymutdb:<PASS>@localhost:5432/soymutdb` |
 | ClickHouse | `clickhouse` | `SOYMUTDB_CLICKHOUSE_HOST=localhost` `SOYMUTDB_CLICKHOUSE_PORT=8123` |
 | 缓存 Redis | `redis` | `SOYMUTDB_REDIS_URL=redis://:<PASS>@localhost:6379/0` |
-| Celery broker/result | `redis-celery` | `SOYMUTDB_CELERY_BROKER_URL=redis://:<PASS>@localhost:6379/0`、`SOYMUTDB_CELERY_RESULT_BACKEND=redis://:<PASS>@localhost:6379/1` |
-| MinIO | `minio` | `SOYMUTDB_S3_ENDPOINT=http://localhost:9000` + access/secret key |
+| Celery broker/result | `redis-celery` | `SOYMUTDB_CELERY_BROKER_URL=redis://:<PASS>@localhost:6380/0`、`SOYMUTDB_CELERY_RESULT_BACKEND=redis://:<PASS>@localhost:6380/1` |
+| MinIO | `minio` | `SOYMUTDB_S3_ENDPOINT=http://localhost:9001` + access/secret key |
 
-> 注意：数据服务端口（5432/8123/6379/9000）在 compose 里只对宿主发布（`ports`），
+> 注意：数据服务端口（5432/8123/6379/6380/9001）在 compose 里只对宿主发布（`ports`），
 > conda 进程连 `localhost` 即可。两个 Redis 实例都要起：`redis`（缓存，可驱逐）与
 > `redis-celery`（broker，noeviction + AOF）职责隔离，不能混用。
 
@@ -119,8 +119,8 @@ WantedBy=multi-user.target
 | `SOYMUTDB_JWT_SECRET` | ≥32 字符随机串 | `openssl rand -hex 32` 输出 |
 | `SOYMUTDB_CORS_ORIGINS` | 逗号分隔，禁止 `*` | `https://soymutdb.org,http://localhost:5173` |
 | `SOYMUTDB_REDIS_URL` | 缓存 Redis | `redis://:<PASS>@localhost:6379/0` |
-| `SOYMUTDB_CELERY_BROKER_URL` / `SOYMUTDB_CELERY_RESULT_BACKEND` | broker/result 独立实例 | `redis://:<PASS>@localhost:6379/0` / `.../1` |
-| `SOYMUTDB_S3_ENDPOINT` / `S3_ACCESS_KEY` / `S3_SECRET_KEY` | MinIO | `http://localhost:9000` + compose 里设置的凭据 |
+| `SOYMUTDB_CELERY_BROKER_URL` / `SOYMUTDB_CELERY_RESULT_BACKEND` | broker/result 独立实例 | `redis://:<PASS>@localhost:6380/0` / `.../1` |
+| `SOYMUTDB_S3_ENDPOINT` / `S3_ACCESS_KEY` / `S3_SECRET_KEY` | MinIO | `http://localhost:9001` + compose 里设置的凭据 |
 
 **常用可选：** `SOYMUTDB_CLICKHOUSE_HOST/PORT/USER/PASSWORD/DATABASE`、`SOYMUTDB_DB_POOL_SIZE`（默认 5，调大需同步 PG `max_connections`）、`SOYMUTDB_WORKER_DB_POOL_SIZE`（worker 同步 engine）、`SOYMUTDB_CELERY_RESULT_EXPIRES`（默认 604800）。
 
@@ -190,7 +190,7 @@ conda run -n soymutdb-worker celery -A soymutdb_worker.main:celery_app inspect p
 ## 7. 对外暴露（nginx 反代或直连）
 
 - **直连**：API 端口 `8000` 直接对外（防火墙放行；`SOYMUTDB_CORS_ORIGINS` 配好前端域名）。
-- **nginx 反代**（推荐，与 compose 内 nginx 语义一致）：`/api/v1/*` → `127.0.0.1:8000`、`/mcp/*`（SSE，`proxy_buffering off`）→ MCP server（conda 下需另跑 `mcp_server` 或仍用 compose 的 `mcp-server` 容器）、`/data/*` → MinIO `localhost:9000`。配置可参考 `infra/nginx/conf.d/default.conf` 改动量最小化。
+- **nginx 反代**（推荐，与 compose 内 nginx 语义一致）：`/api/v1/*` → `127.0.0.1:8000`、`/mcp/*`（SSE，`proxy_buffering off`）→ MCP server（conda 下需另跑 `mcp_server` 或仍用 compose 的 `mcp-server` 容器）、`/data/*` → MinIO `localhost:9001`（纯裸机数据层时使用实际配置端口）。配置可参考 `infra/nginx/conf.d/default.conf` 改动量最小化。
 
 ## 8. 与 Docker 部署的差异
 
@@ -223,13 +223,13 @@ cd apps/api && conda run -n soymutdb-api alembic upgrade head
 
 # 重启服务（systemd 示例）
 sudo systemctl restart soymutdb-api soymutdb-worker-default soymutdb-worker-blast \
-    soymutdb-worker-ingest soymutdb-beat
+    soymutdb-worker-ingest soymutdb-worker-analyses soymutdb-beat
 ```
 
 ## 10. 常见问题
 
 - **API 拒绝启动（prod fail-fast）**：`SOYMUTDB_JWT_SECRET` <32 字符 / CORS 缺失或含 `*` / 凭据仍是 dev 默认值 → 按 §5 修正 `.env`；`conda-deploy.sh` 第 6 步会先拦截同类问题。
-- **任务不进队列**：确认 `SOYMUTDB_CELERY_BROKER_URL` 指向 `redis-celery`（localhost:6379/0）而不是缓存 `redis`（allkeys-lru 会丢消息）。
+- **任务不进队列**：确认 `SOYMUTDB_CELERY_BROKER_URL` 指向 `redis-celery`（推荐组合为 localhost:6380/0）而不是缓存 `redis`（allkeys-lru 会丢消息）。
 - **worker 缺 BLAST 等二进制**：`conda install -n soymutdb-worker -c bioconda blast samtools bcftools tabix bedtools`。
 - **conda env 路径**：`conda env list`；解释器绝对路径 `$(conda info --base)/envs/<name>/bin/python`（systemd 直接用）。
 - **离线安装**：在有网机器 `conda env export > environment.lock.yml` + `conda pack`，拷到离线机解包后改 prefix（`conda-unpack`）。

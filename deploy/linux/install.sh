@@ -57,6 +57,7 @@ else
 fi
 
 mkdir -p "${INSTALL_DIR}"/{apps,data,logs,config}
+mkdir -p "${INSTALL_DIR}/deploy"
 chown -R "${SERVICE_USER}:${SERVICE_USER}" "${INSTALL_DIR}"
 chmod 750 "${INSTALL_DIR}/data"
 echo -e "${GREEN}  Directories created at ${INSTALL_DIR}.${NC}"
@@ -69,7 +70,7 @@ cp -r "${PROJECT_ROOT}/apps/api" "${INSTALL_DIR}/apps/"
 cp -r "${PROJECT_ROOT}/apps/worker" "${INSTALL_DIR}/apps/"
 cp -r "${PROJECT_ROOT}/packages" "${INSTALL_DIR}/"
 cp -r "${PROJECT_ROOT}/infra" "${INSTALL_DIR}/"
-cp -r "${PROJECT_ROOT}/deploy/scripts" "${INSTALL_DIR}/"
+cp -r "${PROJECT_ROOT}/deploy/scripts" "${INSTALL_DIR}/deploy/"
 cp "${PROJECT_ROOT}/docker-compose.yml" "${INSTALL_DIR}/"
 echo -e "${GREEN}  Application files copied (incl. docker-compose.yml, deploy/scripts).${NC}"
 

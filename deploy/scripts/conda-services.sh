@@ -7,6 +7,7 @@
 #   soymutdb-worker-default.service
 #   soymutdb-worker-blast.service
 #   soymutdb-worker-ingest.service
+#   soymutdb-worker-analyses.service
 #   soymutdb-beat.service
 #
 # 用法：
@@ -132,6 +133,26 @@ WantedBy=multi-user.target
 UNIT
 }
 
+unit_worker_analyses() {
+cat <<UNIT
+[Unit]
+Description=SoyMutDB Celery Worker (analyses)
+After=network.target redis-server.service soymutdb-api.service
+
+[Service]
+User=${SOYMUTDB_SERVICE_USER:-soymutdb}
+Group=${SOYMUTDB_SERVICE_GROUP:-soymutdb}
+WorkingDirectory=${PROJECT_ROOT}/apps/worker
+EnvironmentFile=${ENV_FILE}
+ExecStart=${WORKER_ENV_BIN}/celery -A soymutdb_worker.main:celery_app worker --loglevel=info --queues=analyses --concurrency=2 --max-tasks-per-child=20 --hostname=worker-analyses@%%h
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+}
+
 unit_beat() {
 cat <<UNIT
 [Unit]
@@ -152,7 +173,7 @@ WantedBy=multi-user.target
 UNIT
 }
 
-UNITS=(api worker-default worker-blast worker-ingest beat)
+UNITS=(api worker-default worker-blast worker-ingest worker-analyses beat)
 
 if [[ "${MODE}" == "--print" ]]; then
     for name in "${UNITS[@]}"; do

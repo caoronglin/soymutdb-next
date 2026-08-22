@@ -33,7 +33,7 @@
         ▼
 [conda 裸进程]
   soymutdb-api     :8000   uvicorn
-  worker-default / worker-blast / worker-ingest
+  worker-default / worker-blast / worker-ingest / worker-analyses
   beat
 ```
 
@@ -217,7 +217,7 @@ After=postgresql.service clickhouse-server.service redis-server.service redis-se
 - 新增 `deploy/conda/env.example`，包含 conda 模式真正需要的 `SOYMUTDB_DATABASE_URL / CLICKHOUSE / REDIS / CELERY / S3` 变量
 - `conda-deploy.sh` 优先复制该模板，并在预检中检查这些连接变量是否为空
 - 新增 `deploy/scripts/conda-data-init.sh`：探测本机 PG/CH/MinIO/Redis，幂等创建 PG 用户/库、CH 库/用户、MinIO 桶；支持 `--check` 只检查
-- 新增 `deploy/scripts/conda-services.sh`：生成/安装 api/worker-default/worker-blast/worker-ingest/beat 的 systemd units（`--print` / `--install`）
+- 新增 `deploy/scripts/conda-services.sh`：生成/安装 api/worker-default/worker-blast/worker-ingest/worker-analyses/beat 的 systemd units（`--print` / `--install`）
 - 新增 `deploy/conda/environment-data.yml`：纯 conda 数据层环境定义（postgresql / clickhouse-server / clickhouse-client / redis）
 
 仍建议后续增加的脚本：

@@ -26,7 +26,8 @@ if [[ -f "${PROJECT_ROOT}/.env" ]]; then
 fi
 
 API_HOST="${API_HOST:-localhost}"
-API_PORT="${API_PORT:-8000}"
+# Compose only publishes nginx on 8080; set API_PORT=8000 for a direct/dev API.
+API_PORT="${API_PORT:-8080}"
 API_URL="http://${API_HOST}:${API_PORT}"
 
 PASS=0
