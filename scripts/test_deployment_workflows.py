@@ -149,6 +149,19 @@ def test_ci_installs_local_jobs_package_before_api_and_worker_projects() -> None
     )
 
 
+def test_ci_offline_frontend_build_uses_demo_sample_data() -> None:
+    """The generic CI build cannot require an unpublished API endpoint."""
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    frontend_job = _workflow_job(workflow, "frontend")
+    build_step = frontend_job[
+        frontend_job.index("Build all apps (hard gate)") : frontend_job.index(
+            "Bundle size budget check (G2 hard gate)"
+        )
+    ]
+
+    assert "VITE_DEPLOYMENT_MODE: demo" in build_step
+
+
 def test_ci_runs_the_full_worker_pytest_suite_after_installing_worker_dependencies() -> None:
     """Worker Testcontainers coverage is a hard CI gate, not only an import check."""
     workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
@@ -262,6 +275,32 @@ def test_clickhouse_fixture_sends_single_queries_and_keeps_error_body() -> None:
     assert "response body:" in script
     assert 'awk -v prefix="${statement_dir}/statement-"' in script
     assert 'run_query "${statement}" "${DATABASE}"' in script
+
+
+def test_clickhouse_density_backfills_project_their_group_key() -> None:
+    """Density INSERTs must define ``bin_start`` before grouping by it.
+
+    ClickHouse accepts the alias in the materialized-view SELECTs, but the
+    legacy-schema backfill is a separate query.  Referencing the alias without
+    projecting it makes the migration fail before any release can be built.
+    """
+    schema = (ROOT / "infra/clickhouse/upgrade_variant_facts_schema.sql").read_text(
+        encoding="utf-8"
+    )
+
+    for table, bucket in (
+        ("density_10kb", "10000"),
+        ("density_100kb", "100000"),
+        ("density_1mb", "1000000"),
+    ):
+        statement = re.search(
+            rf"INSERT INTO {table} SELECT .*?;",
+            schema,
+            flags=re.DOTALL,
+        )
+        assert statement is not None
+        assert f"intDiv(position, {bucket}) * {bucket} AS bin_start" in statement.group(0)
+        assert "GROUP BY release_key, chromosome, bin_start" in statement.group(0)
 
 
 def test_pages_deploys_an_explicit_public_demo() -> None:

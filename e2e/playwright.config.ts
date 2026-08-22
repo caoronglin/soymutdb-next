@@ -21,6 +21,9 @@ const rl_baseURL =
 
 export default defineConfig({
   testDir: "./tests",
+  // This config runs against the deployed public site only.  Local artifact
+  // suites (including the Primer mock-server tests) use their own configs.
+  testMatch: "**/online-smoke.spec.ts",
   // Single worker: fragile network, avoid concurrent false failures.
   workers: 1,
   fullyParallel: false,

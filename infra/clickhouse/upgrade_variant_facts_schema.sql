@@ -119,7 +119,7 @@ INSERT INTO gene_impact_summary SELECT gene_surrogate_id, impact, consequence, v
 INSERT INTO chromosome_summary SELECT release_key, chromosome, variant_type, count(), min(position), max(position) FROM variant_facts GROUP BY release_key, chromosome, variant_type;
 INSERT INTO mutant_line_summary SELECT mutant_line_surrogate_id, mutant_line_name, chromosome, variant_type, impact, release_key, count() FROM variant_facts GROUP BY mutant_line_surrogate_id, mutant_line_name, chromosome, variant_type, impact, release_key;
 INSERT INTO release_dashboard SELECT release_key, variant_type, impact, consequence, count() FROM variant_facts GROUP BY release_key, variant_type, impact, consequence;
-INSERT INTO density_10kb SELECT release_key, chromosome, intDiv(position, 10000) * 10000, count() FROM variant_facts GROUP BY release_key, chromosome, bin_start;
-INSERT INTO density_100kb SELECT release_key, chromosome, intDiv(position, 100000) * 100000, count() FROM variant_facts GROUP BY release_key, chromosome, bin_start;
-INSERT INTO density_1mb SELECT release_key, chromosome, intDiv(position, 1000000) * 1000000, count() FROM variant_facts GROUP BY release_key, chromosome, bin_start;
+INSERT INTO density_10kb SELECT release_key, chromosome, intDiv(position, 10000) * 10000 AS bin_start, count() FROM variant_facts GROUP BY release_key, chromosome, bin_start;
+INSERT INTO density_100kb SELECT release_key, chromosome, intDiv(position, 100000) * 100000 AS bin_start, count() FROM variant_facts GROUP BY release_key, chromosome, bin_start;
+INSERT INTO density_1mb SELECT release_key, chromosome, intDiv(position, 1000000) * 1000000 AS bin_start, count() FROM variant_facts GROUP BY release_key, chromosome, bin_start;
 INSERT INTO substitution_spectrum SELECT release_key, mutant_line_surrogate_id, ref_allele, alt_allele, count() FROM variant_facts WHERE variant_type = 'SNP' AND length(ref_allele) = 1 AND length(alt_allele) = 1 GROUP BY release_key, mutant_line_surrogate_id, ref_allele, alt_allele;

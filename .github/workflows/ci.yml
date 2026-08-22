@@ -82,6 +82,9 @@ jobs:
 
       - name: Build all apps (hard gate)
         env:
+          # CI has no published release API.  Use the explicit demo fixture for
+          # sample SSG instead of attempting to fetch the placeholder origin.
+          VITE_DEPLOYMENT_MODE: demo
           VITE_API_BASE_URL: https://api.soymutdb.test
           VITE_JBROWSE_BASE_URL: https://jbrowse.soymutdb.test
         run: pnpm build
