@@ -637,6 +637,40 @@
               ],
               "title": "Page Size"
             }
+          },
+          {
+            "name": "release_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
+            }
           }
         ],
         "responses": {
@@ -689,6 +723,40 @@
             "schema": {
               "type": "string",
               "title": "Gene Id"
+            }
+          },
+          {
+            "name": "release_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
             }
           }
         ],
@@ -1006,15 +1074,51 @@
         "summary": "Compute Ld",
         "description": "LD heatmap data: variant coordinates + r\u00b2 matrix.\n\n- Region/gene mode returns the variant coordinates in the interval\n  (from ``variant_facts``) together with ``r_squared: null`` when no\n  per-sample genotype data is available (the store only carries allele\n  frequencies).\n- Inline ``genotypes`` mode (sample \u00d7 variant dosage matrix) computes the\n  full pairwise r\u00b2 matrix (squared Pearson correlation of dosages).",
         "operationId": "compute_ld_api_v1_tools_ld_post",
+        "parameters": [
+          {
+            "name": "release_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/LdRequest"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -1058,15 +1162,51 @@
         "summary": "Nucleotide Diversity",
         "description": "Nucleotide diversity (\u03c0) and Watterson's \u03b8 for a gene / interval.\n\n\u03c0 = \u03a3 2\u00b7p\u00b7(1\u2212p) over polymorphic sites, per base pair; \u03b8 = S / a_n is\nreported when ``sample_size`` is provided.  Optional ``window_size``\n(bp) returns per-window \u03c0 for sliding-window plots.",
         "operationId": "nucleotide_diversity_api_v1_tools_diversity_post",
+        "parameters": [
+          {
+            "name": "release_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/DiversityRequest"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -1110,15 +1250,51 @@
         "summary": "Allele Frequencies",
         "description": "Per-variant allele frequencies for a locus / gene / interval.",
         "operationId": "allele_frequencies_api_v1_tools_allelefreq_post",
+        "parameters": [
+          {
+            "name": "release_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/AlleleFreqRequest"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -1230,6 +1406,42 @@
             }
           },
           {
+            "name": "ref",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ref"
+            }
+          },
+          {
+            "name": "alt",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Alt"
+            }
+          },
+          {
             "name": "gene_id",
             "in": "query",
             "required": false,
@@ -1275,6 +1487,22 @@
                 }
               ],
               "title": "Variant Type"
+            }
+          },
+          {
+            "name": "consequence",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ConsequenceType"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Consequence"
             }
           },
           {
@@ -1355,6 +1583,40 @@
               "minimum": 1,
               "default": 100,
               "title": "Limit"
+            }
+          },
+          {
+            "name": "release_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
             }
           }
         ],
@@ -1452,6 +1714,40 @@
               "default": 1000,
               "title": "Max Results"
             }
+          },
+          {
+            "name": "release_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
+            }
           }
         ],
         "responses": {
@@ -1509,6 +1805,40 @@
               "type": "string",
               "title": "Variant Id"
             }
+          },
+          {
+            "name": "release_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
+            }
           }
         ],
         "responses": {
@@ -1553,15 +1883,56 @@
         "summary": "Export Variants",
         "description": "Submit an asynchronous export job (vcf/tsv/csv/json/bed).",
         "operationId": "export_variants_api_v1_variants_export_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "release_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/ExportRequest"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "202": {
@@ -1594,12 +1965,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/tools/seqfetch": {
@@ -2889,7 +3255,7 @@
           "analyses"
         ],
         "summary": "Create Upload",
-        "description": "Request a pre-signed upload URL for an analysis input file.\n\nReturns a PUT URL valid for 1 hour plus the object key the client must\nsend back at submit time.  Nothing is persisted yet.",
+        "description": "Request a pre-signed upload URL for an analysis input file.\n\nReturns a POST action valid for 1 hour plus the object key the client must\nsend back at submit time.  Nothing is persisted yet.",
         "operationId": "create_upload_api_v1_analyses_uploads_post",
         "requestBody": {
           "content": {
@@ -2946,7 +3312,7 @@
           "analyses"
         ],
         "summary": "Submit Analysis",
-        "description": "Submit an analysis job for the uploaded objects.\n\nValidates the ``analyses/`` key prefix and the parameter whitelist, then\ncreates the job row + outbox event in one transaction (queued).",
+        "description": "Submit an analysis job for the uploaded objects.\n\nValidates that every input key belongs to the caller, checks the parameter\nwhitelist, then creates the job row + outbox event in one transaction.",
         "operationId": "submit_analysis_api_v1_analyses__analysis_type__submit_post",
         "security": [
           {
@@ -3143,6 +3509,11 @@
         "summary": "List Tracks",
         "description": "List tracks (optionally filtered by assembly / category).",
         "operationId": "list_tracks_api_v1_tracks_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "assembly_id",
@@ -3271,6 +3642,11 @@
         "summary": "Get Jbrowse Config",
         "description": "Return JBrowse 2 configuration (assembly + tracks) for the standalone browser.\n\nQueries the database for tracks belonging to the requested assembly and\nconverts them to JBrowse track format. If no tracks are found or the\ndatabase is empty, an empty tracks array is returned \u2014 the frontend\nJBrowse app has built-in default tracks as a fallback.",
         "operationId": "get_jbrowse_config_api_v1_tracks_jbrowse_config_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "assembly",
@@ -3329,6 +3705,11 @@
         "summary": "Get Track",
         "description": "Get track detail.",
         "operationId": "get_track_api_v1_tracks__track_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "track_id",
@@ -3909,8 +4290,13 @@
           "seeds"
         ],
         "summary": "List Seed Requests",
-        "description": "List seed requests.",
+        "description": "List seed requests containing contact data (seed_manager only).",
         "operationId": "list_seed_requests_api_v1_seeds_requests_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "status",
@@ -4093,7 +4479,7 @@
         "tags": [
           "seed-requests"
         ],
-        "summary": "List seed requests (researcher+)",
+        "summary": "List seed requests (seed manager)",
         "description": "Paginated admin listing with an optional status filter.",
         "operationId": "list_seed_requests_api_v1_admin_seed_requests_get",
         "security": [
@@ -4181,7 +4567,7 @@
         "tags": [
           "seed-requests"
         ],
-        "summary": "Update a seed request status (researcher+)",
+        "summary": "Update a seed request status (seed manager)",
         "description": "Advance a request's status (pending \u2192 approved/rejected \u2192 fulfilled).",
         "operationId": "update_seed_request_api_v1_admin_seed_requests__request_id__patch",
         "security": [
@@ -5139,6 +5525,246 @@
             "HTTPBearer": []
           }
         ]
+      }
+    },
+    "/api/v1/ontology/search": {
+      "get": {
+        "tags": [
+          "ontology"
+        ],
+        "summary": "Search",
+        "description": "Search public ontology terms without persisting or executing anything.",
+        "operationId": "search_api_v1_ontology_search_get",
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "title": "Query"
+            }
+          },
+          {
+            "name": "ontology",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ontology"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OntologySearchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ontology/term": {
+      "get": {
+        "tags": [
+          "ontology"
+        ],
+        "summary": "Term",
+        "description": "Read one bounded ontology term by IRI.",
+        "operationId": "term_api_v1_ontology_term_get",
+        "parameters": [
+          {
+            "name": "ontology",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "title": "Ontology"
+            }
+          },
+          {
+            "name": "iri",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048,
+              "title": "Iri"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OntologyTermResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ontology/graph": {
+      "get": {
+        "tags": [
+          "ontology"
+        ],
+        "summary": "Relationship Graph",
+        "description": "Read a one-hop OLS4 relationship graph with strict node and edge caps.",
+        "operationId": "relationship_graph_api_v1_ontology_graph_get",
+        "parameters": [
+          {
+            "name": "ontology",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "title": "Ontology"
+            }
+          },
+          {
+            "name": "iri",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048,
+              "title": "Iri"
+            }
+          },
+          {
+            "name": "max_nodes",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 1,
+              "default": 24,
+              "title": "Max Nodes"
+            }
+          },
+          {
+            "name": "max_edges",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 32,
+              "title": "Max Edges"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OntologyRelationshipGraphResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/page-definitions/{route}": {
@@ -7691,7 +8317,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/v1/admin/page-builder/pages": {
@@ -8132,6 +8763,176 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PublishRequestResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/plugins": {
+      "get": {
+        "tags": [
+          "admin-plugins"
+        ],
+        "summary": "List Plugins",
+        "operationId": "list_plugins_api_v1_admin_plugins_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminPluginsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/plugins/{key}": {
+      "get": {
+        "tags": [
+          "admin-plugins"
+        ],
+        "summary": "Get Plugin",
+        "operationId": "get_plugin_api_v1_admin_plugins__key__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminPluginResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/plugins/{key}/state": {
+      "patch": {
+        "tags": [
+          "admin-plugins"
+        ],
+        "summary": "Update Plugin State",
+        "operationId": "update_plugin_state_api_v1_admin_plugins__key__state_patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PluginStateUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminPluginResponse"
                 }
               }
             }
@@ -9288,6 +10089,706 @@
         }
       }
     },
+    "/api/v1/admin/imports/studio/dataset-versions": {
+      "post": {
+        "tags": [
+          "admin-import-studio"
+        ],
+        "summary": "Create Dataset Version",
+        "description": "Record immutable raw-object metadata before any editing begins.",
+        "operationId": "create_dataset_version_api_v1_admin_imports_studio_dataset_versions_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DatasetVersionCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetVersionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "admin-import-studio"
+        ],
+        "summary": "List Dataset Versions",
+        "operationId": "list_dataset_versions_api_v1_admin_imports_studio_dataset_versions_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "dataset_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Dataset Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DatasetVersionResponse"
+                  },
+                  "title": "Response List Dataset Versions Api V1 Admin Imports Studio Dataset Versions Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/imports/studio/drafts": {
+      "post": {
+        "tags": [
+          "admin-import-studio"
+        ],
+        "summary": "Create Draft",
+        "description": "Create an editing draft from an immutable dataset version.",
+        "operationId": "create_draft_api_v1_admin_imports_studio_drafts_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportDraftCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportDraftResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/imports/studio/drafts/{draft_id}": {
+      "get": {
+        "tags": [
+          "admin-import-studio"
+        ],
+        "summary": "Get Draft",
+        "operationId": "get_draft_api_v1_admin_imports_studio_drafts__draft_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Draft Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportDraftResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/imports/studio/drafts/{draft_id}/mapping": {
+      "put": {
+        "tags": [
+          "admin-import-studio"
+        ],
+        "summary": "Update Mapping",
+        "operationId": "update_mapping_api_v1_admin_imports_studio_drafts__draft_id__mapping_put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Draft Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FieldMappingUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportDraftResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/imports/studio/drafts/{draft_id}/patches": {
+      "post": {
+        "tags": [
+          "admin-import-studio"
+        ],
+        "summary": "Add Patches",
+        "operationId": "add_patches_api_v1_admin_imports_studio_drafts__draft_id__patches_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Draft Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DataPatchCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportDraftResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/imports/studio/drafts/{draft_id}/validate": {
+      "post": {
+        "tags": [
+          "admin-import-studio"
+        ],
+        "summary": "Validate Draft",
+        "operationId": "validate_draft_api_v1_admin_imports_studio_drafts__draft_id__validate_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Draft Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportValidationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportDraftResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/imports/studio/drafts/{draft_id}/commit": {
+      "post": {
+        "tags": [
+          "admin-import-studio"
+        ],
+        "summary": "Commit Draft",
+        "description": "Atomically commit a validated draft and create publication evidence.",
+        "operationId": "commit_draft_api_v1_admin_imports_studio_drafts__draft_id__commit_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Draft Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportCommitRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportDraftResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/imports/studio/drafts/{draft_id}/manifest": {
+      "get": {
+        "tags": [
+          "admin-import-studio"
+        ],
+        "summary": "Get Manifest",
+        "operationId": "get_manifest_api_v1_admin_imports_studio_drafts__draft_id__manifest_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Draft Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicationManifestResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/modules/{module_key}/validate": {
+      "post": {
+        "tags": [
+          "admin-modules"
+        ],
+        "summary": "Inspect Module",
+        "description": "Return a bounded validation preview without persistence or execution.",
+        "operationId": "inspect_module_api_v1_admin_modules__module_key__validate_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "module_key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Module Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportInspectionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportInspectionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/modules/{module_key}/inspect": {
+      "post": {
+        "tags": [
+          "admin-modules"
+        ],
+        "summary": "Inspect Module",
+        "description": "Return a bounded validation preview without persistence or execution.",
+        "operationId": "inspect_module_api_v1_admin_modules__module_key__inspect_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "module_key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Module Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportInspectionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportInspectionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/modules/{module_key}/template": {
       "get": {
         "tags": [
@@ -9354,14 +10855,177 @@
         }
       }
     },
+    "/api/v1/admin/settings/schema": {
+      "get": {
+        "tags": [
+          "admin-settings"
+        ],
+        "summary": "Get Settings Schema",
+        "description": "Return the server-owned, non-secret runtime settings contract.",
+        "operationId": "get_settings_schema_api_v1_admin_settings_schema_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsSchemaResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/settings/validate": {
+      "post": {
+        "tags": [
+          "admin-settings"
+        ],
+        "summary": "Validate Settings",
+        "description": "Validate and normalize a partial settings document without persisting it.",
+        "operationId": "validate_settings_api_v1_admin_settings_validate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsValidateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsValidateResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/settings/{section}/document": {
+      "get": {
+        "tags": [
+          "admin-settings"
+        ],
+        "summary": "Get Settings Document",
+        "description": "Return typed live values with the version required by PATCH.",
+        "operationId": "get_settings_document_api_v1_admin_settings__section__document_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "section",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Section"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsDocumentResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/settings/{section}": {
       "get": {
         "tags": [
           "admin-settings"
         ],
         "summary": "Get Settings",
-        "description": "Return all settings under *section* as a ``{key: value}`` dict.\n\nRows are queried from ``SystemSetting`` where the key starts with\n``{section}.`` (case-insensitive).  The prefix is stripped from the\nreturned keys.",
+        "description": "Return all settings under *section* as a ``{key: value}`` dict.\n\nOnly registered non-secret keys are queried, and the section prefix is\nstripped from returned keys.",
         "operationId": "get_settings_api_v1_admin_settings__section__get",
+        "deprecated": true,
         "security": [
           {
             "HTTPBearer": []
@@ -9413,13 +11077,90 @@
           }
         }
       },
+      "patch": {
+        "tags": [
+          "admin-settings"
+        ],
+        "summary": "Patch Settings",
+        "description": "Apply an optimistic, versioned partial update to one section.",
+        "operationId": "patch_settings_api_v1_admin_settings__section__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "section",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Section"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsPatchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsDocumentResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Settings version conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
       "put": {
         "tags": [
           "admin-settings"
         ],
         "summary": "Update Settings",
-        "description": "Upsert settings under *section*.\n\nAccepts a flat ``{key: value}`` dict.  Each key is prefixed with\n``{section}.`` and upserted into ``SystemSetting``.  Admin audit log\nentries are recorded for every change.",
+        "description": "Upsert settings under *section*.\n\nThis deprecated compatibility layer accepts the historical flat\n``{key: value}`` body and string-valued response, while delegating to the\nsame fail-closed registry, revision history, and audit transaction as the\ntyped contract.",
         "operationId": "update_settings_api_v1_admin_settings__section__put",
+        "deprecated": true,
         "security": [
           {
             "HTTPBearer": []
@@ -9457,6 +11198,154 @@
                   "type": "object",
                   "additionalProperties": true,
                   "title": "Response Update Settings Api V1 Admin Settings  Section  Put"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/settings/{section}/history": {
+      "get": {
+        "tags": [
+          "admin-settings"
+        ],
+        "summary": "Get Settings History",
+        "description": "Return bounded revision and audit metadata for one section.",
+        "operationId": "get_settings_history_api_v1_admin_settings__section__history_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "section",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Section"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsHistoryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/settings/{section}/rollback": {
+      "post": {
+        "tags": [
+          "admin-settings"
+        ],
+        "summary": "Rollback Settings",
+        "description": "Restore a historical snapshot as a new linear version.",
+        "operationId": "rollback_settings_api_v1_admin_settings__section__rollback_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "section",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Section"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsRollbackRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsDocumentResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Settings version conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -9600,7 +11489,7 @@
           "admin-uploads"
         ],
         "summary": "Create Upload Presign",
-        "description": "Request a pre-signed PUT URL for an admin upload (researcher+).\n\nReturns a PUT URL valid for 1 hour, the object key, and the public URL\nthe caller should persist.  Nothing is stored server-side yet.\n\nObjects are stored in the PUBLIC bucket (``SOYMUTDB_S3_PUBLIC_BUCKET``)\nso ``public_url`` can be served directly by the static gateway.",
+        "description": "Request a constrained pre-signed POST for a content-editor upload.\n\nReturns a POST action valid for 1 hour, all signed form fields, the object\nkey, and the public URL the caller should persist. Nothing is stored\nserver-side yet.\n\nObjects are stored in the PUBLIC bucket (``SOYMUTDB_S3_PUBLIC_BUCKET``)\nso ``public_url`` can be served directly by the static gateway.",
         "operationId": "create_upload_presign_api_v1_admin_uploads_presign_post",
         "requestBody": {
           "content": {
@@ -11540,6 +13429,49 @@
         "type": "object",
         "title": "AdminFeaturesResponse"
       },
+      "AdminPluginResponse": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PluginCapabilityResponse"
+          },
+          "manifest": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PluginManifestMetadata"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "status"
+        ],
+        "title": "AdminPluginResponse"
+      },
+      "AdminPluginsResponse": {
+        "properties": {
+          "plugins": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/AdminPluginResponse"
+            },
+            "type": "object",
+            "title": "Plugins"
+          }
+        },
+        "type": "object",
+        "required": [
+          "plugins"
+        ],
+        "title": "AdminPluginsResponse"
+      },
       "AlleleFreqRequest": {
         "properties": {
           "gene_id": {
@@ -11887,12 +13819,18 @@
               }
             ],
             "title": "Content Type"
+          },
+          "checksum_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{64}$",
+            "title": "Checksum Sha256"
           }
         },
         "type": "object",
         "required": [
           "filename",
-          "size"
+          "size",
+          "checksum_sha256"
         ],
         "title": "AnalysesUploadRequest"
       },
@@ -11901,6 +13839,19 @@
           "upload_url": {
             "type": "string",
             "title": "Upload Url"
+          },
+          "upload_method": {
+            "type": "string",
+            "const": "POST",
+            "title": "Upload Method",
+            "default": "POST"
+          },
+          "upload_fields": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Upload Fields"
           },
           "object_key": {
             "type": "string",
@@ -12990,6 +14941,279 @@
         ],
         "title": "DashboardStats"
       },
+      "DataPatchCreateRequest": {
+        "properties": {
+          "patches": {
+            "items": {
+              "$ref": "#/components/schemas/DataPatchItem"
+            },
+            "type": "array",
+            "maxItems": 10000,
+            "title": "Patches"
+          }
+        },
+        "type": "object",
+        "title": "DataPatchCreateRequest"
+      },
+      "DataPatchItem": {
+        "properties": {
+          "row_key": {
+            "type": "string",
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Row Key"
+          },
+          "column_name": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Column Name"
+          },
+          "old_value": {
+            "title": "Old Value"
+          },
+          "new_value": {
+            "title": "New Value"
+          },
+          "patch_type": {
+            "type": "string",
+            "enum": [
+              "set",
+              "clear",
+              "format"
+            ],
+            "title": "Patch Type",
+            "default": "set"
+          }
+        },
+        "type": "object",
+        "required": [
+          "row_key",
+          "column_name"
+        ],
+        "title": "DataPatchItem"
+      },
+      "DatabaseCapabilitiesResponse": {
+        "properties": {
+          "authoritative": {
+            "type": "string",
+            "const": "postgresql",
+            "title": "Authoritative",
+            "default": "postgresql"
+          },
+          "analytics": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "clickhouse"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Analytics",
+            "default": "clickhouse"
+          }
+        },
+        "type": "object",
+        "title": "DatabaseCapabilitiesResponse"
+      },
+      "DatasetVersionCreateRequest": {
+        "properties": {
+          "dataset_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Dataset Id"
+          },
+          "filename": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Filename"
+          },
+          "object_key": {
+            "type": "string",
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Object Key"
+          },
+          "checksum_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Checksum Sha256"
+          },
+          "source": {
+            "type": "string",
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Source"
+          },
+          "license": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 256
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "License"
+          },
+          "mime_type": {
+            "type": "string",
+            "maxLength": 128,
+            "title": "Mime Type",
+            "default": "application/octet-stream"
+          },
+          "row_count": {
+            "type": "integer",
+            "maximum": 2000000.0,
+            "minimum": 0.0,
+            "title": "Row Count",
+            "default": 0
+          },
+          "column_count": {
+            "type": "integer",
+            "maximum": 50.0,
+            "minimum": 0.0,
+            "title": "Column Count",
+            "default": 0
+          },
+          "source_objects": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "maxItems": 64,
+            "title": "Source Objects"
+          }
+        },
+        "type": "object",
+        "required": [
+          "dataset_id",
+          "filename",
+          "object_key",
+          "checksum_sha256",
+          "source"
+        ],
+        "title": "DatasetVersionCreateRequest"
+      },
+      "DatasetVersionResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "dataset_id": {
+            "type": "integer",
+            "title": "Dataset Id"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "object_key": {
+            "type": "string",
+            "title": "Object Key"
+          },
+          "checksum_sha256": {
+            "type": "string",
+            "title": "Checksum Sha256"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "license": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "License"
+          },
+          "mime_type": {
+            "type": "string",
+            "title": "Mime Type"
+          },
+          "row_count": {
+            "type": "integer",
+            "title": "Row Count"
+          },
+          "column_count": {
+            "type": "integer",
+            "title": "Column Count"
+          },
+          "source_objects": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Source Objects"
+          },
+          "manifest": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manifest"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "created_at": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "dataset_id",
+          "version",
+          "filename",
+          "object_key",
+          "checksum_sha256",
+          "source",
+          "mime_type",
+          "row_count",
+          "column_count",
+          "source_objects",
+          "status"
+        ],
+        "title": "DatasetVersionResponse"
+      },
       "DiscoveryTrendPoint": {
         "properties": {
           "date": {
@@ -13613,6 +15837,87 @@
         "title": "EnrichmentTerm",
         "description": "A single enriched term (ORA mode)."
       },
+      "ErrorDetail": {
+        "description": "Machine-readable error detail (inside the ``error`` envelope).",
+        "properties": {
+          "code": {
+            "description": "Stable machine-readable error code, e.g. ``not_found``.",
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "description": "Human-readable error message.",
+            "title": "Message",
+            "type": "string"
+          },
+          "details": {
+            "additionalProperties": true,
+            "description": "Optional structured context (never contains secrets or stack traces).",
+            "title": "Details",
+            "type": "object"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ErrorDetail",
+        "type": "object"
+      },
+      "ErrorResponse": {
+        "$defs": {
+          "ErrorDetail": {
+            "description": "Machine-readable error detail (inside the ``error`` envelope).",
+            "properties": {
+              "code": {
+                "description": "Stable machine-readable error code, e.g. ``not_found``.",
+                "title": "Code",
+                "type": "string"
+              },
+              "message": {
+                "description": "Human-readable error message.",
+                "title": "Message",
+                "type": "string"
+              },
+              "details": {
+                "additionalProperties": true,
+                "description": "Optional structured context (never contains secrets or stack traces).",
+                "title": "Details",
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "title": "ErrorDetail",
+            "type": "object"
+          }
+        },
+        "description": "Unified error envelope returned by every API error.",
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorDetail"
+          },
+          "request_id": {
+            "description": "Correlation id (also echoed in the ``X-Request-ID`` header).",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "status_code": {
+            "description": "HTTP status code.",
+            "title": "Status Code",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "error",
+          "request_id",
+          "status_code"
+        ],
+        "title": "ErrorResponse",
+        "type": "object"
+      },
       "ExonResponse": {
         "properties": {
           "id": {
@@ -13791,6 +16096,55 @@
         },
         "type": "object",
         "title": "FeatureUpdateRequest"
+      },
+      "FieldMappingItem": {
+        "properties": {
+          "source_field": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Source Field"
+          },
+          "target_field": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Target Field"
+          },
+          "position": {
+            "type": "integer",
+            "maximum": 49.0,
+            "minimum": 0.0,
+            "title": "Position"
+          },
+          "transform": {
+            "additionalProperties": true,
+            "type": "object",
+            "maxProperties": 32,
+            "title": "Transform"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_field",
+          "target_field",
+          "position"
+        ],
+        "title": "FieldMappingItem"
+      },
+      "FieldMappingUpdateRequest": {
+        "properties": {
+          "mappings": {
+            "items": {
+              "$ref": "#/components/schemas/FieldMappingItem"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "Mappings"
+          }
+        },
+        "type": "object",
+        "title": "FieldMappingUpdateRequest"
       },
       "GeneDetail": {
         "properties": {
@@ -14688,6 +17042,50 @@
         "title": "ImpactSummaryItem",
         "description": "Variant count for one predicted impact class."
       },
+      "ImportCommitRequest": {
+        "properties": {
+          "page_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Id"
+          },
+          "source_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Source Id",
+            "default": "dataset"
+          },
+          "kind": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Kind",
+            "default": "dataset"
+          },
+          "config": {
+            "additionalProperties": true,
+            "type": "object",
+            "maxProperties": 32,
+            "title": "Config"
+          },
+          "confirm": {
+            "type": "boolean",
+            "const": true,
+            "title": "Confirm",
+            "default": true
+          }
+        },
+        "type": "object",
+        "title": "ImportCommitRequest"
+      },
       "ImportCreateRequest": {
         "properties": {
           "filename": {
@@ -14698,8 +17096,16 @@
           },
           "type": {
             "type": "string",
-            "maxLength": 32,
-            "minLength": 1,
+            "enum": [
+              "vcf",
+              "gff3",
+              "fasta",
+              "blast_db",
+              "seed_data",
+              "expression_csv",
+              "homolog_csv",
+              "module_tsv"
+            ],
             "title": "Type"
           },
           "file_path": {
@@ -14811,6 +17217,346 @@
         ],
         "title": "ImportCreateRequest"
       },
+      "ImportDraftCreateRequest": {
+        "properties": {
+          "dataset_version_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Dataset Version Id"
+          },
+          "module_key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Module Key"
+          },
+          "row_count": {
+            "type": "integer",
+            "maximum": 2000000.0,
+            "minimum": 0.0,
+            "title": "Row Count"
+          },
+          "column_count": {
+            "type": "integer",
+            "maximum": 256.0,
+            "minimum": 0.0,
+            "title": "Column Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "dataset_version_id",
+          "row_count",
+          "column_count"
+        ],
+        "title": "ImportDraftCreateRequest"
+      },
+      "ImportDraftResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "dataset_version_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Dataset Version Id"
+          },
+          "module_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Module Key"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "object_key": {
+            "type": "string",
+            "title": "Object Key"
+          },
+          "checksum_sha256": {
+            "type": "string",
+            "title": "Checksum Sha256"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "license": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "License"
+          },
+          "mime_type": {
+            "type": "string",
+            "title": "Mime Type"
+          },
+          "row_count": {
+            "type": "integer",
+            "title": "Row Count"
+          },
+          "column_count": {
+            "type": "integer",
+            "title": "Column Count"
+          },
+          "field_mapping": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Field Mapping"
+          },
+          "validation": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Validation"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "committed_at": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Committed At"
+          },
+          "created_at": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "dataset_version_id",
+          "filename",
+          "object_key",
+          "checksum_sha256",
+          "source",
+          "mime_type",
+          "row_count",
+          "column_count",
+          "field_mapping",
+          "validation",
+          "status"
+        ],
+        "title": "ImportDraftResponse"
+      },
+      "ImportInspectionErrorResponse": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "row": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Row"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ImportInspectionErrorResponse"
+      },
+      "ImportInspectionRequest": {
+        "properties": {
+          "filename": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Filename"
+          },
+          "content_base64": {
+            "type": "string",
+            "maxLength": 524288,
+            "minLength": 1,
+            "title": "Content Base64"
+          }
+        },
+        "type": "object",
+        "required": [
+          "filename",
+          "content_base64"
+        ],
+        "title": "ImportInspectionRequest"
+      },
+      "ImportInspectionResponse": {
+        "properties": {
+          "schema_version": {
+            "type": "integer",
+            "const": 1,
+            "title": "Schema Version",
+            "default": 1
+          },
+          "module_key": {
+            "type": "string",
+            "title": "Module Key"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "format": {
+            "type": "string",
+            "title": "Format"
+          },
+          "encoding": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Encoding"
+          },
+          "delimiter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delimiter"
+          },
+          "sheet_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sheet Name"
+          },
+          "headers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Headers"
+          },
+          "row_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Row Count"
+          },
+          "rows": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Rows"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated"
+          },
+          "checksum_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Checksum Sha256"
+          },
+          "validation": {
+            "$ref": "#/components/schemas/ImportInspectionValidationResponse"
+          }
+        },
+        "type": "object",
+        "required": [
+          "module_key",
+          "filename",
+          "format",
+          "row_count",
+          "truncated",
+          "checksum_sha256",
+          "validation"
+        ],
+        "title": "ImportInspectionResponse"
+      },
+      "ImportInspectionValidationResponse": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "error_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Error Count"
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ImportInspectionErrorResponse"
+            },
+            "type": "array",
+            "title": "Errors"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ok",
+          "error_count"
+        ],
+        "title": "ImportInspectionValidationResponse"
+      },
       "ImportThroughputPoint": {
         "properties": {
           "date": {
@@ -14836,6 +17582,36 @@
         ],
         "title": "ImportThroughputPoint",
         "description": "Daily import task throughput (success vs. failure)."
+      },
+      "ImportValidationRequest": {
+        "properties": {
+          "row_count": {
+            "type": "integer",
+            "maximum": 2000000.0,
+            "minimum": 0.0,
+            "title": "Row Count"
+          },
+          "column_count": {
+            "type": "integer",
+            "maximum": 50.0,
+            "minimum": 0.0,
+            "title": "Column Count"
+          },
+          "field_mapping": {
+            "items": {
+              "$ref": "#/components/schemas/FieldMappingItem"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "Field Mapping"
+          }
+        },
+        "type": "object",
+        "required": [
+          "row_count",
+          "column_count"
+        ],
+        "title": "ImportValidationRequest"
       },
       "LayoutResponse": {
         "properties": {
@@ -15213,16 +17989,22 @@
             "title": "Parts"
           },
           "sha256": {
-            "type": "string",
-            "pattern": "^[0-9a-fA-F]{64}$",
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9a-fA-F]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Sha256"
           }
         },
         "type": "object",
         "required": [
           "object_key",
-          "parts",
-          "sha256"
+          "parts"
         ],
         "title": "MultipartCompletePathRequest"
       },
@@ -15258,8 +18040,16 @@
           },
           "type": {
             "type": "string",
-            "maxLength": 32,
-            "minLength": 1,
+            "enum": [
+              "vcf",
+              "gff3",
+              "fasta",
+              "blast_db",
+              "seed_data",
+              "expression_csv",
+              "homolog_csv",
+              "module_tsv"
+            ],
             "title": "Type"
           },
           "part_count": {
@@ -16303,6 +19093,286 @@
         "title": "NotificationResponse",
         "description": "One notification entry (list item)."
       },
+      "OntologyRelationshipGraphEdge": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Source"
+          },
+          "target": {
+            "type": "string",
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Target"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "target"
+        ],
+        "title": "OntologyRelationshipGraphEdge",
+        "description": "A relation whose endpoints both occur in the bounded node projection."
+      },
+      "OntologyRelationshipGraphNode": {
+        "properties": {
+          "iri": {
+            "type": "string",
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Iri"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "is_obsolete": {
+            "type": "boolean",
+            "title": "Is Obsolete",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "iri"
+        ],
+        "title": "OntologyRelationshipGraphNode",
+        "description": "One OLS4 graph vertex projected for the bounded browser renderer."
+      },
+      "OntologyRelationshipGraphResponse": {
+        "properties": {
+          "ontology": {
+            "type": "string",
+            "title": "Ontology"
+          },
+          "root_iri": {
+            "type": "string",
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Root Iri"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/OntologyRelationshipGraphNode"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "Nodes"
+          },
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/OntologyRelationshipGraphEdge"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Edges"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "ontology",
+          "root_iri"
+        ],
+        "title": "OntologyRelationshipGraphResponse",
+        "description": "One-hop graph after server-side node/edge caps have been applied."
+      },
+      "OntologySearchResponse": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "title": "Query"
+          },
+          "ontology": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ontology"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Count"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/OntologySearchResult"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "query",
+          "count"
+        ],
+        "title": "OntologySearchResponse"
+      },
+      "OntologySearchResult": {
+        "properties": {
+          "term_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Term Id"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "iri": {
+            "type": "string",
+            "title": "Iri"
+          },
+          "ontology_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ontology Name"
+          },
+          "description": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Description"
+          },
+          "synonyms": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Synonyms"
+          },
+          "is_obsolete": {
+            "type": "boolean",
+            "title": "Is Obsolete",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "iri"
+        ],
+        "title": "OntologySearchResult"
+      },
+      "OntologyTermResponse": {
+        "properties": {
+          "iri": {
+            "type": "string",
+            "title": "Iri"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "ontology_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ontology Name"
+          },
+          "description": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Description"
+          },
+          "synonyms": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Synonyms"
+          },
+          "is_obsolete": {
+            "type": "boolean",
+            "title": "Is Obsolete",
+            "default": false
+          },
+          "parents": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Parents"
+          },
+          "children": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Children"
+          }
+        },
+        "type": "object",
+        "required": [
+          "iri"
+        ],
+        "title": "OntologyTermResponse"
+      },
       "PageDefinitionCreate": {
         "properties": {
           "route": {
@@ -16663,6 +19733,271 @@
         "title": "PhenotypeResponse",
         "description": "Public representation of a phenotype observation."
       },
+      "PluginApiCompatibility": {
+        "properties": {
+          "minimum": {
+            "type": "string",
+            "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$",
+            "title": "Minimum"
+          },
+          "maximum_exclusive": {
+            "type": "string",
+            "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$",
+            "title": "Maximum Exclusive"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "minimum",
+          "maximum_exclusive"
+        ],
+        "title": "PluginApiCompatibility"
+      },
+      "PluginCapabilityResponse": {
+        "properties": {
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
+          "installed": {
+            "type": "boolean",
+            "title": "Installed",
+            "default": false
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": false
+          },
+          "configured": {
+            "type": "boolean",
+            "title": "Configured",
+            "default": false
+          },
+          "healthy": {
+            "type": "boolean",
+            "title": "Healthy",
+            "default": false
+          },
+          "public_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Url"
+          },
+          "assemblies": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Assemblies"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "title": "PluginCapabilityResponse"
+      },
+      "PluginHealthcheck": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "maxLength": 256,
+            "pattern": "^/api/v\\d+(?:/[A-Za-z0-9_.{}:-]+)*$",
+            "title": "Path"
+          },
+          "interval_seconds": {
+            "type": "integer",
+            "maximum": 3600.0,
+            "minimum": 5.0,
+            "title": "Interval Seconds"
+          },
+          "timeout_seconds": {
+            "type": "integer",
+            "maximum": 60.0,
+            "minimum": 1.0,
+            "title": "Timeout Seconds"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "path",
+          "interval_seconds",
+          "timeout_seconds"
+        ],
+        "title": "PluginHealthcheck"
+      },
+      "PluginManifestMetadata": {
+        "properties": {
+          "manifest_version": {
+            "type": "integer",
+            "title": "Manifest Version"
+          },
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "api_compatibility": {
+            "$ref": "#/components/schemas/PluginApiCompatibility"
+          },
+          "license": {
+            "type": "string",
+            "title": "License"
+          },
+          "config_schema": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Config Schema"
+          },
+          "routes": {
+            "items": {
+              "$ref": "#/components/schemas/PluginRoute"
+            },
+            "type": "array",
+            "title": "Routes"
+          },
+          "task_queues": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Task Queues"
+          },
+          "resource_limits": {
+            "$ref": "#/components/schemas/PluginResourceLimits"
+          },
+          "healthcheck": {
+            "$ref": "#/components/schemas/PluginHealthcheck"
+          },
+          "assemblies": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Assemblies"
+          },
+          "uninstall_semantics": {
+            "type": "string",
+            "title": "Uninstall Semantics"
+          }
+        },
+        "type": "object",
+        "required": [
+          "manifest_version",
+          "key",
+          "version",
+          "api_compatibility",
+          "license",
+          "config_schema",
+          "routes",
+          "task_queues",
+          "resource_limits",
+          "healthcheck",
+          "assemblies",
+          "uninstall_semantics"
+        ],
+        "title": "PluginManifestMetadata",
+        "description": "Non-sensitive signed declarations; no signature or configuration values."
+      },
+      "PluginResourceLimits": {
+        "properties": {
+          "max_concurrency": {
+            "type": "integer",
+            "maximum": 128.0,
+            "minimum": 1.0,
+            "title": "Max Concurrency"
+          },
+          "memory_mb": {
+            "type": "integer",
+            "maximum": 65536.0,
+            "minimum": 64.0,
+            "title": "Memory Mb"
+          },
+          "timeout_seconds": {
+            "type": "integer",
+            "maximum": 3600.0,
+            "minimum": 1.0,
+            "title": "Timeout Seconds"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "max_concurrency",
+          "memory_mb",
+          "timeout_seconds"
+        ],
+        "title": "PluginResourceLimits"
+      },
+      "PluginRoute": {
+        "properties": {
+          "method": {
+            "type": "string",
+            "enum": [
+              "GET",
+              "POST",
+              "PUT",
+              "PATCH",
+              "DELETE"
+            ],
+            "title": "Method"
+          },
+          "path": {
+            "type": "string",
+            "maxLength": 256,
+            "pattern": "^/api/v\\d+(?:/[A-Za-z0-9_.{}:-]+)*$",
+            "title": "Path"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "method",
+          "path"
+        ],
+        "title": "PluginRoute"
+      },
+      "PluginStateUpdateRequest": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "enabled"
+        ],
+        "title": "PluginStateUpdateRequest"
+      },
       "PreviewRequest": {
         "properties": {
           "definition": {
@@ -16725,7 +20060,7 @@
           "version": {
             "type": "integer",
             "title": "Version",
-            "default": 1
+            "default": 2
           },
           "features": {
             "additionalProperties": {
@@ -16733,6 +20068,16 @@
             },
             "type": "object",
             "title": "Features"
+          },
+          "plugins": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/PluginCapabilityResponse"
+            },
+            "type": "object",
+            "title": "Plugins"
+          },
+          "databases": {
+            "$ref": "#/components/schemas/DatabaseCapabilitiesResponse"
           }
         },
         "type": "object",
@@ -16823,6 +20168,46 @@
           "authors"
         ],
         "title": "PublicationCreate"
+      },
+      "PublicationManifestResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "import_draft_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Import Draft Id"
+          },
+          "checksum_sha256": {
+            "type": "string",
+            "title": "Checksum Sha256"
+          },
+          "manifest": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Manifest"
+          },
+          "published_at": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "import_draft_id",
+          "checksum_sha256",
+          "manifest"
+        ],
+        "title": "PublicationManifestResponse"
       },
       "PublicationRequest": {
         "properties": {
@@ -17697,11 +21082,431 @@
         "title": "SeqFetchResponse",
         "description": "Extraction result.\n\nSmall results return inline FASTA (``sequence``); results larger than\n10 MiB are stored in S3 and returned as a pre-signed ``download_url``\ninstead (``sequence`` is ``None`` and ``truncated`` is ``False`` \u2013 the\npayload is complete, just delivered out-of-band)."
       },
+      "SettingFieldSchema": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "string",
+              "integer",
+              "boolean",
+              "enum",
+              "email",
+              "url"
+            ],
+            "title": "Kind"
+          },
+          "default": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SettingValue"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "permission": {
+            "type": "string",
+            "const": "administrator",
+            "title": "Permission"
+          },
+          "scope": {
+            "type": "string",
+            "const": "global",
+            "title": "Scope"
+          },
+          "hot_reload": {
+            "type": "boolean",
+            "title": "Hot Reload"
+          },
+          "redaction": {
+            "type": "string",
+            "enum": [
+              "none",
+              "omit"
+            ],
+            "title": "Redaction"
+          },
+          "requires_approval": {
+            "type": "boolean",
+            "title": "Requires Approval"
+          },
+          "allowed_values": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Allowed Values"
+          },
+          "allowed_url_hosts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Allowed Url Hosts"
+          },
+          "minimum": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minimum"
+          },
+          "maximum": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maximum"
+          },
+          "max_length": {
+            "type": "integer",
+            "title": "Max Length"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "default",
+          "permission",
+          "scope",
+          "hot_reload",
+          "redaction",
+          "requires_approval",
+          "max_length"
+        ],
+        "title": "SettingFieldSchema"
+      },
+      "SettingValue": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "integer"
+          },
+          {
+            "type": "boolean"
+          }
+        ]
+      },
+      "SettingsDocumentResponse": {
+        "properties": {
+          "section": {
+            "type": "string",
+            "title": "Section"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Version"
+          },
+          "values": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/SettingValue"
+            },
+            "type": "object",
+            "title": "Values"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "section",
+          "version",
+          "values"
+        ],
+        "title": "SettingsDocumentResponse"
+      },
+      "SettingsHistoryItem": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Version"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "patch",
+              "put_compat",
+              "rollback"
+            ],
+            "title": "Action"
+          },
+          "values": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/SettingValue"
+            },
+            "type": "object",
+            "title": "Values"
+          },
+          "changes": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/SettingValue"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": "object",
+            "title": "Changes"
+          },
+          "actor_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "rollback_from_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rollback From Version"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "version",
+          "action",
+          "values",
+          "changes",
+          "created_at"
+        ],
+        "title": "SettingsHistoryItem"
+      },
+      "SettingsHistoryResponse": {
+        "properties": {
+          "section": {
+            "type": "string",
+            "title": "Section"
+          },
+          "current_version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Current Version"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SettingsHistoryItem"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "section",
+          "current_version",
+          "items"
+        ],
+        "title": "SettingsHistoryResponse"
+      },
+      "SettingsPatchRequest": {
+        "properties": {
+          "expected_version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Version"
+          },
+          "values": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/SettingValue"
+            },
+            "type": "object",
+            "minProperties": 1,
+            "title": "Values"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "expected_version",
+          "values"
+        ],
+        "title": "SettingsPatchRequest"
+      },
+      "SettingsRollbackRequest": {
+        "properties": {
+          "expected_version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Version"
+          },
+          "target_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Target Version"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "expected_version",
+          "target_version",
+          "reason"
+        ],
+        "title": "SettingsRollbackRequest"
+      },
+      "SettingsSchemaResponse": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "const": 1,
+            "title": "Version",
+            "default": 1
+          },
+          "sections": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/SettingsSectionSchema"
+            },
+            "type": "object",
+            "title": "Sections"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "sections"
+        ],
+        "title": "SettingsSchemaResponse"
+      },
+      "SettingsSectionSchema": {
+        "properties": {
+          "fields": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/SettingFieldSchema"
+            },
+            "type": "object",
+            "title": "Fields"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "fields"
+        ],
+        "title": "SettingsSectionSchema"
+      },
+      "SettingsValidateRequest": {
+        "properties": {
+          "section": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Section"
+          },
+          "values": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/SettingValue"
+            },
+            "type": "object",
+            "minProperties": 1,
+            "title": "Values"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "section",
+          "values"
+        ],
+        "title": "SettingsValidateRequest"
+      },
+      "SettingsValidateResponse": {
+        "properties": {
+          "section": {
+            "type": "string",
+            "title": "Section"
+          },
+          "valid": {
+            "type": "boolean",
+            "const": true,
+            "title": "Valid",
+            "default": true
+          },
+          "values": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/SettingValue"
+            },
+            "type": "object",
+            "title": "Values"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "section",
+          "values"
+        ],
+        "title": "SettingsValidateResponse"
+      },
       "SignedUrlResponse": {
         "properties": {
           "url": {
             "type": "string",
             "title": "Url"
+          },
+          "index_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Index Url"
           },
           "expires_in": {
             "type": "integer",
@@ -18285,22 +22090,23 @@
             "title": "Size"
           },
           "content_type": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 128
-              },
-              {
-                "type": "null"
-              }
-            ],
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
             "title": "Content Type"
+          },
+          "checksum_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{64}$",
+            "title": "Checksum Sha256"
           }
         },
         "type": "object",
         "required": [
           "filename",
-          "size"
+          "size",
+          "content_type",
+          "checksum_sha256"
         ],
         "title": "UploadPresignRequest",
         "description": "Request a pre-signed upload URL for a public resource."
@@ -18310,6 +22116,19 @@
           "upload_url": {
             "type": "string",
             "title": "Upload Url"
+          },
+          "upload_method": {
+            "type": "string",
+            "const": "POST",
+            "title": "Upload Method",
+            "default": "POST"
+          },
+          "upload_fields": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Upload Fields"
           },
           "object_key": {
             "type": "string",
@@ -18327,12 +22146,13 @@
         "type": "object",
         "required": [
           "upload_url",
+          "upload_fields",
           "object_key",
           "public_url",
           "expires_in"
         ],
         "title": "UploadPresignResponse",
-        "description": "Pre-signed PUT URL + object key + public URL (nothing persisted)."
+        "description": "Pre-signed upload contract + object key + public URL."
       },
       "UserCreate": {
         "properties": {
@@ -18383,7 +22203,9 @@
           },
           "role_name": {
             "type": "string",
+            "const": "viewer",
             "title": "Role Name",
+            "description": "Public registration always creates a viewer account.",
             "default": "viewer",
             "examples": [
               "viewer"
@@ -18832,6 +22654,32 @@
             ],
             "title": "End"
           },
+          "ref": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4096,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ref"
+          },
+          "alt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4096,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alt"
+          },
           "gene_id": {
             "anyOf": [
               {
@@ -18920,7 +22768,7 @@
               }
             ],
             "title": "Cursor",
-            "description": "Base64-encoded keyset cursor."
+            "description": "Opaque signed keyset cursor."
           },
           "limit": {
             "type": "integer",
@@ -18932,7 +22780,7 @@
         },
         "type": "object",
         "title": "VariantFilterParams",
-        "description": "Query parameters for filtering and paginating variant queries.\n\nUses keyset cursor pagination (base64-encoded) \u2013 never OFFSET.\n``limit`` is capped at 200."
+        "description": "Query parameters for filtering and paginating variant queries.\n\nUses an authenticated, release/filter-bound keyset cursor \u2013 never OFFSET.\n``limit`` is capped at 200."
       },
       "VariantListResponse": {
         "properties": {
@@ -20327,87 +24175,6 @@
         ],
         "title": "SeedRequestUpdate",
         "description": "Admin status update payload."
-      },
-      "ErrorDetail": {
-        "description": "Machine-readable error detail (inside the ``error`` envelope).",
-        "properties": {
-          "code": {
-            "description": "Stable machine-readable error code, e.g. ``not_found``.",
-            "title": "Code",
-            "type": "string"
-          },
-          "message": {
-            "description": "Human-readable error message.",
-            "title": "Message",
-            "type": "string"
-          },
-          "details": {
-            "additionalProperties": true,
-            "description": "Optional structured context (never contains secrets or stack traces).",
-            "title": "Details",
-            "type": "object"
-          }
-        },
-        "required": [
-          "code",
-          "message"
-        ],
-        "title": "ErrorDetail",
-        "type": "object"
-      },
-      "ErrorResponse": {
-        "$defs": {
-          "ErrorDetail": {
-            "description": "Machine-readable error detail (inside the ``error`` envelope).",
-            "properties": {
-              "code": {
-                "description": "Stable machine-readable error code, e.g. ``not_found``.",
-                "title": "Code",
-                "type": "string"
-              },
-              "message": {
-                "description": "Human-readable error message.",
-                "title": "Message",
-                "type": "string"
-              },
-              "details": {
-                "additionalProperties": true,
-                "description": "Optional structured context (never contains secrets or stack traces).",
-                "title": "Details",
-                "type": "object"
-              }
-            },
-            "required": [
-              "code",
-              "message"
-            ],
-            "title": "ErrorDetail",
-            "type": "object"
-          }
-        },
-        "description": "Unified error envelope returned by every API error.",
-        "properties": {
-          "error": {
-            "$ref": "#/components/schemas/ErrorDetail"
-          },
-          "request_id": {
-            "description": "Correlation id (also echoed in the ``X-Request-ID`` header).",
-            "title": "Request Id",
-            "type": "string"
-          },
-          "status_code": {
-            "description": "HTTP status code.",
-            "title": "Status Code",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "error",
-          "request_id",
-          "status_code"
-        ],
-        "title": "ErrorResponse",
-        "type": "object"
       },
       "FieldError": {
         "description": "Field-level validation error for 422 responses.",

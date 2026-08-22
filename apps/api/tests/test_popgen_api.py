@@ -18,6 +18,7 @@ import uuid
 
 import pytest
 
+from app.core.exceptions import NotFoundError
 from app.schemas.popgen import (
     AlleleFreqRequest,
     DiversityRequest,
@@ -31,6 +32,13 @@ from app.services.popgen_service import (
     compute_ld_r2,
     harmonic_sum,
     watterson_theta,
+)
+from app.services.release_context import ReleaseContext
+
+RELEASE_CONTEXT = ReleaseContext(
+    release_id=7,
+    assembly_id=1,
+    assembly="GmWm82.a2.v1",
 )
 
 # ---------------------------------------------------------------------------
@@ -99,6 +107,23 @@ class NullDb:
 
     async def execute(self, stmt, params=None):
         raise AssertionError("region-mode request must not touch PostgreSQL")
+
+
+class MissingGeneDb:
+    """Capture the gene lookup while returning no row."""
+
+    def __init__(self) -> None:
+        self.statements = []
+
+    async def execute(self, stmt, params=None):
+        self.statements.append(stmt)
+
+        class Result:
+            @staticmethod
+            def scalar_one_or_none():
+                return None
+
+        return Result()
 
 
 # ---------------------------------------------------------------------------
@@ -186,7 +211,9 @@ async def test_allelefreq_region_mode() -> None:
         assembly="GmWm82.a2.v1", chromosome="Gm01", start=1, end=1000
     )
 
-    response = await service.allele_frequencies(NullDb(), request)
+    response = await service.allele_frequencies(
+        NullDb(), request, release_context=RELEASE_CONTEXT
+    )
 
     assert ch.calls == 1
     assert response.source == "interval"
@@ -199,6 +226,24 @@ async def test_allelefreq_region_mode() -> None:
     assert response.variants[0].variant_id == "var1"
 
 
+async def test_gene_region_lookup_is_bound_to_selected_release() -> None:
+    db = MissingGeneDb()
+    request = AlleleFreqRequest(gene_id="Glyma.01G000100")
+
+    with pytest.raises(NotFoundError):
+        await _service().allele_frequencies(
+            db,
+            request,
+            release_context=RELEASE_CONTEXT,
+        )
+
+    statement = db.statements[0]
+    sql = str(statement)
+    assert "JOIN assemblies" in sql
+    assert "assemblies.release_id" in sql
+    assert RELEASE_CONTEXT.release_id in statement.compile().params.values()
+
+
 async def test_diversity_region_mode_hand_calc() -> None:
     service = _service()
     request = DiversityRequest(
@@ -209,7 +254,9 @@ async def test_diversity_region_mode_hand_calc() -> None:
         sample_size=5,
     )
 
-    response = await service.diversity(NullDb(), request)
+    response = await service.diversity(
+        NullDb(), request, release_context=RELEASE_CONTEXT
+    )
 
     assert response.n_bp == 1000
     assert response.n_variants == 4
@@ -229,7 +276,9 @@ async def test_diversity_without_sample_size_omits_theta() -> None:
         assembly="GmWm82.a2.v1", chromosome="Gm01", start=1, end=1000
     )
 
-    response = await service.diversity(NullDb(), request)
+    response = await service.diversity(
+        NullDb(), request, release_context=RELEASE_CONTEXT
+    )
 
     assert response.theta is None
     assert response.pi == pytest.approx(0.875 / 1000, abs=1e-10)
@@ -245,7 +294,9 @@ async def test_diversity_with_windows() -> None:
         window_size=250,
     )
 
-    response = await service.diversity(NullDb(), request)
+    response = await service.diversity(
+        NullDb(), request, release_context=RELEASE_CONTEXT
+    )
 
     # Fixture positions: 100 (af 0.5), 200 (af 0.25), 300 (af 0.0),
     # 400 (af None).
@@ -271,7 +322,9 @@ async def test_ld_without_genotypes_returns_note_and_coordinates() -> None:
         assembly="GmWm82.a2.v1", chromosome="Gm01", start=1, end=1000
     )
 
-    response = await service.ld(NullDb(), request)
+    response = await service.ld(
+        NullDb(), request, release_context=RELEASE_CONTEXT
+    )
 
     assert response.r_squared is None
     assert response.note is not None and "genotype" in response.note
@@ -293,7 +346,9 @@ async def test_ld_with_inline_genotypes_computes_r2() -> None:
         ),
     )
 
-    response = await service.ld(NullDb(), request)
+    response = await service.ld(
+        NullDb(), request, release_context=RELEASE_CONTEXT
+    )
 
     assert response.r_squared is not None
     assert len(response.r_squared) == 2
@@ -344,7 +399,9 @@ async def test_diversity_empty_region() -> None:
         assembly="GmWm82.a2.v1", chromosome="Gm01", start=1, end=100
     )
 
-    response = await service.diversity(NullDb(), request)
+    response = await service.diversity(
+        NullDb(), request, release_context=RELEASE_CONTEXT
+    )
 
     assert response.n_variants == 0
     assert response.segregating_sites == 0

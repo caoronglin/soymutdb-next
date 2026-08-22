@@ -9,6 +9,8 @@ env isolation, scrubbed failures and the result_summary contract.
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 import subprocess
 import uuid
@@ -18,10 +20,17 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from boto3.exceptions import S3UploadFailedError
+from botocore.exceptions import ClientError, EndpointConnectionError
 
 from soymutdb_worker.shared import JobPayload
 from soymutdb_worker.tasks.analyses import fastp as fastp_module
 from soymutdb_worker.tasks.analyses.fastp import ANALYSIS_FASTP_TASK
+
+FAKE_FASTQ_BYTES = b"fake fastq bytes"
+FAKE_FASTQ_SHA256 = hashlib.sha256(FAKE_FASTQ_BYTES).digest()
+INTEGRITY_ERROR = "analysis input failed integrity verification"
+STORAGE_ERROR = "analysis object storage operation failed"
 
 #: Realistic fastp >= 0.23 report (stats nested under ``summary``).
 FASTP_JSON_FIXTURE = {
@@ -104,15 +113,104 @@ class FakeS3:
 
     def __init__(self):
         self.downloads: list[tuple[str, str, str]] = []
+        self.events: list[str] = []
+        self.download_payloads: dict[str, bytes] = {}
+        self.head_error: Exception | None = None
+        self.download_error: Exception | None = None
+
+    def head_object(self, *, Bucket: str, Key: str, ChecksumMode: str):
+        self.events.append("head")
+        if self.head_error is not None:
+            raise self.head_error
+        return {
+            "ContentLength": len(FAKE_FASTQ_BYTES),
+            "ContentType": "application/gzip",
+            "ChecksumSHA256": base64.b64encode(FAKE_FASTQ_SHA256).decode("ascii"),
+            "Metadata": {
+                "declared-size": str(len(FAKE_FASTQ_BYTES)),
+                "declared-content-type": "application/gzip",
+                "declared-sha256": FAKE_FASTQ_SHA256.hex(),
+            },
+        }
 
     def download_file(self, bucket: str, key: str, local_path: str):
+        self.events.append("download")
         self.downloads.append((bucket, key, local_path))
-        Path(local_path).write_bytes(b"fake fastq bytes")
+        if self.download_error is not None:
+            raise self.download_error
+        Path(local_path).write_bytes(
+            self.download_payloads.get(key, FAKE_FASTQ_BYTES)
+        )
+
+
+def test_oversized_input_is_rejected_before_download(monkeypatch):
+    s3 = FakeS3()
+    s3.head_object = lambda **kwargs: {
+        "ContentLength": fastp_module.MAX_ANALYSIS_INPUT_SIZE + 1,
+        "ContentType": "application/gzip",
+        "ChecksumSHA256": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=",
+        "Metadata": {
+            "declared-size": str(fastp_module.MAX_ANALYSIS_INPUT_SIZE + 1),
+            "declared-content-type": "application/gzip",
+        },
+    }
+
+    with pytest.raises(ValueError, match="exceeds"):
+        fastp_module.validate_remote_input(s3, "analyses/u/s/input/a.fq.gz")
+
+    assert s3.downloads == []
+
+
+def test_mismatched_mime_is_rejected_before_download():
+    s3 = FakeS3()
+    s3.head_object = lambda **kwargs: {
+        "ContentLength": 10,
+        "ContentType": "text/plain",
+        "ChecksumSHA256": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=",
+        "Metadata": {
+            "declared-size": "10",
+            "declared-content-type": "application/gzip",
+        },
+    }
+
+    with pytest.raises(ValueError, match="MIME"):
+        fastp_module.validate_remote_input(s3, "analyses/u/s/input/a.fq.gz")
+
+    assert s3.downloads == []
+
+
+def test_mismatched_checksum_is_rejected_before_download():
+    s3 = FakeS3()
+    s3.head_object = lambda **kwargs: {
+        "ContentLength": 10,
+        "ContentType": "application/gzip",
+        "ChecksumSHA256": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=",
+        "Metadata": {
+            "declared-size": "10",
+            "declared-content-type": "application/gzip",
+            "declared-sha256": "62" * 32,
+        },
+    }
+
+    with pytest.raises(ValueError, match="checksum does not match"):
+        fastp_module.validate_remote_input(s3, "analyses/u/s/input/a.fq.gz")
+
+    assert s3.downloads == []
 
 
 def _call_task(task: Any, *args, **kwargs):
     """Invoke the raw task function (bypassing Celery's bound-task wrapper)."""
     return task.run.__func__(*args, **kwargs)
+
+
+def _input_key(
+    user_id: str,
+    filename: str = "abc-R1.fastq.gz",
+    *,
+    upload_session_id: str | None = None,
+) -> str:
+    session_id = upload_session_id or str(uuid.uuid4())
+    return f"analyses/{user_id}/{session_id}/input/{filename}"
 
 
 def _payload(
@@ -121,15 +219,18 @@ def _payload(
     input_objects: list[str] | None = None,
     params: dict | None = None,
     analysis_type: str = "fastp",
+    user_id: str | None = None,
 ) -> dict:
     job_id = job_id or str(uuid.uuid4())
+    user_id = user_id or str(uuid.uuid4())
     now = datetime.now(UTC)
-    keys = input_objects or [f"analyses/{job_id}/input/abc-R1.fastq.gz"]
+    keys = input_objects if input_objects is not None else [_input_key(user_id)]
     p = JobPayload(
         job_id=job_id,
         task_name=task_name,
         payload={
             "job_id": job_id,
+            "user_id": user_id,
             "analysis_type": analysis_type,
             "input_objects": keys,
             "params": params or {},
@@ -271,8 +372,8 @@ def test_successful_single_end_run_uploads_and_summarizes(monkeypatch) -> None:
     cmd = captured["cmd"]
     assert cmd[0] == "/usr/bin/fastp"
     assert "-I" not in cmd and "-O" not in cmd
-    # Downloads came from the job-scoped input prefix.
-    assert captured["s3"].downloads[0][1] == f"analyses/{job_id}/input/abc-R1.fastq.gz"
+    assert captured["s3"].downloads[0][1] == payload["payload"]["input_objects"][0]
+    assert captured["s3"].events[:2] == ["head", "download"]
     # Result summary persisted on the job row.
     assert session.status == "succeeded"
     assert session.result_summary is not None
@@ -292,13 +393,15 @@ def test_successful_single_end_run_uploads_and_summarizes(monkeypatch) -> None:
 
 
 def test_paired_end_run_builds_r1_r2_cli(monkeypatch) -> None:
-    """Two input objects → fastp gets -i/-o and -I/-O mate pairs."""
+    """Two upload sessions form one paired-end task without sharing job_id."""
     job_id = str(uuid.uuid4())
+    user_id = str(uuid.uuid4())
     payload = _payload(
         job_id=job_id,
+        user_id=user_id,
         input_objects=[
-            f"analyses/{job_id}/input/abc-R1.fastq.gz",
-            f"analyses/{job_id}/input/abc-R2.fastq.gz",
+            _input_key(user_id, "abc-R1.fastq.gz"),
+            _input_key(user_id, "abc-R2.fastq.gz"),
         ],
     )
     session = FakeSession(status="queued")
@@ -312,6 +415,63 @@ def test_paired_end_run_builds_r1_r2_cli(monkeypatch) -> None:
     assert cmd[cmd.index("-i") + 1].endswith("input_R1.fastq.gz")
     assert cmd[cmd.index("-I") + 1].endswith("input_R2.fastq.gz")
     assert session.status == "succeeded"
+
+
+def test_downloaded_input_checksum_mismatch_fails_before_pipeline(monkeypatch) -> None:
+    payload = _payload()
+    session = FakeSession(status="queued")
+    captured = _monkeypatch_environment(monkeypatch, session)
+    key = payload["payload"]["input_objects"][0]
+    captured["s3"].download_payloads[key] = b"X" * len(FAKE_FASTQ_BYTES)
+
+    with pytest.raises(ValueError, match=f"^{INTEGRITY_ERROR}$"):
+        _call_task(fastp_module.run_fastp, FakeTask(), payload=payload)
+
+    assert session.status == "failed"
+    assert session.error_message == INTEGRITY_ERROR
+    assert "cmd" not in captured
+    assert captured["uploads"] == []
+
+
+def test_downloaded_input_size_mismatch_fails_before_pipeline(monkeypatch) -> None:
+    payload = _payload()
+    session = FakeSession(status="queued")
+    captured = _monkeypatch_environment(monkeypatch, session)
+    key = payload["payload"]["input_objects"][0]
+    captured["s3"].download_payloads[key] = FAKE_FASTQ_BYTES + b"!"
+
+    with pytest.raises(ValueError, match=f"^{INTEGRITY_ERROR}$"):
+        _call_task(fastp_module.run_fastp, FakeTask(), payload=payload)
+
+    assert session.status == "failed"
+    assert session.error_message == INTEGRITY_ERROR
+    assert "cmd" not in captured
+    assert captured["uploads"] == []
+
+
+def test_paired_end_second_input_integrity_mismatch_fails_before_pipeline(
+    monkeypatch,
+) -> None:
+    user_id = str(uuid.uuid4())
+    input_objects = [
+        _input_key(user_id, "abc-R1.fastq.gz"),
+        _input_key(user_id, "abc-R2.fastq.gz"),
+    ]
+    payload = _payload(user_id=user_id, input_objects=input_objects)
+    session = FakeSession(status="queued")
+    captured = _monkeypatch_environment(monkeypatch, session)
+    captured["s3"].download_payloads[input_objects[1]] = b"X" * len(
+        FAKE_FASTQ_BYTES
+    )
+
+    with pytest.raises(ValueError, match=f"^{INTEGRITY_ERROR}$"):
+        _call_task(fastp_module.run_fastp, FakeTask(), payload=payload)
+
+    assert [item[1] for item in captured["s3"].downloads] == input_objects
+    assert session.status == "failed"
+    assert session.error_message == INTEGRITY_ERROR
+    assert "cmd" not in captured
+    assert captured["uploads"] == []
 
 
 def test_param_whitelist_mapping(monkeypatch) -> None:
@@ -359,16 +519,57 @@ def test_disallowed_param_is_rejected(monkeypatch) -> None:
     assert session.status == "queued"
 
 
-def test_input_key_outside_job_prefix_is_rejected(monkeypatch) -> None:
-    job_id = str(uuid.uuid4())
+def test_input_key_without_uuid_upload_session_is_rejected(monkeypatch) -> None:
+    user_id = str(uuid.uuid4())
     payload = _payload(
-        job_id=job_id,
-        input_objects=[f"analyses/{uuid.uuid4()}/input/other.fastq.gz"],
+        user_id=user_id,
+        input_objects=[f"analyses/{user_id}/not-a-session/input/other.fastq.gz"],
     )
     session = FakeSession(status="queued")
     _monkeypatch_environment(monkeypatch, session)
 
-    with pytest.raises(ValueError, match="outside the job's input prefix"):
+    with pytest.raises(ValueError, match="upload session"):
+        _call_task(fastp_module.run_fastp, FakeTask(), payload=payload)
+
+    assert session.status == "queued"
+
+
+def test_input_key_owned_by_another_user_is_rejected(monkeypatch) -> None:
+    user_id = str(uuid.uuid4())
+    other_user_id = str(uuid.uuid4())
+    payload = _payload(
+        user_id=user_id,
+        input_objects=[_input_key(other_user_id, "stolen.fastq.gz")],
+    )
+    session = FakeSession(status="queued")
+    _monkeypatch_environment(monkeypatch, session)
+
+    with pytest.raises(ValueError, match="does not belong"):
+        _call_task(fastp_module.run_fastp, FakeTask(), payload=payload)
+
+    assert session.status == "queued"
+
+
+def test_legacy_unscoped_input_key_is_rejected(monkeypatch) -> None:
+    payload = _payload(
+        input_objects=[f"analyses/{uuid.uuid4()}/input/legacy.fastq.gz"]
+    )
+    session = FakeSession(status="queued")
+    _monkeypatch_environment(monkeypatch, session)
+
+    with pytest.raises(ValueError, match="user UUID"):
+        _call_task(fastp_module.run_fastp, FakeTask(), payload=payload)
+
+    assert session.status == "queued"
+
+
+def test_payload_without_user_id_is_rejected(monkeypatch) -> None:
+    payload = _payload()
+    payload["payload"].pop("user_id")
+    session = FakeSession(status="queued")
+    _monkeypatch_environment(monkeypatch, session)
+
+    with pytest.raises(ValueError, match="user_id"):
         _call_task(fastp_module.run_fastp, FakeTask(), payload=payload)
 
     assert session.status == "queued"
@@ -376,12 +577,14 @@ def test_input_key_outside_job_prefix_is_rejected(monkeypatch) -> None:
 
 def test_three_input_objects_rejected(monkeypatch) -> None:
     job_id = str(uuid.uuid4())
+    user_id = str(uuid.uuid4())
     payload = _payload(
         job_id=job_id,
+        user_id=user_id,
         input_objects=[
-            f"analyses/{job_id}/input/a.fq.gz",
-            f"analyses/{job_id}/input/b.fq.gz",
-            f"analyses/{job_id}/input/c.fq.gz",
+            _input_key(user_id, "a.fq.gz"),
+            _input_key(user_id, "b.fq.gz"),
+            _input_key(user_id, "c.fq.gz"),
         ],
     )
     session = FakeSession(status="queued")
@@ -412,6 +615,7 @@ def test_wrong_analysis_type_is_rejected(monkeypatch) -> None:
 
 def test_legacy_kwargs_dispatch_still_works(monkeypatch) -> None:
     job_id = str(uuid.uuid4())
+    user_id = str(uuid.uuid4())
     session = FakeSession(status="queued")
     _monkeypatch_environment(monkeypatch, session)
 
@@ -419,7 +623,8 @@ def test_legacy_kwargs_dispatch_still_works(monkeypatch) -> None:
         fastp_module.run_fastp,
         FakeTask(),
         job_id=job_id,
-        input_objects=[f"analyses/{job_id}/input/legacy.fq.gz"],
+        user_id=user_id,
+        input_objects=[_input_key(user_id, "legacy.fq.gz")],
         params={"quality_phred": 15},
     )
 
@@ -427,9 +632,86 @@ def test_legacy_kwargs_dispatch_still_works(monkeypatch) -> None:
     assert session.status == "succeeded"
 
 
+def test_legacy_kwargs_without_user_id_are_rejected(monkeypatch) -> None:
+    job_id = str(uuid.uuid4())
+    session = FakeSession(status="queued")
+    _monkeypatch_environment(monkeypatch, session)
+
+    with pytest.raises(TypeError, match="user_id"):
+        _call_task(
+            fastp_module.run_fastp,
+            FakeTask(),
+            job_id=job_id,
+            input_objects=[_input_key(str(uuid.uuid4()), "legacy.fq.gz")],
+            params={},
+        )
+
+    assert session.status == "queued"
+
+
 # ---------------------------------------------------------------------------
 # Failure paths
 # ---------------------------------------------------------------------------
+
+
+def test_head_client_error_is_redacted_before_persistence(monkeypatch) -> None:
+    payload = _payload()
+    session = FakeSession(status="queued")
+    captured = _monkeypatch_environment(monkeypatch, session)
+    secret = "INTERNAL_SENTINEL s3.internal:9000"
+    captured["s3"].head_error = ClientError(
+        {"Error": {"Code": "AccessDenied", "Message": secret}},
+        "HeadObject",
+    )
+
+    with pytest.raises(RuntimeError, match=f"^{STORAGE_ERROR}$"):
+        _call_task(fastp_module.run_fastp, FakeTask(), payload=payload)
+
+    assert session.status == "failed"
+    assert session.error_message == STORAGE_ERROR
+    assert secret not in (session.error_message or "")
+    assert "cmd" not in captured
+    assert captured["uploads"] == []
+
+
+def test_download_botocore_error_is_redacted_before_persistence(monkeypatch) -> None:
+    payload = _payload()
+    session = FakeSession(status="queued")
+    captured = _monkeypatch_environment(monkeypatch, session)
+    secret = "INTERNAL_SENTINEL-download"
+    captured["s3"].download_error = EndpointConnectionError(
+        endpoint_url=f"https://{secret}"
+    )
+
+    with pytest.raises(RuntimeError, match=f"^{STORAGE_ERROR}$"):
+        _call_task(fastp_module.run_fastp, FakeTask(), payload=payload)
+
+    assert session.status == "failed"
+    assert session.error_message == STORAGE_ERROR
+    assert secret not in (session.error_message or "")
+    assert "cmd" not in captured
+    assert captured["uploads"] == []
+
+
+def test_output_upload_error_is_redacted_before_persistence(monkeypatch) -> None:
+    payload = _payload()
+    session = FakeSession(status="queued")
+    _monkeypatch_environment(monkeypatch, session)
+    secret = "INTERNAL_SENTINEL-output-upload"
+
+    def fail_upload(*args, **kwargs):
+        raise S3UploadFailedError(
+            f"Failed to upload /tmp/private to analyses/private-key: {secret}"
+        )
+
+    monkeypatch.setattr(fastp_module, "upload_file", fail_upload)
+
+    with pytest.raises(RuntimeError, match=f"^{STORAGE_ERROR}$"):
+        _call_task(fastp_module.run_fastp, FakeTask(), payload=payload)
+
+    assert session.status == "failed"
+    assert session.error_message == STORAGE_ERROR
+    assert secret not in (session.error_message or "")
 
 
 def test_failed_run_marks_job_failed_with_scrubbed_error(monkeypatch) -> None:

@@ -33,9 +33,139 @@ def _editor() -> uuid.UUID:
     return uuid.uuid4()
 
 
+def _valid_v2_definition() -> dict:
+    return {
+        "schema_version": 2,
+        "root": {
+            "type": "columns",
+            "props": {"columns": 2},
+            "children": [],
+        },
+        "data_sources": [
+            {
+                "id": "genes",
+                "kind": "dataset",
+                "dataset_version_id": "dataset-v7",
+                "config": {"limit": 20},
+            }
+        ],
+        "theme_id": "compact-data",
+        "layouts": {
+            "desktop": {"columns": 12},
+            "tablet": {"columns": 8},
+            "mobile": {"columns": 4},
+        },
+    }
+
+
 # ---------------------------------------------------------------------------
 # Service lifecycle
 # ---------------------------------------------------------------------------
+
+
+def test_registry_normalizes_legacy_definition_to_v2_defaults():
+    from app.page_builder.registry import validate_definition
+
+    cleaned = validate_definition(_valid_definition())
+
+    assert cleaned["schema_version"] == 2
+    assert cleaned["data_sources"] == []
+    assert cleaned["theme_id"] == "scientific-light"
+    assert cleaned["layouts"] == {"desktop": {}, "tablet": {}, "mobile": {}}
+
+
+def test_registry_preserves_valid_v2_metadata():
+    from app.page_builder.registry import validate_definition
+
+    cleaned = validate_definition(_valid_v2_definition())
+
+    assert cleaned["schema_version"] == 2
+    assert cleaned["data_sources"] == _valid_v2_definition()["data_sources"]
+    assert cleaned["theme_id"] == "compact-data"
+    assert cleaned["layouts"] == _valid_v2_definition()["layouts"]
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("schema_version", 3),
+        ("theme_id", "custom-css-theme"),
+        ("data_sources", [{"id": "genes", "kind": "dataset", "script": "alert(1)"}]),
+        ("layouts", {"desktop": [], "tablet": {}, "mobile": {}}),
+    ],
+)
+def test_registry_rejects_invalid_v2_metadata(field, value):
+    from app.page_builder.registry import validate_definition
+
+    definition = _valid_v2_definition()
+    definition[field] = value
+
+    with pytest.raises(ValidationError):
+        validate_definition(definition)
+
+
+def _plugin_state(*, assemblies=("Glycine max",), healthy=True, public_url="https://tools.example.org"):
+    from app.core.plugins import PluginState
+
+    return PluginState(
+        version="1.0.0",
+        installed=True,
+        enabled=True,
+        configured=True,
+        healthy=healthy,
+        public_url=public_url,
+        assemblies=assemblies,
+        reason=None if healthy else "healthcheck_failed",
+    )
+
+
+def test_plugin_launchers_require_healthy_allowlisted_assembly():
+    from app.page_builder.registry import validate_plugin_launchers
+
+    definition = validate_plugin_launchers(
+        {
+            "root": {
+                "type": "columns",
+                "props": {"columns": 1},
+                "children": [
+                    {
+                        "type": "jbrowse_launcher",
+                        "props": {"assembly": "Glycine max"},
+                    },
+                    {
+                        "type": "blast_launcher",
+                        "props": {"program": "blastn", "assembly": "Glycine max"},
+                    },
+                ],
+            }
+        },
+        {"jbrowse": _plugin_state(), "blast": _plugin_state()},
+    )
+
+    assert definition["root"]["children"][0]["props"]["assembly"] == "Glycine max"
+
+
+@pytest.mark.parametrize(
+    "states",
+    [
+        {},
+        {"jbrowse": _plugin_state(healthy=False)},
+        {"jbrowse": _plugin_state(assemblies=("Williams 82",))},
+        {"jbrowse": _plugin_state(public_url=None)},
+    ],
+)
+def test_plugin_launchers_fail_closed_when_status_assembly_or_url_is_invalid(states):
+    from app.page_builder.registry import validate_plugin_launchers
+
+    definition = {
+        "root": {
+            "type": "jbrowse_launcher",
+            "props": {"assembly": "Glycine max"},
+        }
+    }
+
+    with pytest.raises(ValidationError):
+        validate_plugin_launchers(definition, states)
 
 
 @pytest.mark.asyncio
@@ -338,3 +468,11 @@ def test_seed_has_five_navigation_items_and_seven_pages():
     child_types = [c["type"] for c in home["root"]["children"]]
     assert "news_list" in child_types
     assert "media_carousel" in child_types
+
+    tools = next(d for r, _t, d in SEED_PAGES if r == "/tools")
+    blast = next(
+        child
+        for child in tools["root"]["children"]
+        if child["type"] == "blast_launcher"
+    )
+    assert blast["props"]["assembly"] == "Glycine max"

@@ -10,8 +10,25 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, patch
 
 import pytest
+import pytest_asyncio
+
+from app.services.release_context import ReleaseContext, get_release_context
 
 VARIANTS_PREFIX = "/api/v1/variants"
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _release_context_override(app):
+    async def override_release_context() -> ReleaseContext:
+        return ReleaseContext(
+            release_id=7,
+            assembly_id=1,
+            assembly="Wm82.gnm2",
+        )
+
+    app.dependency_overrides[get_release_context] = override_release_context
+    yield
+    app.dependency_overrides.pop(get_release_context, None)
 
 
 def _make_variant_dict(variant_id: str = "var_001", **kwargs) -> dict:
@@ -90,9 +107,18 @@ class TestListVariants:
             "app.services.variant_service.VariantService.list_variants",
             new_callable=AsyncMock,
             return_value={"items": [], "next_cursor": None, "has_more": False},
-        ):
-            response = await client.get(f"{VARIANTS_PREFIX}?chromosome=Gm01")
+        ) as list_variants:
+            response = await client.get(
+                f"{VARIANTS_PREFIX}?chromosome=Gm01&ref=A&alt=T"
+            )
         assert response.status_code == 200
+        assert list_variants.await_args is not None
+        params = list_variants.await_args.args[1]
+        context = list_variants.await_args.kwargs["release_context"]
+        assert params.chromosome == "Gm01"
+        assert params.ref == "A"
+        assert params.alt == "T"
+        assert context.release_id == 7
 
     async def test_list_variants_filter_by_impact(self, client):
         """Filtering by impact returns only matching variants."""

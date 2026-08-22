@@ -21,6 +21,7 @@ from ...schemas.popgen import (
     LdResponse,
 )
 from ...services.popgen_service import PopGenService
+from ...services.release_context import ReleaseContext, get_release_context
 
 router = APIRouter(prefix="/tools", tags=["tools"])
 service = PopGenService()
@@ -30,6 +31,7 @@ service = PopGenService()
 async def compute_ld(
     request: LdRequest,
     db: AsyncSession = Depends(get_db),
+    release_context: ReleaseContext = Depends(get_release_context),
 ) -> LdResponse:
     """LD heatmap data: variant coordinates + r² matrix.
 
@@ -40,13 +42,14 @@ async def compute_ld(
     - Inline ``genotypes`` mode (sample × variant dosage matrix) computes the
       full pairwise r² matrix (squared Pearson correlation of dosages).
     """
-    return await service.ld(db, request)
+    return await service.ld(db, request, release_context=release_context)
 
 
 @router.post("/diversity", response_model=DiversityResponse)
 async def nucleotide_diversity(
     request: DiversityRequest,
     db: AsyncSession = Depends(get_db),
+    release_context: ReleaseContext = Depends(get_release_context),
 ) -> DiversityResponse:
     """Nucleotide diversity (π) and Watterson's θ for a gene / interval.
 
@@ -54,13 +57,22 @@ async def nucleotide_diversity(
     reported when ``sample_size`` is provided.  Optional ``window_size``
     (bp) returns per-window π for sliding-window plots.
     """
-    return await service.diversity(db, request)
+    return await service.diversity(
+        db,
+        request,
+        release_context=release_context,
+    )
 
 
 @router.post("/allelefreq", response_model=AlleleFreqResponse)
 async def allele_frequencies(
     request: AlleleFreqRequest,
     db: AsyncSession = Depends(get_db),
+    release_context: ReleaseContext = Depends(get_release_context),
 ) -> AlleleFreqResponse:
     """Per-variant allele frequencies for a locus / gene / interval."""
-    return await service.allele_frequencies(db, request)
+    return await service.allele_frequencies(
+        db,
+        request,
+        release_context=release_context,
+    )

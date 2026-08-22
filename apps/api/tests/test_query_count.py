@@ -17,6 +17,7 @@ import pytest
 
 from app.api.v1 import expression as expression_module
 from app.services.gene_service import GeneService
+from app.services.release_context import ReleaseContext
 from app.services.seqfetch_service import SeqFetchService
 
 
@@ -164,7 +165,11 @@ class TestGeneDetailQueryCount:
         db = MagicMock()
         db.execute = AsyncMock(return_value=_make_exec_result(scalar_one=gene))
 
-        detail = await GeneService().get_gene(db, "Glyma.01G000100")
+        detail = await GeneService().get_gene(
+            db,
+            "Glyma.01G000100",
+            release_context=ReleaseContext(release_id=7),
+        )
 
         assert detail.gene_id == "Glyma.01G000100"
         assert len(detail.transcripts) == 1

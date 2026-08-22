@@ -41,7 +41,7 @@ def upgrade() -> None:
         sa.Column("description", sa.Text(), nullable=True),
         sa.Column(
             "category",
-            sa.Enum(name="widget_category_enum"),
+            postgresql.ENUM(name="widget_category_enum", create_type=False),
             server_default="custom",
             nullable=False,
         ),
@@ -62,7 +62,7 @@ def upgrade() -> None:
         ),
         sa.Column(
             "permissions",
-            sa.Enum(name="widget_permission_enum"),
+            postgresql.ENUM(name="widget_permission_enum", create_type=False),
             server_default="public",
             nullable=False,
         ),

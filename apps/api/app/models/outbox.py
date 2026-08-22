@@ -14,6 +14,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    CheckConstraint,
     DateTime,
     Enum,
     Index,
@@ -31,6 +32,7 @@ from .base import Base, enum_values
 
 class OutboxEventStatus(enum.StrEnum):
     PENDING = "pending"
+    PROCESSING = "processing"
     SENT = "sent"
     FAILED = "failed"
 
@@ -53,13 +55,26 @@ class OutboxEvent(Base):
     event_type: Mapped[str] = mapped_column(String(64), nullable=False)
     payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
     status: Mapped[str] = mapped_column(
-        Enum(OutboxEventStatus, name="outbox_event_status_enum", create_constraint=True, values_callable=enum_values),
+        Enum(
+            OutboxEventStatus,
+            name="outbox_event_status_enum",
+            create_constraint=True,
+            values_callable=enum_values,
+        ),
         default=OutboxEventStatus.PENDING,
         server_default="pending",
         nullable=False,
     )
     attempt_count: Mapped[int] = mapped_column(
         Integer, default=0, server_default="0", nullable=False
+    )
+    #: Per-claim fencing token.  A fresh value is written for every delivery
+    #: attempt so an expired dispatcher cannot finalize a reclaimed event.
+    lease_owner: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), nullable=True
+    )
+    lease_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -72,7 +87,17 @@ class OutboxEvent(Base):
     message_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     __table_args__ = (
+        CheckConstraint(
+            "(status = 'processing' AND lease_owner IS NOT NULL "
+            "AND lease_until IS NOT NULL) OR "
+            "(status <> 'processing' AND lease_owner IS NULL "
+            "AND lease_until IS NULL)",
+            name="ck_outbox_events_processing_lease",
+        ),
         Index("ix_outbox_events_status_created", "status", "created_at"),
+        Index(
+            "ix_outbox_events_status_lease_until", "status", "lease_until"
+        ),
         Index("ix_outbox_events_aggregate", "aggregate_type", "aggregate_id"),
     )
 

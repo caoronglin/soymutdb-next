@@ -157,6 +157,9 @@ class Settings(BaseSettings):
     # noeviction + AOF）；此处默认值仅供本地开发（单机 Redis 不同 DB）。
     celery_broker_url: str = "redis://localhost:6379/1"
     celery_result_backend: str = "redis://localhost:6379/2"
+    #: Bound broker I/O so one publish cannot hold an outbox lease forever.
+    celery_broker_connect_timeout_seconds: float = Field(default=3.0, ge=1.0, le=60.0)
+    celery_broker_socket_timeout_seconds: float = Field(default=5.0, ge=1.0, le=120.0)
     # Celery result TTL（秒）：默认 7 天（1-7 天范围内建议值），worker 与
     # compose 均读取 SOYMUTDB_CELERY_RESULT_EXPIRES。
     celery_result_expires: int = 604800
@@ -191,9 +194,12 @@ class Settings(BaseSettings):
     # single-instance debugging (SOYMUTDB_OUTBOX_DISPATCHER_ENABLED=false).
     outbox_dispatcher_enabled: bool = True
     outbox_poll_interval_seconds: float = 1.0
-    outbox_batch_size: int = 50
+    outbox_batch_size: int = Field(default=50, ge=1, le=1000)
+    #: Durable claim lifetime.  The dispatcher renews active batch leases at
+    #: one third of this interval while broker delivery is in progress.
+    outbox_lease_seconds: float = Field(default=60.0, ge=5.0, le=3600.0)
     #: Max send attempts per event before the row is left ``failed``.
-    outbox_max_attempts: int = 5
+    outbox_max_attempts: int = Field(default=5, ge=1, le=100)
     #: Sent events older than this many days are archived/deleted.
     outbox_retention_days: int = 30
     outbox_cleanup_interval_seconds: float = 3600.0
@@ -246,6 +252,12 @@ class Settings(BaseSettings):
     # --------------------------------------------------------------- CDN
     cdn_enabled: bool = False
     cdn_urls: list[str] = Field(default_factory=lambda: [])
+
+    # ------------------------------------------------------------- Plugins
+    # Plugin code is deployed out-of-band.  Runtime manifests are accepted
+    # only when their HMAC signature verifies with this deployment secret.
+    plugin_manifest_signing_key: str | None = None
+    plugin_manifests_json: str = "[]"
 
     # -------------------------------------------------------- Timeouts (centralized)
     api_timeout_critical: int = 30

@@ -3,9 +3,9 @@
 - ``POST /seed-requests`` — public submission (no auth); the service writes
   the request row plus an outbox event so the worker emails the requester
   and the admins.
-- ``GET /admin/seed-requests`` — researcher+; paginated listing with an
+- ``GET /admin/seed-requests`` — seed-manager capability; paginated listing with an
   optional status filter.
-- ``PATCH /admin/seed-requests/{id}`` — researcher+; transition-validated
+- ``PATCH /admin/seed-requests/{id}`` — seed-manager capability; transition-validated
   status updates (pending → approved/rejected → fulfilled).
 """
 
@@ -28,7 +28,7 @@ from ...schemas.seed_request import (
     SeedRequestUpdate,
 )
 from ...services.seed_request_service import SeedRequestService
-from .deps import get_current_user, require_role
+from .deps import require_role
 
 router = APIRouter(tags=["seed-requests"])
 service = SeedRequestService()
@@ -52,11 +52,11 @@ async def create_seed_request(
 @router.get(
     "/admin/seed-requests",
     response_model=SeedRequestListResponse,
-    summary="List seed requests (researcher+)",
+    summary="List seed requests (seed manager)",
 )
 async def list_seed_requests(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(RoleName.RESEARCHER)),
+    current_user: User = Depends(require_role(RoleName.SEED_MANAGER)),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=settings.default_page_size, ge=1, le=settings.max_page_size),
     status: SeedRequestStatus | None = Query(default=None),
@@ -70,13 +70,13 @@ async def list_seed_requests(
 @router.patch(
     "/admin/seed-requests/{request_id}",
     response_model=SeedRequestResponse,
-    summary="Update a seed request status (researcher+)",
+    summary="Update a seed request status (seed manager)",
 )
 async def update_seed_request(
     request_id: uuid.UUID,
     update: SeedRequestUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(RoleName.RESEARCHER)),
+    current_user: User = Depends(require_role(RoleName.SEED_MANAGER)),
 ) -> SeedRequestResponse:
     """Advance a request's status (pending → approved/rejected → fulfilled)."""
     return await service.update_status(

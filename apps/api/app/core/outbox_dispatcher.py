@@ -13,7 +13,10 @@ from __future__ import annotations
 
 import asyncio
 import time
+import uuid
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 from typing import Any
 
 import structlog
@@ -30,74 +33,195 @@ settings = get_settings()
 SendFn = Callable[..., Any]
 
 
+def _safe_send_error(exc: Exception) -> str:
+    """Return broker diagnostics that cannot contain an event payload."""
+    return f"{type(exc).__name__}: broker send failed"
+
+
+async def _heartbeat_claims(
+    *,
+    factory: Any,
+    event_ids: set[uuid.UUID],
+    lease_owner: uuid.UUID,
+    lease_seconds: float,
+    stop_event: asyncio.Event,
+) -> None:
+    """Renew every unfinished event in a claimed batch until stopped."""
+    interval = max(lease_seconds / 3, 0.01)
+    while True:
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=interval)
+            return
+        except TimeoutError:
+            pass
+
+        active_ids = list(event_ids)
+        if not active_ids:
+            return
+        try:
+            async with factory() as session:
+                renewed = await outbox_service.renew_leases(
+                    session,
+                    active_ids,
+                    lease_owner=lease_owner,
+                    lease_seconds=lease_seconds,
+                )
+            if renewed < len(active_ids):
+                logger.warning(
+                    "outbox.lease_renew_partial",
+                    lease_owner=str(lease_owner),
+                    expected=len(active_ids),
+                    renewed=renewed,
+                )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning(
+                "outbox.lease_renew_failed",
+                lease_owner=str(lease_owner),
+                error_type=type(exc).__name__,
+            )
+
+
 async def poll_outbox_once(*, send: SendFn = dispatch_task) -> int:
-    """Forward one batch of pending outbox events; return events processed."""
+    """Forward one durably claimed batch; return the number processed.
+
+    The claim transaction commits ``processing`` leases before any broker I/O.
+    A separate heartbeat session keeps all unfinished rows in the batch leased
+    while synchronous Celery sends run in worker threads.
+    """
     factory = get_session_factory()
     processed = 0
+    lease_owner = uuid.uuid4()
     async with factory() as session:
         try:
-            events = await outbox_service.claim_pending(session)
+            events = await outbox_service.claim_pending(
+                session,
+                batch_size=settings.outbox_batch_size,
+                lease_owner=lease_owner,
+                lease_seconds=settings.outbox_lease_seconds,
+            )
         except Exception:
             await session.rollback()
             raise
 
-        for event in events:
-            event_id = str(event.event_id)
-            payload = event.payload or {}
-            task_name = payload.get("task_name", "")
-            if not task_name or not isinstance(task_name, str):
-                logger.warning(
-                    "outbox.malformed_event",
-                    event_id=event_id,
-                    event_type=event.event_type,
-                    reason="missing task_name",
-                )
-                await outbox_service.mark_failed(
-                    session, event.event_id, error="missing task_name"
-                )
-                processed += 1
-                continue
+        if not events:
+            return 0
 
-            kwargs = payload.get("kwargs")
-            if kwargs is None:
-                # Backward compatibility: versioned JobPayload events carry
-                # the task payload directly under ``payload``.
-                kwargs = {"payload": payload}
-            elif not isinstance(kwargs, dict):
-                logger.warning(
-                    "outbox.malformed_event",
-                    event_id=event_id,
-                    event_type=event.event_type,
-                    reason="invalid kwargs",
-                )
-                await outbox_service.mark_failed(
-                    session, event.event_id, error="invalid kwargs"
-                )
-                processed += 1
-                continue
+        active_event_ids = {event.event_id for event in events}
+        heartbeat_stop = asyncio.Event()
+        heartbeat = asyncio.create_task(
+            _heartbeat_claims(
+                factory=factory,
+                event_ids=active_event_ids,
+                lease_owner=lease_owner,
+                lease_seconds=settings.outbox_lease_seconds,
+                stop_event=heartbeat_stop,
+            )
+        )
+        send_executor = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="outbox-send"
+        )
+        cancelled = False
+        try:
+            for event in events:
+                event_id = str(event.event_id)
+                payload = event.payload or {}
+                task_name = payload.get("task_name", "")
+                if not task_name or not isinstance(task_name, str):
+                    logger.warning(
+                        "outbox.malformed_event",
+                        event_id=event_id,
+                        event_type=event.event_type,
+                        reason="missing task_name",
+                    )
+                    changed = await outbox_service.mark_failed(
+                        session,
+                        event.event_id,
+                        lease_owner=lease_owner,
+                        error="missing task_name",
+                    )
+                    if not changed:
+                        logger.warning("outbox.lease_lost", event_id=event_id)
+                    processed += 1
+                    active_event_ids.discard(event.event_id)
+                    continue
 
-            queue = TASK_QUEUE_MAP.get(task_name, QUEUE_DEFAULT)
+                kwargs = payload.get("kwargs")
+                if kwargs is None:
+                    # Backward compatibility: versioned JobPayload events carry
+                    # the task payload directly under ``payload``.
+                    kwargs = {"payload": payload}
+                elif not isinstance(kwargs, dict):
+                    logger.warning(
+                        "outbox.malformed_event",
+                        event_id=event_id,
+                        event_type=event.event_type,
+                        reason="invalid kwargs",
+                    )
+                    changed = await outbox_service.mark_failed(
+                        session,
+                        event.event_id,
+                        lease_owner=lease_owner,
+                        error="invalid kwargs",
+                    )
+                    if not changed:
+                        logger.warning("outbox.lease_lost", event_id=event_id)
+                    processed += 1
+                    active_event_ids.discard(event.event_id)
+                    continue
+
+                queue = TASK_QUEUE_MAP.get(task_name, QUEUE_DEFAULT)
+                try:
+                    await asyncio.get_running_loop().run_in_executor(
+                        send_executor,
+                        partial(
+                            send,
+                            task_name,
+                            identifier=event_id,
+                            kwargs=kwargs,
+                            queue=queue,
+                            task_id=event_id,
+                        ),
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "outbox.send_failed",
+                        event_id=event_id,
+                        task_name=task_name,
+                        error_type=type(exc).__name__,
+                    )
+                    changed = await outbox_service.mark_failed(
+                        session,
+                        event.event_id,
+                        lease_owner=lease_owner,
+                        error=_safe_send_error(exc),
+                    )
+                else:
+                    changed = await outbox_service.mark_sent(
+                        session,
+                        event.event_id,
+                        lease_owner=lease_owner,
+                        message_id=event_id,
+                    )
+                if not changed:
+                    logger.warning("outbox.lease_lost", event_id=event_id)
+                processed += 1
+                active_event_ids.discard(event.event_id)
+        except asyncio.CancelledError:
+            cancelled = True
+            raise
+        finally:
+            heartbeat_stop.set()
             try:
-                send(
-                    task_name,
-                    identifier=event_id,
-                    kwargs=kwargs,
-                    queue=queue,
-                    task_id=event_id,
+                await heartbeat
+            except asyncio.CancelledError:
+                heartbeat.cancel()
+                raise
+            finally:
+                send_executor.shutdown(
+                    wait=not cancelled, cancel_futures=cancelled
                 )
-            except Exception as exc:
-                logger.warning(
-                    "outbox.send_failed",
-                    event_id=event_id,
-                    task_name=task_name,
-                    error=str(exc),
-                )
-                await outbox_service.mark_failed(session, event.event_id, error=str(exc))
-            else:
-                await outbox_service.mark_sent(
-                    session, event.event_id, message_id=event_id
-                )
-            processed += 1
     return processed
 
 
@@ -117,8 +241,11 @@ async def run_outbox_dispatcher(stop_event: asyncio.Event | None = None) -> None
             await poll_outbox_once()
         except asyncio.CancelledError:
             raise
-        except Exception:
-            logger.exception("outbox.poll_error")
+        except Exception as exc:
+            logger.error(
+                "outbox.poll_error",
+                error_type=type(exc).__name__,
+            )
 
         now = time.monotonic()
         if now - last_cleanup >= settings.outbox_cleanup_interval_seconds:

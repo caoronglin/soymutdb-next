@@ -10,8 +10,25 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, patch
 
 import pytest
+import pytest_asyncio
+
+from app.services.release_context import ReleaseContext, get_release_context
 
 GENES_PREFIX = "/api/v1/genes"
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _release_context_override(app):
+    async def override_release_context() -> ReleaseContext:
+        return ReleaseContext(
+            release_id=7,
+            assembly_id=1,
+            assembly="Wm82.gnm2",
+        )
+
+    app.dependency_overrides[get_release_context] = override_release_context
+    yield
+    app.dependency_overrides.pop(get_release_context, None)
 
 
 @pytest.mark.asyncio
@@ -71,9 +88,11 @@ class TestListGenes:
         assert response.status_code == 200
         assert list_genes.await_args is not None
         params = list_genes.await_args.args[1]
+        release_context = list_genes.await_args.kwargs["release_context"]
         assert params.search == "Glyma.01G000100"
         assert params.page == 2
         assert params.page_size == 20
+        assert release_context.release_id == 7
         assert response.json()["total"] == 0
 
     async def test_list_genes_cursor_pagination(self, client, gene_factory):

@@ -13,11 +13,23 @@ from .exceptions import TaskDispatchError
 def get_celery_client() -> Celery:
     """Create a lightweight Celery client used only for named task dispatch."""
     settings = get_settings()
-    return Celery(
+    client = Celery(
         "soymutdb-api-dispatcher",
         broker=settings.celery_broker_url,
         backend=settings.celery_result_backend,
     )
+    client.conf.update(
+        broker_connection_timeout=settings.celery_broker_connect_timeout_seconds,
+        broker_transport_options={
+            "socket_connect_timeout": settings.celery_broker_connect_timeout_seconds,
+            "socket_timeout": settings.celery_broker_socket_timeout_seconds,
+            "retry_on_timeout": False,
+        },
+        # The durable outbox owns retries. Keeping a second in-memory retry
+        # loop here would extend a claim unpredictably during broker outages.
+        task_publish_retry=False,
+    )
+    return client
 
 
 def dispatch_task(
@@ -42,6 +54,7 @@ def dispatch_task(
             kwargs=kwargs,
             queue=queue,
             task_id=task_id,
+            retry=False,
         )
     except Exception as exc:
         raise TaskDispatchError(

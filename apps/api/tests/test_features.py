@@ -4,7 +4,8 @@ from app.core.features import FEATURES, parse_feature_value
 def test_registered_features_have_stable_defaults_and_public_visibility():
     assert "imports.module_tsv" in FEATURES
     assert "imports.module_xlsx" in FEATURES
-    assert FEATURES["mcp.write_tools"].default is False
+    # Unenforced MCP write capability must not be registered as a runtime flag.
+    assert "mcp.write_tools" not in FEATURES
     assert FEATURES["publication.github_pages"].public is False
 
 

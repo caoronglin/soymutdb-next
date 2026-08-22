@@ -108,8 +108,12 @@ def test_reverse_proxy_uses_canonical_path():
     nginx = (repo_root / "infra/nginx/conf.d/default.conf").read_text()
 
     assert "location = /mcp {" in workflow
+    assert "location = /mcp/ {" in workflow
+    assert "return 308 /mcp;" in workflow
     assert "base=http://127.0.0.1:8081/mcp" in workflow
     assert "location = /mcp {" in nginx
+    assert "location = /mcp/ {" in nginx
+    assert "return 308 /mcp;" in nginx
 
 
 def test_initialize_rejects_missing_and_wrong_bearer(mcp_server):

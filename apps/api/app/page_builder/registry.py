@@ -27,8 +27,9 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from typing import Any, Literal
+from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ..core.exceptions import ValidationError
 from ..core.sanitize import sanitize_rich_html
@@ -158,6 +159,103 @@ class JbrowseLauncherConfig(_Strict):
 
 class BlastLauncherConfig(_Strict):
     program: Literal["blastn", "blastp", "blastx", "tblastn", "tblastx"] = "blastn"
+    assembly: str | None = Field(default=None, max_length=128)
+
+
+class OntologyRelationshipGraphConfig(_Strict):
+    """A bounded, first-party OLS4 graph; no caller-controlled endpoint exists."""
+
+    ontology: str = Field(pattern=r"^[a-z0-9]+$", min_length=1, max_length=64)
+    iri: str = Field(min_length=1, max_length=2_048)
+    max_nodes: int = Field(default=24, ge=1, le=50)
+    max_edges: int = Field(default=32, ge=1, le=100)
+
+
+class PageDataSourceConfig(_Strict):
+    """A bounded reference to server-owned data; never an executable adapter."""
+
+    id: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,63}$")
+    kind: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,63}$")
+    dataset_version_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=128,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$",
+    )
+    config: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("config")
+    @classmethod
+    def validate_bounded_config(cls, value: dict[str, Any]) -> dict[str, Any]:
+        if len(value) > 32:
+            raise ValueError("data-source config has too many fields")
+
+        forbidden_key = re.compile(r"(?i)(css|html|script|style|template|url|uri|endpoint|host)")
+
+        def walk(candidate: Any, *, depth: int = 0) -> None:
+            if depth > 4:
+                raise ValueError("data-source config is nested too deeply")
+            if candidate is None or isinstance(candidate, (bool, int, float)):
+                return
+            if isinstance(candidate, str):
+                if len(candidate) > 1_000:
+                    raise ValueError("data-source config string is too long")
+                _reject_dangerous(candidate, field_name="data_sources.config")
+                if re.match(r"(?i)^[a-z][a-z0-9+.-]*:", candidate.strip()):
+                    raise ValueError("data-source config cannot contain a URL or URI")
+                return
+            if isinstance(candidate, list):
+                if len(candidate) > 100:
+                    raise ValueError("data-source config list is too large")
+                for item in candidate:
+                    walk(item, depth=depth + 1)
+                return
+            if isinstance(candidate, dict):
+                if len(candidate) > 32:
+                    raise ValueError("data-source config object has too many fields")
+                for key, item in candidate.items():
+                    if not isinstance(key, str) or forbidden_key.search(key):
+                        raise ValueError("data-source config contains a forbidden field")
+                    walk(item, depth=depth + 1)
+                return
+            raise ValueError("data-source config must contain JSON values only")
+
+        walk(value)
+        return value
+
+
+class LayoutPlacement(_Strict):
+    component: str = Field(
+        pattern=r"^root(?:\.children\[[0-9]+\])*$",
+        max_length=256,
+    )
+    x: int = Field(ge=0, le=23)
+    y: int = Field(ge=0, le=10_000)
+    width: int = Field(ge=1, le=24)
+    height: int = Field(ge=1, le=10_000)
+
+
+class ResponsiveLayoutConfig(_Strict):
+    columns: int | None = Field(default=None, ge=1, le=24)
+    gap: int | None = Field(default=None, ge=0, le=64)
+    placements: list[LayoutPlacement] | None = Field(default=None, max_length=256)
+
+
+class PageLayouts(_Strict):
+    desktop: ResponsiveLayoutConfig = Field(default_factory=ResponsiveLayoutConfig)
+    tablet: ResponsiveLayoutConfig = Field(default_factory=ResponsiveLayoutConfig)
+    mobile: ResponsiveLayoutConfig = Field(default_factory=ResponsiveLayoutConfig)
+
+
+_PAGE_THEMES = frozenset(
+    {
+        "scientific-light",
+        "scientific-dark",
+        "high-contrast",
+        "compact-data",
+        "print",
+    }
+)
 
 
 _CONFIG_MODELS: dict[str, type[BaseModel]] = {
@@ -178,6 +276,7 @@ _CONFIG_MODELS: dict[str, type[BaseModel]] = {
     "columns": ColumnsConfig,
     "jbrowse_launcher": JbrowseLauncherConfig,
     "blast_launcher": BlastLauncherConfig,
+    "ontology_relationship_graph": OntologyRelationshipGraphConfig,
 }
 
 
@@ -221,6 +320,11 @@ _COMPONENTS: list[ComponentDefinition] = [
     ),
     ComponentDefinition("jbrowse_launcher", "JBrowse 2 Launcher", JbrowseLauncherConfig),
     ComponentDefinition("blast_launcher", "BLAST Launcher", BlastLauncherConfig),
+    ComponentDefinition(
+        "ontology_relationship_graph",
+        "Ontology Relationship Graph",
+        OntologyRelationshipGraphConfig,
+    ),
 ]
 
 # Layout container components may nest arbitrary registered children.
@@ -381,15 +485,71 @@ def validate_definition(definition: dict[str, Any]) -> dict[str, Any]:
     """
     if not isinstance(definition, dict):
         raise ValidationError("Definition must be an object")
+    allowed_fields = {
+        "schema_version",
+        "title_key",
+        "root",
+        "data_sources",
+        "theme_id",
+        "layouts",
+    }
+    unknown_fields = sorted(set(definition) - allowed_fields)
+    if unknown_fields:
+        raise ValidationError(
+            "Definition contains unknown fields",
+            details={"fields": unknown_fields},
+        )
     if "root" not in definition:
         raise ValidationError("Definition must contain a 'root' component")
+
+    schema_version = definition.get("schema_version")
+    if schema_version not in (None, 1, 2):
+        raise ValidationError(
+            "Unsupported PageDefinition schema version",
+            details={"schema_version": schema_version},
+        )
 
     root = definition["root"]
     if not isinstance(root, dict):
         raise ValidationError("Definition 'root' must be an object")
     cleaned_root = _validate_node(root, path="root")
 
-    cleaned: dict[str, Any] = {"root": cleaned_root}
+    try:
+        data_sources = [
+            PageDataSourceConfig.model_validate(item).model_dump(
+                mode="python", exclude_none=True
+            )
+            for item in definition.get("data_sources", [])
+        ]
+        layouts = PageLayouts.model_validate(definition.get("layouts", {})).model_dump(
+            mode="python", exclude_none=True
+        )
+    except Exception as exc:  # pydantic ValidationError
+        raise ValidationError(
+            "Invalid PageDefinition v2 metadata",
+            details={"reason": str(exc)},
+        ) from exc
+
+    if len(data_sources) > 32:
+        raise ValidationError("PageDefinition cannot reference more than 32 data sources")
+    data_source_ids = [source["id"] for source in data_sources]
+    if len(set(data_source_ids)) != len(data_source_ids):
+        raise ValidationError("PageDefinition data-source IDs must be unique")
+
+    theme_id = definition.get("theme_id", "scientific-light")
+    if theme_id not in _PAGE_THEMES:
+        raise ValidationError(
+            "Unknown PageDefinition theme",
+            details={"theme_id": theme_id},
+        )
+
+    cleaned: dict[str, Any] = {
+        "schema_version": 2,
+        "root": cleaned_root,
+        "data_sources": data_sources,
+        "theme_id": theme_id,
+        "layouts": layouts,
+    }
     title_key = definition.get("title_key")
     if title_key is not None:
         if not isinstance(title_key, str) or not title_key:
@@ -398,11 +558,125 @@ def validate_definition(definition: dict[str, Any]) -> dict[str, Any]:
     return cleaned
 
 
+_LAUNCHER_PLUGIN_REQUIREMENTS = {
+    "jbrowse_launcher": ("jbrowse", True, True),
+    "blast_launcher": ("blast", True, True),
+    # The graph is rendered in-process, so it needs no external URL or assembly.
+    "ontology_relationship_graph": ("ols4", False, False),
+}
+
+
+def _state_value(state: Any, name: str) -> Any:
+    """Read a plugin-state field from a dataclass or a dict."""
+    if isinstance(state, dict):
+        return state.get(name)
+    return getattr(state, name, None)
+
+
+def _is_https_origin(value: Any) -> bool:
+    """Only an HTTPS origin with no credentials/query/fragment is accepted."""
+    if not isinstance(value, str) or not value:
+        return False
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return False
+    return (
+        parsed.scheme == "https"
+        and bool(parsed.hostname)
+        and parsed.username is None
+        and parsed.password is None
+        and not parsed.query
+        and not parsed.fragment
+    )
+
+
+def _validate_plugin_launcher_node(
+    node: dict[str, Any],
+    *,
+    path: str,
+    plugin_states: dict[str, Any],
+) -> None:
+    node_type = node.get("type")
+    requirements = _LAUNCHER_PLUGIN_REQUIREMENTS.get(str(node_type))
+    if requirements is None:
+        return
+    plugin_key, requires_public_url, requires_assembly = requirements
+
+    state = plugin_states.get(plugin_key)
+    if state is None:
+        raise ValidationError(
+            f"Plugin launcher at {path} requires installed plugin {plugin_key!r}",
+            details={"plugin": plugin_key, "path": path},
+        )
+
+    for field_name, display in (
+        ("installed", "installed"),
+        ("enabled", "enabled"),
+        ("configured", "configured"),
+        ("healthy", "healthy"),
+    ):
+        if not bool(_state_value(state, field_name)):
+            raise ValidationError(
+                f"Plugin {plugin_key!r} is not {display} for launcher at {path}",
+                details={"plugin": plugin_key, "path": path, "reason": display},
+            )
+
+    if requires_public_url:
+        public_url = _state_value(state, "public_url")
+        if not _is_https_origin(public_url):
+            raise ValidationError(
+                f"Plugin {plugin_key!r} has no HTTPS public URL for launcher at {path}",
+                details={"plugin": plugin_key, "path": path},
+            )
+
+    if requires_assembly:
+        assemblies = _state_value(state, "assemblies")
+        assembly = (node.get("props") or {}).get("assembly")
+        if not isinstance(assembly, str) or not assembly:
+            raise ValidationError(
+                f"Plugin launcher at {path} must declare an assembly",
+                details={"plugin": plugin_key, "path": path},
+            )
+        supported = list(assemblies or [])
+        if assembly not in supported:
+            raise ValidationError(
+                f"Assembly {assembly!r} is not supported by plugin {plugin_key!r}",
+                details={
+                    "plugin": plugin_key,
+                    "path": path,
+                    "assembly": assembly,
+                    "supported_assemblies": supported,
+                },
+            )
+
+
+def validate_plugin_launchers(
+    definition: dict[str, Any],
+    plugin_states: dict[str, Any],
+) -> dict[str, Any]:
+    """Fail closed when a launcher references an unavailable plugin/assembly."""
+    if not isinstance(definition, dict) or not isinstance(plugin_states, dict):
+        raise ValidationError("Plugin launcher validation requires a definition and states")
+
+    def walk(node: dict[str, Any], path: str) -> None:
+        _validate_plugin_launcher_node(node, path=path, plugin_states=plugin_states)
+        for index, child in enumerate(node.get("children") or []):
+            if isinstance(child, dict):
+                walk(child, f"{path}.children[{index}]")
+
+    root = definition.get("root")
+    if isinstance(root, dict):
+        walk(root, "root")
+    return definition
+
+
 __all__ = [
     "COMPONENT_REGISTRY",
     "ROUTE_PATTERN",
     "RESERVED_ROUTES",
     "ComponentDefinition",
     "validate_definition",
+    "validate_plugin_launchers",
     "validate_route",
 ]

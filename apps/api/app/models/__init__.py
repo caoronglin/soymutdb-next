@@ -29,6 +29,15 @@ from .gene_data_cache import GeneDataCache
 from .genomic import Assembly, Chromosome, Exon, Gene, GeneAlias, Transcript
 from .gwas import GwasFileType, GwasJob, GwasJobStatus, GwasMethod
 from .homolog import GeneHomolog
+from .import_studio import (
+    DataPatch,
+    DatasetVersion,
+    FieldMapping,
+    ImportDraft,
+    ImportDraftStatus,
+    PageDataSource,
+    PublicationManifest,
+)
 from .import_task import ImportTask, ImportTaskStatus, ImportTaskType
 from .module_data import ModuleDataRow, ModuleSchema
 from .notification import Notification
@@ -43,7 +52,7 @@ from .publication import (
 )
 from .seed import SeedInventory, SeedRequest
 from .seed_request import SeedRequestContact, SeedRequestStatus
-from .system_settings import SystemSetting
+from .system_settings import SystemSetting, SystemSettingRevision
 from .tracks import Track, TrackCategory
 from .variant import MutantLine, Phenotype, VariantSummary
 
@@ -74,6 +83,13 @@ __all__ = [
     "ImportTask",
     "ImportTaskStatus",
     "ImportTaskType",
+    "ImportDraft",
+    "ImportDraftStatus",
+    "DatasetVersion",
+    "FieldMapping",
+    "DataPatch",
+    "PageDataSource",
+    "PublicationManifest",
     "ImportStatus",
     "DataSet",
     "ReleaseDataSet",
@@ -111,6 +127,7 @@ __all__ = [
     "StaticPage",
     "StaticPublication",
     "SystemSetting",
+    "SystemSettingRevision",
     "TimestampMixin",
     "Track",
     "TrackCategory",

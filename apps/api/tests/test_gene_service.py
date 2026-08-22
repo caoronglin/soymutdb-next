@@ -19,6 +19,14 @@ from app.core.exceptions import NotFoundError, ValidationError
 from app.models.genomic import Assembly, Chromosome, Exon, Gene, GeneAlias, Transcript
 from app.schemas.genomic import GeneListParams
 from app.services.gene_service import GeneService, decode_cursor, encode_cursor
+from app.services.release_context import ReleaseContext
+
+RELEASE_CONTEXT = ReleaseContext(
+    release_id=7,
+    assembly_id=1,
+    assembly="Wm82.gnm2",
+)
+DEFAULT_GENE_PARAMS = GeneListParams()
 
 # ---------------------------------------------------------------------------
 # Fake database session (unit-level, no docker)
@@ -163,14 +171,36 @@ def make_chromosome(
 
 class TestCursor:
     def test_roundtrip(self):
-        assert decode_cursor(encode_cursor("Glyma.01G000100")) == "Glyma.01G000100"
+        cursor = encode_cursor(
+            "Glyma.01G000100",
+            release_context=RELEASE_CONTEXT,
+            params=DEFAULT_GENE_PARAMS,
+        )
+        assert decode_cursor(
+            cursor,
+            release_context=RELEASE_CONTEXT,
+            params=DEFAULT_GENE_PARAMS,
+        ) == "Glyma.01G000100"
 
     def test_roundtrip_unicode_gene_id(self):
-        assert decode_cursor(encode_cursor("Glyma.20G000100")) == "Glyma.20G000100"
+        cursor = encode_cursor(
+            "Glyma.20G000100",
+            release_context=RELEASE_CONTEXT,
+            params=DEFAULT_GENE_PARAMS,
+        )
+        assert decode_cursor(
+            cursor,
+            release_context=RELEASE_CONTEXT,
+            params=DEFAULT_GENE_PARAMS,
+        ) == "Glyma.20G000100"
 
     def test_invalid_cursor_raises_validation_error(self):
         with pytest.raises(ValidationError):
-            decode_cursor("!!!not-base64!!!")
+            decode_cursor(
+                "!!!not-base64!!!",
+                release_context=RELEASE_CONTEXT,
+                params=DEFAULT_GENE_PARAMS,
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -181,23 +211,40 @@ class TestCursor:
 class TestListGenes:
     async def test_empty_returns_empty_response(self):
         session = FakeDbSession(genes=[])
-        response = await GeneService().list_genes(session, GeneListParams(limit=50))
+        response = await GeneService().list_genes(
+            session,
+            GeneListParams(limit=50),
+            release_context=RELEASE_CONTEXT,
+        )
         assert response.items == []
         assert response.next_cursor is None
         assert response.has_more is False
 
     async def test_filters_are_encoded_in_sql(self):
         session = FakeDbSession(genes=[make_gene()])
-        params = GeneListParams(
+        params_without_cursor = GeneListParams(
             assembly_id="1",
             chromosome="Gm01",
             biotype="protein_coding",
             search="Glyma",
-            cursor=encode_cursor("Glyma.01G000050"),
             limit=10,
         )
-        await GeneService().list_genes(session, params)
+        params = params_without_cursor.model_copy(
+            update={
+                "cursor": encode_cursor(
+                    "Glyma.01G000050",
+                    release_context=RELEASE_CONTEXT,
+                    params=params_without_cursor,
+                )
+            }
+        )
+        await GeneService().list_genes(
+            session,
+            params,
+            release_context=RELEASE_CONTEXT,
+        )
         sql = str(session.last_stmt)
+        assert "assemblies.release_id" in sql
         assert "genes.assembly_id" in sql
         assert "chromosomes.name" in sql
         assert "genes.biotype" in sql
@@ -209,7 +256,9 @@ class TestListGenes:
     async def test_chromosome_filter_joins_chromosomes(self):
         session = FakeDbSession(genes=[make_gene()])
         await GeneService().list_genes(
-            session, GeneListParams(chromosome="Gm01", limit=50)
+            session,
+            GeneListParams(chromosome="Gm01", limit=50),
+            release_context=RELEASE_CONTEXT,
         )
         sql = str(session.last_stmt)
         assert "JOIN chromosomes" in sql
@@ -218,7 +267,9 @@ class TestListGenes:
     async def test_chromosome_plus_assembly_scopes_join_to_assembly(self):
         session = FakeDbSession(genes=[make_gene()])
         await GeneService().list_genes(
-            session, GeneListParams(assembly_id="1", chromosome="Gm01", limit=50)
+            session,
+            GeneListParams(assembly_id="1", chromosome="Gm01", limit=50),
+            release_context=RELEASE_CONTEXT,
         )
         sql = str(session.last_stmt)
         assert "chromosomes.assembly_id" in sql
@@ -229,15 +280,27 @@ class TestListGenes:
             for i in range(3)
         ]
         session = FakeDbSession(genes=genes)
-        response = await GeneService().list_genes(session, GeneListParams(limit=2))
+        response = await GeneService().list_genes(
+            session,
+            GeneListParams(limit=2),
+            release_context=RELEASE_CONTEXT,
+        )
         assert response.has_more is True
         assert len(response.items) == 2
-        assert response.next_cursor == encode_cursor(genes[1].id)
+        assert response.next_cursor == encode_cursor(
+            genes[1].id,
+            release_context=RELEASE_CONTEXT,
+            params=GeneListParams(limit=2),
+        )
 
     async def test_no_next_cursor_when_exact_fit(self):
         genes = [make_gene(f"Glyma.01G00010{i}") for i in range(2)]
         session = FakeDbSession(genes=genes)
-        response = await GeneService().list_genes(session, GeneListParams(limit=2))
+        response = await GeneService().list_genes(
+            session,
+            GeneListParams(limit=2),
+            release_context=RELEASE_CONTEXT,
+        )
         assert response.has_more is False
         assert response.next_cursor is None
         assert len(response.items) == 2
@@ -246,7 +309,11 @@ class TestListGenes:
         gene = make_gene()
         gene.chromosome = make_chromosome(name="Gm01")
         session = FakeDbSession(genes=[gene])
-        response = await GeneService().list_genes(session, GeneListParams(limit=50))
+        response = await GeneService().list_genes(
+            session,
+            GeneListParams(limit=50),
+            release_context=RELEASE_CONTEXT,
+        )
         item = response.items[0]
         assert item.gene_id == "Glyma.01G000100"
         assert item.chromosome == "Gm01"
@@ -263,7 +330,11 @@ class TestGetGene:
         )
         gene.chromosome = make_chromosome(name="Gm01")
         session = FakeDbSession(genes=[gene])
-        detail = await GeneService().get_gene(session, "Glyma.01G000100")
+        detail = await GeneService().get_gene(
+            session,
+            "Glyma.01G000100",
+            release_context=RELEASE_CONTEXT,
+        )
         assert detail.gene_id == "Glyma.01G000100"
         assert detail.name == "Disease Resistance"
         assert len(detail.transcripts) == 1
@@ -280,7 +351,11 @@ class TestGetGene:
     async def test_missing_raises_not_found(self):
         session = FakeDbSession(genes=[])
         with pytest.raises(NotFoundError):
-            await GeneService().get_gene(session, "NONEXISTENT")
+            await GeneService().get_gene(
+                session,
+                "NONEXISTENT",
+                release_context=RELEASE_CONTEXT,
+            )
 
 
 class TestListAssemblies:

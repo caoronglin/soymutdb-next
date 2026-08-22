@@ -2,7 +2,8 @@
 
 Execution model (mirrors :mod:`soymutdb_worker.tasks.blast`):
 
-- Inputs are downloaded from MinIO (object keys ``analyses/{job_id}/input/``)
+- Inputs are downloaded from MinIO (object keys
+  ``analyses/{user_id}/{upload_session_id}/input/``)
   into a private temp dir (``TemporaryDirectory`` cleans up on every exit
   path, including exceptions).
 - ``fastp`` is executed with ``subprocess.run`` **without** ``shell=True``,
@@ -29,6 +30,8 @@ track).  Presence is checked with :func:`shutil.which` at run time.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import logging
 import os
@@ -45,6 +48,15 @@ from soymutdb_worker.config import get_setting
 from soymutdb_worker.main import celery_app
 from soymutdb_worker.repositories import AnalysisJobStore
 from soymutdb_worker.shared import JobPayload
+from soymutdb_worker.tasks.analyses.input_keys import (
+    ANALYSIS_STORAGE_ERROR,
+    ANALYSIS_STORAGE_EXCEPTIONS,
+    AnalysisInputDeclaration,
+    AnalysisStorageError,
+    download_validated_analysis_input,
+    head_analysis_input,
+    validate_analysis_input_key,
+)
 from soymutdb_worker.tasks.notifications import notify_completed, notify_failed
 from soymutdb_worker.utils.db import get_db
 from soymutdb_worker.utils.s3 import get_s3_client, upload_file
@@ -74,6 +86,9 @@ FASTP_MAX_OUTPUT_SIZE = int(
     get_setting("FASTP_MAX_OUTPUT_SIZE", str(1024 * 1024 * 1024))  # 1 GB
 )
 FASTP_MAX_MEMORY_MB = int(get_setting("FASTP_MAX_MEMORY_MB", "4096"))
+MAX_ANALYSIS_INPUT_SIZE = int(
+    get_setting("ANALYSIS_MAX_INPUT_SIZE", str(500 * 1024 * 1024))
+)
 #: A fastp.json report should stay far below this; cap parsing to avoid
 #: pathological files (RLIMIT_FSIZE already caps the raw output).
 FASTP_MAX_JSON_SIZE = int(get_setting("FASTP_MAX_JSON_SIZE", str(64 * 1024 * 1024)))
@@ -152,12 +167,12 @@ def sanitize_error_message(message: str, max_len: int = MAX_ERROR_LENGTH) -> str
     return message[:max_len]
 
 
-def validate_input_objects(objects: list[str], job_id: str) -> list[str]:
+def validate_input_objects(objects: list[str], user_id: str) -> list[str]:
     """Validate and normalize the input object keys.
 
-    Every key must live under ``analyses/{job_id}/input/`` (job-scoped, no
-    traversal), and exactly one (single-end) or two (paired-end) keys are
-    accepted.  Returns the normalized keys (in processing order).
+    Every key must live under *user_id* and a UUID upload-session input
+    prefix.  Paired-end inputs may come from two sessions because clients
+    presign files in parallel, but both sessions must have the same owner.
     """
     if not isinstance(objects, list) or not objects:
         raise ValueError("input_objects must be a non-empty list")
@@ -166,20 +181,54 @@ def validate_input_objects(objects: list[str], job_id: str) -> list[str]:
             f"fastp accepts exactly 1 (single-end) or 2 (paired-end) input "
             f"objects, got {len(objects)}"
         )
-    job_prefix = f"analyses/{job_id}/input/"
     normalized: list[str] = []
     for key in objects:
-        if not isinstance(key, str) or not key:
-            raise ValueError("input_objects must contain non-empty string keys")
-        if not key.startswith(job_prefix):
-            raise ValueError(
-                f"input object {key!r} is outside the job's input prefix "
-                f"{job_prefix!r}"
-            )
-        if ".." in key.split("/"):
-            raise ValueError(f"input object key must not contain traversal segments: {key!r}")
-        normalized.append(key)
+        normalized.append(validate_analysis_input_key(key, user_id))
     return normalized
+
+
+def validate_remote_input(s3: Any, object_key: str) -> AnalysisInputDeclaration:
+    """Validate signed upload metadata before creating a local input file."""
+    response = head_analysis_input(
+        s3,
+        bucket=ANALYSES_BUCKET,
+        object_key=object_key,
+    )
+    size = response.get("ContentLength")
+    if not isinstance(size, int) or size <= 0:
+        raise ValueError("analysis input has no valid ContentLength")
+    if size > MAX_ANALYSIS_INPUT_SIZE:
+        raise ValueError("analysis input exceeds the configured size limit")
+    metadata = response.get("Metadata")
+    if not isinstance(metadata, dict):
+        raise ValueError("analysis input is missing signed declaration metadata")
+    try:
+        declared_size = int(metadata["declared-size"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("analysis input has no valid declared size") from exc
+    if size != declared_size:
+        raise ValueError("analysis input size does not match its signed declaration")
+    content_type = str(response.get("ContentType") or "").strip().lower()
+    declared_type = str(metadata.get("declared-content-type") or "").strip().lower()
+    if not content_type or content_type != declared_type:
+        raise ValueError("analysis input MIME does not match its signed declaration")
+    try:
+        checksum = base64.b64decode(
+            str(response.get("ChecksumSHA256")), validate=True
+        )
+    except (binascii.Error, ValueError) as exc:
+        raise ValueError("analysis input is missing a valid SHA-256 checksum") from exc
+    if len(checksum) != 32:
+        raise ValueError("analysis input is missing a valid SHA-256 checksum")
+    try:
+        declared_checksum = bytes.fromhex(str(metadata["declared-sha256"]))
+    except (KeyError, ValueError) as exc:
+        raise ValueError("analysis input has no valid declared SHA-256") from exc
+    if len(declared_checksum) != 32:
+        raise ValueError("analysis input has no valid declared SHA-256")
+    if checksum != declared_checksum:
+        raise ValueError("analysis input checksum does not match its signed declaration")
+    return AnalysisInputDeclaration(size=size, sha256=checksum)
 
 
 def validate_params(params: dict | None) -> dict[str, str]:
@@ -366,6 +415,7 @@ def run_fastp(
     payload: dict | None = None,
     *,
     job_id: str | None = None,
+    user_id: str | None = None,
     input_objects: list[str] | None = None,
     params: dict | None = None,
 ) -> dict:
@@ -375,10 +425,10 @@ def run_fastp(
 
     1. **Outbox contract** (canonical): ``payload`` is a serialized
        :class:`soymutdb_jobs.schemas.JobPayload` whose ``payload`` carries
-       the analysis fields (``job_id``, ``analysis_type``, ``input_objects``,
-       ``params``).
+       the analysis fields (``job_id``, ``user_id``, ``analysis_type``,
+       ``input_objects``, ``params``).
     2. **Legacy kwargs** (compat for direct dispatches): ``job_id`` /
-       ``input_objects`` / ``params``.
+       ``user_id`` / ``input_objects`` / ``params``.
 
     Job status advances queued -> running -> succeeded/failed through the
     shared state machine and the narrow :class:`AnalysisJobStore` repository;
@@ -400,20 +450,25 @@ def run_fastp(
             raise ValueError(
                 f"analysis_type {analysis_type!r} is not handled by run_fastp"
             )
+        user_id = p.get("user_id")
+        if not isinstance(user_id, str) or not user_id:
+            raise ValueError("analysis payload requires a user_id")
         input_objects = p.get("input_objects")
         params = p.get("params")
         idempotency_key = job_payload.idempotency_key
     else:
         if job_id is None:
             raise TypeError("run_fastp requires a JobPayload or a legacy job_id kwarg")
+        if user_id is None:
+            raise TypeError("legacy dispatch requires user_id")
         if input_objects is None:
             raise TypeError("legacy dispatch requires input_objects")
         idempotency_key = f"fastp:{job_id}"
 
     # Validate inputs before doing any work (raises before the job is claimed
     # so invalid dispatches fail loudly instead of wedging the row).
-    keys = validate_input_objects(input_objects or [], job_id)
-    cleaned_params = validate_params(params)
+    keys = validate_input_objects(input_objects or [], user_id)
+    validate_params(params)
     paired = len(keys) == 2
 
     logger.info(
@@ -434,14 +489,21 @@ def run_fastp(
 
     try:
         s3 = get_s3_client()
+        declarations = [validate_remote_input(s3, key) for key in keys]
         with tempfile.TemporaryDirectory(prefix=f"fastp_{job_id}_") as tmpdir:
             tmp = Path(tmpdir)
 
             # ── Download inputs from MinIO ────────────────────────────────
             rel_names = [_IN_R1, _IN_R2][: len(keys)]
             input_paths = [tmp / name for name in rel_names]
-            for key, local in zip(keys, input_paths):
-                s3.download_file(ANALYSES_BUCKET, key, str(local))
+            for key, local, declaration in zip(keys, input_paths, declarations):
+                download_validated_analysis_input(
+                    s3,
+                    bucket=ANALYSES_BUCKET,
+                    object_key=key,
+                    local_path=local,
+                    declaration=declaration,
+                )
             self.update_state(state="STARTED", meta={"progress": 20})
 
             # ── Run fastp (no shell, isolated env, limits) ────────────────
@@ -500,7 +562,12 @@ def run_fastp(
             }
 
     except Exception as e:
-        error_text = sanitize_error_message(str(e))
+        raw_storage_error = isinstance(e, ANALYSIS_STORAGE_EXCEPTIONS)
+        error_text = (
+            ANALYSIS_STORAGE_ERROR
+            if raw_storage_error
+            else sanitize_error_message(str(e))
+        )
         logger.error("fastp job %s failed: %s", job_id, error_text)
         try:
             with get_db() as session:
@@ -508,4 +575,6 @@ def run_fastp(
         except Exception as db_err:
             logger.error("Failed to update fastp job status: %s", db_err)
         notify_failed(job_id, kind="fastp", error=error_text)
+        if raw_storage_error:
+            raise AnalysisStorageError(ANALYSIS_STORAGE_ERROR) from e
         raise

@@ -3,7 +3,7 @@
 Execution model (mirrors :mod:`soymutdb_worker.tasks.analyses.fastp`):
 
 - The single input h5ad is downloaded from MinIO (object key under
-  ``analyses/{job_id}/input/``) into a private temp dir
+  ``analyses/{user_id}/{upload_session_id}/input/``) into a private temp dir
   (``TemporaryDirectory`` cleans up on every exit path, including
   exceptions).
 - The standard preprocessing + clustering pipeline runs in-process with the
@@ -33,14 +33,17 @@ Execution model (mirrors :mod:`soymutdb_worker.tasks.analyses.fastp`):
 
 from __future__ import annotations
 
+import base64
+import binascii
 import csv
 import logging
 import signal
 import tempfile
 import threading
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 from celery import Task
 
@@ -49,6 +52,15 @@ from soymutdb_worker.main import celery_app
 from soymutdb_worker.repositories import AnalysisJobStore
 from soymutdb_worker.shared import JobPayload
 from soymutdb_worker.tasks.analyses.fastp import sanitize_error_message
+from soymutdb_worker.tasks.analyses.input_keys import (
+    ANALYSIS_STORAGE_ERROR,
+    ANALYSIS_STORAGE_EXCEPTIONS,
+    AnalysisInputDeclaration,
+    AnalysisStorageError,
+    download_validated_analysis_input,
+    head_analysis_input,
+    validate_analysis_input_key,
+)
 from soymutdb_worker.tasks.notifications import notify_completed, notify_failed
 from soymutdb_worker.utils.db import get_db
 from soymutdb_worker.utils.s3 import get_s3_client, upload_file
@@ -75,6 +87,9 @@ ANALYSES_BUCKET = get_setting("S3_ANALYSES_BUCKET", "analyses")
 
 #: Wall-clock cap for the whole analysis phase (download → pipeline → upload).
 SCANPY_MAX_RUNTIME = int(get_setting("SCANPY_MAX_RUNTIME", "1200"))  # seconds
+MAX_ANALYSIS_INPUT_SIZE = int(
+    get_setting("ANALYSIS_MAX_INPUT_SIZE", str(500 * 1024 * 1024))
+)
 
 #: Output object names under ``analyses/{job_id}/output/``.
 _UMAP_NAME = "umap.png"
@@ -142,34 +157,69 @@ def pipeline_timeout(seconds: int) -> Iterator[None]:
 # ---------------------------------------------------------------------------
 
 
-def validate_input_objects(objects: list[str] | None, job_id: str) -> str:
+def validate_input_objects(objects: list[str] | None, user_id: str) -> str:
     """Validate and normalize the input object keys.
 
-    Exactly one key is accepted, it must end in ``.h5ad`` and live under
-    ``analyses/{job_id}/input/`` (job-scoped, no traversal).  Returns the
-    normalized key.
+    Exactly one key is accepted, it must end in ``.h5ad`` and live under a
+    UUID upload-session input prefix owned by *user_id*.  Upload and job
+    identities are separate.
     """
     if not isinstance(objects, list) or len(objects) != 1:
         raise ValueError(
             "scanpy accepts exactly 1 input h5ad object, "
             f"got {len(objects) if isinstance(objects, list) else 'n/a'}"
-        )
+    )
     key = objects[0]
-    if not isinstance(key, str) or not key:
-        raise ValueError("input_objects must contain a non-empty string key")
-    job_prefix = f"analyses/{job_id}/input/"
-    if not key.startswith(job_prefix):
-        raise ValueError(
-            f"input object {key!r} is outside the job's input prefix "
-            f"{job_prefix!r}"
-        )
-    if ".." in key.split("/"):
-        raise ValueError(f"input object key must not contain traversal segments: {key!r}")
+    validate_analysis_input_key(key, user_id)
     if not key.endswith(".h5ad"):
         raise ValueError(
             f"scanpy input object must be an .h5ad file, got {key!r}"
         )
     return key
+
+
+def validate_remote_input(s3: Any, object_key: str) -> AnalysisInputDeclaration:
+    """Validate signed upload metadata before creating a local input file."""
+    response = head_analysis_input(
+        s3,
+        bucket=ANALYSES_BUCKET,
+        object_key=object_key,
+    )
+    size = response.get("ContentLength")
+    if not isinstance(size, int) or size <= 0:
+        raise ValueError("analysis input has no valid ContentLength")
+    if size > MAX_ANALYSIS_INPUT_SIZE:
+        raise ValueError("analysis input exceeds the configured size limit")
+    metadata = response.get("Metadata")
+    if not isinstance(metadata, dict):
+        raise ValueError("analysis input is missing signed declaration metadata")
+    try:
+        declared_size = int(metadata["declared-size"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("analysis input has no valid declared size") from exc
+    if size != declared_size:
+        raise ValueError("analysis input size does not match its signed declaration")
+    content_type = str(response.get("ContentType") or "").strip().lower()
+    declared_type = str(metadata.get("declared-content-type") or "").strip().lower()
+    if not content_type or content_type != declared_type:
+        raise ValueError("analysis input MIME does not match its signed declaration")
+    try:
+        checksum = base64.b64decode(
+            str(response.get("ChecksumSHA256")), validate=True
+        )
+    except (binascii.Error, ValueError) as exc:
+        raise ValueError("analysis input is missing a valid SHA-256 checksum") from exc
+    if len(checksum) != 32:
+        raise ValueError("analysis input is missing a valid SHA-256 checksum")
+    try:
+        declared_checksum = bytes.fromhex(str(metadata["declared-sha256"]))
+    except (KeyError, ValueError) as exc:
+        raise ValueError("analysis input has no valid declared SHA-256") from exc
+    if len(declared_checksum) != 32:
+        raise ValueError("analysis input has no valid declared SHA-256")
+    if checksum != declared_checksum:
+        raise ValueError("analysis input checksum does not match its signed declaration")
+    return AnalysisInputDeclaration(size=size, sha256=checksum)
 
 
 def _coerce_int(name: str, value: Any, minimum: int) -> int:
@@ -382,6 +432,7 @@ def run_scanpy(
     payload: dict | None = None,
     *,
     job_id: str | None = None,
+    user_id: str | None = None,
     input_objects: list[str] | None = None,
     params: dict | None = None,
 ) -> dict:
@@ -391,10 +442,10 @@ def run_scanpy(
 
     1. **Outbox contract** (canonical): ``payload`` is a serialized
        :class:`soymutdb_jobs.schemas.JobPayload` whose ``payload`` carries
-       the analysis fields (``job_id``, ``analysis_type``, ``input_objects``,
-       ``params``).
+       the analysis fields (``job_id``, ``user_id``, ``analysis_type``,
+       ``input_objects``, ``params``).
     2. **Legacy kwargs** (compat for direct dispatches): ``job_id`` /
-       ``input_objects`` / ``params``.
+       ``user_id`` / ``input_objects`` / ``params``.
 
     Job status advances queued -> running -> succeeded/failed through the
     shared state machine and the narrow :class:`AnalysisJobStore` repository;
@@ -416,19 +467,24 @@ def run_scanpy(
             raise ValueError(
                 f"analysis_type {analysis_type!r} is not handled by run_scanpy"
             )
+        user_id = p.get("user_id")
+        if not isinstance(user_id, str) or not user_id:
+            raise ValueError("analysis payload requires a user_id")
         input_objects = p.get("input_objects")
         params = p.get("params")
         idempotency_key = job_payload.idempotency_key
     else:
         if job_id is None:
             raise TypeError("run_scanpy requires a JobPayload or a legacy job_id kwarg")
+        if user_id is None:
+            raise TypeError("legacy dispatch requires user_id")
         if input_objects is None:
             raise TypeError("legacy dispatch requires input_objects")
         idempotency_key = f"scanpy:{job_id}"
 
     # Validate inputs before doing any work (raises before the job is claimed
     # so invalid dispatches fail loudly instead of wedging the row).
-    key = validate_input_objects(input_objects or [], job_id)
+    key = validate_input_objects(input_objects or [], user_id)
     cleaned_params = validate_params(params)
 
     logger.info(
@@ -453,12 +509,19 @@ def run_scanpy(
         # lands the job in failed below.
         with pipeline_timeout(SCANPY_MAX_RUNTIME):
             s3 = get_s3_client()
+            declaration = validate_remote_input(s3, key)
             with tempfile.TemporaryDirectory(prefix=f"scanpy_{job_id}_") as tmpdir:
                 tmp = Path(tmpdir)
 
                 # ── Download input h5ad from MinIO ────────────────────────
                 input_path = tmp / "input.h5ad"
-                s3.download_file(ANALYSES_BUCKET, key, str(input_path))
+                download_validated_analysis_input(
+                    s3,
+                    bucket=ANALYSES_BUCKET,
+                    object_key=key,
+                    local_path=input_path,
+                    declaration=declaration,
+                )
                 self.update_state(state="STARTED", meta={"progress": 20})
 
                 # ── Run the scanpy pipeline ───────────────────────────────
@@ -509,7 +572,12 @@ def run_scanpy(
                 }
 
     except Exception as e:
-        error_text = sanitize_error_message(str(e))
+        raw_storage_error = isinstance(e, ANALYSIS_STORAGE_EXCEPTIONS)
+        error_text = (
+            ANALYSIS_STORAGE_ERROR
+            if raw_storage_error
+            else sanitize_error_message(str(e))
+        )
         logger.error("scanpy job %s failed: %s", job_id, error_text)
         try:
             with get_db() as session:
@@ -517,4 +585,6 @@ def run_scanpy(
         except Exception as db_err:
             logger.error("Failed to update scanpy job status: %s", db_err)
         notify_failed(job_id, kind="scanpy", error=error_text)
+        if raw_storage_error:
+            raise AnalysisStorageError(ANALYSIS_STORAGE_ERROR) from e
         raise

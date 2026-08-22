@@ -4,8 +4,8 @@ Contract:
 - ``POST /api/v1/admin/uploads/presign``  UploadPresignRequest -> UploadPresignResponse
 
 The flow is stateless (mirrors ``apps/api/app/schemas/analyses.py`` upload
-schemas): the client receives a pre-signed PUT URL plus the object key and
-persists ``public_url`` itself (e.g. as ``news_articles.cover_url``).
+schemas): the client receives a constrained pre-signed POST plus the object
+key and persists ``public_url`` itself (e.g. as ``news_articles.cover_url``).
 
 E2-1 server-side validation (oracle 🔴):
 - ``purpose`` must be in the allowlist (news/editor/about) — it becomes an
@@ -14,12 +14,14 @@ E2-1 server-side validation (oracle 🔴):
   (XSS vector).
 - ``size`` is required and capped at 10 MB (the presign flow has no bytes to
   sniff, so the client declares the size up front).
-- ``content_type`` (optional, declared MIME) must be in the image allowlist.
+- ``content_type`` (required, declared MIME) must be in the image allowlist.
+- ``checksum_sha256`` is required and normalized to lowercase hexadecimal.
 """
 
 from __future__ import annotations
 
 import os
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -49,7 +51,8 @@ class UploadPresignRequest(BaseModel):
     filename: str = Field(..., min_length=1, max_length=512)
     purpose: str = Field(default="news", min_length=1, max_length=512)
     size: int = Field(..., ge=1, le=MAX_UPLOAD_SIZE_BYTES)
-    content_type: str | None = Field(default=None, max_length=128)
+    content_type: str = Field(..., min_length=1, max_length=128)
+    checksum_sha256: str = Field(pattern=r"^[0-9a-fA-F]{64}$")
 
     @field_validator("filename", "purpose")
     @classmethod
@@ -89,9 +92,7 @@ class UploadPresignRequest(BaseModel):
 
     @field_validator("content_type")
     @classmethod
-    def _mime_allowed(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
+    def _mime_allowed(cls, value: str) -> str:
         if value.lower() not in ALLOWED_UPLOAD_MIME_TYPES:
             raise ValueError(
                 "content_type must be one of: "
@@ -99,11 +100,18 @@ class UploadPresignRequest(BaseModel):
             )
         return value.lower()
 
+    @field_validator("checksum_sha256")
+    @classmethod
+    def _normalize_checksum(cls, value: str) -> str:
+        return value.lower()
+
 
 class UploadPresignResponse(BaseModel):
-    """Pre-signed PUT URL + object key + public URL (nothing persisted)."""
+    """Pre-signed upload contract + object key + public URL."""
 
     upload_url: str
+    upload_method: Literal["POST"] = "POST"
+    upload_fields: dict[str, str]
     object_key: str
     public_url: str
     expires_in: int

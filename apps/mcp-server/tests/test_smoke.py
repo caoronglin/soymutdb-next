@@ -1,4 +1,4 @@
-"""MCP server smoke tests (B1): import + tool inventory present."""
+"""MCP server smoke tests: inventory, auth, and deployment boundary."""
 
 from __future__ import annotations
 
@@ -39,7 +39,10 @@ class TestManifest:
         assert MANIFEST["version"] == VERSION
         assert MANIFEST["tools"] is TOOLS
         assert "rate_limit" in AUTH
+        assert "Authorization: Bearer" in AUTH["transport"]
+        assert "fail closed" in AUTH["transport"]
         assert "60 req/min" in AUTH["rate_limit"]
+        assert "Redis-backed" in AUTH["rate_limit"]
 
 
 class TestServerImport:
@@ -103,7 +106,11 @@ class TestPhaseOneDeploymentBoundary:
     def test_nginx_mcp_boundary_requires_bearer_without_affecting_health(self):
         config = Path(__file__).parents[3] / "infra/nginx/conf.d/default.conf"
         text = config.read_text()
-        mcp = text[text.index("location ^~ /mcp/"):text.index("location / {", text.index("location ^~ /mcp/"))]
+        slash = text[text.index("location = /mcp/ {"):text.index("location = /mcp {")]
+        assert "if ($http_authorization = \"\")" in slash
+        assert "return 308 /mcp;" in slash
+
+        mcp = text[text.index("location = /mcp {"):text.index("location / {", text.index("location = /mcp {"))]
         assert "limit_req zone=auth" in mcp
         assert "if ($http_authorization = \"\")" in mcp
         assert "proxy_set_header X-Request-ID" in mcp

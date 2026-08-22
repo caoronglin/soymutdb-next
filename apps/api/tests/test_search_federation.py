@@ -39,8 +39,11 @@ async def test_external_json_preserves_source_degradation(monkeypatch):
         lambda redis: aggregator,
     )
     monkeypatch.setattr("app.api.v1.search.get_redis", lambda: object())
+    db = AsyncMock()
+    db.scalar = AsyncMock(return_value=None)
+
     async def override_db():
-        yield None
+        yield db
 
     app.dependency_overrides[get_db] = override_db
 
@@ -57,6 +60,7 @@ async def test_external_json_preserves_source_degradation(monkeypatch):
     assert result.status_code == 200
     assert result.json()["sources"][1]["status"] == "circuit_open"
     assert result.json()["sources"][1]["error"] == "open"
+    db.scalar.assert_awaited_once()
     aggregator.search.assert_awaited_once_with(
         "Glyma",
         sources=[SearchSource.NCBI, SearchSource.UNIPROT],

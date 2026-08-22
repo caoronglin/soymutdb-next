@@ -142,7 +142,7 @@ SEED_PAGES: list[tuple[str, str, dict]] = [
                     },
                     {
                         "type": "blast_launcher",
-                        "props": {"program": "blastn"},
+                        "props": {"program": "blastn", "assembly": "Glycine max"},
                     },
                 ],
             }

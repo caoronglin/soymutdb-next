@@ -41,6 +41,7 @@ from ..schemas.popgen import (
     LdVariant,
 )
 from .clickhouse_service import ClickHouseService
+from .release_context import ReleaseContext
 
 #: Column names returned by ``query_variants_by_region`` that popgen reads.
 _REGION_COLUMNS = frozenset(
@@ -69,7 +70,11 @@ class PopGenService:
     # ------------------------------------------------------------------ #
 
     async def _resolve_region(
-        self, db: AsyncSession, request: AlleleFreqRequest | DiversityRequest | LdRequest
+        self,
+        db: AsyncSession,
+        request: AlleleFreqRequest | DiversityRequest | LdRequest,
+        *,
+        release_context: ReleaseContext,
     ) -> dict[str, Any]:
         """Resolve a request into ``(assembly, chromosome, start, end, source)``.
 
@@ -78,7 +83,14 @@ class PopGenService:
         the client supplied the coordinates directly.
         """
         if request.gene_id is not None:
-            result = await db.execute(select(Gene).where(Gene.id == request.gene_id))
+            result = await db.execute(
+                select(Gene)
+                .join(Assembly, Gene.assembly_id == Assembly.id)
+                .where(
+                    Gene.id == request.gene_id,
+                    Assembly.release_id == release_context.release_id,
+                )
+            )
             gene = result.scalar_one_or_none()
             if gene is None:
                 raise NotFoundError(f"Gene {request.gene_id!r} not found")
@@ -113,11 +125,20 @@ class PopGenService:
     # ------------------------------------------------------------------ #
 
     async def _fetch_variants(
-        self, db: AsyncSession, request: AlleleFreqRequest | DiversityRequest | LdRequest
+        self,
+        db: AsyncSession,
+        request: AlleleFreqRequest | DiversityRequest | LdRequest,
+        *,
+        release_context: ReleaseContext,
     ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         """Fetch region + variant rows for *request* (capped at MAX_VARIANTS)."""
-        region = await self._resolve_region(db, request)
+        region = await self._resolve_region(
+            db,
+            request,
+            release_context=release_context,
+        )
         rows = await self.ch.query_variants_by_region(
+            release_context=release_context,
             assembly=region["assembly"],
             chromosome=region["chromosome"],
             start=region["start"],
@@ -152,10 +173,18 @@ class PopGenService:
     # ------------------------------------------------------------------ #
 
     async def allele_frequencies(
-        self, db: AsyncSession, request: AlleleFreqRequest
+        self,
+        db: AsyncSession,
+        request: AlleleFreqRequest,
+        *,
+        release_context: ReleaseContext,
     ) -> AlleleFreqResponse:
         """Return per-variant allele frequencies for a gene / interval."""
-        region, rows = await self._fetch_variants(db, request)
+        region, rows = await self._fetch_variants(
+            db,
+            request,
+            release_context=release_context,
+        )
         variants = [
             AlleleFreqVariant(
                 variant_id=r["variant_id"],
@@ -185,7 +214,11 @@ class PopGenService:
     # ------------------------------------------------------------------ #
 
     async def diversity(
-        self, db: AsyncSession, request: DiversityRequest
+        self,
+        db: AsyncSession,
+        request: DiversityRequest,
+        *,
+        release_context: ReleaseContext,
     ) -> DiversityResponse:
         """Compute nucleotide diversity (π) and Watterson's θ for a region.
 
@@ -194,7 +227,11 @@ class PopGenService:
         (monomorphic positions contribute 0).  θ = S / a_n requires an
         explicit ``sample_size`` (the store does not record it).
         """
-        region, rows = await self._fetch_variants(db, request)
+        region, rows = await self._fetch_variants(
+            db,
+            request,
+            release_context=release_context,
+        )
         variants = self._clean_rows(rows)
         n_bp = region["end"] - region["start"] + 1
 
@@ -235,10 +272,20 @@ class PopGenService:
     # LD
     # ------------------------------------------------------------------ #
 
-    async def ld(self, db: AsyncSession, request: LdRequest) -> LdResponse:
+    async def ld(
+        self,
+        db: AsyncSession,
+        request: LdRequest,
+        *,
+        release_context: ReleaseContext,
+    ) -> LdResponse:
         """Return LD r² (inline genotype matrix) or a clear note + variant
         coordinates when no genotype data is available."""
-        region, rows = await self._fetch_variants(db, request)
+        region, rows = await self._fetch_variants(
+            db,
+            request,
+            release_context=release_context,
+        )
         variants = self._clean_rows(rows)
 
         variant_rows = [

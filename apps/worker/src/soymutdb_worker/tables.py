@@ -16,15 +16,51 @@ from sqlalchemy import (
     Column,
     DateTime,
     Float,
+    ForeignKey,
     Integer,
     MetaData,
     String,
     Table,
     Text,
+    UniqueConstraint,
+    func,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import ENUM, JSONB, UUID
 
 metadata = MetaData()
+
+# These PostgreSQL types are declared only to compile worker Core statements
+# against the API-owned schema. ``create_type=False`` is deliberate: migrations
+# remain the sole owner of enum lifecycle.
+release_status_enum = ENUM(
+    "draft",
+    "validated",
+    "ready",
+    "published",
+    "rolled_back",
+    name="release_status_enum",
+    create_type=False,
+)
+import_status_enum = ENUM(
+    "uploading",
+    "validating",
+    "ingesting",
+    "ready",
+    "published",
+    "failed",
+    "rolled_back",
+    name="import_status_enum",
+    create_type=False,
+)
+
+# ``releases`` stays intentionally narrow: worker imports only lock/read the
+# state needed to protect release-scoped writes.
+releases = Table(
+    "releases",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("status", release_status_enum, nullable=False),
+)
 
 genes = Table(
     "genes",
@@ -89,12 +125,12 @@ import_tasks = Table(
     "import_tasks",
     metadata,
     Column("id", Integer, primary_key=True),
-    Column("status", String(32)),
+    Column("status", import_status_enum),
     Column("progress", Integer),
     Column("total_records", Integer),
     Column("processed_records", Integer),
     Column("error_message", Text),
-    Column("error_detail", JSON),
+    Column("error_detail", JSONB),
     Column("failed_batch", Integer),
     Column("completed_at", DateTime(timezone=True)),
 )
@@ -104,11 +140,11 @@ data_sets = Table(
     metadata,
     Column("id", Integer, primary_key=True),
     Column("type", String(32)),
-    Column("release_id", Integer),
-    Column("source_objects", JSON),
-    Column("status", String(32)),
-    Column("validation_evidence", JSON),
-    Column("manifest", JSON),
+    Column("release_id", Integer, ForeignKey("releases.id", ondelete="SET NULL")),
+    Column("source_objects", JSONB),
+    Column("status", import_status_enum),
+    Column("validation_evidence", JSONB),
+    Column("manifest", JSONB),
     Column("created_at", DateTime(timezone=True)),
     Column("updated_at", DateTime(timezone=True)),
 )
@@ -117,12 +153,24 @@ module_data_rows = Table(
     "module_data_rows",
     metadata,
     Column("id", UUID(as_uuid=True), primary_key=True),
-    Column("module_key", String(80)),
-    Column("release_id", Integer),
-    Column("row_key", String(512)),
-    Column("data", JSON),
-    Column("created_at", DateTime(timezone=True)),
-    Column("updated_at", DateTime(timezone=True)),
+    Column("module_key", String(80), nullable=False, index=True),
+    Column(
+        "release_id",
+        Integer,
+        ForeignKey("releases.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    ),
+    Column("row_key", String(512), nullable=False),
+    Column("data", JSONB, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    Column("updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    UniqueConstraint(
+        "module_key",
+        "release_id",
+        "row_key",
+        name="uq_module_data_rows_module_release_row",
+    ),
 )
 
 blast_jobs = Table(
@@ -268,6 +316,7 @@ __all__ = [
     "metadata",
     "notifications",
     "publication_target_leases",
+    "releases",
     "static_publications",
     "utcnow",
 ]

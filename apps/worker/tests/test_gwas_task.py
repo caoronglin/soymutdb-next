@@ -85,16 +85,23 @@ def _call_task(task: Any, *args, **kwargs):
 
 def _payload(job_id: str | None = None, task_name: str = GWAS_RUN_TASK) -> dict:
     job_id = job_id or str(uuid.uuid4())
+    owner_id = str(uuid.uuid4())
+    upload_session_id = str(uuid.uuid4())
     now = datetime.now(UTC)
     p = JobPayload(
         job_id=job_id,
         task_name=task_name,
         payload={
             "job_id": job_id,
+            "owner_id": owner_id,
             "method": "emmax",
             "object_type": "snp",
-            "phenotype_object_key": f"gwas/{job_id}/input/pheno.pheno",
-            "genotype_object_key": f"gwas/{job_id}/input/geno.tped",
+            "phenotype_object_key": (
+                f"gwas/{owner_id}/{upload_session_id}/input/pheno.pheno"
+            ),
+            "genotype_object_key": (
+                f"gwas/{owner_id}/{upload_session_id}/input/geno.tped"
+            ),
             "params": {"num_threads": 2},
         },
         idempotency_key=f"gwas:{job_id}",
@@ -139,10 +146,11 @@ def _monkeypatch_execution(
     """Mock S3 + engine internals so the task runs without external services."""
     monkeypatch.setattr(gwas_module, "get_file_size", lambda key: 1234)
 
+    @contextmanager
     def fake_download(s3_path: str, local_path: str | None = None):
         target = Path(local_path)
         target.write_text("mock input\n")
-        return str(target)
+        yield str(target)
 
     monkeypatch.setattr(gwas_module, "download_file", fake_download)
 
@@ -277,6 +285,8 @@ def test_unknown_payload_version_is_rejected() -> None:
 
 def test_legacy_kwargs_dispatch_still_works(monkeypatch, tmp_path) -> None:
     job_id = str(uuid.uuid4())
+    owner_id = str(uuid.uuid4())
+    upload_session_id = str(uuid.uuid4())
     session = FakeSession(status="pending")
     monkeypatch.setattr(gwas_module, "get_db", lambda: _fake_db(session))
     _monkeypatch_execution(monkeypatch, tmp_path=tmp_path)
@@ -285,8 +295,11 @@ def test_legacy_kwargs_dispatch_still_works(monkeypatch, tmp_path) -> None:
         gwas_module.run_gwas,
         FakeTask(),
         job_id=job_id,
+        owner_id=owner_id,
         method="emmax",
-        phenotype_object_key=f"gwas/{job_id}/input/p.pheno",
+        phenotype_object_key=(
+            f"gwas/{owner_id}/{upload_session_id}/input/p.pheno"
+        ),
     )
 
     assert result["n_variants"] == 3
@@ -350,10 +363,74 @@ def test_parse_assoc_skips_invalid_rows(tmp_path) -> None:
     assert rows[0]["snp"] == "ok1"
 
 
+def test_parse_assoc_preserves_column_positions_when_optional_field_is_empty(
+    tmp_path,
+) -> None:
+    path = tmp_path / "empty-column.assoc.txt"
+    path.write_text(
+        "chr\trs\tps\tn_miss\tallele1\tallele0\taf\tbeta\tse\tp_wald\n"
+        "2\trs-empty\t321\t0\tA\tG\t\t0.25\t0.05\t1e-6\n"
+    )
+
+    rows = gwas_module.parse_assoc_file(path)
+
+    assert rows == [
+        {
+            "snp": "rs-empty",
+            "chr": "2",
+            "pos": 321,
+            "p": pytest.approx(1e-6),
+            "beta": pytest.approx(0.25),
+            "se": pytest.approx(0.05),
+            "af": None,
+        }
+    ]
+
+
 def test_parse_assoc_empty_file(tmp_path) -> None:
     path = tmp_path / "empty.ps"
     path.write_text("")
     assert gwas_module.parse_assoc_file(path) == []
+
+
+def test_run_gwas_enters_download_context_manager(monkeypatch, tmp_path) -> None:
+    payload = _payload()
+    session = FakeSession(status="pending")
+    monkeypatch.setattr(gwas_module, "get_db", lambda: _fake_db(session))
+    monkeypatch.setattr(gwas_module, "get_file_size", lambda key: 1234)
+    events: list[tuple[str, str]] = []
+
+    @contextmanager
+    def tracked_download(s3_path: str, local_path: str | None = None):
+        target = Path(local_path)
+        target.write_text("mock input\n")
+        events.append(("enter", s3_path))
+        try:
+            yield str(target)
+        finally:
+            events.append(("exit", s3_path))
+
+    monkeypatch.setattr(gwas_module, "download_file", tracked_download)
+    assoc = _assoc_fixture(tmp_path)
+
+    def fake_engine(*args, **kwargs):
+        assert events
+        assert Path(kwargs["phenotype_path"]).is_file()
+        assert Path(kwargs["genotype_path"]).is_file()
+        return assoc
+
+    monkeypatch.setattr(gwas_module, "run_engine", fake_engine)
+    monkeypatch.setattr(gwas_module, "_result_file_metadata", lambda p: ("abc123", 12))
+    monkeypatch.setattr(gwas_module, "upload_file", lambda *a, **k: None)
+    monkeypatch.setattr(
+        gwas_module, "generate_presigned_url", lambda *a, **k: "https://s3.example/x"
+    )
+
+    result = _call_task(gwas_module.run_gwas, FakeTask(), payload=payload)
+
+    assert result["n_variants"] == 3
+    assert [event for event, _ in events].count("enter") == 2
+    assert [event for event, _ in events].count("exit") == 2
 
 
 # ---------------------------------------------------------------------------
@@ -520,11 +597,79 @@ def test_sanitize_error_message_removes_input_paths() -> None:
 
 
 def test_validate_input_key_rejects_traversal() -> None:
+    owner_id = uuid.uuid4()
+    session_id = uuid.uuid4()
     with pytest.raises(ValueError):
-        gwas_module.validate_input_key("../../etc/passwd")
+        gwas_module.validate_input_key("../../etc/passwd", owner_id)
     with pytest.raises(ValueError):
-        gwas_module.validate_input_key("analyses/abc/input/x")
-    assert gwas_module.validate_input_key("gwas/abc/input/x.pheno") is not None
+        gwas_module.validate_input_key("analyses/abc/input/x", owner_id)
+    key = f"gwas/{owner_id}/{session_id}/input/x.pheno"
+    assert gwas_module.validate_input_key(key, owner_id) == key
+
+
+def test_validate_input_key_rejects_cross_owner_and_legacy_shape() -> None:
+    owner_id = uuid.uuid4()
+    other_owner_id = uuid.uuid4()
+    session_id = uuid.uuid4()
+    with pytest.raises(ValueError, match="belong"):
+        gwas_module.validate_input_key(
+            f"gwas/{other_owner_id}/{session_id}/input/x.pheno",
+            owner_id,
+        )
+    with pytest.raises(ValueError, match="shape"):
+        gwas_module.validate_input_key(
+            f"gwas/{session_id}/input/x.pheno",
+            owner_id,
+        )
+
+
+def test_run_gwas_rejects_cross_owner_payload_before_database(monkeypatch) -> None:
+    owner_id = uuid.uuid4()
+    attacker_id = uuid.uuid4()
+    session_id = uuid.uuid4()
+    payload = _payload()
+    payload["payload"]["owner_id"] = str(attacker_id)
+    payload["payload"]["phenotype_object_key"] = (
+        f"gwas/{owner_id}/{session_id}/input/trait.pheno"
+    )
+    monkeypatch.setattr(
+        gwas_module,
+        "get_db",
+        lambda: pytest.fail("tenant validation must happen before database access"),
+    )
+
+    with pytest.raises(ValueError, match="belong"):
+        _call_task(gwas_module.run_gwas, FakeTask(), payload=payload)
+
+
+def test_run_gwas_requires_trusted_owner_payload_before_database(monkeypatch) -> None:
+    payload = _payload()
+    del payload["payload"]["owner_id"]
+    monkeypatch.setattr(
+        gwas_module,
+        "get_db",
+        lambda: pytest.fail("owner validation must happen before database access"),
+    )
+
+    with pytest.raises(ValueError, match="owner_id"):
+        _call_task(gwas_module.run_gwas, FakeTask(), payload=payload)
+
+
+def test_legacy_run_gwas_without_owner_fails_closed(monkeypatch) -> None:
+    monkeypatch.setattr(
+        gwas_module,
+        "get_db",
+        lambda: pytest.fail("legacy payload must fail before database access"),
+    )
+
+    with pytest.raises(TypeError, match="owner"):
+        _call_task(
+            gwas_module.run_gwas,
+            FakeTask(),
+            job_id=str(uuid.uuid4()),
+            method="emmax",
+            phenotype_object_key="gwas/legacy/input/trait.pheno",
+        )
 
 
 def test_render_report_html_embeds_json() -> None:

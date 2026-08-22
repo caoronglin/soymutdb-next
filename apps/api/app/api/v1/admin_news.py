@@ -1,6 +1,6 @@
 """Admin news endpoints (B1): list (all statuses), CRUD, drag reorder, HMAC preview tokens.
 
-Requires ``researcher`` role or higher (hierarchical RBAC, see
+Requires the ``content_editor`` capability (hierarchical RBAC, see
 ``app.core.security.has_role``).
 
 Contract:
@@ -39,11 +39,11 @@ router = APIRouter(prefix="/admin/news", tags=["admin-news"])
 service = NewsService()
 
 
-def _require_researcher(user: User) -> User:
-    """Raise :class:`AuthorizationError` unless *user* is researcher+."""
+def _require_content_editor(user: User) -> User:
+    """Raise :class:`AuthorizationError` unless *user* can manage content."""
     roles = get_user_roles(user)
-    if not has_role(roles, RoleName.RESEARCHER):
-        raise AuthorizationError("Researcher access required")
+    if not has_role(roles, RoleName.CONTENT_EDITOR):
+        raise AuthorizationError("Content editor access required")
     return user
 
 
@@ -70,7 +70,7 @@ async def list_news_admin(
     sees every status and supports ``status_filter``, ``category`` and
     ``search`` parameters.
     """
-    _require_researcher(current_user)
+    _require_content_editor(current_user)
     sf = status_filter.lower() if status_filter else None
     return await service.list_articles_admin(
         db,
@@ -103,7 +103,7 @@ async def create_news(
     current_user: User = Depends(get_current_user),
 ) -> NewsDetailResponse:
     """Create a news article (draft by default; publish via ``status``)."""
-    _require_researcher(current_user)
+    _require_content_editor(current_user)
     article = await service.create_article(db, payload, current_user.id)
     return NewsDetailResponse.model_validate(article)
 
@@ -116,7 +116,7 @@ async def update_news(
     current_user: User = Depends(get_current_user),
 ) -> NewsDetailResponse:
     """Partial update; ``status``/``is_published`` stay double-written."""
-    _require_researcher(current_user)
+    _require_content_editor(current_user)
     article = await service.update_article(db, news_id, payload, current_user.id)
     return NewsDetailResponse.model_validate(article)
 
@@ -128,7 +128,7 @@ async def delete_news(
     current_user: User = Depends(get_current_user),
 ) -> Response:
     """Hard-delete a news article."""
-    _require_researcher(current_user)
+    _require_content_editor(current_user)
     await service.delete_article(db, news_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -140,7 +140,7 @@ async def reorder_news(
     current_user: User = Depends(get_current_user),
 ) -> NewsReorderResponse:
     """Apply a full drag-and-drop ordering of ``featured_sort``."""
-    _require_researcher(current_user)
+    _require_content_editor(current_user)
     return await service.reorder(db, payload)
 
 
@@ -157,7 +157,7 @@ async def preview_token(
     endpoint.  The token is NOT a JWT — no server-side state, HMAC-signed
     with ``settings.jwt_secret``.
     """
-    _require_researcher(current_user)
+    _require_content_editor(current_user)
     article = await _get_article(db, news_id)
     token, exp = sign_preview_token(article.slug)
     url = f"/api/v1/news/{article.slug}?preview={token}&exp={exp}"

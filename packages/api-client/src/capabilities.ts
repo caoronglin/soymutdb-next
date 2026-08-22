@@ -2,9 +2,57 @@
 
 import { http } from "./client";
 
+export interface PluginCapability {
+  version: string | null;
+  installed: boolean;
+  enabled: boolean;
+  configured: boolean;
+  healthy: boolean;
+  public_url: string | null;
+  assemblies: string[];
+  reason: string | null;
+}
+
+export interface DatabaseCapabilities {
+  authoritative: "postgresql";
+  analytics: "clickhouse" | null;
+}
+
 export interface PublicCapabilitiesResponse {
   version: number;
   features: Record<string, boolean>;
+  plugins: Record<string, PluginCapability>;
+  databases: DatabaseCapabilities;
+}
+
+export interface PluginAvailability {
+  available: boolean;
+  reason: string | null;
+}
+
+/**
+ * Resolve the server-owned plugin state into a stable UI/task-dispatch guard.
+ * The ordered checks match the API's fail-closed lifecycle semantics.
+ */
+export function getPluginAvailability(
+  capability: PluginCapability | undefined,
+): PluginAvailability {
+  if (!capability?.installed) {
+    return { available: false, reason: "not_installed" };
+  }
+  if (!capability.enabled) {
+    return { available: false, reason: "plugin_disabled" };
+  }
+  if (!capability.configured) {
+    return { available: false, reason: "not_configured" };
+  }
+  if (!capability.healthy) {
+    return {
+      available: false,
+      reason: capability.reason || "plugin_unhealthy",
+    };
+  }
+  return { available: true, reason: null };
 }
 
 export interface FeatureDefinitionResponse {

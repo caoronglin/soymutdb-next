@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,7 +26,7 @@ from ..models.page_builder import (
     PageDefinitionStatus,
     PageDefinitionVersion,
 )
-from .registry import validate_definition, validate_route
+from .registry import validate_definition, validate_plugin_launchers, validate_route
 
 #: Outbox event emitted by a publish request (consumed by the publication
 #: pipeline; the page builder itself never mutates public files).
@@ -97,10 +98,13 @@ async def create_page(
     title_key: str,
     definition: dict,
     edited_by: uuid.UUID,
+    plugin_states: dict[str, Any] | None = None,
 ) -> tuple[PageDefinition, PageDefinitionVersion]:
     """Create a page and its first (draft) version."""
     route = validate_route(route)
     cleaned = validate_definition({**definition, "title_key": title_key})
+    if plugin_states is not None:
+        validate_plugin_launchers(cleaned, plugin_states)
 
     existing = await db.scalar(
         select(PageDefinition).where(PageDefinition.route == route)
@@ -134,6 +138,7 @@ async def update_draft(
     definition: dict,
     edit_comment: str | None,
     edited_by: uuid.UUID,
+    plugin_states: dict[str, Any] | None = None,
 ) -> tuple[PageDefinition, PageDefinitionVersion]:
     """Apply an optimistic draft edit, creating a new version row.
 
@@ -160,6 +165,8 @@ async def update_draft(
         pass
 
     cleaned = validate_definition(definition)
+    if plugin_states is not None:
+        validate_plugin_launchers(cleaned, plugin_states)
     version = PageDefinitionVersion(
         page_id=page.id,
         version=expected + 1,
@@ -181,6 +188,7 @@ async def preview(
     page_id: uuid.UUID | None,
     route: str | None,
     definition: dict,
+    plugin_states: dict[str, Any] | None = None,
 ) -> dict:
     """Validate (and, if a page is referenced, snapshot) a preview definition.
 
@@ -189,6 +197,8 @@ async def preview(
     definition is persisted as a ``preview`` version.
     """
     cleaned = validate_definition(definition)
+    if plugin_states is not None:
+        validate_plugin_launchers(cleaned, plugin_states)
 
     version_preview: int = 0
     page: PageDefinition | None = None
@@ -239,6 +249,7 @@ async def publish_request(
     version_id: uuid.UUID | None,
     reason: str | None,
     edited_by: uuid.UUID,
+    plugin_states: dict[str, Any] | None = None,
 ) -> tuple[PageDefinition, PageDefinitionVersion, OutboxEvent]:
     """Validate and mark a version ``requested``, emitting a publish event.
 
@@ -262,6 +273,8 @@ async def publish_request(
     # Re-validate the stored definition (defence in depth — a definition can
     # never reach ``requested`` without passing the registry).
     cleaned = validate_definition(version.definition)
+    if plugin_states is not None:
+        validate_plugin_launchers(cleaned, plugin_states)
     version.definition = cleaned
     version.status = PageDefinitionStatus.REQUESTED
     version.edit_comment = version.edit_comment or reason

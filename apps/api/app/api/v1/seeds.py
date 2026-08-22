@@ -55,12 +55,16 @@ async def create_seed_request(
     return await service.create_request(db, request)
 
 
-@router.get("/requests", response_model=list[SeedRequestResponse])
+@router.get(
+    "/requests",
+    response_model=list[SeedRequestResponse],
+    dependencies=[Depends(require_role(RoleName.SEED_MANAGER))],
+)
 async def list_seed_requests(
     db: AsyncSession = Depends(get_db),
     status: SeedRequestStatus | None = Query(default=None),
 ) -> list[SeedRequestResponse]:
-    """List seed requests."""
+    """List seed requests containing contact data (seed_manager only)."""
     return await service.list_requests(db, status=status)
 
 

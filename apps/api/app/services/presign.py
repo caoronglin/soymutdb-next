@@ -3,7 +3,7 @@
 Reuses the API's existing boto3 client configuration (``app.utils.s3``,
 driven by ``SOYMUTDB_S3_*`` settings) and adds:
 
-- PUT (upload) and GET (download) pre-signed URL generation.
+- Constrained POST uploads plus legacy PUT and GET pre-signed URL generation.
 - Object-key construction and strict prefix validation so clients can never
   reference objects outside ``analyses/`` (or outside their own job).
 - A generic ``uploads/`` namespace for admin uploads (news covers, images,
@@ -11,17 +11,23 @@ driven by ``SOYMUTDB_S3_*`` settings) and adds:
   ``validate_uploads_key`` + ``generate_public_url`` (public-facing URL that
   can be stored directly in DB columns such as ``news_articles.cover_url``).
 
-The upload flow is stateless: the API hands out a pre-signed PUT URL and the
-object key; the job row (and outbox dispatch) is created only at submit time.
+The analysis upload flow is stateless: the API hands out a pre-signed POST
+action and object key; the job row is created only after HEAD verification.
 """
 
 from __future__ import annotations
 
+import base64
+import binascii
+import hashlib
 import re
 import uuid
 from dataclasses import dataclass
 
+from botocore.exceptions import BotoCoreError, ClientError
+
 from ..core.config import get_settings
+from ..core.exceptions import ServiceUnavailableError
 from ..utils.s3 import get_s3_client
 
 settings = get_settings()
@@ -32,6 +38,9 @@ MAX_UPLOAD_SIZE: int = 500 * 1024 * 1024
 UPLOAD_EXPIRES_IN: int = 3600
 #: Pre-signed URL lifetime for downloads (seconds).
 DOWNLOAD_EXPIRES_IN: int = 600
+#: Positive read size used to derive an object checksum after multipart completion.
+#: Keeping this bounded is important for multi-million-row module uploads.
+MULTIPART_CHECKSUM_CHUNK_SIZE: int = 1024 * 1024
 
 #: Object-key namespace for analysis inputs; every key must start with this
 #: exact segment (a trailing slash boundary is enforced, so ``analyses-evil``
@@ -69,6 +78,12 @@ class CompletedObject:
     sha256: str
 
 
+@dataclass(frozen=True)
+class PresignedPost:
+    url: str
+    fields: dict[str, str]
+
+
 def build_data_object_key(data_set_id: int, filename: str) -> str:
     return f"{DATA_PREFIX}/{data_set_id}/{uuid.uuid4()}-{sanitize_filename(filename)}"
 
@@ -82,7 +97,9 @@ def validate_data_key(object_key: str, data_set_id: int | None = None) -> str:
     return object_key
 
 
-def initiate_multipart_upload(*, data_set_id: int, filename: str, content_type: str, bucket: str | None = None) -> MultipartSession:
+def initiate_multipart_upload(
+    *, data_set_id: int, filename: str, content_type: str, bucket: str | None = None
+) -> MultipartSession:
     object_key = build_data_object_key(data_set_id, filename)
     validate_data_key(object_key, data_set_id)
     result = get_s3_client().create_multipart_upload(
@@ -91,30 +108,97 @@ def initiate_multipart_upload(*, data_set_id: int, filename: str, content_type: 
     return MultipartSession(upload_id=result["UploadId"], object_key=object_key)
 
 
-def sign_multipart_part(*, object_key: str, upload_id: str, part_number: int, bucket: str | None = None) -> str:
+def sign_multipart_part(
+    *, object_key: str, upload_id: str, part_number: int, bucket: str | None = None
+) -> str:
     validate_data_key(object_key)
     if not 1 <= part_number <= 10_000:
         raise ValueError("part_number must be between 1 and 10000")
     return get_s3_client().generate_presigned_url(
-        "upload_part", Params={"Bucket": bucket or settings.s3_analyses_bucket, "Key": object_key, "UploadId": upload_id, "PartNumber": part_number}, ExpiresIn=UPLOAD_EXPIRES_IN
+        "upload_part",
+        Params={
+            "Bucket": bucket or settings.s3_analyses_bucket,
+            "Key": object_key,
+            "UploadId": upload_id,
+            "PartNumber": part_number,
+        },
+        ExpiresIn=UPLOAD_EXPIRES_IN,
     )
 
 
-def complete_multipart_upload(*, object_key: str, upload_id: str, parts: list[CompletedPart], sha256: str, bucket: str | None = None) -> CompletedObject:
+def complete_multipart_upload(
+    *, object_key: str, upload_id: str, parts: list[CompletedPart],
+    sha256: str | None = None, bucket: str | None = None
+) -> CompletedObject:
     validate_data_key(object_key)
-    if not re.fullmatch(r"[0-9a-fA-F]{64}", sha256):
+    if sha256 is not None and not re.fullmatch(r"[0-9a-fA-F]{64}", sha256):
         raise ValueError("sha256 must be a 64-character hexadecimal digest")
     if not parts or any(not p.etag or not 1 <= p.part_number <= 10_000 for p in parts):
         raise ValueError("parts must contain valid part numbers and ETags")
+    target_bucket = bucket or settings.s3_analyses_bucket
+    client = get_s3_client()
     try:
-        get_s3_client().complete_multipart_upload(
-            Bucket=bucket or settings.s3_analyses_bucket, Key=object_key, UploadId=upload_id,
-            MultipartUpload={"Parts": [{"PartNumber": p.part_number, "ETag": p.etag} for p in parts]},
+        client.complete_multipart_upload(
+            Bucket=target_bucket, Key=object_key, UploadId=upload_id,
+            MultipartUpload={
+                "Parts": [
+                    {"PartNumber": p.part_number, "ETag": p.etag} for p in parts
+                ]
+            },
         )
     except Exception:
-        get_s3_client().abort_multipart_upload(Bucket=bucket or settings.s3_analyses_bucket, Key=object_key, UploadId=upload_id)
+        client.abort_multipart_upload(
+            Bucket=target_bucket,
+            Key=object_key,
+            UploadId=upload_id,
+        )
         raise
-    return CompletedObject(object_key, upload_id, tuple(parts), sha256)
+
+    try:
+        computed_sha256 = _stream_object_sha256(client, target_bucket, object_key)
+    except Exception:
+        _delete_completed_object(client, target_bucket, object_key)
+        raise
+
+    # Old clients may still send a digest. Keep that contract as a cross-check,
+    # but make the persisted value server-derived so modern clients do not need
+    # an unbounded browser-side WebCrypto buffer.
+    if sha256 is not None and sha256.lower() != computed_sha256:
+        _delete_completed_object(client, target_bucket, object_key)
+        raise ValueError("server-derived checksum does not match the declared sha256")
+    return CompletedObject(object_key, upload_id, tuple(parts), computed_sha256)
+
+
+def _stream_object_sha256(client, bucket: str, object_key: str) -> str:
+    """Return an object's SHA-256 using bounded positive reads only."""
+    response = client.get_object(Bucket=bucket, Key=object_key)
+    body = response.get("Body")
+    if body is None or not hasattr(body, "read"):
+        raise ValueError("completed object could not be read for checksum verification")
+    digest = hashlib.sha256()
+    try:
+        while True:
+            chunk = body.read(MULTIPART_CHECKSUM_CHUNK_SIZE)
+            if not chunk:
+                break
+            if not isinstance(chunk, bytes):
+                raise ValueError("completed object returned a non-bytes stream chunk")
+            digest.update(chunk)
+    finally:
+        close = getattr(body, "close", None)
+        if callable(close):
+            close()
+    return digest.hexdigest()
+
+
+def _delete_completed_object(client, bucket: str, object_key: str) -> None:
+    """Best-effort cleanup after an integrity failure; callers always fail closed."""
+    try:
+        client.delete_object(Bucket=bucket, Key=object_key)
+    except Exception:
+        # The caller still raises, so cleanup failure can never turn into a
+        # successful import. Storage lifecycle rules handle a rare leftover.
+        pass
 
 
 def generate_upload_url(
@@ -129,6 +213,118 @@ def generate_upload_url(
     :func:`validate_analyses_key` / :func:`build_upload_key`.
     """
     return _presign("put_object", object_key, bucket=bucket, expires_in=expires_in)
+
+
+def generate_upload_post(
+    object_key: str,
+    *,
+    size: int,
+    content_type: str,
+    checksum_sha256: str,
+    bucket: str | None = None,
+    expires_in: int = UPLOAD_EXPIRES_IN,
+) -> PresignedPost:
+    """Create an exact-size, exact-MIME pre-signed POST policy.
+
+    The declared values are copied into signed object metadata so submitters
+    and workers can independently compare them with ``HEAD`` results.  S3 is
+    also instructed to persist a SHA-256 checksum for the uploaded object.
+    """
+    if not 1 <= size <= MAX_UPLOAD_SIZE:
+        raise ValueError(f"size must be between 1 and {MAX_UPLOAD_SIZE} bytes")
+    normalized_type = content_type.strip().lower()
+    if not normalized_type:
+        raise ValueError("content_type must not be empty")
+    try:
+        checksum_bytes = bytes.fromhex(checksum_sha256)
+    except ValueError as exc:
+        raise ValueError("checksum_sha256 must be a 64-character hex digest") from exc
+    if len(checksum_bytes) != 32:
+        raise ValueError("checksum_sha256 must be a 64-character hex digest")
+    checksum_hex = checksum_sha256.lower()
+    checksum_base64 = base64.b64encode(checksum_bytes).decode("ascii")
+    fields = {
+        "Content-Type": normalized_type,
+        "x-amz-meta-declared-size": str(size),
+        "x-amz-meta-declared-content-type": normalized_type,
+        "x-amz-meta-declared-sha256": checksum_hex,
+        "x-amz-checksum-algorithm": "SHA256",
+        "x-amz-checksum-sha256": checksum_base64,
+    }
+    result = get_s3_client().generate_presigned_post(
+        Bucket=bucket or settings.s3_analyses_bucket,
+        Key=object_key,
+        Fields=fields,
+        Conditions=[
+            ["content-length-range", size, size],
+            *({name: value} for name, value in fields.items()),
+        ],
+        ExpiresIn=expires_in,
+    )
+    return PresignedPost(url=result["url"], fields=result["fields"])
+
+
+def validate_uploaded_analysis_object(
+    object_key: str,
+    *,
+    bucket: str | None = None,
+    max_size: int = MAX_UPLOAD_SIZE,
+) -> dict[str, object]:
+    """Fail closed unless an uploaded object matches its signed declaration."""
+    try:
+        response = get_s3_client().head_object(
+            Bucket=bucket or settings.s3_analyses_bucket,
+            Key=object_key,
+            ChecksumMode="ENABLED",
+        )
+    except ClientError as exc:
+        error = exc.response.get("Error") or {}
+        error_code = str(error.get("Code") or "").lower()
+        response_metadata = exc.response.get("ResponseMetadata") or {}
+        http_status = response_metadata.get("HTTPStatusCode")
+        if http_status == 404 or error_code in {"404", "nosuchkey", "notfound"}:
+            raise ValueError("uploaded object was not found") from exc
+        raise ServiceUnavailableError(
+            "Object storage is temporarily unavailable"
+        ) from exc
+    except BotoCoreError as exc:
+        raise ServiceUnavailableError(
+            "Object storage is temporarily unavailable"
+        ) from exc
+    size = response.get("ContentLength")
+    if not isinstance(size, int) or size <= 0:
+        raise ValueError("uploaded object has no valid ContentLength")
+    if size > max_size:
+        raise ValueError(f"uploaded object exceeds the {max_size}-byte limit")
+    metadata = response.get("Metadata")
+    if not isinstance(metadata, dict):
+        raise ValueError("uploaded object is missing signed declaration metadata")
+    try:
+        declared_size = int(metadata["declared-size"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("uploaded object is missing a valid declared size") from exc
+    if declared_size != size:
+        raise ValueError("uploaded object ContentLength does not match declared size")
+    content_type = str(response.get("ContentType") or "").strip().lower()
+    declared_type = str(metadata.get("declared-content-type") or "").strip().lower()
+    if not content_type or content_type != declared_type:
+        raise ValueError("uploaded object ContentType does not match declared content type")
+    checksum = response.get("ChecksumSHA256")
+    try:
+        decoded_checksum = base64.b64decode(str(checksum), validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise ValueError("uploaded object is missing a valid SHA-256 checksum") from exc
+    if len(decoded_checksum) != 32:
+        raise ValueError("uploaded object is missing a valid SHA-256 checksum")
+    try:
+        declared_checksum = bytes.fromhex(str(metadata["declared-sha256"]))
+    except (KeyError, ValueError) as exc:
+        raise ValueError("uploaded object is missing a valid declared SHA-256") from exc
+    if len(declared_checksum) != 32:
+        raise ValueError("uploaded object is missing a valid declared SHA-256")
+    if decoded_checksum != declared_checksum:
+        raise ValueError("uploaded object checksum does not match its signed declaration")
+    return response
 
 
 def generate_download_url(
@@ -164,14 +360,22 @@ def _presign(
 # ---------------------------------------------------------------------------
 
 
-def build_upload_key(job_id: str | uuid.UUID, filename: str) -> str:
+def build_upload_key(
+    user_id: str | uuid.UUID,
+    upload_session_id: str | uuid.UUID,
+    filename: str,
+) -> str:
     """Build the object key for a new upload.
 
-    Shape: ``analyses/{job_id}/input/{uuid}-{sanitized-filename}``.  The
-    random prefix guarantees key uniqueness and makes the filename opaque.
+    Shape: ``analyses/{user_id}/{upload_session_id}/input/`` plus an opaque
+    filename.  The upload session is independent of the analysis job created
+    later; the user segment binds the stateless upload to its owner.
     """
     name = sanitize_filename(filename)
-    return f"{ANALYSES_PREFIX}/{job_id}/input/{uuid.uuid4()}-{name}"
+    return (
+        f"{ANALYSES_PREFIX}/{user_id}/{upload_session_id}/input/"
+        f"{uuid.uuid4()}-{name}"
+    )
 
 
 def sanitize_filename(filename: str) -> str:
@@ -198,6 +402,38 @@ def validate_analyses_key(object_key: str) -> str:
         raise ValueError(
             f"object_key must live under '{ANALYSES_PREFIX}/'"
         )
+    return object_key
+
+
+def validate_analysis_input_key(
+    object_key: str, user_id: str | uuid.UUID
+) -> str:
+    """Validate a stateless analysis upload object key.
+
+    The accepted shape is exactly
+    ``analyses/{user_uuid}/{upload_session_uuid}/input/{filename}``, and the
+    embedded owner must match *user_id*.
+    """
+    validate_analyses_key(object_key)
+    segments = object_key.split("/")
+    if len(segments) != 5 or segments[3] != "input" or not segments[4]:
+        raise ValueError(
+            "object_key must use the shape "
+            "'analyses/{user UUID}/{upload session UUID}/input/{filename}'"
+        )
+    try:
+        owner_id = uuid.UUID(segments[1])
+        upload_session_id = uuid.UUID(segments[2])
+    except ValueError as exc:
+        raise ValueError(
+            "object_key must contain canonical user and upload session UUIDs"
+        ) from exc
+    if str(owner_id) != segments[1].lower():
+        raise ValueError("object_key must contain a canonical user UUID")
+    if str(upload_session_id) != segments[2].lower():
+        raise ValueError("object_key must contain a canonical UUID upload session")
+    if owner_id != uuid.UUID(str(user_id)):
+        raise ValueError("object_key does not belong to this user")
     return object_key
 
 
@@ -283,8 +519,11 @@ __all__ = [
     "generate_download_url",
     "generate_public_url",
     "generate_upload_url",
+    "generate_upload_post",
     "sanitize_filename",
     "validate_analyses_key",
+    "validate_analysis_input_key",
+    "validate_uploaded_analysis_object",
     "validate_job_object_key",
     "validate_uploads_key",
     "build_data_object_key",
@@ -295,4 +534,5 @@ __all__ = [
     "CompletedPart",
     "CompletedObject",
     "MultipartSession",
+    "PresignedPost",
 ]

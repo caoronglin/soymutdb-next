@@ -7,6 +7,7 @@ Uses mocked DB session and authentication — no PostgreSQL required.
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -149,12 +150,26 @@ class TestGetSettings:
         data = response.json()
         assert data == {"url": "https://cdn.example.com"}
 
-    async def test_get_settings_empty_section(self, client, mock_session):
-        """A section with no settings returns empty dict."""
+    async def test_get_settings_unknown_section_is_rejected(self, client, mock_session):
+        """An unregistered section cannot expose arbitrary historical rows."""
         response = await client.get("/api/v1/admin/settings/empty_section")
+        assert response.status_code == 404
+        mock_session.execute.assert_not_awaited()
+
+    async def test_get_settings_omits_unknown_and_secret_historical_rows(
+        self, client, mock_session
+    ):
+        known = MagicMock(key="email.smtpHost", value="smtp.example.org")
+        unknown = MagicMock(key="email.customPython", value="import os")
+        secret = MagicMock(key="email.smtpPassword", value="legacy-plain-secret")
+        result = MagicMock()
+        result.scalars.return_value.all.return_value = [known, unknown, secret]
+        mock_session.execute.return_value = result
+
+        response = await client.get("/api/v1/admin/settings/email")
+
         assert response.status_code == 200
-        data = response.json()
-        assert data == {}
+        assert response.json() == {"smtpHost": "smtp.example.org"}
 
     async def test_get_settings_multiple_keys(self, client, mock_session):
         """Multiple keys under the same section are all returned."""
@@ -175,18 +190,14 @@ class TestGetSettings:
         assert data["max_sequences"] == "100"
         assert data["default_db"] == "williams82_cds"
 
-    async def test_get_settings_requires_admin(
-        self, client, mock_session, viewer_user
-    ):
+    async def test_get_settings_requires_admin(self, client, mock_session, viewer_user):
         """Non-admin user receives 403."""
         from app.api.v1.deps import get_current_user
 
         async def override_get_current_user():
             return viewer_user
 
-        client._transport.app.dependency_overrides[
-            get_current_user
-        ] = override_get_current_user
+        client._transport.app.dependency_overrides[get_current_user] = override_get_current_user
 
         response = await client.get("/api/v1/admin/settings/cdn")
         assert response.status_code == 403
@@ -209,18 +220,12 @@ class TestUpdateSettings:
         not_found = MagicMock()
         not_found.scalar_one_or_none.return_value = None
 
-        # Second execute call: get_settings after upsert returns the new setting
-        setting = MagicMock()
-        setting.key = "cdn.url"
-        setting.value = "https://cdn.example.com"
-        settings_result = MagicMock()
-        settings_result.scalars.return_value.all.return_value = [setting]
+        no_rows = MagicMock()
+        no_rows.scalars.return_value.all.return_value = []
 
-        mock_session.execute.side_effect = [not_found, settings_result]
+        mock_session.execute.side_effect = [not_found, no_rows]
 
-        with patch(
-            "app.api.v1.admin_settings.log_action", new_callable=AsyncMock
-        ) as mock_log:
+        with patch("app.services.settings_service.log_action", new_callable=AsyncMock) as mock_log:
             response = await client.put(
                 "/api/v1/admin/settings/cdn",
                 json={"url": "https://cdn.example.com"},
@@ -232,7 +237,11 @@ class TestUpdateSettings:
 
         # Verify SystemSetting was added to the session
         assert mock_session.add.called
-        added_setting = mock_session.add.call_args[0][0]
+        added_setting = next(
+            call.args[0]
+            for call in mock_session.add.call_args_list
+            if getattr(call.args[0], "key", None) == "cdn.url"
+        )
         assert added_setting.key == "cdn.url"
         assert added_setting.value == "https://cdn.example.com"
 
@@ -245,21 +254,15 @@ class TestUpdateSettings:
         # The endpoint batch-fetches existing rows via `.scalars().all()`.
         existing_row = MagicMock()
         existing_row.key = "cdn.url"
+        existing_row.value = "https://cdn.example.com"
         existing = MagicMock()
         existing.scalars.return_value.all.return_value = [existing_row]
 
-        # Second execute: get_settings return
-        setting = MagicMock()
-        setting.key = "cdn.url"
-        setting.value = "https://cdn-new.example.com"
-        settings_result = MagicMock()
-        settings_result.scalars.return_value.all.return_value = [setting]
+        no_revision = MagicMock()
+        no_revision.scalar_one_or_none.return_value = None
+        mock_session.execute.side_effect = [no_revision, existing]
 
-        mock_session.execute.side_effect = [existing, settings_result]
-
-        with patch(
-            "app.api.v1.admin_settings.log_action", new_callable=AsyncMock
-        ):
+        with patch("app.services.settings_service.log_action", new_callable=AsyncMock):
             response = await client.put(
                 "/api/v1/admin/settings/cdn",
                 json={"url": "https://cdn-new.example.com"},
@@ -276,24 +279,15 @@ class TestUpdateSettings:
         not_found = MagicMock()
         not_found.scalars.return_value.all.return_value = []
 
-        # Final: get_settings return
-        s1 = MagicMock()
-        s1.key = "blast.max_sequences"
-        s1.value = "200"
-        s2 = MagicMock()
-        s2.key = "blast.default_db"
-        s2.value = "williams82_cds"
-        settings_result = MagicMock()
-        settings_result.scalars.return_value.all.return_value = [s1, s2]
+        no_revision = MagicMock()
+        no_revision.scalar_one_or_none.return_value = None
 
         mock_session.execute.side_effect = [
-            not_found,  # batch existing lookup
-            settings_result,  # get_settings return
+            no_revision,
+            not_found,
         ]
 
-        with patch(
-            "app.api.v1.admin_settings.log_action", new_callable=AsyncMock
-        ):
+        with patch("app.services.settings_service.log_action", new_callable=AsyncMock):
             response = await client.put(
                 "/api/v1/admin/settings/blast",
                 json={"max_sequences": "200", "default_db": "williams82_cds"},
@@ -304,18 +298,14 @@ class TestUpdateSettings:
         assert data["max_sequences"] == "200"
         assert data["default_db"] == "williams82_cds"
 
-    async def test_update_settings_requires_admin(
-        self, client, mock_session, viewer_user
-    ):
+    async def test_update_settings_requires_admin(self, client, mock_session, viewer_user):
         """Non-admin user receives 403 on PUT."""
         from app.api.v1.deps import get_current_user
 
         async def override_get_current_user():
             return viewer_user
 
-        client._transport.app.dependency_overrides[
-            get_current_user
-        ] = override_get_current_user
+        client._transport.app.dependency_overrides[get_current_user] = override_get_current_user
 
         response = await client.put(
             "/api/v1/admin/settings/cdn",
@@ -328,17 +318,12 @@ class TestUpdateSettings:
         not_found = MagicMock()
         not_found.scalar_one_or_none.return_value = None
 
-        setting = MagicMock()
-        setting.key = "features.registration"
-        setting.value = "true"
-        settings_result = MagicMock()
-        settings_result.scalars.return_value.all.return_value = [setting]
+        no_rows = MagicMock()
+        no_rows.scalars.return_value.all.return_value = []
 
-        mock_session.execute.side_effect = [not_found, settings_result]
+        mock_session.execute.side_effect = [not_found, no_rows]
 
-        with patch(
-            "app.api.v1.admin_settings.log_action", new_callable=AsyncMock
-        ):
+        with patch("app.services.settings_service.log_action", new_callable=AsyncMock):
             response = await client.put(
                 "/api/v1/admin/settings/features",
                 json={"registration": True},
@@ -346,7 +331,11 @@ class TestUpdateSettings:
 
         assert response.status_code == 200
         assert mock_session.add.called
-        added = mock_session.add.call_args[0][0]
+        added = next(
+            call.args[0]
+            for call in mock_session.add.call_args_list
+            if getattr(call.args[0], "key", None) == "features.registration"
+        )
         assert added.value == "true"
 
     async def test_update_settings_numeric_value(self, client, mock_session):
@@ -354,17 +343,12 @@ class TestUpdateSettings:
         not_found = MagicMock()
         not_found.scalar_one_or_none.return_value = None
 
-        setting = MagicMock()
-        setting.key = "blast.max_sequences"
-        setting.value = "200"
-        settings_result = MagicMock()
-        settings_result.scalars.return_value.all.return_value = [setting]
+        no_rows = MagicMock()
+        no_rows.scalars.return_value.all.return_value = []
 
-        mock_session.execute.side_effect = [not_found, settings_result]
+        mock_session.execute.side_effect = [not_found, no_rows]
 
-        with patch(
-            "app.api.v1.admin_settings.log_action", new_callable=AsyncMock
-        ):
+        with patch("app.services.settings_service.log_action", new_callable=AsyncMock):
             response = await client.put(
                 "/api/v1/admin/settings/blast",
                 json={"max_sequences": 200},
@@ -372,8 +356,498 @@ class TestUpdateSettings:
 
         assert response.status_code == 200
         assert mock_session.add.called
-        added = mock_session.add.call_args[0][0]
+        added = next(
+            call.args[0]
+            for call in mock_session.add.call_args_list
+            if getattr(call.args[0], "key", None) == "blast.max_sequences"
+        )
         assert added.value == "200"
+
+    async def test_update_settings_rejects_unknown_key_before_database_write(
+        self, client, mock_session
+    ):
+        response = await client.put(
+            "/api/v1/admin/settings/general",
+            json={"unregistered": "value"},
+        )
+
+        assert response.status_code == 422
+        assert response.json()["error"]["code"] == "validation_error"
+        mock_session.execute.assert_not_awaited()
+        mock_session.add.assert_not_called()
+        mock_session.commit.assert_not_awaited()
+
+    async def test_update_settings_rejects_plaintext_secret_before_database_write(
+        self, client, mock_session
+    ):
+        response = await client.put(
+            "/api/v1/admin/settings/email",
+            json={"smtpPassword": "do-not-store-me"},
+        )
+
+        assert response.status_code == 422
+        assert "deployment secret" in response.json()["error"]["message"]
+        mock_session.execute.assert_not_awaited()
+        mock_session.add.assert_not_called()
+
+    async def test_update_settings_rejects_non_allowlisted_url(self, client, mock_session):
+        response = await client.put(
+            "/api/v1/admin/settings/cdn",
+            json={"url": "https://attacker.example/payload.js"},
+        )
+
+        assert response.status_code == 422
+        assert "allowlist" in response.json()["error"]["message"]
+        mock_session.execute.assert_not_awaited()
+        mock_session.add.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Tests: typed settings contract
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_settings_schema_exposes_typed_non_secret_contract(client, mock_session):
+    response = await client.get("/api/v1/admin/settings/schema")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["version"] == 1
+    assert body["sections"]["general"]["fields"]["siteName"]["kind"] == "string"
+    assert body["sections"]["data"]["fields"]["maxExportRecords"] == {
+        "kind": "integer",
+        "default": 10_000,
+        "permission": "administrator",
+        "scope": "global",
+        "hot_reload": True,
+        "redaction": "none",
+        "requires_approval": False,
+        "allowed_values": [],
+        "allowed_url_hosts": [],
+        "minimum": 1,
+        "maximum": 10_000_000,
+        "max_length": 10_000,
+    }
+    assert "smtpPassword" not in body["sections"]["email"]["fields"]
+    assert body["sections"]["cdn"]["fields"]["url"]["allowed_url_hosts"]
+    assert body["sections"]["geo"]["fields"]["defaultCrawlerPolicy"] == {
+        "kind": "enum",
+        "default": "deny",
+        "permission": "administrator",
+        "scope": "global",
+        "hot_reload": False,
+        "redaction": "none",
+        "requires_approval": True,
+        "allowed_values": ["deny", "retrieval_and_training", "retrieval_only"],
+        "allowed_url_hosts": [],
+        "minimum": None,
+        "maximum": None,
+        "max_length": 10_000,
+    }
+    schema_text = str(body)
+    assert "smtpPassword" not in schema_text
+    assert "deployment secret" not in schema_text
+    mock_session.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_settings_document_returns_typed_values_and_current_version(client, mock_session):
+    revision = MagicMock(version=4)
+    revision_result = MagicMock()
+    revision_result.scalar_one_or_none.return_value = revision
+    rows_result = MagicMock()
+    rows_result.scalars.return_value.all.return_value = [
+        MagicMock(key="email.smtpPort", value="587"),
+        MagicMock(key="email.enableNotifications", value="false"),
+        MagicMock(key="email.smtpPassword", value="must-not-leak"),
+        MagicMock(key="email.unknown", value="must-not-leak"),
+    ]
+    mock_session.execute.side_effect = [revision_result, rows_result]
+
+    response = await client.get("/api/v1/admin/settings/email/document")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "section": "email",
+        "version": 4,
+        "values": {"smtpPort": 587, "enableNotifications": False},
+    }
+    mock_session.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_settings_openapi_exposes_typed_document_and_deprecates_legacy_read(
+    client,
+):
+    schema = client._transport.app.openapi()
+    paths = schema["paths"]
+
+    document_response = paths["/api/v1/admin/settings/{section}/document"]["get"]["responses"][
+        "200"
+    ]["content"]["application/json"]["schema"]
+    assert document_response == {"$ref": "#/components/schemas/SettingsDocumentResponse"}
+    assert paths["/api/v1/admin/settings/{section}"]["get"]["deprecated"] is True
+    assert paths["/api/v1/admin/settings/{section}"]["put"]["deprecated"] is True
+    for operation in (
+        paths["/api/v1/admin/settings/{section}"]["patch"],
+        paths["/api/v1/admin/settings/{section}/rollback"]["post"],
+    ):
+        assert "409" in operation["responses"]
+        assert operation["responses"]["409"]["content"]["application/json"]["schema"] == {
+            "$ref": "#/components/schemas/ErrorResponse"
+        }
+
+
+@pytest.mark.asyncio
+async def test_settings_validate_normalizes_values_without_database_access(client, mock_session):
+    response = await client.post(
+        "/api/v1/admin/settings/validate",
+        json={
+            "section": "data",
+            "values": {"maxExportRecords": "200", "enableClickhouse": "off"},
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "section": "data",
+        "valid": True,
+        "values": {"maxExportRecords": 200, "enableClickhouse": False},
+    }
+    mock_session.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_settings_validate_returns_the_sanitized_storage_value(client, mock_session):
+    response = await client.post(
+        "/api/v1/admin/settings/validate",
+        json={
+            "section": "about",
+            "values": {"content_en": "<p>safe</p><script>must-not-survive()</script>"},
+        },
+    )
+
+    assert response.status_code == 200
+    content = response.json()["values"]["content_en"]
+    assert "<p>safe</p>" in content
+    assert "script" not in content
+    mock_session.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("section", "values", "message"),
+    [
+        ("general", {"unregistered": "value"}, "Unknown setting"),
+        ("email", {"smtpPassword": "do-not-store-me"}, "deployment secret"),
+        ("cdn", {"url": "https://attacker.example/payload.js"}, "allowlist"),
+    ],
+)
+async def test_settings_validate_is_fail_closed(client, mock_session, section, values, message):
+    response = await client.post(
+        "/api/v1/admin/settings/validate",
+        json={"section": section, "values": values},
+    )
+
+    assert response.status_code == 422
+    assert message in response.json()["error"]["message"]
+    assert "do-not-store-me" not in response.text
+    mock_session.execute.assert_not_awaited()
+    mock_session.add.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_settings_patch_rejects_unsafe_values_before_version_query(client, mock_session):
+    response = await client.patch(
+        "/api/v1/admin/settings/cdn",
+        json={
+            "expected_version": 0,
+            "values": {"url": "https://attacker.example/payload.js"},
+        },
+    )
+
+    assert response.status_code == 422
+    assert "allowlist" in response.json()["error"]["message"]
+    mock_session.execute.assert_not_awaited()
+    mock_session.add.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_settings_patch_rejects_invalid_live_snapshot_before_mutation(
+    mock_session,
+):
+    from app.core.exceptions import ValidationError
+    from app.services.settings_service import patch_settings
+
+    no_revision = MagicMock()
+    no_revision.scalar_one_or_none.return_value = None
+    invalid_row = MagicMock(key="data.maxExportRecords", value="not-an-integer")
+    live_result = MagicMock()
+    live_result.scalars.return_value.all.return_value = [invalid_row]
+    mock_session.execute.side_effect = [no_revision, live_result]
+
+    with pytest.raises(ValidationError, match="data.maxExportRecords"):
+        await patch_settings(
+            mock_session,
+            section="data",
+            expected_version=0,
+            values={"enableClickhouse": True},
+            actor_id=uuid.uuid4(),
+            ip_address=None,
+        )
+
+    mock_session.add.assert_not_called()
+    mock_session.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_settings_patch_creates_first_version_and_audit(client, mock_session):
+    no_revision = MagicMock()
+    no_revision.scalar_one_or_none.return_value = None
+    no_rows = MagicMock()
+    no_rows.scalars.return_value.all.return_value = []
+    mock_session.execute.side_effect = [no_revision, no_rows]
+
+    response = await client.patch(
+        "/api/v1/admin/settings/data",
+        json={
+            "expected_version": 0,
+            "values": {"maxExportRecords": 200, "enableClickhouse": False},
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "section": "data",
+        "version": 1,
+        "values": {"maxExportRecords": 200, "enableClickhouse": False},
+    }
+    added = [call.args[0] for call in mock_session.add.call_args_list]
+    setting_rows = [item for item in added if hasattr(item, "key")]
+    assert {row.key: row.value for row in setting_rows} == {
+        "data.maxExportRecords": "200",
+        "data.enableClickhouse": "false",
+    }
+    revision = next(item for item in added if hasattr(item, "snapshot"))
+    assert revision.version == 1
+    assert revision.snapshot == {
+        "maxExportRecords": "200",
+        "enableClickhouse": "false",
+    }
+    audit = next(item for item in added if getattr(item, "action", None) == "settings_patch")
+    assert audit.action == "settings_patch"
+    assert mock_session.commit.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_settings_patch_rejects_stale_expected_version_with_stable_code(client, mock_session):
+    current_revision = MagicMock(version=3)
+    revision_result = MagicMock()
+    revision_result.scalar_one_or_none.return_value = current_revision
+    no_rows = MagicMock()
+    no_rows.scalars.return_value.all.return_value = []
+    mock_session.execute.side_effect = [revision_result, no_rows]
+
+    response = await client.patch(
+        "/api/v1/admin/settings/data",
+        json={"expected_version": 2, "values": {"maxExportRecords": 200}},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"] == {
+        "code": "settings_version_conflict",
+        "message": "Settings version conflict",
+        "details": {
+            "section": "data",
+            "expected_version": 2,
+            "current_version": 3,
+        },
+    }
+    mock_session.add.assert_not_called()
+    mock_session.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_first_settings_patch_race_becomes_stable_version_conflict(mock_session):
+    from sqlalchemy.exc import IntegrityError
+
+    from app.core.exceptions import SettingsVersionConflictError
+    from app.services.settings_service import patch_settings
+
+    no_revision = MagicMock()
+    no_revision.scalar_one_or_none.return_value = None
+    no_rows = MagicMock()
+    no_rows.scalars.return_value.all.return_value = []
+    winner = MagicMock(version=1)
+    winner_result = MagicMock()
+    winner_result.scalar_one_or_none.return_value = winner
+    mock_session.execute.side_effect = [no_revision, no_rows, winner_result]
+    mock_session.commit.side_effect = IntegrityError(
+        "duplicate revision", {}, Exception("unique violation")
+    )
+
+    with pytest.raises(SettingsVersionConflictError) as raised:
+        await patch_settings(
+            mock_session,
+            section="data",
+            expected_version=0,
+            values={"maxExportRecords": 200},
+            actor_id=uuid.uuid4(),
+            ip_address=None,
+        )
+
+    assert raised.value.error_code == "settings_version_conflict"
+    assert raised.value.details["current_version"] == 1
+    mock_session.rollback.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_settings_history_returns_typed_audit_metadata_without_secrets(client, mock_session):
+    actor_id = uuid.uuid4()
+    revision = MagicMock(
+        version=2,
+        action="patch",
+        snapshot={
+            "smtpPort": "587",
+            "enableNotifications": "true",
+            "smtpPassword": "must-not-leak",
+        },
+        changes={"smtpPort": "587"},
+        created_by=actor_id,
+        created_at=datetime(2026, 8, 20, 12, 0, tzinfo=UTC),
+        rollback_from_version=None,
+        reason=None,
+    )
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = [revision]
+    mock_session.execute.return_value = result
+
+    response = await client.get("/api/v1/admin/settings/email/history")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "section": "email",
+        "current_version": 2,
+        "items": [
+            {
+                "version": 2,
+                "action": "patch",
+                "values": {"smtpPort": 587, "enableNotifications": True},
+                "changes": {"smtpPort": 587},
+                "actor_id": str(actor_id),
+                "created_at": "2026-08-20T12:00:00Z",
+                "rollback_from_version": None,
+                "reason": None,
+            }
+        ],
+    }
+    mock_session.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_settings_rollback_restores_snapshot_as_new_audited_version(client, mock_session):
+    current = MagicMock(
+        version=3,
+        snapshot={"smtpPort": "2525", "enableNotifications": "true"},
+    )
+    target = MagicMock(version=1, snapshot={"smtpPort": "587"})
+    current_result = MagicMock()
+    current_result.scalar_one_or_none.return_value = current
+    target_result = MagicMock()
+    target_result.scalar_one_or_none.return_value = target
+    smtp_port = MagicMock(key="email.smtpPort", value="2525")
+    notifications = MagicMock(key="email.enableNotifications", value="true")
+    live_result = MagicMock()
+    live_result.scalars.return_value.all.return_value = [smtp_port, notifications]
+    delete_result = MagicMock()
+    mock_session.execute.side_effect = [
+        current_result,
+        target_result,
+        live_result,
+        delete_result,
+    ]
+
+    response = await client.post(
+        "/api/v1/admin/settings/email/rollback",
+        json={
+            "expected_version": 3,
+            "target_version": 1,
+            "reason": "restore known SMTP configuration",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "section": "email",
+        "version": 4,
+        "values": {"smtpPort": 587},
+    }
+    assert smtp_port.value == "587"
+    assert "DELETE FROM system_settings" in str(mock_session.execute.await_args_list[3].args[0])
+    added = [call.args[0] for call in mock_session.add.call_args_list]
+    revision = next(item for item in added if getattr(item, "action", None) == "rollback")
+    assert revision.version == 4
+    assert revision.rollback_from_version == 1
+    assert revision.reason == "restore known SMTP configuration"
+    assert revision.changes == {
+        "smtpPort": "587",
+        "enableNotifications": None,
+    }
+    audit = next(item for item in added if getattr(item, "action", None) == "settings_rollback")
+    assert audit.new_value["rollback_from_version"] == 1
+    assert mock_session.commit.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_settings_rollback_revalidates_historical_snapshot(client, mock_session):
+    current = MagicMock(version=2)
+    target = MagicMock(
+        version=1,
+        snapshot={"url": "https://attacker.example/legacy-payload.js"},
+    )
+    current_result = MagicMock()
+    current_result.scalar_one_or_none.return_value = current
+    target_result = MagicMock()
+    target_result.scalar_one_or_none.return_value = target
+    live_result = MagicMock()
+    live_result.scalars.return_value.all.return_value = []
+    mock_session.execute.side_effect = [current_result, target_result, live_result]
+
+    response = await client.post(
+        "/api/v1/admin/settings/cdn/rollback",
+        json={"expected_version": 2, "target_version": 1, "reason": "unsafe"},
+    )
+
+    assert response.status_code == 422
+    assert "allowlist" in response.json()["error"]["message"]
+    mock_session.add.assert_not_called()
+    mock_session.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_legacy_put_is_restricted_versioned_compatibility_layer(client, mock_session):
+    no_revision = MagicMock()
+    no_revision.scalar_one_or_none.return_value = None
+    no_revision.scalars.return_value.all.return_value = []
+    no_rows = MagicMock()
+    no_rows.scalars.return_value.all.return_value = []
+    stored = MagicMock(key="data.maxExportRecords", value="200")
+    final_result = MagicMock()
+    final_result.scalars.return_value.all.return_value = [stored]
+    mock_session.execute.side_effect = [no_revision, no_rows, final_result]
+
+    response = await client.put("/api/v1/admin/settings/data", json={"maxExportRecords": 200})
+
+    assert response.status_code == 200
+    added = [call.args[0] for call in mock_session.add.call_args_list]
+    assert any(getattr(item, "action", None) == "put_compat" for item in added)
+    revision = next(item for item in added if getattr(item, "action", None) == "put_compat")
+    assert revision.version == 1
+    assert revision.snapshot == {"maxExportRecords": "200"}
+    audit = next(item for item in added if getattr(item, "action", None) == "settings_update:data")
+    assert audit.new_value["version"] == 1
+    assert response.json() == {"maxExportRecords": "200"}
 
 
 # ---------------------------------------------------------------------------

@@ -985,7 +985,7 @@ export interface paths {
          * Create Upload
          * @description Request a pre-signed upload URL for an analysis input file.
          *
-         *     Returns a PUT URL valid for 1 hour plus the object key the client must
+         *     Returns a POST action valid for 1 hour plus the object key the client must
          *     send back at submit time.  Nothing is persisted yet.
          */
         post: operations["create_upload_api_v1_analyses_uploads_post"];
@@ -1008,8 +1008,8 @@ export interface paths {
          * Submit Analysis
          * @description Submit an analysis job for the uploaded objects.
          *
-         *     Validates the ``analyses/`` key prefix and the parameter whitelist, then
-         *     creates the job row + outbox event in one transaction (queued).
+         *     Validates that every input key belongs to the caller, checks the parameter
+         *     whitelist, then creates the job row + outbox event in one transaction.
          */
         post: operations["submit_analysis_api_v1_analyses__analysis_type__submit_post"];
         delete?: never;
@@ -1322,7 +1322,7 @@ export interface paths {
         };
         /**
          * List Seed Requests
-         * @description List seed requests.
+         * @description List seed requests containing contact data (seed_manager only).
          */
         get: operations["list_seed_requests_api_v1_seeds_requests_get"];
         put?: never;
@@ -1385,7 +1385,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List seed requests (researcher+)
+         * List seed requests (seed manager)
          * @description Paginated admin listing with an optional status filter.
          */
         get: operations["list_seed_requests_api_v1_admin_seed_requests_get"];
@@ -1411,7 +1411,7 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Update a seed request status (researcher+)
+         * Update a seed request status (seed manager)
          * @description Advance a request's status (pending → approved/rejected → fulfilled).
          */
         patch: operations["update_seed_request_api_v1_admin_seed_requests__request_id__patch"];
@@ -1730,6 +1730,66 @@ export interface paths {
          *     ``ids`` are always scoped to the caller; foreign ids are ignored.
          */
         post: operations["mark_notifications_read_api_v1_notifications_read_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ontology/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search
+         * @description Search public ontology terms without persisting or executing anything.
+         */
+        get: operations["search_api_v1_ontology_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ontology/term": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Term
+         * @description Read one bounded ontology term by IRI.
+         */
+        get: operations["term_api_v1_ontology_term_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ontology/graph": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Relationship Graph
+         * @description Read a one-hop OLS4 relationship graph with strict node and edge caps.
+         */
+        get: operations["relationship_graph_api_v1_ontology_graph_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2463,6 +2523,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/plugins": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Plugins */
+        get: operations["list_plugins_api_v1_admin_plugins_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/plugins/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Plugin */
+        get: operations["get_plugin_api_v1_admin_plugins__key__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/plugins/{key}/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Plugin State */
+        patch: operations["update_plugin_state_api_v1_admin_plugins__key__state_patch"];
+        trace?: never;
+    };
     "/api/v1/admin/publication/targets": {
         parameters: {
             query?: never;
@@ -2746,6 +2857,192 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/imports/studio/dataset-versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Dataset Versions */
+        get: operations["list_dataset_versions_api_v1_admin_imports_studio_dataset_versions_get"];
+        put?: never;
+        /**
+         * Create Dataset Version
+         * @description Record immutable raw-object metadata before any editing begins.
+         */
+        post: operations["create_dataset_version_api_v1_admin_imports_studio_dataset_versions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/imports/studio/drafts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Draft
+         * @description Create an editing draft from an immutable dataset version.
+         */
+        post: operations["create_draft_api_v1_admin_imports_studio_drafts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/imports/studio/drafts/{draft_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Draft */
+        get: operations["get_draft_api_v1_admin_imports_studio_drafts__draft_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/imports/studio/drafts/{draft_id}/mapping": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Mapping */
+        put: operations["update_mapping_api_v1_admin_imports_studio_drafts__draft_id__mapping_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/imports/studio/drafts/{draft_id}/patches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add Patches */
+        post: operations["add_patches_api_v1_admin_imports_studio_drafts__draft_id__patches_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/imports/studio/drafts/{draft_id}/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Validate Draft */
+        post: operations["validate_draft_api_v1_admin_imports_studio_drafts__draft_id__validate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/imports/studio/drafts/{draft_id}/commit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Commit Draft
+         * @description Atomically commit a validated draft and create publication evidence.
+         */
+        post: operations["commit_draft_api_v1_admin_imports_studio_drafts__draft_id__commit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/imports/studio/drafts/{draft_id}/manifest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Manifest */
+        get: operations["get_manifest_api_v1_admin_imports_studio_drafts__draft_id__manifest_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/modules/{module_key}/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Inspect Module
+         * @description Return a bounded validation preview without persistence or execution.
+         */
+        post: operations["inspect_module_api_v1_admin_modules__module_key__validate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/modules/{module_key}/inspect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Inspect Module
+         * @description Return a bounded validation preview without persistence or execution.
+         */
+        post: operations["inspect_module_api_v1_admin_modules__module_key__inspect_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/modules/{module_key}/template": {
         parameters: {
             query?: never;
@@ -2770,6 +3067,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/settings/schema": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Settings Schema
+         * @description Return the server-owned, non-secret runtime settings contract.
+         */
+        get: operations["get_settings_schema_api_v1_admin_settings_schema_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/settings/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Validate Settings
+         * @description Validate and normalize a partial settings document without persisting it.
+         */
+        post: operations["validate_settings_api_v1_admin_settings_validate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/settings/{section}/document": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Settings Document
+         * @description Return typed live values with the version required by PATCH.
+         */
+        get: operations["get_settings_document_api_v1_admin_settings__section__document_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/settings/{section}": {
         parameters: {
             query?: never;
@@ -2779,23 +3136,69 @@ export interface paths {
         };
         /**
          * Get Settings
+         * @deprecated
          * @description Return all settings under *section* as a ``{key: value}`` dict.
          *
-         *     Rows are queried from ``SystemSetting`` where the key starts with
-         *     ``{section}.`` (case-insensitive).  The prefix is stripped from the
-         *     returned keys.
+         *     Only registered non-secret keys are queried, and the section prefix is
+         *     stripped from returned keys.
          */
         get: operations["get_settings_api_v1_admin_settings__section__get"];
         /**
          * Update Settings
+         * @deprecated
          * @description Upsert settings under *section*.
          *
-         *     Accepts a flat ``{key: value}`` dict.  Each key is prefixed with
-         *     ``{section}.`` and upserted into ``SystemSetting``.  Admin audit log
-         *     entries are recorded for every change.
+         *     This deprecated compatibility layer accepts the historical flat
+         *     ``{key: value}`` body and string-valued response, while delegating to the
+         *     same fail-closed registry, revision history, and audit transaction as the
+         *     typed contract.
          */
         put: operations["update_settings_api_v1_admin_settings__section__put"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Patch Settings
+         * @description Apply an optimistic, versioned partial update to one section.
+         */
+        patch: operations["patch_settings_api_v1_admin_settings__section__patch"];
+        trace?: never;
+    };
+    "/api/v1/admin/settings/{section}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Settings History
+         * @description Return bounded revision and audit metadata for one section.
+         */
+        get: operations["get_settings_history_api_v1_admin_settings__section__history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/settings/{section}/rollback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rollback Settings
+         * @description Restore a historical snapshot as a new linear version.
+         */
+        post: operations["rollback_settings_api_v1_admin_settings__section__rollback_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2862,10 +3265,11 @@ export interface paths {
         put?: never;
         /**
          * Create Upload Presign
-         * @description Request a pre-signed PUT URL for an admin upload (researcher+).
+         * @description Request a constrained pre-signed POST for a content-editor upload.
          *
-         *     Returns a PUT URL valid for 1 hour, the object key, and the public URL
-         *     the caller should persist.  Nothing is stored server-side yet.
+         *     Returns a POST action valid for 1 hour, all signed form fields, the object
+         *     key, and the public URL the caller should persist. Nothing is stored
+         *     server-side yet.
          *
          *     Objects are stored in the PUBLIC bucket (``SOYMUTDB_S3_PUBLIC_BUCKET``)
          *     so ``public_url`` can be served directly by the static gateway.
@@ -3442,6 +3846,20 @@ export interface components {
             /** Features */
             features?: components["schemas"]["FeatureDefinitionResponse"][];
         };
+        /** AdminPluginResponse */
+        AdminPluginResponse: {
+            /** Key */
+            key: string;
+            status: components["schemas"]["PluginCapabilityResponse"];
+            manifest?: components["schemas"]["PluginManifestMetadata"] | null;
+        };
+        /** AdminPluginsResponse */
+        AdminPluginsResponse: {
+            /** Plugins */
+            plugins: {
+                [key: string]: components["schemas"]["AdminPluginResponse"];
+            };
+        };
         /**
          * AlleleFreqRequest
          * @description Allele-frequency query (per locus / gene / interval).
@@ -3569,11 +3987,23 @@ export interface components {
             size: number;
             /** Content Type */
             content_type?: string | null;
+            /** Checksum Sha256 */
+            checksum_sha256: string;
         };
         /** AnalysesUploadResponse */
         AnalysesUploadResponse: {
             /** Upload Url */
             upload_url: string;
+            /**
+             * Upload Method
+             * @default POST
+             * @constant
+             */
+            upload_method: "POST";
+            /** Upload Fields */
+            upload_fields?: {
+                [key: string]: string;
+            };
             /** Object Key */
             object_key: string;
             /** Expires In */
@@ -3966,6 +4396,118 @@ export interface components {
              */
             last_updated: string;
         };
+        /** DataPatchCreateRequest */
+        DataPatchCreateRequest: {
+            /** Patches */
+            patches?: components["schemas"]["DataPatchItem"][];
+        };
+        /** DataPatchItem */
+        DataPatchItem: {
+            /** Row Key */
+            row_key: string;
+            /** Column Name */
+            column_name: string;
+            /** Old Value */
+            old_value?: unknown;
+            /** New Value */
+            new_value?: unknown;
+            /**
+             * Patch Type
+             * @default set
+             * @enum {string}
+             */
+            patch_type: "set" | "clear" | "format";
+        };
+        /** DatabaseCapabilitiesResponse */
+        DatabaseCapabilitiesResponse: {
+            /**
+             * Authoritative
+             * @default postgresql
+             * @constant
+             */
+            authoritative: "postgresql";
+            /**
+             * Analytics
+             * @default clickhouse
+             */
+            analytics: "clickhouse" | null;
+        };
+        /** DatasetVersionCreateRequest */
+        DatasetVersionCreateRequest: {
+            /** Dataset Id */
+            dataset_id: number;
+            /** Filename */
+            filename: string;
+            /** Object Key */
+            object_key: string;
+            /** Checksum Sha256 */
+            checksum_sha256: string;
+            /** Source */
+            source: string;
+            /** License */
+            license?: string | null;
+            /**
+             * Mime Type
+             * @default application/octet-stream
+             */
+            mime_type: string;
+            /**
+             * Row Count
+             * @default 0
+             */
+            row_count: number;
+            /**
+             * Column Count
+             * @default 0
+             */
+            column_count: number;
+            /** Source Objects */
+            source_objects?: {
+                [key: string]: unknown;
+            }[];
+        };
+        /** DatasetVersionResponse */
+        DatasetVersionResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Dataset Id */
+            dataset_id: number;
+            /** Version */
+            version: number;
+            /** Filename */
+            filename: string;
+            /** Object Key */
+            object_key: string;
+            /** Checksum Sha256 */
+            checksum_sha256: string;
+            /** Source */
+            source: string;
+            /** License */
+            license?: string | null;
+            /** Mime Type */
+            mime_type: string;
+            /** Row Count */
+            row_count: number;
+            /** Column Count */
+            column_count: number;
+            /** Source Objects */
+            source_objects: {
+                [key: string]: unknown;
+            }[];
+            /** Manifest */
+            manifest?: {
+                [key: string]: unknown;
+            } | null;
+            /** Status */
+            status: string;
+            /** Created At */
+            created_at?: unknown | null;
+            /** Updated At */
+            updated_at?: unknown | null;
+        };
         /**
          * DiscoveryTrendPoint
          * @description One point of the cumulative variant discovery trend.
@@ -4290,6 +4832,71 @@ export interface components {
              */
             genes: string[];
         };
+        /**
+         * ErrorDetail
+         * @description Machine-readable error detail (inside the ``error`` envelope).
+         */
+        ErrorDetail: {
+            /**
+             * Code
+             * @description Stable machine-readable error code, e.g. ``not_found``.
+             */
+            code: string;
+            /**
+             * Message
+             * @description Human-readable error message.
+             */
+            message: string;
+            /**
+             * Details
+             * @description Optional structured context (never contains secrets or stack traces).
+             */
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * ErrorResponse
+         * @description Unified error envelope returned by every API error.
+         */
+        ErrorResponse: {
+            error: components["schemas"]["ErrorDetail"];
+            /**
+             * Request Id
+             * @description Correlation id (also echoed in the ``X-Request-ID`` header).
+             */
+            request_id: string;
+            /**
+             * Status Code
+             * @description HTTP status code.
+             */
+            status_code: number;
+            $defs: {
+                /**
+                 * ErrorDetail
+                 * @description Machine-readable error detail (inside the ``error`` envelope).
+                 */
+                ErrorDetail: {
+                    /**
+                     * Code
+                     * @description Stable machine-readable error code, e.g. ``not_found``.
+                     */
+                    code: string;
+                    /**
+                     * Message
+                     * @description Human-readable error message.
+                     */
+                    message: string;
+                    /**
+                     * Details
+                     * @description Optional structured context (never contains secrets or stack traces).
+                     */
+                    details?: {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
         /** ExonResponse */
         ExonResponse: {
             /** Id */
@@ -4380,6 +4987,24 @@ export interface components {
             features?: {
                 [key: string]: boolean;
             };
+        };
+        /** FieldMappingItem */
+        FieldMappingItem: {
+            /** Source Field */
+            source_field: string;
+            /** Target Field */
+            target_field: string;
+            /** Position */
+            position: number;
+            /** Transform */
+            transform?: {
+                [key: string]: unknown;
+            };
+        };
+        /** FieldMappingUpdateRequest */
+        FieldMappingUpdateRequest: {
+            /** Mappings */
+            mappings?: components["schemas"]["FieldMappingItem"][];
         };
         /** GeneDetail */
         GeneDetail: {
@@ -4734,12 +5359,40 @@ export interface components {
              */
             count: number;
         };
+        /** ImportCommitRequest */
+        ImportCommitRequest: {
+            /** Page Id */
+            page_id?: string | null;
+            /**
+             * Source Id
+             * @default dataset
+             */
+            source_id: string;
+            /**
+             * Kind
+             * @default dataset
+             */
+            kind: string;
+            /** Config */
+            config?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Confirm
+             * @default true
+             * @constant
+             */
+            confirm: true;
+        };
         /** ImportCreateRequest */
         ImportCreateRequest: {
             /** Filename */
             filename: string;
-            /** Type */
-            type: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "vcf" | "gff3" | "fasta" | "blast_db" | "seed_data" | "expression_csv" | "homolog_csv" | "module_tsv";
             /** File Path */
             file_path?: string | null;
             /** Object Key */
@@ -4759,6 +5412,126 @@ export interface components {
             /** Idempotency Key */
             idempotency_key: string;
         };
+        /** ImportDraftCreateRequest */
+        ImportDraftCreateRequest: {
+            /**
+             * Dataset Version Id
+             * Format: uuid
+             */
+            dataset_version_id: string;
+            /** Module Key */
+            module_key?: string | null;
+            /** Row Count */
+            row_count: number;
+            /** Column Count */
+            column_count: number;
+        };
+        /** ImportDraftResponse */
+        ImportDraftResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Dataset Version Id
+             * Format: uuid
+             */
+            dataset_version_id: string;
+            /** Module Key */
+            module_key?: string | null;
+            /** Filename */
+            filename: string;
+            /** Object Key */
+            object_key: string;
+            /** Checksum Sha256 */
+            checksum_sha256: string;
+            /** Source */
+            source: string;
+            /** License */
+            license?: string | null;
+            /** Mime Type */
+            mime_type: string;
+            /** Row Count */
+            row_count: number;
+            /** Column Count */
+            column_count: number;
+            /** Field Mapping */
+            field_mapping: {
+                [key: string]: unknown;
+            }[];
+            /** Validation */
+            validation: {
+                [key: string]: unknown;
+            };
+            /** Status */
+            status: string;
+            /** Committed At */
+            committed_at?: unknown | null;
+            /** Created At */
+            created_at?: unknown | null;
+            /** Updated At */
+            updated_at?: unknown | null;
+        };
+        /** ImportInspectionErrorResponse */
+        ImportInspectionErrorResponse: {
+            /** Code */
+            code: string;
+            /** Row */
+            row?: number | null;
+            /** Message */
+            message: string;
+        };
+        /** ImportInspectionRequest */
+        ImportInspectionRequest: {
+            /** Filename */
+            filename: string;
+            /** Content Base64 */
+            content_base64: string;
+        };
+        /** ImportInspectionResponse */
+        ImportInspectionResponse: {
+            /**
+             * Schema Version
+             * @default 1
+             * @constant
+             */
+            schema_version: 1;
+            /** Module Key */
+            module_key: string;
+            /** Filename */
+            filename: string;
+            /** Format */
+            format: string;
+            /** Encoding */
+            encoding?: string | null;
+            /** Delimiter */
+            delimiter?: string | null;
+            /** Sheet Name */
+            sheet_name?: string | null;
+            /** Headers */
+            headers?: string[];
+            /** Row Count */
+            row_count: number;
+            /** Rows */
+            rows?: {
+                [key: string]: unknown;
+            }[];
+            /** Truncated */
+            truncated: boolean;
+            /** Checksum Sha256 */
+            checksum_sha256: string;
+            validation: components["schemas"]["ImportInspectionValidationResponse"];
+        };
+        /** ImportInspectionValidationResponse */
+        ImportInspectionValidationResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Error Count */
+            error_count: number;
+            /** Errors */
+            errors?: components["schemas"]["ImportInspectionErrorResponse"][];
+        };
         /**
          * ImportThroughputPoint
          * @description Daily import task throughput (success vs. failure).
@@ -4776,6 +5549,15 @@ export interface components {
              * @default 0
              */
             failed: number;
+        };
+        /** ImportValidationRequest */
+        ImportValidationRequest: {
+            /** Row Count */
+            row_count: number;
+            /** Column Count */
+            column_count: number;
+            /** Field Mapping */
+            field_mapping?: components["schemas"]["FieldMappingItem"][];
         };
         /** LayoutResponse */
         LayoutResponse: {
@@ -4913,7 +5695,7 @@ export interface components {
             /** Parts */
             parts: components["schemas"]["MultipartPart"][];
             /** Sha256 */
-            sha256: string;
+            sha256?: string | null;
         };
         /** MultipartPart */
         MultipartPart: {
@@ -4926,8 +5708,11 @@ export interface components {
         MultipartStartRequest: {
             /** Filename */
             filename: string;
-            /** Type */
-            type: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "vcf" | "gff3" | "fasta" | "blast_db" | "seed_data" | "expression_csv" | "homolog_csv" | "module_tsv";
             /** Part Count */
             part_count: number;
             /**
@@ -5305,6 +6090,105 @@ export interface components {
              */
             created_at: string;
         };
+        /**
+         * OntologyRelationshipGraphEdge
+         * @description A relation whose endpoints both occur in the bounded node projection.
+         */
+        OntologyRelationshipGraphEdge: {
+            /** Source */
+            source: string;
+            /** Target */
+            target: string;
+            /** Label */
+            label?: string | null;
+        };
+        /**
+         * OntologyRelationshipGraphNode
+         * @description One OLS4 graph vertex projected for the bounded browser renderer.
+         */
+        OntologyRelationshipGraphNode: {
+            /** Iri */
+            iri: string;
+            /** Label */
+            label?: string | null;
+            /**
+             * Is Obsolete
+             * @default false
+             */
+            is_obsolete: boolean;
+        };
+        /**
+         * OntologyRelationshipGraphResponse
+         * @description One-hop graph after server-side node/edge caps have been applied.
+         */
+        OntologyRelationshipGraphResponse: {
+            /** Ontology */
+            ontology: string;
+            /** Root Iri */
+            root_iri: string;
+            /** Nodes */
+            nodes?: components["schemas"]["OntologyRelationshipGraphNode"][];
+            /** Edges */
+            edges?: components["schemas"]["OntologyRelationshipGraphEdge"][];
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated: boolean;
+        };
+        /** OntologySearchResponse */
+        OntologySearchResponse: {
+            /** Query */
+            query: string;
+            /** Ontology */
+            ontology?: string | null;
+            /** Count */
+            count: number;
+            /** Items */
+            items?: components["schemas"]["OntologySearchResult"][];
+        };
+        /** OntologySearchResult */
+        OntologySearchResult: {
+            /** Term Id */
+            term_id?: string | null;
+            /** Label */
+            label?: string | null;
+            /** Iri */
+            iri: string;
+            /** Ontology Name */
+            ontology_name?: string | null;
+            /** Description */
+            description?: string[];
+            /** Synonyms */
+            synonyms?: string[];
+            /**
+             * Is Obsolete
+             * @default false
+             */
+            is_obsolete: boolean;
+        };
+        /** OntologyTermResponse */
+        OntologyTermResponse: {
+            /** Iri */
+            iri: string;
+            /** Label */
+            label?: string | null;
+            /** Ontology Name */
+            ontology_name?: string | null;
+            /** Description */
+            description?: string[];
+            /** Synonyms */
+            synonyms?: string[];
+            /**
+             * Is Obsolete
+             * @default false
+             */
+            is_obsolete: boolean;
+            /** Parents */
+            parents?: string[];
+            /** Children */
+            children?: string[];
+        };
         /** PageDefinitionCreate */
         PageDefinitionCreate: {
             /** Route */
@@ -5475,6 +6359,106 @@ export interface components {
             /** Description */
             description?: string | null;
         };
+        /** PluginApiCompatibility */
+        PluginApiCompatibility: {
+            /** Minimum */
+            minimum: string;
+            /** Maximum Exclusive */
+            maximum_exclusive: string;
+        };
+        /** PluginCapabilityResponse */
+        PluginCapabilityResponse: {
+            /** Version */
+            version?: string | null;
+            /**
+             * Installed
+             * @default false
+             */
+            installed: boolean;
+            /**
+             * Enabled
+             * @default false
+             */
+            enabled: boolean;
+            /**
+             * Configured
+             * @default false
+             */
+            configured: boolean;
+            /**
+             * Healthy
+             * @default false
+             */
+            healthy: boolean;
+            /** Public Url */
+            public_url?: string | null;
+            /** Assemblies */
+            assemblies?: string[];
+            /** Reason */
+            reason?: string | null;
+        };
+        /** PluginHealthcheck */
+        PluginHealthcheck: {
+            /** Path */
+            path: string;
+            /** Interval Seconds */
+            interval_seconds: number;
+            /** Timeout Seconds */
+            timeout_seconds: number;
+        };
+        /**
+         * PluginManifestMetadata
+         * @description Non-sensitive signed declarations; no signature or configuration values.
+         */
+        PluginManifestMetadata: {
+            /** Manifest Version */
+            manifest_version: number;
+            /** Key */
+            key: string;
+            /** Version */
+            version: string;
+            api_compatibility: components["schemas"]["PluginApiCompatibility"];
+            /** License */
+            license: string;
+            /** Config Schema */
+            config_schema: {
+                [key: string]: unknown;
+            };
+            /** Routes */
+            routes: components["schemas"]["PluginRoute"][];
+            /** Task Queues */
+            task_queues: string[];
+            resource_limits: components["schemas"]["PluginResourceLimits"];
+            healthcheck: components["schemas"]["PluginHealthcheck"];
+            /** Assemblies */
+            assemblies: string[];
+            /** Uninstall Semantics */
+            uninstall_semantics: string;
+        };
+        /** PluginResourceLimits */
+        PluginResourceLimits: {
+            /** Max Concurrency */
+            max_concurrency: number;
+            /** Memory Mb */
+            memory_mb: number;
+            /** Timeout Seconds */
+            timeout_seconds: number;
+        };
+        /** PluginRoute */
+        PluginRoute: {
+            /**
+             * Method
+             * @enum {string}
+             */
+            method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+            /** Path */
+            path: string;
+        };
+        /** PluginStateUpdateRequest */
+        PluginStateUpdateRequest: {
+            /** Enabled */
+            enabled: boolean;
+        };
         /** PreviewRequest */
         PreviewRequest: {
             /** Definition */
@@ -5507,13 +6491,18 @@ export interface components {
         PublicCapabilitiesResponse: {
             /**
              * Version
-             * @default 1
+             * @default 2
              */
             version: number;
             /** Features */
             features?: {
                 [key: string]: boolean;
             };
+            /** Plugins */
+            plugins?: {
+                [key: string]: components["schemas"]["PluginCapabilityResponse"];
+            };
+            databases?: components["schemas"]["DatabaseCapabilitiesResponse"];
         };
         /** PublicationCreate */
         PublicationCreate: {
@@ -5536,6 +6525,27 @@ export interface components {
              * @default false
              */
             is_featured: boolean;
+        };
+        /** PublicationManifestResponse */
+        PublicationManifestResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Import Draft Id
+             * Format: uuid
+             */
+            import_draft_id: string;
+            /** Checksum Sha256 */
+            checksum_sha256: string;
+            /** Manifest */
+            manifest: {
+                [key: string]: unknown;
+            };
+            /** Published At */
+            published_at?: unknown | null;
         };
         /** PublicationRequest */
         PublicationRequest: {
@@ -5901,6 +6911,156 @@ export interface components {
              */
             expires_in?: number | null;
         };
+        /** SettingFieldSchema */
+        SettingFieldSchema: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "string" | "integer" | "boolean" | "enum" | "email" | "url";
+            default: components["schemas"]["SettingValue"] | null;
+            /**
+             * Permission
+             * @constant
+             */
+            permission: "administrator";
+            /**
+             * Scope
+             * @constant
+             */
+            scope: "global";
+            /** Hot Reload */
+            hot_reload: boolean;
+            /**
+             * Redaction
+             * @enum {string}
+             */
+            redaction: "none" | "omit";
+            /** Requires Approval */
+            requires_approval: boolean;
+            /** Allowed Values */
+            allowed_values?: string[];
+            /** Allowed Url Hosts */
+            allowed_url_hosts?: string[];
+            /** Minimum */
+            minimum?: number | null;
+            /** Maximum */
+            maximum?: number | null;
+            /** Max Length */
+            max_length: number;
+        };
+        SettingValue: string | number | boolean;
+        /** SettingsDocumentResponse */
+        SettingsDocumentResponse: {
+            /** Section */
+            section: string;
+            /** Version */
+            version: number;
+            /** Values */
+            values: {
+                [key: string]: components["schemas"]["SettingValue"];
+            };
+        };
+        /** SettingsHistoryItem */
+        SettingsHistoryItem: {
+            /** Version */
+            version: number;
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "patch" | "put_compat" | "rollback";
+            /** Values */
+            values: {
+                [key: string]: components["schemas"]["SettingValue"];
+            };
+            /** Changes */
+            changes: {
+                [key: string]: components["schemas"]["SettingValue"] | null;
+            };
+            /** Actor Id */
+            actor_id?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Rollback From Version */
+            rollback_from_version?: number | null;
+            /** Reason */
+            reason?: string | null;
+        };
+        /** SettingsHistoryResponse */
+        SettingsHistoryResponse: {
+            /** Section */
+            section: string;
+            /** Current Version */
+            current_version: number;
+            /** Items */
+            items: components["schemas"]["SettingsHistoryItem"][];
+        };
+        /** SettingsPatchRequest */
+        SettingsPatchRequest: {
+            /** Expected Version */
+            expected_version: number;
+            /** Values */
+            values: {
+                [key: string]: components["schemas"]["SettingValue"];
+            };
+        };
+        /** SettingsRollbackRequest */
+        SettingsRollbackRequest: {
+            /** Expected Version */
+            expected_version: number;
+            /** Target Version */
+            target_version: number;
+            /** Reason */
+            reason: string;
+        };
+        /** SettingsSchemaResponse */
+        SettingsSchemaResponse: {
+            /**
+             * Version
+             * @default 1
+             * @constant
+             */
+            version: 1;
+            /** Sections */
+            sections: {
+                [key: string]: components["schemas"]["SettingsSectionSchema"];
+            };
+        };
+        /** SettingsSectionSchema */
+        SettingsSectionSchema: {
+            /** Fields */
+            fields: {
+                [key: string]: components["schemas"]["SettingFieldSchema"];
+            };
+        };
+        /** SettingsValidateRequest */
+        SettingsValidateRequest: {
+            /** Section */
+            section: string;
+            /** Values */
+            values: {
+                [key: string]: components["schemas"]["SettingValue"];
+            };
+        };
+        /** SettingsValidateResponse */
+        SettingsValidateResponse: {
+            /** Section */
+            section: string;
+            /**
+             * Valid
+             * @default true
+             * @constant
+             */
+            valid: true;
+            /** Values */
+            values: {
+                [key: string]: components["schemas"]["SettingValue"];
+            };
+        };
         /**
          * SignedUrlResponse
          * @description Pre-signed URL response with RBAC-validated access.
@@ -5908,6 +7068,8 @@ export interface components {
         SignedUrlResponse: {
             /** Url */
             url: string;
+            /** Index Url */
+            index_url?: string | null;
             /**
              * Expires In
              * @description URL validity in seconds.
@@ -6134,15 +7296,27 @@ export interface components {
             /** Size */
             size: number;
             /** Content Type */
-            content_type?: string | null;
+            content_type: string;
+            /** Checksum Sha256 */
+            checksum_sha256: string;
         };
         /**
          * UploadPresignResponse
-         * @description Pre-signed PUT URL + object key + public URL (nothing persisted).
+         * @description Pre-signed upload contract + object key + public URL.
          */
         UploadPresignResponse: {
             /** Upload Url */
             upload_url: string;
+            /**
+             * Upload Method
+             * @default POST
+             * @constant
+             */
+            upload_method: "POST";
+            /** Upload Fields */
+            upload_fields: {
+                [key: string]: string;
+            };
             /** Object Key */
             object_key: string;
             /** Public Url */
@@ -6178,10 +7352,12 @@ export interface components {
             organization_id?: number | null;
             /**
              * Role Name
+             * @description Public registration always creates a viewer account.
              * @default viewer
              * @example viewer
+             * @constant
              */
-            role_name: string;
+            role_name: "viewer";
         };
         /**
          * UserResponse
@@ -6293,7 +7469,7 @@ export interface components {
          * VariantFilterParams
          * @description Query parameters for filtering and paginating variant queries.
          *
-         *     Uses keyset cursor pagination (base64-encoded) – never OFFSET.
+         *     Uses an authenticated, release/filter-bound keyset cursor – never OFFSET.
          *     ``limit`` is capped at 200.
          */
         VariantFilterParams: {
@@ -6308,6 +7484,10 @@ export interface components {
             start?: number | null;
             /** End */
             end?: number | null;
+            /** Ref */
+            ref?: string | null;
+            /** Alt */
+            alt?: string | null;
             /** Gene Id */
             gene_id?: string | null;
             /** Mutant Line Id */
@@ -6321,7 +7501,7 @@ export interface components {
             max_af?: number | null;
             /**
              * Cursor
-             * @description Base64-encoded keyset cursor.
+             * @description Opaque signed keyset cursor.
              */
             cursor?: string | null;
             /**
@@ -6890,71 +8070,6 @@ export interface components {
             status: components["schemas"]["app__models__seed_request__SeedRequestStatus"];
         };
         /**
-         * ErrorDetail
-         * @description Machine-readable error detail (inside the ``error`` envelope).
-         */
-        ErrorDetail: {
-            /**
-             * Code
-             * @description Stable machine-readable error code, e.g. ``not_found``.
-             */
-            code: string;
-            /**
-             * Message
-             * @description Human-readable error message.
-             */
-            message: string;
-            /**
-             * Details
-             * @description Optional structured context (never contains secrets or stack traces).
-             */
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-        /**
-         * ErrorResponse
-         * @description Unified error envelope returned by every API error.
-         */
-        ErrorResponse: {
-            error: components["schemas"]["ErrorDetail"];
-            /**
-             * Request Id
-             * @description Correlation id (also echoed in the ``X-Request-ID`` header).
-             */
-            request_id: string;
-            /**
-             * Status Code
-             * @description HTTP status code.
-             */
-            status_code: number;
-            $defs: {
-                /**
-                 * ErrorDetail
-                 * @description Machine-readable error detail (inside the ``error`` envelope).
-                 */
-                ErrorDetail: {
-                    /**
-                     * Code
-                     * @description Stable machine-readable error code, e.g. ``not_found``.
-                     */
-                    code: string;
-                    /**
-                     * Message
-                     * @description Human-readable error message.
-                     */
-                    message: string;
-                    /**
-                     * Details
-                     * @description Optional structured context (never contains secrets or stack traces).
-                     */
-                    details?: {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
-        /**
          * FieldError
          * @description Field-level validation error for 422 responses.
          */
@@ -7458,8 +8573,11 @@ export interface operations {
                 limit?: number;
                 page?: number | null;
                 page_size?: number | null;
+                release_id?: number | null;
             };
-            header?: never;
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -7496,8 +8614,12 @@ export interface operations {
     };
     get_gene_api_v1_genes__gene_id__get: {
         parameters: {
-            query?: never;
-            header?: never;
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
             path: {
                 gene_id: string;
             };
@@ -7738,8 +8860,12 @@ export interface operations {
     };
     compute_ld_api_v1_tools_ld_post: {
         parameters: {
-            query?: never;
-            header?: never;
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -7780,8 +8906,12 @@ export interface operations {
     };
     nucleotide_diversity_api_v1_tools_diversity_post: {
         parameters: {
-            query?: never;
-            header?: never;
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -7822,8 +8952,12 @@ export interface operations {
     };
     allele_frequencies_api_v1_tools_allelefreq_post: {
         parameters: {
-            query?: never;
-            header?: never;
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -7869,16 +9003,22 @@ export interface operations {
                 chromosome?: string | null;
                 start?: number | null;
                 end?: number | null;
+                ref?: string | null;
+                alt?: string | null;
                 gene_id?: string | null;
                 mutant_line_id?: string | null;
                 variant_type?: components["schemas"]["VariantType"] | null;
+                consequence?: components["schemas"]["ConsequenceType"] | null;
                 impact?: components["schemas"]["ImpactLevel"] | null;
                 min_af?: number | null;
                 max_af?: number | null;
                 cursor?: string | null;
                 limit?: number;
+                release_id?: number | null;
             };
-            header?: never;
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -7922,8 +9062,11 @@ export interface operations {
                 start: number;
                 end: number;
                 max_results?: number;
+                release_id?: number | null;
             };
-            header?: never;
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -7960,8 +9103,12 @@ export interface operations {
     };
     get_variant_api_v1_variants__variant_id__get: {
         parameters: {
-            query?: never;
-            header?: never;
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
             path: {
                 variant_id: string;
             };
@@ -8000,8 +9147,12 @@ export interface operations {
     };
     export_variants_api_v1_variants_export_post: {
         parameters: {
-            query?: never;
-            header?: never;
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -10334,6 +11485,132 @@ export interface operations {
             };
         };
     };
+    search_api_v1_ontology_search_get: {
+        parameters: {
+            query: {
+                query: string;
+                ontology?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OntologySearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    term_api_v1_ontology_term_get: {
+        parameters: {
+            query: {
+                ontology: string;
+                iri: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OntologyTermResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    relationship_graph_api_v1_ontology_graph_get: {
+        parameters: {
+            query: {
+                ontology: string;
+                iri: string;
+                max_nodes?: number;
+                max_edges?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OntologyRelationshipGraphResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     get_page_definition_api_v1_page_definitions__route__get: {
         parameters: {
             query?: {
@@ -12149,6 +13426,128 @@ export interface operations {
             };
         };
     };
+    list_plugins_api_v1_admin_plugins_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPluginsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_plugin_api_v1_admin_plugins__key__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPluginResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_plugin_state_api_v1_admin_plugins__key__state_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PluginStateUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPluginResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     list_targets_api_v1_admin_publication_targets_get: {
         parameters: {
             query?: never;
@@ -12866,6 +14265,474 @@ export interface operations {
             };
         };
     };
+    list_dataset_versions_api_v1_admin_imports_studio_dataset_versions_get: {
+        parameters: {
+            query?: {
+                dataset_id?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatasetVersionResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_dataset_version_api_v1_admin_imports_studio_dataset_versions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DatasetVersionCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatasetVersionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_draft_api_v1_admin_imports_studio_drafts_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportDraftCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportDraftResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_draft_api_v1_admin_imports_studio_drafts__draft_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportDraftResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_mapping_api_v1_admin_imports_studio_drafts__draft_id__mapping_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FieldMappingUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportDraftResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    add_patches_api_v1_admin_imports_studio_drafts__draft_id__patches_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DataPatchCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportDraftResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    validate_draft_api_v1_admin_imports_studio_drafts__draft_id__validate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportValidationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportDraftResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    commit_draft_api_v1_admin_imports_studio_drafts__draft_id__commit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportCommitRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportDraftResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_manifest_api_v1_admin_imports_studio_drafts__draft_id__manifest_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationManifestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    inspect_module_api_v1_admin_modules__module_key__validate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                module_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportInspectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportInspectionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    inspect_module_api_v1_admin_modules__module_key__inspect_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                module_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportInspectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportInspectionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     download_module_template_api_v1_admin_modules__module_key__template_get: {
         parameters: {
             query?: {
@@ -12886,6 +14753,126 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_settings_schema_api_v1_admin_settings_schema_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsSchemaResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    validate_settings_api_v1_admin_settings_validate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SettingsValidateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsValidateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_settings_document_api_v1_admin_settings__section__document_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                section: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsDocumentResponse"];
                 };
             };
             /** @description Validation Error */
@@ -12976,6 +14963,154 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    patch_settings_api_v1_admin_settings__section__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                section: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SettingsPatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsDocumentResponse"];
+                };
+            };
+            /** @description Settings version conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_settings_history_api_v1_admin_settings__section__history_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                section: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsHistoryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    rollback_settings_api_v1_admin_settings__section__rollback_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                section: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SettingsRollbackRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsDocumentResponse"];
+                };
+            };
+            /** @description Settings version conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Validation Error */

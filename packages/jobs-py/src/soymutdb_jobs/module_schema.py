@@ -16,9 +16,11 @@ from __future__ import annotations
 
 import csv
 import io
+import tempfile
+import zipfile
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-from typing import Any, Literal, Protocol
+from typing import Any, BinaryIO, Literal, Protocol
 
 ScalarType = Literal["string", "integer"]
 
@@ -49,11 +51,35 @@ _TEMPLATE_MEDIA_TYPES: dict[str, str] = {
 #: rejected before any parsing to bound memory usage.
 MAX_MODULE_FILE_BYTES: int = 50 * 1024 * 1024
 
+#: Read size used for stream-backed module imports.  This deliberately keeps
+#: parser I/O bounded even when the object-store body does not provide a
+#: content length.
+STREAM_READ_CHUNK_BYTES: int = 64 * 1024
+
+#: XLSX is a ZIP container and openpyxl needs a seekable input.  Streamed
+#: workbooks are therefore spooled to disk after this small in-memory budget,
+#: never materialised as one bytes object.
+XLSX_SPOOL_MEMORY_BYTES: int = 8 * 1024 * 1024
+
 #: Maximum length (in characters) of a single header name.
 MAX_HEADER_LENGTH: int = 256
 
 #: Maximum accepted worksheet count in an ``.xlsx`` workbook.
 MAX_XLSX_WORKSHEETS: int = 16
+
+#: Bounded physical-record and field sizes for delimited text.  The field cap
+#: intentionally stays below the stdlib CSV default so we do not need to
+#: mutate ``csv.field_size_limit()`` process-wide in concurrent workers.
+MAX_DELIMITED_PHYSICAL_LINE_CHARACTERS: int = 1 * 1024 * 1024
+MAX_DELIMITED_FIELD_CHARACTERS: int = 64 * 1024
+
+#: XLSX is a ZIP container.  Its compressed upload is capped separately by
+#: ``MAX_MODULE_FILE_BYTES``; these limits constrain metadata and expansion
+#: before openpyxl can read any archive member.
+MAX_XLSX_ARCHIVE_MEMBERS: int = 1_000
+MAX_XLSX_MEMBER_UNCOMPRESSED_BYTES: int = 64 * 1024 * 1024
+MAX_XLSX_UNCOMPRESSED_BYTES: int = 200 * 1024 * 1024
+MAX_XLSX_COMPRESSION_RATIO: int = 100
 
 #: ZIP local-file-header signature (required for a real ``.xlsx``).
 _ZIP_MAGIC: bytes = b"PK\x03\x04"
@@ -263,6 +289,286 @@ def preflight_module_file(filename: str | None, data: bytes) -> ValidationResult
     return None
 
 
+class _StreamingParseError(ValueError):
+    """A bounded-stream parser failure that maps to a validation diagnostic."""
+
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+
+
+def _preflight_xlsx_archive(archive: zipfile.ZipFile) -> None:
+    """Reject ZIP metadata that could make an XLSX expand beyond our bounds."""
+    members = archive.infolist()
+    if len(members) > MAX_XLSX_ARCHIVE_MEMBERS:
+        raise _StreamingParseError(
+            "xlsx_archive_too_many_members",
+            f"XLSX archive has {len(members)} members, above limit {MAX_XLSX_ARCHIVE_MEMBERS}",
+        )
+
+    total_uncompressed = 0
+    macro_names = {name.lower() for name in _MACRO_SHEET_NAMES}
+    for member in members:
+        if member.filename.lower() in macro_names:
+            raise _StreamingParseError("macro_enabled", "macro-enabled workbook is not accepted")
+        if member.file_size > MAX_XLSX_MEMBER_UNCOMPRESSED_BYTES:
+            raise _StreamingParseError(
+                "xlsx_member_too_large",
+                "XLSX archive member exceeds the uncompressed-size limit",
+            )
+
+        total_uncompressed += member.file_size
+        if total_uncompressed > MAX_XLSX_UNCOMPRESSED_BYTES:
+            raise _StreamingParseError(
+                "xlsx_archive_too_large",
+                "XLSX archive exceeds the total uncompressed-size limit",
+            )
+
+        if member.file_size and (
+            member.compress_size == 0
+            or member.file_size > member.compress_size * MAX_XLSX_COMPRESSION_RATIO
+        ):
+            raise _StreamingParseError(
+                "xlsx_compression_ratio_exceeded",
+                "XLSX archive member exceeds the compression-ratio limit",
+            )
+
+
+class _DelimitedFieldLengthValidator:
+    """Track CSV field growth without changing global CSV parser state."""
+
+    def __init__(self, delimiter: str) -> None:
+        self._delimiter = delimiter
+        self._field_length = 0
+        self._state = "field_start"
+
+    def _reset_field(self) -> None:
+        self._field_length = 0
+        self._state = "field_start"
+
+    def _append_character(self) -> None:
+        self._field_length += 1
+        if self._field_length > MAX_DELIMITED_FIELD_CHARACTERS:
+            raise _StreamingParseError(
+                "field_too_large",
+                f"delimited field exceeds {MAX_DELIMITED_FIELD_CHARACTERS} characters",
+            )
+
+    def check(self, line: str) -> None:
+        """Validate one physical line while preserving quoted-field state."""
+        for character in line:
+            if self._state == "quoted":
+                if character == '"':
+                    self._state = "after_quote"
+                else:
+                    self._append_character()
+                continue
+
+            if self._state == "after_quote":
+                if character == '"':
+                    self._append_character()
+                    self._state = "quoted"
+                elif character == self._delimiter or character in "\r\n":
+                    self._reset_field()
+                else:
+                    self._append_character()
+                    self._state = "unquoted"
+                continue
+
+            if character == self._delimiter or character in "\r\n":
+                self._reset_field()
+            elif self._state == "field_start" and character == '"':
+                self._state = "quoted"
+            else:
+                self._append_character()
+                self._state = "unquoted"
+
+
+def _physical_line_length(line: str) -> int:
+    if line.endswith("\r\n"):
+        return len(line) - 2
+    if line.endswith("\r") or line.endswith("\n"):
+        return len(line) - 1
+    return len(line)
+
+
+def _iter_checked_delimited_lines(text_stream: io.TextIOBase, delimiter: str) -> Iterator[str]:
+    """Yield bounded, safe physical lines for a ``csv.reader`` instance."""
+    field_lengths = _DelimitedFieldLengthValidator(delimiter)
+    readline_limit = MAX_DELIMITED_PHYSICAL_LINE_CHARACTERS + 2
+    try:
+        while line := text_stream.readline(readline_limit):
+            if _physical_line_length(line) > MAX_DELIMITED_PHYSICAL_LINE_CHARACTERS:
+                raise _StreamingParseError(
+                    "line_too_long",
+                    "physical line exceeds "
+                    f"{MAX_DELIMITED_PHYSICAL_LINE_CHARACTERS} characters",
+                )
+            for character in line:
+                codepoint = ord(character)
+                if codepoint in (9, 10, 13):
+                    continue
+                if codepoint == 0:
+                    raise _StreamingParseError("nul_byte", "module data contains NUL bytes")
+                if codepoint < 32 or 0x7F <= codepoint <= 0x9F:
+                    raise _StreamingParseError(
+                        "control_character", "module data contains control characters"
+                    )
+            field_lengths.check(line)
+            yield line
+    except UnicodeDecodeError as exc:
+        raise _StreamingParseError(
+            "invalid_utf8", "module data must be UTF-8 encoded"
+        ) from exc
+
+
+def _invalid_csv_error(exc: csv.Error, row: int | None = None) -> ValidationError:
+    return ValidationError("invalid_csv", row, f"invalid delimited data: {exc}")
+
+
+def _row_width_error(row: int, expected: int, actual: int) -> ValidationError:
+    """Return a diagnostic without ever discarding unaddressed input cells."""
+    return ValidationError(
+        "row_width_mismatch",
+        row,
+        f"Expected {expected} cells from the header, found {actual}",
+    )
+
+
+def _trim_xlsx_trailing_none(values: tuple[Any, ...]) -> tuple[Any, ...]:
+    """Remove only openpyxl worksheet-dimension padding.
+
+    ``ReadOnlyWorksheet.iter_rows`` pads every row to the worksheet's widest
+    used column. Keep a non-empty extra cell intact for width validation, but
+    do not mistake a trailing ``None`` introduced by that padding for a cell.
+    """
+    last = len(values)
+    while last and values[last - 1] is None:
+        last -= 1
+    return values[:last]
+
+
+class _BoundedBinaryStream(io.RawIOBase):
+    """Adapt a non-seekable source while enforcing the module byte limit.
+
+    ``readinto`` always passes a positive size to the wrapped source.  This is
+    important for S3's streaming body: ``read()`` with no size would silently
+    materialise the full object in memory.
+    """
+
+    def __init__(self, source: BinaryIO, prefix: bytes = b"") -> None:
+        self._source = source
+        self._prefix = memoryview(prefix)
+        self._prefix_offset = 0
+        self._bytes_read = len(prefix)
+
+    def readable(self) -> bool:
+        return True
+
+    def readinto(self, buffer: Any) -> int:
+        view = memoryview(buffer).cast("B")
+        if not view:
+            return 0
+
+        written = 0
+        if self._prefix_offset < len(self._prefix):
+            prefix_remaining = self._prefix[self._prefix_offset :]
+            prefix_size = min(len(view), len(prefix_remaining))
+            view[:prefix_size] = prefix_remaining[:prefix_size]
+            self._prefix_offset += prefix_size
+            written += prefix_size
+            if written == len(view):
+                return written
+
+        remaining = MAX_MODULE_FILE_BYTES - self._bytes_read
+        if remaining <= 0:
+            # Probe exactly one byte to distinguish a file at the limit from a
+            # file above it, without requesting an unbounded body read.
+            if self._source.read(1):
+                raise _StreamingParseError(
+                    "file_too_large",
+                    f"module file is above limit {MAX_MODULE_FILE_BYTES}",
+                )
+            return written
+
+        chunk = self._source.read(min(len(view) - written, remaining))
+        if not chunk:
+            return written
+        if not isinstance(chunk, bytes):
+            raise _StreamingParseError("invalid_input", "module stream must yield bytes")
+        view[written : written + len(chunk)] = chunk
+        self._bytes_read += len(chunk)
+        return written + len(chunk)
+
+
+def _read_stream_prefix(source: BinaryIO, size: int = 8) -> bytes:
+    """Read at most *size* bytes without ever asking the source for all data."""
+    chunks: list[bytes] = []
+    remaining = size
+    while remaining:
+        chunk = source.read(remaining)
+        if not chunk:
+            break
+        if not isinstance(chunk, bytes):
+            raise _StreamingParseError("invalid_input", "module stream must yield bytes")
+        chunks.append(chunk)
+        remaining -= len(chunk)
+    return b"".join(chunks)
+
+
+def _preflight_stream(filename: str, prefix: bytes) -> ValidationResult | None:
+    """Run extension/signature checks before wrapping a potentially large stream."""
+    rl_fmt = detect_format(filename)
+    rl_forbidden = detect_forbidden_format(filename)
+    if rl_forbidden is not None:
+        return ValidationResult(
+            False,
+            [
+                ValidationError(
+                    "unsupported_format",
+                    None,
+                    f"macro/legacy format '{rl_forbidden}' is not accepted",
+                )
+            ],
+        )
+    if rl_fmt == ".xlsx":
+        if prefix[:8] == _OLE_MAGIC:
+            return ValidationResult(
+                False,
+                [
+                    ValidationError(
+                        "format_signature_mismatch",
+                        None,
+                        "file is a legacy OLE2 workbook, not .xlsx",
+                    )
+                ],
+            )
+        if prefix[:4] != _ZIP_MAGIC and not prefix.startswith(b"PK"):
+            return ValidationResult(
+                False,
+                [
+                    ValidationError(
+                        "format_signature_mismatch",
+                        None,
+                        "file does not start with a ZIP signature",
+                    )
+                ],
+            )
+    elif rl_fmt in (".txt", ".tsv", ".csv"):
+        if prefix[:8] == _OLE_MAGIC or prefix[:4] == _ZIP_MAGIC:
+            return ValidationResult(
+                False,
+                [
+                    ValidationError(
+                        "format_signature_mismatch",
+                        None,
+                        "text module file contains a binary container payload",
+                    )
+                ],
+            )
+    return None
+
+
 def _read_text_rows(
     data: bytes, delimiter: str
 ) -> tuple[list[str], list[dict[str, str]], ValidationResult | None]:
@@ -289,64 +595,70 @@ def _read_text_rows(
             ),
         )
 
-    # Reject control characters (other than \t/\n/\r) anywhere in the body:
-    # spreadsheet cells must never embed NUL or other C0/C1 controls that Excel
-    # could mis-handle.
-    for rl_ch in rl_text:
-        rl_ord = ord(rl_ch)
-        if rl_ord == 9 or rl_ord == 10 or rl_ord == 13:
-            continue
-        if rl_ord < 32 or 0x7F <= rl_ord <= 0x9F:
+    rl_reader = csv.reader(
+        _iter_checked_delimited_lines(io.StringIO(rl_text), delimiter),
+        delimiter=delimiter,
+        strict=True,
+    )
+    try:
+        try:
+            rl_fieldnames = next(rl_reader)
+        except StopIteration:
             return (
                 [],
                 [],
                 ValidationResult(
-                    False,
-                    [
-                        ValidationError(
-                            "control_character", None, "module data contains control characters"
-                        )
-                    ],
+                    False, [ValidationError("empty_file", None, "module data is empty")]
                 ),
             )
-
-    rl_reader = csv.DictReader(io.StringIO(rl_text), delimiter=delimiter)
-    if rl_reader.fieldnames is None:
+        for rl_field in rl_fieldnames:
+            if len(rl_field) > MAX_HEADER_LENGTH:
+                return (
+                    [],
+                    [],
+                    ValidationResult(
+                        False,
+                        [
+                            ValidationError(
+                                "header_too_long",
+                                None,
+                                f"header '{rl_field[:32]}…' exceeds {MAX_HEADER_LENGTH} chars",
+                            )
+                        ],
+                    ),
+                )
+        rl_rows: list[dict[str, str]] = []
+        for row_number, rl_values in enumerate(rl_reader, start=2):
+            if len(rl_values) != len(rl_fieldnames):
+                return (
+                    [],
+                    [],
+                    ValidationResult(
+                        False,
+                        [_row_width_error(row_number, len(rl_fieldnames), len(rl_values))],
+                    ),
+                )
+            rl_rows.append(dict(zip(rl_fieldnames, rl_values, strict=True)))
+        return rl_fieldnames, rl_rows, None
+    except _StreamingParseError as exc:
+        return [], [], ValidationResult(False, [ValidationError(exc.code, None, str(exc))])
+    except csv.Error as exc:
         return (
             [],
             [],
-            ValidationResult(False, [ValidationError("empty_file", None, "module data is empty")]),
+            ValidationResult(False, [_invalid_csv_error(exc, rl_reader.line_num or None)]),
         )
-    rl_fieldnames = list(rl_reader.fieldnames)
-    for rl_field in rl_fieldnames:
-        if len(rl_field) > MAX_HEADER_LENGTH:
-            return (
-                [],
-                [],
-                ValidationResult(
-                    False,
-                    [
-                        ValidationError(
-                            "header_too_long",
-                            None,
-                            f"header '{rl_field[:32]}…' exceeds {MAX_HEADER_LENGTH} chars",
-                        )
-                    ],
-                ),
-            )
-    return rl_fieldnames, list(rl_reader), None
 
 
 def _read_xlsx_rows(data: bytes) -> tuple[list[str], list[dict[str, str]], ValidationResult | None]:
     """Read the first worksheet of an ``.xlsx`` workbook; header = first row."""
-    # Macro-enabled workbook rejection: scan the raw ZIP namelist for a VBA
-    # project entry before any openpyxl parsing (openpyxl silently ignores it).
+    # Validate raw ZIP metadata before openpyxl can expand any member.
     try:
-        import zipfile
-
-        rl_zip = zipfile.ZipFile(io.BytesIO(data))
-        rl_names = set(rl_zip.namelist())
-    except Exception as rl_exc:
+        with zipfile.ZipFile(io.BytesIO(data)) as rl_zip:
+            _preflight_xlsx_archive(rl_zip)
+    except _StreamingParseError as exc:
+        return [], [], ValidationResult(False, [ValidationError(exc.code, None, str(exc))])
+    except (OSError, zipfile.BadZipFile) as rl_exc:
         return (
             [],
             [],
@@ -355,20 +667,6 @@ def _read_xlsx_rows(data: bytes) -> tuple[list[str], list[dict[str, str]], Valid
                 [ValidationError("invalid_xlsx", None, f"cannot open workbook zip: {rl_exc!s}")],
             ),
         )
-    for rl_macro in _MACRO_SHEET_NAMES:
-        if rl_macro in rl_names:
-            return (
-                [],
-                [],
-                ValidationResult(
-                    False,
-                    [
-                        ValidationError(
-                            "macro_enabled", None, "macro-enabled workbook is not accepted"
-                        )
-                    ],
-                ),
-            )
 
     try:
         from openpyxl import load_workbook
@@ -424,6 +722,10 @@ def _read_xlsx_rows(data: bytes) -> tuple[list[str], list[dict[str, str]], Valid
                 False, [ValidationError("hidden_sheet", None, "first worksheet is hidden")]
             ),
         )
+    # A workbook's ``<dimension>`` attribute is advisory and can be stale or
+    # forged. Reset it before iteration so openpyxl scans actual cells rather
+    # than silently truncating a non-empty column beyond the header.
+    rl_sheet.reset_dimensions()
 
     rl_grid: list[tuple[Any, ...]] = []
     for rl_row in rl_sheet.iter_rows(values_only=True):
@@ -437,7 +739,8 @@ def _read_xlsx_rows(data: bytes) -> tuple[list[str], list[dict[str, str]], Valid
             ValidationResult(False, [ValidationError("empty_file", None, "module data is empty")]),
         )
 
-    rl_fieldnames = [str(rl_v).strip() if rl_v is not None else "" for rl_v in rl_grid[0]]
+    rl_header_values = _trim_xlsx_trailing_none(rl_grid[0])
+    rl_fieldnames = [str(rl_v).strip() if rl_v is not None else "" for rl_v in rl_header_values]
     for rl_field in rl_fieldnames:
         if len(rl_field) > MAX_HEADER_LENGTH:
             return (
@@ -455,7 +758,22 @@ def _read_xlsx_rows(data: bytes) -> tuple[list[str], list[dict[str, str]], Valid
                 ),
             )
     rl_rows: list[dict[str, str]] = []
-    for rl_values in rl_grid[1:]:
+    for row_number, rl_values in enumerate(rl_grid[1:], start=2):
+        rl_values = _trim_xlsx_trailing_none(rl_values)
+        # ``iter_rows`` pads cells to the widest worksheet dimension and
+        # Excel does not retain a distinction between an omitted optional
+        # trailing cell and padding. Missing values are represented as None
+        # below and validated by the column-required rules; only a real,
+        # non-empty cell beyond the header would be silently lost.
+        if len(rl_values) > len(rl_fieldnames):
+            return (
+                [],
+                [],
+                ValidationResult(
+                    False,
+                    [_row_width_error(row_number, len(rl_fieldnames), len(rl_values))],
+                ),
+        )
         rl_row: dict[str, str] = {}
         for rl_idx, rl_field in enumerate(rl_fieldnames):
             rl_cell = rl_values[rl_idx] if rl_idx < len(rl_values) else None
@@ -733,6 +1051,7 @@ class ParsedRow:
 
     row_number: int
     values: dict[str, str]
+    field_count: int
 
 
 class ModuleFileReader(Protocol):
@@ -751,22 +1070,35 @@ class ModuleFileReader(Protocol):
 class DelimitedTextReader:
     """Streaming reader for ``.txt`` / ``.tsv`` (tab) and ``.csv`` (comma)."""
 
-    def __init__(self, data: bytes, file_format: str) -> None:
-        if b"\x00" in data:
-            raise ValueError("module data contains NUL bytes")
-        try:
-            text = data.decode("utf-8-sig")
-        except UnicodeDecodeError as exc:
-            raise ValueError("module data must be UTF-8 encoded") from exc
+    def __init__(self, source: bytes | BinaryIO, file_format: str) -> None:
+        binary_source = io.BytesIO(source) if isinstance(source, bytes) else source
         delimiter = _FORMAT_DELIMITERS[file_format]
-        self._csv_reader = csv.reader(io.StringIO(text), delimiter=delimiter)
+        self._delimiter = delimiter
+        self._text_stream = io.TextIOWrapper(
+            binary_source,
+            encoding="utf-8-sig",
+            newline="",
+        )
+        self._csv_reader = csv.reader(self._checked_lines(), delimiter=delimiter, strict=True)
         try:
             header = next(self._csv_reader)
         except StopIteration as exc:
             raise ValueError("module data is empty") from exc
+        except UnicodeDecodeError as exc:
+            raise _StreamingParseError(
+                "invalid_utf8", "module data must be UTF-8 encoded"
+            ) from exc
+        except csv.Error as exc:
+            raise _StreamingParseError("invalid_csv", f"invalid delimited data: {exc}") from exc
         if not header or not any(h and h.strip() for h in header):
             raise ValueError("module data is empty")
         fieldnames = tuple(h.strip() for h in header)
+        for fieldname in fieldnames:
+            if len(fieldname) > MAX_HEADER_LENGTH:
+                raise _StreamingParseError(
+                    "header_too_long",
+                    f"header '{fieldname[:32]}…' exceeds {MAX_HEADER_LENGTH} chars",
+                )
         self.metadata = FileMetadata(
             format=file_format,
             encoding="utf-8",
@@ -775,13 +1107,16 @@ class DelimitedTextReader:
             fieldnames=fieldnames,
         )
 
+    def _checked_lines(self) -> Iterator[str]:
+        yield from _iter_checked_delimited_lines(self._text_stream, self._delimiter)
+
     def iter_rows(self) -> Iterator[ParsedRow]:
         for row_number, values in enumerate(self._csv_reader, start=2):
             row = {
                 name: (values[i] if i < len(values) else "")
                 for i, name in enumerate(self.metadata.fieldnames)
             }
-            yield ParsedRow(row_number=row_number, values=row)
+            yield ParsedRow(row_number=row_number, values=row, field_count=len(values))
 
 
 class XlsxReader:
@@ -791,29 +1126,60 @@ class XlsxReader:
     ``rl_grid`` full-list materialisation.
     """
 
-    def __init__(self, data: bytes, sheet_name: str | None = None) -> None:
+    def __init__(self, source: bytes | BinaryIO, sheet_name: str | None = None) -> None:
+        self._source = io.BytesIO(source) if isinstance(source, bytes) else source
+        try:
+            self._source.seek(0)
+            with zipfile.ZipFile(self._source) as archive:
+                _preflight_xlsx_archive(archive)
+        except Exception as exc:
+            if isinstance(exc, _StreamingParseError):
+                raise
+            raise ValueError("cannot open workbook") from exc
         try:
             from openpyxl import load_workbook
         except ImportError as exc:
             raise ValueError("openpyxl is required for xlsx import") from exc
         try:
-            self._book = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+            self._source.seek(0)
+            self._book = load_workbook(self._source, read_only=True, data_only=True)
         except Exception as exc:
             raise ValueError("cannot open workbook") from exc
         try:
-            sheet = self._book[sheet_name] if sheet_name else self._book.worksheets[0]
+            sheets = self._book.worksheets
+            if len(sheets) > MAX_XLSX_WORKSHEETS:
+                raise _StreamingParseError(
+                    "too_many_worksheets",
+                    f"workbook has {len(sheets)} worksheets",
+                )
+            sheet = self._book[sheet_name] if sheet_name else sheets[0]
         except (IndexError, KeyError, AttributeError) as exc:
             raise ValueError("workbook has no worksheet") from exc
+        if getattr(sheet, "sheet_state", "visible") != "visible":
+            raise _StreamingParseError("hidden_sheet", "first worksheet is hidden")
         self._sheet = sheet
+        # Do not trust worksheet-dimension metadata: a stale ``ref`` can hide
+        # real cells from read-only ``iter_rows`` and otherwise defeats the
+        # row-width guard below.
+        self._sheet.reset_dimensions()
         self._iterator = sheet.iter_rows(values_only=True)
         self._resolved_sheet = sheet.title
         fieldnames: tuple[str, ...] = ()
         for values in self._iterator:
             if values and any(v is not None and str(v).strip() for v in values):
-                fieldnames = tuple((str(v).strip() if v is not None else "") for v in values)
+                header_values = _trim_xlsx_trailing_none(tuple(values))
+                fieldnames = tuple(
+                    str(v).strip() if v is not None else "" for v in header_values
+                )
                 break
         if not fieldnames or not any(fn for fn in fieldnames):
             raise ValueError("module data is empty")
+        for fieldname in fieldnames:
+            if len(fieldname) > MAX_HEADER_LENGTH:
+                raise _StreamingParseError(
+                    "header_too_long",
+                    f"header '{fieldname[:32]}…' exceeds {MAX_HEADER_LENGTH} chars",
+                )
         self.metadata = FileMetadata(
             format=".xlsx",
             encoding=None,
@@ -826,11 +1192,23 @@ class XlsxReader:
         for row_number, values in enumerate(self._iterator, start=2):
             if not values or not any(v is not None and str(v).strip() for v in values):
                 continue
+            effective_values = _trim_xlsx_trailing_none(tuple(values))
             row = {
-                name: ("" if i >= len(values) or values[i] is None else str(values[i]).strip())
+                name: (
+                    "" if i >= len(effective_values) or effective_values[i] is None
+                    else str(effective_values[i]).strip()
+                )
                 for i, name in enumerate(self.metadata.fieldnames)
             }
-            yield ParsedRow(row_number=row_number, values=row)
+            yield ParsedRow(
+                row_number=row_number,
+                values=row,
+                field_count=len(effective_values),
+            )
+
+    def close(self) -> None:
+        self._book.close()
+        self._source.close()
 
 
 def _reader_for(module_key: str, filename: str, data: bytes) -> ModuleFileReader | ValidationResult:
@@ -868,6 +1246,8 @@ def _reader_for(module_key: str, filename: str, data: bytes) -> ModuleFileReader
         if file_format == ".xlsx":
             return XlsxReader(data)
         return DelimitedTextReader(data, file_format)
+    except _StreamingParseError as exc:
+        return ValidationResult(False, [ValidationError(exc.code, None, str(exc))])
     except ValueError as exc:
         message = str(exc)
         if "NUL" in message:
@@ -881,6 +1261,64 @@ def _reader_for(module_key: str, filename: str, data: bytes) -> ModuleFileReader
         else:
             code = "empty_file"
         return ValidationResult(False, [ValidationError(code, None, message)])
+
+
+def _reader_for_stream(
+    module_key: str,
+    filename: str,
+    source: BinaryIO,
+) -> ModuleFileReader | ValidationResult:
+    """Build a reader over a local/S3 binary stream without materialising it."""
+    schema = get_schema(module_key)
+    if schema is None:
+        return ValidationResult(
+            False,
+            [ValidationError("unknown_schema", None, f"Unknown module schema '{module_key}'")],
+        )
+
+    file_format = detect_format(filename)
+    if file_format is None:
+        return ValidationResult(
+            False,
+            [
+                ValidationError(
+                    "unsupported_format",
+                    None,
+                    f"Unsupported module file format for '{filename}'",
+                )
+            ],
+        )
+
+    try:
+        prefix = _read_stream_prefix(source)
+        preflight = _preflight_stream(filename, prefix)
+        if preflight is not None:
+            return preflight
+        bounded_source = io.BufferedReader(_BoundedBinaryStream(source, prefix))
+        if file_format == ".xlsx":
+            # ``openpyxl`` needs seeking for ZIP central-directory access.
+            # Spooling caps memory while retaining support for non-seekable S3
+            # response bodies.
+            spool = tempfile.SpooledTemporaryFile(
+                max_size=XLSX_SPOOL_MEMORY_BYTES,
+                mode="w+b",
+            )
+            try:
+                while chunk := bounded_source.read(STREAM_READ_CHUNK_BYTES):
+                    spool.write(chunk)
+                spool.seek(0)
+                return XlsxReader(spool)
+            except Exception:
+                spool.close()
+                raise
+        return DelimitedTextReader(bounded_source, file_format)
+    except _StreamingParseError as exc:
+        return ValidationResult(False, [ValidationError(exc.code, None, str(exc))])
+    except (AttributeError, OSError, ValueError) as exc:
+        return ValidationResult(
+            False,
+            [ValidationError("invalid_input", None, f"cannot read module stream: {exc}")],
+        )
 
 
 def iter_typed_rows(
@@ -924,8 +1362,33 @@ def iter_typed_rows(
         return
 
     seen_keys: set[str] = set()
+    accepted_rows = 0
     for parsed in reader.iter_rows():
         row_number = parsed.row_number
+        # XLSX returns worksheet-dimension padding as trailing ``None``. A
+        # missing optional tail is therefore indistinguishable from padding;
+        # let the regular required-column validation decide whether it is
+        # valid, while rejecting every non-empty cell beyond the header.
+        has_extra_cells = parsed.field_count > len(fieldnames)
+        has_short_delimited_row = (
+            reader.metadata.format != ".xlsx" and parsed.field_count < len(fieldnames)
+        )
+        if has_extra_cells or has_short_delimited_row:
+            yield (
+                None,
+                _row_width_error(row_number, len(fieldnames), parsed.field_count),
+            )
+            continue
+        if accepted_rows >= schema.max_rows:
+            yield (
+                None,
+                ValidationError(
+                    "max_rows",
+                    row_number,
+                    f"Exceeds maximum rows ({schema.max_rows})",
+                ),
+            )
+            return
         row = parsed.values
         errors: list[ValidationError] = []
         typed: dict[str, Any] = {}
@@ -977,6 +1440,7 @@ def iter_typed_rows(
                 row_valid = False
 
         if row_valid:
+            accepted_rows += 1
             yield typed, None
         else:
             yield (
@@ -985,21 +1449,62 @@ def iter_typed_rows(
             )
 
 
+def _iter_reader_rows(
+    module_key: str,
+    reader: ModuleFileReader,
+) -> Iterator[tuple[dict[str, Any] | None, ValidationError | None]]:
+    try:
+        yield from iter_typed_rows(module_key, reader)
+    except _StreamingParseError as exc:
+        yield None, ValidationError(exc.code, None, str(exc))
+    except csv.Error as exc:
+        csv_reader = getattr(reader, "_csv_reader", None)
+        row = getattr(csv_reader, "line_num", None)
+        yield None, _invalid_csv_error(exc, row or None)
+    except UnicodeDecodeError:
+        yield None, ValidationError("invalid_utf8", None, "module data must be UTF-8 encoded")
+    finally:
+        close = getattr(reader, "close", None)
+        if callable(close):
+            close()
+
+
 def iter_module_rows(
     module_key: str, filename: str, data: bytes
 ) -> Iterator[tuple[dict[str, Any] | None, ValidationError | None]]:
     """Yield typed rows/errors without materialising all rows.
 
-    This is the worker-facing streaming API. Header/envelope failures are
-    yielded once and terminate; row failures are yielded individually so the
-    caller can bound diagnostics and roll back its transaction.
+    This compatibility API accepts bytes.  For local/S3 sources, use
+    :func:`iter_module_rows_from_stream` so the object is never materialised.
+    Header/envelope failures are yielded once and terminate; row failures are
+    yielded individually so the caller can bound diagnostics and roll back its
+    transaction.
     """
     reader_or_error = _reader_for(module_key, filename, data)
     if isinstance(reader_or_error, ValidationResult):
         if reader_or_error.errors:
             yield None, reader_or_error.errors[0]
         return
-    yield from iter_typed_rows(module_key, reader_or_error)
+    yield from _iter_reader_rows(module_key, reader_or_error)
+
+
+def iter_module_rows_from_stream(
+    module_key: str,
+    filename: str,
+    source: BinaryIO,
+) -> Iterator[tuple[dict[str, Any] | None, ValidationError | None]]:
+    """Yield typed module rows directly from a bounded binary source.
+
+    Delimited formats are read incrementally from the source.  XLSX files are
+    chunk-spooled to a seekable temporary file after a small memory threshold,
+    because OOXML ZIP parsing requires random access.
+    """
+    reader_or_error = _reader_for_stream(module_key, filename, source)
+    if isinstance(reader_or_error, ValidationResult):
+        if reader_or_error.errors:
+            yield None, reader_or_error.errors[0]
+        return
+    yield from _iter_reader_rows(module_key, reader_or_error)
 
 
 def validate_module_file_streaming(
@@ -1015,7 +1520,25 @@ def validate_module_file_streaming(
         return ValidationSummary(False, errors=reader_or_error.errors)
 
     summary = ValidationSummary(ok=True)
-    for _typed, error in iter_typed_rows(module_key, reader_or_error):
+    for _typed, error in _iter_reader_rows(module_key, reader_or_error):
+        if error is not None:
+            summary.ok = False
+            summary.error_count += 1
+            if len(summary.errors) < MAX_INLINE_DIAGNOSTICS:
+                summary.errors.append(error)
+        else:
+            summary.row_count += 1
+    return summary
+
+
+def validate_module_file_streaming_from_stream(
+    module_key: str,
+    filename: str,
+    source: BinaryIO,
+) -> ValidationSummary:
+    """Validate a local/S3 source without retaining its full byte payload."""
+    summary = ValidationSummary(ok=True)
+    for _typed, error in iter_module_rows_from_stream(module_key, filename, source):
         if error is not None:
             summary.ok = False
             summary.error_count += 1
@@ -1030,10 +1553,12 @@ __all__ = [
     "DelimitedTextReader",
     "FileMetadata",
     "MAX_INLINE_DIAGNOSTICS",
+    "MAX_MODULE_FILE_BYTES",
     "ModuleFileReader",
     "ModuleTsvSchema",
     "MODULE_SCHEMAS",
     "ParsedRow",
+    "STREAM_READ_CHUNK_BYTES",
     "SUPPORTED_MODULE_FORMATS",
     "TsvColumn",
     "ValidationError",
@@ -1043,9 +1568,11 @@ __all__ = [
     "detect_format",
     "get_schema",
     "iter_module_rows",
+    "iter_module_rows_from_stream",
     "iter_typed_rows",
     "render_module_template",
     "validate_module_file",
     "validate_module_file_streaming",
+    "validate_module_file_streaming_from_stream",
     "validate_tsv",
 ]

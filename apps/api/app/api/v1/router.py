@@ -16,6 +16,7 @@ from . import (
     admin_modules,
     admin_news,
     admin_page_builder,
+    admin_plugins,
     admin_publication,
     admin_publications,
     admin_settings,
@@ -25,17 +26,19 @@ from . import (
     analytics,
     auth,
     blast,
-    content,
     capabilities,
+    content,
     expression,
     genes,
     gwas,
     health,
     homolog,
+    import_studio,
     jobs,
     mutants,
     news,
     notifications,
+    ontology,
     page_definitions,
     popgen,
     releases,
@@ -56,7 +59,7 @@ from . import (
 # ``widgets.models`` imports ``app.models.base``, and importing it first
 # would trigger the ``app.models`` package init while ``widgets.models`` is
 # still partially initialized (circular import).
-from ...widgets.router import router as widgets_router
+from ...widgets.router import router as widgets_router  # isort: skip
 
 api_router = APIRouter()
 
@@ -81,15 +84,18 @@ api_router.include_router(seed_requests.router)
 api_router.include_router(content.router)
 api_router.include_router(news.router)
 api_router.include_router(notifications.router)
+api_router.include_router(ontology.router)
 api_router.include_router(page_definitions.router)
 api_router.include_router(admin.router)
 api_router.include_router(admin_features.router)
 api_router.include_router(admin_content.router)
 api_router.include_router(admin_news.router)
 api_router.include_router(admin_page_builder.router)
+api_router.include_router(admin_plugins.router)
 api_router.include_router(admin_publication.router)
 api_router.include_router(admin_publications.router)
 api_router.include_router(admin_imports.router)
+api_router.include_router(import_studio.router)
 api_router.include_router(admin_modules.router)
 api_router.include_router(admin_settings.router)
 api_router.include_router(admin_static.router)

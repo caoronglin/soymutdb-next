@@ -14,8 +14,10 @@ from clickhouse_connect.driver.asyncclient import AsyncClient
 from structlog import get_logger
 
 from ..core.database import get_clickhouse_client
+from ..core.exceptions import ServiceUnavailableError
 from ..core.metrics import CLICKHOUSE_QUERY_COUNT, CLICKHOUSE_QUERY_LATENCY
 from ..schemas.variant import VariantFilterParams
+from .release_context import ReleaseContext
 
 logger = get_logger(__name__)
 
@@ -75,14 +77,15 @@ class ClickHouseService:
     @staticmethod
     def _build_where(
         params: VariantFilterParams,
+        release_context: ReleaseContext,
     ) -> tuple[str, dict[str, Any]]:
         """Build a parameterised WHERE clause.
 
         Returns ``(where_sql, query_params)``.  Column names are whitelisted
         literals; values are bound via ``%(name)s`` placeholders.
         """
-        conditions: list[str] = []
-        qp: dict[str, Any] = {}
+        conditions = ["release_key = %(release_key)s"]
+        qp: dict[str, Any] = {"release_key": release_context.release_key}
 
         if params.assembly is not None:
             conditions.append("assembly_key = %(assembly)s")
@@ -96,6 +99,12 @@ class ClickHouseService:
         if params.end is not None:
             conditions.append("position <= %(end)s")
             qp["end"] = params.end
+        if params.ref is not None:
+            conditions.append("ref_allele = %(ref)s")
+            qp["ref"] = params.ref
+        if params.alt is not None:
+            conditions.append("alt_allele = %(alt)s")
+            qp["alt"] = params.alt
         if params.gene_id is not None:
             conditions.append("gene_id = %(gene_id)s")
             qp["gene_id"] = params.gene_id
@@ -105,6 +114,9 @@ class ClickHouseService:
         if params.variant_type is not None:
             conditions.append("variant_type = %(vtype)s")
             qp["vtype"] = params.variant_type.value
+        if params.consequence is not None:
+            conditions.append("consequence = %(consequence)s")
+            qp["consequence"] = params.consequence.value
         if params.impact is not None:
             conditions.append("impact = %(impact)s")
             qp["impact"] = params.impact.value
@@ -115,16 +127,20 @@ class ClickHouseService:
             conditions.append("allele_frequency <= %(max_af)s")
             qp["max_af"] = params.max_af
 
-        where = " AND ".join(conditions) if conditions else "1=1"
-        return where, qp
+        return " AND ".join(conditions), qp
 
     # ------------------------------------------------------------------ #
     # Public query API
     # ------------------------------------------------------------------ #
 
-    async def count_variants(self, params: VariantFilterParams) -> int:
+    async def count_variants(
+        self,
+        params: VariantFilterParams,
+        *,
+        release_context: ReleaseContext,
+    ) -> int:
         """Return the total number of variants matching *params*."""
-        where, qp = self._build_where(params)
+        where, qp = self._build_where(params, release_context)
         query = f"SELECT count() AS total FROM {VARIANT_FACTS_TABLE} WHERE {where}"
         client = await self._get_client()
         CLICKHOUSE_QUERY_COUNT.labels(operation="count").inc()
@@ -141,20 +157,26 @@ class ClickHouseService:
         self,
         params: VariantFilterParams,
         limit: int,
-        cursor_position: int | None = None,
+        *,
+        release_context: ReleaseContext,
+        cursor_key: tuple[int, int] | None = None,
     ) -> list[dict[str, Any]]:
         """Query variants with keyset pagination.
 
-        Pagination is performed on the ``position`` column (ascending).  The
-        caller passes the last seen position as ``cursor_position``; we filter
-        ``position > cursor_position``.  This avoids OFFSET entirely.
+        Pagination uses ``(position, variant_id)`` ascending so variants that
+        share a genomic position cannot be skipped between pages.
         """
-        where, qp = self._build_where(params)
+        where, qp = self._build_where(params, release_context)
 
-        if cursor_position is not None:
-            conditions_extra = "position > %(cursor_pos)s"
-            where = f"{where} AND {conditions_extra}" if where != "1=1" else conditions_extra
+        if cursor_key is not None:
+            cursor_position, cursor_variant_id = cursor_key
+            where = (
+                f"{where} AND (position > %(cursor_pos)s OR "
+                "(position = %(cursor_pos)s AND "
+                "variant_id > %(cursor_variant_id)s))"
+            )
             qp["cursor_pos"] = cursor_position
+            qp["cursor_variant_id"] = cursor_variant_id
 
         # ``limit`` is bound as a parameter too.
         qp["lim"] = limit
@@ -167,7 +189,7 @@ class ClickHouseService:
             filter_status, read_depth, allele_frequency, hgvs_c, hgvs_p, zygosity
         FROM {VARIANT_FACTS_TABLE}
         WHERE {where}
-        ORDER BY position ASC
+        ORDER BY position ASC, variant_id ASC
         LIMIT %(lim)s
         """
         client = await self._get_client()
@@ -188,11 +210,15 @@ class ClickHouseService:
         start: int,
         end: int,
         max_results: int = 1000,
+        *,
+        release_context: ReleaseContext | None = None,
     ) -> list[dict[str, Any]]:
         """Query variants in a genomic region.
 
         ``assembly`` is a required parameter (never hardcoded).
         """
+        if release_context is None:
+            raise ServiceUnavailableError("Release context is required")
         query = f"""
         SELECT
             variant_id, release_key, assembly_key, chromosome, position,
@@ -201,14 +227,16 @@ class ClickHouseService:
             consequence, consequence_id, impact, rs_id, quality_score,
             filter_status, read_depth, allele_frequency, hgvs_c, hgvs_p, zygosity
         FROM {VARIANT_FACTS_TABLE}
-        WHERE assembly_key = %(assembly)s
+        WHERE release_key = %(release_key)s
+          AND assembly_key = %(assembly)s
           AND chromosome = %(chromosome)s
           AND position >= %(start)s
           AND position <= %(end)s
-        ORDER BY position ASC
+        ORDER BY position ASC, variant_id ASC
         LIMIT %(max_results)s
         """
         qp = {
+            "release_key": release_context.release_key,
             "assembly": assembly,
             "chromosome": chromosome,
             "start": start,
@@ -225,7 +253,12 @@ class ClickHouseService:
         columns = result.column_names
         return [dict(zip(columns, row)) for row in result.result_rows]
 
-    async def get_variant_by_id(self, variant_id: str) -> dict[str, Any] | None:
+    async def get_variant_by_id(
+        self,
+        variant_id: str,
+        *,
+        release_context: ReleaseContext,
+    ) -> dict[str, Any] | None:
         """Fetch a single variant by its ID."""
         query = f"""
         SELECT
@@ -235,11 +268,18 @@ class ClickHouseService:
             consequence, consequence_id, impact, rs_id, quality_score,
             filter_status, read_depth, allele_frequency, hgvs_c, hgvs_p, zygosity
         FROM {VARIANT_FACTS_TABLE}
-        WHERE variant_id = %(vid)s
+        WHERE release_key = %(release_key)s
+          AND variant_id = %(vid)s
         LIMIT 1
         """
         client = await self._get_client()
-        result = await client.query(query, parameters={"vid": variant_id})
+        result = await client.query(
+            query,
+            parameters={
+                "release_key": release_context.release_key,
+                "vid": variant_id,
+            },
+        )
         if result.row_count == 0:
             return None
         columns = result.column_names

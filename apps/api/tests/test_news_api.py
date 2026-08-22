@@ -6,7 +6,7 @@ Covers with a fake database session:
 - service layer: list (published + visibility window + category filter),
   featured (5 + carousel grouping), detail (published / hidden / preview),
   admin CRUD (is_published <-> status double-write), reorder
-- HTTP layer: RBAC (401 unauthenticated / 403 viewer / 200 researcher+),
+- HTTP layer: RBAC (401 unauthenticated / 403 non-editor / 200 content editor),
   endpoint wiring for every news route
 """
 
@@ -735,8 +735,24 @@ class TestAdminRBAC:
         assert r.status_code == 403
         assert r.json()["error"]["code"] == "forbidden"
 
-    async def test_admin_researcher_create_201(self, api_client, api_app):
+    async def test_admin_researcher_create_403(self, api_client, api_app):
         user = _make_user(RoleName.RESEARCHER)
+        api_app.state.fake_session.user = user
+        r = await api_client.post(
+            "/api/v1/admin/news",
+            json={
+                "title_en": "Hello",
+                "content_en": "Body",
+                "slug": "hello",
+                "status": "published",
+            },
+            headers=_auth_header(user),
+        )
+        assert r.status_code == 403
+        assert r.json()["error"]["code"] == "forbidden"
+
+    async def test_admin_content_editor_create_201(self, api_client, api_app):
+        user = _make_user(RoleName.CONTENT_EDITOR)
         api_app.state.fake_session.user = user
         r = await api_client.post(
             "/api/v1/admin/news",
@@ -754,8 +770,8 @@ class TestAdminRBAC:
         assert body["status"] == "published"
         assert body["is_published"] is True
 
-    async def test_admin_researcher_update_200(self, api_client, api_app):
-        user = _make_user(RoleName.RESEARCHER)
+    async def test_admin_content_editor_update_200(self, api_client, api_app):
+        user = _make_user(RoleName.CONTENT_EDITOR)
         api_app.state.fake_session.user = user
         api_app.state.fake_session.articles = [_make_article(article_id=3, slug="a")]
         r = await api_client.put(
@@ -773,7 +789,7 @@ class TestAdminRBAC:
         form can re-fill the scheduled visibility window."""
         from datetime import UTC, datetime
 
-        user = _make_user(RoleName.RESEARCHER)
+        user = _make_user(RoleName.CONTENT_EDITOR)
         api_app.state.fake_session.user = user
         window = datetime(2026, 1, 1, tzinfo=UTC)
         api_app.state.fake_session.articles = [
@@ -795,7 +811,7 @@ class TestAdminRBAC:
         self, api_client, api_app
     ):
         """D4: PUT with explicit null clears nullable fields (HTTP round-trip)."""
-        user = _make_user(RoleName.RESEARCHER)
+        user = _make_user(RoleName.CONTENT_EDITOR)
         api_app.state.fake_session.user = user
         article = _make_article(article_id=3, slug="a")
         article.cover_url = "https://cdn.example/x.jpg"
@@ -811,8 +827,8 @@ class TestAdminRBAC:
         assert body["cover_url"] is None
         assert body["category"] is None
 
-    async def test_admin_researcher_delete_204(self, api_client, api_app):
-        user = _make_user(RoleName.RESEARCHER)
+    async def test_admin_content_editor_delete_204(self, api_client, api_app):
+        user = _make_user(RoleName.CONTENT_EDITOR)
         api_app.state.fake_session.user = user
         api_app.state.fake_session.articles = [_make_article(article_id=3, slug="a")]
         r = await api_client.delete(
@@ -820,8 +836,8 @@ class TestAdminRBAC:
         )
         assert r.status_code == 204
 
-    async def test_admin_researcher_reorder_200(self, api_client, api_app):
-        user = _make_user(RoleName.RESEARCHER)
+    async def test_admin_content_editor_reorder_200(self, api_client, api_app):
+        user = _make_user(RoleName.CONTENT_EDITOR)
         api_app.state.fake_session.user = user
         api_app.state.fake_session.articles = [
             _make_article(article_id=1, slug="a"),
@@ -841,7 +857,7 @@ class TestAdminRBAC:
 
         from app.core.config import get_settings
 
-        user = _make_user(RoleName.RESEARCHER)
+        user = _make_user(RoleName.CONTENT_EDITOR)
         api_app.state.fake_session.user = user
         api_app.state.fake_session.articles = [
             _make_article(article_id=4, slug="draft-post", status="draft")
@@ -862,7 +878,7 @@ class TestAdminRBAC:
         assert body["preview"].count(".") == 0
 
     async def test_admin_preview_token_404_unknown(self, api_client, api_app):
-        user = _make_user(RoleName.RESEARCHER)
+        user = _make_user(RoleName.CONTENT_EDITOR)
         api_app.state.fake_session.user = user
         r = await api_client.get(
             "/api/v1/admin/news/404/preview-token", headers=_auth_header(user)
@@ -871,8 +887,8 @@ class TestAdminRBAC:
 
     # -- admin list endpoint (all statuses) --
 
-    async def test_admin_list_researcher_200(self, api_client, api_app):
-        user = _make_user(RoleName.RESEARCHER)
+    async def test_admin_list_content_editor_200(self, api_client, api_app):
+        user = _make_user(RoleName.CONTENT_EDITOR)
         api_app.state.fake_session.user = user
         api_app.state.fake_session.articles = [
             _make_article(article_id=1, slug="pub", status="published"),
@@ -900,7 +916,7 @@ class TestAdminRBAC:
         assert r.status_code == 401
 
     async def test_admin_list_filter_draft(self, api_client, api_app):
-        user = _make_user(RoleName.RESEARCHER)
+        user = _make_user(RoleName.CONTENT_EDITOR)
         api_app.state.fake_session.user = user
         api_app.state.fake_session.articles = [
             _make_article(article_id=1, slug="pub", status="published"),
@@ -924,7 +940,7 @@ class TestAdminRBAC:
         assert "draft" in statuses
 
     async def test_admin_list_pagination(self, api_client, api_app):
-        user = _make_user(RoleName.RESEARCHER)
+        user = _make_user(RoleName.CONTENT_EDITOR)
         api_app.state.fake_session.user = user
         api_app.state.fake_session.articles = [
             _make_article(article_id=i, slug=f"a{i}", status="published")
@@ -946,7 +962,7 @@ class TestAdminRBAC:
         """D4: the admin list endpoint accepts the category + search filters
         the ProTable sends (backend service already supports them; verify
         the HTTP wiring accepts the params without error)."""
-        user = _make_user(RoleName.RESEARCHER)
+        user = _make_user(RoleName.CONTENT_EDITOR)
         api_app.state.fake_session.user = user
         api_app.state.fake_session.articles = [
             _make_article(article_id=1, slug="soybean-trial", category="news"),

@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import base64
-import json
-
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,19 +17,56 @@ from ..schemas.genomic import (
     GeneResponse,
     TranscriptResponse,
 )
+from .release_context import (
+    ReleaseContext,
+    decode_bound_cursor,
+    encode_bound_cursor,
+)
 
 
-def encode_cursor(gene_id: str) -> str:
-    """Encode a gene-id sort key into a base64 cursor."""
-    payload = json.dumps({"g": gene_id}, separators=(",", ":"))
-    return base64.urlsafe_b64encode(payload.encode("utf-8")).decode("ascii")
+def _cursor_filters(params: GeneListParams) -> dict[str, str]:
+    return params.model_dump(
+        mode="json",
+        exclude={"cursor", "limit", "page", "page_size"},
+        exclude_none=True,
+    )
 
 
-def decode_cursor(cursor: str) -> str:
-    """Decode a base64 cursor back into the gene-id sort key."""
+def encode_cursor(
+    gene_id: str,
+    *,
+    release_context: ReleaseContext,
+    params: GeneListParams,
+) -> str:
+    """Encode a release/filter-bound gene-id keyset cursor."""
+    return encode_bound_cursor(
+        kind="gene",
+        sort_key={"g": gene_id},
+        release_context=release_context,
+        filters=_cursor_filters(params),
+    )
+
+
+def decode_cursor(
+    cursor: str,
+    *,
+    release_context: ReleaseContext,
+    params: GeneListParams,
+) -> str:
+    """Verify and decode a release/filter-bound gene-id keyset cursor."""
     try:
-        payload = json.loads(base64.urlsafe_b64decode(cursor.encode("ascii")))
-        return str(payload["g"])
+        payload = decode_bound_cursor(
+            cursor,
+            kind="gene",
+            release_context=release_context,
+            filters=_cursor_filters(params),
+        )
+        gene_id = payload["g"]
+        if not isinstance(gene_id, str) or not gene_id:
+            raise ValueError("gene id must be a non-empty string")
+        return gene_id
+    except ValidationError:
+        raise
     except Exception as exc:
         raise ValidationError(f"Invalid cursor: {exc}") from exc
 
@@ -41,10 +75,18 @@ class GeneService:
     """Gene query service backed by PostgreSQL."""
 
     async def list_genes(
-        self, db: AsyncSession, params: GeneListParams
+        self,
+        db: AsyncSession,
+        params: GeneListParams,
+        *,
+        release_context: ReleaseContext,
     ) -> GeneListResponse:
         """Return a cursor-paginated list of genes."""
-        stmt = select(Gene)
+        stmt = (
+            select(Gene)
+            .join(Assembly, Gene.assembly_id == Assembly.id)
+            .where(Assembly.release_id == release_context.release_id)
+        )
 
         if params.assembly_id is not None:
             stmt = stmt.where(Gene.assembly_id == int(params.assembly_id))
@@ -78,7 +120,11 @@ class GeneService:
 
         # Keyset pagination on gene id (string, ascending).
         if params.cursor:
-            last_id = decode_cursor(params.cursor)
+            last_id = decode_cursor(
+                params.cursor,
+                release_context=release_context,
+                params=params,
+            )
             stmt = stmt.where(Gene.id > last_id)
 
         stmt = stmt.order_by(Gene.id.asc())
@@ -98,7 +144,15 @@ class GeneService:
             genes = genes[: params.limit]
 
         items = [self._gene_to_response(g) for g in genes]
-        next_cursor = encode_cursor(genes[-1].id) if has_more and genes else None
+        next_cursor = (
+            encode_cursor(
+                genes[-1].id,
+                release_context=release_context,
+                params=params,
+            )
+            if has_more and genes
+            else None
+        )
 
         page = params.page or 1
         return GeneListResponse(
@@ -111,9 +165,22 @@ class GeneService:
             total_pages=(total + page_size - 1) // page_size if total else 0,
         )
 
-    async def get_gene(self, db: AsyncSession, gene_id: str) -> GeneDetail:
-        """Fetch a single gene with transcripts and aliases."""
-        stmt = select(Gene).where(Gene.id == gene_id)
+    async def get_gene(
+        self,
+        db: AsyncSession,
+        gene_id: str,
+        *,
+        release_context: ReleaseContext,
+    ) -> GeneDetail:
+        """Fetch one gene without crossing the selected data release."""
+        stmt = (
+            select(Gene)
+            .join(Assembly, Gene.assembly_id == Assembly.id)
+            .where(
+                Gene.id == gene_id,
+                Assembly.release_id == release_context.release_id,
+            )
+        )
         result = await db.execute(stmt)
         gene = result.scalar_one_or_none()
         if gene is None:

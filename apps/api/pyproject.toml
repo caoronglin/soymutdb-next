@@ -9,6 +9,7 @@ description = "SoyMutDB REST API — FastAPI application for a multi-species mut
 requires-python = ">=3.14"
 license = { text = "MIT" }
 dependencies = [
+    "soymutdb-jobs==0.1.0",
     "fastapi==0.137.1",
     "uvicorn[standard]>=0.32.0",
     "pydantic>=2.10.0",
@@ -35,6 +36,9 @@ dependencies = [
     "Jinja2>=3.1.0",
     "aiohttp>=3.10.0",
 ]
+
+[tool.uv.sources]
+soymutdb-jobs = { path = "../../packages/jobs-py" }
 
 [project.optional-dependencies]
 dev = [

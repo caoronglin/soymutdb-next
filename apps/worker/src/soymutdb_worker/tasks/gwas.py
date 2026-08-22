@@ -43,6 +43,8 @@ import resource
 import shutil
 import subprocess
 import tempfile
+import uuid
+from contextlib import ExitStack
 from pathlib import Path
 
 import numpy as np
@@ -136,12 +138,27 @@ def validate_method(method: str) -> str:
     return method
 
 
-def validate_input_key(key: str) -> str:
-    """Validate an input object key (``gwas/`` namespace, no traversal)."""
-    if not key or not key.startswith("gwas/"):
+def validate_input_key(key: str, owner_id: str | uuid.UUID) -> str:
+    """Validate an owner-bound GWAS input object key."""
+    if not key or key.startswith("/") or not key.startswith("gwas/"):
         raise ValueError(f"Invalid GWAS input key: {key!r}")
-    if key.startswith("/") or "//" in key or ".." in key.split("/"):
+    if "//" in key:
         raise ValueError(f"Invalid GWAS input key: {key!r}")
+    segments = key.split("/")
+    if any(segment in {"", ".", ".."} for segment in segments):
+        raise ValueError(f"Invalid GWAS input key: {key!r}")
+    if len(segments) != 5 or segments[3] != "input":
+        raise ValueError(
+            "Invalid GWAS input key shape; expected "
+            "gwas/{owner_id}/{session_id}/input/{filename}"
+        )
+    if segments[1] != str(owner_id):
+        raise ValueError("GWAS input key does not belong to payload owner")
+    try:
+        uuid.UUID(segments[1])
+        uuid.UUID(segments[2])
+    except ValueError as exc:
+        raise ValueError("GWAS input owner and session must be UUIDs") from exc
     return key
 
 
@@ -324,18 +341,17 @@ def parse_assoc_file(path: Path) -> list[dict]:
     rows: list[dict] = []
     with open(path) as fh:
         for raw_line in fh:
-            line = raw_line.strip()
-            if not line or line.startswith("#") or line.startswith("SNP") and not header_idx:
-                if line and not header_idx and not line.startswith("#"):
-                    cols = [c.strip().lower() for c in line.split("\t") if c.strip()]
-                    header_idx = {name: idx for idx, name in enumerate(cols)}
+            line = raw_line.rstrip("\r\n")
+            if not line.strip() or line.lstrip().startswith("#"):
                 continue
             if not header_idx:
-                cols = [c.strip().lower() for c in line.split("\t") if c.strip()]
-                header_idx = {name: idx for idx, name in enumerate(cols)}
+                cols = [column.strip().lower() for column in line.split("\t")]
+                header_idx = {
+                    name: idx for idx, name in enumerate(cols) if name
+                }
                 continue
-            fields = [f.strip() for f in line.split("\t") if f.strip()]
-            if not fields:
+            fields = [field.strip() for field in line.split("\t")]
+            if not any(fields):
                 continue
             parsed = _parse_assoc_row(fields, header_idx)
             if parsed is not None:
@@ -634,6 +650,7 @@ def run_gwas(
     payload: dict | None = None,
     *,
     job_id: str | None = None,
+    owner_id: str | None = None,
     method: str | None = None,
     object_type: str = "snp",
     phenotype_object_key: str | None = None,
@@ -667,6 +684,9 @@ def run_gwas(
         job_id = str(job_payload.job_id)
         idempotency_key = job_payload.idempotency_key
         p = job_payload.payload
+        owner_id = p.get("owner_id")
+        if not owner_id:
+            raise ValueError("GWAS payload requires owner_id")
         method = str(p["method"])
         # ``object_type`` is part of the payload contract but does not change
         # execution (format validation happens at parse time).
@@ -678,6 +698,8 @@ def run_gwas(
     else:
         if job_id is None:
             raise TypeError("run_gwas requires a JobPayload or a legacy job_id kwarg")
+        if owner_id is None:
+            raise TypeError("legacy dispatch requires owner_id")
         if method is None or phenotype_object_key is None:
             raise TypeError("legacy dispatch requires method and phenotype_object_key")
         idempotency_key = f"gwas:{job_id}"
@@ -692,10 +714,10 @@ def run_gwas(
 
     # Validate inputs before doing any work
     validate_method(method)
-    validate_input_key(phenotype_object_key)
+    validate_input_key(phenotype_object_key, owner_id)
     for key in (genotype_object_key, kinship_object_key, covariate_object_key):
         if key is not None:
-            validate_input_key(key)
+            validate_input_key(key, owner_id)
     params = params or {}
     num_threads = int(params.get("num_threads", 1) or 1)
     if not (1 <= num_threads <= 64):
@@ -711,7 +733,7 @@ def run_gwas(
     self.update_state(state="STARTED", meta={"progress": 5})
 
     try:
-        with tempfile.TemporaryDirectory() as tmpdir:
+        with tempfile.TemporaryDirectory() as tmpdir, ExitStack() as downloads:
             tmpdir_path = Path(tmpdir)
 
             # ── Download inputs (with size caps) ─────────────────────────
@@ -722,8 +744,12 @@ def run_gwas(
                         f"Input file {key!r} exceeds the {GWAS_MAX_INPUT_SIZE}-byte limit"
                     )
                 local = tmpdir_path / Path(key).name
-                download_file(f"{GWAS_S3_BUCKET}/{key}", local_path=str(local))
-                return local
+                downloaded = downloads.enter_context(
+                    download_file(
+                        f"{GWAS_S3_BUCKET}/{key}", local_path=str(local)
+                    )
+                )
+                return Path(downloaded)
 
             phenotype_path = _download(phenotype_object_key)
             self.update_state(state="STARTED", meta={"progress": 15})

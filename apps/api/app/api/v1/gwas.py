@@ -41,13 +41,18 @@ _RESEARCHER_OR_HIGHER = [Depends(require_role(RoleName.RESEARCHER))]
     response_model=GwasUploadResponse,
     dependencies=_RESEARCHER_OR_HIGHER,
 )
-async def create_upload(request: GwasUploadRequest) -> GwasUploadResponse:
+async def create_upload(
+    request: GwasUploadRequest,
+    current_user: User = Depends(get_current_user),
+) -> GwasUploadResponse:
     """Request a pre-signed upload URL for a GWAS input file.
 
     Returns a PUT URL valid for 1 hour plus the object key the client must
     send back at submit time.  Nothing is persisted yet.
     """
-    return GwasUploadResponse(**service.create_upload(request.filename))
+    return GwasUploadResponse(
+        **service.create_upload(current_user.id, request.filename)
+    )
 
 
 @router.post(

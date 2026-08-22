@@ -21,9 +21,14 @@ depends_on: str | None = None
 
 def upgrade() -> None:
     """Create ``blast_hits`` and extend ``blast_jobs`` with result stats."""
-    op.add_column(
-        "blast_jobs",
-        sa.Column("hit_count", sa.Integer(), server_default="0", nullable=False),
+    # ``0001`` already owns this column. Keep the operation compatible with
+    # databases whose historical ``0001`` did not create it, without failing
+    # or replacing the column for canonical ``0001`` -> ``0008`` upgrades.
+    op.execute(
+        sa.text(
+            "ALTER TABLE blast_jobs "
+            "ADD COLUMN IF NOT EXISTS hit_count INTEGER DEFAULT 0 NOT NULL"
+        )
     )
     op.add_column(
         "blast_jobs",
@@ -76,4 +81,3 @@ def downgrade() -> None:
     op.drop_index("ix_blast_hits_job_id", table_name="blast_hits")
     op.drop_table("blast_hits")
     op.drop_column("blast_jobs", "query_len")
-    op.drop_column("blast_jobs", "hit_count")

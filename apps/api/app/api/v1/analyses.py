@@ -4,9 +4,10 @@ Every endpoint requires the researcher role or higher (hierarchical RBAC
 includes administrators).  Unauthenticated callers get 401, lower roles 403 –
 both through the unified error envelope.
 
-The upload flow is stateless: a pre-signed PUT URL plus the object key are
-returned immediately (no job row yet); the job is created only when the
-client submits it with the returned object keys.
+The upload flow is stateless: each pre-signed object key carries the owner's
+user UUID and an upload-session UUID, but no job row exists yet.  A job is
+created only when the client submits one or more returned object keys;
+upload-session identity and job identity are intentionally separate.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.config import get_settings
 from ...core.database import get_db
+from ...core.exceptions import ValidationError
 from ...core.security import RoleName
 from ...models.analysis_job import AnalysisType as ModelAnalysisType
 from ...models.auth import User
@@ -35,7 +37,9 @@ from ...services.analyses_service import AnalysesService
 from ...services.presign import (
     UPLOAD_EXPIRES_IN,
     build_upload_key,
-    generate_upload_url,
+    generate_upload_post,
+    validate_analysis_input_key,
+    validate_uploaded_analysis_object,
 )
 from .deps import get_current_user, get_user_roles, require_role
 
@@ -71,17 +75,30 @@ async def list_analysis_jobs(
     response_model=AnalysesUploadResponse,
     dependencies=_RESEARCHER_OR_HIGHER,
 )
-async def create_upload(request: AnalysesUploadRequest) -> AnalysesUploadResponse:
+async def create_upload(
+    request: AnalysesUploadRequest,
+    current_user: User = Depends(get_current_user),
+) -> AnalysesUploadResponse:
     """Request a pre-signed upload URL for an analysis input file.
 
-    Returns a PUT URL valid for 1 hour plus the object key the client must
+    Returns a POST action valid for 1 hour plus the object key the client must
     send back at submit time.  Nothing is persisted yet.
     """
-    job_id = uuid.uuid4()
-    object_key = build_upload_key(job_id, request.filename)
-    upload_url = generate_upload_url(object_key, expires_in=UPLOAD_EXPIRES_IN)
+    upload_session_id = uuid.uuid4()
+    object_key = build_upload_key(
+        current_user.id, upload_session_id, request.filename
+    )
+    content_type = request.content_type or "application/octet-stream"
+    upload = generate_upload_post(
+        object_key,
+        size=request.size,
+        content_type=content_type,
+        checksum_sha256=request.checksum_sha256,
+        expires_in=UPLOAD_EXPIRES_IN,
+    )
     return AnalysesUploadResponse(
-        upload_url=upload_url,
+        upload_url=upload.url,
+        upload_fields=upload.fields,
         object_key=object_key,
         expires_in=UPLOAD_EXPIRES_IN,
     )
@@ -101,9 +118,15 @@ async def submit_analysis(
 ) -> AnalysesSubmitResponse:
     """Submit an analysis job for the uploaded objects.
 
-    Validates the ``analyses/`` key prefix and the parameter whitelist, then
-    creates the job row + outbox event in one transaction (queued).
+    Validates that every input key belongs to the caller, checks the parameter
+    whitelist, then creates the job row + outbox event in one transaction.
     """
+    for object_key in request.input_objects:
+        try:
+            validate_analysis_input_key(object_key, current_user.id)
+            validate_uploaded_analysis_object(object_key)
+        except ValueError as exc:
+            raise ValidationError(str(exc)) from exc
     return await service.submit_job(
         db, current_user.id, ModelAnalysisType(analysis_type.value), request
     )

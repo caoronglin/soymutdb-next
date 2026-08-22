@@ -1,22 +1,29 @@
-"""Small, idempotent adapters for the seven published data-set kinds."""
+"""Import adapters for published data-set kinds.
+
+Adapters without a persistence writer remain registered so queued work fails
+with an explicit, auditable error instead of being reported as successfully
+inserted.
+"""
 
 from __future__ import annotations
 
-import csv
 import hashlib
-import shutil
-import subprocess
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
+from soymutdb_worker.config import get_setting
 from soymutdb_worker.shared import _ensure_jobs_package
 
 _ensure_jobs_package()
 
-from soymutdb_jobs.module_schema import iter_module_rows, validate_module_file  # noqa: E402
+from soymutdb_jobs.module_schema import (  # noqa: E402
+    iter_module_rows_from_stream,
+    validate_module_file_streaming_from_stream,
+)
 
 ProgressCallback = Callable[..., Any]
 
@@ -52,6 +59,10 @@ class DataAdapter(Protocol):
     ) -> AdapterResult: ...
 
 
+class UnsupportedImportError(RuntimeError):
+    """Raised when an import cannot satisfy the pipeline's safety contract."""
+
+
 def _path(context: ImportContext) -> Path:
     path = Path(context.file_key)
     if not path.exists():
@@ -76,26 +87,9 @@ class FastaAdapter(_TextAdapter):
     kind = "fasta"
 
     def run(self, context: ImportContext, *, progress=None) -> AdapterResult:
-        records = 0
-        lengths: dict[str, int] = {}
-        current = None
-        for line in _path(context).read_text().splitlines():
-            if line.startswith(">"):
-                current = line[1:].split()[0]
-                records += 1
-                lengths[current] = 0
-            elif current:
-                lengths[current] += len(line.strip())
-        index = str(_path(context)) + ".fai"
-        Path(index).write_text(
-            "\n".join(f"{name}\t{length}" for name, length in lengths.items()) + "\n"
-        )
-        _progress(progress, processed=records, progress=100)
-        return AdapterResult(
-            records,
-            records,
-            0,
-            {"assembly": context.assembly, "chromosomes": lengths, "index": index},
+        raise UnsupportedImportError(
+            "fasta import is disabled: durable persistence writer, artifact upload, "
+            "and release registration are not implemented"
         )
 
 
@@ -103,23 +97,10 @@ class Gff3Adapter(_TextAdapter):
     kind = "gff3"
 
     def run(self, context: ImportContext, *, progress=None) -> AdapterResult:
-        counts = {"genes": 0, "transcripts": 0, "exons": 0, "aliases": 0}
-        with _path(context).open() as handle:
-            for row in csv.reader(handle, delimiter="\t"):
-                if len(row) < 9 or not row or row[0].startswith("#"):
-                    continue
-                feature = row[2].lower()
-                if feature == "gene":
-                    counts["genes"] += 1
-                elif feature in {"mrna", "transcript"}:
-                    counts["transcripts"] += 1
-                elif feature == "exon":
-                    counts["exons"] += 1
-                if "alias=" in row[8].lower():
-                    counts["aliases"] += 1
-        total = sum(counts.values())
-        _progress(progress, processed=total, progress=100)
-        return AdapterResult(total, total, 0, {"assembly": context.assembly, **counts})
+        raise UnsupportedImportError(
+            "gff3 import is disabled: durable persistence writer and release "
+            "registration are not implemented"
+        )
 
 
 class VcfAdapter:
@@ -129,86 +110,113 @@ class VcfAdapter:
         return {"file": context.file_key}
 
     def run(self, context, *, progress=None):
-        from . import ingest
-
-        value = ingest.import_vcf.run(context.release_id, context.file_key, context.assembly or "")
-        result = AdapterResult(
-            value.get("total_variants", 0),
-            value.get("total_inserted", 0),
-            value.get("skipped", 0),
-            value,
+        raise UnsupportedImportError(
+            "vcf import is disabled: durable persistence requires an idempotent "
+            "staging writer and atomic release finalize"
         )
-        _progress(progress, processed=result.records, progress=100)
-        return result
 
 
 class BlastDbAdapter(_TextAdapter):
     kind = "blast_db"
 
     def run(self, context, *, progress=None):
-        executable = shutil.which("makeblastdb")
-        if not executable:
-            raise RuntimeError("makeblastdb is required for blast_db imports")
-        output = str(_path(context).with_suffix(""))
-        subprocess.run(
-            [executable, "-in", context.file_key, "-dbtype", "nucl", "-out", output],
-            check=True,
+        raise UnsupportedImportError(
+            "blast_db import is disabled: durable persistence requires artifact "
+            "upload and database registration"
         )
-        evidence = {"database": output, "tool": "makeblastdb"}
-        _progress(progress, processed=1, progress=100)
-        return AdapterResult(1, 1, 0, evidence)
 
 
-class CsvUpsertAdapter(_TextAdapter):
+class UnsupportedCsvAdapter(_TextAdapter):
+    """Fail closed until a real business-key upsert writer exists."""
+
     def __init__(self, kind: str):
         self.kind = kind
 
     def run(self, context, *, progress=None):
-        with _path(context).open(newline="") as handle:
-            rows = list(csv.DictReader(handle))
-        _progress(progress, processed=len(rows), progress=100)
-        return AdapterResult(
-            len(rows),
-            len(rows),
-            0,
-            {"identity": "business-key", "rows": len(rows), "on_conflict": "update"},
+        raise UnsupportedImportError(
+            f"{self.kind} import is disabled: no persistence writer is implemented; "
+            "refusing to report parsed CSV rows as inserted"
         )
 
 
-def _read_module_bytes(context: ImportContext) -> bytes:
-    """Read module TSV bytes from a local path or S3 object."""
+@contextmanager
+def _open_module_source(context: ImportContext) -> Iterator[Any]:
+    """Open a module source without downloading or reading it all at once."""
     path = Path(context.file_key)
     if path.exists():
-        return path.read_bytes()
-    from soymutdb_worker.utils.s3 import download_file
+        with path.open("rb") as source:
+            yield source
+        return
 
-    with download_file(context.file_key) as local_path:
-        return Path(local_path).read_bytes()
+    from soymutdb_worker.utils.s3 import stream_s3_file
+
+    source_key = context.file_key
+    # Browser-direct multipart uploads store bare ``data/<dataset>/...``
+    # object keys in the configured analyses bucket. Preserve explicit URIs
+    # and legacy ``bucket/key`` values so only this platform-owned namespace
+    # receives the configured-bucket prefix.
+    if source_key.startswith("data/"):
+        analyses_bucket = get_setting("S3_ANALYSES_BUCKET", "analyses")
+        source_key = f"{analyses_bucket}/{source_key}"
+
+    with stream_s3_file(source_key) as source:
+        yield source
+
+
+def _module_release_id(value: str) -> int:
+    """Return a valid module release id before beginning a database write."""
+    try:
+        release_id = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("release_id must be a positive integer for module_tsv imports") from exc
+    if release_id <= 0:
+        raise ValueError("release_id must be a positive integer for module_tsv imports")
+    return release_id
+
+
+def _validate_module_data_object_key(context: ImportContext) -> None:
+    """Fail closed for browser-upload keys carried by legacy queue messages.
+
+    New commands are checked by the API. The worker repeats the narrow check
+    because an already-enqueued task can outlive an API deployment or state
+    transition. Explicit ``s3://`` and legacy bucket/key sources are not
+    platform-owned browser keys and keep their existing advanced semantics.
+    """
+    if not context.file_key.startswith("data/"):
+        return
+
+    segments = context.file_key.split("/")
+    if any(segment in {"", ".", ".."} for segment in segments):
+        raise ValueError("data object key must not contain traversal segments")
+    if not context.file_key.startswith(f"data/{context.data_set_id}/"):
+        raise ValueError("data object key does not belong to this data set")
 
 
 class ModuleTsvAdapter(_TextAdapter):
     kind = "module_tsv"
 
     def validate(self, context: ImportContext) -> dict[str, Any]:
-        data = _read_module_bytes(context)
-        result = self._validate_bytes(context, data)
+        _validate_module_data_object_key(context)
+        filename = context.filename or str(Path(context.file_key).name)
+        with _open_module_source(context) as source:
+            result = validate_module_file_streaming_from_stream(
+                context.module_key or "",
+                filename,
+                source,
+            )
         if not result.ok:
             raise ValueError(f"TSV validation failed: {result.first_error()}")
         return {
             "module_key": context.module_key,
-            "rows": len(result.rows),
+            "rows": result.row_count,
             "checksum": context.checksum,
         }
-
-    @staticmethod
-    def _validate_bytes(context: ImportContext, data: bytes):
-        rl_filename = context.filename or str(Path(context.file_key).name)
-        return validate_module_file(context.module_key or "", rl_filename, data)
 
     def run(self, context: ImportContext, *, progress=None) -> AdapterResult:
         if not context.module_key:
             raise ValueError("module_key is required for module_tsv imports")
-        data = _read_module_bytes(context)
+        release_id = _module_release_id(context.release_id)
+        _validate_module_data_object_key(context)
         filename = context.filename or str(Path(context.file_key).name)
         batch_size = 10_000
         rows_seen = 0
@@ -217,9 +225,9 @@ class ModuleTsvAdapter(_TextAdapter):
         diagnostics: list[str] = []
         batch: list[dict[str, Any]] = []
 
-        from sqlalchemy import delete
+        from sqlalchemy import delete, select
 
-        from soymutdb_worker.tables import data_sets, module_data_rows
+        from soymutdb_worker.tables import data_sets, module_data_rows, releases
         from soymutdb_worker.utils.db import get_db
 
         def flush_batch(session, values: list[dict[str, Any]]) -> int:
@@ -234,7 +242,7 @@ class ModuleTsvAdapter(_TextAdapter):
                     {
                         "id": uuid.uuid4(),
                         "module_key": context.module_key,
-                        "release_id": int(context.release_id),
+                        "release_id": release_id,
                         "row_key": "\x1f".join(key_parts),
                         "data": row,
                     }
@@ -245,26 +253,52 @@ class ModuleTsvAdapter(_TextAdapter):
         with get_db() as session:
             # A single transaction protects the public view: any validation
             # error raises below and rolls back deletes/inserts together.
+            release_status = session.execute(
+                select(releases.c.status)
+                .where(releases.c.id == release_id)
+                .with_for_update()
+            ).scalar_one_or_none()
+            if getattr(release_status, "value", release_status) != "draft":
+                raise ValueError("module_tsv imports require a draft release")
+            data_set_binding = session.execute(
+                select(data_sets.c.type, data_sets.c.release_id)
+                .where(data_sets.c.id == context.data_set_id)
+                .with_for_update()
+            ).one_or_none()
+            if data_set_binding is None:
+                raise ValueError("module_tsv import data set does not exist")
+            data_set_type, data_set_release_id = data_set_binding
+            if data_set_type != "module_tsv":
+                raise ValueError("module_tsv import requires a module_tsv data set")
+            if data_set_release_id != release_id:
+                raise ValueError("module_tsv import data set is not bound to this release")
             session.execute(
                 delete(module_data_rows).where(
                     module_data_rows.c.module_key == context.module_key,
-                    module_data_rows.c.release_id == int(context.release_id),
+                    module_data_rows.c.release_id == release_id,
                 )
             )
-            for typed, error in iter_module_rows(context.module_key, filename, data):
-                if error is not None:
-                    skipped += 1
-                    if len(diagnostics) < 200:
-                        diagnostics.append(f"row {error.row or '?'}: {error.code}: {error.message}")
-                    continue
-                if typed is None:
-                    continue
-                rows_seen += 1
-                batch.append(typed)
-                if len(batch) >= batch_size:
-                    inserted += flush_batch(session, batch)
-                    batch.clear()
-                    _progress(progress, processed=rows_seen, total=rows_seen, progress=0)
+            with _open_module_source(context) as source:
+                for typed, error in iter_module_rows_from_stream(
+                    context.module_key,
+                    filename,
+                    source,
+                ):
+                    if error is not None:
+                        skipped += 1
+                        if len(diagnostics) < 200:
+                            diagnostics.append(
+                                f"row {error.row or '?'}: {error.code}: {error.message}"
+                            )
+                        continue
+                    if typed is None:
+                        continue
+                    rows_seen += 1
+                    batch.append(typed)
+                    if len(batch) >= batch_size:
+                        inserted += flush_batch(session, batch)
+                        batch.clear()
+                        _progress(progress, processed=rows_seen, total=rows_seen, progress=0)
             inserted += flush_batch(session, batch)
 
             if diagnostics:
@@ -290,7 +324,7 @@ class ModuleTsvAdapter(_TextAdapter):
                     },
                     manifest={
                         "module_key": context.module_key,
-                        "release_id": context.release_id,
+                        "release_id": release_id,
                         "filename": filename,
                         "checksum": context.checksum,
                         "row_count": rows_seen,
@@ -330,9 +364,9 @@ _ADAPTERS: dict[str, DataAdapter] = {
     "gff3": Gff3Adapter(),
     "vcf": VcfAdapter(),
     "blast_db": BlastDbAdapter(),
-    "seed_data": CsvUpsertAdapter("seed_data"),
-    "expression_csv": CsvUpsertAdapter("expression_csv"),
-    "homolog_csv": CsvUpsertAdapter("homolog_csv"),
+    "seed_data": UnsupportedCsvAdapter("seed_data"),
+    "expression_csv": UnsupportedCsvAdapter("expression_csv"),
+    "homolog_csv": UnsupportedCsvAdapter("homolog_csv"),
     "module_tsv": ModuleTsvAdapter(),
 }
 
@@ -348,4 +382,10 @@ def registered_kinds() -> tuple[str, ...]:
     return tuple(sorted(_ADAPTERS))
 
 
-__all__ = ["AdapterResult", "ImportContext", "get_adapter", "registered_kinds"]
+__all__ = [
+    "AdapterResult",
+    "ImportContext",
+    "UnsupportedImportError",
+    "get_adapter",
+    "registered_kinds",
+]

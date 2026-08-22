@@ -102,17 +102,28 @@ def _make_user(role: RoleName = RoleName.RESEARCHER) -> User:
     )
 
 
+def _analysis_input_key(
+    user_id: uuid.UUID,
+    filename: str = "abc.fq.gz",
+    *,
+    upload_session_id: uuid.UUID | None = None,
+) -> str:
+    session_id = upload_session_id or uuid.uuid4()
+    return f"analyses/{user_id}/{session_id}/input/{filename}"
+
+
 def _make_job(
     *,
     status: AnalysisJobStatus = AnalysisJobStatus.QUEUED,
     user_id: uuid.UUID | None = None,
 ) -> AnalysisJob:
     now = datetime.now(UTC)
+    owner_id = user_id or uuid.uuid4()
     return AnalysisJob(
         id=uuid.uuid4(),
-        user_id=user_id or uuid.uuid4(),
+        user_id=owner_id,
         analysis_type=AnalysisType.FASTP.value,
-        input_objects=[f"analyses/{uuid.uuid4()}/input/abc.fq.gz"],
+        input_objects=[_analysis_input_key(owner_id)],
         params={"thread": 4},
         status=status,
         result_summary=None,
@@ -127,6 +138,178 @@ def _make_job(
 
 
 class TestPresign:
+    def test_generate_upload_post_binds_size_mime_metadata_and_checksum(self):
+        from unittest.mock import MagicMock, patch
+
+        from app.services.presign import generate_upload_post
+
+        s3 = MagicMock()
+        s3.generate_presigned_post.return_value = {
+            "url": "https://minio/analyses",
+            "fields": {"policy": "signed"},
+        }
+        with patch("app.services.presign.get_s3_client", return_value=s3):
+            result = generate_upload_post(
+                "analyses/user/session/input/a.fq.gz",
+                size=12345,
+                content_type="application/gzip",
+                checksum_sha256="61" * 32,
+            )
+
+        assert result.url == "https://minio/analyses"
+        assert result.fields == {"policy": "signed"}
+        call = s3.generate_presigned_post.call_args.kwargs
+        assert call["Fields"] == {
+            "Content-Type": "application/gzip",
+            "x-amz-meta-declared-size": "12345",
+            "x-amz-meta-declared-content-type": "application/gzip",
+            "x-amz-meta-declared-sha256": "61" * 32,
+            "x-amz-checksum-algorithm": "SHA256",
+            "x-amz-checksum-sha256": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=",
+        }
+        assert ["content-length-range", 12345, 12345] in call["Conditions"]
+        assert {"Content-Type": "application/gzip"} in call["Conditions"]
+        assert {"x-amz-checksum-algorithm": "SHA256"} in call["Conditions"]
+
+    def test_upload_request_requires_sha256(self):
+        from pydantic import ValidationError as PydanticValidationError
+
+        from app.schemas.analyses import AnalysesUploadRequest
+
+        with pytest.raises(PydanticValidationError, match="checksum_sha256"):
+            AnalysesUploadRequest(
+                filename="sample.fq.gz",
+                size=10,
+                content_type="application/gzip",
+            )
+
+    def test_validate_uploaded_object_rejects_mismatched_declared_size(self):
+        from unittest.mock import MagicMock, patch
+
+        from app.services.presign import validate_uploaded_analysis_object
+
+        s3 = MagicMock()
+        s3.head_object.return_value = {
+            "ContentLength": 20,
+            "ContentType": "application/gzip",
+            "ChecksumSHA256": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=",
+            "Metadata": {
+                "declared-size": "10",
+                "declared-content-type": "application/gzip",
+            },
+        }
+        with patch("app.services.presign.get_s3_client", return_value=s3):
+            with pytest.raises(ValueError, match="declared size"):
+                validate_uploaded_analysis_object("analyses/u/s/input/a.fq.gz")
+
+    def test_validate_uploaded_object_rejects_missing_sha256(self):
+        from unittest.mock import MagicMock, patch
+
+        from app.services.presign import validate_uploaded_analysis_object
+
+        s3 = MagicMock()
+        s3.head_object.return_value = {
+            "ContentLength": 10,
+            "ContentType": "application/gzip",
+            "Metadata": {
+                "declared-size": "10",
+                "declared-content-type": "application/gzip",
+            },
+        }
+        with patch("app.services.presign.get_s3_client", return_value=s3):
+            with pytest.raises(ValueError, match="SHA-256 checksum"):
+                validate_uploaded_analysis_object("analyses/u/s/input/a.fq.gz")
+
+    def test_validate_uploaded_object_rejects_mismatched_content_type(self):
+        from unittest.mock import MagicMock, patch
+
+        from app.services.presign import validate_uploaded_analysis_object
+
+        s3 = MagicMock()
+        s3.head_object.return_value = {
+            "ContentLength": 10,
+            "ContentType": "text/plain",
+            "ChecksumSHA256": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=",
+            "Metadata": {
+                "declared-size": "10",
+                "declared-content-type": "application/gzip",
+            },
+        }
+        with patch("app.services.presign.get_s3_client", return_value=s3):
+            with pytest.raises(ValueError, match="ContentType"):
+                validate_uploaded_analysis_object("analyses/u/s/input/a.fq.gz")
+
+    def test_validate_uploaded_object_rejects_mismatched_sha256(self):
+        from unittest.mock import MagicMock, patch
+
+        from app.services.presign import validate_uploaded_analysis_object
+
+        s3 = MagicMock()
+        s3.head_object.return_value = {
+            "ContentLength": 10,
+            "ContentType": "application/gzip",
+            "ChecksumSHA256": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=",
+            "Metadata": {
+                "declared-size": "10",
+                "declared-content-type": "application/gzip",
+                "declared-sha256": "62" * 32,
+            },
+        }
+        with patch("app.services.presign.get_s3_client", return_value=s3):
+            with pytest.raises(ValueError, match="checksum does not match"):
+                validate_uploaded_analysis_object("analyses/u/s/input/a.fq.gz")
+
+    def test_validate_uploaded_object_maps_missing_key_to_safe_value_error(self):
+        from unittest.mock import MagicMock, patch
+
+        from botocore.exceptions import ClientError
+
+        from app.services.presign import validate_uploaded_analysis_object
+
+        s3 = MagicMock()
+        s3.head_object.side_effect = ClientError(
+            {
+                "Error": {
+                    "Code": "NoSuchKey",
+                    "Message": "INTERNAL_SENTINEL bucket=secret",
+                },
+                "ResponseMetadata": {"HTTPStatusCode": 404},
+            },
+            "HeadObject",
+        )
+        with patch("app.services.presign.get_s3_client", return_value=s3):
+            with pytest.raises(ValueError) as error:
+                validate_uploaded_analysis_object("analyses/u/s/input/a.fq.gz")
+
+        assert str(error.value) == "uploaded object was not found"
+        assert "INTERNAL_SENTINEL" not in str(error.value)
+
+    def test_validate_uploaded_object_maps_storage_failure_to_safe_503(self):
+        from unittest.mock import MagicMock, patch
+
+        from botocore.exceptions import ClientError
+
+        from app.core.exceptions import ServiceUnavailableError
+        from app.services.presign import validate_uploaded_analysis_object
+
+        s3 = MagicMock()
+        s3.head_object.side_effect = ClientError(
+            {
+                "Error": {
+                    "Code": "AccessDenied",
+                    "Message": "INTERNAL_SENTINEL s3.internal:9000",
+                },
+                "ResponseMetadata": {"HTTPStatusCode": 403},
+            },
+            "HeadObject",
+        )
+        with patch("app.services.presign.get_s3_client", return_value=s3):
+            with pytest.raises(ServiceUnavailableError) as error:
+                validate_uploaded_analysis_object("analyses/u/s/input/a.fq.gz")
+
+        assert str(error.value) == "Object storage is temporarily unavailable"
+        assert "INTERNAL_SENTINEL" not in str(error.value)
+
     def test_generate_upload_url_put(self):
         from unittest.mock import MagicMock, patch
 
@@ -174,15 +357,16 @@ class TestPresign:
     def test_build_upload_key_shape(self):
         from app.services.presign import build_upload_key
 
-        job_id = uuid.uuid4()
-        key = build_upload_key(job_id, "sample_R1.fastq.gz")
-        assert key.startswith(f"analyses/{job_id}/input/")
+        user_id = uuid.uuid4()
+        upload_session_id = uuid.uuid4()
+        key = build_upload_key(user_id, upload_session_id, "sample_R1.fastq.gz")
+        assert key.startswith(f"analyses/{user_id}/{upload_session_id}/input/")
         assert key.endswith("-sample_R1.fastq.gz")
 
     def test_build_upload_key_sanitizes_filename(self):
         from app.services.presign import build_upload_key
 
-        key = build_upload_key(uuid.uuid4(), "../../etc/passwd")
+        key = build_upload_key(uuid.uuid4(), uuid.uuid4(), "../../etc/passwd")
         assert ".." not in key
         assert key.endswith("-passwd")
         # the sanitized filename segment never contains a separator
@@ -192,7 +376,7 @@ class TestPresign:
         from app.services.presign import build_upload_key
 
         with pytest.raises(ValueError):
-            build_upload_key(uuid.uuid4(), "..")
+            build_upload_key(uuid.uuid4(), uuid.uuid4(), "..")
 
 
 class TestKeyValidation:
@@ -247,14 +431,14 @@ class TestSubmitJob:
 
         session = FakeDbSession(user=_make_user())
         service = AnalysesService()
-        job_id = uuid.uuid4()
+        user_id = uuid.uuid4()
         request = AnalysesSubmitRequest(
-            input_objects=[f"analyses/{job_id}/input/sample_R1.fastq.gz"],
+            input_objects=[_analysis_input_key(user_id, "sample_R1.fastq.gz")],
             params={"thread": 8, "quality_phred": 20},
         )
 
         response = await service.submit_job(
-            session, uuid.uuid4(), AnalysisType.FASTP, request
+            session, user_id, AnalysisType.FASTP, request
         )
 
         assert session.commits == 1
@@ -273,6 +457,7 @@ class TestSubmitJob:
         assert payload["task_name"] == ANALYSIS_FASTP_TASK
         assert payload["payload_version"] == 1
         assert payload["idempotency_key"] == f"analyses:{job.id}"
+        assert payload["payload"]["user_id"] == str(user_id)
         assert payload["payload"]["analysis_type"] == "fastp"
         assert payload["payload"]["params"] == {"thread": 8, "quality_phred": 20}
 
@@ -282,11 +467,12 @@ class TestSubmitJob:
 
         session = FakeDbSession(user=_make_user())
         service = AnalysesService()
+        user_id = uuid.uuid4()
         request = AnalysesSubmitRequest(
-            input_objects=[f"analyses/{uuid.uuid4()}/input/matrix.h5ad"],
+            input_objects=[_analysis_input_key(user_id, "matrix.h5ad")],
             params={"min_genes": 200, "use_hvg": True},
         )
-        await service.submit_job(session, uuid.uuid4(), AnalysisType.SCANPY, request)
+        await service.submit_job(session, user_id, AnalysisType.SCANPY, request)
         event = next(obj for obj in session.added if isinstance(obj, OutboxEvent))
         assert event.payload["task_name"] == "soymutdb_worker.tasks.analyses.run_scanpy"
 
@@ -322,6 +508,101 @@ class TestSubmitJob:
                 session, uuid.uuid4(), AnalysisType.FASTP, request
             )
 
+    async def test_submit_rejects_non_uuid_upload_session_key(self):
+        from app.core.exceptions import ValidationError
+        from app.schemas.analyses import AnalysesSubmitRequest
+        from app.services.analyses_service import AnalysesService
+
+        user_id = uuid.uuid4()
+        session = FakeDbSession(user=_make_user())
+        request = AnalysesSubmitRequest(
+            input_objects=[f"analyses/{user_id}/not-a-session/input/a.fq.gz"],
+            params={},
+        )
+
+        with pytest.raises(ValidationError, match="upload session"):
+            await AnalysesService().submit_job(
+                session, user_id, AnalysisType.FASTP, request
+            )
+
+        assert session.added == []
+        assert session.commits == 0
+
+    async def test_submit_rejects_legacy_unscoped_upload_key(self):
+        from app.core.exceptions import ValidationError
+        from app.schemas.analyses import AnalysesSubmitRequest
+        from app.services.analyses_service import AnalysesService
+
+        user_id = uuid.uuid4()
+        session = FakeDbSession(user=_make_user())
+        request = AnalysesSubmitRequest(
+            input_objects=[f"analyses/{uuid.uuid4()}/input/a.fq.gz"], params={}
+        )
+
+        with pytest.raises(ValidationError, match="user UUID"):
+            await AnalysesService().submit_job(
+                session, user_id, AnalysisType.FASTP, request
+            )
+
+        assert session.added == []
+        assert session.commits == 0
+
+    async def test_submit_rejects_another_users_upload_key_atomically(self):
+        from app.core.exceptions import ValidationError
+        from app.schemas.analyses import AnalysesSubmitRequest
+        from app.services.analyses_service import AnalysesService
+
+        owner_id = uuid.uuid4()
+        submitting_user_id = uuid.uuid4()
+        session = FakeDbSession(user=_make_user())
+        request = AnalysesSubmitRequest(
+            input_objects=[_analysis_input_key(owner_id, "stolen.fq.gz")], params={}
+        )
+
+        with pytest.raises(ValidationError, match="does not belong"):
+            await AnalysesService().submit_job(
+                session, submitting_user_id, AnalysisType.FASTP, request
+            )
+
+        assert session.added == []
+        assert session.flushes == 0
+        assert session.commits == 0
+
+    async def test_submit_groups_multiple_upload_sessions_into_one_job(self):
+        from app.schemas.analyses import AnalysesSubmitRequest
+        from app.services.analyses_service import AnalysesService
+
+        user_id = uuid.uuid4()
+        session = FakeDbSession(user=_make_user())
+        upload_sessions = [uuid.uuid4(), uuid.uuid4()]
+        input_objects = [
+            _analysis_input_key(
+                user_id,
+                "sample_R1.fastq.gz",
+                upload_session_id=upload_sessions[0],
+            ),
+            _analysis_input_key(
+                user_id,
+                "sample_R2.fastq.gz",
+                upload_session_id=upload_sessions[1],
+            ),
+        ]
+
+        response = await AnalysesService().submit_job(
+            session,
+            user_id,
+            AnalysisType.FASTP,
+            AnalysesSubmitRequest(input_objects=input_objects, params={}),
+        )
+
+        job = next(obj for obj in session.added if isinstance(obj, AnalysisJob))
+        event = next(obj for obj in session.added if isinstance(obj, OutboxEvent))
+        assert response.job_id == str(job.id)
+        assert job.id not in upload_sessions
+        assert job.input_objects == input_objects
+        assert event.payload["payload"]["input_objects"] == input_objects
+        assert event.payload["payload"]["user_id"] == str(user_id)
+
     async def test_submit_rejects_unknown_param(self):
         from app.core.exceptions import ValidationError
         from app.schemas.analyses import AnalysesSubmitRequest
@@ -329,13 +610,14 @@ class TestSubmitJob:
 
         session = FakeDbSession(user=_make_user())
         service = AnalysesService()
+        user_id = uuid.uuid4()
         request = AnalysesSubmitRequest(
-            input_objects=[f"analyses/{uuid.uuid4()}/input/a.fq.gz"],
+            input_objects=[_analysis_input_key(user_id, "a.fq.gz")],
             params={"evil_flag": True},
         )
         with pytest.raises(ValidationError):
             await service.submit_job(
-                session, uuid.uuid4(), AnalysisType.FASTP, request
+                session, user_id, AnalysisType.FASTP, request
             )
         assert session.commits == 0
 
@@ -346,13 +628,14 @@ class TestSubmitJob:
 
         session = FakeDbSession(user=_make_user())
         service = AnalysesService()
+        user_id = uuid.uuid4()
         request = AnalysesSubmitRequest(
-            input_objects=[f"analyses/{uuid.uuid4()}/input/a.fq.gz"],
+            input_objects=[_analysis_input_key(user_id, "a.fq.gz")],
             params={"thread": 0},
         )
         with pytest.raises(ValidationError):
             await service.submit_job(
-                session, uuid.uuid4(), AnalysisType.FASTP, request
+                session, user_id, AnalysisType.FASTP, request
             )
 
 
@@ -445,6 +728,50 @@ class TestDownloadUrl:
                 session, job.id, other_key, job.user_id, ["researcher"]
             )
 
+    async def test_download_url_allows_exact_registered_upload_input(self):
+        from unittest.mock import patch
+
+        from app.services.analyses_service import AnalysesService
+
+        job = _make_job()
+        input_key = _analysis_input_key(job.user_id, "a.fq.gz")
+        job.input_objects = [input_key]
+        with patch(
+            "app.services.analyses_service.generate_download_url",
+            return_value="https://minio/get?sig=input",
+        ):
+            response = await AnalysesService().get_download_url(
+                FakeDbSession(job=job),
+                job.id,
+                input_key,
+                job.user_id,
+                ["researcher"],
+            )
+
+        assert response.download_url == "https://minio/get?sig=input"
+
+    async def test_administrator_download_validates_input_against_job_owner(self):
+        from unittest.mock import patch
+
+        from app.services.analyses_service import AnalysesService
+
+        job = _make_job()
+        input_key = _analysis_input_key(job.user_id, "a.fq.gz")
+        job.input_objects = [input_key]
+        with patch(
+            "app.services.analyses_service.generate_download_url",
+            return_value="https://minio/get?sig=admin-input",
+        ):
+            response = await AnalysesService().get_download_url(
+                FakeDbSession(job=job),
+                job.id,
+                input_key,
+                uuid.uuid4(),
+                ["administrator"],
+            )
+
+        assert response.download_url == "https://minio/get?sig=admin-input"
+
     async def test_cross_user_analysis_download_is_forbidden(self):
         from app.services.analyses_service import AnalysesService
 
@@ -457,6 +784,7 @@ class TestDownloadUrl:
 
     async def test_administrator_can_download_other_users_analysis(self):
         from unittest.mock import patch
+
         from app.services.analyses_service import AnalysesService
 
         job = _make_job()
@@ -578,14 +906,19 @@ class TestRBAC:
 
 
 class TestUploadEndpoint:
-    async def test_upload_returns_presigned_put_url(self, api_client, api_app):
+    async def test_upload_returns_constrained_presigned_post(self, api_client, api_app):
         from unittest.mock import patch
+
+        from app.services.presign import PresignedPost
 
         user = _make_user(RoleName.RESEARCHER)
         api_app.state.fake_session.user = user
         with patch(
-            "app.api.v1.analyses.generate_upload_url",
-            return_value="https://minio/put?sig=1",
+            "app.api.v1.analyses.generate_upload_post",
+            return_value=PresignedPost(
+                url="https://minio/post",
+                fields={"policy": "signed", "Content-Type": "application/gzip"},
+            ),
         ):
             r = await api_client.post(
                 "/api/v1/analyses/uploads",
@@ -593,15 +926,116 @@ class TestUploadEndpoint:
                     "filename": "sample_R1.fastq.gz",
                     "size": 12345,
                     "content_type": "application/gzip",
+                    "checksum_sha256": "61" * 32,
                 },
                 headers=_auth_header(user),
             )
         assert r.status_code == 200
         body = r.json()
-        assert body["upload_url"] == "https://minio/put?sig=1"
+        assert body["upload_url"] == "https://minio/post"
+        assert body["upload_method"] == "POST"
+        assert body["upload_fields"] == {
+            "policy": "signed",
+            "Content-Type": "application/gzip",
+        }
         assert body["object_key"].startswith("analyses/")
         assert body["object_key"].endswith("-sample_R1.fastq.gz")
+        segments = body["object_key"].split("/")
+        assert segments[1] == str(user.id)
+        assert uuid.UUID(segments[2])
+        assert segments[3] == "input"
         assert body["expires_in"] == 3600
+
+    async def test_submit_rejects_invalid_uploaded_object_before_job_creation(
+        self, api_client, api_app
+    ):
+        from unittest.mock import patch
+
+        user = _make_user(RoleName.RESEARCHER)
+        api_app.state.fake_session.user = user
+        key = _analysis_input_key(user.id, "sample.fq.gz")
+        with patch(
+            "app.api.v1.analyses.validate_uploaded_analysis_object",
+            side_effect=ValueError("uploaded object exceeds the 500 MiB limit"),
+        ):
+            r = await api_client.post(
+                "/api/v1/analyses/fastp/submit",
+                json={"input_objects": [key], "params": {}},
+                headers=_auth_header(user),
+            )
+
+        assert r.status_code == 422
+        assert api_app.state.fake_session.added == []
+
+    async def test_submit_missing_object_returns_safe_422(
+        self, api_client, api_app
+    ):
+        from unittest.mock import MagicMock, patch
+
+        from botocore.exceptions import ClientError
+
+        user = _make_user(RoleName.RESEARCHER)
+        api_app.state.fake_session.user = user
+        key = _analysis_input_key(user.id, "missing.fq.gz")
+        s3 = MagicMock()
+        s3.head_object.side_effect = ClientError(
+            {
+                "Error": {
+                    "Code": "NoSuchKey",
+                    "Message": "INTERNAL_SENTINEL bucket=secret",
+                },
+                "ResponseMetadata": {"HTTPStatusCode": 404},
+            },
+            "HeadObject",
+        )
+        with patch("app.services.presign.get_s3_client", return_value=s3):
+            r = await api_client.post(
+                "/api/v1/analyses/fastp/submit",
+                json={"input_objects": [key], "params": {}},
+                headers=_auth_header(user),
+            )
+
+        assert r.status_code == 422
+        assert r.json()["error"]["message"] == "uploaded object was not found"
+        assert "INTERNAL_SENTINEL" not in r.text
+        assert api_app.state.fake_session.added == []
+
+    async def test_submit_storage_failure_returns_safe_503(
+        self, api_client, api_app
+    ):
+        from unittest.mock import MagicMock, patch
+
+        from botocore.exceptions import ClientError
+
+        user = _make_user(RoleName.RESEARCHER)
+        api_app.state.fake_session.user = user
+        key = _analysis_input_key(user.id, "sample.fq.gz")
+        s3 = MagicMock()
+        s3.head_object.side_effect = ClientError(
+            {
+                "Error": {
+                    "Code": "AccessDenied",
+                    "Message": "INTERNAL_SENTINEL s3.internal:9000",
+                },
+                "ResponseMetadata": {"HTTPStatusCode": 403},
+            },
+            "HeadObject",
+        )
+        with patch("app.services.presign.get_s3_client", return_value=s3):
+            r = await api_client.post(
+                "/api/v1/analyses/fastp/submit",
+                json={"input_objects": [key], "params": {}},
+                headers=_auth_header(user),
+            )
+
+        assert r.status_code == 503
+        assert r.json()["error"] == {
+            "code": "service_unavailable",
+            "message": "Object storage is temporarily unavailable",
+            "details": {},
+        }
+        assert "INTERNAL_SENTINEL" not in r.text
+        assert api_app.state.fake_session.added == []
 
     async def test_upload_rejects_path_filename_422(self, api_client, api_app):
         user = _make_user(RoleName.RESEARCHER)
@@ -618,12 +1052,14 @@ class TestUploadEndpoint:
 
         user = _make_user(RoleName.RESEARCHER)
         api_app.state.fake_session.user = user
-        key = f"analyses/{uuid.uuid4()}/input/sample.fq.gz"
+        key = _analysis_input_key(user.id, "sample.fq.gz")
         with patch(
             "app.services.analyses_service.build_job_payload"
         ) as mock_payload, patch(
             "app.services.analyses_service.create_outbox_event"
-        ) as mock_outbox:
+        ) as mock_outbox, patch(
+            "app.api.v1.analyses.validate_uploaded_analysis_object"
+        ):
             from app.core.jobs_package import ensure_jobs_package  # noqa: F401
 
             mock_payload.return_value.model_dump.return_value = {"ok": True}

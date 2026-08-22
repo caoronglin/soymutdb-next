@@ -19,22 +19,23 @@ VERSION = "0.2.0"
 #: Transport-level and application-level auth notes (oracle-aligned).
 AUTH: dict[str, str] = {
     "transport": (
-        "Optional X-MCP-Key header on the transport layer (reserved; "
-        "enforcement lands with the G3 gateway gate)."
+        "Every Streamable HTTP request requires Authorization: Bearer "
+        "<SOYMUTDB_MCP_API_TOKEN>; missing, incorrect, or unconfigured tokens "
+        "fail closed."
     ),
     "api": (
         "SOYMUTDB_MCP_API_TOKEN is forwarded as 'Authorization: Bearer' on "
         "every internal REST call to apps/api."
     ),
     "rate_limit": (
-        "In-memory fixed window: 60 req/min per MCP client across all "
-        "tools, plus a 10 submissions/hour per client quota on "
-        "blast_submit.  Exceeded calls return "
+        "Redis-backed fixed windows enforce 60 req/min across all tools and "
+        "10 blast_submit calls/hour, with an in-memory fallback when Redis is "
+        "unavailable. Exceeded calls return "
         "{'error': 'rate_limited', 'retry_after': N}."
     ),
     "idor": (
         "blast_submit returns a random submitter_token bound to the job id "
-        "in the MCP server's in-memory ownership registry; "
+        "in the MCP server's process-local ownership registry; "
         "blast_job_status / analyses_query require that token and refuse "
         "cross-token reads (fail closed: unbound jobs are refused)."
     ),

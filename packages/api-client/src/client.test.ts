@@ -90,12 +90,10 @@ describe("withRetry", () => {
 
   it("throws after exhausting all retries", async () => {
     // Make setTimeout fire synchronously so retries are instantaneous.
-    vi.spyOn(globalThis, "setTimeout").mockImplementation(
-      (fn: (...args: unknown[]) => void, _ms?: unknown, ...args: unknown[]) => {
-        fn(...args);
-        return 1 as unknown as NodeJS.Timeout;
-      },
-    );
+    vi.spyOn(globalThis, "setTimeout").mockImplementation((fn) => {
+      (fn as () => void)();
+      return 1 as unknown as NodeJS.Timeout;
+    });
 
     let callCount = 0;
     async function fn() {

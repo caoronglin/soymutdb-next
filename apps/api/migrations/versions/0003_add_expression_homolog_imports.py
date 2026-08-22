@@ -53,12 +53,12 @@ def upgrade() -> None:
         sa.Column("filename", sa.String(length=256), nullable=False),
         sa.Column(
             "type",
-            sa.Enum(name="import_task_type_enum"),
+            postgresql.ENUM(name="import_task_type_enum", create_type=False),
             nullable=False,
         ),
         sa.Column(
             "status",
-            sa.Enum(name="import_task_status_enum"),
+            postgresql.ENUM(name="import_task_status_enum", create_type=False),
             nullable=False,
             server_default="queued",
         ),
@@ -107,12 +107,12 @@ def upgrade() -> None:
         sa.Column("library_name", sa.String(length=256), nullable=False),
         sa.Column(
             "tissue",
-            sa.Enum(name="expression_tissue_enum"),
+            postgresql.ENUM(name="expression_tissue_enum", create_type=False),
             nullable=False,
         ),
         sa.Column(
             "treatment",
-            sa.Enum(name="expression_treatment_enum"),
+            postgresql.ENUM(name="expression_treatment_enum", create_type=False),
             nullable=False,
         ),
         sa.Column(
@@ -227,7 +227,7 @@ def upgrade() -> None:
         sa.Column("homolog_gene_id", sa.String(length=64), nullable=False),
         sa.Column(
             "homolog_type",
-            sa.Enum(name="homolog_type_enum"),
+            postgresql.ENUM(name="homolog_type_enum", create_type=False),
             nullable=False,
         ),
         sa.Column("source", sa.String(length=128), nullable=True),

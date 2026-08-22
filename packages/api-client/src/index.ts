@@ -47,6 +47,11 @@ export * from "./news";
 export * from "./site";
 export * from "./admin-news";
 export * from "./admin-uploads";
+export * from "./admin-plugins";
+export * from "./admin-imports";
+export * from "./admin-import-studio";
+export * from "./admin-settings";
 export * from "./page-definitions";
 
 export * from "./capabilities";
+export * from "./ontology";

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
@@ -46,7 +46,11 @@ class UserCreate(BaseModel):
     )
     full_name: str = Field(..., min_length=1, max_length=255, examples=["Jane Doe"])
     organization_id: int | None = Field(default=None)
-    role_name: str = Field(default="viewer", examples=["viewer"])
+    role_name: Literal["viewer"] = Field(
+        default="viewer",
+        examples=["viewer"],
+        description="Public registration always creates a viewer account.",
+    )
 
     @field_validator("password")
     @classmethod

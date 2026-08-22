@@ -62,7 +62,8 @@ def validate_password_strength(password: str) -> tuple[bool, str]:
     if types_present < 3:
         return (
             False,
-            "Password must contain at least 3 of: uppercase, lowercase, digits, and special characters",
+            "Password must contain at least 3 of: uppercase, lowercase, "
+            "digits, and special characters",
         )
 
     return True, "OK"
@@ -135,32 +136,36 @@ class RoleName(StrEnum):
     ADMINISTRATOR = "administrator"
 
 
-# Role hierarchy: a role implicitly grants all permissions of lower roles.
-# Used by :func:`has_role` to implement hierarchical RBAC.
-_ROLE_LEVEL: dict[RoleName, int] = {
-    RoleName.VIEWER: 0,
-    RoleName.RESEARCHER: 1,
-    RoleName.CURATOR: 2,
-    RoleName.DATA_MANAGER: 3,
-    RoleName.TRACK_MANAGER: 3,
-    RoleName.BLAST_MANAGER: 3,
-    RoleName.SEED_MANAGER: 3,
-    RoleName.CONTENT_EDITOR: 3,
-    RoleName.AUDITOR: 4,
-    RoleName.ADMINISTRATOR: 5,
+# Explicit grants preserve the common viewer -> researcher -> curator
+# progression without treating domain-specific roles as interchangeable.
+# Administrators remain the only role that implicitly grants every role.
+_COMMON_GRANTS = frozenset(
+    {RoleName.VIEWER, RoleName.RESEARCHER, RoleName.CURATOR}
+)
+_ROLE_GRANTS: dict[RoleName, frozenset[RoleName]] = {
+    RoleName.VIEWER: frozenset({RoleName.VIEWER}),
+    RoleName.RESEARCHER: frozenset({RoleName.VIEWER, RoleName.RESEARCHER}),
+    RoleName.CURATOR: _COMMON_GRANTS,
+    RoleName.DATA_MANAGER: _COMMON_GRANTS | {RoleName.DATA_MANAGER},
+    RoleName.TRACK_MANAGER: _COMMON_GRANTS | {RoleName.TRACK_MANAGER},
+    RoleName.BLAST_MANAGER: _COMMON_GRANTS | {RoleName.BLAST_MANAGER},
+    RoleName.SEED_MANAGER: _COMMON_GRANTS | {RoleName.SEED_MANAGER},
+    RoleName.CONTENT_EDITOR: _COMMON_GRANTS | {RoleName.CONTENT_EDITOR},
+    RoleName.AUDITOR: _COMMON_GRANTS | {RoleName.AUDITOR},
+    RoleName.ADMINISTRATOR: frozenset(RoleName),
 }
 
 
 def has_role(user_roles: list[str], required: RoleName) -> bool:
-    """Return True if any of *user_roles* satisfies *required* (hierarchical)."""
-    required_level = _ROLE_LEVEL[required]
-    for r in user_roles:
+    """Return whether any assigned role explicitly grants ``required``."""
+    for role_name in user_roles:
         try:
-            if _ROLE_LEVEL[RoleName(r)] >= required_level:
-                return True
-        except KeyError:
-            # Unknown role string – ignore (defensive).
+            assigned_role = RoleName(role_name)
+        except ValueError:
+            # Unknown role string -- ignore defensively.
             continue
+        if required in _ROLE_GRANTS[assigned_role]:
+            return True
     return False
 
 

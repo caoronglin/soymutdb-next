@@ -26,6 +26,7 @@ echo ">> regenerating client types in temp dir..."
 if ! diff -q "$TMP_DIR/openapi.d.ts" "$PKG_DIR/src/generated/openapi.d.ts" >/dev/null; then
   echo "CONTRACT DEBT: generated client is out of sync with the backend OpenAPI."
   echo "Run: pnpm --filter @soymutdb/api-client generate:api-client"
+  exit 1
 else
   echo "OK: client schema in sync with backend OpenAPI."
 fi

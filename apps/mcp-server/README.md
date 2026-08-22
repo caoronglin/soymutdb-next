@@ -2,15 +2,15 @@
 
 Model Context Protocol server for SoyMutDB (FastMCP, **Streamable HTTP**).
 Serves as the machine-access layer: an LLM/agent can query genes, variants,
-news and statistics, and (with a write token) submit BLAST jobs / query
-analysis status.
+news and statistics, submit BLAST jobs, and query analysis status over an
+authenticated transport.
 
-> **Status: B1 skeleton.** All tools are registered passthrough stubs that
-> call the internal REST API. Real business contracts (BLAST async
-> submit+poll, job binding / IDOR protection, response shaping) land in **B4**;
-> rate limiting (60 req/min per client) is enforced by the **G3** gate.
+> **Status: B4 implemented.** Eight tools proxy the internal REST API with
+> response shaping, bearer-authenticated Streamable HTTP, shared rate limits,
+> asynchronous BLAST polling, and submitter-token job binding. Job ownership is
+> still process-local; use a shared registry before scaling MCP horizontally.
 
-## Tools (B1)
+## Tools
 
 | Tool              | Type   | Backing endpoint            | Notes |
 |-------------------|--------|-----------------------------|-------|
@@ -19,20 +19,25 @@ analysis status.
 | `news_list`       | read   | `GET /api/v1/news`          | category + pagination |
 | `stats_summary`   | read   | `GET /api/v1/stats/dashboard` | |
 | `seqfetch`        | read   | `POST /api/v1/tools/seqfetch` | genes[] or region mode |
-| `blast_submit`    | write  | `POST /api/v1/blast/jobs`   | async; poll contract in B4 |
-| `analyses_query`  | write  | `GET /api/v1/analyses/{id}` | job status/result |
+| `blast_submit`    | write  | `POST /api/v1/blast/jobs`   | async; returns job + submitter token |
+| `blast_job_status` | write | `GET /api/v1/blast/jobs/{id}` | ownership-checked polling |
+| `analyses_query`  | write  | `GET /api/v1/analyses/{id}` | ownership-checked result polling |
 
 Full machine-readable inventory in `mcp_server/manifest.py`
 (`MANIFEST["tools"]`, plus `MANIFEST["auth"]`).
 
 ## Auth
 
-- Read tools: no auth (public API endpoints).
-- Write tools: `SOYMUTDB_MCP_API_TOKEN` is forwarded to the API as
-  `Authorization: Bearer`. The API itself enforces RBAC (researcher+ for
-  BLAST submission).
-- Transport: optional `X-MCP-Key` header is reserved for the G3 gateway.
-- Rate limit: 60 req/min per client (placeholder until G3).
+- Transport: every `POST /mcp` requires
+  `Authorization: Bearer <SOYMUTDB_MCP_API_TOKEN>`; an unset, missing, or
+  incorrect token fails closed.
+- Internal API: the configured token is forwarded on every REST call. The API
+  still enforces its own public/RBAC policy; read/write labels describe tool
+  semantics, not a transport-auth bypass.
+- Job reads: `blast_job_status` and `analyses_query` require the random
+  submitter token returned by `blast_submit`.
+- Rate limit: shared Redis fixed windows enforce 60 calls/minute and 10 BLAST
+  submissions/hour, with an in-memory fallback when Redis is unavailable.
 
 ## Local run
 
@@ -44,8 +49,9 @@ SOYMUTDB_MCP_API_TOKEN=... \
 python -m mcp_server.server --host 0.0.0.0 --port 9000
 ```
 
-Streamable HTTP endpoint: `POST /mcp/` (JSON-RPC), SSE transport available
-at `/mcp/sse` (when enabled by the transport).
+Streamable HTTP endpoint: `POST /mcp` (JSON-RPC). Streamed responses use
+the same endpoint. The compatibility path `POST /mcp/` requires the same
+bearer header and returns `308` to `/mcp`.
 
 ## Docker Compose
 
@@ -59,17 +65,27 @@ nginx proxy), and depends on a healthy `api` service.
 
 ## nginx reverse proxy (SSE requirements)
 
-`infra/nginx/conf.d/default.conf` exposes the server at `/mcp/`:
+`infra/nginx/conf.d/default.conf` exposes the canonical FastMCP endpoint at
+`/mcp`:
 
 ```nginx
-location ^~ /mcp/ {
+location = /mcp/ {
+    if ($http_authorization = "") { return 401; }
+    return 308 /mcp;
+}
+
+location = /mcp {
+    # Nginx checks presence; FastMCP validates the bearer secret.
+    if ($http_authorization = "") { return 401; }
+    limit_req zone=auth burst=10 nodelay;
     proxy_pass http://mcp-server:9000;
     proxy_http_version 1.1;
     proxy_set_header Connection "";
+    proxy_set_header X-Request-ID $request_id_to_forward;
     # SSE: NEVER buffer the upstream stream
     proxy_buffering off;
     proxy_cache off;
-    proxy_read_timeout 600s;   # keep SSE sessions alive
+    proxy_read_timeout 600s;   # keep streamed sessions alive
     proxy_send_timeout 600s;
     proxy_connect_timeout 10s;
 }
@@ -86,7 +102,7 @@ location ^~ /mcp/ {
 | Variable                  | Default                 | Purpose |
 |---------------------------|-------------------------|---------|
 | `SOYMUTDB_API_BASE`       | `http://localhost:8000` | Internal API base URL |
-| `SOYMUTDB_MCP_API_TOKEN`  | *(empty)*               | Bearer token for write tools |
+| `SOYMUTDB_MCP_API_TOKEN`  | *(empty)*               | Transport and internal API bearer token |
 
 ## Tests
 

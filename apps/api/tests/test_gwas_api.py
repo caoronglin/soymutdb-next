@@ -11,16 +11,21 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from typing import Any
+from unittest.mock import Mock
 
 import pytest
 
+from app.api.v1 import gwas as gwas_routes
 from app.core.task_contract import GWAS_RUN_TASK
 from app.models.gwas import GwasJob, GwasJobStatus
 from app.models.outbox import OutboxEvent, OutboxEventStatus
-from app.schemas.gwas import GwasMethod, GwasSubmitRequest
+from app.schemas.gwas import GwasMethod, GwasSubmitRequest, GwasUploadRequest
 from app.services import gwas_service as gwas_module
 from app.services.gwas_service import GwasService, validate_gwas_key
+
+_OWNER_ID = uuid.uuid4()
 
 
 class _Scalars:
@@ -72,7 +77,9 @@ class FakeDbSession:
 def _make_request(**overrides: Any) -> GwasSubmitRequest:
     base = dict(
         method=GwasMethod.EMMAX,
-        phenotype_object_key=f"gwas/{uuid.uuid4()}/input/{uuid.uuid4()}-trait.pheno",
+        phenotype_object_key=(
+            f"gwas/{_OWNER_ID}/{uuid.uuid4()}/input/{uuid.uuid4()}-trait.pheno"
+        ),
     )
     base.update(overrides)
     return GwasSubmitRequest(**base)
@@ -106,6 +113,47 @@ def _patch_upload_check(monkeypatch, size: int | None = None) -> None:
         monkeypatch.setattr(gwas_module, "get_file_size", lambda key: size)
 
 
+async def test_upload_route_derives_owner_from_current_user(monkeypatch) -> None:
+    owner_id = uuid.uuid4()
+    create_upload = Mock(
+        return_value={
+            "upload_url": "https://minio.example/upload",
+            "object_key": f"gwas/{owner_id}/{uuid.uuid4()}/input/trait.pheno",
+            "expires_in": 3600,
+            "max_upload_size": 1024,
+        }
+    )
+    monkeypatch.setattr(gwas_routes, "service", SimpleNamespace(create_upload=create_upload))
+
+    await gwas_routes.create_upload(
+        GwasUploadRequest(filename="trait.pheno"),
+        current_user=SimpleNamespace(id=owner_id),
+    )
+
+    create_upload.assert_called_once_with(owner_id, "trait.pheno")
+
+
+async def test_submit_job_rejects_another_users_upload_key(monkeypatch) -> None:
+    from app.core.exceptions import ValidationError
+
+    owner_id = uuid.uuid4()
+    attacker_id = uuid.uuid4()
+    session_id = uuid.uuid4()
+    request = _make_request(
+        phenotype_object_key=(
+            f"gwas/{owner_id}/{session_id}/input/{uuid.uuid4()}-trait.pheno"
+        )
+    )
+    session = FakeDbSession()
+    _patch_upload_check(monkeypatch, size=1024)
+
+    with pytest.raises(ValidationError, match="belong"):
+        await GwasService().submit_job(session, attacker_id, request)
+
+    assert session.added == []
+    assert session.commits == 0
+
+
 async def test_submit_job_writes_job_and_outbox_event_in_one_transaction(
     monkeypatch,
 ) -> None:
@@ -113,7 +161,7 @@ async def test_submit_job_writes_job_and_outbox_event_in_one_transaction(
     _patch_upload_check(monkeypatch, size=1024)
     service = GwasService()
 
-    response = await service.submit_job(session, uuid.uuid4(), _make_request())
+    response = await service.submit_job(session, _OWNER_ID, _make_request())
 
     assert session.commits == 1
     assert session.flushes >= 1
@@ -132,6 +180,7 @@ async def test_submit_job_writes_job_and_outbox_event_in_one_transaction(
     assert payload["job_id"] == str(job.id)
     assert payload["idempotency_key"] == f"gwas:{job.id}"
     assert payload["payload"]["method"] == "emmax"
+    assert payload["payload"]["owner_id"] == str(_OWNER_ID)
     assert payload["payload"]["phenotype_object_key"] == job.phenotype_file_path
     assert payload["payload"]["params"] == {}
 
@@ -148,7 +197,7 @@ async def test_submit_job_forwards_whitelisted_params(monkeypatch) -> None:
         method=GwasMethod.GEMMA,
         params={"num_threads": 4, "max_p_value_threads": 2},
     )
-    response = await service.submit_job(session, uuid.uuid4(), request)
+    response = await service.submit_job(session, _OWNER_ID, request)
 
     job = next(obj for obj in session.added if isinstance(obj, GwasJob))
     assert job.params == {"num_threads": 4, "max_p_value_threads": 2}
@@ -165,7 +214,7 @@ async def test_submit_job_rejects_unknown_parameter(monkeypatch) -> None:
 
     request = _make_request(params={"evil_flag": True})
     with pytest.raises(ValidationError, match="Unknown parameter"):
-        await service.submit_job(session, uuid.uuid4(), request)
+        await service.submit_job(session, _OWNER_ID, request)
 
     assert session.added == []
     assert session.commits == 0
@@ -180,7 +229,7 @@ async def test_submit_job_rejects_out_of_range_parameter(monkeypatch) -> None:
 
     request = _make_request(params={"num_threads": 999})
     with pytest.raises(ValidationError, match="num_threads"):
-        await service.submit_job(session, uuid.uuid4(), request)
+        await service.submit_job(session, _OWNER_ID, request)
 
 
 async def test_submit_job_rejects_key_outside_gwas_namespace(monkeypatch) -> None:
@@ -192,7 +241,7 @@ async def test_submit_job_rejects_key_outside_gwas_namespace(monkeypatch) -> Non
 
     request = _make_request(phenotype_object_key="analyses/abc/input/x.pheno")
     with pytest.raises(ValidationError, match="gwas/"):
-        await service.submit_job(session, uuid.uuid4(), request)
+        await service.submit_job(session, _OWNER_ID, request)
 
 
 async def test_submit_job_rejects_traversal_key(monkeypatch) -> None:
@@ -219,7 +268,7 @@ async def test_submit_job_rejects_traversal_key(monkeypatch) -> None:
     with pytest.raises(DomainValidationError, match="traversal"):
         await service.submit_job(
             session,
-            uuid.uuid4(),
+            _OWNER_ID,
             request.model_copy(
                 update={
                     "phenotype_object_key": "gwas/abc/input/../../etc/passwd.pheno"
@@ -237,7 +286,7 @@ async def test_submit_job_rejects_oversized_upload(monkeypatch) -> None:
     service = GwasService()
 
     with pytest.raises(ValidationError, match="exceeds"):
-        await service.submit_job(session, uuid.uuid4(), _make_request())
+        await service.submit_job(session, _OWNER_ID, _make_request())
 
     assert session.commits == 0
 
@@ -331,8 +380,8 @@ async def test_get_result_running_returns_no_urls() -> None:
 
 
 def test_validate_gwas_key_accepts_input_key() -> None:
-    key = f"gwas/{uuid.uuid4()}/input/abc.pheno"
-    assert validate_gwas_key(key) == key
+    key = f"gwas/{_OWNER_ID}/{uuid.uuid4()}/input/abc.pheno"
+    assert validate_gwas_key(key, _OWNER_ID) == key
 
 
 @pytest.mark.asyncio
@@ -344,8 +393,14 @@ async def test_gwas_reads_reject_cross_user_and_allow_owner_and_admin() -> None:
     session = FakeDbSession(job=job)
     with pytest.raises(AuthorizationError):
         await service.get_job(session, job.id, uuid.uuid4(), ["researcher"])
-    assert (await service.get_job(session, job.id, job.user_id, ["researcher"])).job_id == str(job.id)
-    assert (await service.get_job(session, job.id, uuid.uuid4(), ["administrator"])).job_id == str(job.id)
+    owner_response = await service.get_job(
+        session, job.id, job.user_id, ["researcher"]
+    )
+    admin_response = await service.get_job(
+        session, job.id, uuid.uuid4(), ["administrator"]
+    )
+    assert owner_response.job_id == str(job.id)
+    assert admin_response.job_id == str(job.id)
 
     with pytest.raises(AuthorizationError):
         await service.get_result(session, job.id, uuid.uuid4(), ["researcher"])
@@ -353,6 +408,6 @@ async def test_gwas_reads_reject_cross_user_and_allow_owner_and_admin() -> None:
 
 def test_validate_gwas_key_rejects_lookalike_prefix() -> None:
     with pytest.raises(ValueError, match="gwas/"):
-        validate_gwas_key("gwas-evil/abc/input/x.pheno")
+        validate_gwas_key("gwas-evil/abc/input/x.pheno", _OWNER_ID)
     with pytest.raises(ValueError, match="gwas/"):
-        validate_gwas_key("analyses/abc/input/x.pheno")
+        validate_gwas_key("analyses/abc/input/x.pheno", _OWNER_ID)

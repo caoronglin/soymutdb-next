@@ -9,6 +9,7 @@ description = "SoyMutDB Celery worker — BLAST, export, ingestion, and statisti
 requires-python = ">=3.13"
 license = { text = "MIT" }
 dependencies = [
+    "soymutdb-jobs==0.1.0",
     "celery[redis]>=5.4.0",
     "redis>=5.2.0",
     "clickhouse-connect>=0.8.0",
@@ -42,6 +43,9 @@ dependencies = [
     "dominate>=2.9.0",
 ]
 
+[tool.uv.sources]
+soymutdb-jobs = { path = "../../packages/jobs-py" }
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0.0",
@@ -73,3 +77,8 @@ select = ["E", "F", "I", "W", "UP"]
 python_version = "3.13"
 warn_return_any = true
 warn_unused_configs = true
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: capacity or integration acceptance test; the 2M-row tier requires SOYMUTDB_RUN_2M_IMPORT_PERF=1",
+]

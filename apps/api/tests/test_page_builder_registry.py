@@ -21,8 +21,7 @@ from app.page_builder.registry import (
 
 
 def test_registry_contains_the_approved_component_types():
-    # The plan enumerates these specific types (the "16" figure is a typo; the
-    # concrete allowlist below has 17 entries).
+    # The concrete server-owned allowlist below has 18 entries.
     expected = {
         "navigation",
         "news_list",
@@ -41,6 +40,7 @@ def test_registry_contains_the_approved_component_types():
         "columns",
         "jbrowse_launcher",
         "blast_launcher",
+        "ontology_relationship_graph",
     }
     assert set(COMPONENT_REGISTRY) == expected
 
@@ -211,6 +211,52 @@ def test_approved_actions_and_launchers_pass():
     )
     assert out["root"]["type"] == "columns"
     assert len(out["root"]["children"]) == 2
+
+
+def test_ontology_relationship_graph_requires_an_available_ols4_plugin():
+    from app.page_builder.registry import validate_plugin_launchers
+
+    definition = {
+        "root": {
+            "type": "ontology_relationship_graph",
+            "props": {
+                "ontology": "go",
+                "iri": "http://purl.obolibrary.org/obo/GO_0008150",
+                "max_nodes": 24,
+                "max_edges": 32,
+            },
+        }
+    }
+
+    with pytest.raises(ValidationError):
+        validate_plugin_launchers(definition, {})
+
+
+def test_ontology_relationship_graph_accepts_a_healthy_embedded_ols4_plugin():
+    from app.core.plugins import PluginState
+    from app.page_builder.registry import validate_plugin_launchers
+
+    definition = {
+        "root": {
+            "type": "ontology_relationship_graph",
+            "props": {
+                "ontology": "go",
+                "iri": "http://purl.obolibrary.org/obo/GO_0008150",
+            },
+        }
+    }
+    state = PluginState(
+        version="1.0.0",
+        installed=True,
+        enabled=True,
+        configured=True,
+        healthy=True,
+        public_url=None,
+        assemblies=(),
+        reason=None,
+    )
+
+    assert validate_plugin_launchers(definition, {"ols4": state}) == definition
 
 
 # ---------------------------------------------------------------------------

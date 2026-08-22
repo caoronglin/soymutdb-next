@@ -87,7 +87,7 @@ class VariantDetail(VariantResponse):
 class VariantFilterParams(BaseModel):
     """Query parameters for filtering and paginating variant queries.
 
-    Uses keyset cursor pagination (base64-encoded) – never OFFSET.
+    Uses an authenticated, release/filter-bound keyset cursor – never OFFSET.
     ``limit`` is capped at 200.
     """
 
@@ -98,6 +98,8 @@ class VariantFilterParams(BaseModel):
     chromosome: str | None = None
     start: int | None = Field(default=None, ge=0)
     end: int | None = Field(default=None, ge=0)
+    ref: str | None = Field(default=None, min_length=1, max_length=4096)
+    alt: str | None = Field(default=None, min_length=1, max_length=4096)
     gene_id: str | None = None
     mutant_line_id: str | None = None
     variant_type: VariantType | None = None
@@ -106,7 +108,7 @@ class VariantFilterParams(BaseModel):
     min_af: float | None = Field(default=None, ge=0.0, le=1.0)
     max_af: float | None = Field(default=None, ge=0.0, le=1.0)
     cursor: str | None = Field(
-        default=None, description="Base64-encoded keyset cursor."
+        default=None, description="Opaque signed keyset cursor."
     )
     limit: int = Field(default=100, ge=1, le=200)
 

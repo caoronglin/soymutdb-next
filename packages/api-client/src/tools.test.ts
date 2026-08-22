@@ -123,9 +123,11 @@ describe("tools (public, no auth)", () => {
 
       const result = await runEnrichment({
         genes: ["Glyma.01G000100", "Glyma.01G000200"],
+        mode: "ora",
         ontology: "go",
         p_threshold: 0.05,
         max_terms: 20,
+        min_genes: 5,
       });
 
       const [url, init] = lastFetchCall();
@@ -133,9 +135,11 @@ describe("tools (public, no auth)", () => {
       expect(init.method).toBe("POST");
       expect(JSON.parse(init.body as string)).toEqual({
         genes: ["Glyma.01G000100", "Glyma.01G000200"],
+        mode: "ora",
         ontology: "go",
         p_threshold: 0.05,
         max_terms: 20,
+        min_genes: 5,
       });
       assertNoAuth(init);
       expect(result).toEqual(response);

@@ -1,13 +1,8 @@
-"""Variant service with keyset cursor pagination (base64-encoded).
-
-The cursor is a base64-encoded JSON payload containing the last seen sort key
-(``position``).  This is a true keyset pagination – never OFFSET.
-"""
+"""Release-scoped variant service with stable keyset cursor pagination."""
 
 from __future__ import annotations
 
-import base64
-import json
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,22 +15,63 @@ from ..schemas.variant import (
     VariantResponse,
 )
 from .clickhouse_service import ClickHouseService
+from .release_context import (
+    ReleaseContext,
+    decode_bound_cursor,
+    encode_bound_cursor,
+)
 
 
-def encode_cursor(position: int) -> str:
-    """Encode a sort key into an opaque base64 cursor string."""
-    payload = json.dumps({"p": position}, separators=(",", ":"))
-    return base64.urlsafe_b64encode(payload.encode("utf-8")).decode("ascii")
+def _cursor_filters(params: VariantFilterParams) -> dict[str, Any]:
+    return params.model_dump(
+        mode="json",
+        exclude={"cursor", "limit"},
+        exclude_none=True,
+    )
 
 
-def decode_cursor(cursor: str) -> int:
-    """Decode a base64 cursor back into the sort key.
+def encode_cursor(
+    position: int,
+    variant_id: int,
+    *,
+    release_context: ReleaseContext,
+    params: VariantFilterParams,
+) -> str:
+    """Encode an authenticated ``(position, variant_id)`` cursor."""
+    return encode_bound_cursor(
+        kind="variant",
+        sort_key={"p": position, "i": variant_id},
+        release_context=release_context,
+        filters=_cursor_filters(params),
+    )
+
+
+def decode_cursor(
+    cursor: str,
+    *,
+    release_context: ReleaseContext,
+    params: VariantFilterParams,
+) -> tuple[int, int]:
+    """Verify and decode a ``(position, variant_id)`` keyset cursor.
 
     Raises :class:`ValidationError` if the cursor is malformed.
     """
     try:
-        payload = json.loads(base64.urlsafe_b64decode(cursor.encode("ascii")))
-        return int(payload["p"])
+        payload = decode_bound_cursor(
+            cursor,
+            kind="variant",
+            release_context=release_context,
+            filters=_cursor_filters(params),
+        )
+        position = payload["p"]
+        variant_id = payload["i"]
+        if type(position) is not int or position < 0:
+            raise ValueError("position must be a non-negative integer")
+        if type(variant_id) is not int or variant_id < 0:
+            raise ValueError("variant id must be a non-negative integer")
+        return position, variant_id
+    except ValidationError:
+        raise
     except Exception as exc:
         raise ValidationError(f"Invalid cursor: {exc}") from exc
 
@@ -54,16 +90,23 @@ class VariantService:
         self,
         db: AsyncSession,
         params: VariantFilterParams,
+        *,
+        release_context: ReleaseContext,
     ) -> VariantListResponse:
         """Return a cursor-paginated list of variants."""
-        cursor_position: int | None = None
+        cursor_key: tuple[int, int] | None = None
         if params.cursor:
-            cursor_position = decode_cursor(params.cursor)
+            cursor_key = decode_cursor(
+                params.cursor,
+                release_context=release_context,
+                params=params,
+            )
 
         rows = await self.ch.query_variants(
             params=params,
+            release_context=release_context,
             limit=params.limit + 1,  # fetch one extra to detect has_more
-            cursor_position=cursor_position,
+            cursor_key=cursor_key,
         )
 
         has_more = len(rows) > params.limit
@@ -71,7 +114,16 @@ class VariantService:
             rows = rows[: params.limit]
 
         items = [self._row_to_response(r) for r in rows]
-        next_cursor = encode_cursor(rows[-1]["position"]) if has_more and rows else None
+        next_cursor = (
+            encode_cursor(
+                int(rows[-1]["position"]),
+                int(rows[-1]["variant_id"]),
+                release_context=release_context,
+                params=params,
+            )
+            if has_more and rows
+            else None
+        )
 
         return VariantListResponse(
             items=items,
@@ -80,9 +132,17 @@ class VariantService:
             total_count=None,  # omitted for large result sets
         )
 
-    async def get_variant(self, variant_id: str) -> VariantDetail:
+    async def get_variant(
+        self,
+        variant_id: str,
+        *,
+        release_context: ReleaseContext,
+    ) -> VariantDetail:
         """Fetch a single variant detail from ClickHouse."""
-        row = await self.ch.get_variant_by_id(variant_id)
+        row = await self.ch.get_variant_by_id(
+            variant_id,
+            release_context=release_context,
+        )
         if row is None:
             raise NotFoundError(f"Variant {variant_id} not found")
         return self._row_to_detail(row)
@@ -94,11 +154,14 @@ class VariantService:
         start: int,
         end: int,
         max_results: int = 1000,
+        *,
+        release_context: ReleaseContext,
     ) -> list[VariantResponse]:
         """Region query – ``assembly`` is required (never hardcoded)."""
         if not assembly:
             raise ValidationError("assembly parameter is required for region queries")
         rows = await self.ch.query_variants_by_region(
+            release_context=release_context,
             assembly=assembly,
             chromosome=chromosome,
             start=start,
@@ -107,9 +170,17 @@ class VariantService:
         )
         return [self._row_to_response(r) for r in rows]
 
-    async def get_variant_count(self, params: VariantFilterParams) -> int:
+    async def get_variant_count(
+        self,
+        params: VariantFilterParams,
+        *,
+        release_context: ReleaseContext,
+    ) -> int:
         """Return the total count of matching variants (best-effort)."""
-        return await self.ch.count_variants(params)
+        return await self.ch.count_variants(
+            params,
+            release_context=release_context,
+        )
 
     # ------------------------------------------------------------------ #
     # Helpers
@@ -119,7 +190,7 @@ class VariantService:
     def _row_to_response(row: dict[str, Any]) -> VariantResponse:
         return VariantResponse(
             id=str(row.get("variant_id", "")),
-            variant_id=row.get("variant_id"),
+            variant_id=str(row.get("variant_id", "")),
             assembly_id="",
             chromosome=str(row.get("chromosome", "")),
             position=int(row.get("position", 0)),
@@ -137,12 +208,10 @@ class VariantService:
 
     @staticmethod
     def _row_to_detail(row: dict[str, Any]) -> VariantDetail:
-        from datetime import datetime, timezone
-
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         return VariantDetail(
             id=str(row.get("variant_id", "")),
-            variant_id=row.get("variant_id"),
+            variant_id=str(row.get("variant_id", "")),
             assembly_id="",
             chromosome=str(row.get("chromosome", "")),
             position=int(row.get("position", 0)),

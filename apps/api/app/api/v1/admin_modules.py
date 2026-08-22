@@ -9,6 +9,14 @@ from fastapi.responses import Response as _Response
 from ...core.exceptions import NotFoundError, ValidationError
 from ...core.security import RoleName, has_role
 from ...models.auth import User
+from ...schemas.data_publishing import (
+    ImportInspectionRequest,
+    ImportInspectionResponse,
+)
+from ...services.import_inspection_service import (
+    ImportInspectionError,
+    inspect_module_file,
+)
 from ...services.module_schema_registry import get_schema, render_module_template
 from .deps import get_current_user, get_user_roles
 
@@ -21,6 +29,27 @@ def _require_admin(user: User) -> None:
         from ...core.exceptions import AuthorizationError
 
         raise AuthorizationError("Administrator access required")
+
+
+@router.post("/{module_key}/inspect", response_model=ImportInspectionResponse)
+@router.post("/{module_key}/validate", response_model=ImportInspectionResponse)
+async def inspect_module(
+    module_key: str,
+    body: ImportInspectionRequest,
+    current_user: User = Depends(get_current_user),
+) -> ImportInspectionResponse:
+    """Return a bounded validation preview without persistence or execution."""
+    _require_admin(current_user)
+    if get_schema(module_key) is None:
+        raise NotFoundError(f"Unknown module schema '{module_key}'")
+    try:
+        return inspect_module_file(
+            module_key=module_key,
+            filename=body.filename,
+            content_base64=body.content_base64,
+        )
+    except ImportInspectionError as exc:
+        raise ValidationError(str(exc)) from exc
 
 
 @router.get("/{module_key}/template")

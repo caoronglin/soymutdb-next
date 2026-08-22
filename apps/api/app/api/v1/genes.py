@@ -16,6 +16,7 @@ from ...schemas.genomic import (
 )
 from ...services.cache import get_or_set
 from ...services.gene_service import GeneService
+from ...services.release_context import ReleaseContext, get_release_context
 
 router = APIRouter(prefix="/genes", tags=["genes"])
 service = GeneService()
@@ -65,6 +66,7 @@ async def list_chromosomes(
 @router.get("", response_model=GeneListResponse)
 async def list_genes(
     db: AsyncSession = Depends(get_db),
+    release_context: ReleaseContext = Depends(get_release_context),
     assembly_id: int | None = Query(default=None),
     chromosome: str | None = Query(default=None),
     biotype: str | None = Query(default=None),
@@ -86,13 +88,18 @@ async def list_genes(
         page=page,
         page_size=page_size,
     )
-    return await service.list_genes(db, params)
+    return await service.list_genes(
+        db,
+        params,
+        release_context=release_context,
+    )
 
 
 @router.get("/{gene_id}", response_model=GeneDetail)
 async def get_gene(
     gene_id: str,
     db: AsyncSession = Depends(get_db),
+    release_context: ReleaseContext = Depends(get_release_context),
 ) -> GeneDetail:
     """Get gene detail with transcripts and aliases.
 
@@ -101,7 +108,11 @@ async def get_gene(
     always receives a structured response.
     """
     try:
-        return await service.get_gene(db, gene_id)
+        return await service.get_gene(
+            db,
+            gene_id,
+            release_context=release_context,
+        )
     except SoyMutDBError:
         raise
     except Exception as exc:

@@ -43,6 +43,12 @@ class NotFoundError(SoyMutDBError):
     error_code = "not_found"
 
 
+class PluginDisabledError(NotFoundError):
+    """A deployed plugin exists but is intentionally hidden/disabled."""
+
+    error_code = "plugin_disabled"
+
+
 class AuthenticationError(SoyMutDBError):
     status_code = status.HTTP_401_UNAUTHORIZED
     error_code = "authentication_failed"
@@ -63,6 +69,12 @@ class ConflictError(SoyMutDBError):
     error_code = "conflict"
 
 
+class SettingsVersionConflictError(ConflictError):
+    """An optimistic settings mutation used a stale section version."""
+
+    error_code = "settings_version_conflict"
+
+
 class RateLimitExceededError(SoyMutDBError):
     status_code = status.HTTP_429_TOO_MANY_REQUESTS
     error_code = "rate_limit_exceeded"
@@ -81,6 +93,12 @@ class RateLimitExceededError(SoyMutDBError):
 class ServiceUnavailableError(SoyMutDBError):
     status_code = status.HTTP_503_SERVICE_UNAVAILABLE
     error_code = "service_unavailable"
+
+
+class PluginUnavailableError(ServiceUnavailableError):
+    """A plugin is enabled but not configured or currently unhealthy."""
+
+    error_code = "plugin_unavailable"
 
 
 class TaskDispatchError(ServiceUnavailableError):

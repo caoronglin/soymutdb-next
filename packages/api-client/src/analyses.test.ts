@@ -43,15 +43,19 @@ describe("analyses (auth)", () => {
   // requestUpload
   // -------------------------------------------------------------------------
   describe("requestUpload", () => {
-    it("POSTs filename/size to /analyses/uploads with Bearer and parses response", async () => {
+    const checksum = "a".repeat(64);
+
+    it("POSTs filename/size/checksum to /analyses/uploads with Bearer and parses response", async () => {
       const presigned = {
         upload_url: "https://s3.example.com/analyses/abc/input/s.fastq",
+        upload_method: "POST" as const,
+        upload_fields: { key: "analyses/abc/input/s.fastq" },
         object_key: "analyses/abc/input/s.fastq",
         expires_in: 3600,
       };
       vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(presigned));
 
-      const result = await requestUpload("s.fastq", 1024);
+      const result = await requestUpload("s.fastq", 1024, checksum);
 
       const [url, init] = lastFetchCall();
       expect(url).toBe(`${API_BASE}/analyses/uploads`);
@@ -59,6 +63,7 @@ describe("analyses (auth)", () => {
       expect(JSON.parse(init.body as string)).toEqual({
         filename: "s.fastq",
         size: 1024,
+        checksum_sha256: checksum,
       });
       expect(new Headers(init.headers).get("Authorization")).toBe(
         "Bearer test-token",
@@ -70,19 +75,30 @@ describe("analyses (auth)", () => {
       vi.mocked(fetch).mockResolvedValueOnce(
         jsonResponse({
           upload_url: "u",
+          upload_method: "POST",
+          upload_fields: {},
           object_key: "k",
           expires_in: 3600,
         }),
       );
 
-      await requestUpload("s.fastq", 2048, "application/gzip");
+      await requestUpload("s.fastq", 2048, checksum, "application/gzip");
 
       const [, init] = lastFetchCall();
       expect(JSON.parse(init.body as string)).toEqual({
         filename: "s.fastq",
         size: 2048,
+        checksum_sha256: checksum,
         content_type: "application/gzip",
       });
+    });
+
+    it("rejects a checksum that is not 64 lowercase hexadecimal characters", async () => {
+      await expect(
+        requestUpload("s.fastq", 1024, "A".repeat(64)),
+      ).rejects.toThrow(/64 lowercase hexadecimal/i);
+
+      expect(fetch).not.toHaveBeenCalled();
     });
   });
 

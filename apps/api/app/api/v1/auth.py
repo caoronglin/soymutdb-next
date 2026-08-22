@@ -22,7 +22,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...core.config import get_settings
 from ...core.csrf import validate_request_origin
 from ...core.database import get_db
-from ...core.exceptions import AuthenticationError, ConflictError, RateLimitExceededError
+from ...core.exceptions import (
+    AuthenticationError,
+    ConflictError,
+    RateLimitExceededError,
+    ServiceUnavailableError,
+)
 from ...core.ratelimit import login_rate_limiter
 from ...core.security import (
     RoleName,
@@ -107,15 +112,17 @@ async def register(
     if existing.scalar_one_or_none() is not None:
         raise ConflictError("A user with this email or username already exists")
 
-    # Resolve role (default viewer).
+    # Public registration never accepts caller-selected privilege.  Resolve
+    # the viewer role from a server-side constant even if an internal caller
+    # bypasses request-model validation.
     role_result = await db.execute(
-        select(Role).where(Role.name == payload.role_name)
+        select(Role).where(Role.name == RoleName.VIEWER.value)
     )
     role = role_result.scalar_one_or_none()
     if role is None:
-        # Fallback to viewer role.
-        role_result = await db.execute(select(Role).where(Role.name == RoleName.VIEWER.value))
-        role = role_result.scalar_one_or_none()
+        raise ServiceUnavailableError(
+            "Registration is unavailable because the viewer role is not initialized"
+        )
 
     user = User(
         id=uuid.uuid4(),
@@ -123,7 +130,7 @@ async def register(
         email=payload.email,
         password_hash=hash_password(payload.password),
         full_name=payload.full_name,
-        role_id=role.id if role else None,
+        role_id=role.id,
         is_active=True,
         joined_at=datetime.now(UTC),
     )

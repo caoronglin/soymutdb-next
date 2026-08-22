@@ -8,8 +8,10 @@ until the worker registers the analyses tasks (W1-C/D), events simply wait
 in the outbox and submission still succeeds.
 
 Object keys are re-validated here (defense in depth): every input object must
-live under ``analyses/`` and downloads under the requesting job's own prefix
-``analyses/{job_id}/``.
+live under the submitting user's UUID and a UUID upload-session prefix.
+Outputs remain under the requesting job's own ``analyses/{job_id}/`` prefix;
+registered input keys remain attached to the job through
+``AnalysisJob.input_objects``.
 """
 
 from __future__ import annotations
@@ -22,8 +24,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.config import get_settings
 from ..core.exceptions import AuthorizationError, NotFoundError, ValidationError
-from ..core.security import RoleName, has_role
 from ..core.jobs_package import ensure_jobs_package  # noqa: F401  (sys.path bootstrap)
+from ..core.security import RoleName, has_role
 from ..core.task_contract import ANALYSIS_FASTP_TASK, ANALYSIS_SCANPY_TASK
 from ..models.analysis_job import AnalysisJob, AnalysisJobStatus, AnalysisType
 from ..schemas.analyses import (
@@ -42,7 +44,7 @@ from ..schemas.analyses import (
 from ..services.presign import (
     DOWNLOAD_EXPIRES_IN,
     generate_download_url,
-    validate_analyses_key,
+    validate_analysis_input_key,
     validate_job_object_key,
 )
 from .job_service import build_job_payload
@@ -127,7 +129,7 @@ class AnalysesService:
         """
         for key in request.input_objects:
             try:
-                validate_analyses_key(key)
+                validate_analysis_input_key(key, user_id)
             except ValueError as exc:
                 raise ValidationError(str(exc)) from exc
 
@@ -149,6 +151,7 @@ class AnalysesService:
             task_name=_ANALYSES_TASKS[analysis_type],
             payload={
                 "job_id": str(job.id),
+                "user_id": str(user_id),
                 "analysis_type": analysis_type.value,
                 "input_objects": list(request.input_objects),
                 "params": clean_params,
@@ -170,7 +173,11 @@ class AnalysesService:
         return AnalysesSubmitResponse(job_id=str(job.id), status="queued")
 
     async def get_job(
-        self, db: AsyncSession, job_id: uuid.UUID, user_id: uuid.UUID | None = None, user_roles: list[str] | None = None
+        self,
+        db: AsyncSession,
+        job_id: uuid.UUID,
+        user_id: uuid.UUID | None = None,
+        user_roles: list[str] | None = None,
     ) -> AnalysesJobResponse:
         result = await db.execute(select(AnalysisJob).where(AnalysisJob.id == job_id))
         job = result.scalar_one_or_none()
@@ -208,8 +215,9 @@ class AnalysesService:
     ) -> AnalysesDownloadResponse:
         """Return a pre-signed GET URL for one of the job's own objects.
 
-        The key must be under ``analyses/{job_id}/`` – cross-job references
-        are rejected before any presigning happens.
+        Outputs must be under ``analyses/{job_id}/``.  Inputs may retain their
+        upload-session prefix, but only exact keys registered on this job are
+        accepted; arbitrary keys from another upload session remain rejected.
         """
         result = await db.execute(select(AnalysisJob).where(AnalysisJob.id == job_id))
         job = result.scalar_one_or_none()
@@ -218,7 +226,10 @@ class AnalysesService:
         self._authorize_job(job.user_id, user_id, user_roles)
 
         try:
-            validate_job_object_key(object_key, job.id)
+            if object_key in job.input_objects:
+                validate_analysis_input_key(object_key, job.user_id)
+            else:
+                validate_job_object_key(object_key, job.id)
         except ValueError as exc:
             raise ValidationError(str(exc)) from exc
 

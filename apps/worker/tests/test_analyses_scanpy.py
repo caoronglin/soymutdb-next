@@ -9,6 +9,8 @@ scrubbed failures, the timeout path and Celery registration.
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import signal
 import time
 import uuid
@@ -20,6 +22,7 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
+from botocore.exceptions import ClientError, EndpointConnectionError
 
 from soymutdb_worker.shared import JobPayload
 from soymutdb_worker.tasks.analyses import scanpy as scanpy_module
@@ -27,6 +30,11 @@ from soymutdb_worker.tasks.analyses.scanpy import (
     ANALYSIS_SCANPY_TASK,
     AnalysisTimeoutError,
 )
+
+FAKE_H5AD_BYTES = b"fake h5ad bytes"
+FAKE_H5AD_SHA256 = hashlib.sha256(FAKE_H5AD_BYTES).digest()
+INTEGRITY_ERROR = "analysis input failed integrity verification"
+STORAGE_ERROR = "analysis object storage operation failed"
 
 
 class _FakeResult:
@@ -86,15 +94,103 @@ class FakeS3:
 
     def __init__(self):
         self.downloads: list[tuple[str, str, str]] = []
+        self.events: list[str] = []
+        self.download_payloads: dict[str, bytes] = {}
+        self.head_error: Exception | None = None
+        self.download_error: Exception | None = None
+
+    def head_object(self, *, Bucket: str, Key: str, ChecksumMode: str):
+        self.events.append("head")
+        if self.head_error is not None:
+            raise self.head_error
+        return {
+            "ContentLength": len(FAKE_H5AD_BYTES),
+            "ContentType": "application/octet-stream",
+            "ChecksumSHA256": base64.b64encode(FAKE_H5AD_SHA256).decode("ascii"),
+            "Metadata": {
+                "declared-size": str(len(FAKE_H5AD_BYTES)),
+                "declared-content-type": "application/octet-stream",
+                "declared-sha256": FAKE_H5AD_SHA256.hex(),
+            },
+        }
 
     def download_file(self, bucket: str, key: str, local_path: str):
+        self.events.append("download")
         self.downloads.append((bucket, key, local_path))
-        Path(local_path).write_bytes(b"fake h5ad bytes")
+        if self.download_error is not None:
+            raise self.download_error
+        Path(local_path).write_bytes(
+            self.download_payloads.get(key, FAKE_H5AD_BYTES)
+        )
+
+
+def test_missing_checksum_is_rejected_before_download():
+    s3 = FakeS3()
+    s3.head_object = lambda **kwargs: {
+        "ContentLength": 10,
+        "ContentType": "application/octet-stream",
+        "Metadata": {
+            "declared-size": "10",
+            "declared-content-type": "application/octet-stream",
+        },
+    }
+
+    with pytest.raises(ValueError, match="SHA-256 checksum"):
+        scanpy_module.validate_remote_input(s3, "analyses/u/s/input/a.h5ad")
+
+    assert s3.downloads == []
+
+
+def test_mismatched_mime_is_rejected_before_download():
+    s3 = FakeS3()
+    s3.head_object = lambda **kwargs: {
+        "ContentLength": 10,
+        "ContentType": "text/plain",
+        "ChecksumSHA256": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=",
+        "Metadata": {
+            "declared-size": "10",
+            "declared-content-type": "application/octet-stream",
+        },
+    }
+
+    with pytest.raises(ValueError, match="MIME"):
+        scanpy_module.validate_remote_input(s3, "analyses/u/s/input/a.h5ad")
+
+    assert s3.downloads == []
+
+
+def test_mismatched_checksum_is_rejected_before_download():
+    s3 = FakeS3()
+    s3.head_object = lambda **kwargs: {
+        "ContentLength": 10,
+        "ContentType": "application/octet-stream",
+        "ChecksumSHA256": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=",
+        "Metadata": {
+            "declared-size": "10",
+            "declared-content-type": "application/octet-stream",
+            "declared-sha256": "62" * 32,
+        },
+    }
+
+    with pytest.raises(ValueError, match="checksum does not match"):
+        scanpy_module.validate_remote_input(s3, "analyses/u/s/input/a.h5ad")
+
+    assert s3.downloads == []
 
 
 def _call_task(task: Any, *args, **kwargs):
     """Invoke the raw task function (bypassing Celery's bound-task wrapper)."""
     return task.run.__func__(*args, **kwargs)
+
+
+def _input_key(
+    user_id: str,
+    filename: str = "matrix.h5ad",
+    *,
+    upload_session_id: str | None = None,
+) -> str:
+    session_id = upload_session_id or str(uuid.uuid4())
+    return f"analyses/{user_id}/{session_id}/input/{filename}"
 
 
 def _payload(
@@ -103,15 +199,18 @@ def _payload(
     input_objects: list[str] | None = None,
     params: dict | None = None,
     analysis_type: str = "scanpy",
+    user_id: str | None = None,
 ) -> dict:
     job_id = job_id or str(uuid.uuid4())
+    user_id = user_id or str(uuid.uuid4())
     now = datetime.now(UTC)
-    keys = input_objects or [f"analyses/{job_id}/input/matrix.h5ad"]
+    keys = input_objects if input_objects is not None else [_input_key(user_id)]
     p = JobPayload(
         job_id=job_id,
         task_name=task_name,
         payload={
             "job_id": job_id,
+            "user_id": user_id,
             "analysis_type": analysis_type,
             "input_objects": keys,
             "params": params or {},
@@ -315,10 +414,10 @@ def test_successful_run_uploads_and_summarizes(monkeypatch) -> None:
         f"analyses/analyses/{job_id}/output/umap.png",
         f"analyses/analyses/{job_id}/output/markers.csv",
     ]
-    # The single download came from the job-scoped input prefix.
     assert len(captured["s3"].downloads) == 1
-    assert captured["s3"].downloads[0][1] == f"analyses/{job_id}/input/matrix.h5ad"
+    assert captured["s3"].downloads[0][1] == payload["payload"]["input_objects"][0]
     assert captured["s3"].downloads[0][2].endswith("input.h5ad")
+    assert captured["s3"].events[:2] == ["head", "download"]
     # read_h5ad consumed the downloaded local path.
     read_path = captured["sc"].read_h5ad.call_args[0][0]
     assert read_path.endswith("input.h5ad")
@@ -339,6 +438,38 @@ def test_successful_run_uploads_and_summarizes(monkeypatch) -> None:
         assert summary["top_markers"][group][0] == f"gene_{group}_0"
         assert summary["top_markers"][group][9] == f"gene_{group}_9"
     assert result["result_summary"] == summary
+
+
+def test_downloaded_input_checksum_mismatch_fails_before_pipeline(monkeypatch) -> None:
+    payload = _payload()
+    session = FakeSession(status="queued")
+    captured = _monkeypatch_environment(monkeypatch, session)
+    key = payload["payload"]["input_objects"][0]
+    captured["s3"].download_payloads[key] = b"X" * len(FAKE_H5AD_BYTES)
+
+    with pytest.raises(ValueError, match=f"^{INTEGRITY_ERROR}$"):
+        _call_task(scanpy_module.run_scanpy, FakeTask(), payload=payload)
+
+    assert session.status == "failed"
+    assert session.error_message == INTEGRITY_ERROR
+    assert captured["sc"].read_h5ad.call_count == 0
+    assert captured["uploads"] == []
+
+
+def test_downloaded_input_size_mismatch_fails_before_pipeline(monkeypatch) -> None:
+    payload = _payload()
+    session = FakeSession(status="queued")
+    captured = _monkeypatch_environment(monkeypatch, session)
+    key = payload["payload"]["input_objects"][0]
+    captured["s3"].download_payloads[key] = FAKE_H5AD_BYTES + b"!"
+
+    with pytest.raises(ValueError, match=f"^{INTEGRITY_ERROR}$"):
+        _call_task(scanpy_module.run_scanpy, FakeTask(), payload=payload)
+
+    assert session.status == "failed"
+    assert session.error_message == INTEGRITY_ERROR
+    assert captured["sc"].read_h5ad.call_count == 0
+    assert captured["uploads"] == []
 
 
 def test_default_params_applied(monkeypatch) -> None:
@@ -415,6 +546,7 @@ def test_string_params_are_coerced(monkeypatch) -> None:
 
 def test_legacy_kwargs_dispatch_still_works(monkeypatch) -> None:
     job_id = str(uuid.uuid4())
+    user_id = str(uuid.uuid4())
     session = FakeSession(status="queued")
     _monkeypatch_environment(monkeypatch, session)
 
@@ -422,7 +554,8 @@ def test_legacy_kwargs_dispatch_still_works(monkeypatch) -> None:
         scanpy_module.run_scanpy,
         FakeTask(),
         job_id=job_id,
-        input_objects=[f"analyses/{job_id}/input/legacy.h5ad"],
+        user_id=user_id,
+        input_objects=[_input_key(user_id, "legacy.h5ad")],
         params={"resolution": 2.0},
     )
 
@@ -430,6 +563,23 @@ def test_legacy_kwargs_dispatch_still_works(monkeypatch) -> None:
     assert result["job_id"] == job_id
     assert session.status == "succeeded"
     assert session.result_summary["n_clusters"] == 2
+
+
+def test_legacy_kwargs_without_user_id_are_rejected(monkeypatch) -> None:
+    job_id = str(uuid.uuid4())
+    session = FakeSession(status="queued")
+    _monkeypatch_environment(monkeypatch, session)
+
+    with pytest.raises(TypeError, match="user_id"):
+        _call_task(
+            scanpy_module.run_scanpy,
+            FakeTask(),
+            job_id=job_id,
+            input_objects=[_input_key(str(uuid.uuid4()), "legacy.h5ad")],
+            params={},
+        )
+
+    assert session.status == "queued"
 
 
 # ---------------------------------------------------------------------------
@@ -460,11 +610,13 @@ def test_bad_param_values_are_rejected(monkeypatch) -> None:
 
 def test_two_input_objects_rejected(monkeypatch) -> None:
     job_id = str(uuid.uuid4())
+    user_id = str(uuid.uuid4())
     payload = _payload(
         job_id=job_id,
+        user_id=user_id,
         input_objects=[
-            f"analyses/{job_id}/input/a.h5ad",
-            f"analyses/{job_id}/input/b.h5ad",
+            _input_key(user_id, "a.h5ad"),
+            _input_key(user_id, "b.h5ad"),
         ],
     )
     session = FakeSession(status="queued")
@@ -477,10 +629,10 @@ def test_two_input_objects_rejected(monkeypatch) -> None:
 
 
 def test_non_h5ad_input_rejected(monkeypatch) -> None:
-    job_id = str(uuid.uuid4())
+    user_id = str(uuid.uuid4())
     payload = _payload(
-        job_id=job_id,
-        input_objects=[f"analyses/{job_id}/input/matrix.mtx"],
+        user_id=user_id,
+        input_objects=[_input_key(user_id, "matrix.mtx")],
     )
     session = FakeSession(status="queued")
     _monkeypatch_environment(monkeypatch, session)
@@ -491,16 +643,74 @@ def test_non_h5ad_input_rejected(monkeypatch) -> None:
     assert session.status == "queued"
 
 
-def test_input_key_outside_job_prefix_is_rejected(monkeypatch) -> None:
+def test_upload_session_key_is_independent_of_job_id(monkeypatch) -> None:
     job_id = str(uuid.uuid4())
+    user_id = str(uuid.uuid4())
     payload = _payload(
         job_id=job_id,
-        input_objects=[f"analyses/{uuid.uuid4()}/input/other.h5ad"],
+        user_id=user_id,
+        input_objects=[_input_key(user_id, "other.h5ad")],
     )
     session = FakeSession(status="queued")
     _monkeypatch_environment(monkeypatch, session)
 
-    with pytest.raises(ValueError, match="outside the job's input prefix"):
+    result = _call_task(scanpy_module.run_scanpy, FakeTask(), payload=payload)
+
+    assert result["skipped"] is False
+    assert session.status == "succeeded"
+
+
+def test_input_key_without_uuid_upload_session_is_rejected(monkeypatch) -> None:
+    user_id = str(uuid.uuid4())
+    payload = _payload(
+        user_id=user_id,
+        input_objects=[f"analyses/{user_id}/not-a-session/input/other.h5ad"],
+    )
+    session = FakeSession(status="queued")
+    _monkeypatch_environment(monkeypatch, session)
+
+    with pytest.raises(ValueError, match="upload session"):
+        _call_task(scanpy_module.run_scanpy, FakeTask(), payload=payload)
+
+    assert session.status == "queued"
+
+
+def test_input_key_owned_by_another_user_is_rejected(monkeypatch) -> None:
+    user_id = str(uuid.uuid4())
+    other_user_id = str(uuid.uuid4())
+    payload = _payload(
+        user_id=user_id,
+        input_objects=[_input_key(other_user_id, "stolen.h5ad")],
+    )
+    session = FakeSession(status="queued")
+    _monkeypatch_environment(monkeypatch, session)
+
+    with pytest.raises(ValueError, match="does not belong"):
+        _call_task(scanpy_module.run_scanpy, FakeTask(), payload=payload)
+
+    assert session.status == "queued"
+
+
+def test_legacy_unscoped_input_key_is_rejected(monkeypatch) -> None:
+    payload = _payload(
+        input_objects=[f"analyses/{uuid.uuid4()}/input/legacy.h5ad"]
+    )
+    session = FakeSession(status="queued")
+    _monkeypatch_environment(monkeypatch, session)
+
+    with pytest.raises(ValueError, match="user UUID"):
+        _call_task(scanpy_module.run_scanpy, FakeTask(), payload=payload)
+
+    assert session.status == "queued"
+
+
+def test_payload_without_user_id_is_rejected(monkeypatch) -> None:
+    payload = _payload()
+    payload["payload"].pop("user_id")
+    session = FakeSession(status="queued")
+    _monkeypatch_environment(monkeypatch, session)
+
+    with pytest.raises(ValueError, match="user_id"):
         _call_task(scanpy_module.run_scanpy, FakeTask(), payload=payload)
 
     assert session.status == "queued"
@@ -526,6 +736,64 @@ def test_wrong_analysis_type_is_rejected(monkeypatch) -> None:
 # ---------------------------------------------------------------------------
 # Failure paths
 # ---------------------------------------------------------------------------
+
+
+def test_head_client_error_is_redacted_before_persistence(monkeypatch) -> None:
+    payload = _payload()
+    session = FakeSession(status="queued")
+    captured = _monkeypatch_environment(monkeypatch, session)
+    secret = "INTERNAL_SENTINEL s3.internal:9000"
+    captured["s3"].head_error = ClientError(
+        {"Error": {"Code": "AccessDenied", "Message": secret}},
+        "HeadObject",
+    )
+
+    with pytest.raises(RuntimeError, match=f"^{STORAGE_ERROR}$"):
+        _call_task(scanpy_module.run_scanpy, FakeTask(), payload=payload)
+
+    assert session.status == "failed"
+    assert session.error_message == STORAGE_ERROR
+    assert secret not in (session.error_message or "")
+    assert captured["sc"].read_h5ad.call_count == 0
+    assert captured["uploads"] == []
+
+
+def test_download_botocore_error_is_redacted_before_persistence(monkeypatch) -> None:
+    payload = _payload()
+    session = FakeSession(status="queued")
+    captured = _monkeypatch_environment(monkeypatch, session)
+    secret = "INTERNAL_SENTINEL-download"
+    captured["s3"].download_error = EndpointConnectionError(
+        endpoint_url=f"https://{secret}"
+    )
+
+    with pytest.raises(RuntimeError, match=f"^{STORAGE_ERROR}$"):
+        _call_task(scanpy_module.run_scanpy, FakeTask(), payload=payload)
+
+    assert session.status == "failed"
+    assert session.error_message == STORAGE_ERROR
+    assert secret not in (session.error_message or "")
+    assert captured["sc"].read_h5ad.call_count == 0
+    assert captured["uploads"] == []
+
+
+def test_output_upload_botocore_error_is_redacted_before_persistence(monkeypatch) -> None:
+    payload = _payload()
+    session = FakeSession(status="queued")
+    _monkeypatch_environment(monkeypatch, session)
+    secret = "INTERNAL_SENTINEL-output-upload"
+
+    def fail_upload(*args, **kwargs):
+        raise EndpointConnectionError(endpoint_url=f"https://{secret}")
+
+    monkeypatch.setattr(scanpy_module, "upload_file", fail_upload)
+
+    with pytest.raises(RuntimeError, match=f"^{STORAGE_ERROR}$"):
+        _call_task(scanpy_module.run_scanpy, FakeTask(), payload=payload)
+
+    assert session.status == "failed"
+    assert session.error_message == STORAGE_ERROR
+    assert secret not in (session.error_message or "")
 
 
 def test_failed_run_marks_job_failed_with_scrubbed_error(monkeypatch) -> None:

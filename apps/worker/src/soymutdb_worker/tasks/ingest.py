@@ -1,10 +1,11 @@
 """Variant ingestion tasks.
 
 Fixes vs. quartz reference:
-- **Idempotent**: variant IDs are deterministic — derived from
+- **Stable identity**: variant IDs are deterministic — derived from
   ``release_id + file_key + chromosome + position + ref + alt`` via a stable
-  hash, NOT an in-memory counter.  Re-importing the same file produces the
-  same IDs, so ClickHouse ``REPLACE`` deduplicates automatically.
+  hash, NOT an in-memory counter. This does not make imports idempotent:
+  ``variant_facts`` uses ``MergeTree`` and its materialized summaries are
+  additive, so retries would insert and aggregate duplicates.
 - **zygosity**: read from the actual sample genotype (cyvcf2 ``gt_type``),
   not hardcoded to ``"heterozygous"``.
 - **No dependency on non-existent INFO fields**: ``GENE_SID`` / ``ML_SID`` are
@@ -24,22 +25,82 @@ import hashlib
 import io
 import logging
 import re
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC
 from typing import Any
 
 import clickhouse_connect
 from celery import Task
 from clickhouse_connect.driver import Client
+from sqlalchemy import text
 
 from soymutdb_worker.config import get_setting
 from soymutdb_worker.main import celery_app
+from soymutdb_worker.utils.db import get_db
 from soymutdb_worker.utils.s3 import download_file, stream_s3_file
 
-from .data_adapters import ImportContext, get_adapter
+from .data_adapters import ImportContext, UnsupportedImportError, get_adapter
 
 logger = logging.getLogger(__name__)
 
 BATCH_SIZE = 50_000
+_IMPORT_LOCK_NAMESPACE = 0x534D4442
+_TERMINAL_IMPORT_STATUSES = frozenset({"ready", "published", "rolled_back"})
+
+
+def _import_lock_key(import_task_id: int) -> int:
+    """Return a stable signed-bigint advisory-lock key for one import task."""
+    if not 0 < import_task_id <= 0x7FFFFFFF:
+        raise ValueError("import_task_id is outside the supported integer range")
+    return (_IMPORT_LOCK_NAMESPACE << 32) | import_task_id
+
+
+@contextmanager
+def import_execution_guard(import_task_id: int) -> Iterator[bool]:
+    """Fence duplicate deliveries with a PostgreSQL session advisory lock.
+
+    The lock is held for the complete adapter execution. A concurrent copy is
+    acknowledged without running, while a later redelivery observes a terminal
+    task status and also skips. PostgreSQL releases the lock automatically if
+    the worker process or connection dies.
+    """
+    params = {"lock_key": _import_lock_key(import_task_id)}
+    with get_db() as session:
+        acquired = bool(
+            session.execute(
+                text("SELECT pg_try_advisory_lock(:lock_key)"),
+                params,
+            ).scalar_one()
+        )
+        if not acquired:
+            logger.warning(
+                "duplicate import delivery skipped: task %s is already running",
+                import_task_id,
+            )
+            yield False
+            return
+
+        try:
+            row = session.execute(
+                text("SELECT status FROM import_tasks WHERE id = :task_id"),
+                {"task_id": import_task_id},
+            ).first()
+            if row is None:
+                raise RuntimeError(f"import task {import_task_id} does not exist")
+            yield str(row[0]) not in _TERMINAL_IMPORT_STATUSES
+        finally:
+            released = bool(
+                session.execute(
+                    text("SELECT pg_advisory_unlock(:lock_key)"),
+                    params,
+                ).scalar_one()
+            )
+            if not released:
+                logger.error(
+                    "import advisory lock was not owned at release: task %s",
+                    import_task_id,
+                )
 
 
 def update_import_progress(import_task_id: int, **values: Any) -> None:
@@ -195,7 +256,7 @@ def get_clickhouse_client() -> Client:
 
 
 # ---------------------------------------------------------------------------
-# Deterministic variant ID (idempotent)
+# Deterministic variant ID (stable identity only; not deduplication)
 # ---------------------------------------------------------------------------
 
 
@@ -207,15 +268,15 @@ def compute_variant_id(
     ref: str,
     alt: str,
 ) -> int:
-    """Compute a deterministic, idempotent variant ID.
+    """Compute a deterministic variant ID.
 
     The ID is derived from a stable SHA-256 hash of
     ``release_id + file_key + chromosome + position + ref + alt``.
-    Re-importing the same file always produces the same IDs, so ClickHouse
-    ``REPLACE`` / ``ReplacingMergeTree`` deduplicates automatically.
+    Re-importing the same file produces the same IDs, but the current
+    ``MergeTree`` target does not enforce uniqueness or replace existing rows.
 
     This replaces the non-idempotent ``variant_id_counter`` from the quartz
-    reference which produced duplicate IDs on repeated imports.
+    reference; durable import idempotency remains a separate requirement.
     """
     key = f"{release_id}|{file_key}|{chromosome}|{position}|{ref}|{alt}"
     digest = hashlib.sha256(key.encode("utf-8")).digest()
@@ -357,19 +418,25 @@ def import_vcf(
 ) -> dict:
     """Ingest variants from a VCF file into ClickHouse.
 
-    Uses ``cyvcf2`` for efficient streaming parsing of bgzipped VCF files.
-    Variant IDs are deterministic (idempotent) — re-importing the same file
-    produces the same IDs.
+    This path currently fails closed. Stable variant IDs do not prevent
+    duplicate rows or duplicate materialized-summary counts in the current
+    ``MergeTree`` schema. Re-enable only after a durable checksum/import
+    identity and staging/finalize protocol can make retries safe.
 
     Args:
         release_id: Release identifier.
-        file_key: S3 key of the VCF file (used for idempotent ID generation).
+        file_key: S3 key of the VCF file (used for stable ID generation).
         assembly_key: Assembly identifier.
         batch_size: Number of variants per batch insert (default 50 000).
 
     Returns:
         dict with ingestion statistics.
     """
+    raise UnsupportedImportError(
+        "VCF import is disabled: variant_facts uses MergeTree and no durable "
+        "checksum/import identity plus staging finalize prevents duplicate facts on retry"
+    )
+
     logger.info("Starting VCF ingestion: %s for release %s", file_key, release_id)
 
     ch = get_clickhouse_client()
@@ -462,7 +529,7 @@ def import_vcf(
                     vtype, vsubtype = determine_variant_type(ref, str(alt))
                     length = max(len(ref), len(str(alt)))
 
-                    # Deterministic variant ID (idempotent)
+                    # Deterministic variant ID; the storage layer must provide deduplication.
                     variant_id = compute_variant_id(
                         release_id, file_key, chrom, pos, ref, str(alt)
                     )
@@ -689,36 +756,45 @@ def run_import_adapter(import_task_id: int, data_set_id: int, kind: str,
                        schema_version: int | None = None,
                        checksum: str | None = None,
                        filename: str | None = None) -> dict[str, Any]:
-    context = ImportContext(
-        import_task_id,
-        data_set_id,
-        release_id,
-        file_key,
-        assembly or None,
-        module_key=module_key,
-        schema_version=schema_version,
-        checksum=checksum,
-        filename=filename,
-    )
-    try:
-        update_import_progress(import_task_id, status="ingesting", progress=0)
-        result = get_adapter(kind).run(
-            context,
-            progress=lambda **values: update_import_progress(import_task_id, **values),
-        )
-        update_import_progress(
+    with import_execution_guard(import_task_id) as should_run:
+        if not should_run:
+            return {
+                "import_task_id": import_task_id,
+                "skipped": True,
+                "reason": "duplicate_or_completed",
+            }
+
+        context = ImportContext(
             import_task_id,
-            status="ready",
-            progress=100,
-            evidence=result.evidence,
+            data_set_id,
+            release_id,
+            file_key,
+            assembly or None,
+            module_key=module_key,
+            schema_version=schema_version,
+            checksum=checksum,
+            filename=filename,
         )
-        from dataclasses import asdict
-        return asdict(result)
-    except Exception as exc:
-        update_import_progress(
-            import_task_id,
-            status="failed",
-            error_detail=str(exc),
-            failed_batch=current_batch(),
-        )
-        raise
+        try:
+            update_import_progress(import_task_id, status="ingesting", progress=0)
+            result = get_adapter(kind).run(
+                context,
+                progress=lambda **values: update_import_progress(import_task_id, **values),
+            )
+            update_import_progress(
+                import_task_id,
+                status="ready",
+                progress=100,
+                evidence=result.evidence,
+            )
+            from dataclasses import asdict
+
+            return asdict(result)
+        except Exception as exc:
+            update_import_progress(
+                import_task_id,
+                status="failed",
+                error_detail=str(exc),
+                failed_batch=current_batch(),
+            )
+            raise

@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.database import get_db
 from ...core.exceptions import AuthorizationError
+from ...core.plugins import get_plugin_registry
 from ...core.security import RoleName, has_role
 from ...models.auth import User
 from ...models.page_builder import PageDefinitionVersion
@@ -29,6 +30,7 @@ from ...page_builder.schemas import (
     PublishRequestResponse,
     RegistryResponse,
 )
+from ...services.plugin_service import PluginService
 from .deps import get_current_user, get_user_roles
 
 router = APIRouter(prefix="/admin/page-builder", tags=["admin-page-builder"])
@@ -70,8 +72,11 @@ def _summary(page, version: PageDefinitionVersion | None) -> PageDefinitionSumma
 
 
 @router.get("/registry", response_model=RegistryResponse)
-async def get_registry() -> RegistryResponse:
+async def get_registry(
+    current_user: User = Depends(get_current_user),
+) -> RegistryResponse:
     """Expose the server-owned component registry to the Admin editor."""
+    _require_admin(current_user)
     components = [
         ComponentDescriptor(
             renderer_key=entry.renderer_key,
@@ -118,6 +123,7 @@ async def create_page(
     current_user: User = Depends(get_current_user),
 ) -> PageDefinitionResponse:
     _require_admin(current_user)
+    plugin_states = await PluginService.snapshot(db, get_plugin_registry())
 
     page, version = await page_service.create_page(
         db,
@@ -125,6 +131,7 @@ async def create_page(
         title_key=payload.title_key,
         definition=payload.definition,
         edited_by=current_user.id,
+        plugin_states=plugin_states,
     )
     return PageDefinitionResponse(
         id=page.id,
@@ -164,6 +171,7 @@ async def update_draft(
     current_user: User = Depends(get_current_user),
 ) -> PageDefinitionVersionResponse:
     _require_admin(current_user)
+    plugin_states = await PluginService.snapshot(db, get_plugin_registry())
 
     _page, version = await page_service.update_draft(
         db,
@@ -172,6 +180,7 @@ async def update_draft(
         definition=payload.definition,
         edit_comment=payload.edit_comment,
         edited_by=current_user.id,
+        plugin_states=plugin_states,
     )
     return _version_to_response(version)
 
@@ -184,9 +193,14 @@ async def preview_page(
     current_user: User = Depends(get_current_user),
 ) -> PreviewResponse:
     _require_admin(current_user)
+    plugin_states = await PluginService.snapshot(db, get_plugin_registry())
 
     result = await page_service.preview(
-        db, page_id=page_id, route=None, definition=payload.definition
+        db,
+        page_id=page_id,
+        route=None,
+        definition=payload.definition,
+        plugin_states=plugin_states,
     )
     return PreviewResponse(
         definition=result["definition"], version_preview=result["version_preview"]
@@ -219,6 +233,7 @@ async def publish_request(
     current_user: User = Depends(get_current_user),
 ) -> PublishRequestResponse:
     _require_admin(current_user)
+    plugin_states = await PluginService.snapshot(db, get_plugin_registry())
 
     _page, version, event = await page_service.publish_request(
         db,
@@ -226,6 +241,7 @@ async def publish_request(
         version_id=payload.version_id,
         reason=payload.reason,
         edited_by=current_user.id,
+        plugin_states=plugin_states,
     )
     return PublishRequestResponse(
         page_id=page_id,

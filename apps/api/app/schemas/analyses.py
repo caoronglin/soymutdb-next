@@ -2,9 +2,10 @@
 
 Validation notes:
 - Upload requests enforce the 500 MB size ceiling and reject filenames that
-  contain path separators or traversal segments (``..``).
+  contain path separators or traversal segments (``..``).  A SHA-256 digest
+  is required so the signed POST and later HEAD checks bind exact content.
 - Submit requests carry the object keys returned by the upload endpoint;
-  the service layer re-checks the ``analyses/`` prefix on every key.
+  the service layer re-checks every key's user and upload-session UUIDs.
 """
 
 from __future__ import annotations
@@ -46,6 +47,12 @@ class AnalysesUploadRequest(BaseModel):
     filename: str = Field(min_length=1, max_length=255)
     size: int = Field(gt=0, le=MAX_UPLOAD_SIZE)
     content_type: str | None = Field(default=None, max_length=128)
+    checksum_sha256: str = Field(pattern=r"^[0-9a-fA-F]{64}$")
+
+    @field_validator("checksum_sha256")
+    @classmethod
+    def _normalize_checksum(cls, value: str) -> str:
+        return value.lower()
 
     @field_validator("filename")
     @classmethod
@@ -53,8 +60,8 @@ class AnalysesUploadRequest(BaseModel):
         """Reject path separators and traversal segments in the client filename.
 
         The stored key is built from the sanitized basename only, so a
-        malicious name can never escape the ``analyses/{job_id}/input/``
-        prefix.
+        malicious name can never escape the
+        ``analyses/{user_id}/{upload_session_id}/input/`` prefix.
         """
         name = v.replace("\\", "/").rsplit("/", 1)[-1].strip()
         if not name or name in {".", ".."}:
@@ -66,6 +73,8 @@ class AnalysesUploadRequest(BaseModel):
 
 class AnalysesUploadResponse(BaseModel):
     upload_url: str
+    upload_method: Literal["POST"] = "POST"
+    upload_fields: dict[str, str] = Field(default_factory=dict)
     object_key: str
     expires_in: int
 

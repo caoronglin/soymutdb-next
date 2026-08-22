@@ -6,8 +6,8 @@ Covers with a fake database session:
   status transitions (pending → approved/rejected → fulfilled, illegal
   transitions rejected, unknown id 404)
 - HTTP layer: public create (201 / validation 422 for bad email and
-  >200 gene IDs), admin RBAC (401 unauthenticated / 403 viewer /
-  200 researcher+), endpoint wiring
+  >200 gene IDs), admin RBAC (401 unauthenticated / 403 non-manager /
+  200 seed manager), endpoint wiring
 """
 
 from __future__ import annotations
@@ -441,8 +441,17 @@ class TestAdminRBAC:
         assert r.status_code == 403
         assert r.json()["error"]["code"] == "forbidden"
 
-    async def test_admin_list_researcher_200(self, api_client, api_app):
+    async def test_admin_list_researcher_403(self, api_client, api_app):
         user = _make_user(RoleName.RESEARCHER)
+        api_app.state.fake_session.user = user
+        r = await api_client.get(
+            "/api/v1/admin/seed-requests", headers=_auth_header(user)
+        )
+        assert r.status_code == 403
+        assert r.json()["error"]["code"] == "forbidden"
+
+    async def test_admin_list_seed_manager_200(self, api_client, api_app):
+        user = _make_user(RoleName.SEED_MANAGER)
         api_app.state.fake_session.user = user
         api_app.state.fake_session.requests = [
             _make_request(status="pending"),
@@ -458,7 +467,7 @@ class TestAdminRBAC:
         assert len(body["items"]) == 2
 
     async def test_admin_list_pagination_params(self, api_client, api_app):
-        user = _make_user(RoleName.RESEARCHER)
+        user = _make_user(RoleName.SEED_MANAGER)
         api_app.state.fake_session.user = user
         api_app.state.fake_session.requests = [_make_request()]
         r = await api_client.get(
@@ -478,8 +487,21 @@ class TestAdminRBAC:
         )
         assert r.status_code == 401
 
-    async def test_admin_patch_researcher_200(self, api_client, api_app):
+    async def test_admin_patch_researcher_403(self, api_client, api_app):
         user = _make_user(RoleName.RESEARCHER)
+        api_app.state.fake_session.user = user
+        request = _make_request()
+        api_app.state.fake_session.requests = [request]
+        r = await api_client.patch(
+            f"/api/v1/admin/seed-requests/{request.id}",
+            json={"status": "approved"},
+            headers=_auth_header(user),
+        )
+        assert r.status_code == 403
+        assert r.json()["error"]["code"] == "forbidden"
+
+    async def test_admin_patch_seed_manager_200(self, api_client, api_app):
+        user = _make_user(RoleName.SEED_MANAGER)
         api_app.state.fake_session.user = user
         request = _make_request()
         api_app.state.fake_session.requests = [request]
@@ -494,7 +516,7 @@ class TestAdminRBAC:
         assert body["processed_by"] == str(user.id)
 
     async def test_admin_patch_illegal_transition_422(self, api_client, api_app):
-        user = _make_user(RoleName.RESEARCHER)
+        user = _make_user(RoleName.SEED_MANAGER)
         api_app.state.fake_session.user = user
         request = _make_request(status="pending")
         api_app.state.fake_session.requests = [request]

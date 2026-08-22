@@ -22,18 +22,31 @@ export type AnalysesSubmitResponse = components["schemas"]["AnalysesSubmitRespon
 export type AnalysesJobResponse = components["schemas"]["AnalysesJobResponse"];
 export type AnalysesDownloadResponse = components["schemas"]["AnalysesDownloadResponse"];
 
+const SHA256_HEX_PATTERN = /^[0-9a-f]{64}$/;
+
 /**
- * Request a pre-signed PUT URL for an analysis input file.
+ * Request a pre-signed multipart POST for an analysis input file.
  *
- * Returns the URL to upload to plus the `object_key` that must be sent back
- * at submit time. Nothing is persisted server-side yet.
+ * Returns the URL and form fields to upload to plus the `object_key` that
+ * must be sent back at submit time. Nothing is persisted server-side yet.
  */
 export function requestUpload(
   filename: string,
   size: number,
+  checksumSha256: string,
   contentType?: string,
 ): Promise<AnalysesUploadResponse> {
-  const body: AnalysesUploadRequest = { filename, size };
+  if (!SHA256_HEX_PATTERN.test(checksumSha256)) {
+    return Promise.reject(
+      new TypeError("checksumSha256 must be 64 lowercase hexadecimal characters"),
+    );
+  }
+
+  const body: AnalysesUploadRequest = {
+    filename,
+    size,
+    checksum_sha256: checksumSha256,
+  };
   if (contentType !== undefined) body.content_type = contentType;
   return http.post<AnalysesUploadResponse>("/analyses/uploads", { json: body });
 }

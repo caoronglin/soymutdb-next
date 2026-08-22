@@ -82,17 +82,27 @@ def _sanitize_error(message: str | None) -> str | None:
     return clean.strip()[:_MAX_ERROR_LEN] or None
 
 
-def build_upload_key(job_id: str | uuid.UUID, filename: str) -> str:
+def build_upload_key(
+    owner_id: str | uuid.UUID,
+    upload_session_id: str | uuid.UUID,
+    filename: str,
+) -> str:
     """Build the object key for a new GWAS input upload.
 
-    Shape: ``gwas/{job_id}/input/{uuid}-{sanitized-filename}``.  The random
-    prefix guarantees key uniqueness and makes the filename opaque.
+    Shape: ``gwas/{owner_id}/{session}/input/{uuid}-{sanitized-filename}``.
+    The owner segment binds the stateless upload to its authenticated user.
     """
     name = sanitize_filename(filename)
-    return f"{GWAS_PREFIX}/{job_id}/input/{uuid.uuid4()}-{name}"
+    return (
+        f"{GWAS_PREFIX}/{owner_id}/{upload_session_id}/input/"
+        f"{uuid.uuid4()}-{name}"
+    )
 
 
-def validate_gwas_key(object_key: str) -> str:
+def validate_gwas_key(
+    object_key: str,
+    owner_id: str | uuid.UUID,
+) -> str:
     """Validate an object key against the ``gwas/`` namespace.
 
     Rejects keys outside ``gwas/`` (including look-alike prefixes such as
@@ -109,8 +119,18 @@ def validate_gwas_key(object_key: str) -> str:
         raise ValueError("object_key must not contain traversal segments")
     if not object_key.startswith(f"{GWAS_PREFIX}/"):
         raise ValueError(f"object_key must live under '{GWAS_PREFIX}/'")
-    if "/input/" not in object_key:
-        raise ValueError("object_key must contain an '/input/' segment")
+    if len(segments) != 5 or segments[3] != "input":
+        raise ValueError(
+            "object_key must have shape "
+            "'gwas/{owner_id}/{session_id}/input/{filename}'"
+        )
+    if segments[1] != str(owner_id):
+        raise ValueError("object_key does not belong to the current owner")
+    try:
+        uuid.UUID(segments[1])
+        uuid.UUID(segments[2])
+    except ValueError as exc:
+        raise ValueError("object_key owner and session must be UUIDs") from exc
     return object_key
 
 
@@ -119,10 +139,14 @@ class GwasService:
 
     # -- upload presigning -------------------------------------------------
 
-    def create_upload(self, filename: str) -> dict[str, Any]:
+    def create_upload(
+        self,
+        owner_id: str | uuid.UUID,
+        filename: str,
+    ) -> dict[str, Any]:
         """Return a pre-signed PUT URL + object key (stateless, nothing persisted)."""
-        job_id = uuid.uuid4()
-        object_key = build_upload_key(job_id, filename)
+        upload_session_id = uuid.uuid4()
+        object_key = build_upload_key(owner_id, upload_session_id, filename)
         upload_url = generate_upload_url(object_key, expires_in=UPLOAD_EXPIRES_IN)
         return {
             "upload_url": upload_url,
@@ -181,7 +205,7 @@ class GwasService:
             if key is None:
                 continue
             try:
-                validate_gwas_key(key)
+                validate_gwas_key(key, user_id)
             except ValueError as exc:
                 raise ValidationError(str(exc)) from exc
 
@@ -209,6 +233,7 @@ class GwasService:
             task_name=GWAS_RUN_TASK,
             payload={
                 "job_id": str(job.id),
+                "owner_id": str(user_id),
                 "method": job.method,
                 "object_type": job.object_type,
                 "phenotype_object_key": job.phenotype_file_path,
@@ -264,7 +289,13 @@ class GwasService:
 
     # -- status / results --------------------------------------------------
 
-    async def get_job(self, db: AsyncSession, job_id: uuid.UUID, user_id: uuid.UUID, user_roles: list[str]) -> GwasJobResponse:
+    async def get_job(
+        self,
+        db: AsyncSession,
+        job_id: uuid.UUID,
+        user_id: uuid.UUID,
+        user_roles: list[str],
+    ) -> GwasJobResponse:
         result = await db.execute(select(GwasJob).where(GwasJob.id == job_id))
         job = result.scalar_one_or_none()
         if job is None:

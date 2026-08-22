@@ -12,7 +12,7 @@ from ...core.security import RoleName
 from ...models.auth import User
 from ...schemas.content import SignedUrlResponse
 from ...services.track_service import TrackService
-from .deps import get_current_user, get_user_roles, require_role
+from .deps import get_current_user, get_optional_user, get_user_roles, require_role
 
 router = APIRouter(prefix="/tracks", tags=["tracks"])
 service = TrackService()
@@ -23,9 +23,16 @@ async def list_tracks(
     db: AsyncSession = Depends(get_db),
     assembly_id: int | None = Query(default=None),
     category_id: int | None = Query(default=None),
+    current_user: User | None = Depends(get_optional_user),
 ) -> list[dict[str, Any]]:
     """List tracks (optionally filtered by assembly / category)."""
-    return await service.list_tracks(db, assembly_id=assembly_id, category_id=category_id)
+    return await service.list_tracks(
+        db,
+        assembly_id=assembly_id,
+        category_id=category_id,
+        user_id=current_user.id if current_user else None,
+        user_roles=get_user_roles(current_user) if current_user else [],
+    )
 
 
 @router.get("/categories", response_model=list[dict[str, Any]])
@@ -40,6 +47,7 @@ async def list_track_categories(
 async def get_jbrowse_config(
     assembly: str = Query(default="Wm82v4.0", description="Assembly name"),
     db: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(get_optional_user),
 ) -> dict[str, Any]:
     """Return JBrowse 2 configuration (assembly + tracks) for the standalone browser.
 
@@ -48,16 +56,27 @@ async def get_jbrowse_config(
     database is empty, an empty tracks array is returned — the frontend
     JBrowse app has built-in default tracks as a fallback.
     """
-    return await service.get_jbrowse_config(db, assembly_name=assembly)
+    return await service.get_jbrowse_config(
+        db,
+        assembly_name=assembly,
+        user_id=current_user.id if current_user else None,
+        user_roles=get_user_roles(current_user) if current_user else [],
+    )
 
 
 @router.get("/{track_id}", response_model=dict[str, Any])
 async def get_track(
     track_id: int,
     db: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(get_optional_user),
 ) -> dict[str, Any]:
     """Get track detail."""
-    return await service.get_track(db, track_id)
+    return await service.get_track(
+        db,
+        track_id,
+        user_id=current_user.id if current_user else None,
+        user_roles=get_user_roles(current_user) if current_user else [],
+    )
 
 
 @router.get(

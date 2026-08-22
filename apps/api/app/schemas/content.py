@@ -223,5 +223,6 @@ class SignedUrlResponse(BaseModel):
     """Pre-signed URL response with RBAC-validated access."""
 
     url: str
+    index_url: str | None = None
     expires_in: int = Field(..., description="URL validity in seconds.")
     request_id: str | None = None
