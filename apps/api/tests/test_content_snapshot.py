@@ -148,4 +148,3 @@ class TestReleaseAwareSnapshot:
         assert self._seen["release_id"] == 7
         assert self._seen["page_definition_version"] == 3
         assert "release_id" not in resp.json()  # fixture has no release_id key
-
