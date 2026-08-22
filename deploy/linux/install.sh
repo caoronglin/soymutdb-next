@@ -82,7 +82,7 @@ if [[ -f "${INSTALL_DIR}/.env" ]]; then
 elif [[ -f "${PROJECT_ROOT}/deploy/.env.example" ]]; then
     cp "${PROJECT_ROOT}/deploy/.env.example" "${INSTALL_DIR}/.env"
     echo -e "${YELLOW}  Copied deploy/.env.example to .env - EDIT IT with production values:${NC}"
-    echo -e "${YELLOW}    - API_IMAGE_TAG / WORKER_IMAGE_TAG (镜像 tag，禁止 latest)${NC}"
+    echo -e "${YELLOW}    - *_IMAGE_REF (CI 发布合同中的 image@sha256)${NC}"
     echo -e "${YELLOW}    - SOYMUTDB_JWT_SECRET / SOYMUTDB_CORS_ORIGINS (API fail-fast 必填)${NC}"
     echo -e "${YELLOW}    - POSTGRES_PASSWORD / CLICKHOUSE_PASSWORD / REDIS_PASSWORD / MINIO_*${NC}"
 fi
@@ -124,7 +124,7 @@ echo -e "${GREEN}  Installation Complete!${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
 echo "Next steps:"
-echo "  1. Edit ${INSTALL_DIR}/.env with production values (镜像 tag / 密钥 / 密码)"
+echo "  1. Edit ${INSTALL_DIR}/.env with production values (镜像 digest refs / 密钥 / 密码)"
 echo "  2. Start stack:  sudo systemctl start soymutdb.target"
 echo "  3. Upgrade:      sudo bash ${INSTALL_DIR}/deploy/scripts/upgrade.sh"
 echo "  4. Check status: sudo systemctl status soymutdb.target"

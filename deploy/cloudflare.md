@@ -1,17 +1,8 @@
-# SoyMutDB — Cloudflare Pages 静态部署
+# SoyMutDB — Cloudflare Pages 与 Tunnel 部署
 
-> ## ⚠️ 非主路径（已放弃，仅保留参考）
->
-> 前端静态托管已改用 **GitHub Pages**（`.github/workflows/pages.yml` → gh-pages 分支，站点
-> https://caoronglin.github.io/soymutdb-next/），本文档所述 Cloudflare Pages 方案**未启用**。
-> 保留仅为历史参考；其中 CSP/`_headers` 占位符、preview 隔离等约束对任何静态托管仍适用。
-> 当前部署架构见 **docs/design/deployment-architecture.md**。
-> 当前主入口已迁移至 **[开发者架构与部署](../docs/dev/architecture-and-deployment.md)**；本文仅作历史参考。
->
-> ---
+Cloudflare Pages 是受支持的**可选生产静态托管**方案：三个前端应用以纯静态 `dist` 发布；API 与基因组数据仍由自管后端提供。若启用 Cloudflare Tunnel，则仅把该专用 API origin 接入 Cloudflare，不使用 Workers / Pages Functions / KV / D1 / Queues。
 
-> 本文档描述将三个前端应用（`apps/web`、`apps/jbrowse`、`apps/admin`）作为**纯静态站点**部署到 Cloudflare Pages 的完整流程。
-> **Cloudflare 只承载静态前端 dist**；API 与数据面保留自管后端（docker-compose）。不使用 Workers / Functions / KV / D1 / Queues。
+GitHub Pages（`.github/workflows/ci.yml` 生成 `pages-demo-dist` → `.github/workflows/pages.yml` 校验后推送 `gh-pages`）仅是公开 demo 发布渠道，不承载生产认证、管理端或生产 API。Pages 工作流绝不重建源码：它下载触发 CI 的同一静态树，校验 `SHA256SUMS`、复制后再次比较完整文件清单和 SHA-256，再更新 `gh-pages`。生产部署可选择 Cloudflare Pages；两者不能共享生产环境变量、CORS 白名单或 Cookie 配置。
 
 ---
 
@@ -26,10 +17,9 @@
   │                                                                      │
   │         HTTPS  + _headers（安全头/CSP/缓存）+ _redirects（SPA fallback）
   │                                                                      │
-  └───────────────► 自管后端（docker-compose，独立 API 域名）             │
-                    ├─ API:      https://api.<domain>   （/api/v1/*, /jbrowse-data/*）
-                    ├─ 数据库 / 对象存储 / 任务队列（不在本文档范围）
-                    └─ CORS 白名单: SOYMUTDB_CORS_ORIGINS（精确 origin，拒绝 *）
+  └───────────────► API 公共 origin: https://<API_PUBLIC_ORIGIN>          │
+                    └─ Cloudflare Tunnel → cloudflared → tunnel-origin    │
+                       └─ API（/api/v1/*、/jbrowse-data/*）；内部依赖不公开 │
 ```
 
 **既定约束**
@@ -37,6 +27,7 @@
 - `VITE_CDN_ENABLED=false`：所有第三方库（Fontsource 字体、echarts、gsap 等）本地打包，CSP 才能保持 `script-src 'self'` 收紧。
 - 生产 build 的 `VITE_API_BASE_URL` 指向**独立的生产 API 域名**。
 - Preview build 的 `VITE_API_BASE_URL` **只能指向 staging API，禁止连生产**。
+- `tunnel-origin` 是 Compose 内部 origin；`cloudflare-tunnel` profile 只负责运行 Tunnel 链路。两者不是前端站点，也不替代 Pages。
 - 认证依赖 HttpOnly refresh cookie（`Path=/api/v1/auth`、`Secure`）。带凭据的 CORS 不支持通配 origin —— 后端 `SOYMUTDB_CORS_ORIGINS` 必须**精确列出**每个允许的前端 origin（生产域名 + 固定 preview/staging origin），`*` 会被拒绝。
 - 本仓库中 `_headers` / `_redirects` 是**静态文件**，生产与 preview 共享同一份 —— preview 联调时需要临时把 CSP 占位符换成 staging origin（见 §7）。
 
@@ -101,7 +92,54 @@ Content-Security-Policy: <见下>
 1. Cloudflare 账号；门户 / jbrowse / admin 的生产域名解析到 Pages（`*.example.com` 建议用独立子域：`www`、`jbrowse`、`admin`）。
 2. 自管后端已上线：生产 API 域名与 staging API 域名均已配置 HTTPS（refresh cookie 为 `Secure`）。
 3. 后端 CORS 白名单：生产 `SOYMUTDB_CORS_ORIGINS` 含生产前端 origin；staging `SOYMUTDB_CORS_ORIGINS` 含 staging/preview 前端 origin。
-4. 仓库环境：pnpm 10（`packageManager: pnpm@10.0.0`），Node ≥ 20（建议 22）。
+4. 仓库环境：pnpm 11.21.0（与 `packageManager` 一致），Node 24.19.0。
+
+### 3.1 发布渠道边界
+
+| 渠道 | 用途 | 禁止事项 |
+| --- | --- | --- |
+| GitHub Pages | 可公开访问的 demo | 生产 API、生产 Cookie、管理端与任何 secret |
+| Cloudflare Pages | 可选生产门户 / JBrowse 静态发布 | 将 `VITE_*` 当作 secret，或让 Preview 访问生产后端 |
+| Cloudflare Tunnel | 仅 `https://<API_PUBLIC_ORIGIN>` 的 API/基因组数据入口 | 任何管理面、数据存储或 Docker 管理接口 |
+
+### 3.2 Cloudflare Tunnel（可选生产 API origin）
+
+Tunnel 用于让 Cloudflare 连接私网中的 `tunnel-origin`；它不是把 Docker 网络整体暴露到公网。先在 Cloudflare Dashboard 或受管 IaC 中创建 Tunnel 与公共主机名，再把唯一的主机名设为 `https://<API_PUBLIC_ORIGIN>`，上游固定指向 `http://tunnel-origin:8081`。可将 [tunnel-ingress.example.yml](cloudflare/tunnel-ingress.example.yml) 作为 Dashboard/IaC 配置评审模板；它不含真实 ID 或凭据，也不会被容器挂载。
+
+`cloudflare-tunnel` Compose profile 会启动内部 `tunnel-origin` 与 `cloudflared`。`cloudflared` 只加入专用 `cloudflare-edge` 网络，不能直连默认应用网络；`tunnel-origin` 才受控连接 API/MinIO 的公开基因组 bucket。将 token 写入仓库外、权限为 `0600` 的 secret 文件，并只在部署环境变量中设置文件路径：
+
+```bash
+# 从部署方的 secret manager 写入该文件；不要把 token 贴进 shell history。
+install -d -m 700 /etc/soymutdb/secrets
+install -m 600 /dev/null /etc/soymutdb/secrets/cloudflare_tunnel_token
+
+# /opt/soymutdb/.env（仅路径，不含 token）
+CLOUDFLARE_TUNNEL_TOKEN_FILE=/etc/soymutdb/secrets/cloudflare_tunnel_token
+```
+
+然后显式启用 profile：
+
+```bash
+docker compose --profile cloudflare-tunnel up -d
+docker compose --profile cloudflare-tunnel ps
+CLOUDFLARE_TUNNEL_HEALTH_URL=https://<API_PUBLIC_ORIGIN>/api/v1/health/live \
+  bash deploy/scripts/verify-cloudflare-tunnel.sh
+```
+
+该脚本除健康检查外，还会对同一 HTTPS origin 发起负向探测：`/api/v1/admin`、`/api/v1/admin/users`、`/minio/`、`/metrics`、`/mcp` 和随机未知路径必须全部返回 `404`。通常它从健康 URL 推导 origin；如果健康 URL 不使用固定的 `/api/v1/health/live` 后缀，则显式设置 `CLOUDFLARE_TUNNEL_BASE_URL=https://<API_PUBLIC_ORIGIN>`。任一拒绝路径可达即视为部署失败。
+
+`<CF_TUNNEL_TOKEN>` 是可接管 Tunnel 的 secret：不得提交到 Git、`.env.example`、镜像、`VITE_*` 变量、构建日志或工单。Compose 通过 `/run/secrets/cloudflare_tunnel_token` 只读挂载它，而非环境变量或命令行参数。轮换或疑似泄露时，立即在 Cloudflare 侧撤销/重建 token，更新 secret 文件后重启该 profile。
+
+**必须保持的最小暴露面：**
+
+- Tunnel ingress 只能转发至 `tunnel-origin:8081` 的**非管理** `/api/*`、`/jbrowse-data/*`（及兼容的 `/data/*`）和 `/health`；`/api/v1/admin/*` 在入口处固定返回 404。不要把 `apps/admin`、管理端 Web 端口或任意通配内部服务作为上游。
+- `tunnel-origin` 不应发布宿主机端口，并只加入 `tunnel-backend` 与 `cloudflare-edge` 两个内部 Docker network。前者仅连接 API/公开 MinIO bucket，后者仅连接 `cloudflared`；数据库、Redis/队列、MinIO 控制台、监控面板和 `/var/run/docker.sock` 均不得成为 Tunnel ingress 或 volume。
+- Cloudflare Dashboard 中不要为同一 Tunnel 增加额外 public hostname；CORS 仍使用精确的 `SOYMUTDB_CORS_ORIGINS`，不能以 Tunnel 为由放宽为 `*`。
+- 验收时除健康检查外，确认公网无法通过该 API origin 到达 admin、MinIO 控制台或 Docker 管理接口；检查 `cloudflared` 日志时不得输出 token。
+
+本方案故意不服务管理端。若要部署 `apps/admin`，须使用单独的、受 Cloudflare Access/网络策略保护的管理 origin 和 API 路径，不能复用此 Tunnel hostname。
+
+回滚 Tunnel 时，先删除/禁用该公共 hostname，再停止 `cloudflare-tunnel` profile；Pages 可继续服务静态内容，但依赖 API 的功能会按既有失败状态降级。不要为恢复访问而临时把内部服务映射到宿主机公网端口。
 
 ---
 
@@ -111,7 +149,7 @@ Content-Security-Policy: <见下>
 | --- | --- | --- |
 | `soymutdb-web` | `apps/web` | ✅ |
 | `soymutdb-jbrowse` | `apps/jbrowse` | ✅ |
-| `soymutdb-admin` | `apps/admin` | ⭕ 可选（也可仅保留自管 nginx 部署） |
+| `soymutdb-admin` | `apps/admin` | ⭕ 仅在另配受保护管理 API origin 时启用；不能使用 §3.2 的公开 Tunnel |
 
 创建步骤（Cloudflare Dashboard → Workers & Pages → Create → Pages → Connect to Git）：
 
@@ -120,13 +158,13 @@ Content-Security-Policy: <见下>
 3. **Root directory**：留空（仓库根，pnpm workspace 需要根 lockfile）。
 4. **Build command**（见下表）；**Build output directory**：`apps/<app>/dist`。
 5. **Environment variables**：按 §5 配置。
-6. 建议额外设置 `NODE_VERSION=22`（或 20），并在 build command 中先 `corepack enable`（仓库声明了 `packageManager: pnpm@10.0.0`，corepack 会按其锁定 pnpm 版本）。
+6. 设置 `NODE_VERSION=24.19.0`，并在 build command 中先 `corepack enable`（仓库声明了 `packageManager: pnpm@11.21.0`，corepack 会按其锁定 pnpm 版本）。
 
 | 项目 | Build command | 输出目录 |
 | --- | --- | --- |
 | web | `corepack enable && pnpm install --frozen-lockfile && pnpm --filter @soymutdb/web build` | `apps/web/dist` |
 | jbrowse | `corepack enable && pnpm install --frozen-lockfile && pnpm --filter @soymutdb/jbrowse build` | `apps/jbrowse/dist` |
-| admin | `corepack enable && pnpm install --frozen-lockfile && pnpm --filter @soymutdb/admin build:web` | `apps/admin/dist` |
+| admin | `corepack enable && pnpm install --frozen-lockfile && pnpm --filter @soymutdb/admin build:web` | `apps/admin/dist`（需独立受保护 API origin） |
 
 > web 的 build 会运行 SSG 脚本（`ssg-build` / `generate-samples`），构建机连不上 API 时自动回退到内嵌数据（构建不失败，但页面内容为回退数据）。想让生产 SSG 页面拿到最新布局/数据，可另设 build 期变量 `SOYMUTDB_API_URL`（staging/生产 API 均可，仅构建期访问，非 secret）与可选 `SOYMUTDB_SITE_URL`。构建机访问不到内网 API 时保持默认回退即可。
 
@@ -180,7 +218,7 @@ Content-Security-Policy: <见下>
 
 | 变量 | 生产 build | Preview build | 说明 |
 | --- | --- | --- | --- |
-| `VITE_API_BASE_URL` | `https://api.example.com` ✅替换 | `https://api-staging.example.com`（**禁止生产**） | API 源；Tauri 桌面版未设置时回退 `http://127.0.0.1:8000`，与 Cloudflare web 版无关 |
+| `VITE_API_BASE_URL` | `https://admin-api.example.com` ✅替换 | `https://admin-api-staging.example.com`（**禁止生产**） | 必须是单独受 Cloudflare Access/网络策略保护的管理 API origin；不得使用本 Tunnel 的 `api.example.com` |
 
 ### 5.4 后端（不归本仓库前端管理，仅提醒）
 
@@ -298,4 +336,4 @@ grep -c "cloudflareinsights\|testtoken" apps/web/dist/index.html   # 应 ≥1
 - 不使用 Cloudflare Workers / Pages Functions / KV / D1 / Queues / R2 —— 一切动态能力保留在自管后端。
 - 不在 `VITE_*` 变量中存放任何 secret。
 - Preview 不连接生产 API / 数据库。
-- 不在此文档范围内修改后端 CORS、认证 cookie 或 docker-compose 部署。
+- 不在此文档范围内自动修改后端 CORS、认证 cookie、真实域名或 Cloudflare 账号资源。

@@ -8,7 +8,7 @@ Requires=docker.service
 [Service]
 # ------------------------------------------------------------------
 # systemd 只负责编排 docker compose 项目；容器生命周期（含一次性
-# migrate 服务）全部由 compose 管理。镜像 tag 与密钥从
+# migrate 服务）全部由 compose 管理。镜像 digest refs 与密钥从
 # /opt/soymutdb/.env 注入（compose 自动读取）。
 # 历史 conda/裸进程部署（soymutdb-worker/soymutdb-beat 单元）已废弃，
 # 由本单元统一管理。发布使用 deploy/scripts/upgrade.sh。

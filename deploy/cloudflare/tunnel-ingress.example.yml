@@ -1,0 +1,9 @@
+# Reference mapping for the Cloudflare Dashboard or IaC. The Compose connector
+# runs a remotely managed Tunnel using a token, so this file is intentionally
+# not mounted and contains no ID, credential, or secret.
+#
+# Create exactly one public hostname and apply the equivalent mapping there.
+ingress:
+  - hostname: <API_PUBLIC_HOSTNAME>
+    service: http://tunnel-origin:8081
+  - service: http_status:404

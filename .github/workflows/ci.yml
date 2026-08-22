@@ -3,25 +3,28 @@
 #
 # Trigger  : push to main + all pull requests
 # Jobs     :
-#   frontend    — pnpm install + turbo build (hard gate), contract check
-#                 (hard gate), lint/typecheck (non-blocking, baseline failing),
-#                 upload dist artifacts for deployment
-#   api-tests   — Python 3.14 venv + pytest (hard gate, runs testcontainers
-#                 integration tests on the runner's docker daemon), ruff
-#                 (non-blocking, baseline has 303 findings), worker analysis
-#                 deps install + import verification (hard gate)
-#   docker-build— build api / worker / jbrowse images (hard gates) + trivy
-#                 vulnerability scan (hard gate, CRITICAL/HIGH fails) + api
-#                 image smoke test
+#   frontend    — pnpm install, build, bundle budget, unit tests, lint,
+#                 typecheck, and OpenAPI contract checks (all hard gates),
+#                 then upload dist artifacts for deployment
+#   api-tests   — Python 3.14 venv + full pytest tree (hard gate, including A0
+#                 and testcontainers integration), Ruff (non-blocking), worker
+#                 analysis deps install + import verification (hard gate)
+#   dependency-governance— normalized pnpm/uv/Compose/OCI graphs plus blocking
+#                 unused/dependency/cycle/version/license/vulnerability audits
+#   docker-build— after all other hard gates pass, independently build API /
+#                 Worker / MCP / JBrowse on native amd64 and arm64 runners;
+#                 smoke, scan, generate SPDX, and export exact image packages
+#   publish-images— on main only, load both verified packages, merge exact
+#                   platform manifests, keyless-sign/attest them, and publish a
+#                   source-bound release manifest without rebuilding
 #
-# Baseline facts (recorded 2026-08-07, git 3cf4718):
-#   * pnpm turbo run build → 3/3 apps green   → hard gate
-#   * check:contract       → green (needs apps/api/.venv + node_modules)
-#   * lint  (admin#lint)   → failing        → continue-on-error
-#   * typecheck (api-client#typecheck) → failing → continue-on-error
-#   * test  (ui#test)      → failing        → continue-on-error (not run here)
-#   * ruff check app       → 303 findings   → continue-on-error
-#   * tests/a0 (rl_ subsystem) fails even at collection → always excluded
+# Ruff remains non-blocking until the Python baseline is reduced. Frontend
+# build/test/lint/typecheck/contract and the full API pytest tree are blocking.
+#
+# Actions are pinned to commit SHAs (trailing comments record the tag) and
+# Node is pinned to an exact release for reproducibility. The Deploy Web to
+# Pages workflow consumes this workflow via workflow_run and only publishes
+# after it succeeds on main (see pages.yml).
 #
 # NOTE: the repo's .npmrc points at npmmirror; CI explicitly overrides the
 # registry to https://registry.npmjs.org/ (official) before installing.
@@ -39,9 +42,6 @@ concurrency:
 
 permissions:
   contents: read
-  packages: write
-  # actions: write needed for actions/upload-artifact v4 (dist bundles, SARIF)
-  actions: write
 
 env:
   TURBO_TELEMETRY_DISABLED: "1"
@@ -56,21 +56,20 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 1
 
-      - name: Install pnpm 10
-        uses: pnpm/action-setup@v4
+      - name: Install pnpm 11
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
-          # Must match package.json "packageManager" exactly, otherwise
-          # corepack fails with "Multiple versions of pnpm specified".
-          version: 10.0.0
+          # Must match package.json "packageManager" exactly.
+          version: 11.21.0
 
-      - name: Setup Node 22
-        uses: actions/setup-node@v4
+      - name: Setup Node 24
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 22
+          node-version: 24.19.0
           # Cache the pnpm store; key is derived from pnpm-lock.yaml.
           cache: pnpm
 
@@ -85,58 +84,97 @@ jobs:
         env:
           VITE_API_BASE_URL: https://api.soymutdb.test
           VITE_JBROWSE_BASE_URL: https://jbrowse.soymutdb.test
-        run: pnpm turbo run build
+        run: pnpm build
 
       # --- G2 bundle budget gate (hard gate) ----------------------------------
-      # antd ≤280KB / pro-components ≤180KB / main entry ≤200KB gzip.
+      # antd ≤320KB / pro-components ≤180KB / main entry ≤200KB gzip.
       # Thresholds overridable via ANTD_MAX_KB / PRO_MAX_KB / ENTRY_MAX_KB env.
       - name: Bundle size budget check (G2 hard gate)
         run: bash scripts/check-bundle-size.sh
 
-      # --- non-blocking quality gates (baseline failing, see header) ----------
-      - name: Lint (baseline failing — non-blocking)
+      - name: Workspace JS unit tests (hard gate)
+        run: pnpm turbo run test
+
+      # --- blocking quality gates ---------------------------------------------
+      - name: Lint (hard gate)
         if: always()
-        continue-on-error: true
         run: pnpm turbo run lint
 
-      - name: Typecheck (baseline failing — non-blocking)
+      - name: Typecheck (hard gate)
         if: always()
-        continue-on-error: true
         run: pnpm turbo run typecheck
 
       # --- OpenAPI contract check -------------------------------------------
       # check-contract.sh exports the backend OpenAPI document using
       # apps/api/.venv/bin/python, so the venv must exist before running it.
       - name: Setup Python 3.14
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.14"
 
       - name: Prepare API venv (for OpenAPI export)
         run: |
           python -m venv apps/api/.venv
+          apps/api/.venv/bin/pip install --quiet -e packages/jobs-py
           apps/api/.venv/bin/pip install --quiet -e apps/api
 
       - name: API client contract check (hard gate)
         run: pnpm --filter @soymutdb/api-client check:contract
 
+      # Pages deploys the exact static tree checked here.  It must not rebuild
+      # a verified commit later with a different environment or toolchain.
+      - name: Build GitHub Pages demo artifact (deploy input)
+        env:
+          VITE_DEPLOYMENT_MODE: demo
+          VITE_BASE_URL: /${{ github.event.repository.name }}/
+          VITE_API_BASE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/api/v1
+          VITE_CDN_ENABLED: "false"
+          VITE_JBROWSE_BASE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/soymutdb-jbrowse/
+          VITE_JBROWSE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/soymutdb-jbrowse/
+          SOYMUTDB_SITE_URL: https://${{ github.repository_owner }}.github.io
+        run: |
+          pnpm --filter @soymutdb/web build
+          VITE_BASE_URL=/${{ github.event.repository.name }}/soymutdb-jbrowse/ \
+            VITE_JBROWSE_DATA_URL=/${{ github.event.repository.name }}/jbrowse-data \
+            pnpm --filter @soymutdb/jbrowse build
+          rm -rf pages-dist
+          mkdir -p pages-dist/soymutdb-jbrowse
+          cp -r apps/web/dist/. pages-dist/
+          cp -r apps/jbrowse/dist/. pages-dist/soymutdb-jbrowse/
+          cp pages-dist/index.html pages-dist/404.html
+          touch pages-dist/.nojekyll
+          (
+            cd pages-dist
+            find . -type f ! -name SHA256SUMS -print0 | LC_ALL=C sort -z | xargs -0 sha256sum > SHA256SUMS
+            sha256sum -c SHA256SUMS
+          )
+          test -f pages-dist/SHA256SUMS
+
+      - name: Upload GitHub Pages demo artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: pages-demo-dist
+          path: pages-dist
+          if-no-files-found: error
+          compression-level: 0
+
       # --- dist artifacts for deployment ------------------------------------
       - name: Upload web dist
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: dist-web
           path: apps/web/dist
           if-no-files-found: error
 
       - name: Upload admin dist
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: dist-admin
           path: apps/admin/dist
           if-no-files-found: error
 
       - name: Upload jbrowse dist
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: dist-jbrowse
           path: apps/jbrowse/dist
@@ -151,12 +189,12 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 1
 
       - name: Setup Python 3.14
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.14"
           cache: pip
@@ -166,6 +204,7 @@ jobs:
         run: |
           python -m venv apps/api/.venv
           apps/api/.venv/bin/pip install --upgrade pip
+          apps/api/.venv/bin/pip install --quiet -e packages/jobs-py
           apps/api/.venv/bin/pip install -e "apps/api[dev]"
 
       - name: Ruff (baseline failing — non-blocking)
@@ -174,13 +213,14 @@ jobs:
         run: .venv/bin/ruff check app
 
       # testcontainers-postgres boots a real postgres:16-alpine container on the
-      # runner's docker daemon (ubuntu-latest ships docker). tests/a0 is a
-      # known-broken rl_ subsystem that fails at collection — always excluded.
-      - name: Pytest (hard gate, excludes tests/a0)
+      # runner's docker daemon (ubuntu-latest ships docker). The A0
+      # reconciliation suite is included now that its collection baseline is
+      # green, so this hard gate covers the full API test tree.
+      - name: Pytest (hard gate)
         working-directory: apps/api
         env:
           PYTHONPATH: ${{ github.workspace }}
-        run: .venv/bin/python -m pytest tests -q --ignore=tests/a0
+        run: .venv/bin/python -m pytest tests -q
 
       # --- worker analysis deps gate -----------------------------------------
       # scanpy/leidenalg/anndata must install on the same Python the API tests
@@ -191,19 +231,104 @@ jobs:
           apps/api/.venv/bin/pip install --quiet -e apps/worker
           apps/api/.venv/bin/python -c "import scanpy, anndata, leidenalg, igraph, matplotlib; print('analysis deps OK:', scanpy.__version__)"
 
+      - name: Worker pytest including PostgreSQL integration (hard gate)
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          SOYMUTDB_RUN_POSTGRES_INTEGRATION: "1"
+        run: apps/api/.venv/bin/python -m pytest apps/worker/tests -q
+
   # ---------------------------------------------------------------------------
-  # Job 3 — Docker images: api / worker / MCP / jbrowse
+  # Job 3 — Machine dependency evidence and dependency-health gates
   # ---------------------------------------------------------------------------
-  # Independent from Job 1: every Dockerfile is self-contained (the jbrowse
-  # image runs its own pnpm install + build inside the container). Runs in
-  # parallel with the other jobs.
-  docker-build:
-    name: Docker image build
+  dependency-governance:
+    name: Dependency graphs + governance
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 60
+    permissions:
+      contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 1
+
+      - name: Install pnpm 11
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 11.21.0
+
+      - name: Setup Node 24
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24.19.0
+          cache: pnpm
+
+      - name: Setup Python 3.14
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.14"
+
+      - name: Use official npm registry
+        run: pnpm config set registry https://registry.npmjs.org/
+
+      - name: Install workspace and graph tooling
+        run: |
+          pnpm install --frozen-lockfile
+          python -m pip install --quiet PyYAML==6.0.3 uv==0.11.33
+
+      - name: Generate machine dependency graphs
+        run: pnpm deps:graphs
+
+      # Always attempt the full audit set so a failed graph does not hide Knip,
+      # Deptry, cycle, duplicate, license, or vulnerability evidence.
+      - name: Run dependency governance gates
+        if: always()
+        env:
+          UV_CACHE_DIR: ${{ runner.temp }}/soymutdb-governance-uv-cache
+        run: pnpm deps:audit
+
+      - name: Upload dependency governance evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: dependency-governance-${{ github.sha }}
+          path: |
+            artifacts/dependency-graphs
+            artifacts/dependency-audit
+          if-no-files-found: error
+          retention-days: 30
+
+  # ---------------------------------------------------------------------------
+  # Job 4 — Build, runtime-smoke, scan, and inventory every platform image
+  # ---------------------------------------------------------------------------
+  # Run only after every non-image hard gate succeeds. This job remains
+  # read-only: main pushes are performed by publish-images from the exact
+  # platform archives exported after all runtime and vulnerability gates.
+  docker-build:
+    name: Docker ${{ matrix.arch }} build + runtime + scan
+    needs:
+      - frontend
+      - api-tests
+      - dependency-governance
+      - clickhouse-migration
+      - mcp-e2e
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+            platform: linux/amd64
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            platform: linux/arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 1
 
@@ -215,96 +340,605 @@ jobs:
       - name: Verify Dockerfile COPY sources exist (hard gate)
         run: bash scripts/check-dockerfile-copy.sh
 
-      - name: Login to GHCR (pushes only)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Compute image tags
-        id: image-tags
+      # Docker-backed Compose acceptance stays on the CI runner. Developer and
+      # pre-commit checks use scripts/test_platform_delivery_contracts.py and
+      # do not require a local daemon or production secrets.
+      - name: Validate production Compose profiles (Docker-only CI gate)
+        if: matrix.arch == 'amd64'
+        env:
+          API_IMAGE_REF: ghcr.io/example/api@sha256:1111111111111111111111111111111111111111111111111111111111111111
+          WORKER_IMAGE_REF: ghcr.io/example/worker@sha256:2222222222222222222222222222222222222222222222222222222222222222
+          MCP_IMAGE_REF: ghcr.io/example/mcp-server@sha256:3333333333333333333333333333333333333333333333333333333333333333
+          JBROWSE_IMAGE_REF: ghcr.io/example/jbrowse@sha256:4444444444444444444444444444444444444444444444444444444444444444
+          POSTGRES_PASSWORD: ci-compose-postgres
+          CLICKHOUSE_PASSWORD: ci-compose-clickhouse
+          REDIS_PASSWORD: ci-compose-redis
+          MINIO_ROOT_USER: ci-compose-minio
+          MINIO_ROOT_PASSWORD: ci-compose-minio-secret
+          SOYMUTDB_MCP_API_TOKEN: ci-compose-mcp-token
+          GRAFANA_PASSWORD: ci-compose-grafana
         run: |
-          tag="$(date -u +%Y.%m.%d)-${GITHUB_SHA::7}"
-          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          profile_sets=(
+            "core"
+            "core,jbrowse"
+            "core,blast"
+            "core,analyses"
+            "core,mcp"
+            "core,cloudflare-tunnel"
+          )
+          for profile_set in "${profile_sets[@]}"; do
+            COMPOSE_PROFILES="$profile_set" docker compose -f docker-compose.yml config --quiet
+          done
 
       - name: Build API image (hard gate)
-        run: docker build -f infra/docker/Dockerfile.api -t soymutdb-api:ci .
+        run: docker build -f infra/docker/Dockerfile.api -t soymutdb-api:ci-${{ matrix.arch }} .
 
       - name: Build Worker image (hard gate)
-        run: docker build -f infra/docker/Dockerfile.worker -t soymutdb-worker:ci .
+        run: docker build -f infra/docker/Dockerfile.worker -t soymutdb-worker:ci-${{ matrix.arch }} .
 
       - name: Build MCP image (hard gate)
-        run: docker build -f apps/mcp-server/Dockerfile -t soymutdb-mcp:ci apps/mcp-server
-
-      - name: Smoke test MCP image (hard gate)
-        run: docker run --rm soymutdb-mcp:ci python -c "import mcp_server; print('MCP imports OK')"
+        run: docker build -f apps/mcp-server/Dockerfile -t soymutdb-mcp:ci-${{ matrix.arch }} apps/mcp-server
 
       # NOTE: the jbrowse Dockerfile copies the repo .npmrc into the build
       # context, so its internal pnpm install uses npmmirror (existing repo
       # behavior, not changed here). Image build is self-contained.
       - name: Build JBrowse image (hard gate)
-        run: docker build -f apps/jbrowse/Dockerfile -t soymutdb-jbrowse:ci .
+        run: docker build -f apps/jbrowse/Dockerfile -t soymutdb-jbrowse:ci-${{ matrix.arch }} .
 
-      - name: Tag and push release images
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        env:
-          RELEASE_TAG: ${{ steps.image-tags.outputs.tag }}
+      - name: Smoke test API runtime image (hard gate)
+        run: >-
+          docker run --rm
+          -e SOYMUTDB_DATABASE_URL=postgresql+asyncpg://ci:ci@database.invalid/soymutdb
+          -e SOYMUTDB_REDIS_URL=redis://cache.invalid:6379/0
+          -e SOYMUTDB_S3_ENDPOINT=http://storage.invalid:9000
+          -e SOYMUTDB_S3_ACCESS_KEY=ci-runtime-access
+          -e SOYMUTDB_S3_SECRET_KEY=ci-runtime-secret
+          -e SOYMUTDB_JWT_SECRET=ci-runtime-smoke-jwt-secret-0123456789abcdef
+          -e SOYMUTDB_CORS_ORIGINS=https://runtime-smoke.invalid
+          soymutdb-api:ci-${{ matrix.arch }}
+          python -c "import soymutdb_jobs; from app.main import app; assert app.title == 'SoyMutDB'; print('API app import OK')"
+
+      - name: Smoke test Worker task registry (hard gate)
+        run: >-
+          docker run --rm
+          --volume "${GITHUB_WORKSPACE}/scripts/check-worker-task-registry.py:/tmp/check-worker-task-registry.py:ro"
+          soymutdb-worker:ci-${{ matrix.arch }}
+          python /tmp/check-worker-task-registry.py
+
+      - name: Smoke test MCP runtime image (hard gate)
+        run: >-
+          docker run --rm
+          -e SOYMUTDB_MCP_API_TOKEN=ci-runtime-smoke-token
+          soymutdb-mcp:ci-${{ matrix.arch }}
+          python -c "from mcp_server.server import mcp; assert mcp is not None; print('MCP server import OK')"
+
+      - name: Smoke test JBrowse runtime image (hard gate)
+        run: >-
+          docker run --rm soymutdb-jbrowse:ci-${{ matrix.arch }}
+          sh -ec 'nginx -t && test -s /usr/share/nginx/html/index.html'
+
+      # Matrix metadata alone is not platform evidence. Fail before scans or
+      # export if Docker reports an image architecture different from the
+      # independently selected native runner architecture.
+      - name: Assert actual native image architecture (hard gate)
         run: |
-          registry_owner="${GITHUB_REPOSITORY_OWNER,,}"
-          for image in api worker; do
-            docker tag "soymutdb-${image}:ci" "ghcr.io/${registry_owner}/${image}:${RELEASE_TAG}"
-            docker push "ghcr.io/${registry_owner}/${image}:${RELEASE_TAG}"
+          set -euo pipefail
+          expected_architecture="${{ matrix.arch }}"
+          images=(
+            "soymutdb-api:ci-${{ matrix.arch }}"
+            "soymutdb-worker:ci-${{ matrix.arch }}"
+            "soymutdb-mcp:ci-${{ matrix.arch }}"
+            "soymutdb-jbrowse:ci-${{ matrix.arch }}"
+          )
+          for image in "${images[@]}"; do
+            actual_architecture="$(docker image inspect --format '{{.Architecture}}' "${image}")"
+            test "${actual_architecture}" = "${expected_architecture}"
+            echo "verified ${image}: ${actual_architecture}"
           done
-          docker tag "soymutdb-mcp:ci" "ghcr.io/${registry_owner}/mcp-server:${RELEASE_TAG}"
-          docker push "ghcr.io/${registry_owner}/mcp-server:${RELEASE_TAG}"
-
-      - name: Verify pushed image manifests
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        env:
-          RELEASE_TAG: ${{ steps.image-tags.outputs.tag }}
-        run: |
-          registry_owner="${GITHUB_REPOSITORY_OWNER,,}"
-          API_IMAGE_TAG="ghcr.io/${registry_owner}/api:${RELEASE_TAG}"
-          WORKER_IMAGE_TAG="ghcr.io/${registry_owner}/worker:${RELEASE_TAG}"
-          MCP_IMAGE_TAG="ghcr.io/${registry_owner}/mcp-server:${RELEASE_TAG}"
-          for image in "$API_IMAGE_TAG" "$WORKER_IMAGE_TAG" "$MCP_IMAGE_TAG"; do
-            docker manifest inspect "$image" >/dev/null
-          done
-
-      # Smoke test: confirm the API runtime image actually has its deps.
-      # Non-blocking: the Dockerfile never sets VIRTUAL_ENV, so `uv pip install`
-      # may fall back to the system Python and leave /opt/venv empty — a
-      # pre-existing repo issue. The step reports it without failing CI.
-      - name: Smoke test API image (non-blocking)
-        continue-on-error: true
-        run: docker run --rm soymutdb-api:ci python -c "import fastapi, sqlalchemy, app; print('API imports OK')"
 
       # --- security scan (hard gate) -----------------------------------------
-      # CRITICAL/HIGH vulnerabilities in the API image fail the workflow
-      # (exit-code: 1). Unfixed knowns may be triaged by adding .trivyignore.
+      # CRITICAL/HIGH vulnerabilities in any release image fail the workflow.
+      # Any exception must be explicitly triaged in .trivyignore.
       - name: Trivy scan API image (hard gate)
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: soymutdb-api:ci
+          image-ref: soymutdb-api:ci-${{ matrix.arch }}
           format: sarif
           output: trivy-api.sarif
           severity: CRITICAL,HIGH
-          ignore-unfixed: true
+          ignore-unfixed: false
           exit-code: 1
 
-      - name: Upload Trivy SARIF report
+      - name: Trivy scan Worker image (hard gate)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: soymutdb-worker:ci-${{ matrix.arch }}
+          format: sarif
+          output: trivy-worker.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: false
+          exit-code: 1
+
+      - name: Trivy scan MCP image (hard gate)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: soymutdb-mcp:ci-${{ matrix.arch }}
+          format: sarif
+          output: trivy-mcp.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: false
+          exit-code: 1
+
+      - name: Trivy scan JBrowse image (hard gate)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: soymutdb-jbrowse:ci-${{ matrix.arch }}
+          format: sarif
+          output: trivy-jbrowse.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: false
+          exit-code: 1
+
+      # SPDX documents are generated from the same local image IDs that passed
+      # runtime smoke and the blocking vulnerability gates above.
+      - name: Prepare platform evidence directory
+        run: mkdir -p validated-runtime-images
+
+      - name: Generate API SPDX SBOM
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: soymutdb-api:ci-${{ matrix.arch }}
+          format: spdx-json
+          output: validated-runtime-images/sbom-api-${{ matrix.arch }}.spdx.json
+          exit-code: 0
+
+      - name: Generate Worker SPDX SBOM
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: soymutdb-worker:ci-${{ matrix.arch }}
+          format: spdx-json
+          output: validated-runtime-images/sbom-worker-${{ matrix.arch }}.spdx.json
+          exit-code: 0
+
+      - name: Generate MCP SPDX SBOM
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: soymutdb-mcp:ci-${{ matrix.arch }}
+          format: spdx-json
+          output: validated-runtime-images/sbom-mcp-${{ matrix.arch }}.spdx.json
+          exit-code: 0
+
+      - name: Generate JBrowse SPDX SBOM
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: soymutdb-jbrowse:ci-${{ matrix.arch }}
+          format: spdx-json
+          output: validated-runtime-images/sbom-jbrowse-${{ matrix.arch }}.spdx.json
+          exit-code: 0
+
+      - name: Upload Trivy SARIF reports
         if: always()
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: trivy-sarif
-          path: trivy-api.sarif
+          name: trivy-sarif-${{ matrix.arch }}
+          path: trivy-*.sarif
           if-no-files-found: ignore
 
+      - name: Export validated runtime images
+        # The amd64 archive is also consumed by the separate Kind smoke job on
+        # pull requests.  The arm64 archive remains release-only because Kind
+        # runs on an amd64 runner; native arm64 Docker validation still runs.
+        if: >-
+          success() &&
+          (matrix.arch == 'amd64' ||
+          (github.event_name == 'push' && github.ref == 'refs/heads/main'))
+        run: |
+          mkdir -p validated-runtime-images
+          validated_images=(
+            "soymutdb-api:ci-${{ matrix.arch }}"
+            "soymutdb-worker:ci-${{ matrix.arch }}"
+            "soymutdb-mcp:ci-${{ matrix.arch }}"
+            "soymutdb-jbrowse:ci-${{ matrix.arch }}"
+          )
+          for image in "${validated_images[@]}"; do
+            image_id="$(docker image inspect --format '{{.Id}}' "$image")"
+            printf '%s %s\n' "$image" "$image_id"
+          done > validated-runtime-images/image-ids-${{ matrix.arch }}.txt
+          printf '%s\n' '${{ matrix.platform }}' > validated-runtime-images/platform.txt
+          docker save --output validated-runtime-images/soymutdb-runtime-images-${{ matrix.arch }}.tar \
+            "${validated_images[@]}"
+          cd validated-runtime-images
+          sha256sum soymutdb-runtime-images-${{ matrix.arch }}.tar \
+            image-ids-${{ matrix.arch }}.txt platform.txt \
+            sbom-*-${{ matrix.arch }}.spdx.json > SHA256SUMS
+
+      - name: Upload validated runtime images
+        if: >-
+          success() &&
+          (matrix.arch == 'amd64' ||
+          (github.event_name == 'push' && github.ref == 'refs/heads/main'))
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: validated-runtime-images-${{ matrix.arch }}
+          path: validated-runtime-images
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
   # ---------------------------------------------------------------------------
-  # Job 4 — Real ClickHouse legacy migration (hard gate)
+  # Job 5 — Load the exact verified amd64 package into a real Kind cluster
+  # ---------------------------------------------------------------------------
+  # This is a Kubernetes runtime smoke for the CI-only amd64 harness. It is
+  # deliberately not an arm64 Kubernetes-cluster claim: native arm64 Docker
+  # build/smoke/scan evidence remains the multi-platform release evidence.
+  kubernetes-kind:
+    name: Kubernetes Kind smoke (verified linux/amd64 images)
+    needs: docker-build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Python for manifest policy
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.14"
+
+      - name: Validate Kind manifests and policy before cluster mutation
+        run: |
+          python -m pip install --quiet PyYAML==6.0.3
+          python3 scripts/check-kubernetes-manifests.py infra/k8s/kind-smoke
+
+      - name: Download validated amd64 runtime package
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: validated-runtime-images-amd64
+          path: validated-runtime-images-amd64
+
+      - name: Verify and load validated amd64 runtime package
+        run: |
+          set -euo pipefail
+          artifact_dir=validated-runtime-images-amd64
+          test "$(cat "${artifact_dir}/platform.txt")" = "linux/amd64"
+          (cd "${artifact_dir}" && sha256sum -c SHA256SUMS)
+          docker load --input "${artifact_dir}/soymutdb-runtime-images-amd64.tar"
+          for image_name in api worker mcp jbrowse; do
+            image="soymutdb-${image_name}:ci-amd64"
+            expected_id="$(awk -v image="${image}" '$1 == image {print $2}' "${artifact_dir}/image-ids-amd64.txt")"
+            test -n "${expected_id}"
+            test "$(docker image inspect --format '{{.Id}}' "${image}")" = "${expected_id}"
+            test "$(docker image inspect --format '{{.Architecture}}' "${image}")" = "amd64"
+          done
+
+      - name: Create Kind cluster
+        uses: helm/kind-action@a1b0e391336a6ee6713a0583f8c6240d70863de3 # v1.12.0
+        with:
+          version: v0.26.0
+          kubectl_version: v1.31.4
+          cluster_name: soymutdb-kind-smoke
+          wait: 120s
+
+      - name: Load checksum-verified workloads into Kind
+        run: >-
+          kind load docker-image
+          soymutdb-api:ci-amd64
+          soymutdb-worker:ci-amd64
+          --name soymutdb-kind-smoke
+
+      - name: Render and apply Kind smoke manifests
+        run: |
+          set -euo pipefail
+          kubectl kustomize infra/k8s/kind-smoke > /tmp/soymutdb-kind-smoke.yaml
+          kubectl apply --dry-run=client --validate=true -f /tmp/soymutdb-kind-smoke.yaml
+          kubectl apply -k infra/k8s/kind-smoke
+
+      - name: Prove deployed API and worker behavior
+        run: |
+          set -euo pipefail
+          namespace=soymutdb-kind-smoke
+          kubectl -n "${namespace}" rollout status deployment/api --timeout=180s
+          kubectl -n "${namespace}" rollout status deployment/worker --timeout=180s
+          test "$(kubectl -n "${namespace}" get deployment/api -o jsonpath='{.spec.template.spec.containers[0].image}')" = "soymutdb-api:ci-amd64"
+          test "$(kubectl -n "${namespace}" get deployment/worker -o jsonpath='{.spec.template.spec.containers[0].image}')" = "soymutdb-worker:ci-amd64"
+          worker_metrics="$(kubectl -n "${namespace}" exec deployment/worker -- curl --fail --silent --show-error http://127.0.0.1:9808/metrics)"
+          grep -Eq '^soymutdb_worker_up[[:space:]]+1(\.0+)?$' <<<"${worker_metrics}"
+          kubectl -n "${namespace}" port-forward service/api 18080:80 >/tmp/soymutdb-kind-port-forward.log 2>&1 &
+          port_forward_pid=$!
+          cleanup() {
+            kill "${port_forward_pid}" 2>/dev/null || true
+            wait "${port_forward_pid}" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent --show-error --max-time 5 http://127.0.0.1:18080/api/v1/health/live >/tmp/soymutdb-kind-live.json; then
+              break
+            fi
+            sleep 2
+          done
+          jq -e '.status == "ok"' /tmp/soymutdb-kind-live.json >/dev/null
+
+      - name: Capture Kind diagnostics on failure
+        if: failure()
+        run: |
+          kubectl get pods --all-namespaces -o wide || true
+          kubectl -n soymutdb-kind-smoke describe deployment/api || true
+          kubectl -n soymutdb-kind-smoke describe deployment/worker || true
+          kubectl -n soymutdb-kind-smoke logs deployment/api --all-containers=true || true
+          kubectl -n soymutdb-kind-smoke logs deployment/worker --all-containers=true || true
+          cat /tmp/soymutdb-kind-port-forward.log || true
+
+  # ---------------------------------------------------------------------------
+  # Job 6 — Merge/sign only images exported by both read-only verify jobs
+  # ---------------------------------------------------------------------------
+  publish-images:
+    name: Merge, sign, and publish verified runtime images
+    needs: [docker-build, kubernetes-kind]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      release-contract-sha256: ${{ steps.release-contract.outputs.sha256 }}
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    steps:
+      - name: Download validated runtime images
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: validated-runtime-images-*
+          path: validated-platforms
+
+      - name: Verify and load both platform packages
+        run: |
+          platform_artifacts=(
+            "validated-runtime-images-amd64"
+            "validated-runtime-images-arm64"
+          )
+          for artifact in "${platform_artifacts[@]}"; do
+            arch="${artifact##*-}"
+            artifact_dir="validated-platforms/${artifact}"
+            test "$(cat "${artifact_dir}/platform.txt")" = "linux/${arch}"
+            (cd "${artifact_dir}" && sha256sum -c SHA256SUMS)
+            docker load --input "${artifact_dir}/soymutdb-runtime-images-${arch}.tar"
+            expected_images=(api worker mcp jbrowse)
+            test "$(wc -l < "${artifact_dir}/image-ids-${arch}.txt")" -eq "${#expected_images[@]}"
+            for image_name in "${expected_images[@]}"; do
+              image="soymutdb-${image_name}:ci-${arch}"
+              expected_id="$(awk -v image="$image" '$1 == image {print $2}' "${artifact_dir}/image-ids-${arch}.txt")"
+              test -n "$expected_id"
+              actual_id="$(docker image inspect --format '{{.Id}}' "$image")"
+              test "$actual_id" = "$expected_id"
+            done
+          done
+
+      - name: Compute release tag
+        id: image-tags
+        run: |
+          tag="$(date -u +%Y.%m.%d)-${GITHUB_SHA::7}"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+
+      - name: Login to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@3454372f43399081ed03b604cb2d021dabca52bb # v3.8.2
+        with:
+          cosign-release: v2.4.1
+
+      - name: Tag and push validated platform images
+        env:
+          RELEASE_TAG: ${{ steps.image-tags.outputs.tag }}
+        run: |
+          registry_owner="${GITHUB_REPOSITORY_OWNER,,}"
+          local_names=(api worker mcp jbrowse)
+          remote_names=(api worker mcp-server jbrowse)
+          for arch in amd64 arm64; do
+            for index in "${!local_names[@]}"; do
+              image="ghcr.io/${registry_owner}/${remote_names[$index]}:${RELEASE_TAG}-${arch}"
+              docker tag "soymutdb-${local_names[$index]}:ci-${arch}" "$image"
+              docker push "$image"
+            done
+          done
+
+      - name: Merge manifests, attest evidence, and write release manifest
+        id: release-contract
+        env:
+          RELEASE_TAG: ${{ steps.image-tags.outputs.tag }}
+        run: |
+          set -euo pipefail
+          registry_owner="${GITHUB_REPOSITORY_OWNER,,}"
+          mkdir -p release-contract
+          certificate_identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/ci.yml@refs/heads/main"
+          oidc_issuer="https://token.actions.githubusercontent.com"
+          local_names=(api worker mcp jbrowse)
+          remote_names=(api worker mcp-server jbrowse)
+
+          jq -n \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg revision "$GITHUB_SHA" \
+            --arg workflow_identity "$certificate_identity" \
+            --arg run_id "$GITHUB_RUN_ID" \
+            --arg release_tag "$RELEASE_TAG" \
+            '{
+              "schema_version": 1,
+              "source": {
+                "repository": $repository,
+                "revision": $revision,
+                "workflow_identity": $workflow_identity,
+                "run_id": $run_id
+              },
+              "release_tag": $release_tag,
+              "platforms": ["linux/amd64", "linux/arm64"],
+              "images": []
+            }' > release-contract/release-manifest.json
+
+          for index in "${!local_names[@]}"; do
+            image_name="${local_names[$index]}"
+            remote_name="${remote_names[$index]}"
+            final_tag="ghcr.io/${registry_owner}/${remote_name}:${RELEASE_TAG}"
+            amd64_tag="${final_tag}-amd64"
+            arm64_tag="${final_tag}-arm64"
+
+            docker manifest create "$final_tag" "$amd64_tag" "$arm64_tag"
+            digest="$(docker manifest push "$final_tag" | tail -n 1)"
+            [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+            image="$final_tag"
+            digest_ref="${image%:*}@${digest}"
+            docker manifest inspect "$digest_ref" >/dev/null
+
+            platforms="$(docker manifest inspect "$digest_ref" | jq -r '[.manifests[].platform | "\(.os)/\(.architecture)"] | sort | join(",")')"
+            test "$platforms" = "linux/amd64,linux/arm64"
+            echo "Verify merged manifest platforms: ${image_name}=${platforms}"
+
+            provenance="release-contract/provenance-${image_name}.json"
+            jq -n \
+              --arg repository "$GITHUB_REPOSITORY" \
+              --arg revision "$GITHUB_SHA" \
+              --arg image "$image_name" \
+              --arg builder "$certificate_identity" \
+              --arg invocation "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+              '{
+                "buildDefinition": {
+                  "buildType": "https://github.com/soymutdb/oci-multiarch@v1",
+                  "externalParameters": {
+                    "source_repository": $repository,
+                    "source_revision": $revision,
+                    "image": $image,
+                    "platforms": ["linux/amd64", "linux/arm64"]
+                  },
+                  "internalParameters": {},
+                  "resolvedDependencies": [{
+                    "uri": ("git+https://github.com/" + $repository),
+                    "digest": {"gitCommit": $revision}
+                  }]
+                },
+                "runDetails": {
+                  "builder": {"id": $builder},
+                  "metadata": {"invocationId": $invocation}
+                }
+              }' > "$provenance"
+            provenance_sha256="$(sha256sum "$provenance" | cut -d ' ' -f 1)"
+
+            cosign sign --yes "$digest_ref"
+            cosign attest --yes --type slsaprovenance --predicate "$provenance" "$digest_ref"
+            cosign verify \
+              --certificate-identity "$certificate_identity" \
+              --certificate-oidc-issuer "$oidc_issuer" "$digest_ref" >/dev/null
+            cosign verify-attestation --type slsaprovenance \
+              --certificate-identity "$certificate_identity" \
+              --certificate-oidc-issuer "$oidc_issuer" "$digest_ref" >/dev/null
+
+            platforms_json='[]'
+            for arch in amd64 arm64; do
+              platform_tag="${final_tag}-${arch}"
+              platform_digest="$(docker manifest inspect --verbose "$platform_tag" | jq -r '.Descriptor.digest')"
+              [[ "$platform_digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+              platform_ref="${platform_tag%:*}@${platform_digest}"
+              sbom_source="validated-platforms/validated-runtime-images-${arch}/sbom-${image_name}-${arch}.spdx.json"
+              sbom_target="release-contract/sbom-${image_name}-${arch}.spdx.json"
+              cp "$sbom_source" "$sbom_target"
+              jq -e '.spdxVersion | startswith("SPDX-")' "$sbom_target" >/dev/null
+              sbom_sha256="$(sha256sum "$sbom_target" | cut -d ' ' -f 1)"
+
+              cosign sign --yes "$platform_ref"
+              cosign attest --yes --type spdxjson --predicate "$sbom_target" "$platform_ref"
+              cosign verify \
+                --certificate-identity "$certificate_identity" \
+                --certificate-oidc-issuer "$oidc_issuer" "$platform_ref" >/dev/null
+              cosign verify-attestation --type spdxjson \
+                --certificate-identity "$certificate_identity" \
+                --certificate-oidc-issuer "$oidc_issuer" "$platform_ref" >/dev/null
+
+              platform_entry="$(jq -n \
+                --arg platform "linux/${arch}" \
+                --arg digest_ref "$platform_ref" \
+                --arg sbom "$(basename "$sbom_target")" \
+                --arg sbom_sha256 "$sbom_sha256" \
+                '{platform: $platform, digest_ref: $digest_ref, sbom: $sbom, sbom_sha256: $sbom_sha256}')"
+              platforms_json="$(jq --argjson item "$platform_entry" '. + [$item]' <<<"$platforms_json")"
+            done
+
+            image_entry="$(jq -n \
+              --arg name "$image_name" \
+              --arg digest_ref "$digest_ref" \
+              --arg provenance "$(basename "$provenance")" \
+              --arg provenance_sha256 "$provenance_sha256" \
+              --argjson platforms "$platforms_json" \
+              '{
+                name: $name,
+                digest_ref: $digest_ref,
+                provenance: $provenance,
+                provenance_sha256: $provenance_sha256,
+                platforms: $platforms
+              }')"
+            jq --argjson image "$image_entry" '.images += [$image]' \
+              release-contract/release-manifest.json > release-contract/release-manifest.tmp
+            mv release-contract/release-manifest.tmp release-contract/release-manifest.json
+          done
+
+          expected_provenance=(
+            "release-contract/provenance-api.json"
+            "release-contract/provenance-worker.json"
+            "release-contract/provenance-mcp.json"
+            "release-contract/provenance-jbrowse.json"
+          )
+          for provenance_file in "${expected_provenance[@]}"; do
+            test -s "$provenance_file"
+          done
+          jq -r '.images[].digest_ref' release-contract/release-manifest.json | sort > release-contract/oci-image-refs.txt
+
+          cd release-contract
+          jq -e '
+            .schema_version == 1 and
+            .platforms == ["linux/amd64", "linux/arm64"] and
+            (.images | length == 4) and
+            ([.images[].name] | sort) == ["api", "jbrowse", "mcp", "worker"] and
+            all(.images[];
+              (.digest_ref | test("@sha256:[0-9a-f]{64}$")) and
+              (.provenance_sha256 | test("^[0-9a-f]{64}$")) and
+              ([.platforms[].platform] | sort) == ["linux/amd64", "linux/arm64"]
+            )
+          ' release-manifest.json >/dev/null
+          sha256sum oci-image-refs.txt > OCI_SHA256SUMS
+          sha256sum release-manifest.json oci-image-refs.txt provenance-*.json sbom-*.spdx.json > SHA256SUMS
+          cosign sign-blob --yes --bundle release-manifest.sigstore.json release-manifest.json
+          cosign verify-blob \
+            --bundle release-manifest.sigstore.json \
+            --certificate-identity "$certificate_identity" \
+            --certificate-oidc-issuer "$oidc_issuer" release-manifest.json
+          contract_sha="$(sha256sum release-manifest.json | cut -d ' ' -f 1)"
+          echo "sha256=$contract_sha" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Signed multi-architecture OCI release contract"
+            echo
+            echo '```text'
+            cat oci-image-refs.txt
+            echo '```'
+            echo
+            echo "Contract SHA-256: \`$contract_sha\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload signed OCI release contract
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: oci-release-contract-${{ github.sha }}
+          path: release-contract
+          if-no-files-found: error
+          retention-days: 90
+
+  # ---------------------------------------------------------------------------
+  # Job 6 — Real ClickHouse legacy migration (hard gate)
   # ---------------------------------------------------------------------------
   clickhouse-migration:
     name: ClickHouse migration fixture
@@ -313,12 +947,12 @@ jobs:
     continue-on-error: false
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 1
 
       - name: Setup Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
 
@@ -401,23 +1035,23 @@ jobs:
         run: docker rm -f ch-test
 
   # ---------------------------------------------------------------------------
-  # Job 5 — MCP authenticated transport (hard gate)
+  # Job 7 — MCP authenticated transport (hard gate)
   # ---------------------------------------------------------------------------
   mcp-e2e:
-    name: MCP transport e2e (nginx /mcp/)
+    name: MCP transport e2e (nginx /mcp)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     continue-on-error: false
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Build MCP image
         run: docker build -t soymutdb-mcp:ci apps/mcp-server
       - name: Create e2e network
         run: docker network create mcp-e2e
       - name: Start MCP server
         run: docker run -d --network mcp-e2e --name mcp-server -e SOYMUTDB_MCP_API_TOKEN=ci-test-token soymutdb-mcp:ci
-      - name: Start nginx reverse proxy (/mcp/ -> mcp-server)
+      - name: Start nginx reverse proxy (/mcp -> mcp-server)
         run: |
           cat > /tmp/mcp-nginx.conf <<'NGINX'
           worker_processes 1;
@@ -426,6 +1060,10 @@ jobs:
             limit_req_zone $binary_remote_addr zone=auth:10m rate=10r/s;
             server {
               listen 80;
+              location = /mcp/ {
+                if ($http_authorization = "") { return 401; }
+                return 308 /mcp;
+              }
               location = /mcp {
                 if ($http_authorization = "") { return 401; }
                 limit_req zone=auth burst=10 nodelay;
@@ -433,9 +1071,15 @@ jobs:
                 proxy_http_version 1.1;
                 proxy_set_header Connection "";
                 proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+                proxy_set_header X-Request-ID $request_id;
                 proxy_buffering off;
                 proxy_cache off;
                 proxy_read_timeout 600s;
+                proxy_send_timeout 600s;
+                proxy_connect_timeout 10s;
               }
             }
           }
@@ -444,8 +1088,7 @@ jobs:
       - name: Assert MCP authentication through nginx
         run: |
           payload='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci","version":"1"}}}'
-          # FastMCP's canonical Streamable HTTP endpoint is /mcp. The
-          # trailing-slash variant redirects instead of returning JSON-RPC.
+          # FastMCP's canonical Streamable HTTP endpoint is /mcp.
           base=http://127.0.0.1:8081/mcp
           code=000
           for attempt in {1..60}; do
@@ -454,6 +1097,9 @@ jobs:
             sleep 2
           done
           test "$code" = 401
+          slash_base=http://127.0.0.1:8081/mcp/
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' -X POST "$slash_base" -H 'Content-Type: application/json' -d "$payload")" = 401
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' -X POST "$slash_base" -H 'Content-Type: application/json' -H 'Authorization: Bearer ci-test-token' -d "$payload")" = 308
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' -X POST "$base" -H 'Content-Type: application/json' -H 'Authorization: Bearer wrong' -d "$payload")" = 401
           code=$(curl --fail --silent --output /dev/null --write-out '%{http_code}' -X POST "$base" -H 'Accept: application/json, text/event-stream' -H 'Content-Type: application/json' -H 'Authorization: Bearer ci-test-token' -d "$payload")
           test "$code" -ge 200 -a "$code" -lt 300

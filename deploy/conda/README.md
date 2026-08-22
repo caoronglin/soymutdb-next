@@ -108,7 +108,7 @@ WantedBy=multi-user.target
 
 ## 5. 环境变量（`SOYMUTDB_` 前缀，对齐 config.py）
 
-模板：`deploy/conda/env.example` → 复制为 `$INSTALL_DIR/.env`（conda-deploy.sh 自动完成；compose 专用 `API_IMAGE_TAG` / `WORKER_IMAGE_TAG` 不在 conda 模板中）。
+模板：`deploy/conda/env.example` → 复制为 `$INSTALL_DIR/.env`（conda-deploy.sh 自动完成；compose 专用 `*_IMAGE_REF` 不在 conda 模板中）。
 
 **必填（API prod 模式 fail-fast，缺失拒绝启动）：**
 
@@ -196,7 +196,7 @@ conda run -n soymutdb-worker celery -A soymutdb_worker.main:celery_app inspect p
 
 | 维度 | docker compose（主路径） | conda 裸进程（备选） |
 | --- | --- | --- |
-| 应用层运行方式 | 容器（镜像 tag 不可变） | 源码 + conda env（editable 安装） |
+| 应用层运行方式 | 容器（`image@sha256` 不可变） | 源码 + conda env（editable 安装） |
 | 升级 | `upgrade.sh`：预检 → 拉镜像 → 备份 → 迁移 → 滚动重启 → 健康轮询 → 自动回滚 | 手动/脚本：`git pull` → `conda env update -f` → `alembic upgrade head` → 重启 systemd 服务；**无自动回滚**（可保留旧 release 目录切换） |
 | 数据持久化 | compose volumes（`pgdata` 等，`docker compose down` 不删数据） | 数据层仍在 docker 时不变；纯裸机时由本机 PG/CH/Redis 管理 |
 | 日志 | `docker compose logs -f <svc>` + systemd journal | 进程 stdout/journald 或 `celery multi` 日志文件（`$INSTALL_DIR/logs/`） |

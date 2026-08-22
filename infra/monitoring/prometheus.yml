@@ -24,6 +24,11 @@ global:
 rule_files:
   - "/etc/prometheus/rules/*.yml"
 
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
 scrape_configs:
   # ------------------------------------------------------------------
   # API - FastAPI Prometheus metrics
@@ -67,6 +72,14 @@ scrape_configs:
   - job_name: "node"
     static_configs:
       - targets: ["node-exporter:9100"]
+    scrape_interval: 15s
+
+  # ------------------------------------------------------------------
+  # Alertmanager - delivery health and notification failure metrics
+  # ------------------------------------------------------------------
+  - job_name: "alertmanager"
+    static_configs:
+      - targets: ["alertmanager:9093"]
     scrape_interval: 15s
 
   # ------------------------------------------------------------------

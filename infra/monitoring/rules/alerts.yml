@@ -9,15 +9,8 @@
 #   - PG        pg_stat_database_numbackends（postgres-exporter）
 #   - Redis     redis_memory_used_bytes / redis_memory_max_bytes（redis-exporter）
 #   - 磁盘      node_filesystem_*（node-exporter，--path.rootfs=/host）
-#
-# 明确未实现 / 依赖外部条件（待后续任务补齐后取消注释）：
-#   - 备份过期：deploy/scripts/backup.sh 目前不写任何 metric（无 pushgateway、
-#     无 node textfile collector）。待备份任务将最近成功备份时间写入
-#     node-exporter textfile 目录或 pushgateway 后，再启用：
-#       - alert: BackupStale
-#         expr: time() - soymutdb_last_backup_success_timestamp_seconds > 172800
-#         for: 0m
-#         annotations: { summary: "Backup is older than 48h" }
+#   - 备份      soymutdb_backup_*（backup.sh 原子写入 node textfile collector）
+#   - 投递      alertmanager_notifications_failed_total（Alertmanager 自身指标）
 # =====================================================================
 groups:
   # ------------------------------------------------------------------
@@ -135,3 +128,46 @@ groups:
         annotations:
           summary: "Redis memory above 85%"
           description: "Redis instance {{ $labels.redis_instance }} is using {{ $value | humanizePercentage }} of its maxmemory."
+
+  # ------------------------------------------------------------------
+  # Disaster recovery and alert delivery
+  # ------------------------------------------------------------------
+  - name: soymutdb-disaster-recovery
+    rules:
+      - alert: BackupStale
+        expr: >
+          (time() - soymutdb_backup_last_success_timestamp_seconds > 172800)
+          or absent(soymutdb_backup_last_success_timestamp_seconds)
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Authoritative backup is older than 48 hours"
+          description: "No verified successful backup has been observed within the 48-hour recovery objective."
+
+      - alert: BackupFailed
+        expr: soymutdb_backup_status == 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Latest authoritative backup failed"
+          description: "The latest backup attempt failed. Inspect backup logs and staging/offsite connectivity."
+
+      - alert: AlertmanagerUnavailable
+        expr: up{job="alertmanager"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Alertmanager is unavailable"
+          description: "Prometheus cannot reach Alertmanager; external alert delivery is unavailable."
+
+      - alert: AlertDeliveryFailed
+        expr: increase(alertmanager_notifications_failed_total[10m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Alertmanager notification delivery failed"
+          description: "Alertmanager reported {{ $value }} failed notification attempts in the last 10 minutes."

@@ -17,7 +17,10 @@ if grep -RInE 'touch apps/(api|worker)/uv\.lock|uv\.lock\*' "${ROOT}/.github" "$
   fail=1
 fi
 
-if grep -nE ':\$\{[A-Z_]+:-' "${ROOT}/docker-compose.yml"; then
+# Only non-empty fallbacks for credential-bearing variables are secret defaults.
+# Empty fallbacks retain the application-level fail-fast validation, and values
+# such as JBROWSE_BIND_ADDRESS or *_FILE paths are operational configuration.
+if grep -nE '\$\{([A-Z0-9_]+_)?(SECRET|PASSWORD|PASSWD|TOKEN|KEY|CREDENTIAL):-[^}]+' "${ROOT}/docker-compose.yml"; then
   echo "FAIL: production compose contains insecure secret defaults" >&2
   fail=1
 fi

@@ -14,7 +14,7 @@
 #   7. 启动服务
 #   8. readiness 轮询（失败自动回滚旧镜像并退出非零）
 #   8. 业务 smoke（deploy/scripts/healthcheck.sh）
-#  10. 记录发布结果（镜像 tag/digest、迁移版本、时间 -> .release-state.json）
+#  10. 记录发布结果（OCI digest refs、迁移版本、时间 -> .release-state.json）
 #
 # Usage:
 #   sudo bash deploy/scripts/upgrade.sh
@@ -85,8 +85,10 @@ echo -e "${GREEN}  Compose config OK.${NC}"
 # Step 2: 发布前预检（与 apps/api/app/core/config.py prod 校验对齐）
 # ---------------------------------------------------------------------
 echo -e "${CYAN}[2/10] Pre-flight checks...${NC}"
-[[ -n "${API_IMAGE_TAG:-}" ]] || fail "API_IMAGE_TAG is required (no bare :latest)"
-[[ -n "${WORKER_IMAGE_TAG:-}" ]] || fail "WORKER_IMAGE_TAG is required (no bare :latest)"
+[[ -n "${API_IMAGE_REF:-}" ]] || fail "API_IMAGE_REF is required (image@sha256)"
+[[ -n "${WORKER_IMAGE_REF:-}" ]] || fail "WORKER_IMAGE_REF is required (image@sha256)"
+[[ -n "${MCP_IMAGE_REF:-}" ]] || fail "MCP_IMAGE_REF is required (image@sha256)"
+[[ -n "${JBROWSE_IMAGE_REF:-}" ]] || fail "JBROWSE_IMAGE_REF is required (image@sha256)"
 
 if [[ -z "${SOYMUTDB_JWT_SECRET:-}" || "${#SOYMUTDB_JWT_SECRET}" -lt 32 ]]; then
     fail "SOYMUTDB_JWT_SECRET must be >= 32 characters (API will refuse to start otherwise)"
@@ -120,16 +122,16 @@ echo -e "${GREEN}  Pre-flight checks passed.${NC}"
 # Step 3: 镜像 manifest 预检
 # ---------------------------------------------------------------------
 echo -e "${CYAN}[3/10] Checking image manifests...${NC}"
-[[ -n "${MCP_IMAGE_TAG:-}" ]] || fail "MCP_IMAGE_TAG is required (no bare :latest)"
-for rl_image in "${API_IMAGE_TAG}" "${WORKER_IMAGE_TAG}" "${MCP_IMAGE_TAG}"; do
-    [[ "${rl_image}" != *:latest ]] || fail "image tag must not be :latest: ${rl_image}"
+for rl_image in "${API_IMAGE_REF}" "${WORKER_IMAGE_REF}" "${MCP_IMAGE_REF}" "${JBROWSE_IMAGE_REF}"; do
+    [[ "${rl_image}" =~ @sha256:[0-9a-f]{64}$ ]] || \
+        fail "image reference must be immutable image@sha256: ${rl_image}"
     docker manifest inspect "${rl_image}" >/dev/null || fail "image manifest unavailable: ${rl_image}"
 done
 echo -e "${GREEN}  Image manifests OK.${NC}"
 
 echo -e "${CYAN}[4/10] Pulling images...${NC}"
-"${COMPOSE[@]}" pull api migrate migrate-clickhouse worker-default worker-analyses worker-blast worker-ingest beat mcp-server || \
-    fail "docker compose pull failed - check registry access and image tags"
+"${COMPOSE[@]}" pull api migrate migrate-clickhouse worker-default worker-analyses worker-blast worker-ingest beat mcp-server jbrowse || \
+    fail "docker compose pull failed - check registry access and digest refs"
 echo -e "${GREEN}  Images pulled.${NC}"
 
 # ---------------------------------------------------------------------
@@ -147,7 +149,7 @@ fi
 # Step 6: 停止应用并运行一次性迁移（alembic upgrade head）
 # ---------------------------------------------------------------------
 echo -e "${CYAN}[6/10] Stopping application services and running migrations...${NC}"
-APP_SERVICES=(api worker-default worker-analyses worker-blast worker-ingest beat mcp-server nginx)
+APP_SERVICES=(api worker-default worker-analyses worker-blast worker-ingest beat mcp-server jbrowse nginx)
 "${COMPOSE[@]}" stop "${APP_SERVICES[@]}" || fail "failed to stop application services"
 "${COMPOSE[@]}" up -d postgres
 for _ in $(seq 1 30); do
@@ -166,26 +168,28 @@ echo -e "${CYAN}  Running ClickHouse schema migration with validation gates...${
 # ---------------------------------------------------------------------
 # Step 6a: 记录旧版本（用于失败回滚）
 # ---------------------------------------------------------------------
-OLD_API_TAG=""
-OLD_WORKER_TAG=""
-OLD_MCP_TAG=""
+OLD_API_REF=""
+OLD_WORKER_REF=""
+OLD_MCP_REF=""
+OLD_JBROWSE_REF=""
 if [[ -f "${STATE_FILE}" ]]; then
-    OLD_API_TAG="$(sed -n 's/.*"api_image_tag": *"\([^"]*\)".*/\1/p' "${STATE_FILE}" | awk 'NR==1{print; exit}')"
-    OLD_WORKER_TAG="$(sed -n 's/.*"worker_image_tag": *"\([^"]*\)".*/\1/p' "${STATE_FILE}" | awk 'NR==1{print; exit}')"
-    OLD_MCP_TAG="$(sed -n 's/.*"mcp_image_tag": *"\([^"]*\)".*/\1/p' "${STATE_FILE}" | awk 'NR==1{print; exit}')"
+    OLD_API_REF="$(sed -n 's/.*"api_image_ref": *"\([^"]*\)".*/\1/p' "${STATE_FILE}" | awk 'NR==1{print; exit}')"
+    OLD_WORKER_REF="$(sed -n 's/.*"worker_image_ref": *"\([^"]*\)".*/\1/p' "${STATE_FILE}" | awk 'NR==1{print; exit}')"
+    OLD_MCP_REF="$(sed -n 's/.*"mcp_image_ref": *"\([^"]*\)".*/\1/p' "${STATE_FILE}" | awk 'NR==1{print; exit}')"
+    OLD_JBROWSE_REF="$(sed -n 's/.*"jbrowse_image_ref": *"\([^"]*\)".*/\1/p' "${STATE_FILE}" | awk 'NR==1{print; exit}')"
 fi
-echo -e "  Previous release recorded: api=${OLD_API_TAG:-none} worker=${OLD_WORKER_TAG:-none} mcp=${OLD_MCP_TAG:-none}"
+echo -e "  Previous release recorded: api=${OLD_API_REF:-none} worker=${OLD_WORKER_REF:-none} mcp=${OLD_MCP_REF:-none} jbrowse=${OLD_JBROWSE_REF:-none}"
 
 rollback() {
     # ClickHouse migration may be irreversible; restore the pre-upgrade backup
     # manually if an incompatible schema change is detected.
-    if [[ -z "${OLD_API_TAG}" || -z "${OLD_WORKER_TAG}" || -z "${OLD_MCP_TAG}" ]]; then
+    if [[ -z "${OLD_API_REF}" || -z "${OLD_WORKER_REF}" || -z "${OLD_MCP_REF}" || -z "${OLD_JBROWSE_REF}" ]]; then
         echo -e "${RED}  No complete previous release recorded - manual intervention required${NC}" >&2
         "${COMPOSE[@]}" logs --no-color "${APP_SERVICES[@]}" >&2 || true
         return 1
     fi
-    API_IMAGE_TAG="${OLD_API_TAG}" WORKER_IMAGE_TAG="${OLD_WORKER_TAG}" MCP_IMAGE_TAG="${OLD_MCP_TAG}" \
-        "${COMPOSE[@]}" up -d "${APP_SERVICES[@]}" || true
+    API_IMAGE_REF="${OLD_API_REF}" WORKER_IMAGE_REF="${OLD_WORKER_REF}" MCP_IMAGE_REF="${OLD_MCP_REF}" JBROWSE_IMAGE_REF="${OLD_JBROWSE_REF}" \
+        "${COMPOSE[@]}" up -d || true
     for _ in $(seq 1 "${READY_RETRIES}"); do
         if curl -sf "${READY_URL}" >/dev/null 2>&1 && \
            "${COMPOSE[@]}" ps --status running --services | grep -qx mcp-server && \
@@ -241,9 +245,10 @@ fi
 released_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 cat > "${STATE_FILE}" <<EOF
 {
-  "api_image_tag": "${API_IMAGE_TAG}",
-  "worker_image_tag": "${WORKER_IMAGE_TAG}",
-  "mcp_image_tag": "${MCP_IMAGE_TAG}",
+  "api_image_ref": "${API_IMAGE_REF}",
+  "worker_image_ref": "${WORKER_IMAGE_REF}",
+  "mcp_image_ref": "${MCP_IMAGE_REF}",
+  "jbrowse_image_ref": "${JBROWSE_IMAGE_REF}",
   "api_digest": "${api_digest}",
   "migration_version": "${migration_version}",
   "services": ["api", "migrate", "migrate-clickhouse", "worker-default", "worker-analyses", "worker-blast", "worker-ingest", "beat", "mcp-server", "nginx"],
@@ -251,8 +256,8 @@ cat > "${STATE_FILE}" <<EOF
 }
 EOF
 echo -e "${GREEN}  Release recorded: ${STATE_FILE}${NC}"
-echo "    api_image_tag:     ${API_IMAGE_TAG}"
-echo "    worker_image_tag:  ${WORKER_IMAGE_TAG}"
+echo "    api_image_ref:     ${API_IMAGE_REF}"
+echo "    worker_image_ref:  ${WORKER_IMAGE_REF}"
 echo "    api_digest:        ${api_digest}"
 echo "    migration_version: ${migration_version}"
 echo "    released_at:       ${released_at}"

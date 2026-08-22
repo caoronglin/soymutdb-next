@@ -9,7 +9,6 @@ WORKDIR /app
 # ---- deps stage ----------------------------------------------------
 FROM base AS deps
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml* ./
-COPY packages/ui/package.json packages/ui/
 COPY packages/shared/package.json packages/shared/
 COPY packages/api-client/package.json packages/api-client/
 COPY packages/i18n/package.json packages/i18n/

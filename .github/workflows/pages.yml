@@ -1,16 +1,22 @@
 # =============================================================================
 # SoyMutDB Next — Deploy public demo to GitHub Pages (gh-pages branch)
 #
-# Trigger: push to main + manual dispatch. Builds the public portal and JBrowse,
-# then force-pushes the static demo to `gh-pages`. No API/worker is deployed;
-# API requests use the same-origin /api/v1 demo URL and render existing
-# unavailable/empty states on GitHub Pages.
+# Trigger: the "CI" workflow completing successfully on main (workflow_run),
+# plus manual dispatch. A failed or cancelled CI run never reaches the deploy
+# job: the gate job hard-fails unless the triggering run concluded successfully
+# on a main-branch commit of this repository. The deploy job then checks out
+# that exact commit (workflow_run.head_sha), consumes CI's static artifact,
+# and force-pushes those verified bytes to gh-pages.
+#
+# No API/worker is deployed; API requests use the same-origin /api/v1 demo URL
+# and render existing unavailable/empty states on GitHub Pages.
 # =============================================================================
 name: Deploy Web to Pages
 
 on:
-  push:
-    branches: [main]
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
   workflow_dispatch:
     inputs:
       publication_id:
@@ -27,6 +33,7 @@ on:
         default: ""
 
 permissions:
+  actions: read
   contents: write
 
 concurrency:
@@ -34,50 +41,59 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  gate:
+    name: Gate on successful CI for main
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # workflow_run consumers fire for every CI completion (PRs included).
+      # Only a successful CI run on a main-branch commit of this repository
+      # may deploy; anything else fails here so the deploy job is skipped.
+      # Manual dispatch bypasses the gate deliberately (operator-run release).
+      - name: Require CI success on the same main commit
+        if: github.event_name == 'workflow_run'
+        env:
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_REPO: ${{ github.event.workflow_run.head_repository.full_name }}
+        run: |
+          if [ "$HEAD_BRANCH" != "main" ] || [ "$HEAD_REPO" != "${{ github.repository }}" ]; then
+            echo "Non-main or foreign-repository CI run — nothing to deploy."
+            exit 0
+          fi
+          test "$CONCLUSION" = "success"
+
   deploy:
-    name: Build web + publish pages (gh-pages) branch
+    name: Publish CI-verified Pages tree (gh-pages) branch
+    needs: gate
+    # Authoritative guard: only manual dispatch or a successful CI run on a
+    # main-branch commit of this repository may publish.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      # Deploy the exact commit the triggering CI run verified (head_sha);
+      # fall back to the dispatch ref for manual runs.
+      - name: Checkout CI-verified commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 1
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
-      - name: Install pnpm 10
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10.0.0
-
-      - name: Setup Node 22
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - name: Use official npm registry
-        run: pnpm config set registry https://registry.npmjs.org/
-
-      - name: Install dependencies (frozen lockfile)
-        run: pnpm install --frozen-lockfile
-
-      - name: Build web (SSG + assets)
+      - name: Download CI-verified Pages artifact
+        if: github.event_name == 'workflow_run'
         env:
-          VITE_DEPLOYMENT_MODE: demo
-          VITE_BASE_URL: /soymutdb-next/
-          VITE_API_BASE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/api/v1
-          VITE_CDN_ENABLED: "false"
-          VITE_JBROWSE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/soymutdb-jbrowse/
-        run: pnpm --filter @soymutdb/web build
-
-      - name: Build JBrowse demo
-        env:
-          VITE_BASE_URL: /soymutdb-next/soymutdb-jbrowse/
-          VITE_JBROWSE_DATA_URL: /soymutdb-next/jbrowse-data
-        run: pnpm --filter @soymutdb/jbrowse build
-
-      - name: Smoke test static content (news/about/sitemap)
-        run: pnpm --filter @soymutdb/web exec tsx scripts/smoke-pages.ts
+          GH_TOKEN: ${{ github.token }}
+          CI_RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          rm -rf /tmp/pages-dist
+          gh run download "$CI_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name pages-demo-dist --dir /tmp/pages-dist
+          test -f /tmp/pages-dist/SHA256SUMS
 
       - name: Verify immutable artifact digest (workflow_dispatch only)
         if: github.event_name == 'workflow_dispatch' && inputs.manifest_digest != ''
@@ -88,34 +104,48 @@ jobs:
         run: |
           set -euo pipefail
           curl -fsSL "$ARTIFACT_URL" -o /tmp/artifact.tar.gz
-          mkdir -p /tmp/artifact
-          tar -xzf /tmp/artifact.tar.gz -C /tmp/artifact
-          echo "$MANIFEST_DIGEST  /tmp/artifact/manifest.json" | sha256sum -c -
+          rm -rf /tmp/pages-dist
+          mkdir -p /tmp/pages-dist
+          tar -xzf /tmp/artifact.tar.gz -C /tmp/pages-dist
+          echo "$MANIFEST_DIGEST  /tmp/pages-dist/manifest.json" | sha256sum -c -
+          test -f /tmp/pages-dist/SHA256SUMS
           echo "verified artifact $PUBLICATION_ID ($MANIFEST_DIGEST)"
+
+      - name: Verify exact Pages artifact tree
+        run: |
+          set -euo pipefail
+          test -f /tmp/pages-dist/index.html
+          test -f /tmp/pages-dist/soymutdb-jbrowse/index.html
+          (
+            cd /tmp/pages-dist
+            sha256sum -c SHA256SUMS
+          )
+
+      - name: Prepare Pages deployment branch
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan gh-pages
+          git rm -rf --quiet . >/dev/null 2>&1 || true
+          # The verified artifact lives outside the checkout and therefore
+          # survives this cleanup unchanged.
+          git clean -fdx >/dev/null 2>&1 || true
+          cp -r /tmp/pages-dist/. .
+          test -f index.html
+          test -f soymutdb-jbrowse/index.html
+
+      - name: Verify deployed Pages tree is byte-identical
+        run: |
+          set -euo pipefail
+          find /tmp/pages-dist -type f -printf '%P\n' | LC_ALL=C sort > /tmp/pages-expected-files
+          find . -path './.git' -prune -o -type f -printf '%P\n' | LC_ALL=C sort > /tmp/pages-actual-files
+          diff -u /tmp/pages-expected-files /tmp/pages-actual-files
+          sha256sum -c /tmp/pages-dist/SHA256SUMS
 
       - name: Deploy all apps to pages (gh-pages) branch
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # Stage dist BEFORE the orphan checkout: git clean -fdx would wipe
-          # the untracked (gitignored) dist folder.
-          mkdir -p /tmp/pages-dist
-          cp -r apps/web/dist/. /tmp/pages-dist/
-          mkdir -p /tmp/pages-dist/soymutdb-jbrowse
-          # Publish the dist-jbrowse artifact under the stable JBrowse path.
-          cp -r apps/jbrowse/dist/. /tmp/pages-dist/soymutdb-jbrowse/
-          git checkout --orphan gh-pages
-          git rm -rf --quiet . >/dev/null 2>&1 || true
-          # Wipe untracked leftovers too (node_modules, pnpm symlinks) so the
-          # pages (gh-pages) branch carries only static files.
-          git clean -fdx >/dev/null 2>&1 || true
-          cp -r /tmp/pages-dist/. .
-          # SPA fallback: GitHub Pages serves 404.html for unknown paths.
-          cp /tmp/pages-dist/index.html ./404.html
-          # Pure static hosting — skip Jekyll processing.
-          test -f index.html
-          test -f soymutdb-jbrowse/index.html
-          touch .nojekyll
+          set -euo pipefail
           git add -A
           git commit -m "deploy(web): $(date -u +%Y-%m-%dT%H:%M:%SZ)"
           git push origin gh-pages --force

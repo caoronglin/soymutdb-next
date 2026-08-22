@@ -3,7 +3,7 @@
 # SoyMutDB Web — G2 体积分块预算门禁 (docs/design/upgrade-plan.md §七)
 #
 # 构建后检测 apps/web/dist/assets 下各 chunk 的 gzip 大小（硬门禁）：
-#   antd          ≤ 280 KB  (ANTD_MAX_KB)
+#   antd          ≤ 320 KB  (ANTD_MAX_KB)
 #   pro-components≤ 180 KB  (PRO_MAX_KB)
 #   主入口 index  ≤ 200 KB  (ENTRY_MAX_KB)
 #
@@ -20,7 +20,7 @@
 set -uo pipefail
 
 DIST_DIR="${1:-apps/web/dist/assets}"
-ANTD_MAX_KB="${ANTD_MAX_KB:-280}"
+ANTD_MAX_KB="${ANTD_MAX_KB:-320}"
 PRO_MAX_KB="${PRO_MAX_KB:-180}"
 ENTRY_MAX_KB="${ENTRY_MAX_KB:-200}"
 

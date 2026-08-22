@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  labels:
+    app.kubernetes.io/name: soymutdb-api
+    app.kubernetes.io/part-of: soymutdb-kind-smoke
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: soymutdb-api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: soymutdb-api
+        app.kubernetes.io/part-of: soymutdb-kind-smoke
+    spec:
+      automountServiceAccountToken: false
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        runAsNonRoot: true
+        # Dockerfile uses the named `soymutdb` user. Pin its numeric identity
+        # so kubelet can prove non-root execution before it starts the image.
+        runAsUser: 1000
+        runAsGroup: 1000
+        # The /tmp emptyDir must be writable by the pinned non-root process.
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: api
+          # The CI job loads this exact, checksum-verified local image into
+          # Kind. imagePullPolicy: Never prevents a registry fallback.
+          image: soymutdb-api:ci-amd64
+          imagePullPolicy: Never
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            # The Kind harness tests process/HTTP behavior only. It does not
+            # pretend to provision the production PostgreSQL/Redis/S3 stack.
+            - name: SOYMUTDB_APP_ENV
+              value: dev
+            - name: SOYMUTDB_OUTBOX_DISPATCHER_ENABLED
+              value: "false"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          volumeMounts:
+            - name: runtime-tmp
+              mountPath: /tmp
+          livenessProbe:
+            httpGet:
+              path: /api/v1/health/live
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 12
+          readinessProbe:
+            httpGet:
+              path: /api/v1/health/live
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 12
+      volumes:
+        - name: runtime-tmp
+          emptyDir:
+            sizeLimit: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  labels:
+    app.kubernetes.io/name: soymutdb-api
+    app.kubernetes.io/part-of: soymutdb-kind-smoke
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: soymutdb-api
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

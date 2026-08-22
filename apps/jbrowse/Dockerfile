@@ -9,7 +9,6 @@ WORKDIR /app
 # ---- deps stage: install the complete workspace from the root lockfile
 FROM base AS deps
 COPY package.json pnpm-workspace.yaml turbo.json pnpm-lock.yaml ./
-COPY packages/ui/package.json packages/ui/package.json
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/api-client/package.json packages/api-client/package.json
 COPY packages/i18n/package.json packages/i18n/package.json

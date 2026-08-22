@@ -1,0 +1,11 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "ignore": [
+    "**/dist/**",
+    "**/coverage/**",
+    "**/generated/**",
+    "**/node_modules/**",
+    "**/playwright-report*/**",
+    "**/test-results*/**"
+  ]
+}

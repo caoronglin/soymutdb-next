@@ -13,7 +13,7 @@
 #      （依赖已在步骤 2 装好；设置 SOYMUTDB_SKIP_PIP_INSTALL=1 可跳过）
 #   4. 初始化目录（${INSTALL_DIR}/{data,logs,config}）
 #   5. 生成 .env（缺失时从 deploy/.env.example 复制，并注释 compose 专用
-#      镜像 tag 行；conda 模式下应用变量使用 SOYMUTDB_ 前缀）
+#      镜像 digest ref 行；conda 模式下应用变量使用 SOYMUTDB_ 前缀）
 #   6. 启动前校验（与 apps/api/app/core/config.py 生产 fail-fast 对齐：
 #      JWT>=32 字符、CORS 非空且不含通配符）
 #   7. 输出启动命令模板（uvicorn / celery multi / beat / alembic）
@@ -122,8 +122,8 @@ else
         echo -e "${GREEN}  Created ${ENV_FILE} from deploy/conda/env.example.${NC}"
     else
         cp "${PROJECT_ROOT}/deploy/.env.example" "${ENV_FILE}"
-        # conda 模式无镜像概念：注释掉 compose 专用镜像 tag 行，避免误导
-        sed -i 's/^\(API_IMAGE_TAG=\|WORKER_IMAGE_TAG=\)/# conda 模式无需镜像 tag（由源码/editable 安装提供）：\1/' "${ENV_FILE}"
+        # conda 模式无镜像概念：注释掉 compose 专用 digest ref，避免误导
+        sed -i 's/^\([A-Z]*_IMAGE_REF=\)/# conda 模式无需镜像 digest（由源码\/editable 安装提供）：\1/' "${ENV_FILE}"
         echo -e "${GREEN}  Created ${ENV_FILE} from deploy/.env.example (fallback).${NC}"
     fi
     echo -e "${YELLOW}  >>> 请编辑 ${ENV_FILE}：SOYMUTDB_JWT_SECRET / SOYMUTDB_CORS_ORIGINS /"

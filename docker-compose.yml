@@ -6,8 +6,8 @@
 #   - 所有传给 api/worker/beat/migrate 的配置变量使用 SOYMUTDB_ 前缀，
 #     字段名与 apps/api/app/core/config.py 的 pydantic-settings 对齐
 #     （APP_ENV 取值仅 dev|staging|prod，生产用 prod）。
-#   - 镜像 tag 必须显式注入，禁止裸 latest：
-#       API_IMAGE_TAG / WORKER_IMAGE_TAG（模板见 deploy/.env.example）
+#   - 应用镜像必须使用 registry digest 引用，tag 仅用于 CI 发现：
+#       API_IMAGE_REF / WORKER_IMAGE_REF / MCP_IMAGE_REF / JBROWSE_IMAGE_REF
 #   - 一次性数据库迁移由 migrate 服务负责（alembic upgrade head），
 #     api/worker 依赖其成功完成（service_completed_successfully）。
 #   - 前端静态站点（web/admin/jbrowse）已移出本 compose，由 Cloudflare
@@ -71,6 +71,7 @@ services:
   # 保持官方默认；如需覆盖可加 command: postgres -c max_connections=200）。
   # PgBouncer 暂不引入（本任务只做池预算；如需接入见 infra/ 后续任务）。
   postgres:
+    profiles: [ "core" ]
     image: postgres:18.4-alpine
     environment:
       POSTGRES_DB: soymutdb
@@ -89,6 +90,7 @@ services:
     restart: unless-stopped
 
   clickhouse:
+    profiles: [ "core" ]
     image: clickhouse/clickhouse-server:24.8-alpine
     environment:
       CLICKHOUSE_DB: soymutdb
@@ -100,6 +102,7 @@ services:
       - "127.0.0.1:9000:9000"
     volumes:
       - chdata:/var/lib/clickhouse
+      - chbackups:/var/lib/clickhouse-backups
       - ./infra/clickhouse/config.xml:/etc/clickhouse-server/config.d/custom.xml:ro
       - ./infra/clickhouse/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     ulimits:
@@ -117,6 +120,7 @@ services:
   # 缓存 Redis（redis-cache 角色）：allkeys-lru 允许驱逐，仅服务 API 缓存/
   # 限流/会话；Celery 绝不使用本实例（防止消息被驱逐丢失）。
   redis:
+    profiles: [ "core" ]
     image: redis:7.4-alpine
     command: >
       redis-server --appendonly yes --maxmemory ${REDIS_CACHE_MAXMEMORY:-512mb} --maxmemory-policy allkeys-lru --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
@@ -134,6 +138,7 @@ services:
   # Celery broker/result Redis：noeviction（禁止任何驱逐——消息/结果不可丢），
   # 开 AOF 持久化；broker 用 DB 0、result 用 DB 1。仅暴露给容器网络。
   redis-celery:
+    profiles: [ "core" ]
     image: redis:7.4-alpine
     command: >
       redis-server --appendonly yes --maxmemory ${REDIS_CELERY_MAXMEMORY:-512mb} --maxmemory-policy noeviction --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
@@ -147,6 +152,7 @@ services:
     restart: unless-stopped
 
   minio:
+    profiles: [ "core" ]
     image: minio/minio:RELEASE.2024-01-01T00-00-00Z
     command: server /data --console-address ":9001"
     environment:
@@ -157,6 +163,9 @@ services:
       - "127.0.0.1:9002:9001" # Web console (host 9002 -> container 9001)
     volumes:
       - miniodata:/data
+    networks:
+      - default
+      - tunnel-backend
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
       interval: 10s
@@ -166,6 +175,7 @@ services:
     restart: unless-stopped
 
   minio-init:
+    profiles: [ "core" ]
     image: minio/mc:RELEASE.2024-01-01T00-00-00Z
     depends_on:
       minio:
@@ -181,10 +191,8 @@ services:
   # 因此 migrate 必须注入与 api 相同的完整 SOYMUTDB_* 环境。
   # ------------------------------------------------------------------
   migrate:
-    image: ${API_IMAGE_TAG:?API_IMAGE_TAG is required (e.g. ghcr.io/soymutdb/api:2026.08.07-1) - see deploy/.env.example}
-    build:
-      context: .
-      dockerfile: infra/docker/Dockerfile.api
+    profiles: [ "core" ]
+    image: ${API_IMAGE_REF:?API_IMAGE_REF is required as image@sha256 - see deploy/.env.example}
     depends_on:
       postgres:
         condition: service_healthy
@@ -197,7 +205,8 @@ services:
   # 一次性 ClickHouse schema 迁移；由 deploy/scripts/upgrade.sh 显式调用。
   # 运行容器与 clickhouse 共享 Compose 网络，因此可直接解析服务名 clickhouse。
   migrate-clickhouse:
-    image: ${WORKER_IMAGE_TAG:?WORKER_IMAGE_TAG is required (e.g. ghcr.io/soymutdb/worker:2026.08.07-1) - see deploy/.env.example}
+    profiles: [ "core" ]
+    image: ${WORKER_IMAGE_REF:?WORKER_IMAGE_REF is required as image@sha256 - see deploy/.env.example}
     depends_on:
       clickhouse:
         condition: service_healthy
@@ -213,10 +222,8 @@ services:
   # Application services
   # ------------------------------------------------------------------
   api:
-    image: ${API_IMAGE_TAG:?API_IMAGE_TAG is required (e.g. ghcr.io/soymutdb/api:2026.08.07-1) - see deploy/.env.example}
-    build:
-      context: .
-      dockerfile: infra/docker/Dockerfile.api
+    profiles: [ "core" ]
+    image: ${API_IMAGE_REF:?API_IMAGE_REF is required as image@sha256 - see deploy/.env.example}
     depends_on:
       postgres:
         condition: service_healthy
@@ -235,6 +242,9 @@ services:
       SOYMUTDB_DATABASE_URL: postgresql+asyncpg://soymutdb:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/soymutdb
     expose:
       - "8000"
+    networks:
+      - default
+      - tunnel-backend
     healthcheck:
       # Liveness（readiness 由发布脚本轮询 /api/v1/health/ready）
       test: [ "CMD", "curl", "-f", "http://localhost:8000/api/v1/health/live" ]
@@ -253,10 +263,8 @@ services:
   # Celery workers. Each service listens on a subset of queues.
   # ------------------------------------------------------------------
   worker-default:
-    image: ${WORKER_IMAGE_TAG:?WORKER_IMAGE_TAG is required (e.g. ghcr.io/soymutdb/worker:2026.08.07-1) - see deploy/.env.example}
-    build:
-      context: .
-      dockerfile: infra/docker/Dockerfile.worker
+    profiles: [ "core" ]
+    image: ${WORKER_IMAGE_REF:?WORKER_IMAGE_REF is required as image@sha256 - see deploy/.env.example}
     depends_on:
       postgres:
         condition: service_healthy
@@ -285,10 +293,8 @@ services:
     restart: unless-stopped
 
   worker-blast:
-    image: ${WORKER_IMAGE_TAG:?WORKER_IMAGE_TAG is required (e.g. ghcr.io/soymutdb/worker:2026.08.07-1) - see deploy/.env.example}
-    build:
-      context: .
-      dockerfile: infra/docker/Dockerfile.worker
+    profiles: [ "blast" ]
+    image: ${WORKER_IMAGE_REF:?WORKER_IMAGE_REF is required as image@sha256 - see deploy/.env.example}
     depends_on:
       postgres:
         condition: service_healthy
@@ -317,10 +323,8 @@ services:
     restart: unless-stopped
 
   worker-ingest:
-    image: ${WORKER_IMAGE_TAG:?WORKER_IMAGE_TAG is required (e.g. ghcr.io/soymutdb/worker:2026.08.07-1) - see deploy/.env.example}
-    build:
-      context: .
-      dockerfile: infra/docker/Dockerfile.worker
+    profiles: [ "core" ]
+    image: ${WORKER_IMAGE_REF:?WORKER_IMAGE_REF is required as image@sha256 - see deploy/.env.example}
     depends_on:
       postgres:
         condition: service_healthy
@@ -349,10 +353,8 @@ services:
     restart: unless-stopped
 
   worker-analyses:
-    image: ${WORKER_IMAGE_TAG:?WORKER_IMAGE_TAG is required (e.g. ghcr.io/soymutdb/worker:2026.08.07-1) - see deploy/.env.example}
-    build:
-      context: .
-      dockerfile: infra/docker/Dockerfile.worker
+    profiles: [ "analyses" ]
+    image: ${WORKER_IMAGE_REF:?WORKER_IMAGE_REF is required as image@sha256 - see deploy/.env.example}
     depends_on:
       postgres:
         condition: service_healthy
@@ -382,10 +384,8 @@ services:
     restart: unless-stopped
 
   beat:
-    image: ${WORKER_IMAGE_TAG:?WORKER_IMAGE_TAG is required (e.g. ghcr.io/soymutdb/worker:2026.08.07-1) - see deploy/.env.example}
-    build:
-      context: .
-      dockerfile: infra/docker/Dockerfile.worker
+    profiles: [ "core" ]
+    image: ${WORKER_IMAGE_REF:?WORKER_IMAGE_REF is required as image@sha256 - see deploy/.env.example}
     depends_on:
       redis-celery:
         condition: service_healthy
@@ -417,9 +417,8 @@ services:
   # infra/nginx/conf.d/default.conf）。
   # ------------------------------------------------------------------
   mcp-server:
-    image: ${MCP_IMAGE_TAG:?MCP_IMAGE_TAG is required (e.g. ghcr.io/soymutdb/mcp-server:2026.08.13-1) - see deploy/.env.example}
-    build:
-      context: ./apps/mcp-server
+    profiles: [ "mcp" ]
+    image: ${MCP_IMAGE_REF:?MCP_IMAGE_REF is required as image@sha256 - see deploy/.env.example}
     depends_on:
       api:
         condition: service_healthy
@@ -438,6 +437,22 @@ services:
       start_period: 15s
     restart: unless-stopped
 
+  # Optional self-hosted JBrowse runtime. The default production topology uses
+  # static hosting, so this profile binds to loopback and is enabled only when
+  # an operator explicitly selects it.
+  jbrowse:
+    profiles: [ "jbrowse" ]
+    image: ${JBROWSE_IMAGE_REF:?JBROWSE_IMAGE_REF is required as image@sha256 - see deploy/.env.example}
+    ports:
+      - "${JBROWSE_BIND_ADDRESS:-127.0.0.1}:${JBROWSE_PORT:-8082}:80"
+    healthcheck:
+      test: [ "CMD-SHELL", "wget --spider -q http://localhost/ || exit 1" ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
   # ------------------------------------------------------------------
   # Reverse proxy（仅反代 API 与 MinIO；前端静态由 Cloudflare Pages 托管）
   # infra/nginx 中 web/admin/jbrowse 上游定义保留（禁止改动），但对应
@@ -446,6 +461,7 @@ services:
   # 502/504，直到 Cloudflare 域名层接管。
   # ------------------------------------------------------------------
   nginx:
+    profiles: [ "core" ]
     image: nginx:1.27-alpine
     depends_on:
       api:
@@ -467,6 +483,79 @@ services:
     restart: unless-stopped
 
   # ------------------------------------------------------------------
+  # Cloudflare Tunnel origin and connector (optional)
+  #
+  # The connector is isolated on cloudflare-edge and can reach application
+  # services only through tunnel-origin.  Do not point a public hostname at
+  # nginx, api, MinIO, or another Compose service: tunnel-origin is the
+  # intentionally narrow public surface (API, public genomic data, health).
+  # Start explicitly with: docker compose --profile cloudflare-tunnel up -d
+  # ------------------------------------------------------------------
+  tunnel-origin:
+    image: nginx:1.27-alpine
+    profiles:
+      - "cloudflare-tunnel"
+    depends_on:
+      api:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    entrypoint: [ "nginx" ]
+    command: [ "-g", "daemon off;" ]
+    user: "101:101"
+    expose:
+      - "8081"
+    networks:
+      - tunnel-backend
+      - cloudflare-edge
+    volumes:
+      - ./infra/nginx/cloudflare-tunnel.conf:/etc/nginx/nginx.conf:ro
+    tmpfs:
+      - /tmp
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: [ "CMD-SHELL", "wget --spider -q http://localhost:8081/health || exit 1" ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+  cloudflared:
+    image: cloudflare/cloudflared:2025.2.1
+    profiles:
+      - "cloudflare-tunnel"
+    depends_on:
+      tunnel-origin:
+        condition: service_healthy
+    command:
+      - tunnel
+      - --no-autoupdate
+      - --metrics
+      - 0.0.0.0:2000
+      - run
+      - --token-file
+      - /run/secrets/cloudflare_tunnel_token
+    secrets:
+      - cloudflare_tunnel_token
+    networks:
+      - cloudflare-edge
+    expose:
+      - "2000"
+    tmpfs:
+      - /tmp
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+  # ------------------------------------------------------------------
   # Monitoring
   # ------------------------------------------------------------------
   # Prometheus exporters（仅容器网络内可见，expose 不映射到宿主机）。
@@ -476,6 +565,7 @@ services:
   # PostgreSQL exporter：凭据与 api/migrate 同源（SOYMUTDB_DATABASE_URL 同款
   # 用户名/密码/库名，仅 host 指向 postgres 服务名）。
   postgres-exporter:
+    profiles: [ "core" ]
     image: prometheuscommunity/postgres-exporter:v0.15.0
     environment:
       DATA_SOURCE_NAME: "postgresql://soymutdb:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/soymutdb?sslmode=disable"
@@ -494,6 +584,7 @@ services:
   # Redis exporter：单实例抓取缓存 redis 与 celery broker/result 双实例
   # （REDIS_ADDR 逗号分隔；两实例共用同一密码）。指标带 redis_instance 标签。
   redis-exporter:
+    profiles: [ "core" ]
     image: oliver006/redis-exporter:v1.60.0
     environment:
       REDIS_ADDR: "redis://redis:6379,redis://redis-celery:6379"
@@ -515,11 +606,14 @@ services:
   # node-exporter：宿主磁盘/CPU/内存监控（磁盘 >85% 告警依赖）。
   # 只读挂载宿主根文件系统到 /host，经 --path.rootfs 报告 host 指标。
   node-exporter:
+    profiles: [ "core" ]
     image: prom/node-exporter:v1.8.2
     command:
       - "--path.rootfs=/host"
+      - "--collector.textfile.directory=/textfile"
     volumes:
       - /:/host:ro,rslave
+      - ${BACKUP_METRICS_DIR:-/var/lib/node_exporter/textfile_collector}:/textfile:ro
     expose:
       - "9100"
     healthcheck:
@@ -529,7 +623,35 @@ services:
       retries: 3
     restart: unless-stopped
 
+  # Alert delivery is intentionally fail-closed. The service refuses to start
+  # unless ALERTMANAGER_WEBHOOK_URL_FILE points to a non-empty HTTPS URL file;
+  # the URL is mounted as a Docker secret and never committed to the repository.
+  alertmanager:
+    profiles: [ "core" ]
+    image: prom/alertmanager:v0.28.1
+    entrypoint: [ "/bin/sh", "/etc/alertmanager/start-alertmanager.sh" ]
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+      - "--web.listen-address=:9093"
+    volumes:
+      - ./infra/monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ./infra/monitoring/start-alertmanager.sh:/etc/alertmanager/start-alertmanager.sh:ro
+      - alertmanagerdata:/alertmanager
+    secrets:
+      - alertmanager_webhook_url
+    expose:
+      - "9093"
+    healthcheck:
+      test: [ "CMD-SHELL", "wget --spider -q http://localhost:9093/-/healthy || exit 1" ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
   prometheus:
+    profiles: [ "core" ]
     image: prom/prometheus:v3.0.0
     ports:
       - "127.0.0.1:9090:9090"
@@ -550,6 +672,7 @@ services:
     restart: unless-stopped
 
   grafana:
+    profiles: [ "core" ]
     image: grafana/grafana:11.4.0
     ports:
       - "127.0.0.1:3000:3000"
@@ -574,8 +697,28 @@ services:
 volumes:
   pgdata:
   chdata:
+  chbackups:
   redisdata:
   redis-celerydata:
   miniodata:
   promdata:
+  alertmanagerdata:
   grafanadata:
+
+networks:
+  # Only api, minio, and tunnel-origin join this network. It prevents a
+  # compromised Tunnel origin from reaching databases, queues, MCP, or
+  # observability services on the shared default network.
+  tunnel-backend:
+  # cloudflared gets egress to Cloudflare but no direct attachment to the
+  # default application network. tunnel-origin bridges this and the narrow
+  # tunnel-backend network instead.
+  cloudflare-edge:
+
+secrets:
+  alertmanager_webhook_url:
+    file: ${ALERTMANAGER_WEBHOOK_URL_FILE:-/etc/soymutdb/secrets/alertmanager_webhook_url}
+  # The file contains only the remotely-managed Tunnel token. Keep it outside
+  # the repository, owned by the deployment account, and mode 0600.
+  cloudflare_tunnel_token:
+    file: ${CLOUDFLARE_TUNNEL_TOKEN_FILE:-/etc/soymutdb/secrets/cloudflare_tunnel_token}

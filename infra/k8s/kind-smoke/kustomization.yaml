@@ -1,0 +1,9 @@
+# This is a deliberately small, amd64-only Kind smoke harness.  It is not a
+# production Kubernetes deployment definition; see README.md for its boundary.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: soymutdb-kind-smoke
+resources:
+  - namespace.yaml
+  - api.yaml
+  - worker.yaml

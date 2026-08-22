@@ -1,100 +1,78 @@
 #!/usr/bin/env bash
 # =====================================================================
-# SoyMutDB Restore Script (v2)
+# SoyMutDB authoritative restore (format v2)
 # =====================================================================
-# 从 v2 备份归档（含 manifest.json）恢复数据面：
-#   顺序：PostgreSQL -> ClickHouse（含事实表 variant_facts、维度表、
-#         物化视图，经 BACKUP/RESTORE DATABASE 完整恢复）-> S3/对象存储
-#         （按 manifest 校验每对象 SHA-256）。
-#   Job/Outbox 状态：权威记录在 PostgreSQL 中，随 PG 恢复一并还原；
-#         Redis 缓存与 Celery broker 不恢复（由应用在 PG 恢复后重建，
-#         见 backup.sh 头部说明）。
-#
-# 安全门槛（防误操作）：
-#   - 默认只允许恢复到“隔离目标”：环境变量 TARGET 非空（如 TARGET=drill）
-#     或显式 --target <name> 才执行；
-#   - 生产恢复必须显式 `--target prod|production` 并二次确认（输入 restore）；
-#   - 隔离演练（推荐至少每月一次，假数据环境）：
-#       1) 在隔离主机/独立 compose 项目启动同版本空栈
-#       2) POSTGRES_HOST/S3_ENDPOINT/CLICKHOUSE_HOST 等指向演练栈，
-#          TARGET=drill 后执行本脚本
-#       3) bash deploy/scripts/verify-restore.sh <backup>.tar.gz
-#          全部 PASS 且退出码 0 才视为演练成功
+# Restore is destructive. It performs all archive, component, snapshot,
+# bucket-list, and artifact checksum preflight checks before confirmation.
+# PostgreSQL, database-level ClickHouse, every listed S3 bucket, and bucket
+# policies are mandatory; no component has an implicit fallback or skip.
 #
 # Usage:
-#   bash deploy/scripts/restore.sh <backup-file.tar.gz>
-#   bash deploy/scripts/restore.sh --target drill <backup-file.tar.gz>
-#   bash deploy/scripts/restore.sh --target prod <backup-file.tar.gz>   # 生产
-#
-# 环境变量：
-#   TARGET                    目标标识（隔离目标名；缺省拒绝执行）
-#   SOYMUTDB_INSTALL_DIR      compose 项目目录（缺省自动探测）
-#   POSTGRES_HOST/POSTGRES_PORT/POSTGRES_USER/POSTGRES_DB/POSTGRES_PASSWORD
-#   CLICKHOUSE_HOST/CLICKHOUSE_PORT/CLICKHOUSE_USER/CLICKHOUSE_PASSWORD
-#   S3_ENDPOINT/S3_ACCESS_KEY/S3_SECRET_KEY
-#   BAK_BASE_DIR              与 backup.sh 一致（mc 配置目录所在，默认
-#                             /opt/soymutdb/backups）
-#
-# 安全：不在命令行/日志打印密钥；容器内命令复用容器环境认证。
+#   bash deploy/scripts/restore.sh --target drill --target-config /secure/drill.env <backup.tar.gz>
+#   bash deploy/scripts/restore.sh --target prod <backup.tar.gz>
 # =====================================================================
-set -euo pipefail
+set -Eeuo pipefail
+umask 077
 
 GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
 RED='\033[0;31m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
 info() { echo -e "${GREEN}  $*${NC}"; }
-warn() { echo -e "${YELLOW}  [WARN] $*${NC}"; }
 err()  { echo -e "${RED}[ERROR] $*${NC}" >&2; }
 die()  { err "$*"; exit 1; }
 
-# ---------------------------------------------------------------------
-# 参数与目标门槛
-# ---------------------------------------------------------------------
+readonly REQUIRED_S3_BUCKETS="genomic-data user-tracks blast-dbs exports gwas analyses"
+readonly -a QUIESCED_WRITER_SERVICES=(api worker-default worker-analyses worker-blast worker-ingest beat)
+
 TARGET_ARG=""
+TARGET_CONFIG=""
 BACKUP_FILE=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --target)
             [[ $# -ge 2 ]] || die "--target requires a value"
-            TARGET_ARG="$2"; shift 2 ;;
-        --target=*)
-            TARGET_ARG="${1#*=}"; shift ;;
+            TARGET_ARG="$2"
+            shift 2
+            ;;
+        --target=*) TARGET_ARG="${1#*=}"; shift ;;
+        --target-config)
+            [[ $# -ge 2 ]] || die "--target-config requires a value"
+            TARGET_CONFIG="$2"
+            shift 2
+            ;;
+        --target-config=*) TARGET_CONFIG="${1#*=}"; shift ;;
         --help|-h)
-            sed -n '2,38p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
-        -*)
-            die "unknown option: $1" ;;
+            sed -n '2,14p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+            exit 0
+            ;;
+        -*) die "unknown option: $1" ;;
         *)
-            [[ -n "${BACKUP_FILE}" ]] && die "too many arguments: $1"
-            BACKUP_FILE="$1"; shift ;;
+            [[ -z "${BACKUP_FILE}" ]] || die "too many arguments: $1"
+            BACKUP_FILE="$1"
+            shift
+            ;;
     esac
 done
 
-[[ -n "${BACKUP_FILE}" ]] || die "Usage: bash deploy/scripts/restore.sh [--target <name>] <backup-file.tar.gz>"
-[[ -f "${BACKUP_FILE}" ]] || die "Backup file not found: ${BACKUP_FILE}"
-
-# 目标解析：--target 优先，其次环境变量 TARGET；都为空则拒绝
+[[ -n "${BACKUP_FILE}" ]] \
+    || die "Usage: bash deploy/scripts/restore.sh --target <name> <backup.tar.gz>"
+[[ -f "${BACKUP_FILE}" ]] || die "backup file not found: ${BACKUP_FILE}"
 TARGET="${TARGET_ARG:-${TARGET:-}}"
-if [[ -z "${TARGET}" ]]; then
-    die "未指定恢复目标。默认只允许恢复到隔离目标：\n" \
-        "  演练: TARGET=drill bash deploy/scripts/restore.sh <backup>.tar.gz\n" \
-        "  生产: bash deploy/scripts/restore.sh --target prod <backup>.tar.gz (需二次确认)"
-fi
-
+[[ -n "${TARGET}" ]] || die "restore target is required (for example --target drill)"
+[[ "${TARGET}" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$ ]] \
+    || die "restore target contains unsafe characters"
 IS_PROD=0
 case "${TARGET}" in
     prod|production) IS_PROD=1 ;;
 esac
 
-# ---------------------------------------------------------------------
-# 环境与配置
-# ---------------------------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-
-if [[ -f "${PROJECT_ROOT}/.env" ]]; then
+# shellcheck source=deploy/scripts/mc-auth.sh
+source "${SCRIPT_DIR}/mc-auth.sh"
+if [[ "${IS_PROD}" == "1" && -f "${PROJECT_ROOT}/.env" ]]; then
     set -a
     # shellcheck disable=SC1091
     source "${PROJECT_ROOT}/.env"
@@ -107,78 +85,394 @@ if [[ -f "${INSTALL_DIR}/docker-compose.yml" ]]; then
 else
     COMPOSE_DIR="${PROJECT_ROOT}"
 fi
-COMPOSE_BIN=(docker compose --project-directory "${COMPOSE_DIR}" -f "${COMPOSE_DIR}/docker-compose.yml")
+DEFAULT_COMPOSE_FILE="${COMPOSE_DIR}/docker-compose.yml"
+COMPOSE_BIN=(docker compose --project-directory "${COMPOSE_DIR}" -f "${DEFAULT_COMPOSE_FILE}")
 
 BAK_BASE_DIR="${BAK_BASE_DIR:-/opt/soymutdb/backups}"
+RESTORE_STATE_FILE="${BAK_BASE_DIR}/restore-${TARGET}.incomplete"
 PG_HOST="${POSTGRES_HOST:-localhost}"
 PG_PORT="${POSTGRES_PORT:-5432}"
 PG_USER="${POSTGRES_USER:-soymutdb}"
 PG_DB="${POSTGRES_DB:-soymutdb}"
 CH_HOST="${CLICKHOUSE_HOST:-localhost}"
-CH_PORT="${CLICKHOUSE_PORT:-8123}"
 CH_USER="${CLICKHOUSE_USER:-soymutdb}"
 S3_ENDPOINT="${S3_ENDPOINT:-http://localhost:9001}"
 S3_ACCESS_KEY="${S3_ACCESS_KEY:-minioadmin}"
 S3_SECRET_KEY="${S3_SECRET_KEY:-minioadmin}"
 
+for tool in python3 sha256sum stat realpath; do
+    command -v "${tool}" >/dev/null 2>&1 || die "required tool is unavailable: ${tool}"
+done
+
 RESTORE_DIR="$(mktemp -d)"
-trap 'rm -rf "${RESTORE_DIR}"' EXIT
+PG_CONTAINER_FILE=""
+CH_CONTAINER_FILE=""
+cleanup() {
+    local rc="$?"
+    trap - EXIT
+    if [[ -n "${PG_CONTAINER_FILE}" ]]; then
+        "${COMPOSE_BIN[@]}" exec -T postgres rm -f "${PG_CONTAINER_FILE}" >/dev/null 2>&1 || true
+    fi
+    if [[ -n "${CH_CONTAINER_FILE}" ]]; then
+        "${COMPOSE_BIN[@]}" exec -T clickhouse rm -f "${CH_CONTAINER_FILE}" >/dev/null 2>&1 || true
+    fi
+    rm -rf -- "${RESTORE_DIR}"
+    exit "${rc}"
+}
+trap cleanup EXIT
+
+verify_archive_sidecar() {
+    local sidecar="${BACKUP_FILE}.sha256" expected name extra actual
+    [[ -f "${sidecar}" ]] || die "archive checksum sidecar is required: ${sidecar}"
+    IFS=' ' read -r expected name extra < "${sidecar}" \
+        || die "archive checksum sidecar cannot be read"
+    [[ "${expected}" =~ ^[0-9a-f]{64}$ && "${name}" == "$(basename "${BACKUP_FILE}")" && -z "${extra}" ]] \
+        || die "archive checksum sidecar is malformed or names another archive"
+    actual="$(sha256sum "${BACKUP_FILE}" | awk '{print $1}')"
+    [[ "${actual}" == "${expected}" ]] || die "archive checksum mismatch"
+    ARCHIVE_SHA_ACTUAL="${actual}"
+}
+verify_archive_sidecar
+
+verify_completion_marker() {
+    local marker="${BACKUP_FILE}.complete" key value
+    COMPLETE_BACKUP_ID=""
+    COMPLETE_ARCHIVE_SHA=""
+    [[ -f "${marker}" ]] || die "backup completion marker is required: ${marker}"
+    while IFS='=' read -r key value; do
+        case "${key}" in
+            backup_id)
+                [[ -z "${COMPLETE_BACKUP_ID}" ]] || die "backup completion marker has duplicate backup_id"
+                COMPLETE_BACKUP_ID="${value}"
+                ;;
+            sha256)
+                [[ -z "${COMPLETE_ARCHIVE_SHA}" ]] || die "backup completion marker has duplicate sha256"
+                COMPLETE_ARCHIVE_SHA="${value}"
+                ;;
+            *) die "backup completion marker contains an unknown field" ;;
+        esac
+    done < "${marker}"
+    [[ "${COMPLETE_BACKUP_ID}" =~ ^[A-Za-z0-9._-]+$ ]] \
+        || die "backup completion marker has an invalid backup_id"
+    [[ "${COMPLETE_ARCHIVE_SHA}" =~ ^[0-9a-f]{64}$ ]] \
+        || die "backup completion marker has an invalid sha256"
+    [[ "${COMPLETE_ARCHIVE_SHA}" == "${ARCHIVE_SHA_ACTUAL}" ]] \
+        || die "backup completion marker checksum mismatch"
+}
+verify_completion_marker
+
+python3 - "${BACKUP_FILE}" "${RESTORE_DIR}" <<'PY'
+import pathlib
+import sys
+import tarfile
+
+archive, destination = sys.argv[1:]
+with tarfile.open(archive, "r:gz") as handle:
+    members = handle.getmembers()
+    if not members:
+        raise SystemExit("backup archive is empty")
+    roots = set()
+    for member in members:
+        path = pathlib.PurePosixPath(member.name)
+        if path.is_absolute() or not path.parts or ".." in path.parts:
+            raise SystemExit(f"unsafe archive member: {member.name}")
+        if not (member.isfile() or member.isdir()):
+            raise SystemExit(f"unsupported archive member type: {member.name}")
+        roots.add(path.parts[0])
+    if len(roots) != 1:
+        raise SystemExit("backup archive must contain exactly one top-level directory")
+    handle.extractall(destination)
+PY
+
+mapfile -t RESTORE_ROOTS < <(find "${RESTORE_DIR}" -mindepth 1 -maxdepth 1 -type d -print)
+[[ ${#RESTORE_ROOTS[@]} -eq 1 ]] || die "backup archive has no unique content directory"
+RESTORE_SRC="${RESTORE_ROOTS[0]}"
+MANIFEST="${RESTORE_SRC}/manifest.json"
+[[ -f "${MANIFEST}" ]] || die "manifest.json is required"
+
+manifest_get() {
+    local path="$1"
+    python3 - "${MANIFEST}" "${path}" <<'PY'
+import json
+import sys
+
+filename, dotted_path = sys.argv[1:]
+with open(filename, encoding="utf-8") as handle:
+    value = json.load(handle)
+for key in dotted_path.split("."):
+    if not isinstance(value, dict) or key not in value:
+        raise SystemExit(f"missing manifest field: {dotted_path}")
+    value = value[key]
+if isinstance(value, bool) or not isinstance(value, (str, int)):
+    raise SystemExit(f"manifest field is not scalar: {dotted_path}")
+print(value)
+PY
+}
+
+validate_relative_path() {
+    local value="$1" segment
+    [[ -n "${value}" && "${value}" != /* ]] || return 1
+    [[ "${value}" != *$'\t'* && "${value}" != *$'\n'* && "${value}" != *$'\r'* ]] || return 1
+    IFS='/' read -r -a segments <<< "${value}"
+    for segment in "${segments[@]}"; do
+        [[ -n "${segment}" && "${segment}" != "." && "${segment}" != ".." ]] || return 1
+    done
+}
+
+[[ "$(manifest_get format_version)" == "2" ]] \
+    || die "unsupported manifest format_version (authoritative v2 required)"
+[[ "$(manifest_get consistency.mode)" == "writers_quiesced" ]] \
+    || die "backup consistency mode is not safe for authoritative restore"
+BACKUP_ID="$(manifest_get backup_id)"
+[[ "${BACKUP_ID}" == "${COMPLETE_BACKUP_ID}" ]] \
+    || die "backup completion marker backup_id mismatch"
+for component in postgres clickhouse s3; do
+    status="$(manifest_get "components.${component}.status")" \
+        || die "missing ${component} component status"
+    [[ "${status}" == "ok" ]] \
+        || die "${component} component status must be 'ok' (got '${status}')"
+done
+
+ARTIFACT_MANIFEST_REL="$(manifest_get artifact_manifest.file)"
+ARTIFACT_MANIFEST_SIZE="$(manifest_get artifact_manifest.size)"
+ARTIFACT_MANIFEST_SHA="$(manifest_get artifact_manifest.sha256)"
+validate_relative_path "${ARTIFACT_MANIFEST_REL}" || die "unsafe artifact manifest path"
+[[ "${ARTIFACT_MANIFEST_SIZE}" =~ ^[0-9]+$ && "${ARTIFACT_MANIFEST_SHA}" =~ ^[0-9a-f]{64}$ ]] \
+    || die "artifact manifest metadata is invalid"
+ARTIFACT_MANIFEST="${RESTORE_SRC}/${ARTIFACT_MANIFEST_REL}"
+[[ -s "${ARTIFACT_MANIFEST}" ]] || die "artifact checksum manifest is missing or empty"
+[[ "$(stat -c%s "${ARTIFACT_MANIFEST}")" == "${ARTIFACT_MANIFEST_SIZE}" ]] \
+    || die "artifact checksum manifest size mismatch"
+[[ "$(sha256sum "${ARTIFACT_MANIFEST}" | awk '{print $1}')" == "${ARTIFACT_MANIFEST_SHA}" ]] \
+    || die "artifact checksum manifest checksum mismatch"
+
+verify_artifact_manifest() {
+    local hash size relative extra path actual count=0
+    while IFS=$'\t' read -r hash size relative extra; do
+        [[ -n "${hash}${size}${relative}${extra}" ]] || continue
+        [[ -z "${extra}" && "${hash}" =~ ^[0-9a-f]{64}$ && "${size}" =~ ^[0-9]+$ ]] \
+            || die "artifact checksum manifest contains an invalid row"
+        validate_relative_path "${relative}" \
+            || die "artifact checksum manifest contains an unsafe path"
+        path="${RESTORE_SRC}/${relative}"
+        [[ -f "${path}" && ! -L "${path}" ]] || die "artifact is missing: ${relative}"
+        [[ "$(stat -c%s "${path}")" == "${size}" ]] \
+            || die "artifact size mismatch: ${relative}"
+        actual="$(sha256sum "${path}" | awk '{print $1}')"
+        [[ "${actual}" == "${hash}" ]] || die "artifact checksum mismatch: ${relative}"
+        count=$((count + 1))
+    done < "${ARTIFACT_MANIFEST}"
+    [[ "${count}" -gt 0 ]] || die "artifact checksum manifest has no rows"
+}
+verify_artifact_manifest
+
+PG_DUMP_REL="$(manifest_get components.postgres.file)"
+PG_ROWS_REL="$(manifest_get components.postgres.row_counts_file)"
+PG_TABLES_EXPECTED="$(manifest_get components.postgres.tables)"
+CH_BACKUP_REL="$(manifest_get components.clickhouse.file)"
+CH_ROWS_REL="$(manifest_get components.clickhouse.row_counts_file)"
+CH_TABLES_EXPECTED="$(manifest_get components.clickhouse.tables)"
+S3_MANIFEST_REL="$(manifest_get components.s3.manifest_file)"
+# manifest key: "buckets_file"
+S3_BUCKETS_REL="$(manifest_get components.s3.buckets_file)"
+S3_OBJECTS_EXPECTED="$(manifest_get components.s3.object_count)"
+S3_BYTES_EXPECTED="$(manifest_get components.s3.total_bytes)"
+S3_CHECKSUM_ALGORITHM="$(manifest_get components.s3.checksum_algorithm)"
+for relative in "${PG_DUMP_REL}" "${PG_ROWS_REL}" "${CH_BACKUP_REL}" "${CH_ROWS_REL}" \
+    "${S3_MANIFEST_REL}" "${S3_BUCKETS_REL}"; do
+    validate_relative_path "${relative}" || die "manifest contains an unsafe component path"
+done
+[[ "${PG_TABLES_EXPECTED}" =~ ^[1-9][0-9]*$ && "${CH_TABLES_EXPECTED}" =~ ^[1-9][0-9]*$ ]] \
+    || die "row snapshot table counts must be positive"
+[[ "${S3_OBJECTS_EXPECTED}" =~ ^[0-9]+$ && "${S3_BYTES_EXPECTED}" =~ ^[0-9]+$ ]] \
+    || die "S3 manifest totals are invalid"
+[[ "${S3_CHECKSUM_ALGORITHM}" == "sha256" ]] || die "S3 object checksums must use sha256"
+
+PG_DUMP_FILE="${RESTORE_SRC}/${PG_DUMP_REL}"
+PG_ROWS_FILE="${RESTORE_SRC}/${PG_ROWS_REL}"
+CH_BACKUP_FILE="${RESTORE_SRC}/${CH_BACKUP_REL}"
+CH_ROWS_FILE="${RESTORE_SRC}/${CH_ROWS_REL}"
+S3_MANIFEST="${RESTORE_SRC}/${S3_MANIFEST_REL}"
+S3_BUCKETS_FILE="${RESTORE_SRC}/${S3_BUCKETS_REL}"
+[[ -s "${PG_DUMP_FILE}" && -s "${CH_BACKUP_FILE}" ]] \
+    || die "mandatory database backup artifact is missing or empty"
+
+validate_pg_snapshot() {
+    local table count extra rows=0
+    [[ -s "${PG_ROWS_FILE}" ]] || die "PostgreSQL row snapshot is empty"
+    while IFS=$'\t' read -r table count extra; do
+        [[ "${table}" =~ ^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$ ]] \
+            || die "PostgreSQL row snapshot table identifier is unsafe"
+        [[ "${count}" =~ ^[0-9]+$ && -z "${extra}" ]] \
+            || die "PostgreSQL row snapshot contains an invalid row"
+        rows=$((rows + 1))
+    done < "${PG_ROWS_FILE}"
+    [[ "${rows}" == "${PG_TABLES_EXPECTED}" ]] \
+        || die "PostgreSQL row snapshot table count mismatch"
+}
+
+validate_ch_snapshot() {
+    local table rows parts extra count=0
+    [[ -s "${CH_ROWS_FILE}" ]] || die "ClickHouse row snapshot is empty"
+    while IFS=$'\t' read -r table rows parts extra; do
+        [[ "${table}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] \
+            || die "ClickHouse row snapshot table identifier is unsafe"
+        [[ "${rows}" =~ ^[0-9]+$ && "${parts}" =~ ^[0-9]+$ && -z "${extra}" ]] \
+            || die "ClickHouse row snapshot contains an invalid row"
+        count=$((count + 1))
+    done < "${CH_ROWS_FILE}"
+    [[ "${count}" == "${CH_TABLES_EXPECTED}" ]] \
+        || die "ClickHouse row snapshot table count mismatch"
+}
+validate_pg_snapshot
+validate_ch_snapshot
+
+[[ -s "${S3_BUCKETS_FILE}" ]] || die "S3 bucket manifest is empty"
+read -r -a REQUIRED_BUCKET_ARRAY <<< "${REQUIRED_S3_BUCKETS}"
+declare -a S3_BUCKETS=()
+declare -A LISTED_BUCKETS=()
+while IFS= read -r bucket; do
+    [[ "${bucket}" =~ ^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$ ]] \
+        || die "S3 bucket manifest contains an invalid bucket"
+    [[ -z "${LISTED_BUCKETS[${bucket}]:-}" ]] || die "S3 bucket manifest contains a duplicate: ${bucket}"
+    LISTED_BUCKETS["${bucket}"]=1
+    S3_BUCKETS+=("${bucket}")
+done < "${S3_BUCKETS_FILE}"
+for bucket in "${REQUIRED_BUCKET_ARRAY[@]}"; do
+    [[ -n "${LISTED_BUCKETS[${bucket}]:-}" ]] \
+        || die "required bucket missing from manifest: ${bucket}"
+done
+
+S3_OBJECT_COUNT=0
+S3_TOTAL_BYTES=0
+while IFS=$'\t' read -r bucket relative size hash extra; do
+    [[ -n "${bucket}${relative}${size}${hash}${extra}" ]] || continue
+    [[ -n "${LISTED_BUCKETS[${bucket}]:-}" ]] || die "S3 object names an unlisted bucket: ${bucket}"
+    validate_relative_path "${relative}" || die "S3 manifest contains an unsafe object path"
+    [[ -z "${extra}" && "${size}" =~ ^[0-9]+$ && "${hash}" =~ ^[0-9a-f]{64}$ ]] \
+        || die "S3 manifest contains an invalid object row"
+    object="${RESTORE_SRC}/s3_data/${bucket}/${relative}"
+    [[ -f "${object}" && ! -L "${object}" ]] || die "S3 backup object is missing: ${bucket}/${relative}"
+    [[ "$(stat -c%s "${object}")" == "${size}" ]] \
+        || die "S3 backup object size mismatch: ${bucket}/${relative}"
+    [[ "$(sha256sum "${object}" | awk '{print $1}')" == "${hash}" ]] \
+        || die "S3 backup object checksum mismatch: ${bucket}/${relative}"
+    S3_OBJECT_COUNT=$((S3_OBJECT_COUNT + 1))
+    S3_TOTAL_BYTES=$((S3_TOTAL_BYTES + size))
+done < "${S3_MANIFEST}"
+[[ "${S3_OBJECT_COUNT}" == "${S3_OBJECTS_EXPECTED}" && "${S3_TOTAL_BYTES}" == "${S3_BYTES_EXPECTED}" ]] \
+    || die "S3 object manifest totals do not match manifest.json"
+for bucket in "${S3_BUCKETS[@]}"; do
+    [[ -d "${RESTORE_SRC}/s3_data/${bucket}" ]] || die "S3 bucket data directory is missing: ${bucket}"
+    [[ -s "${RESTORE_SRC}/s3_policy_${bucket}.json" ]] || die "S3 bucket policy is missing: ${bucket}"
+done
+
+configure_restore_target() {
+    local target_compose default_compose variable
+    if [[ "${IS_PROD}" == "1" ]]; then
+        [[ -z "${TARGET_CONFIG}" ]] \
+            || die "production restore does not accept --target-config"
+        return
+    fi
+
+    [[ -n "${TARGET_CONFIG}" && -f "${TARGET_CONFIG}" ]] \
+        || die "an explicit target config (--target-config) is required for a non-production target"
+    set -a
+    # shellcheck disable=SC1090
+    source "${TARGET_CONFIG}"
+    set +a
+    for variable in \
+        RESTORE_TARGET_ID RESTORE_TARGET_ISOLATED RESTORE_COMPOSE_FILE \
+        RESTORE_COMPOSE_PROJECT RESTORE_POSTGRES_HOST RESTORE_POSTGRES_PORT \
+        RESTORE_POSTGRES_USER RESTORE_POSTGRES_DB RESTORE_POSTGRES_PASSWORD \
+        RESTORE_CLICKHOUSE_HOST RESTORE_CLICKHOUSE_USER \
+        RESTORE_S3_ENDPOINT RESTORE_S3_ACCESS_KEY RESTORE_S3_SECRET_KEY; do
+        [[ -n "${!variable:-}" ]] || die "target config is missing ${variable}"
+    done
+    [[ "${RESTORE_TARGET_ID}" == "${TARGET}" && "${RESTORE_TARGET_ISOLATED}" == "1" ]] \
+        || die "target config does not attest the requested isolated target"
+    [[ "${RESTORE_COMPOSE_PROJECT}" =~ ^[a-z0-9][a-z0-9_-]{0,62}$ ]] \
+        || die "target config compose project name is unsafe"
+    [[ -f "${RESTORE_COMPOSE_FILE}" ]] \
+        || die "target config compose file does not exist"
+    target_compose="$(realpath "${RESTORE_COMPOSE_FILE}")"
+    default_compose="$(realpath "${DEFAULT_COMPOSE_FILE}")"
+    [[ "${target_compose}" != "${default_compose}" ]] \
+        || die "isolated target must not use the default production compose file"
+
+    COMPOSE_DIR="$(dirname "${target_compose}")"
+    COMPOSE_BIN=(
+        docker compose --project-directory "${COMPOSE_DIR}"
+        --project-name "${RESTORE_COMPOSE_PROJECT}" -f "${target_compose}"
+    )
+    PG_HOST="${RESTORE_POSTGRES_HOST}"
+    PG_PORT="${RESTORE_POSTGRES_PORT}"
+    PG_USER="${RESTORE_POSTGRES_USER}"
+    PG_DB="${RESTORE_POSTGRES_DB}"
+    POSTGRES_PASSWORD="${RESTORE_POSTGRES_PASSWORD}"
+    CH_HOST="${RESTORE_CLICKHOUSE_HOST}"
+    CH_USER="${RESTORE_CLICKHOUSE_USER}"
+    S3_ENDPOINT="${RESTORE_S3_ENDPOINT}"
+    S3_ACCESS_KEY="${RESTORE_S3_ACCESS_KEY}"
+    S3_SECRET_KEY="${RESTORE_S3_SECRET_KEY}"
+}
+
+assert_writers_stopped() {
+    local service running
+    [[ "${RESTORE_WRITES_QUIESCED:-0}" == "1" ]] \
+        || die "RESTORE_WRITES_QUIESCED=1 is required after stopping all writers"
+    for service in "${QUIESCED_WRITER_SERVICES[@]}"; do
+        if ! running="$("${COMPOSE_BIN[@]}" ps --status running -q "${service}" 2>/dev/null)"; then
+            die "could not verify writer state for compose service: ${service}"
+        fi
+        [[ -z "${running}" ]] \
+            || die "writer service must be stopped before restore: ${service}"
+    done
+}
+
+configure_restore_target
+assert_writers_stopped
+
+[[ "${CH_HOST}" == "localhost" || "${CH_HOST}" == "127.0.0.1" ]] \
+    || die "database-level ClickHouse restore requires the local compose backup disk"
 
 echo -e "${CYAN}========================================${NC}"
-echo -e "${CYAN}  SoyMutDB Restore (v2)${NC}"
+echo -e "${CYAN}  SoyMutDB Authoritative Restore${NC}"
 echo -e "${CYAN}========================================${NC}"
 echo "  Backup: ${BACKUP_FILE}"
-echo "  Target: ${TARGET} $([ "${IS_PROD}" == "1" ] && echo '(PRODUCTION)' || echo '(isolated)')"
-echo "  Temp:   ${RESTORE_DIR}"
+echo "  ID:     ${BACKUP_ID}"
+echo "  Target: ${TARGET}"
+echo "  Preflight: all mandatory components and checksums valid"
 echo ""
 
-# ---------------------------------------------------------------------
-# 二次确认
-# ---------------------------------------------------------------------
-if [[ "${IS_PROD}" == "1" ]]; then
-    echo -e "${RED}WARNING: 生产环境恢复，将 OVERWRITE 现有数据（PG + ClickHouse + S3）！${NC}"
-    read -r -p "Type 'restore' to confirm production restore: " CONFIRM
-    [[ "${CONFIRM}" == "restore" ]] || die "Aborted (confirmation mismatch)."
-else
-    read -r -p "将恢复到隔离目标 '${TARGET}'（覆盖该目标上现有数据）。确认? [y/N]: " CONFIRM
-    [[ "${CONFIRM}" == "y" || "${CONFIRM}" == "Y" ]] || die "Aborted."
-fi
-
-# ---------------------------------------------------------------------
-# 校验归档：sidecar SHA-256（存在则必过）+ 解包
-# ---------------------------------------------------------------------
-if [[ -f "${BACKUP_FILE}.sha256" ]]; then
-    echo -e "${CYAN}Verifying archive SHA-256...${NC}"
-    (cd "$(dirname "${BACKUP_FILE}")" && sha256sum -c "$(basename "${BACKUP_FILE}").sha256") \
-        || die "Archive checksum mismatch - refusing to restore a corrupted backup."
-    info "Archive checksum OK."
-fi
-
-echo -e "${CYAN}Extracting backup...${NC}"
-tar -xzf "${BACKUP_FILE}" -C "${RESTORE_DIR}"
-BACKUP_SUBDIR=""
-for cand in "${RESTORE_DIR}"/*; do
-    [[ -d "${cand}" ]] && BACKUP_SUBDIR="$(basename "${cand}")" && break
-done
-[[ -n "${BACKUP_SUBDIR}" ]] || die "Backup archive has no content directory."
-RESTORE_SRC="${RESTORE_DIR}/${BACKUP_SUBDIR}"
-info "Extracted to ${RESTORE_SRC}"
-
-# manifest 是 v2 恢复的前提（旧版归档缺事实表/S3 对象，不完整，拒绝恢复）
-MANIFEST="${RESTORE_SRC}/manifest.json"
-[[ -f "${MANIFEST}" ]] || die "manifest.json not found in backup - 该归档不是 v2 完整备份（缺少事实表/S3 对象恢复能力），请重新创建备份。"
-FMT_VER="$(sed -n 's/.*"format_version": *\([0-9]*\).*/\1/p' "${MANIFEST}" | head -1)"
-[[ "${FMT_VER}" == "1" ]] || die "Unsupported manifest format_version: ${FMT_VER:-?}"
-BACKUP_ID="$(sed -n 's/.*"backup_id": *"\([^"]*\)".*/\1/p' "${MANIFEST}" | head -1)"
-info "Manifest OK (backup_id: ${BACKUP_ID:-unknown})"
-
-# ---------------------------------------------------------------------
-# helpers
-# ---------------------------------------------------------------------
-compose_exec() {
-    local svc="$1"; shift
-    "${COMPOSE_BIN[@]}" exec -T "${svc}" "$@"
+restore_incomplete() {
+    local temp="${RESTORE_STATE_FILE}.tmp.$$"
+    mkdir -p "${BAK_BASE_DIR}" || die "cannot create restore state directory"
+    {
+        printf 'target=%s\n' "${TARGET}"
+        printf 'backup_id=%s\n' "${BACKUP_ID}"
+        printf 'started_at=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    } > "${temp}" || die "cannot write restore incomplete state"
+    mv -f -- "${temp}" "${RESTORE_STATE_FILE}" \
+        || die "cannot publish restore incomplete state"
 }
+
+if [[ "${IS_PROD}" == "1" ]]; then
+    echo -e "${RED}WARNING: production restore overwrites PostgreSQL, ClickHouse, and S3.${NC}"
+    read -r -p "Type 'restore' to confirm production restore: " CONFIRM
+    [[ "${CONFIRM}" == "restore" ]] || die "restore aborted"
+else
+    read -r -p "Restore over isolated target '${TARGET}'? [y/N]: " CONFIRM
+    [[ "${CONFIRM}" == "y" || "${CONFIRM}" == "Y" ]] || die "restore aborted"
+fi
+restore_incomplete
+
+compose_exec() {
+    local service="$1"
+    shift
+    "${COMPOSE_BIN[@]}" exec -T "${service}" "$@"
+}
+
 pg_query() {
     local sql="$1"
     if [[ "${PG_HOST}" == "localhost" || "${PG_HOST}" == "127.0.0.1" ]]; then
@@ -188,21 +482,50 @@ pg_query() {
             psql -h "${PG_HOST}" -p "${PG_PORT}" -U "${PG_USER}" -d "${PG_DB}" -At -c "${sql}"
     fi
 }
+
 ch_query() {
-    local sql="$1"
-    if [[ "${CH_HOST}" == "localhost" || "${CH_HOST}" == "127.0.0.1" ]]; then
-        compose_exec clickhouse clickhouse-client --user "${CH_USER}" -q "${sql}"
-    else
-        curl -sf -u "${CH_USER}:${CH_PASSWORD:-soymutdb_dev_password}" \
-            "http://${CH_HOST}:${CH_PORT}/" --data-binary "${sql}"
-    fi
+    compose_exec clickhouse clickhouse-client --user "${CH_USER}" --database default -q "$1"
 }
+
+verify_restored_postgres_rows() {
+    local table expected extra actual
+    while IFS=$'\t' read -r table expected extra; do
+        [[ -n "${table}${expected}${extra}" ]] || continue
+        actual="$(pg_query "SELECT count(*) FROM ${table}")" \
+            || die "PostgreSQL post-restore count failed for ${table}"
+        actual="${actual//$'\r'/}"
+        [[ "${actual}" == "${expected}" ]] \
+            || die "PostgreSQL post-restore row mismatch for ${table}: expected ${expected}, got ${actual:-empty}"
+    done < "${PG_ROWS_FILE}"
+}
+
+verify_restored_clickhouse_rows() {
+    local table expected_rows expected_parts extra actual_rows actual_parts
+    while IFS=$'\t' read -r table expected_rows expected_parts extra; do
+        [[ -n "${table}${expected_rows}${expected_parts}${extra}" ]] || continue
+        actual_rows="$(ch_query "SELECT count() FROM soymutdb.\`${table}\`")" \
+            || die "ClickHouse post-restore count failed for ${table}"
+        actual_parts="$(ch_query "SELECT count(DISTINCT partition) FROM system.parts WHERE database='soymutdb' AND table='${table}' AND active=1")" \
+            || die "ClickHouse post-restore partition count failed for ${table}"
+        actual_rows="${actual_rows//$'\r'/}"
+        actual_parts="${actual_parts//$'\r'/}"
+        [[ "${actual_rows}" == "${expected_rows}" && "${actual_parts}" == "${expected_parts}" ]] \
+            || die "ClickHouse post-restore snapshot mismatch for ${table}"
+    done < "${CH_ROWS_FILE}"
+}
+
 MC_CFG_DIR="${BAK_BASE_DIR}/.mc"
 mc_run() {
-    if command -v mc &>/dev/null; then
+    local env_name
+    local -a docker_env_args=()
+    if command -v mc >/dev/null 2>&1; then
         mc --config-dir "${MC_CFG_DIR}" "$@"
     else
+        for env_name in "${MC_ENV_NAMES[@]}"; do
+            docker_env_args+=(--env "${env_name}")
+        done
         docker run --rm --network host \
+            "${docker_env_args[@]}" \
             -v "${MC_CFG_DIR}:/root/.mc" \
             -v "${BAK_BASE_DIR}:${BAK_BASE_DIR}" \
             minio/mc:RELEASE.2024-01-01T00-00-00Z \
@@ -210,135 +533,116 @@ mc_run() {
     fi
 }
 
-RESTORE_SKIPPED=""
-
-# ---------------------------------------------------------------------
-# 1. PostgreSQL（--clean 重建；Job/Outbox 表随库恢复）
-# ---------------------------------------------------------------------
 echo -e "${CYAN}[1/3] Restoring PostgreSQL...${NC}"
-if [[ -f "${RESTORE_SRC}/postgres.dump" ]]; then
-    if [[ "${PG_HOST}" == "localhost" || "${PG_HOST}" == "127.0.0.1" ]]; then
-        "${COMPOSE_BIN[@]}" cp "${RESTORE_SRC}/postgres.dump" "postgres:/tmp/soymutdb_restore.dump"
-        compose_exec postgres pg_restore -U "${PG_USER}" -d "${PG_DB}" \
-            --clean --if-exists --no-owner --no-privileges /tmp/soymutdb_restore.dump \
-            || die "PostgreSQL restore failed (pg_restore)."
-        compose_exec postgres rm -f /tmp/soymutdb_restore.dump
-    else
-        PGPASSWORD="${POSTGRES_PASSWORD:-soymutdb_dev_password}" \
-            pg_restore -h "${PG_HOST}" -p "${PG_PORT}" -U "${PG_USER}" -d "${PG_DB}" \
-            --clean --if-exists --no-owner --no-privileges "${RESTORE_SRC}/postgres.dump" \
-            || die "PostgreSQL restore failed (pg_restore)."
-    fi
-    info "PostgreSQL restore complete."
+if [[ "${PG_HOST}" == "localhost" || "${PG_HOST}" == "127.0.0.1" ]]; then
+    PG_CONTAINER_FILE="/tmp/soymutdb_restore_$$.dump"
+    "${COMPOSE_BIN[@]}" cp "${PG_DUMP_FILE}" "postgres:${PG_CONTAINER_FILE}" \
+        || die "copying PostgreSQL dump into the container failed"
+    compose_exec postgres dropdb -U "${PG_USER}" --if-exists --force "${PG_DB}" \
+        || die "dropping the existing PostgreSQL database failed"
+    compose_exec postgres createdb -U "${PG_USER}" --owner "${PG_USER}" "${PG_DB}" \
+        || die "creating a clean PostgreSQL database failed"
+    compose_exec postgres pg_restore -U "${PG_USER}" -d "${PG_DB}" \
+        --no-owner --no-privileges "${PG_CONTAINER_FILE}" \
+        || die "PostgreSQL restore failed"
+    compose_exec postgres rm -f "${PG_CONTAINER_FILE}" || die "PostgreSQL restore staging cleanup failed"
+    PG_CONTAINER_FILE=""
 else
-    warn "postgres.dump 缺失，跳过 PG 恢复。"
-    RESTORE_SKIPPED="${RESTORE_SKIPPED} postgres"
+    PGPASSWORD="${POSTGRES_PASSWORD:-soymutdb_dev_password}" \
+        dropdb -h "${PG_HOST}" -p "${PG_PORT}" -U "${PG_USER}" \
+            --if-exists --force "${PG_DB}" \
+        || die "dropping the existing PostgreSQL database failed"
+    PGPASSWORD="${POSTGRES_PASSWORD:-soymutdb_dev_password}" \
+        createdb -h "${PG_HOST}" -p "${PG_PORT}" -U "${PG_USER}" \
+            --owner "${PG_USER}" "${PG_DB}" \
+        || die "creating a clean PostgreSQL database failed"
+    PGPASSWORD="${POSTGRES_PASSWORD:-soymutdb_dev_password}" \
+        pg_restore -h "${PG_HOST}" -p "${PG_PORT}" -U "${PG_USER}" -d "${PG_DB}" \
+        --no-owner --no-privileges "${PG_DUMP_FILE}" \
+        || die "PostgreSQL restore failed"
 fi
+verify_restored_postgres_rows
+info "PostgreSQL restore complete"
 
-# ---------------------------------------------------------------------
-# 2. ClickHouse：BACKUP DATABASE 产物整体恢复（含事实表与物化视图）
-# ---------------------------------------------------------------------
-echo -e "${CYAN}[2/3] Restoring ClickHouse...${NC}"
-CH_ZIP="${RESTORE_SRC}/clickhouse_soymutdb.zip"
-if [[ -f "${CH_ZIP}" ]]; then
-    if [[ "${CH_HOST}" != "localhost" && "${CH_HOST}" != "127.0.0.1" ]]; then
-        warn "远程 CH（${CH_HOST}）恢复需手工放置 zip；跳过 ZIP 恢复。"
-        RESTORE_SKIPPED="${RESTORE_SKIPPED} clickhouse"
-    else
-        # 将产物放回容器备份盘
-        "${COMPOSE_BIN[@]}" cp "${CH_ZIP}" "clickhouse:/var/lib/clickhouse/backups/soymutdb_restore.zip"
-        ch_query "CREATE DATABASE IF NOT EXISTS soymutdb" >/dev/null
-        # 清空现有表（含物化视图；.inner 表随 MV 自动删除，跳过以免误删）
-        while IFS= read -r tname; do
-            [[ -n "${tname}" ]] || continue
-            ch_query "DROP TABLE IF EXISTS soymutdb.\`${tname}\` SYNC" >/dev/null || true
-        done < <(ch_query "SELECT name FROM system.tables WHERE database='soymutdb' AND name NOT LIKE '.inner%' ORDER BY name" 2>/dev/null || true)
-        # RESTORE DATABASE 重建全部表 + 数据 + 物化视图（含事实表）
-        ch_query "RESTORE DATABASE soymutdb FROM Disk('backups', 'soymutdb_restore.zip')" >/dev/null \
-            || die "ClickHouse RESTORE failed."
-        compose_exec clickhouse rm -f /var/lib/clickhouse/backups/soymutdb_restore.zip >/dev/null 2>&1 || true
-        info "ClickHouse restore complete (database-level, incl. fact tables)."
-    fi
-else
-    warn "clickhouse_soymutdb.zip 缺失——尝试维度表 TSV 回退恢复（事实表将缺失，请用 verify-restore.sh 确认）。"
-    for table in release_dim gene_dim mutant_line_dim consequence_dim; do
-        TSV_FILE="${RESTORE_SRC}/clickhouse_${table}.tsv"
-        if [[ -f "${TSV_FILE}" ]]; then
-            ch_query "TRUNCATE TABLE soymutdb.${table}" >/dev/null 2>&1 || \
-                warn "  ${table} TRUNCATE 失败（表可能不存在，尝试直接插入）。"
-            ch_query "INSERT INTO soymutdb.${table} FORMAT TabSeparated" < "${TSV_FILE}" >/dev/null 2>&1 || \
-                warn "  ${table} TSV 恢复失败（请人工介入）。"
-        fi
-    done
-    RESTORE_SKIPPED="${RESTORE_SKIPPED} clickhouse-facts"
-fi
+echo -e "${CYAN}[2/3] Restoring ClickHouse database...${NC}"
+CH_CONTAINER_FILE="/var/lib/clickhouse-backups/soymutdb_restore_$$.zip"
+"${COMPOSE_BIN[@]}" cp "${CH_BACKUP_FILE}" "clickhouse:${CH_CONTAINER_FILE}" \
+    || die "copying ClickHouse backup into the container failed"
+ch_query "DROP DATABASE IF EXISTS soymutdb SYNC" >/dev/null \
+    || die "dropping the existing ClickHouse database failed"
+ch_query "RESTORE DATABASE soymutdb FROM Disk('backups', '$(basename "${CH_CONTAINER_FILE}")')" >/dev/null \
+    || die "ClickHouse RESTORE DATABASE failed"
+compose_exec clickhouse rm -f "${CH_CONTAINER_FILE}" \
+    || die "ClickHouse restore staging cleanup failed"
+CH_CONTAINER_FILE=""
+verify_restored_clickhouse_rows
+info "ClickHouse database restore complete"
 
-# ---------------------------------------------------------------------
-# 3. MinIO/S3：对象数据（mc mirror 精确恢复）+ 按 manifest 校验 checksum
-# ---------------------------------------------------------------------
-echo -e "${CYAN}[3/3] Restoring MinIO/S3 objects...${NC}"
-S3_MANIFEST="${RESTORE_SRC}/s3_manifest.tsv"
-S3_DATA_DIR="${RESTORE_SRC}/s3_data"
-if [[ -d "${S3_DATA_DIR}" && -f "${S3_MANIFEST}" ]]; then
-    [[ -f "${RESTORE_SRC}/s3_buckets.txt" ]] || die "备份缺少 S3 bucket manifest"
-    grep -qx 'gwas' "${RESTORE_SRC}/s3_buckets.txt" || die "备份缺少 gwas bucket manifest"
-    if mc_run alias set s3dst "${S3_ENDPOINT}" "${S3_ACCESS_KEY}" "${S3_SECRET_KEY}" >/dev/null 2>&1; then
-        for bucket in $({ cut -f1 "${S3_MANIFEST}"; cat "${RESTORE_SRC}/s3_buckets.txt"; } | sort -u); do
-            SRC_DIR="${S3_DATA_DIR}/${bucket}"
-            [[ -d "${SRC_DIR}" ]] || continue
-            # --remove: 删除远端多余对象，得到与备份完全一致的状态
-            mc_run mirror --overwrite --remove "${SRC_DIR}" "s3dst/${bucket}" >/dev/null 2>&1 \
-                || warn "  bucket ${bucket} 镜像恢复失败。"
-            # bucket policy 恢复
-            POLICY_FILE="${RESTORE_SRC}/s3_policy_${bucket}.json"
-            if [[ -f "${POLICY_FILE}" && -s "${POLICY_FILE}" ]]; then
-                mc_run policy set "$(cat "${POLICY_FILE}")" "s3dst/${bucket}" >/dev/null 2>&1 || true
-            fi
-            info "  ${bucket}: mirrored."
-        done
-        # 按 manifest 校验每对象 SHA-256（下载比对）
-        CHK_TMP="$(mktemp -d)"
-        MISMATCH=0
-        CHECKED=0
-        while IFS=$'\t' read -r bucket rel size hash; do
-            [[ -n "${rel}" ]] || continue
-            if [[ -n "${hash}" ]]; then
-                mc_run cp "s3dst/${bucket}/${rel}" "${CHK_TMP}/obj" >/dev/null 2>&1 || { warn "  对象缺失: ${bucket}/${rel}"; MISMATCH=$((MISMATCH + 1)); continue; }
-                got="$(sha256sum "${CHK_TMP}/obj" | awk '{print $1}')"
-                if [[ "${got}" != "${hash}" ]]; then
-                    warn "  checksum mismatch: ${bucket}/${rel}"
-                    MISMATCH=$((MISMATCH + 1))
-                fi
-                CHECKED=$((CHECKED + 1))
-                rm -f "${CHK_TMP}/obj"
-            fi
-        done < "${S3_MANIFEST}"
-        rm -rf "${CHK_TMP}"
-        if [[ "${MISMATCH}" -gt 0 ]]; then
-            warn "S3 校验发现 ${MISMATCH} 个对象不一致（已检查 ${CHECKED}）。"
-        else
-            info "S3 checksum verified: ${CHECKED} objects OK."
-        fi
-    else
-        warn "mc 不可用，S3 对象未恢复。"
-        RESTORE_SKIPPED="${RESTORE_SKIPPED} s3"
-    fi
-else
-    warn "备份中无 S3 数据（s3_data/s3_manifest.tsv），跳过。"
-    RESTORE_SKIPPED="${RESTORE_SKIPPED} s3"
-fi
+echo -e "${CYAN}[3/3] Restoring S3 buckets and policies...${NC}"
+mkdir -p "${MC_CFG_DIR}"
+mc_configure_alias_env s3dst "${S3_ENDPOINT}" "${S3_ACCESS_KEY}" "${S3_SECRET_KEY}" \
+    || die "S3 destination alias environment configuration failed"
+for bucket in "${S3_BUCKETS[@]}"; do
+    source_dir="${RESTORE_SRC}/s3_data/${bucket}"
+    mc_run mb --ignore-existing "s3dst/${bucket}" >/dev/null 2>&1 \
+        || die "creating required destination bucket failed: ${bucket}"
+    mc_run mirror --overwrite --remove "${source_dir}" "s3dst/${bucket}" >/dev/null 2>&1 \
+        || die "restoring required S3 bucket failed: ${bucket}"
+    mc_run anonymous set-json "${RESTORE_SRC}/s3_policy_${bucket}.json" "s3dst/${bucket}" >/dev/null 2>&1 \
+        || die "restoring S3 bucket policy failed: ${bucket}"
+done
+
+CHECK_DIR="${RESTORE_DIR}/s3-check"
+mkdir -p "${CHECK_DIR}"
+for bucket in "${S3_BUCKETS[@]}"; do
+    listing="${CHECK_DIR}/${bucket}.jsonl"
+    mc_run ls --recursive --json "s3dst/${bucket}/" > "${listing}" 2>/dev/null \
+        || die "listing restored S3 bucket failed: ${bucket}"
+    read -r actual_count actual_bytes < <(python3 - "${listing}" <<'PY'
+import json
+import sys
+
+count = 0
+size = 0
+with open(sys.argv[1], encoding="utf-8") as handle:
+    for raw in handle:
+        if not raw.strip():
+            continue
+        item = json.loads(raw)
+        if item.get("type") == "folder":
+            continue
+        value = item.get("size")
+        if not isinstance(value, int) or value < 0:
+            raise SystemExit("invalid mc listing size")
+        count += 1
+        size += value
+print(count, size)
+PY
+    )
+    expected_count="$(awk -F'\t' -v wanted="${bucket}" '$1 == wanted { count++ } END { print count+0 }' "${S3_MANIFEST}")"
+    expected_bytes="$(awk -F'\t' -v wanted="${bucket}" '$1 == wanted { total+=$3 } END { print total+0 }' "${S3_MANIFEST}")"
+    [[ "${actual_count}" == "${expected_count}" && "${actual_bytes}" == "${expected_bytes}" ]] \
+        || die "restored S3 object count/size mismatch: ${bucket}"
+done
+
+while IFS=$'\t' read -r bucket relative size hash extra; do
+    [[ -n "${bucket}${relative}${size}${hash}${extra}" ]] || continue
+    downloaded="${CHECK_DIR}/object"
+    mc_run cp "s3dst/${bucket}/${relative}" "${downloaded}" >/dev/null 2>&1 \
+        || die "restored S3 object is missing: ${bucket}/${relative}"
+    [[ "$(stat -c%s "${downloaded}")" == "${size}" ]] \
+        || die "restored S3 object size mismatch: ${bucket}/${relative}"
+    [[ "$(sha256sum "${downloaded}" | awk '{print $1}')" == "${hash}" ]] \
+        || die "restored S3 object checksum mismatch: ${bucket}/${relative}"
+    rm -f -- "${downloaded}"
+done < "${S3_MANIFEST}"
+info "S3 restore and object verification complete"
+
+rm -f -- "${RESTORE_STATE_FILE}" || die "could not clear restore incomplete state"
 
 echo ""
 echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}  Restore Complete (target: ${TARGET})${NC}"
 echo -e "${GREEN}========================================${NC}"
-if [[ -n "${RESTORE_SKIPPED}" ]]; then
-    echo -e "${YELLOW}  跳过/未完整恢复的组件:${RESTORE_SKIPPED}${NC}"
-fi
-echo ""
-echo "Next steps:"
-echo "  1. 重启/验证服务（生产: sudo systemctl restart soymutdb.target）"
-echo "  2. 运行恢复验证:"
-echo "       bash deploy/scripts/verify-restore.sh ${BACKUP_FILE}"
-echo "     全部 PASS 且退出码 0 才代表恢复成功"
+echo "  Run: bash deploy/scripts/verify-restore.sh ${BACKUP_FILE}"
 echo ""

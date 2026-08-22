@@ -1,0 +1,289 @@
+{
+  "schema_version": 1,
+  "checks": [
+    {
+      "name": "knip",
+      "category": "knip",
+      "command": [
+        "pnpm",
+        "dlx",
+        "knip@5.63.1",
+        "--config",
+        "knip.json",
+        "--reporter",
+        "json"
+      ],
+      "report": {
+        "mode": "stdout",
+        "path": "knip.json",
+        "format": "json"
+      }
+    },
+    {
+      "name": "deptry-api",
+      "category": "deptry",
+      "cwd": "apps/api",
+      "command": [
+        "uvx",
+        "--from",
+        "deptry==0.23.1",
+        "deptry",
+        ".",
+        "--json-output",
+        "{output_dir}/deptry-api.json"
+      ],
+      "report": {
+        "mode": "file",
+        "path": "deptry-api.json",
+        "format": "json"
+      }
+    },
+    {
+      "name": "deptry-worker",
+      "category": "deptry",
+      "cwd": "apps/worker",
+      "command": [
+        "uvx",
+        "--from",
+        "deptry==0.23.1",
+        "deptry",
+        ".",
+        "--json-output",
+        "{output_dir}/deptry-worker.json"
+      ],
+      "report": {
+        "mode": "file",
+        "path": "deptry-worker.json",
+        "format": "json"
+      }
+    },
+    {
+      "name": "deptry-mcp-server",
+      "category": "deptry",
+      "cwd": "apps/mcp-server",
+      "command": [
+        "uvx",
+        "--from",
+        "deptry==0.23.1",
+        "deptry",
+        ".",
+        "--json-output",
+        "{output_dir}/deptry-mcp-server.json"
+      ],
+      "report": {
+        "mode": "file",
+        "path": "deptry-mcp-server.json",
+        "format": "json"
+      }
+    },
+    {
+      "name": "pnpm-duplicate-versions",
+      "category": "duplicate-versions",
+      "command": [
+        "pnpm",
+        "dedupe",
+        "--check"
+      ],
+      "report": {
+        "mode": "status",
+        "path": "pnpm-duplicate-versions.json",
+        "format": "json"
+      }
+    },
+    {
+      "name": "typescript-circular-dependencies",
+      "category": "circular-dependencies",
+      "command": [
+        "pnpm",
+        "dlx",
+        "madge@8.0.0",
+        "--circular",
+        "--json",
+        "--extensions",
+        "ts,tsx",
+        "apps",
+        "packages"
+      ],
+      "report": {
+        "mode": "stdout",
+        "path": "typescript-circular-dependencies.json",
+        "format": "json"
+      }
+    },
+    {
+      "name": "pnpm-licenses",
+      "category": "licenses",
+      "command": [
+        "pnpm",
+        "dlx",
+        "license-checker-rseidelsohn@4.4.2",
+        "--start",
+        "{root}",
+        "--production",
+        "--onlyAllow",
+        "0BSD;Apache-2.0;BSD-2-Clause;BSD-3-Clause;CC0-1.0;ISC;MIT;MPL-2.0;Python-2.0;Unlicense;Zlib",
+        "--json"
+      ],
+      "report": {
+        "mode": "stdout",
+        "path": "pnpm-licenses.json",
+        "format": "json"
+      }
+    },
+    {
+      "name": "python-licenses-api",
+      "category": "licenses",
+      "command": [
+        "uv",
+        "run",
+        "--locked",
+        "--project",
+        "{root}/apps/api",
+        "--with",
+        "pip-licenses==5.0.0",
+        "pip-licenses",
+        "--format=json",
+        "--allow-only=0BSD;Apache Software License;BSD License;ISC License;MIT License;Mozilla Public License 2.0 (MPL 2.0);Python Software Foundation License",
+        "--ignore-packages",
+        "soymutdb-api",
+        "--output-file={output_dir}/python-licenses-api.json"
+      ],
+      "report": {
+        "mode": "file",
+        "path": "python-licenses-api.json",
+        "format": "json"
+      }
+    },
+    {
+      "name": "python-licenses-worker",
+      "category": "licenses",
+      "command": [
+        "uv",
+        "run",
+        "--locked",
+        "--project",
+        "{root}/apps/worker",
+        "--with",
+        "pip-licenses==5.0.0",
+        "pip-licenses",
+        "--format=json",
+        "--allow-only=0BSD;Apache Software License;BSD License;ISC License;MIT License;Mozilla Public License 2.0 (MPL 2.0);Python Software Foundation License",
+        "--ignore-packages",
+        "soymutdb-worker",
+        "soymutdb-jobs",
+        "--output-file={output_dir}/python-licenses-worker.json"
+      ],
+      "report": {
+        "mode": "file",
+        "path": "python-licenses-worker.json",
+        "format": "json"
+      }
+    },
+    {
+      "name": "python-licenses-mcp-server",
+      "category": "licenses",
+      "command": [
+        "uv",
+        "run",
+        "--locked",
+        "--project",
+        "{root}/apps/mcp-server",
+        "--with",
+        "pip-licenses==5.0.0",
+        "pip-licenses",
+        "--format=json",
+        "--allow-only=0BSD;Apache Software License;BSD License;ISC License;MIT License;Mozilla Public License 2.0 (MPL 2.0);Python Software Foundation License",
+        "--ignore-packages",
+        "soymutdb-mcp-server",
+        "--output-file={output_dir}/python-licenses-mcp-server.json"
+      ],
+      "report": {
+        "mode": "file",
+        "path": "python-licenses-mcp-server.json",
+        "format": "json"
+      }
+    },
+    {
+      "name": "pnpm-audit",
+      "category": "vulnerabilities",
+      "command": [
+        "pnpm",
+        "audit",
+        "--json",
+        "--audit-level",
+        "high"
+      ],
+      "report": {
+        "mode": "stdout",
+        "path": "pnpm-audit.json",
+        "format": "json"
+      }
+    },
+    {
+      "name": "pip-audit-api",
+      "category": "vulnerabilities",
+      "command": [
+        "uvx",
+        "--from",
+        "pip-audit==2.9.0",
+        "pip-audit",
+        "--locked",
+        "--strict",
+        "--format",
+        "json",
+        "--output",
+        "{output_dir}/pip-audit-api.json",
+        "{root}/apps/api"
+      ],
+      "report": {
+        "mode": "file",
+        "path": "pip-audit-api.json",
+        "format": "json"
+      }
+    },
+    {
+      "name": "pip-audit-worker",
+      "category": "vulnerabilities",
+      "command": [
+        "uvx",
+        "--from",
+        "pip-audit==2.9.0",
+        "pip-audit",
+        "--locked",
+        "--strict",
+        "--format",
+        "json",
+        "--output",
+        "{output_dir}/pip-audit-worker.json",
+        "{root}/apps/worker"
+      ],
+      "report": {
+        "mode": "file",
+        "path": "pip-audit-worker.json",
+        "format": "json"
+      }
+    },
+    {
+      "name": "pip-audit-mcp-server",
+      "category": "vulnerabilities",
+      "command": [
+        "uvx",
+        "--from",
+        "pip-audit==2.9.0",
+        "pip-audit",
+        "--locked",
+        "--strict",
+        "--format",
+        "json",
+        "--output",
+        "{output_dir}/pip-audit-mcp-server.json",
+        "{root}/apps/mcp-server"
+      ],
+      "report": {
+        "mode": "file",
+        "path": "pip-audit-mcp-server.json",
+        "format": "json"
+      }
+    }
+  ]
+}
