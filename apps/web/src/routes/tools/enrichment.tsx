@@ -17,32 +17,9 @@ import { useTranslation } from "react-i18next";
 import * as React from "react";
 import { useMemo } from "react";
 import type { EChartsOption } from "echarts";
-import { Network, Activity, Play, Loader2, RotateCcw } from "lucide-react";
-import {
-  PageHeader,
-  Card,
-  CardHeader,
-  CardContent,
-  CardTitle,
-  CardDescription,
-  Label,
-  Textarea,
-  Input,
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-  Button,
-  Badge,
-  Tabs,
-  TabsList,
-  TabsTrigger,
-  ErrorState,
-  EmptyState,
-  ToastProvider,
-  useToast,
-} from "../../lib/web-ui";
+import { NodeIndexOutlined, RiseOutlined, CaretRightOutlined, LoadingOutlined, RedoOutlined } from "@ant-design/icons";
+import { Breadcrumb, Button, Card, Empty, Input, Result, Select, Tabs, Tag, Typography } from "@/lib/antd";
+import { useToast } from "@/lib/toast";
 import { DataTable } from "../../components/data-table";
 import { useECharts } from "../../lib/use-echarts";
 import { runEnrichment } from "./api";
@@ -153,14 +130,6 @@ function termLabel(name: string, id: string): string {
 }
 
 function EnrichmentComponent() {
-  return (
-    <ToastProvider>
-      <EnrichmentInner />
-    </ToastProvider>
-  );
-}
-
-function EnrichmentInner() {
   const { t } = useTranslation();
   const { success, error } = useToast();
 
@@ -338,9 +307,9 @@ function EnrichmentInner() {
           cell: (row: ResultRow) => (
             <div className="flex max-w-[420px] flex-wrap gap-1">
               {row.genes.map((g) => (
-                <Badge key={g} variant="secondary" className="font-mono text-[10px]">
+                <Tag key={g} className="font-mono text-[10px]">
                   {g}
-                </Badge>
+                </Tag>
               ))}
             </div>
           ),
@@ -383,9 +352,9 @@ function EnrichmentInner() {
           cell: (row: ResultRow) => (
             <div className="flex max-w-[420px] flex-wrap gap-1">
               {row.genes.map((g) => (
-                <Badge key={g} variant="secondary" className="font-mono text-[10px]">
+                <Tag key={g} className="font-mono text-[10px]">
                   {g}
-                </Badge>
+                </Tag>
               ))}
             </div>
           ),
@@ -394,34 +363,37 @@ function EnrichmentInner() {
 
   return (
     <div className="container-prose section-rhythm">
-      <PageHeader
-        icon={Network}
-        title={t("tools.enrichment.title")}
-        description={t("tools.enrichment.subtitle")}
-        breadcrumb={[
-          { label: t("tools.title"), href: "/tools" },
-          { label: t("tools.enrichment.title") },
-        ]}
-      />
+      <header className="flex flex-col gap-4">
+        <Breadcrumb items={[{ title: t("tools.title") }, { title: t("tools.enrichment.title") }]} />
+        <div className="flex items-start gap-3.5">
+          <span className="flex size-11 items-center justify-center rounded-xl border bg-card shadow-sm"><NodeIndexOutlined className="size-5" aria-hidden /></span>
+          <div>
+            <Typography.Title level={2} style={{ margin: 0 }}>{t("tools.enrichment.title")}</Typography.Title>
+            <Typography.Paragraph type="secondary" style={{ margin: 0 }}>{t("tools.enrichment.subtitle")}</Typography.Paragraph>
+          </div>
+        </div>
+      </header>
 
       <div className="mt-10 grid gap-6 lg:grid-cols-[1.3fr_1fr]">
         <Card>
-          <CardHeader>
-            <CardTitle>{t("tools.enrichment.formTitle")}</CardTitle>
-            <CardDescription>
+          <div className="mb-5">
+            <Typography.Title level={5} style={{ margin: 0 }}>{t("tools.enrichment.formTitle")}</Typography.Title>
+            <Typography.Text type="secondary">
               {mode === "gsea" ? t("tools.enrichment.gsea.desc") : t("tools.enrichment.formDesc")}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+            </Typography.Text>
+          </div>
+          <div>
             <form onSubmit={onSubmit} className="grid gap-5">
               <div className="grid gap-2">
-                <Label>{t("tools.enrichment.modeLabel")}</Label>
-                <Tabs value={mode} onValueChange={(v) => onModeChange(v as Mode)}>
-                  <TabsList>
-                    <TabsTrigger value="ora">{t("tools.enrichment.modeOra")}</TabsTrigger>
-                    <TabsTrigger value="gsea">{t("tools.enrichment.modeGsea")}</TabsTrigger>
-                  </TabsList>
-                </Tabs>
+                <label>{t("tools.enrichment.modeLabel")}</label>
+                <Tabs
+                  activeKey={mode}
+                  onChange={(value) => onModeChange(value as Mode)}
+                  items={[
+                    { key: "ora", label: t("tools.enrichment.modeOra") },
+                    { key: "gsea", label: t("tools.enrichment.modeGsea") },
+                  ]}
+                />
                 <p className="text-xs text-muted-foreground">
                   {mode === "gsea"
                     ? t("tools.enrichment.modeGseaDesc")
@@ -431,8 +403,8 @@ function EnrichmentInner() {
 
               {mode === "ora" ? (
                 <div className="grid gap-2">
-                  <Label htmlFor="en-genes">{t("tools.enrichment.genesLabel")}</Label>
-                  <Textarea
+                  <label htmlFor="en-genes">{t("tools.enrichment.genesLabel")}</label>
+                  <Input.TextArea
                     id="en-genes"
                     value={genesRaw}
                     onChange={(e) => setGenesRaw(e.target.value)}
@@ -447,8 +419,8 @@ function EnrichmentInner() {
                 </div>
               ) : (
                 <div className="grid gap-2">
-                  <Label htmlFor="en-gsea-values">{t("tools.enrichment.gsea.valuesLabel")}</Label>
-                  <Textarea
+                  <label htmlFor="en-gsea-values">{t("tools.enrichment.gsea.valuesLabel")}</label>
+                  <Input.TextArea
                     id="en-gsea-values"
                     value={gseaRaw}
                     onChange={(e) => setGseaRaw(e.target.value)}
@@ -467,19 +439,19 @@ function EnrichmentInner() {
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="grid gap-2">
-                  <Label htmlFor="en-ontology">{t("tools.enrichment.ontologyLabel")}</Label>
-                  <Select value={ontology} onValueChange={(v) => setOntology(v as "go" | "kegg")}>
-                    <SelectTrigger id="en-ontology">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="go">GO</SelectItem>
-                      <SelectItem value="kegg">KEGG</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <label htmlFor="en-ontology">{t("tools.enrichment.ontologyLabel")}</label>
+                  <Select
+                    id="en-ontology"
+                    value={ontology}
+                    onChange={(v) => setOntology(v as "go" | "kegg")}
+                    options={[
+                      { value: "go", label: "GO" },
+                      { value: "kegg", label: "KEGG" },
+                    ]}
+                  />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="en-p">{t("tools.enrichment.pLabel")}</Label>
+                  <label htmlFor="en-p">{t("tools.enrichment.pLabel")}</label>
                   <Input
                     id="en-p"
                     type="number"
@@ -497,9 +469,9 @@ function EnrichmentInner() {
                 </div>
                 {mode === "gsea" ? (
                   <div className="grid gap-2">
-                    <Label htmlFor="en-min-genes">
+                    <label htmlFor="en-min-genes">
                       {t("tools.enrichment.gsea.minGenesLabel")}
-                    </Label>
+                    </label>
                     <Input
                       id="en-min-genes"
                       type="number"
@@ -519,50 +491,55 @@ function EnrichmentInner() {
               </div>
 
               <div className="flex flex-wrap gap-2">
-                <Button type="submit" disabled={enrichMutation.isPending}>
+                <Button type="primary" htmlType="submit" disabled={enrichMutation.isPending}>
                   {enrichMutation.isPending ? (
-                    <Loader2 className="size-4 animate-spin" aria-hidden />
+                    <LoadingOutlined className="size-4 animate-spin" aria-hidden />
                   ) : (
-                    <Play className="size-4" aria-hidden />
+                    <CaretRightOutlined className="size-4" aria-hidden />
                   )}
                   {t("tools.enrichment.submit")}
                 </Button>
-                <Button type="button" variant="outline" onClick={onClear}>
-                  <RotateCcw className="size-4" aria-hidden />
+                <Button htmlType="button" onClick={onClear}>
+                  <RedoOutlined className="size-4" aria-hidden />
                   {t("common.clear")}
                 </Button>
               </div>
             </form>
-          </CardContent>
+          </div>
         </Card>
 
         <div className="grid gap-6">
           {enrichMutation.isError ? (
-            <ErrorState
+            <Result
+              status="error"
               title={t("tools.enrichment.errorTitle")}
-              message={(enrichMutation.error as Error).message}
-              onRetry={() => enrichMutation.mutate()}
-              retryLabel={t("common.retry")}
+              subTitle={(enrichMutation.error as Error).message}
+              extra={
+                <Button type="primary" onClick={() => enrichMutation.mutate()}>
+                  {t("common.retry")}
+                </Button>
+              }
             />
           ) : null}
 
           {!result && !enrichMutation.isError ? (
             <Card>
-              <CardContent className="p-6">
-                <EmptyState
-                  mode="empty"
-                  title={t("tools.enrichment.emptyTitle")}
-                  description={t("tools.enrichment.emptyDesc")}
-                />
-              </CardContent>
+              <Empty
+                description={
+                  <>
+                    <p className="font-medium">{t("tools.enrichment.emptyTitle")}</p>
+                    <p className="text-sm text-muted-foreground">{t("tools.enrichment.emptyDesc")}</p>
+                  </>
+                }
+              />
             </Card>
           ) : null}
 
           {result ? (
             <Card>
-              <CardHeader>
-                <CardTitle>{t("tools.enrichment.summaryTitle")}</CardTitle>
-                <CardDescription>
+              <div className="mb-5">
+                <Typography.Title level={5} style={{ margin: 0 }}>{t("tools.enrichment.summaryTitle")}</Typography.Title>
+                <Typography.Text type="secondary">
                   {isGsea
                     ? t("tools.enrichment.gsea.summaryDesc", {
                         input: result.input_genes,
@@ -572,22 +549,22 @@ function EnrichmentInner() {
                         input: result.input_genes,
                         background: result.background_genes,
                       })}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-3">
+                </Typography.Text>
+              </div>
+              <div className="grid gap-3">
                 <div className="flex flex-wrap gap-2">
-                  <Badge variant="secondary">{result.ontology.toUpperCase()}</Badge>
-                  <Badge variant="secondary">{isGsea ? "GSEA" : "ORA"}</Badge>
-                  <Badge variant="secondary">
+                  <Tag>{result.ontology.toUpperCase()}</Tag>
+                  <Tag>{isGsea ? "GSEA" : "ORA"}</Tag>
+                  <Tag>
                     {t("tools.enrichment.termsBadge", { count: terms.length })}
-                  </Badge>
+                  </Tag>
                 </div>
                 {result.message ? (
                   <p className="rounded-lg border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
                     {result.message}
                   </p>
                 ) : null}
-              </CardContent>
+              </div>
             </Card>
           ) : null}
         </div>
@@ -596,32 +573,38 @@ function EnrichmentInner() {
       {result ? (
         <section className="mt-10 grid gap-6">
           {terms.length === 0 ? (
-            <EmptyState
-              mode="filtered"
-              icon={isGsea ? Activity : Network}
-              title={t("tools.enrichment.noTermsTitle")}
-              description={t("tools.enrichment.noTermsDesc")}
+            <Empty
+              image={
+                isGsea ? (
+                  <RiseOutlined style={{ fontSize: 40, color: "var(--muted-foreground)" }} />
+                ) : (
+                  <NodeIndexOutlined style={{ fontSize: 40, color: "var(--muted-foreground)" }} />
+                )
+              }
+              description={
+                <>
+                  <p className="font-medium">{t("tools.enrichment.noTermsTitle")}</p>
+                  <p className="text-sm text-muted-foreground">{t("tools.enrichment.noTermsDesc")}</p>
+                </>
+              }
             />
           ) : (
             <>
               <Card>
-                <CardHeader className="gap-3">
+                <div className="mb-5">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <CardTitle>{t("tools.enrichment.gsea.chartTitle")}</CardTitle>
-                      <CardDescription>{t("tools.enrichment.gsea.chartDesc")}</CardDescription>
+                      <Typography.Title level={5} style={{ margin: 0 }}>{t("tools.enrichment.gsea.chartTitle")}</Typography.Title>
+                      <Typography.Text type="secondary">{t("tools.enrichment.gsea.chartDesc")}</Typography.Text>
                     </div>
                     <Tabs
-                      value={chartView}
-                      onValueChange={(v) => setChartView(v as "bubble" | "bar")}
-                    >
-                      <TabsList>
-                        <TabsTrigger value="bubble">
-                          {t("tools.enrichment.gsea.chartBubble")}
-                        </TabsTrigger>
-                        <TabsTrigger value="bar">{t("tools.enrichment.gsea.chartBar")}</TabsTrigger>
-                      </TabsList>
-                    </Tabs>
+                      activeKey={chartView}
+                      onChange={(v) => setChartView(v as "bubble" | "bar")}
+                      items={[
+                        { key: "bubble", label: t("tools.enrichment.gsea.chartBubble") },
+                        { key: "bar", label: t("tools.enrichment.gsea.chartBar") },
+                      ]}
+                    />
                   </div>
                   {isGsea ? (
                     <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
@@ -643,22 +626,22 @@ function EnrichmentInner() {
                       </span>
                     </div>
                   ) : null}
-                </CardHeader>
-                <CardContent>
+                </div>
+                <div>
                   <EnrichmentSignificanceChart
                     rows={chartRows}
                     isGsea={isGsea}
                     view={chartView}
                   />
-                </CardContent>
+                </div>
               </Card>
 
               <Card>
-                <CardHeader>
-                  <CardTitle>{t("tools.enrichment.resultsTitle")}</CardTitle>
-                  <CardDescription>{t("tools.enrichment.resultsDesc")}</CardDescription>
-                </CardHeader>
-                <CardContent>
+                <div className="mb-5">
+                  <Typography.Title level={5} style={{ margin: 0 }}>{t("tools.enrichment.resultsTitle")}</Typography.Title>
+                  <Typography.Text type="secondary">{t("tools.enrichment.resultsDesc")}</Typography.Text>
+                </div>
+                <div>
                   <DataTable
                     ariaLabel={t("tools.enrichment.resultsTitle")}
                     rowKey={(row) => row.id}
@@ -666,7 +649,7 @@ function EnrichmentInner() {
                     responsive
                     columns={columns}
                   />
-                </CardContent>
+                </div>
               </Card>
             </>
           )}

@@ -9,7 +9,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { Download } from "lucide-react";
+import { DownloadOutlined as Download, LeftOutlined, ReloadOutlined, RightOutlined } from "@ant-design/icons";
 import {
   Button,
   Empty,
@@ -22,7 +22,6 @@ import {
   type TableColumnsType,
   type TableProps,
 } from "@/lib/antd";
-import { LeftOutlined, ReloadOutlined, RightOutlined } from "@ant-design/icons";
 import { searchVariants, type VariantSummary } from "@soymutdb/api-client";
 import { FadeUp } from "../../components/route-motion";
 import { SOYBEAN_CHROMOSOMES, formatPosition } from "../../lib/format";

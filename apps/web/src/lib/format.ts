@@ -1,7 +1,32 @@
 /**
  * Shared formatting helpers for genomic data display.
  */
-export { formatNumber, formatPercent, formatFileSize, truncate } from "./web-ui";
+
+/** Format a numeric value with thousands separators; "—" for null/NaN. */
+export function formatNumber(value: number | null | undefined): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return "—";
+  return new Intl.NumberFormat().format(value);
+}
+
+/** Format a value as a percentage with the given decimals; "—" for null/NaN. */
+export function formatPercent(value: number | null | undefined, decimals = 1): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return "—";
+  return `${value.toFixed(decimals)}%`;
+}
+
+/** Format a byte count as a human-readable size (B/KB/MB/GB/TB); "—" for null. */
+export function formatFileSize(bytes: number | null | undefined): string {
+  if (bytes === null || bytes === undefined || bytes <= 0) return "—";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const unit = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  return `${(bytes / 1024 ** unit).toFixed(1)} ${units[unit]}`;
+}
+
+/** Truncate a string with an ellipsis when it exceeds maxLength. */
+export function truncate(value: string, maxLength: number): string {
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, Math.max(0, maxLength - 1))}…`;
+}
 
 /** Default species (soybean) has 20 chromosomes — canonical names used across the UI. */
 export const SOYBEAN_CHROMOSOMES = Array.from({ length: 20 }, (_, i) => `chr${String(i + 1).padStart(2, "0")}`) as readonly string[];

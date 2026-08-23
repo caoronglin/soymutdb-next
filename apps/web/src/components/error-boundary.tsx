@@ -1,6 +1,6 @@
 import * as React from "react";
-import { AlertTriangle, RotateCw } from "lucide-react";
-import { Button } from "../lib/web-ui";
+import { WarningOutlined, ReloadOutlined } from "@ant-design/icons";
+import { Button } from "@/lib/antd";
 
 export interface ErrorBoundaryProps {
     children: React.ReactNode;
@@ -49,14 +49,14 @@ function DefaultFallback({ error, onReset }: { error: Error; onReset: () => void
             className="mx-auto flex max-w-md flex-col items-center rounded-xl border border-dashed p-10 text-center"
         >
             <div className="mb-4 flex size-12 items-center justify-center rounded-full bg-destructive/10">
-                <AlertTriangle className="size-6 text-destructive" aria-hidden />
+                <WarningOutlined className="size-6 text-destructive" aria-hidden />
             </div>
             <h2 className="font-display text-xl font-semibold">Something went wrong</h2>
             <p className="mt-2 text-sm text-muted-foreground">
                 {error.message || "An unexpected error occurred while rendering this section."}
             </p>
-            <Button onClick={onReset} className="mt-6" variant="default">
-                <RotateCw className="size-4" aria-hidden />
+            <Button onClick={onReset} className="mt-6" type="primary">
+                <ReloadOutlined className="size-4" aria-hidden />
                 Try again
             </Button>
         </div>

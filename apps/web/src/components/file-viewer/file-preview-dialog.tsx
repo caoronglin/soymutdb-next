@@ -17,14 +17,14 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button, Dropdown, Modal, Skeleton, Tag, Tooltip, type MenuProps } from "@/lib/antd";
 import {
-  ChevronLeft,
-  ChevronRight,
-  Download,
-  Maximize,
-  Minimize,
-  Printer,
-  FileDown,
-} from "lucide-react";
+  LeftOutlined,
+  RightOutlined,
+  DownloadOutlined,
+  ExpandOutlined,
+  CompressOutlined,
+  PrinterOutlined,
+  FileTextOutlined,
+} from "@ant-design/icons";
 import {
   formatFileSize,
   getFileExtension,
@@ -200,7 +200,7 @@ export function FilePreviewDialog({
   const menuItems: MenuProps["items"] = files.map((f, idx) => ({
     key: String(idx),
     label: f.name,
-    icon: idx === currentIndex ? <FileDown className="size-3.5" /> : undefined,
+    icon: idx === currentIndex ? <FileTextOutlined className="size-3.5" /> : undefined,
   }));
 
   const renderBody = () => {
@@ -292,7 +292,7 @@ export function FilePreviewDialog({
                 type="text"
                 size="small"
                 disabled={!canPrev}
-                icon={<ChevronLeft className="size-4" />}
+                icon={<LeftOutlined className="size-4" />}
                 onClick={() => goTo(currentIndex - 1)}
               />
             </Tooltip>
@@ -319,7 +319,7 @@ export function FilePreviewDialog({
                 type="text"
                 size="small"
                 disabled={!canNext}
-                icon={<ChevronRight className="size-4" />}
+                icon={<RightOutlined className="size-4" />}
                 onClick={() => goTo(currentIndex + 1)}
               />
             </Tooltip>
@@ -337,7 +337,7 @@ export function FilePreviewDialog({
               <Button
                 type="text"
                 size="small"
-                icon={<Download className="size-4" />}
+                icon={<DownloadOutlined className="size-4" />}
                 onClick={() => window.open(current.url, "_blank")}
               />
             </Tooltip>
@@ -345,7 +345,7 @@ export function FilePreviewDialog({
               <Button
                 type="text"
                 size="small"
-                icon={<Printer className="size-4" />}
+                icon={<PrinterOutlined className="size-4" />}
                 onClick={handlePrint}
               />
             </Tooltip>
@@ -355,7 +355,7 @@ export function FilePreviewDialog({
               <Button
                 type="text"
                 size="small"
-                icon={fullscreen ? <Minimize className="size-4" /> : <Maximize className="size-4" />}
+                icon={fullscreen ? <CompressOutlined className="size-4" /> : <ExpandOutlined className="size-4" />}
                 onClick={() => setFullscreen((f) => !f)}
               />
             </Tooltip>

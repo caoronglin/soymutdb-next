@@ -5,7 +5,8 @@
 import { useMemo } from "react";
 import type { EChartsOption } from "echarts";
 import { useECharts } from "../../lib/use-echarts";
-import { ChartEmptyState, cn } from "../../lib/web-ui";
+import { Empty } from "@/lib/antd";
+import { cn } from "@/lib/cn";
 
 export interface ExpressionHeatmapProps {
   data: Array<{ gene_id: string; library_name: string; fpkm: number }>;
@@ -111,7 +112,7 @@ export function ExpressionHeatmap({ data, className }: ExpressionHeatmapProps) {
       {loading ? (
         <div className="skeleton-pulse absolute inset-0 rounded-lg bg-muted/40" aria-hidden />
       ) : null}
-      <ChartEmptyState visible={data.length === 0 && !loading} />
+      {data.length === 0 && !loading ? <Empty className="absolute inset-0 flex items-center justify-center" image={Empty.PRESENTED_IMAGE_SIMPLE} /> : null}
       <figcaption className="sr-only">
         Expression heatmap: {data.length} data points across {genes.length} genes and{" "}
         {libraries.length} libraries.

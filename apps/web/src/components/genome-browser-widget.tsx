@@ -19,8 +19,8 @@
  * not the full /browser route (which has its own embed).
  */
 import * as React from "react";
-import { ZoomIn, ZoomOut, Maximize2, ExternalLink, Loader2, Microscope, AlertCircle } from "lucide-react";
-import { cn } from "../lib/web-ui";
+import { ZoomInOutlined, ZoomOutOutlined, ExpandOutlined, ExportOutlined, LoadingOutlined, AimOutlined, ExclamationCircleOutlined } from "@ant-design/icons";
+import { cn } from "@/lib/cn";
 import { useAnimation } from "../lib/animation-context";
 import { isMinimalDeploymentMode } from "../lib/deployment";
 import { formatPosition, formatMb, jbrowseUrl, CHROMOSOME_LENGTHS_BP } from "../lib/format";
@@ -282,7 +282,7 @@ export function GenomeBrowserWidget({
       {showHeader && (
         <div className="flex items-center justify-between border-b bg-muted/30 px-3 py-2">
           <div className="flex items-center gap-2">
-            <Microscope className="size-4 text-primary" aria-hidden />
+            <AimOutlined className="size-4 text-primary" aria-hidden />
             <span className="font-mono text-xs tabular-nums text-foreground/80">{positionLabel}</span>
             <span className="text-[10px] text-muted-foreground">({formatMb(viewWidth)})</span>
           </div>
@@ -294,7 +294,7 @@ export function GenomeBrowserWidget({
               aria-label="Zoom in"
               title="Zoom in"
             >
-              <ZoomIn className="size-4" />
+              <ZoomInOutlined className="size-4" />
             </button>
             <button
               type="button"
@@ -303,7 +303,7 @@ export function GenomeBrowserWidget({
               aria-label="Zoom out"
               title="Zoom out"
             >
-              <ZoomOut className="size-4" />
+              <ZoomOutOutlined className="size-4" />
             </button>
             <button
               type="button"
@@ -312,7 +312,7 @@ export function GenomeBrowserWidget({
               aria-label="Reset view"
               title="Reset view"
             >
-              <Maximize2 className="size-4" />
+              <ExpandOutlined className="size-4" />
             </button>
             {effectiveMode === "iframe" && (
               <a
@@ -323,7 +323,7 @@ export function GenomeBrowserWidget({
                 aria-label="Open in full browser"
                 title="Open in full browser"
               >
-                <ExternalLink className="size-4" />
+                <ExportOutlined className="size-4" />
               </a>
             )}
           </div>
@@ -335,13 +335,13 @@ export function GenomeBrowserWidget({
           <>
             {!iframeLoaded && !iframeError && (
               <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-muted/50">
-                <Loader2 className="size-6 animate-spin text-primary" aria-hidden />
+                <LoadingOutlined className="size-6 animate-spin text-primary" aria-hidden />
                 <p className="mt-2 text-xs text-muted-foreground">Loading genome browser…</p>
               </div>
             )}
             {iframeError && (
               <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-card p-4 text-center">
-                <AlertCircle className="size-8 text-muted-foreground" />
+                <ExclamationCircleOutlined className="size-8 text-muted-foreground" />
                 <p className="mt-2 text-xs text-muted-foreground">JBrowse unavailable. Using linear view.</p>
                 <button
                   type="button"

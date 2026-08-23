@@ -3,7 +3,8 @@
  */
 import type { EChartsOption } from "echarts";
 import { useECharts } from "../../lib/use-echarts";
-import { ChartEmptyState, cn } from "../../lib/web-ui";
+import { Empty } from "@/lib/antd";
+import { cn } from "@/lib/cn";
 
 export interface ReleaseTrendProps {
   data: ReadonlyArray<{ date: string; cumulative: number; newVariants: number }>;
@@ -88,7 +89,7 @@ export function ReleaseTrend({ data, className }: ReleaseTrendProps) {
     <figure className={cn("relative", className)}>
       <div ref={ref} className="h-72 w-full" role="img" aria-label="Release trend area chart" />
       {loading ? <div className="skeleton-pulse absolute inset-0 rounded-lg bg-muted/40" aria-hidden /> : null}
-      <ChartEmptyState visible={data.length === 0 && !loading} />
+      {data.length === 0 && !loading ? <Empty className="absolute inset-0 flex items-center justify-center" image={Empty.PRESENTED_IMAGE_SIMPLE} /> : null}
       <figcaption className="sr-only">
         Variant accumulation over {data.length} releases. Latest cumulative total: {data[data.length - 1]?.cumulative.toLocaleString() ?? "unknown"}.
       </figcaption>

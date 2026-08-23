@@ -7,40 +7,25 @@
  * z-scored by default and can be reordered by clustering. The returned
  * matrix is already in display order (see `row_order`).
  */
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import * as React from "react";
 import { useMemo } from "react";
 import type { EChartsOption } from "echarts";
-import { Activity, Play, Loader2, RotateCcw } from "lucide-react";
+import { RiseOutlined, CaretRightOutlined, LoadingOutlined, RedoOutlined } from "@ant-design/icons";
 import {
-  PageHeader,
-  Card,
-  CardHeader,
-  CardContent,
-  CardTitle,
-  CardDescription,
-  Label,
-  Textarea,
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
+  Breadcrumb,
   Button,
-  Badge,
-  Table,
-  TableHeader,
-  TableBody,
-  TableHead,
-  TableRow,
-  TableCell,
-  ErrorState,
-  EmptyState,
-  ToastProvider,
-  useToast,
-} from "../../lib/web-ui";
+  Card,
+  Empty,
+  Input,
+  Result,
+  Select,
+  Tag,
+  Typography,
+} from "@/lib/antd";
+import { useToast } from "../../lib/toast";
 import { useECharts } from "../../lib/use-echarts";
 import { runExpPattern, type ExpPatternResponse } from "./api";
 
@@ -69,11 +54,7 @@ function fmtV(v: number | null): string {
 }
 
 function ExpPatternComponent() {
-  return (
-    <ToastProvider>
-      <ExpPatternInner />
-    </ToastProvider>
-  );
+  return <ExpPatternInner />;
 }
 
 function ExpPatternInner() {
@@ -132,130 +113,155 @@ function ExpPatternInner() {
 
   return (
     <div className="container-prose section-rhythm">
-      <PageHeader
-        icon={Activity}
-        title={t("tools.exppattern.title")}
-        description={t("tools.exppattern.subtitle")}
-        breadcrumb={[
-          { label: t("tools.title"), href: "/tools" },
-          { label: t("tools.exppattern.title") },
-        ]}
-      />
+      <header className="flex flex-col gap-4">
+        <Breadcrumb
+          items={[
+            { title: <Link to="/tools">{t("tools.title")}</Link> },
+            { title: t("tools.exppattern.title") },
+          ]}
+        />
+        <div className="flex items-start gap-3.5">
+          <span className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-border bg-card shadow-sm">
+            <RiseOutlined className="size-5" aria-hidden />
+          </span>
+          <div>
+            <Typography.Title level={2} style={{ margin: 0 }}>
+              {t("tools.exppattern.title")}
+            </Typography.Title>
+            <Typography.Paragraph type="secondary" style={{ margin: 0 }}>
+              {t("tools.exppattern.subtitle")}
+            </Typography.Paragraph>
+          </div>
+        </div>
+      </header>
 
       <div className="mt-10 grid gap-6 lg:grid-cols-[1.3fr_1fr]">
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("tools.exppattern.formTitle")}</CardTitle>
-            <CardDescription>{t("tools.exppattern.formDesc")}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={onSubmit} className="grid gap-5">
+        <Card
+          title={
+            <>
+              <Typography.Title level={5} style={{ margin: 0 }}>
+                {t("tools.exppattern.formTitle")}
+              </Typography.Title>
+              <Typography.Text type="secondary">{t("tools.exppattern.formDesc")}</Typography.Text>
+            </>
+          }
+        >
+          <form onSubmit={onSubmit} className="grid gap-5">
+            <div className="grid gap-2">
+              <label htmlFor="ep-genes" className="text-sm font-medium">
+                {t("tools.exppattern.genesLabel")}
+              </label>
+              <Input.TextArea
+                id="ep-genes"
+                value={genesRaw}
+                onChange={(e) => setGenesRaw(e.target.value)}
+                placeholder={t("tools.exppattern.genesPlaceholder")}
+                className="min-h-[130px] font-mono text-sm"
+                aria-invalid={!!fieldErrors.genes}
+              />
+              <p className="text-xs text-muted-foreground">{t("tools.exppattern.genesHint")}</p>
+              {fieldErrors.genes ? (
+                <p className="text-xs text-destructive">{fieldErrors.genes}</p>
+              ) : null}
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-2">
-                <Label htmlFor="ep-genes">{t("tools.exppattern.genesLabel")}</Label>
-                <Textarea
-                  id="ep-genes"
-                  value={genesRaw}
-                  onChange={(e) => setGenesRaw(e.target.value)}
-                  placeholder={t("tools.exppattern.genesPlaceholder")}
-                  className="min-h-[130px] font-mono text-sm"
-                  aria-invalid={!!fieldErrors.genes}
+                <label htmlFor="ep-scale" className="text-sm font-medium">
+                  {t("tools.exppattern.scaleLabel")}
+                </label>
+                <Select
+                  id="ep-scale"
+                  value={scale}
+                  onChange={(v) => setScale(v as "zscore" | "none")}
+                  options={[
+                    { value: "zscore", label: t("tools.exppattern.scaleZscore") },
+                    { value: "none", label: t("tools.exppattern.scaleNone") },
+                  ]}
                 />
-                <p className="text-xs text-muted-foreground">{t("tools.exppattern.genesHint")}</p>
-                {fieldErrors.genes ? (
-                  <p className="text-xs text-destructive">{fieldErrors.genes}</p>
-                ) : null}
               </div>
+              <div className="flex items-end gap-2 pb-1">
+                <label
+                  htmlFor="ep-cluster"
+                  className="flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-muted/20 px-3 py-2.5 text-sm font-medium transition-colors hover:bg-muted/40"
+                >
+                  <input
+                    id="ep-cluster"
+                    type="checkbox"
+                    checked={clusterRows}
+                    onChange={(e) => setClusterRows(e.target.checked)}
+                    className="size-4 accent-primary"
+                  />
+                  {t("tools.exppattern.clusterLabel")}
+                </label>
+              </div>
+            </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="grid gap-2">
-                  <Label htmlFor="ep-scale">{t("tools.exppattern.scaleLabel")}</Label>
-                  <Select value={scale} onValueChange={(v) => setScale(v as "zscore" | "none")}>
-                    <SelectTrigger id="ep-scale">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="zscore">{t("tools.exppattern.scaleZscore")}</SelectItem>
-                      <SelectItem value="none">{t("tools.exppattern.scaleNone")}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex items-end gap-2 pb-1">
-                  <label
-                    htmlFor="ep-cluster"
-                    className="flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-muted/20 px-3 py-2.5 text-sm font-medium transition-colors hover:bg-muted/40"
-                  >
-                    <input
-                      id="ep-cluster"
-                      type="checkbox"
-                      checked={clusterRows}
-                      onChange={(e) => setClusterRows(e.target.checked)}
-                      className="size-4 accent-primary"
-                    />
-                    {t("tools.exppattern.clusterLabel")}
-                  </label>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <Button type="submit" disabled={patternMutation.isPending}>
-                  {patternMutation.isPending ? (
-                    <Loader2 className="size-4 animate-spin" aria-hidden />
-                  ) : (
-                    <Play className="size-4" aria-hidden />
-                  )}
-                  {t("tools.exppattern.submit")}
-                </Button>
-                <Button type="button" variant="outline" onClick={onClear}>
-                  <RotateCcw className="size-4" aria-hidden />
-                  {t("common.clear")}
-                </Button>
-              </div>
-            </form>
-          </CardContent>
+            <div className="flex flex-wrap gap-2">
+              <Button type="primary" htmlType="submit" disabled={patternMutation.isPending}>
+                {patternMutation.isPending ? (
+                  <LoadingOutlined className="size-4 animate-spin" aria-hidden />
+                ) : (
+                  <CaretRightOutlined className="size-4" aria-hidden />
+                )}
+                {t("tools.exppattern.submit")}
+              </Button>
+              <Button htmlType="button" onClick={onClear}>
+                <RedoOutlined className="size-4" aria-hidden />
+                {t("common.clear")}
+              </Button>
+            </div>
+          </form>
         </Card>
 
         <div className="grid gap-6">
           {patternMutation.isError ? (
-            <ErrorState
+            <Result
+              status="error"
               title={t("tools.exppattern.errorTitle")}
-              message={(patternMutation.error as Error).message}
-              onRetry={() => patternMutation.mutate()}
-              retryLabel={t("common.retry")}
+              subTitle={(patternMutation.error as Error).message}
+              extra={
+                <Button type="primary" onClick={() => patternMutation.mutate()}>
+                  {t("common.retry")}
+                </Button>
+              }
             />
           ) : null}
 
           {!result && !patternMutation.isError ? (
             <Card>
-              <CardContent className="p-6">
-                <EmptyState
-                  mode="empty"
-                  title={t("tools.exppattern.emptyTitle")}
-                  description={t("tools.exppattern.emptyDesc")}
-                />
-              </CardContent>
+              <Empty
+                description={
+                  <>
+                    <p className="font-medium">{t("tools.exppattern.emptyTitle")}</p>
+                    <p className="text-sm text-muted-foreground">{t("tools.exppattern.emptyDesc")}</p>
+                  </>
+                }
+              />
             </Card>
           ) : null}
 
           {result ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>{t("tools.exppattern.summaryTitle")}</CardTitle>
-                <CardDescription>
-                  {t("tools.exppattern.summaryDesc", {
-                    genes: result.genes.length,
-                    conds: result.conditions.length,
-                  })}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-3">
+            <Card
+              title={
+                <>
+                  <Typography.Title level={5} style={{ margin: 0 }}>
+                    {t("tools.exppattern.summaryTitle")}
+                  </Typography.Title>
+                  <Typography.Text type="secondary">
+                    {t("tools.exppattern.summaryDesc", {
+                      genes: result.genes.length,
+                      conds: result.conditions.length,
+                    })}
+                  </Typography.Text>
+                </>
+              }
+            >
+              <div className="grid gap-3">
                 <div className="flex flex-wrap gap-2">
-                  <Badge variant="secondary">
-                    {t("tools.exppattern.clusteringBadge", { method: result.clustering })}
-                  </Badge>
-                  <Badge variant="secondary">{result.scale === "zscore" ? "z-score" : "raw FPKM"}</Badge>
-                  {isLarge ? (
-                    <Badge variant="secondary">{t("tools.exppattern.largeBadge")}</Badge>
-                  ) : null}
+                  <Tag>{t("tools.exppattern.clusteringBadge", { method: result.clustering })}</Tag>
+                  <Tag>{result.scale === "zscore" ? "z-score" : "raw FPKM"}</Tag>
+                  {isLarge ? <Tag>{t("tools.exppattern.largeBadge")}</Tag> : null}
                 </div>
                 {result.missing_genes.length > 0 ? (
                   <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2">
@@ -264,14 +270,14 @@ function ExpPatternInner() {
                     </p>
                     <p className="mt-1 flex flex-wrap gap-1">
                       {result.missing_genes.map((g) => (
-                        <Badge key={g} variant="secondary" className="font-mono text-[10px]">
+                        <Tag key={g} className="font-mono text-[10px]">
                           {g}
-                        </Badge>
+                        </Tag>
                       ))}
                     </p>
                   </div>
                 ) : null}
-              </CardContent>
+              </div>
             </Card>
           ) : null}
         </div>
@@ -281,69 +287,74 @@ function ExpPatternInner() {
         <section className="mt-10 grid gap-6">
           {!hasData ? (
             <Card>
-              <CardContent className="p-6">
-                <EmptyState
-                  mode="filtered"
-                  icon={Activity}
-                  title={t("tools.exppattern.noDataTitle")}
-                  description={t("tools.exppattern.noDataDesc")}
-                />
-              </CardContent>
+              <Empty
+                image={<RiseOutlined style={{ fontSize: 40, color: "var(--muted-foreground)" }} />}
+                description={
+                  <>
+                    <p className="font-medium">{t("tools.exppattern.noDataTitle")}</p>
+                    <p className="text-sm text-muted-foreground">{t("tools.exppattern.noDataDesc")}</p>
+                  </>
+                }
+              />
             </Card>
           ) : (
             <>
-              <Card>
-                <CardHeader>
-                  <CardTitle>{t("tools.exppattern.heatmapTitle")}</CardTitle>
-                  <CardDescription>{t("tools.exppattern.heatmapDesc")}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {isLarge ? (
-                    <p className="mb-3 rounded-lg border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-                      {t("tools.exppattern.largeHint")}
-                    </p>
-                  ) : null}
-                  <ExpPatternHeatmap result={result} />
-                </CardContent>
+              <Card
+                title={
+                  <>
+                    <Typography.Title level={5} style={{ margin: 0 }}>
+                      {t("tools.exppattern.heatmapTitle")}
+                    </Typography.Title>
+                    <Typography.Text type="secondary">{t("tools.exppattern.heatmapDesc")}</Typography.Text>
+                  </>
+                }
+              >
+                {isLarge ? (
+                  <p className="mb-3 rounded-lg border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                    {t("tools.exppattern.largeHint")}
+                  </p>
+                ) : null}
+                <ExpPatternHeatmap result={result} />
               </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>{t("tools.exppattern.matrixTitle")}</CardTitle>
-                  <CardDescription>{t("tools.exppattern.matrixDesc")}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="overflow-auto rounded-xl border border-border">
-                    <Table className="min-w-max text-xs">
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="sticky left-0 z-10 bg-card font-mono">
-                            {t("tools.exppattern.geneCol")}
-                          </TableHead>
-                          {result.conditions.map((c) => (
-                            <TableHead key={c} className="max-w-[140px] truncate font-mono">
-                              {c}
-                            </TableHead>
-                          ))}
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {result.genes.map((gene, i) => (
-                          <TableRow key={gene}>
-                            <TableCell className="sticky left-0 z-10 bg-card font-mono font-medium">
-                              {gene}
-                            </TableCell>
-                            {result.conditions.map((c, j) => (
-                              <TableCell key={`${gene}-${c}`} align="right" className="font-mono tabular-nums">
-                                {fmtV(result.matrix[i]?.[j] ?? null)}
-                              </TableCell>
-                            ))}
-                          </TableRow>
+              <Card
+                title={
+                  <>
+                    <Typography.Title level={5} style={{ margin: 0 }}>
+                      {t("tools.exppattern.matrixTitle")}
+                    </Typography.Title>
+                    <Typography.Text type="secondary">{t("tools.exppattern.matrixDesc")}</Typography.Text>
+                  </>
+                }
+              >
+                <div className="overflow-auto rounded-xl border border-border">
+                  <table className="min-w-max text-xs">
+                    <thead>
+                      <tr>
+                        <th className="sticky left-0 z-10 bg-card font-mono">
+                          {t("tools.exppattern.geneCol")}
+                        </th>
+                        {result.conditions.map((c) => (
+                          <th key={c} className="max-w-[140px] truncate font-mono">
+                            {c}
+                          </th>
                         ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </CardContent>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {result.genes.map((gene, i) => (
+                        <tr key={gene}>
+                          <td className="sticky left-0 z-10 bg-card font-mono font-medium">{gene}</td>
+                          {result.conditions.map((c, j) => (
+                            <td key={`${gene}-${c}`} align="right" className="font-mono tabular-nums">
+                              {fmtV(result.matrix[i]?.[j] ?? null)}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </Card>
             </>
           )}

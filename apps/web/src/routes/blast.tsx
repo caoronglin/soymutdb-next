@@ -13,7 +13,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import * as React from "react";
-import { FlaskConical, Play } from "lucide-react";
+import { CaretRightOutlined as Play, ExperimentOutlined as FlaskConical } from "@ant-design/icons";
 import {
   Alert,
   Button,

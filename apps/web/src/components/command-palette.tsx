@@ -7,8 +7,8 @@
  */
 import * as React from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Search, X, Dna, ArrowRight, Command as CmdIcon } from "lucide-react";
-import { cn } from "../lib/web-ui";
+import { SearchOutlined, CloseOutlined, DeploymentUnitOutlined, ArrowRightOutlined, ControlOutlined as CmdIcon } from "@ant-design/icons";
+import { cn } from "../lib/cn";
 
 interface QuickAction {
   id: string;
@@ -20,12 +20,12 @@ interface QuickAction {
 }
 
 const QUICK_ACTIONS: QuickAction[] = [
-  { id: "browser", label: "Open Genome Browser", description: "Navigate to JBrowse viewer", icon: Dna, to: "/browser" },
-  { id: "genes", label: "Browse Genes", description: "Search gene models", icon: Dna, to: "/genes" },
-  { id: "variants", label: "Search Variants", description: "Query SNP/INDEL catalog", icon: Dna, to: "/variants" },
-  { id: "blast", label: "BLAST Search", description: "Sequence similarity search", icon: Dna, to: "/blast" },
-  { id: "downloads", label: "Download Data", description: "Bulk VCF/FASTA downloads", icon: ArrowRight, to: "/downloads" },
-  { id: "help", label: "Help & Documentation", description: "User guides & tutorials", icon: ArrowRight, to: "/help" },
+  { id: "browser", label: "Open Genome Browser", description: "Navigate to JBrowse viewer", icon: DeploymentUnitOutlined, to: "/browser" },
+  { id: "genes", label: "Browse Genes", description: "Search gene models", icon: DeploymentUnitOutlined, to: "/genes" },
+  { id: "variants", label: "Search Variants", description: "Query SNP/INDEL catalog", icon: DeploymentUnitOutlined, to: "/variants" },
+  { id: "blast", label: "BLAST Search", description: "Sequence similarity search", icon: DeploymentUnitOutlined, to: "/blast" },
+  { id: "downloads", label: "Download Data", description: "Bulk VCF/FASTA downloads", icon: ArrowRightOutlined, to: "/downloads" },
+  { id: "help", label: "Help & Documentation", description: "User guides & tutorials", icon: ArrowRightOutlined, to: "/help" },
 ];
 
 export function CommandPalette() {
@@ -119,7 +119,7 @@ export function CommandPalette() {
       >
         {/* Search input */}
         <div className="flex items-center gap-3 border-b px-4 py-3">
-          <Search className="size-5 shrink-0 text-muted-foreground" aria-hidden />
+          <SearchOutlined className="size-5 shrink-0 text-muted-foreground" aria-hidden />
           <input
             ref={inputRef}
             type="search"
@@ -140,7 +140,7 @@ export function CommandPalette() {
             className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
             aria-label="Close"
           >
-            <X className="size-4" aria-hidden />
+            <CloseOutlined className="size-4" aria-hidden />
           </button>
         </div>
 
@@ -159,11 +159,11 @@ export function CommandPalette() {
                 activeIndex === 0 ? "bg-accent text-accent-foreground" : "hover:bg-accent/50",
               )}
             >
-              <Search className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+              <SearchOutlined className="size-4 shrink-0 text-muted-foreground" aria-hidden />
               <span className="flex-1">
                 Search for <span className="font-semibold">&ldquo;{query.trim()}&rdquo;</span>
               </span>
-              <ArrowRight className="size-3.5 text-muted-foreground" aria-hidden />
+              <ArrowRightOutlined className="size-3.5 text-muted-foreground" aria-hidden />
             </button>
           )}
 
@@ -188,7 +188,7 @@ export function CommandPalette() {
                     <span className="ml-2 text-xs text-muted-foreground">{action.description}</span>
                   )}
                 </span>
-                <ArrowRight className="size-3.5 text-muted-foreground" aria-hidden />
+                <ArrowRightOutlined className="size-3.5 text-muted-foreground" aria-hidden />
               </button>
             );
           })}

@@ -9,7 +9,7 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Bell, CheckCheck, CheckCircle2, Info, XCircle } from "lucide-react";
+import { BellOutlined, CheckOutlined, CheckCircleOutlined, InfoCircleOutlined, CloseCircleOutlined } from "@ant-design/icons";
 import { Badge, Button, Empty, List, Popover, Skeleton, Tag, Tooltip, Typography } from "@/lib/antd";
 import { secureHttp } from "../../lib/api";
 import { useCurrentUser } from "../../lib/use-current-user";
@@ -42,12 +42,12 @@ function fetchUnreadCount(): Promise<{ unread_count: number }> {
 /** Icon + tone per notification type (worker-side type vocabulary). */
 function typeVisual(type: string): { icon: React.ReactNode; color: string } {
   if (type.endsWith("_failed")) {
-    return { icon: <XCircle className="size-4" aria-hidden />, color: "error" };
+    return { icon: <CloseCircleOutlined className="size-4" aria-hidden />, color: "error" };
   }
   if (type.endsWith("_completed")) {
-    return { icon: <CheckCircle2 className="size-4" aria-hidden />, color: "success" };
+    return { icon: <CheckCircleOutlined className="size-4" aria-hidden />, color: "success" };
   }
-  return { icon: <Info className="size-4" aria-hidden />, color: "processing" };
+  return { icon: <InfoCircleOutlined className="size-4" aria-hidden />, color: "processing" };
 }
 
 export function NotificationBell() {
@@ -109,7 +109,7 @@ export function NotificationBell() {
           size="small"
           disabled={unread === 0 || markAllMutation.isPending}
           loading={markAllMutation.isPending}
-          icon={<CheckCheck className="size-3.5" aria-hidden />}
+          icon={<CheckOutlined className="size-3.5" aria-hidden />}
           onClick={() => markAllMutation.mutate()}
         >
           {t("notifications.markAllRead")}
@@ -190,7 +190,7 @@ export function NotificationBell() {
             className="flex size-9 items-center justify-center"
             aria-label={t("notifications.title")}
           >
-            <Bell className="size-4" aria-hidden />
+            <BellOutlined className="size-4" aria-hidden />
           </Button>
         </Badge>
       </Tooltip>

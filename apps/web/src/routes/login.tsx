@@ -14,25 +14,17 @@ import { createFileRoute, Link, useRouterState, useNavigate } from "@tanstack/re
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
-  LogIn,
-  ArrowLeft,
-  Dna,
-  Microscope,
-  BarChart3,
-  ShieldCheck,
-  Lock,
-  Clock,
-  ArrowRight,
-} from "lucide-react";
-import {
-  Button,
-  Card,
-  CardHeader,
-  CardTitle,
-  CardContent,
-  Input,
-  Label,
-} from "../lib/web-ui";
+  AimOutlined as Microscope,
+  ArrowLeftOutlined as ArrowLeft,
+  ArrowRightOutlined as ArrowRight,
+  BarChartOutlined as BarChart3,
+  ClockCircleOutlined as Clock,
+  DeploymentUnitOutlined as Dna,
+  LockOutlined as Lock,
+  LoginOutlined as LogIn,
+  SafetyCertificateOutlined as ShieldCheck,
+} from "@ant-design/icons";
+import { Button, Card, Input, Typography } from "@/lib/antd";
 import { ApiError, request, setAccessToken } from "@soymutdb/api-client";
 import { TextReveal, Reveal, Stagger } from "../components/route-motion";
 
@@ -202,19 +194,19 @@ function LoginComponent() {
         <div className="flex flex-1 items-center justify-center px-6 py-10">
           <Reveal variant="blur-up" className="w-full max-w-md">
             <Card className="border-border/80 shadow-sm">
-              <CardHeader>
+              <div>
                 <p className="eyebrow">{t("loginPage.welcomeBack")}</p>
-                <CardTitle className="flex items-center gap-2">
+                <Typography.Title className="flex items-center gap-2">
                   <LogIn className="size-5 text-primary" aria-hidden />
                   {t("loginPage.title")}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-8">
+                </Typography.Title>
+              </div>
+              <div className="p-8">
                 <p className="text-sm text-muted-foreground">{t("loginPage.subtitle")}</p>
 
                 <form className="mt-7 grid gap-5" onSubmit={onSubmit}>
                   <div className="grid gap-2">
-                    <Label htmlFor="email">{t("auth.email")}</Label>
+                    <label htmlFor="email">{t("auth.email")}</label>
                     <Input
                       id="email"
                       type="email"
@@ -226,7 +218,7 @@ function LoginComponent() {
                     />
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="password">{t("auth.password")}</Label>
+                    <label htmlFor="password">{t("auth.password")}</label>
                     <Input
                       id="password"
                       type="password"
@@ -244,8 +236,8 @@ function LoginComponent() {
                   ) : null}
 
                   <Button
-                    type="submit"
-                    size="lg"
+                    htmlType="submit" type="primary"
+                    size="large"
                     disabled={submitting}
                     aria-busy={submitting}
                     className="w-full"
@@ -283,7 +275,7 @@ function LoginComponent() {
                     {t("loginPage.adminHint")}
                   </p>
                 </div>
-              </CardContent>
+              </div>
             </Card>
 
             <p className="mt-6 text-center text-sm text-muted-foreground">

@@ -8,37 +8,13 @@
  * Results larger than 10 MiB come back as a pre-signed download_url instead
  * of inline text.
  */
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import * as React from "react";
-import { Dna, Play, Download, Loader2, RotateCcw } from "lucide-react";
-import {
-  PageHeader,
-  Card,
-  CardHeader,
-  CardContent,
-  CardTitle,
-  CardDescription,
-  Tabs,
-  TabsList,
-  TabsTrigger,
-  TabsContent,
-  Label,
-  Textarea,
-  Input,
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-  Button,
-  Badge,
-  ErrorState,
-  EmptyState,
-  ToastProvider,
-  useToast,
-} from "../../lib/web-ui";
+import { DeploymentUnitOutlined, CaretRightOutlined, DownloadOutlined, LoadingOutlined, RedoOutlined } from "@ant-design/icons";
+import { Breadcrumb, Button, Card, Empty, Input, Result, Select, Tabs, Tag, Typography } from "@/lib/antd";
+import { useToast } from "../../lib/toast";
 import { seqFetchGenes, seqFetchRegion, getAssemblies, type SeqFetchResponse } from "./api";
 
 export const Route = createFileRoute("/tools/seqfetch")({
@@ -62,11 +38,7 @@ function parseGenes(raw: string): string[] {
 }
 
 function SeqFetchComponent() {
-  return (
-    <ToastProvider>
-      <SeqFetchInner />
-    </ToastProvider>
-  );
+  return <SeqFetchInner />;
 }
 
 function SeqFetchInner() {
@@ -150,184 +122,221 @@ function SeqFetchInner() {
 
   return (
     <div className="container-prose section-rhythm">
-      <PageHeader
-        icon={Dna}
-        title={t("tools.seqfetch.title")}
-        description={t("tools.seqfetch.subtitle")}
-        breadcrumb={[
-          { label: t("tools.title"), href: "/tools" },
-          { label: t("tools.seqfetch.title") },
-        ]}
-      />
+      <header className="flex flex-col gap-4">
+        <Breadcrumb
+          items={[
+            { title: <Link to="/tools">{t("tools.title")}</Link> },
+            { title: t("tools.seqfetch.title") },
+          ]}
+        />
+        <div className="flex items-start gap-3.5">
+          <span className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-border bg-card shadow-sm">
+            <DeploymentUnitOutlined className="size-5" aria-hidden />
+          </span>
+          <div>
+            <Typography.Title level={2} style={{ margin: 0 }}>
+              {t("tools.seqfetch.title")}
+            </Typography.Title>
+            <Typography.Paragraph type="secondary" style={{ margin: 0 }}>
+              {t("tools.seqfetch.subtitle")}
+            </Typography.Paragraph>
+          </div>
+        </div>
+      </header>
 
       <div className="mt-10 grid gap-6 lg:grid-cols-[1.3fr_1fr]">
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("tools.seqfetch.formTitle")}</CardTitle>
-            <CardDescription>{t("tools.seqfetch.formDesc")}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={onSubmit} className="grid gap-5">
-              <Tabs
-                value={mode}
-                onValueChange={(v) => {
-                  setMode(v as Mode);
-                  setFieldErrors({});
-                }}
-              >
-                <TabsList>
-                  <TabsTrigger value="genes">{t("tools.seqfetch.modeGenes")}</TabsTrigger>
-                  <TabsTrigger value="region">{t("tools.seqfetch.modeRegion")}</TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="genes" className="grid gap-2">
-                  <Label htmlFor="sf-genes">{t("tools.seqfetch.genesLabel")}</Label>
-                  <Textarea
-                    id="sf-genes"
-                    value={genesRaw}
-                    onChange={(e) => setGenesRaw(e.target.value)}
-                    placeholder={t("tools.seqfetch.genesPlaceholder")}
-                    className="min-h-[150px] font-mono text-sm"
-                    aria-invalid={!!fieldErrors.genes}
-                  />
-                  <p className="text-xs text-muted-foreground">{t("tools.seqfetch.genesHint")}</p>
-                  {fieldErrors.genes ? (
-                    <p className="text-xs text-destructive">{fieldErrors.genes}</p>
-                  ) : null}
-                </TabsContent>
-
-                <TabsContent value="region" className="grid gap-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="sf-assembly">{t("tools.seqfetch.assemblyLabel")}</Label>
-                    <Select value={assembly} onValueChange={setAssembly}>
-                      <SelectTrigger id="sf-assembly">
-                        <SelectValue placeholder={t("tools.seqfetch.assemblyPlaceholder")} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {assembliesQuery.isLoading ? (
-                          <SelectItem value="__loading__" disabled>
-                            {t("common.loading")}
-                          </SelectItem>
-                        ) : (
-                          (assembliesQuery.data ?? []).map((a) => (
-                            <SelectItem key={a.id} value={a.name}>
-                              {a.name}
-                              {a.is_default ? ` · ${t("tools.seqfetch.default")}` : ""}
-                            </SelectItem>
-                          ))
-                        )}
-                      </SelectContent>
-                    </Select>
-                    {fieldErrors.assembly ? (
-                      <p className="text-xs text-destructive">{fieldErrors.assembly}</p>
-                    ) : null}
-                  </div>
-
-                  <div className="grid gap-4 sm:grid-cols-[1fr_auto_auto] sm:items-end">
+        <Card
+          title={
+            <>
+              <Typography.Title level={5} style={{ margin: 0 }}>
+                {t("tools.seqfetch.formTitle")}
+              </Typography.Title>
+              <Typography.Text type="secondary">{t("tools.seqfetch.formDesc")}</Typography.Text>
+            </>
+          }
+        >
+          <form onSubmit={onSubmit} className="grid gap-5">
+            <Tabs
+              activeKey={mode}
+              onChange={(key) => {
+                setMode(key as Mode);
+                setFieldErrors({});
+              }}
+              items={[
+                {
+                  key: "genes",
+                  label: t("tools.seqfetch.modeGenes"),
+                  children: (
                     <div className="grid gap-2">
-                      <Label htmlFor="sf-chr">{t("tools.seqfetch.chromosomeLabel")}</Label>
-                      <Input
-                        id="sf-chr"
-                        value={chromosome}
-                        onChange={(e) => setChromosome(e.target.value)}
-                        placeholder="chr1"
-                        className="font-mono"
-                        aria-invalid={!!fieldErrors.chromosome}
+                      <label htmlFor="sf-genes" className="text-sm font-medium">
+                        {t("tools.seqfetch.genesLabel")}
+                      </label>
+                      <Input.TextArea
+                        id="sf-genes"
+                        value={genesRaw}
+                        onChange={(e) => setGenesRaw(e.target.value)}
+                        placeholder={t("tools.seqfetch.genesPlaceholder")}
+                        className="min-h-[150px] font-mono text-sm"
+                        aria-invalid={!!fieldErrors.genes}
                       />
-                      {fieldErrors.chromosome ? (
-                        <p className="text-xs text-destructive">{fieldErrors.chromosome}</p>
+                      <p className="text-xs text-muted-foreground">{t("tools.seqfetch.genesHint")}</p>
+                      {fieldErrors.genes ? (
+                        <p className="text-xs text-destructive">{fieldErrors.genes}</p>
                       ) : null}
                     </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="sf-start">{t("tools.seqfetch.startLabel")}</Label>
-                      <Input
-                        id="sf-start"
-                        type="number"
-                        min={1}
-                        value={start}
-                        onChange={(e) => setStart(e.target.value)}
-                        className="font-mono"
-                        aria-invalid={!!fieldErrors.start}
-                      />
-                      {fieldErrors.start ? (
-                        <p className="text-xs text-destructive">{fieldErrors.start}</p>
-                      ) : null}
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="sf-end">{t("tools.seqfetch.endLabel")}</Label>
-                      <Input
-                        id="sf-end"
-                        type="number"
-                        min={1}
-                        value={end}
-                        onChange={(e) => setEnd(e.target.value)}
-                        className="font-mono"
-                        aria-invalid={!!fieldErrors.end}
-                      />
-                      {fieldErrors.end ? (
-                        <p className="text-xs text-destructive">{fieldErrors.end}</p>
-                      ) : null}
-                    </div>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {t("tools.seqfetch.regionHint", { region: `${chromosome || "chr1"}:${start || "1000"}-${end || "2000"}` })}
-                  </p>
-                </TabsContent>
-              </Tabs>
+                  ),
+                },
+                {
+                  key: "region",
+                  label: t("tools.seqfetch.modeRegion"),
+                  children: (
+                    <div className="grid gap-4">
+                      <div className="grid gap-2">
+                        <label htmlFor="sf-assembly" className="text-sm font-medium">
+                          {t("tools.seqfetch.assemblyLabel")}
+                        </label>
+                        <Select
+                          id="sf-assembly"
+                          value={assembly || undefined}
+                          onChange={setAssembly}
+                          placeholder={t("tools.seqfetch.assemblyPlaceholder")}
+                          options={
+                            (
+                              assembliesQuery.isLoading
+                                ? [{ value: "__loading__", label: t("common.loading"), disabled: true }]
+                                : (assembliesQuery.data ?? []).map((a) => ({
+                                    value: a.name,
+                                    label: a.is_default ? `${a.name} · ${t("tools.seqfetch.default")}` : a.name,
+                                  }))
+                            ) as { value: string; label: string; disabled?: boolean }[]
+                          }
+                        />
+                        {fieldErrors.assembly ? (
+                          <p className="text-xs text-destructive">{fieldErrors.assembly}</p>
+                        ) : null}
+                      </div>
 
-              <div className="flex flex-wrap gap-2">
-                <Button type="submit" disabled={fetchMutation.isPending}>
-                  {fetchMutation.isPending ? (
-                    <Loader2 className="size-4 animate-spin" aria-hidden />
-                  ) : (
-                    <Play className="size-4" aria-hidden />
-                  )}
-                  {t("tools.seqfetch.submit")}
-                </Button>
-                <Button type="button" variant="outline" onClick={onClear}>
-                  <RotateCcw className="size-4" aria-hidden />
-                  {t("common.clear")}
-                </Button>
-              </div>
-            </form>
-          </CardContent>
+                      <div className="grid gap-4 sm:grid-cols-[1fr_auto_auto] sm:items-end">
+                        <div className="grid gap-2">
+                          <label htmlFor="sf-chr" className="text-sm font-medium">
+                            {t("tools.seqfetch.chromosomeLabel")}
+                          </label>
+                          <Input
+                            id="sf-chr"
+                            value={chromosome}
+                            onChange={(e) => setChromosome(e.target.value)}
+                            placeholder="chr1"
+                            className="font-mono"
+                            aria-invalid={!!fieldErrors.chromosome}
+                          />
+                          {fieldErrors.chromosome ? (
+                            <p className="text-xs text-destructive">{fieldErrors.chromosome}</p>
+                          ) : null}
+                        </div>
+                        <div className="grid gap-2">
+                          <label htmlFor="sf-start" className="text-sm font-medium">
+                            {t("tools.seqfetch.startLabel")}
+                          </label>
+                          <Input
+                            id="sf-start"
+                            type="number"
+                            min={1}
+                            value={start}
+                            onChange={(e) => setStart(e.target.value)}
+                            className="font-mono"
+                            aria-invalid={!!fieldErrors.start}
+                          />
+                          {fieldErrors.start ? (
+                            <p className="text-xs text-destructive">{fieldErrors.start}</p>
+                          ) : null}
+                        </div>
+                        <div className="grid gap-2">
+                          <label htmlFor="sf-end" className="text-sm font-medium">
+                            {t("tools.seqfetch.endLabel")}
+                          </label>
+                          <Input
+                            id="sf-end"
+                            type="number"
+                            min={1}
+                            value={end}
+                            onChange={(e) => setEnd(e.target.value)}
+                            className="font-mono"
+                            aria-invalid={!!fieldErrors.end}
+                          />
+                          {fieldErrors.end ? (
+                            <p className="text-xs text-destructive">{fieldErrors.end}</p>
+                          ) : null}
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {t("tools.seqfetch.regionHint", { region: `${chromosome || "chr1"}:${start || "1000"}-${end || "2000"}` })}
+                      </p>
+                    </div>
+                  ),
+                },
+              ]}
+            />
+
+            <div className="flex flex-wrap gap-2">
+              <Button type="primary" htmlType="submit" disabled={fetchMutation.isPending}>
+                {fetchMutation.isPending ? (
+                  <LoadingOutlined className="size-4 animate-spin" aria-hidden />
+                ) : (
+                  <CaretRightOutlined className="size-4" aria-hidden />
+                )}
+                {t("tools.seqfetch.submit")}
+              </Button>
+              <Button htmlType="button" onClick={onClear}>
+                <RedoOutlined className="size-4" aria-hidden />
+                {t("common.clear")}
+              </Button>
+            </div>
+          </form>
         </Card>
 
         <div className="grid gap-6">
           {fetchMutation.isError ? (
-            <ErrorState
+            <Result
+              status="error"
               title={t("tools.seqfetch.errorTitle")}
-              message={(fetchMutation.error as Error).message}
-              onRetry={() => fetchMutation.mutate()}
-              retryLabel={t("common.retry")}
+              subTitle={(fetchMutation.error as Error).message}
+              extra={
+                <Button type="primary" onClick={() => fetchMutation.mutate()}>
+                  {t("common.retry")}
+                </Button>
+              }
             />
           ) : null}
 
           {!result && !fetchMutation.isError ? (
             <Card>
-              <CardContent className="p-6">
-                <EmptyState
-                  mode="empty"
-                  title={t("tools.seqfetch.emptyTitle")}
-                  description={t("tools.seqfetch.emptyDesc")}
-                />
-              </CardContent>
+              <Empty
+                description={
+                  <>
+                    <p className="font-medium">{t("tools.seqfetch.emptyTitle")}</p>
+                    <p className="text-sm text-muted-foreground">{t("tools.seqfetch.emptyDesc")}</p>
+                  </>
+                }
+              />
             </Card>
           ) : null}
 
           {result ? (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex flex-wrap items-center gap-2">
-                  {t("tools.seqfetch.resultTitle")}
-                  <Badge variant="secondary">{t("tools.seqfetch.countLabel", { count: result.count })}</Badge>
-                  {result.truncated ? (
-                    <Badge variant="secondary">{t("tools.seqfetch.truncated")}</Badge>
-                  ) : null}
-                </CardTitle>
-                <CardDescription>{t("tools.seqfetch.resultDesc")}</CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-4">
+            <Card
+              title={
+                <>
+                  <Typography.Title level={5} style={{ margin: 0 }}>
+                    <span className="flex flex-wrap items-center gap-2">
+                      {t("tools.seqfetch.resultTitle")}
+                      <Tag>{t("tools.seqfetch.countLabel", { count: result.count })}</Tag>
+                      {result.truncated ? <Tag>{t("tools.seqfetch.truncated")}</Tag> : null}
+                    </span>
+                  </Typography.Title>
+                  <Typography.Text type="secondary">{t("tools.seqfetch.resultDesc")}</Typography.Text>
+                </>
+              }
+            >
+              <div className="grid gap-4">
                 {result.sequence ? (
                   <FastaPreview
                     fasta={result.sequence}
@@ -338,25 +347,23 @@ function SeqFetchInner() {
                     })}
                   />
                 ) : result.download_url ? (
-                  <EmptyState
-                    mode="empty"
-                    title={t("tools.seqfetch.largeTitle")}
-                    description={t("tools.seqfetch.largeDesc")}
-                    action={
-                      <a href={result.download_url} download>
-                        <Button>
-                          <Download className="size-4" aria-hidden />
-                          {t("tools.seqfetch.download")}
-                        </Button>
-                      </a>
+                  <Empty
+                    description={
+                      <>
+                        <p className="font-medium">{t("tools.seqfetch.largeTitle")}</p>
+                        <p className="text-sm text-muted-foreground">{t("tools.seqfetch.largeDesc")}</p>
+                      </>
                     }
-                  />
+                  >
+                    <a href={result.download_url} download>
+                      <Button icon={<DownloadOutlined aria-hidden />}>{t("tools.seqfetch.download")}</Button>
+                    </a>
+                  </Empty>
                 ) : null}
 
                 {result.download_url ? (
                   <a href={result.download_url} download>
-                    <Button variant="outline" className="w-full">
-                      <Download className="size-4" aria-hidden />
+                    <Button icon={<DownloadOutlined aria-hidden />} className="w-full">
                       {t("tools.seqfetch.downloadFasta")}
                     </Button>
                   </a>
@@ -367,14 +374,14 @@ function SeqFetchInner() {
                     <p className="text-sm font-medium">{t("tools.seqfetch.missingTitle")}</p>
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {missing.map((g) => (
-                        <Badge key={g} variant="secondary" className="font-mono text-[11px]">
+                        <Tag key={g} className="font-mono text-[11px]">
                           {g}
-                        </Badge>
+                        </Tag>
                       ))}
                     </div>
                   </div>
                 ) : null}
-              </CardContent>
+              </div>
             </Card>
           ) : null}
         </div>

@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button, Skeleton } from "@/lib/antd";
-import { Minus, Plus } from "lucide-react";
+import { MinusOutlined, PlusOutlined } from "@ant-design/icons";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 
 interface PdfViewerProps {
@@ -166,13 +166,13 @@ export function PdfViewer({ url }: PdfViewerProps) {
         <span className="mx-1 opacity-40">|</span>
         <Button
           size="small"
-          icon={<Minus className="size-3.5" />}
+          icon={<MinusOutlined className="size-3.5" />}
           disabled={fitWidth || scaleIndex === 0}
           onClick={() => setScaleIndex((i) => Math.max(0, i - 1))}
         />
         <Button
           size="small"
-          icon={<Plus className="size-3.5" />}
+          icon={<PlusOutlined className="size-3.5" />}
           disabled={fitWidth || scaleIndex === SCALES.length - 1}
           onClick={() => setScaleIndex((i) => Math.min(SCALES.length - 1, i + 1))}
         />

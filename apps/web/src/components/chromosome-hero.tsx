@@ -8,8 +8,8 @@
  * SSR-friendly: renders static content immediately; JS enhances interactivity.
  */
 import * as React from "react";
-import { ArrowUpRight } from "lucide-react";
-import { cn } from "../lib/web-ui";
+import { ExportOutlined } from "@ant-design/icons";
+import { cn } from "@/lib/cn";
 import { useAnimation } from "../lib/animation-context";
 import { CHROMOSOME_LENGTHS_BP, formatMb, jbrowseUrl } from "../lib/format";
 import { getMotionPrefs } from "../lib/motion-prefs";
@@ -361,7 +361,7 @@ export function ChromosomeHero({ data, onSelectChromosome, className }: Chromoso
             </div>
             <span className="inline-flex items-center gap-1 text-xs font-medium text-primary">
               Open in browser
-              <ArrowUpRight className="size-3" aria-hidden />
+              <ExportOutlined className="size-3" aria-hidden />
             </span>
           </div>
         ) : (

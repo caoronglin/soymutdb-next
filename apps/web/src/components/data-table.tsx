@@ -6,8 +6,9 @@
  * a plain table for full control over styling and virtualization hooks.
  */
 import * as React from "react";
-import { cn, Skeleton, Pagination } from "../lib/web-ui";
-import { ArrowDown, ArrowUp, ArrowUpDown, Inbox } from "lucide-react";
+import { cn } from "../lib/cn";
+import { Pagination } from "@/lib/antd";
+import { ArrowDownOutlined, ArrowUpOutlined, SwapOutlined, InboxOutlined } from "@ant-design/icons";
 
 export interface DataTableColumn<T> {
   id?: string;
@@ -134,12 +135,12 @@ export function DataTable<T>({
                         {col.header}
                         {isSorted ? (
                           sort?.dir === "asc" ? (
-                            <ArrowUp className="size-3.5" aria-hidden />
+                            <ArrowUpOutlined className="size-3.5" aria-hidden />
                           ) : (
-                            <ArrowDown className="size-3.5" aria-hidden />
+                            <ArrowDownOutlined className="size-3.5" aria-hidden />
                           )
                         ) : (
-                          <ArrowUpDown className="size-3.5 opacity-40" aria-hidden />
+                          <SwapOutlined className="size-3.5 opacity-40" aria-hidden />
                         )}
                       </button>
                     ) : (
@@ -164,7 +165,7 @@ export function DataTable<T>({
                         col.frozen && "sticky left-0 z-10 bg-card",
                       )}
                     >
-                      <Skeleton className="h-4 w-full max-w-[120px]" />
+                      <div className="h-4 w-full max-w-[120px] animate-pulse rounded bg-muted/70" />
                     </td>
                   ))}
                 </tr>
@@ -174,7 +175,7 @@ export function DataTable<T>({
                 <td colSpan={columns.length} className="px-4 py-12">
                   <div className="flex flex-col items-center gap-3 text-center">
                     <div className="flex size-10 items-center justify-center rounded-full bg-muted">
-                      <Inbox className="size-5 text-muted-foreground" aria-hidden />
+                      <InboxOutlined className="size-5 text-muted-foreground" aria-hidden />
                     </div>
                     <p className="font-medium">{emptyTitle}</p>
                     <p className="max-w-sm text-sm text-muted-foreground">{emptyDescription}</p>
@@ -263,12 +264,12 @@ export function DataTable<T>({
       ) : null}
       {pagination ? (
         <Pagination
-          page={pagination.page}
-          totalPages={pagination.totalPages}
+          current={pagination.page}
           total={pagination.total}
           pageSize={pagination.pageSize}
-          onPageChange={pagination.onPageChange}
+          showSizeChanger={false}
           disabled={loading}
+          onChange={pagination.onPageChange}
         />
       ) : null}
     </div>

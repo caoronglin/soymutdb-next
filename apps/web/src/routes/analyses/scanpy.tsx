@@ -8,8 +8,8 @@
 
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import * as React from "react";
-import { ScanSearch, Loader2, Play, RotateCcw, Info } from "lucide-react";
-import { PageHeader, Card, CardHeader, CardTitle, CardDescription, CardContent, Label, Input, Button } from "../../lib/web-ui";
+import { ScanOutlined, LoadingOutlined, CaretRightOutlined, RedoOutlined, InfoCircleOutlined } from "@ant-design/icons";
+import { Breadcrumb, Button, Card, Input, Typography } from "@/lib/antd";
 import { UploadDropzone } from "../../components/analyses/upload-dropzone";
 import { ResearcherGate } from "../../components/analyses/researcher-gate";
 import { useAnalysisUpload } from "../../lib/analyses-upload";
@@ -87,25 +87,29 @@ function ScanpyComponent() {
   return (
     <div className="container-prose section-rhythm">
       <ResearcherGate>
-        <PageHeader
-          icon={ScanSearch}
-          title="scanpy clustering"
-          description="Quality-filter, normalise and cluster a single-cell expression matrix (.h5ad). Results include a UMAP projection, cluster sizes and marker genes."
-          breadcrumb={[{ label: "Analyze", href: "/analyses" }, { label: "scanpy" }]}
-        />
+        <header className="flex flex-col gap-4">
+          <Breadcrumb items={[{ title: "Analyze", href: "/analyses" }, { title: "scanpy" }]} />
+          <div className="flex items-start gap-3.5">
+            <span className="flex size-11 items-center justify-center rounded-xl border bg-card shadow-sm"><ScanOutlined /></span>
+            <div>
+              <Typography.Title level={2} style={{ margin: 0 }}>scanpy clustering</Typography.Title>
+              <Typography.Paragraph type="secondary" style={{ margin: 0 }}>Quality-filter, normalise and cluster a single-cell expression matrix (.h5ad). Results include a UMAP projection, cluster sizes and marker genes.</Typography.Paragraph>
+            </div>
+          </div>
+        </header>
 
         <form onSubmit={onSubmit} className="mt-8 grid gap-6 lg:grid-cols-[1.5fr_1fr]">
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <ScanSearch className="size-5 text-primary" aria-hidden />
+            <div className="mb-6">
+              <Typography.Title level={4} className="flex items-center gap-2">
+                <ScanOutlined className="size-5 text-primary" aria-hidden />
                 Input data
-              </CardTitle>
-              <CardDescription>
+              </Typography.Title>
+              <Typography.Paragraph type="secondary">
                 One AnnData file in .h5ad format (raw counts or normalised matrix).
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-6">
+              </Typography.Paragraph>
+            </div>
+            <div className="grid gap-6">
               <UploadDropzone
                 extensions={H5AD_EXTENSIONS}
                 formatLabel=".h5ad"
@@ -117,7 +121,7 @@ function ScanpyComponent() {
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="grid gap-2">
-                  <Label htmlFor="min_genes">min_genes</Label>
+                  <label htmlFor="min_genes">min_genes</label>
                   <Input
                     id="min_genes"
                     type="number"
@@ -134,7 +138,7 @@ function ScanpyComponent() {
                   ) : null}
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="min_cells">min_cells</Label>
+                  <label htmlFor="min_cells">min_cells</label>
                   <Input
                     id="min_cells"
                     type="number"
@@ -151,7 +155,7 @@ function ScanpyComponent() {
                   ) : null}
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="n_top_genes">n_top_genes</Label>
+                  <label htmlFor="n_top_genes">n_top_genes</label>
                   <Input
                     id="n_top_genes"
                     type="number"
@@ -168,7 +172,7 @@ function ScanpyComponent() {
                   ) : null}
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="resolution">Resolution</Label>
+                  <label htmlFor="resolution">Resolution</label>
                   <Input
                     id="resolution"
                     type="number"
@@ -202,12 +206,12 @@ function ScanpyComponent() {
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     {upload.phase === "submitting" ? (
                       <>
-                        <Loader2 className="size-4 animate-spin" aria-hidden />
+                        <LoadingOutlined className="size-4 animate-spin" aria-hidden />
                         Submitting job…
                       </>
                     ) : (
                       <>
-                        <Loader2 className="size-4 animate-spin" aria-hidden />
+                        <LoadingOutlined className="size-4 animate-spin" aria-hidden />
                         Uploading to object storage… {upload.progress}%
                       </>
                     )}
@@ -234,17 +238,17 @@ function ScanpyComponent() {
               ) : null}
 
               <div className="flex flex-wrap gap-2">
-                <Button type="submit" disabled={files.length === 0 || upload.busy}>
+                <Button htmlType="submit" type="primary" disabled={files.length === 0 || upload.busy}>
                   {upload.phase === "submitting" ? (
-                    <Loader2 className="size-4 animate-spin" aria-hidden />
+                    <LoadingOutlined className="size-4 animate-spin" aria-hidden />
                   ) : (
-                    <Play className="size-4" aria-hidden />
+                    <CaretRightOutlined className="size-4" aria-hidden />
                   )}
                   {files.length === 0 ? "Select a file first" : upload.busy ? "Working…" : "Submit job"}
                 </Button>
                 <Button
-                  type="button"
-                  variant="outline"
+                  htmlType="button"
+                  type="default"
                   disabled={upload.busy}
                   onClick={() => {
                     setFiles([]);
@@ -254,37 +258,37 @@ function ScanpyComponent() {
                     upload.reset();
                   }}
                 >
-                  <RotateCcw className="size-4" aria-hidden />
+                  <RedoOutlined className="size-4" aria-hidden />
                   Reset
                 </Button>
               </div>
-            </CardContent>
+            </div>
           </Card>
 
           <div className="grid h-fit gap-4">
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-sm">
-                  <Info className="size-4 text-primary" aria-hidden />
+              <div className="mb-6">
+                <Typography.Title level={4} className="flex items-center gap-2 text-sm">
+                  <InfoCircleOutlined className="size-4 text-primary" aria-hidden />
                   How it works
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="text-sm leading-relaxed text-muted-foreground">
+                </Typography.Title>
+              </div>
+              <div className="text-sm leading-relaxed text-muted-foreground">
                 <ol className="list-decimal space-y-2 pl-4">
                   <li>The .h5ad file is uploaded directly to object storage via a pre-signed URL (max 500 MB).</li>
                   <li>A scanpy job is queued: filtering → HVG → PCA → Leiden clustering → UMAP.</li>
                   <li>The result page refreshes automatically and shows the UMAP plot, cluster sizes and marker genes.</li>
                 </ol>
-              </CardContent>
+              </div>
             </Card>
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-sm">
-                  <ScanSearch className="size-4 text-primary" aria-hidden />
+              <div className="mb-6">
+                <Typography.Title level={4} className="flex items-center gap-2 text-sm">
+                  <ScanOutlined className="size-4 text-primary" aria-hidden />
                   Parameters
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="text-sm leading-relaxed text-muted-foreground">
+                </Typography.Title>
+              </div>
+              <div className="text-sm leading-relaxed text-muted-foreground">
                 <p>
                   <span className="font-medium text-foreground">min_genes / min_cells</span> — minimum genes
                   per cell and cells per gene after filtering.
@@ -297,7 +301,7 @@ function ScanpyComponent() {
                   <span className="font-medium text-foreground">resolution</span> — Leiden clustering
                   resolution (0.1–10; higher = more clusters).
                 </p>
-              </CardContent>
+              </div>
             </Card>
           </div>
         </form>

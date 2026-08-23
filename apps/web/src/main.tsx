@@ -26,7 +26,6 @@ import { routeTree } from "./routeTree.gen";
 import { createQueryClient } from "./lib/query-client";
 import { ThemeProvider } from "./lib/theme-provider";
 import { AnimationProvider } from "./lib/animation-context";
-import { ToastProvider } from "./lib/web-ui";
 import { DesignSystemProvider } from "./lib/design-system-provider";
 import { initI18nOnce } from "./lib/i18n";
 import { initWidgetLoader } from "./lib/widget-loader";
@@ -159,10 +158,8 @@ createRoot(rootEl).render(
                 <ThemeProvider>
                     <AnimationProvider>
                         <DesignSystemProvider>
-                            <ToastProvider>
-                                <RouterProvider router={router} />
-                                {null /* devtools hidden */}
-                            </ToastProvider>
+                            <RouterProvider router={router} />
+                            {null /* devtools hidden */}
                         </DesignSystemProvider>
                     </AnimationProvider>
                 </ThemeProvider>

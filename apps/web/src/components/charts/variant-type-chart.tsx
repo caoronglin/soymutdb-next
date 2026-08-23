@@ -4,7 +4,8 @@
  */
 import type { EChartsOption } from "echarts";
 import { useECharts } from "../../lib/use-echarts";
-import { ChartEmptyState, cn } from "../../lib/web-ui";
+import { Empty } from "@/lib/antd";
+import { cn } from "@/lib/cn";
 
 export interface VariantTypeChartProps {
   data: ReadonlyArray<{ name: string; value: number }>;
@@ -76,7 +77,7 @@ export function VariantTypeChart({ data, className }: VariantTypeChartProps) {
     <figure className={cn("relative", className)}>
       <div ref={ref} className="h-72 w-full" role="img" aria-label="Variant type distribution donut chart" />
       {loading ? <div className="skeleton-pulse absolute inset-0 rounded-lg bg-muted/40" aria-hidden /> : null}
-      <ChartEmptyState visible={data.length === 0 && !loading} />
+      {data.length === 0 && !loading ? <Empty className="absolute inset-0 flex items-center justify-center" image={Empty.PRESENTED_IMAGE_SIMPLE} /> : null}
       <figcaption className="sr-only">
         Variant type distribution: {data.map((d) => `${d.name} ${d.value.toLocaleString()}`).join(", ")}.
       </figcaption>

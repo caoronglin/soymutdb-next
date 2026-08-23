@@ -3,8 +3,14 @@
  */
 import { createFileRoute } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
-import { HelpCircle, BookOpen, Mail, Rocket, ChevronDown } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../lib/web-ui";
+import {
+  DownOutlined as ChevronDown,
+  MailOutlined as Mail,
+  QuestionCircleOutlined as HelpCircle,
+  ReadOutlined as BookOpen,
+  RocketOutlined as Rocket,
+} from "@ant-design/icons";
+import { Card, Typography } from "@/lib/antd";
 import { FadeUp, Stagger } from "../components/route-motion";
 import * as React from "react";
 
@@ -33,69 +39,69 @@ function HelpComponent() {
 
       <Stagger className="mt-10 grid gap-4 md:grid-cols-3">
         <Card className="card-lift">
-          <CardHeader>
+          <div>
             <div className="flex size-10 items-center justify-center rounded-lg bg-accent text-accent-foreground">
               <Rocket className="size-5" aria-hidden />
             </div>
-            <CardTitle className="mt-2 text-base">{t("help.gettingStarted")}</CardTitle>
-            <CardDescription>Quick start guide for new users</CardDescription>
-          </CardHeader>
-          <CardContent>
+            <Typography.Title className="mt-2 text-base">{t("help.gettingStarted")}</Typography.Title>
+            <Typography.Text>Quick start guide for new users</Typography.Text>
+          </div>
+          <div>
             <ol className="list-decimal space-y-1.5 pl-4 text-sm text-muted-foreground">
               <li>Search for genes or variants using the top search bar</li>
               <li>Filter results by chromosome, type, or impact</li>
               <li>View details or open in the genome browser</li>
               <li>Download data or request seeds</li>
             </ol>
-          </CardContent>
+          </div>
         </Card>
 
         <Card className="card-lift">
-          <CardHeader>
+          <div>
             <div className="flex size-10 items-center justify-center rounded-lg bg-accent text-accent-foreground">
               <BookOpen className="size-5" aria-hidden />
             </div>
-            <CardTitle className="mt-2 text-base">{t("help.documentation")}</CardTitle>
-            <CardDescription>API reference and tutorials</CardDescription>
-          </CardHeader>
-          <CardContent>
+            <Typography.Title className="mt-2 text-base">{t("help.documentation")}</Typography.Title>
+            <Typography.Text>API reference and tutorials</Typography.Text>
+          </div>
+          <div>
             <ul className="space-y-1.5 text-sm text-muted-foreground">
               <li>· REST API v1 reference</li>
               <li>· JBrowse 2 configuration</li>
               <li>· BLAST usage guide</li>
             </ul>
-          </CardContent>
+          </div>
         </Card>
 
         <Card className="card-lift">
-          <CardHeader>
+          <div>
             <div className="flex size-10 items-center justify-center rounded-lg bg-accent text-accent-foreground">
               <Mail className="size-5" aria-hidden />
             </div>
-            <CardTitle className="mt-2 text-base">{t("help.contact")}</CardTitle>
-            <CardDescription>Get support from the team</CardDescription>
-          </CardHeader>
-          <CardContent>
+            <Typography.Title className="mt-2 text-base">{t("help.contact")}</Typography.Title>
+            <Typography.Text>Get support from the team</Typography.Text>
+          </div>
+          <div>
             <p className="text-sm text-muted-foreground">Email us at <span className="font-mono text-foreground">support@soymutdb.org</span> for questions about data access, technical issues, or collaboration.</p>
-          </CardContent>
+          </div>
         </Card>
       </Stagger>
 
       <FadeUp>
         <Card className="mt-8">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+          <div>
+            <Typography.Title className="flex items-center gap-2">
               <HelpCircle className="size-5 text-primary" aria-hidden />
               {t("help.faq")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
+            </Typography.Title>
+          </div>
+          <div>
             <div className="divide-y">
               {FAQS.map((faq, i) => (
                 <FaqItem key={i} q={faq.q} a={faq.a} />
               ))}
             </div>
-          </CardContent>
+          </div>
         </Card>
       </FadeUp>
     </div>

@@ -8,8 +8,10 @@
  */
 
 import * as React from "react";
-import { UploadCloud, X, File as FileIcon, FileWarning } from "lucide-react";
-import { cn, useToast, Badge } from "../../lib/web-ui";
+import { CloudUploadOutlined, CloseOutlined, FileOutlined as FileIcon, WarningOutlined } from "@ant-design/icons";
+import { Button, Tag } from "@/lib/antd";
+import { cn } from "@/lib/cn";
+import { useToast } from "@/lib/toast";
 
 export interface UploadDropzoneProps {
   /** Accepted extensions (lowercase, leading dot) — e.g. [".fq", ".fq.gz"]. */
@@ -139,7 +141,7 @@ export function UploadDropzone({
           disabled && "pointer-events-none cursor-not-allowed opacity-60",
         )}
       >
-        <UploadCloud className={cn("size-8", dragging ? "text-primary" : "text-muted-foreground")} aria-hidden />
+        <CloudUploadOutlined className={cn("size-8", dragging ? "text-primary" : "text-muted-foreground")} aria-hidden />
         <div>
           <p className="text-sm font-medium text-foreground">
             Drag &amp; drop {formatLabel} file{maxFiles > 1 ? "s" : ""} here
@@ -181,25 +183,25 @@ export function UploadDropzone({
                 <p className="text-xs text-muted-foreground">{formatBytes(f.size)}</p>
               </div>
               {maxFiles === 2 ? (
-                <Badge variant="secondary" className="text-[10px] uppercase">
+                <Tag className="text-[10px] uppercase">
                   {i === 0 ? "R1" : "R2"}
-                </Badge>
+                </Tag>
               ) : null}
-              <button
-                type="button"
+              <Button
+                htmlType="button"
+                type="text"
                 aria-label={`Remove ${f.name}`}
                 disabled={disabled}
                 onClick={() => onFilesChange(files.filter((_, fi) => fi !== i))}
                 className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <X className="size-4" aria-hidden />
-              </button>
+                icon={<CloseOutlined className="size-4" aria-hidden />}
+              />
             </li>
           ))}
         </ul>
       ) : (
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <FileWarning className="size-3.5" aria-hidden />
+          <WarningOutlined className="size-3.5" aria-hidden />
           No file selected yet.
         </p>
       )}

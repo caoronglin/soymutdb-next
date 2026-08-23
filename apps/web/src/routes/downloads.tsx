@@ -13,17 +13,16 @@ import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Database, Dna, Layers, FileText, Download, Eye, FileCheck2 } from "lucide-react";
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  Button,
-  Badge,
-  Skeleton,
-} from "../lib/web-ui";
+  DatabaseOutlined as Database,
+  DeploymentUnitOutlined as Dna,
+  DownloadOutlined as Download,
+  EyeOutlined as Eye,
+  FileProtectOutlined as FileCheck2,
+  FileTextOutlined as FileText,
+  PartitionOutlined as Layers,
+} from "@ant-design/icons";
+import { Button, Card, Skeleton, Tag, Typography } from "@/lib/antd";
 import { FadeUp, Stagger } from "../components/route-motion";
 import { getDownloadFiles, getDownloadUrl } from "@soymutdb/api-client";
 import type { DownloadFile } from "@soymutdb/api-client";
@@ -139,18 +138,18 @@ function DownloadsComponent() {
           const Icon = group.icon;
           return (
             <Card key={group.id}>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
+              <div>
+                <Typography.Title className="flex items-center gap-2">
                   <span className="flex size-10 items-center justify-center rounded-lg bg-accent text-accent-foreground">
                     <Icon className="size-5" aria-hidden />
                   </span>
                   {t(group.titleKey)}
-                </CardTitle>
-                <CardDescription>
+                </Typography.Title>
+                <Typography.Text>
                   {group.files.length} {t("common.items")}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
+                </Typography.Text>
+              </div>
+              <div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
@@ -173,9 +172,9 @@ function DownloadsComponent() {
                           >
                             <td className="py-3 pr-4 font-mono text-xs">{file.name}</td>
                             <td className="py-3 pr-4">
-                              <Badge variant="outline" className="font-mono text-[10px]">
+                              <Tag variant="outlined" className="font-mono text-[10px]">
                                 {format}
-                              </Badge>
+                              </Tag>
                             </td>
                             <td className="py-3 pr-4 font-mono text-xs tabular-nums">
                               {file.file_size !== null && file.file_size > 1024 * 1024 * 1024 ? (
@@ -192,13 +191,13 @@ function DownloadsComponent() {
                             <td className="py-3 text-right">
                               <div className="flex items-center justify-end gap-1">
                                 {isTooLarge ? (
-                                  <Badge variant="secondary" className="text-[10px]">
+                                  <Tag className="text-[10px]">
                                     {t("downloads.too_large")}
-                                  </Badge>
+                                  </Tag>
                                 ) : (
                                   <Button
-                                    variant="ghost"
-                                    size="sm"
+                                    type="text"
+                                    size="small"
                                     className="h-8 px-2 text-xs"
                                     onClick={() => handlePreview(file)}
                                   >
@@ -207,8 +206,8 @@ function DownloadsComponent() {
                                   </Button>
                                 )}
                                 <Button
-                                  variant="ghost"
-                                  size="icon"
+                                  type="text"
+                                 
                                   className="h-8 w-8"
                                   aria-label={t("downloads.download")}
                                   onClick={() => handleDownload(file)}
@@ -223,14 +222,14 @@ function DownloadsComponent() {
                     </tbody>
                   </table>
                 </div>
-              </CardContent>
+              </div>
             </Card>
           );
         })}
       </Stagger>
 
       <Card className="mt-6 border-dashed">
-        <CardContent className="flex items-center gap-4 p-6">
+        <div className="flex items-center gap-4 p-6">
           <div className="flex size-10 items-center justify-center rounded-lg bg-accent text-accent-foreground">
             <FileCheck2 className="size-5" aria-hidden />
           </div>
@@ -240,8 +239,8 @@ function DownloadsComponent() {
               Submit an async export job for filtered variant sets up to 10M records.
             </p>
           </div>
-          <Button variant="outline">{t("common.submit")}</Button>
-        </CardContent>
+          <Button variant="outlined">{t("common.submit")}</Button>
+        </div>
       </Card>
 
       {preview && (

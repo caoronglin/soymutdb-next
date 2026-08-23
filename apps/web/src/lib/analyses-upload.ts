@@ -12,7 +12,7 @@
 
 import * as React from "react";
 import { requestUpload, submitAnalysis, type AnalysisType } from "@soymutdb/api-client";
-import { useToast } from "./web-ui";
+import { useToast } from "./toast";
 import { recordRecentJob } from "./analyses-local";
 
 export type UploadPhase = "idle" | "uploading" | "submitting" | "done";

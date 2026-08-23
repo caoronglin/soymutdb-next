@@ -6,24 +6,16 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import * as React from "react";
 import {
-  GitCompareArrows,
-  X,
-  Dna,
-  FlaskConical,
-  MapPin,
-  Activity,
-  Plus,
-  BarChart3,
-} from "lucide-react";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  Badge,
-  EmptyState,
-} from "../lib/web-ui";
+  BarChartOutlined as BarChart3,
+  CloseOutlined as X,
+  DeploymentUnitOutlined as Dna,
+  EnvironmentOutlined as MapPin,
+  ExperimentOutlined as FlaskConical,
+  PlusOutlined as Plus,
+  RiseOutlined as Activity,
+  SwapOutlined as GitCompareArrows,
+} from "@ant-design/icons";
+import { Card, Empty, Tag, Typography } from "@/lib/antd";
 import { FadeUp, useReveal } from "../components/route-motion";
 import { startViewTransition } from "../lib/view-transitions";
 import { COMPARE_VARIANTS, type CompareVariant } from "../lib/compare-data";
@@ -103,13 +95,13 @@ function ComparePage() {
         {/* Variant picker */}
         <FadeUp delay={0.1}>
           <Card className="lg:sticky lg:top-20 h-fit max-h-[70vh] overflow-hidden flex flex-col">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm">Select Variants</CardTitle>
-              <CardDescription className="text-xs">
+            <div className="pb-3">
+              <Typography.Title className="text-sm">Select Variants</Typography.Title>
+              <Typography.Text className="text-xs">
                 {selected.length} / {MAX_COMPARE} selected
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="pt-0 overflow-y-auto space-y-1">
+              </Typography.Text>
+            </div>
+            <div className="pt-0 overflow-y-auto space-y-1">
               {COMPARE_VARIANTS.map((v) => {
                 const isSelected = selected.includes(v.id);
                 const disabled = !isSelected && selected.length >= MAX_COMPARE;
@@ -131,12 +123,12 @@ function ComparePage() {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <span className="font-mono text-xs font-semibold">{v.id}</span>
-                        <Badge
-                          variant="outline"
+                        <Tag
+                          variant="outlined"
                           className={`text-[10px] border ${IMPACT_COLORS[v.impact] || ""}`}
                         >
                           {v.impact}
-                        </Badge>
+                        </Tag>
                       </div>
                       <div className="text-xs font-medium truncate">{v.geneName || v.gene}</div>
                       <div className="text-[11px] text-muted-foreground truncate">
@@ -146,17 +138,21 @@ function ComparePage() {
                   </label>
                 );
               })}
-            </CardContent>
+            </div>
           </Card>
         </FadeUp>
 
         {/* Comparison panel */}
         <div className="space-y-6 min-w-0">
           {selectedVariants.length < 2 ? (
-            <EmptyState
-              icon={Plus}
-              title="Select at least 2 variants"
-              description="Pick variants from the list to start a comparison."
+            <Empty
+              image={<Plus style={{ fontSize: 40, color: "var(--muted-foreground)" }} />}
+              description={
+                <>
+                  <p className="font-medium">Select at least 2 variants</p>
+                  <p className="text-sm text-muted-foreground">Pick variants from the list to start a comparison.</p>
+                </>
+              }
             />
           ) : (
             <>
@@ -177,12 +173,12 @@ function ComparePage() {
               {/* Comparison grid */}
               <FadeUp delay={0.2}>
                 <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base flex items-center gap-2">
+                  <div className="pb-3">
+                    <Typography.Title className="text-base flex items-center gap-2">
                       <BarChart3 className="size-4" /> Attribute Comparison
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="pt-0 overflow-x-auto">
+                    </Typography.Title>
+                  </div>
+                  <div className="pt-0 overflow-x-auto">
                     <table className="w-full text-sm">
                       <tbody>
                         <CompareRow
@@ -226,9 +222,9 @@ function ComparePage() {
                           label="Mutation"
                           icon={<Dna className="size-3.5" />}
                           values={selectedVariants.map((v) => (
-                            <Badge key={v.id} variant="secondary" className="text-xs">
+                            <Tag key={v.id} className="text-xs">
                               {v.mutationType}
-                            </Badge>
+                            </Tag>
                           ))}
                           ids={selectedVariants.map((v) => v.id)}
                         />
@@ -236,13 +232,13 @@ function ComparePage() {
                           label="Impact"
                           icon={<Activity className="size-3.5" />}
                           values={selectedVariants.map((v) => (
-                            <Badge
+                            <Tag
                               key={v.id}
-                              variant="outline"
+                              variant="outlined"
                               className={`text-xs border ${IMPACT_COLORS[v.impact] || ""}`}
                             >
                               {v.impact}
-                            </Badge>
+                            </Tag>
                           ))}
                           ids={selectedVariants.map((v) => v.id)}
                         />
@@ -282,24 +278,24 @@ function ComparePage() {
                         </tr>
                       </tbody>
                     </table>
-                  </CardContent>
+                  </div>
                 </Card>
               </FadeUp>
 
               {/* Distribution chart (pure SVG, no heavy lib needed) */}
               <FadeUp delay={0.25}>
                 <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base flex items-center gap-2">
+                  <div className="pb-3">
+                    <Typography.Title className="text-base flex items-center gap-2">
                       <BarChart3 className="size-4" /> Impact Distribution
-                    </CardTitle>
-                    <CardDescription className="text-xs">
+                    </Typography.Title>
+                    <Typography.Text className="text-xs">
                       Counts of HIGH / MODERATE / LOW / MODIFIER impact in current selection
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
+                    </Typography.Text>
+                  </div>
+                  <div>
                     <ImpactChart variants={selectedVariants} />
-                  </CardContent>
+                  </div>
                 </Card>
               </FadeUp>
             </>
@@ -322,18 +318,18 @@ function VariantCard({ v, onRemove }: { v: CompareVariant; onRemove: () => void 
       >
         <X className="size-3" />
       </button>
-      <CardContent className="p-4">
+      <div className="p-4">
         <div className="font-mono text-xs text-muted-foreground mb-1">{v.id}</div>
         <div className="font-display text-lg font-bold leading-tight mb-1">
           {v.geneName || v.gene}
         </div>
         <div className="font-mono text-[11px] text-muted-foreground truncate mb-3">{v.gene}</div>
-        <Badge
-          variant="outline"
+        <Tag
+          variant="outlined"
           className={`text-[10px] border ${IMPACT_COLORS[v.impact] || ""}`}
         >
           {v.impact}
-        </Badge>
+        </Tag>
         <div className="mt-3 space-y-1 text-[11px] text-muted-foreground">
           <div className="flex items-center gap-1">
             <MapPin className="size-3" />
@@ -344,7 +340,7 @@ function VariantCard({ v, onRemove }: { v: CompareVariant; onRemove: () => void 
             {v.mutagen}
           </div>
         </div>
-      </CardContent>
+      </div>
     </Card>
   );
 }

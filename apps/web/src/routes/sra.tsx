@@ -6,32 +6,21 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import * as React from "react";
 import {
-  Search,
-  Database,
-  ExternalLink,
-  History,
-  RefreshCw,
-  AlertTriangle,
-  Download,
-  Dna,
-  Clock,
-  HardDrive,
-  Microscope,
-  ChevronRight,
-  Trash2,
-} from "lucide-react";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  Input,
-  Button,
-  Skeleton,
-  Badge,
-  EmptyState,
-} from "../lib/web-ui";
+  AimOutlined as Microscope,
+  ClockCircleOutlined as Clock,
+  DownloadOutlined as Download,
+  DatabaseOutlined as Database,
+  DeleteOutlined as Trash2,
+  DeploymentUnitOutlined as Dna,
+  ExportOutlined as ExternalLink,
+  HistoryOutlined as History,
+  HddOutlined as HardDrive,
+  ReloadOutlined as RefreshCw,
+  RightOutlined as ChevronRight,
+  SearchOutlined as Search,
+  WarningOutlined as AlertTriangle,
+} from "@ant-design/icons";
+import { Button, Card, Empty, Input, Skeleton, Tag, Typography } from "@/lib/antd";
 import { fetchSraRun, fetchSraSamples, type SraRunInfo } from "@soymutdb/api-client";
 import { FadeUp, useReveal } from "../components/route-motion";
 import { startViewTransition } from "../lib/view-transitions";
@@ -210,7 +199,7 @@ function SraBrowser() {
                 aria-label="SRA accession"
               />
             </div>
-            <Button type="submit" disabled={runQuery.isFetching}>
+            <Button htmlType="submit" type="primary" disabled={runQuery.isFetching}>
               {runQuery.isFetching ? (
                 <RefreshCw className="size-4 mr-1 animate-spin" />
               ) : (
@@ -227,12 +216,21 @@ function SraBrowser() {
         <div className="lg:col-span-2 space-y-4">
           {runQuery.isLoading && <RunDetailsSkeleton />}
           {runQuery.isError && !run && (
-            <EmptyState
-              icon={AlertTriangle}
-              title="Failed to load run"
-              description={runQuery.error?.message || "Could not fetch SRA metadata. Check the accession and try again."}
-              action={<Button onClick={() => runQuery.refetch()}><RefreshCw className="size-4 mr-1" />Retry</Button>}
-            />
+            <Empty
+              image={<AlertTriangle style={{ fontSize: 40, color: "var(--muted-foreground)" }} />}
+              description={
+                <>
+                  <p className="font-medium">Failed to load run</p>
+                  <p className="text-sm text-muted-foreground">
+                    {runQuery.error?.message || "Could not fetch SRA metadata. Check the accession and try again."}
+                  </p>
+                </>
+              }
+            >
+              <Button icon={<RefreshCw className="size-4" />} onClick={() => runQuery.refetch()}>
+                Retry
+              </Button>
+            </Empty>
           )}
           {run && <RunDetails run={run} source={source} isCached={!!isCached} />}
         </div>
@@ -242,13 +240,13 @@ function SraBrowser() {
           {/* History */}
           <FadeUp delay={0.15}>
             <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm flex items-center gap-2">
+              <div className="pb-3">
+                <Typography.Title className="text-sm flex items-center gap-2">
                   <History className="size-4" />
                   Recent Runs
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0">
+                </Typography.Title>
+              </div>
+              <div className="pt-0">
                 {history.length === 0 ? (
                   <p className="text-xs text-muted-foreground">No recent accessions.</p>
                 ) : (
@@ -271,23 +269,23 @@ function SraBrowser() {
                     </button>
                   </div>
                 )}
-              </CardContent>
+              </div>
             </Card>
           </FadeUp>
 
           {/* Curated runs — current default species (soybean) */}
           <FadeUp delay={0.2}>
             <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm flex items-center gap-2">
+              <div className="pb-3">
+                <Typography.Title className="text-sm flex items-center gap-2">
                   <Dna className="size-4" />
                   Curated SRA Runs
-                </CardTitle>
-                <CardDescription className="text-xs">
+                </Typography.Title>
+                <Typography.Text className="text-xs">
                   Glycine max (soybean) sequencing runs — current default species
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="pt-0">
+                </Typography.Text>
+              </div>
+              <div className="pt-0">
                 {samplesQuery.isLoading && (
                   <div className="space-y-2">
                     {[1, 2, 3].map((i) => <Skeleton key={i} className="h-8 w-full" />)}
@@ -309,7 +307,7 @@ function SraBrowser() {
                     ))}
                   </div>
                 )}
-              </CardContent>
+              </div>
             </Card>
           </FadeUp>
         </div>
@@ -319,20 +317,20 @@ function SraBrowser() {
       {activeRun && (
         <FadeUp delay={0.25} className="mt-8">
           <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Rich Widget View</CardTitle>
-              <CardDescription className="text-xs">
+            <div>
+              <Typography.Title className="text-base">Rich Widget View</Typography.Title>
+              <Typography.Text className="text-xs">
                 Server-rendered widget with full run metadata (loaded via &lt;soymutdb-widget&gt; Web Component)
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
+              </Typography.Text>
+            </div>
+            <div>
               {/* This is a Custom Element registered in soymutdb-widget.ts */}
               <soymutdb-widget
                 name="sra_run"
                 params={JSON.stringify({ run: activeRun })}
                 key={activeRun}
               />
-            </CardContent>
+            </div>
           </Card>
         </FadeUp>
       )}
@@ -355,18 +353,18 @@ function RunDetails({ run, source, isCached }: { run: SraRunInfo; source?: strin
   return (
     <FadeUp>
       <Card>
-        <CardHeader>
+        <div>
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <CardTitle className="font-mono text-xl">{run.Run}</CardTitle>
-                {isCached && <Badge variant="outline" className="text-[10px]">cached</Badge>}
-                {source === "fallback" && <Badge variant="secondary" className="text-[10px]">offline</Badge>}
-                {source === "stub" && <Badge variant="destructive" className="text-[10px]">stub</Badge>}
+                <Typography.Title className="font-mono text-xl">{run.Run}</Typography.Title>
+                {isCached && <Tag variant="outlined" className="text-[10px]">cached</Tag>}
+                {source === "fallback" && <Tag className="text-[10px]">offline</Tag>}
+                {source === "stub" && <Tag color="red" className="text-[10px]">stub</Tag>}
               </div>
-              <CardDescription>
+              <Typography.Text>
                 {run.ScientificName || run.SampleName || "SRA sequencing run"}
-              </CardDescription>
+              </Typography.Text>
             </div>
             <a
               href={run.sra_url}
@@ -377,8 +375,8 @@ function RunDetails({ run, source, isCached }: { run: SraRunInfo; source?: strin
               Open in NCBI SRA <ExternalLink className="size-3" />
             </a>
           </div>
-        </CardHeader>
-        <CardContent className="space-y-6">
+        </div>
+        <div className="space-y-6">
           {/* Stat grid */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {stats.map((s) => (
@@ -421,7 +419,7 @@ function RunDetails({ run, source, isCached }: { run: SraRunInfo; source?: strin
               </a>
             </div>
           )}
-        </CardContent>
+        </div>
       </Card>
     </FadeUp>
   );
@@ -441,18 +439,18 @@ function DetailRow({ label, value, mono }: { label: string; value?: string; mono
 function RunDetailsSkeleton() {
   return (
     <Card>
-      <CardHeader>
+      <div>
         <Skeleton className="h-7 w-40 mb-2" />
         <Skeleton className="h-4 w-72" />
-      </CardHeader>
-      <CardContent className="space-y-4">
+      </div>
+      <div className="space-y-4">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-16 w-full" />)}
         </div>
         <div className="space-y-2">
           {[1, 2, 3, 4, 5, 6].map((i) => <Skeleton key={i} className="h-5 w-full" />)}
         </div>
-      </CardContent>
+      </div>
     </Card>
   );
 }

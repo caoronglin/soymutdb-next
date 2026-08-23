@@ -9,7 +9,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import * as React from "react";
-import { ArrowRight } from "lucide-react";
+import { ArrowRightOutlined as ArrowRight, ReloadOutlined } from "@ant-design/icons";
 import {
   Button,
   Empty,
@@ -21,7 +21,6 @@ import {
   type TableColumnsType,
   type TableProps,
 } from "@/lib/antd";
-import { ReloadOutlined } from "@ant-design/icons";
 import { searchGenes, type GeneSummary } from "@soymutdb/api-client";
 import { FadeUp } from "../../components/route-motion";
 import {

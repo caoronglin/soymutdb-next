@@ -7,11 +7,11 @@
  * of submitted job ids and resolves each via `getAnalysis(jobId)`.
  */
 
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import * as React from "react";
-import { FlaskConical, ScanSearch, ArrowRight, FolderKanban } from "lucide-react";
-import { PageHeader, Badge, Button, LoadingState, ErrorState } from "../../lib/web-ui";
+import { ExperimentOutlined, ScanOutlined, ArrowRightOutlined, FolderOpenOutlined } from "@ant-design/icons";
+import { Breadcrumb, Button, Result, Skeleton, Tag, Typography } from "@/lib/antd";
 import { getAnalysis, type AnalysesJobResponse, type AnalysisJobStatus } from "@soymutdb/api-client";
 import { DataTable, type DataTableColumn } from "../../components/data-table";
 import { ResearcherGate } from "../../components/analyses/researcher-gate";
@@ -40,6 +40,19 @@ const STATUS_VARIANT: Record<AnalysisJobStatus, "default" | "secondary" | "destr
   cancel_requested: "warning",
   cancelled: "outline",
 };
+
+function statusColor(v: "default" | "secondary" | "destructive" | "outline" | "success" | "warning"): string {
+  switch (v) {
+    case "success":
+      return "success";
+    case "destructive":
+      return "error";
+    case "warning":
+      return "warning";
+    default:
+      return "default";
+  }
+}
 
 function statusLabel(status: AnalysisJobStatus): string {
   return status.replace("_", " ");
@@ -94,9 +107,9 @@ function AnalysesIndexComponent() {
       cell: (row) => (
         <span className="inline-flex items-center gap-1.5 capitalize">
           {row.analysis_type === "fastp" ? (
-            <FlaskConical className="size-3.5 text-muted-foreground" aria-hidden />
+            <ExperimentOutlined className="size-3.5 text-muted-foreground" aria-hidden />
           ) : (
-            <ScanSearch className="size-3.5 text-muted-foreground" aria-hidden />
+            <ScanOutlined className="size-3.5 text-muted-foreground" aria-hidden />
           )}
           {row.analysis_type}
         </span>
@@ -106,9 +119,9 @@ function AnalysesIndexComponent() {
       id: "status",
       header: "Status",
       cell: (row) => (
-        <Badge variant={STATUS_VARIANT[row.status] ?? "secondary"} className="text-[10px] uppercase">
+        <Tag color={statusColor(STATUS_VARIANT[row.status] ?? "secondary")} className="text-[10px] uppercase">
           {statusLabel(row.status)}
-        </Badge>
+        </Tag>
       ),
     },
     {
@@ -121,7 +134,7 @@ function AnalysesIndexComponent() {
       header: "",
       className: "w-12 text-right",
       cell: () => (
-        <ArrowRight className="ml-auto size-4 text-muted-foreground transition-colors group-hover/row:text-primary" aria-hidden />
+        <ArrowRightOutlined className="ml-auto size-4 text-muted-foreground transition-colors group-hover/row:text-primary" aria-hidden />
       ),
     },
   ];
@@ -129,37 +142,56 @@ function AnalysesIndexComponent() {
   return (
     <div className="container-prose section-rhythm">
       <ResearcherGate>
-        <PageHeader
-          icon={FolderKanban}
-          title="Analyze"
-          description="Run RNA-seq quality control (fastp) and single-cell clustering (scanpy) pipelines on your uploaded data. Jobs run asynchronously; results appear here once finished."
-          breadcrumb={[{ label: "Analyze" }]}
-          actions={
-            <>
-              <Button asChild size="sm">
-                <Link to="/analyses/fastp">
-                  <FlaskConical className="size-4" aria-hidden />
-                  New fastp job
-                </Link>
+        <header className="flex flex-col gap-4">
+          <Breadcrumb items={[{ title: "Analyze" }]} />
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-start gap-3.5">
+              <span className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-border bg-card shadow-sm">
+                <FolderOpenOutlined className="size-5" aria-hidden />
+              </span>
+              <div>
+                <Typography.Title level={2} style={{ margin: 0 }}>
+                  Analyze
+                </Typography.Title>
+                <Typography.Paragraph type="secondary" style={{ margin: 0, maxWidth: "52rem" }}>
+                  Run RNA-seq quality control (fastp) and single-cell clustering (scanpy) pipelines on your uploaded data. Jobs run asynchronously; results appear here once finished.
+                </Typography.Paragraph>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 lg:shrink-0">
+              <Button
+                size="small"
+                type="primary"
+                icon={<ExperimentOutlined aria-hidden />}
+                onClick={() => navigate({ to: "/analyses/fastp" })}
+              >
+                New fastp job
               </Button>
-              <Button asChild variant="outline" size="sm">
-                <Link to="/analyses/scanpy">
-                  <ScanSearch className="size-4" aria-hidden />
-                  New scanpy job
-                </Link>
+              <Button
+                size="small"
+                variant="outlined"
+                icon={<ScanOutlined aria-hidden />}
+                onClick={() => navigate({ to: "/analyses/scanpy" })}
+              >
+                New scanpy job
               </Button>
-            </>
-          }
-        />
+            </div>
+          </div>
+        </header>
 
         <div className="mt-8">
           {jobsQuery.isLoading ? (
-            <LoadingState label="Loading analysis jobs…" rows={5} />
+            <Skeleton active paragraph={{ rows: 5 }} />
           ) : jobsQuery.isError ? (
-            <ErrorState
+            <Result
+              status="error"
               title="Could not load analysis jobs"
-              message="The jobs service is unavailable. Please try again shortly."
-              onRetry={() => void jobsQuery.refetch()}
+              subTitle="The jobs service is unavailable. Please try again shortly."
+              extra={
+                <Button type="primary" onClick={() => void jobsQuery.refetch()}>
+                  Try again
+                </Button>
+              }
             />
           ) : (
             <DataTable

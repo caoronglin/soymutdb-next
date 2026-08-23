@@ -3,8 +3,9 @@
  * Mounted in the site header. Persists to localStorage.
  */
 import * as React from "react";
-import { Sparkles, Check, Gauge, Ban, SunMedium } from "lucide-react";
-import { Button, cn } from "../lib/web-ui";
+import { CrownOutlined, CheckOutlined, DashboardOutlined, StopOutlined, SunOutlined } from "@ant-design/icons";
+import { Button } from "@/lib/antd";
+import { cn } from "@/lib/cn";
 import { useAnimation, type AnimationIntensity } from "../lib/animation-context";
 
 const OPTIONS: ReadonlyArray<{
@@ -13,10 +14,10 @@ const OPTIONS: ReadonlyArray<{
     description: string;
     icon: React.ComponentType<{ className?: string }>;
 }> = [
-        { value: "auto", label: "Auto", description: "Adapt to accessibility and session resources.", icon: Sparkles },
-        { value: "standard", label: "Standard", description: "Standard ease-out (~300ms).", icon: SunMedium },
-        { value: "minimal", label: "Minimal", description: "Only essential transitions (~100ms).", icon: Gauge },
-        { value: "off", label: "Off", description: "No motion. Best for accessibility.", icon: Ban },
+        { value: "auto", label: "Auto", description: "Adapt to accessibility and session resources.", icon: CrownOutlined },
+        { value: "standard", label: "Standard", description: "Standard ease-out (~300ms).", icon: SunOutlined },
+        { value: "minimal", label: "Minimal", description: "Only essential transitions (~100ms).", icon: DashboardOutlined },
+        { value: "off", label: "Off", description: "No motion. Best for accessibility.", icon: StopOutlined },
     ];
 
 export function AnimationControl() {
@@ -53,15 +54,13 @@ export function AnimationControl() {
         <div className="relative">
             <Button
                 ref={buttonRef}
-                variant="ghost"
-                size="icon"
+                type="text"
+                icon={<CrownOutlined className="size-4" aria-hidden />}
                 aria-label="Animation settings"
                 aria-haspopup="dialog"
                 aria-expanded={open}
                 onClick={() => setOpen((v) => !v)}
-            >
-                <Sparkles className="size-4" aria-hidden />
-            </Button>
+            />
             {open ? (
                 <div
                     ref={popoverRef}
@@ -87,16 +86,17 @@ export function AnimationControl() {
                             const Icon = opt.icon;
                             const active = preference === opt.value;
                             return (
-                                <button
+                                <Button
                                     key={opt.value}
-                                    type="button"
+                                    htmlType="button"
+                                    type="text"
                                     onClick={() => {
                                         setIntensity(opt.value);
                                         setOpen(false);
                                     }}
                                     aria-pressed={active}
                                     className={cn(
-                                        "flex w-full items-start gap-3 rounded-lg px-3 py-2 text-left transition-colors",
+                                        "flex h-auto w-full items-start gap-3 rounded-lg px-3 py-2 text-left transition-colors",
                                         "hover:bg-accent focus-visible:bg-accent",
                                         active && "bg-accent/60",
                                     )}
@@ -106,8 +106,8 @@ export function AnimationControl() {
                                         <span className="block text-sm font-medium">{opt.label}</span>
                                         <span className="block text-xs text-muted-foreground">{opt.description}</span>
                                     </span>
-                                    {active ? <Check className="mt-0.5 size-4 text-primary" aria-hidden /> : null}
-                                </button>
+                                    {active ? <CheckOutlined className="mt-0.5 size-4 text-primary" aria-hidden /> : null}
+                                </Button>
                             );
                         })}
                     </div>

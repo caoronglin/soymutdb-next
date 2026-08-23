@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import * as React from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, Skeleton, Button } from "../lib/web-ui";
+import { Button, Card, Skeleton, Typography } from "@/lib/antd";
 import {
   fetchChromosomeDensity,
   fetchHomepageStats,
@@ -176,8 +176,8 @@ function AnalyticsComponent() {
 
 function AnalyticsCard({ title, description, loading, error, onRetry, children }: { title: string; description: string; loading: boolean; error: boolean; onRetry: () => void; children: React.ReactNode }) {
   return (
-    <Card><CardHeader><CardTitle>{title}</CardTitle><CardDescription>{description}</CardDescription></CardHeader><CardContent>
-      {loading ? <ChartFallback /> : error ? <div className="flex h-72 flex-col items-center justify-center gap-3 rounded-lg border border-dashed text-center"><p className="text-sm text-destructive">Live data unavailable.</p><Button type="button" variant="outline" size="sm" onClick={onRetry}>Retry</Button></div> : children}
-    </CardContent></Card>
+    <Card title={<><Typography.Title level={5}>{title}</Typography.Title><Typography.Text type="secondary">{description}</Typography.Text></>}>
+      {loading ? <ChartFallback /> : error ? <div className="flex h-72 flex-col items-center justify-center gap-3 rounded-lg border border-dashed text-center"><p className="text-sm text-destructive">Live data unavailable.</p><Button htmlType="button" type="default" size="small" onClick={onRetry}>Retry</Button></div> : children}
+    </Card>
   );
 }

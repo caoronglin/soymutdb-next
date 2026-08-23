@@ -21,8 +21,15 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import * as React from "react";
-import { ArrowLeft, Microscope, ExternalLink, Search, AlertCircle, Loader2 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, Input, Button } from "../lib/web-ui";
+import {
+  AimOutlined as Microscope,
+  ArrowLeftOutlined as ArrowLeft,
+  ExclamationCircleOutlined as AlertCircle,
+  ExportOutlined as ExternalLink,
+  LoadingOutlined as Loader2,
+  SearchOutlined as Search,
+} from "@ant-design/icons";
+import { Button, Card, Input, Typography } from "@/lib/antd";
 import { FadeUp } from "../components/route-motion";
 import { SOYBEAN_CHROMOSOMES } from "../lib/format";
 import {
@@ -312,32 +319,21 @@ function BrowserComponent() {
                     </div>
                     <div className="flex items-center gap-2">
                         {safeReturn && (
-                            <Button variant="ghost" size="sm" asChild>
-                                <a href={safeReturn} rel="noopener noreferrer">
-                                    <ArrowLeft className="size-4" aria-hidden />
-                                    {t("browser.back")}
-                                </a>
+                            <Button type="text" size="small" href={safeReturn} rel="noopener noreferrer" icon={<ArrowLeft className="size-4" aria-hidden />}>
+                                {t("browser.back")}
                             </Button>
                         )}
-                        <Button variant="outline" size="sm" asChild>
-                            <a href={newTabSrc} target="_blank" rel="noopener noreferrer">
-                                <ExternalLink className="size-4" aria-hidden />
-                                {t("browser.openInNewTab")}
-                            </a>
+                        <Button type="default" size="small" href={newTabSrc} target="_blank" rel="noopener noreferrer" icon={<ExternalLink className="size-4" aria-hidden />}>
+                            {t("browser.openInNewTab")}
                         </Button>
                     </div>
                 </div>
             </FadeUp>
 
-            <Card className="mt-10">
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <Microscope className="size-5 text-primary" aria-hidden />
-                        {t("browser.title")}
-                    </CardTitle>
-                    <CardDescription>{t("browser.loading")}</CardDescription>
-                </CardHeader>
-                <CardContent>
+            <Card
+                className="mt-10"
+                title={<div><Typography.Title level={5} className="flex items-center gap-2"><Microscope className="size-5 text-primary" aria-hidden />{t("browser.title")}</Typography.Title><Typography.Text type="secondary">{t("browser.loading")}</Typography.Text></div>}
+            >
                     <form
                         onSubmit={(e) => {
                             e.preventDefault();
@@ -360,15 +356,15 @@ function BrowserComponent() {
                                 className="h-12 pl-9"
                             />
                         </div>
-                        <Button type="submit">{t("browser.go")}</Button>
+                        <Button type="primary" htmlType="submit">{t("browser.go")}</Button>
                     </form>
 
                     <div className="flex flex-wrap gap-1">
                         {SOYBEAN_CHROMOSOMES.slice(0, 10).map((c) => (
                             <Button
                                 key={c}
-                                variant={search.locus === c ? "default" : "outline"}
-                                size="sm"
+                                type={search.locus === c ? "primary" : "default"}
+                                size="small"
                                 className="px-2.5 font-mono text-xs"
                                 onClick={() => handleLocate(c)}
                             >
@@ -399,15 +395,11 @@ function BrowserComponent() {
                                     {t("browser.stillLoadingDesc", { url: JBROWSE_BASE })}
                                 </p>
                                 <div className="mt-5 flex flex-wrap justify-center gap-3">
-                                    <Button variant="outline" size="sm" onClick={handleRetry}>
-                                        <Loader2 className="size-4" aria-hidden />
+                                    <Button type="default" size="small" onClick={handleRetry} icon={<Loader2 className="size-4" aria-hidden />}>
                                         {t("browser.retry")}
                                     </Button>
-                                    <Button variant="outline" size="sm" asChild>
-                                        <a href={newTabSrc} target="_blank" rel="noopener noreferrer">
-                                            <ExternalLink className="size-4" aria-hidden />
-                                            {t("browser.openInNewTab")}
-                                        </a>
+                                    <Button type="default" size="small" href={newTabSrc} target="_blank" rel="noopener noreferrer" icon={<ExternalLink className="size-4" aria-hidden />}>
+                                        {t("browser.openInNewTab")}
                                     </Button>
                                 </div>
                             </div>
@@ -424,15 +416,11 @@ function BrowserComponent() {
                                     {errorMessage ?? t("browser.loadErrorDetail", { url: JBROWSE_BASE })}
                                 </p>
                                 <div className="mt-5 flex flex-wrap justify-center gap-3">
-                                    <Button variant="outline" size="sm" onClick={handleRetry}>
-                                        <Loader2 className="size-4" aria-hidden />
+                                    <Button type="default" size="small" onClick={handleRetry} icon={<Loader2 className="size-4" aria-hidden />}>
                                         {t("browser.retry")}
                                     </Button>
-                                    <Button variant="outline" size="sm" asChild>
-                                        <a href={newTabSrc} target="_blank" rel="noopener noreferrer">
-                                            <ExternalLink className="size-4" aria-hidden />
-                                            {t("browser.openInNewTab")}
-                                        </a>
+                                    <Button type="default" size="small" href={newTabSrc} target="_blank" rel="noopener noreferrer" icon={<ExternalLink className="size-4" aria-hidden />}>
+                                        {t("browser.openInNewTab")}
                                     </Button>
                                 </div>
                             </div>
@@ -452,7 +440,6 @@ function BrowserComponent() {
                             }}
                         />
                     </div>
-                </CardContent>
             </Card>
         </div>
     );

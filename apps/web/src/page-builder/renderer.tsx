@@ -18,7 +18,7 @@ import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import DOMPurify from "dompurify";
 import { Alert, Button, Divider, Tabs as AntTabs } from "@/lib/antd";
-import { Search, MapPin, Microscope, FlaskConical, FlaskRound } from "lucide-react";
+import { SearchOutlined, EnvironmentOutlined, AimOutlined, ExperimentOutlined } from "@ant-design/icons";
 import {
   capabilitiesApi,
   getFeaturedNews,
@@ -55,11 +55,11 @@ function isSafeHref(value: unknown): value is string {
 
 /** Map the five tool-entry labels to their public routes. */
 const TOOL_TARGETS: Record<string, { to: string; icon: React.ComponentType<{ className?: string }> }> = {
-  "Gene ID": { to: "/search/genes", icon: Search },
-  "Physical Location": { to: "/search/location", icon: MapPin },
-  "JBrowse 2": { to: "/search/gbrowse", icon: Microscope },
-  BLAST: { to: "/blast", icon: FlaskConical },
-  "Primer Design": { to: "/search/primer", icon: FlaskRound },
+  "Gene ID": { to: "/search/genes", icon: SearchOutlined },
+  "Physical Location": { to: "/search/location", icon: EnvironmentOutlined },
+  "JBrowse 2": { to: "/search/gbrowse", icon: AimOutlined },
+  BLAST: { to: "/blast", icon: ExperimentOutlined },
+  "Primer Design": { to: "/search/primer", icon: ExperimentOutlined },
 };
 
 const MINIMAL_DEPLOYMENT = isMinimalDeploymentMode(import.meta.env.VITE_DEPLOYMENT_MODE);
@@ -443,7 +443,7 @@ function SearchFormLauncher({ to, title }: { to: string; title?: string }) {
       to={to}
       className="flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-3 text-sm font-medium hover:bg-accent/50"
     >
-      <Search className="size-4 text-primary" aria-hidden />
+      <SearchOutlined className="size-4 text-primary" aria-hidden />
       {title ?? t("nav.search")}
     </Link>
   );

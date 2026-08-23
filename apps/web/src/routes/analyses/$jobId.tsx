@@ -12,11 +12,11 @@
  * `getAnalysisDownload` (server validates the `analyses/{job_id}/` prefix).
  */
 
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import * as React from "react";
-import { FlaskConical, ScanSearch, Loader2, CircleCheck, CircleX, Download, FileText, Database } from "lucide-react";
-import { PageHeader, Card, CardHeader, CardTitle, CardDescription, CardContent, Badge, Button, LoadingState, ErrorState, StatCard } from "../../lib/web-ui";
+import { ExperimentOutlined, ScanOutlined, LoadingOutlined, CheckCircleOutlined, CloseCircleOutlined, DownloadOutlined, FileTextOutlined, DatabaseOutlined } from "@ant-design/icons";
+import { Breadcrumb, Button, Card, Result, Spin, Statistic, Tag, Typography } from "@/lib/antd";
 import { getAnalysis, getAnalysisDownload, type AnalysesJobResponse } from "@soymutdb/api-client";
 import { DataTable } from "../../components/data-table";
 import { ResearcherGate } from "../../components/analyses/researcher-gate";
@@ -79,30 +79,31 @@ function fmtInt(v: number | undefined): string {
 function StatusBadge({ job }: { job: AnalysesJobResponse }) {
   if (job.status === "succeeded") {
     return (
-      <Badge variant="success" className="gap-1 uppercase">
-        <CircleCheck className="size-3" aria-hidden /> Succeeded
-      </Badge>
+      <Tag color="success" className="gap-1 uppercase">
+        <CheckCircleOutlined className="size-3" aria-hidden /> Succeeded
+      </Tag>
     );
   }
   if (job.status === "failed") {
     return (
-      <Badge variant="destructive" className="gap-1 uppercase">
-        <CircleX className="size-3" aria-hidden /> Failed
-      </Badge>
+      <Tag color="error" className="gap-1 uppercase">
+        <CloseCircleOutlined className="size-3" aria-hidden /> Failed
+      </Tag>
     );
   }
   if (ACTIVE_STATUSES.has(job.status)) {
     return (
-      <Badge variant="default" className="gap-1 uppercase">
-        <Loader2 className="size-3 animate-spin" aria-hidden /> {job.status}
-      </Badge>
+      <Tag color="processing" className="gap-1 uppercase">
+        <LoadingOutlined className="size-3 animate-spin" aria-hidden /> {job.status}
+      </Tag>
     );
   }
-  return <Badge variant="secondary" className="uppercase">{job.status.replace("_", " ")}</Badge>;
+  return <Tag className="uppercase">{job.status.replace("_", " ")}</Tag>;
 }
 
 function JobResultComponent() {
   const { jobId } = Route.useParams();
+  const navigate = useNavigate();
 
   const jobQuery = useQuery({
     queryKey: ["analysis-job", jobId],
@@ -189,8 +190,14 @@ function JobResultComponent() {
     return (
       <div className="container-prose section-rhythm">
         <ResearcherGate>
-          <PageHeader icon={FlaskConical} title="Analysis job" breadcrumb={[{ label: "Analyze", href: "/analyses" }, { label: "Job" }]} />
-          <LoadingState label="Loading job…" variant="spinner" className="py-24" />
+          <header className="flex flex-col gap-4">
+            <Breadcrumb items={[{ title: <Link to="/analyses">Analyze</Link> }, { title: "Job" }]} />
+            <div className="flex items-start gap-3.5">
+              <span className="flex size-11 items-center justify-center rounded-xl border bg-card shadow-sm"><ExperimentOutlined className="size-5" aria-hidden /></span>
+              <Typography.Title level={2} style={{ margin: 0 }}>Analysis job</Typography.Title>
+            </div>
+          </header>
+          <Spin tip="Loading job…" className="py-24" />
         </ResearcherGate>
       </div>
     );
@@ -200,11 +207,22 @@ function JobResultComponent() {
     return (
       <div className="container-prose section-rhythm">
         <ResearcherGate>
-          <PageHeader icon={FlaskConical} title="Analysis job" breadcrumb={[{ label: "Analyze", href: "/analyses" }, { label: "Job" }]} />
-          <ErrorState
+          <header className="flex flex-col gap-4">
+            <Breadcrumb items={[{ title: <Link to="/analyses">Analyze</Link> }, { title: "Job" }]} />
+            <div className="flex items-start gap-3.5">
+              <span className="flex size-11 items-center justify-center rounded-xl border bg-card shadow-sm"><ExperimentOutlined className="size-5" aria-hidden /></span>
+              <Typography.Title level={2} style={{ margin: 0 }}>Analysis job</Typography.Title>
+            </div>
+          </header>
+          <Result
+            status="error"
             title="Could not load this job"
-            message="The job may have been removed, or the job service is unavailable."
-            onRetry={() => void jobQuery.refetch()}
+            subTitle="The job may have been removed, or the job service is unavailable."
+            extra={
+              <Button type="primary" onClick={() => void jobQuery.refetch()}>
+                Retry
+              </Button>
+            }
           />
         </ResearcherGate>
       </div>
@@ -217,47 +235,60 @@ function JobResultComponent() {
   return (
     <div className="container-prose section-rhythm">
       <ResearcherGate>
-        <PageHeader
-          icon={isFastp ? FlaskConical : ScanSearch}
-          title={`${isFastp ? "fastp" : "scanpy"} job`}
-          description={`Job ${job.job_id.slice(0, 8)}… · submitted ${formatDate(job.created_at)}`}
-          breadcrumb={[{ label: "Analyze", href: "/analyses" }, { label: job.job_id.slice(0, 8) }]}
-          actions={<StatusBadge job={job} />}
-        />
+        <header className="flex flex-col gap-4">
+          <Breadcrumb items={[{ title: <Link to="/analyses">Analyze</Link> }, { title: job.job_id.slice(0, 8) }]} />
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-start gap-3.5">
+              <span className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-border bg-card shadow-sm">
+                {isFastp ? <ExperimentOutlined className="size-5" aria-hidden /> : <ScanOutlined className="size-5" aria-hidden />}
+              </span>
+              <div>
+                <Typography.Title level={2} style={{ margin: 0 }}>
+                  {isFastp ? "fastp" : "scanpy"} job
+                </Typography.Title>
+                <Typography.Paragraph type="secondary" style={{ margin: 0 }}>
+                  Job {job.job_id.slice(0, 8)}… · submitted {formatDate(job.created_at)}
+                </Typography.Paragraph>
+              </div>
+            </div>
+            <div className="lg:shrink-0"><StatusBadge job={job} /></div>
+          </div>
+        </header>
 
         {ACTIVE_STATUSES.has(job.status) ? (
           <Card className="mt-8">
-            <CardContent className="flex items-center gap-3 py-6">
-              <Loader2 className="size-5 animate-spin text-primary" aria-hidden />
+            <div className="flex items-center gap-3 py-6">
+              <LoadingOutlined className="size-5 animate-spin text-primary" aria-hidden />
               <div>
                 <p className="text-sm font-medium">
                   {job.status === "queued" ? "Job queued — waiting for a worker…" : job.status === "pending" ? "Job pending…" : "Job running — this can take a few minutes…"}
                 </p>
                 <p className="text-xs text-muted-foreground">This page refreshes automatically every {POLL_INTERVAL_MS / 1000}s. You can leave and come back later.</p>
               </div>
-            </CardContent>
+            </div>
           </Card>
         ) : null}
 
         {job.status === "failed" ? (
-          <Card className="mt-8 border-destructive/40">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-destructive">
-                <CircleX className="size-5" aria-hidden />
+          <Card
+            className="mt-8"
+            title={
+              <span className="flex items-center gap-2 text-destructive">
+                <CloseCircleOutlined className="size-5" aria-hidden />
                 Job failed
-              </CardTitle>
-              <CardDescription>The pipeline stopped with an error.</CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-4">
+              </span>
+            }
+          >
+            <div className="gap-4" style={{ display: "grid", gap: 16 }}>
               <pre className="overflow-x-auto rounded-lg border bg-muted/40 p-4 font-mono text-xs leading-relaxed whitespace-pre-wrap">
                 {job.error_message ?? "No error message provided."}
               </pre>
               <div>
-                <Button asChild size="sm" variant="outline">
-                  <Link to={retryTo}>Re-submit a {isFastp ? "fastp" : "scanpy"} job</Link>
+                <Button size="small" variant="outlined" onClick={() => navigate({ to: retryTo })}>
+                  Re-submit a {isFastp ? "fastp" : "scanpy"} job
                 </Button>
               </div>
-            </CardContent>
+            </div>
           </Card>
         ) : null}
 
@@ -266,24 +297,25 @@ function JobResultComponent() {
             {isFastp ? (
               <>
                 <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                  <StatCard label="Total reads" value={fmtInt(fastpStats.reads)} />
-                  <StatCard label="Total bases" value={fmtInt(fastpStats.bases)} />
-                  <StatCard label="Q30 bases" value={percent(fastpStats.q30)} />
-                  <StatCard label="Duplication" value={percent(fastpStats.duplication)} />
+                  <Card><Statistic title="Total reads" value={fmtInt(fastpStats.reads)} /></Card>
+                  <Card><Statistic title="Total bases" value={fmtInt(fastpStats.bases)} /></Card>
+                  <Card><Statistic title="Q30 bases" value={percent(fastpStats.q30)} /></Card>
+                  <Card><Statistic title="Duplication" value={percent(fastpStats.duplication)} /></Card>
                 </div>
 
                 {fastpHtmlKey ? (
-                  <Card className="mt-6">
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2 text-sm">
-                        <FileText className="size-4 text-primary" aria-hidden />
+                  <Card
+                    className="mt-6"
+                    title={
+                      <span className="flex items-center gap-2 text-sm">
+                        <FileTextOutlined className="size-4 text-primary" aria-hidden />
                         fastp HTML report
-                      </CardTitle>
-                      <CardDescription>Opens below (rendered from the job's stored report).</CardDescription>
-                    </CardHeader>
-                    <CardContent>
+                      </span>
+                    }
+                  >
+                    <div>
                       {fastpHtml.isLoading ? (
-                        <LoadingState label="Preparing report…" variant="spinner" className="py-16" />
+                        <Spin tip="Preparing report…" className="py-16" />
                       ) : fastpHtml.error || !fastpHtml.data ? (
                         <p className="py-10 text-center text-sm text-muted-foreground">
                           Report unavailable at the moment — try again later.
@@ -296,23 +328,25 @@ function JobResultComponent() {
                           className="h-[75vh] w-full rounded-lg border bg-white"
                         />
                       )}
-                    </CardContent>
+                    </div>
                   </Card>
                 ) : null}
               </>
             ) : (
               <>
                 {umapKey ? (
-                  <Card className="mt-8">
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2 text-sm">
-                        <ScanSearch className="size-4 text-primary" aria-hidden />
+                  <Card
+                    className="mt-8"
+                    title={
+                      <span className="flex items-center gap-2 text-sm">
+                        <ScanOutlined className="size-4 text-primary" aria-hidden />
                         UMAP projection
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
+                      </span>
+                    }
+                  >
+                    <div>
                       {umap.isLoading ? (
-                        <LoadingState label="Loading UMAP…" variant="spinner" className="py-16" />
+                        <Spin tip="Loading UMAP…" className="py-16" />
                       ) : umap.error || !umap.data ? (
                         <p className="py-10 text-center text-sm text-muted-foreground">UMAP unavailable.</p>
                       ) : (
@@ -322,19 +356,20 @@ function JobResultComponent() {
                           className="mx-auto max-h-[70vh] w-auto max-w-full rounded-lg border bg-white"
                         />
                       )}
-                    </CardContent>
+                    </div>
                   </Card>
                 ) : null}
 
                 <div className="mt-6 grid gap-6 lg:grid-cols-2">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2 text-sm">
-                        <Database className="size-4 text-primary" aria-hidden />
+                  <Card
+                    title={
+                      <span className="flex items-center gap-2 text-sm">
+                        <DatabaseOutlined className="size-4 text-primary" aria-hidden />
                         Cluster sizes
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
+                      </span>
+                    }
+                  >
+                    <div>
                       {clusterSizes.length > 0 ? (
                         <DataTable
                           columns={[
@@ -347,17 +382,18 @@ function JobResultComponent() {
                       ) : (
                         <p className="py-6 text-center text-sm text-muted-foreground">No cluster size data in the result.</p>
                       )}
-                    </CardContent>
+                    </div>
                   </Card>
 
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2 text-sm">
-                        <ScanSearch className="size-4 text-primary" aria-hidden />
+                  <Card
+                    title={
+                      <span className="flex items-center gap-2 text-sm">
+                        <ScanOutlined className="size-4 text-primary" aria-hidden />
                         Top marker genes
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
+                      </span>
+                    }
+                  >
+                    <div>
                       {topMarkers.length > 0 ? (
                         <DataTable
                           columns={[
@@ -374,42 +410,44 @@ function JobResultComponent() {
                       ) : (
                         <p className="py-6 text-center text-sm text-muted-foreground">No marker gene data in the result.</p>
                       )}
-                    </CardContent>
+                    </div>
                   </Card>
                 </div>
 
                 {markersCsvKey || annotatedKey ? (
-                  <Card className="mt-6">
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2 text-sm">
-                        <Download className="size-4 text-primary" aria-hidden />
+                  <Card
+                    className="mt-6"
+                    title={
+                      <span className="flex items-center gap-2 text-sm">
+                        <DownloadOutlined className="size-4 text-primary" aria-hidden />
                         Downloads
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="flex flex-wrap gap-2">
+                      </span>
+                    }
+                  >
+                    <div className="flex flex-wrap gap-2">
                       {markersCsvKey ? (
                         <Button
-                          size="sm"
-                          variant="outline"
+                          size="small"
+                          variant="outlined"
                           disabled={markersCsv.isLoading}
                           onClick={() => markersCsv.data && window.open(markersCsv.data.download_url, "_blank", "noopener")}
                         >
-                          <Download className="size-4" aria-hidden />
+                          <DownloadOutlined className="size-4" aria-hidden />
                           markers.csv
                         </Button>
                       ) : null}
                       {annotatedKey ? (
                         <Button
-                          size="sm"
-                          variant="outline"
+                          size="small"
+                          variant="outlined"
                           disabled={annotated.isLoading}
                           onClick={() => annotated.data && window.open(annotated.data.download_url, "_blank", "noopener")}
                         >
-                          <Download className="size-4" aria-hidden />
+                          <DownloadOutlined className="size-4" aria-hidden />
                           annotated .h5ad
                         </Button>
                       ) : null}
-                    </CardContent>
+                    </div>
                   </Card>
                 ) : null}
               </>

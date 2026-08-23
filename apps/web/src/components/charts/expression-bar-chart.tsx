@@ -4,7 +4,8 @@
  */
 import type { EChartsOption } from "echarts";
 import { useECharts } from "../../lib/use-echarts";
-import { ChartEmptyState, cn } from "../../lib/web-ui";
+import { Empty } from "@/lib/antd";
+import { cn } from "@/lib/cn";
 
 export interface ExpressionBarChartProps {
   data: Array<{ tissue: string; mean_fpkm: number; treatment: string }>;
@@ -85,7 +86,7 @@ export function ExpressionBarChart({ data, className }: ExpressionBarChartProps)
       {loading ? (
         <div className="skeleton-pulse absolute inset-0 rounded-lg bg-muted/40" aria-hidden />
       ) : null}
-      <ChartEmptyState visible={data.length === 0 && !loading} />
+      {data.length === 0 && !loading ? <Empty className="absolute inset-0 flex items-center justify-center" image={Empty.PRESENTED_IMAGE_SIMPLE} /> : null}
       <figcaption className="sr-only">
         Mean FPKM by tissue and treatment:{" "}
         {data.map((d) => `${d.tissue} ${d.treatment} ${d.mean_fpkm.toFixed(2)}`).join(", ")}.

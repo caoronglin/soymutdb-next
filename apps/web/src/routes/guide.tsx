@@ -11,27 +11,19 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { http, ApiError } from "@soymutdb/api-client";
+import { Button, Card, Skeleton, Tag, Typography } from "@/lib/antd";
 import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
-    Badge,
-    Button,
-    Skeleton,
-} from "../lib/web-ui";
-import {
-    BookOpen,
-    ArrowLeft,
-    ArrowUp,
-    ExternalLink,
-    FileText,
-    Search,
-    Database,
-    Dna,
-    Microscope,
-    Globe,
-} from "lucide-react";
+    AimOutlined as Microscope,
+    ArrowLeftOutlined as ArrowLeft,
+    ArrowUpOutlined as ArrowUp,
+    DatabaseOutlined as Database,
+    DeploymentUnitOutlined as Dna,
+    ExportOutlined as ExternalLink,
+    FileTextOutlined as FileText,
+    GlobalOutlined as Globe,
+    ReadOutlined as BookOpen,
+    SearchOutlined as Search,
+} from "@ant-design/icons";
 import { FadeUp } from "../components/route-motion";
 
 export const Route = createFileRoute("/guide")({
@@ -400,15 +392,15 @@ function GuideComponent() {
                 <>
                     <FadeUp>
                         <div className="mt-6 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                            <Badge variant="secondary" className="gap-1">
+                            <Tag className="gap-1">
                                 <BookOpen className="size-3" aria-hidden />
                                 {t("nav.guide")}
-                            </Badge>
+                            </Tag>
                             {page.category ? (
-                                <Badge variant="outline" className="gap-1">
+                                <Tag variant="outlined" className="gap-1">
                                     <FileText className="size-3" aria-hidden />
                                     {page.category}
-                                </Badge>
+                                </Tag>
                             ) : null}
                             <span className="font-mono">
                                 {new Date(page.updated_at).toLocaleDateString()}
@@ -474,8 +466,8 @@ function GuideComponent() {
 
             {showTop ? (
                 <Button
-                    variant="outline"
-                    size="icon"
+                    variant="outlined"
+                   
                     onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
                     className="fixed bottom-6 right-6 z-40 rounded-full shadow-lg"
                     aria-label={t("common.back")}
@@ -518,18 +510,18 @@ function GuideError({ error, onRetry }: { error: unknown; onRetry: () => void })
               : t("common.errorDescription");
     return (
         <Card className="mt-8 max-w-2xl">
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2">
+            <div>
+                <Typography.Title className="flex items-center gap-2">
                     <FileText className="size-5 text-destructive" aria-hidden />
                     {t("common.error")}
-                </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
+                </Typography.Title>
+            </div>
+            <div className="space-y-4">
                 <p className="text-sm text-muted-foreground">{message}</p>
-                <Button variant="outline" onClick={onRetry}>
+                <Button variant="outlined" onClick={onRetry}>
                     {t("common.retry")}
                 </Button>
-            </CardContent>
+            </div>
         </Card>
     );
 }

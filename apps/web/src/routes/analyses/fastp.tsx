@@ -9,8 +9,8 @@
 
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import * as React from "react";
-import { FlaskConical, Loader2, Play, RotateCcw, Info } from "lucide-react";
-import { PageHeader, Card, CardHeader, CardTitle, CardDescription, CardContent, Label, Input, Button } from "../../lib/web-ui";
+import { ExperimentOutlined, LoadingOutlined, CaretRightOutlined, RedoOutlined, InfoCircleOutlined } from "@ant-design/icons";
+import { Breadcrumb, Button, Card, Input, Typography } from "@/lib/antd";
 import { UploadDropzone } from "../../components/analyses/upload-dropzone";
 import { ResearcherGate } from "../../components/analyses/researcher-gate";
 import { useAnalysisUpload } from "../../lib/analyses-upload";
@@ -87,25 +87,29 @@ function FastpComponent() {
   return (
     <div className="container-prose section-rhythm">
       <ResearcherGate>
-        <PageHeader
-          icon={FlaskConical}
-          title="fastp QC"
-          description="Trim adapters and filter low-quality reads from FASTQ files. Results include a HTML report plus per-run statistics."
-          breadcrumb={[{ label: "Analyze", href: "/analyses" }, { label: "fastp" }]}
-        />
+        <header className="flex flex-col gap-4">
+          <Breadcrumb items={[{ title: "Analyze", href: "/analyses" }, { title: "fastp" }]} />
+          <div className="flex items-start gap-3.5">
+            <span className="flex size-11 items-center justify-center rounded-xl border bg-card shadow-sm"><ExperimentOutlined /></span>
+            <div>
+              <Typography.Title level={2} style={{ margin: 0 }}>fastp QC</Typography.Title>
+              <Typography.Paragraph type="secondary" style={{ margin: 0 }}>Trim adapters and filter low-quality reads from FASTQ files. Results include a HTML report plus per-run statistics.</Typography.Paragraph>
+            </div>
+          </div>
+        </header>
 
         <form onSubmit={onSubmit} className="mt-8 grid gap-6 lg:grid-cols-[1.5fr_1fr]">
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FlaskConical className="size-5 text-primary" aria-hidden />
+            <div className="mb-6">
+              <Typography.Title level={4} className="flex items-center gap-2">
+                <ExperimentOutlined className="size-5 text-primary" aria-hidden />
                 Input files
-              </CardTitle>
-              <CardDescription>
+              </Typography.Title>
+              <Typography.Paragraph type="secondary">
                 Single-end: one FASTQ file. Paired-end: select R1 and R2 together (R1 first).
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-6">
+              </Typography.Paragraph>
+            </div>
+            <div className="grid gap-6">
               <UploadDropzone
                 extensions={FASTQ_EXTENSIONS}
                 formatLabel="FASTQ"
@@ -118,7 +122,7 @@ function FastpComponent() {
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="grid gap-2">
-                  <Label htmlFor="trim_front1">trim_front1 (bp)</Label>
+                  <label htmlFor="trim_front1">trim_front1 (bp)</label>
                   <Input
                     id="trim_front1"
                     type="number"
@@ -135,7 +139,7 @@ function FastpComponent() {
                   ) : null}
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="trim_tail1">trim_tail1 (bp)</Label>
+                  <label htmlFor="trim_tail1">trim_tail1 (bp)</label>
                   <Input
                     id="trim_tail1"
                     type="number"
@@ -152,7 +156,7 @@ function FastpComponent() {
                   ) : null}
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="quality_phred">Quality cutoff (phred)</Label>
+                  <label htmlFor="quality_phred">Quality cutoff (phred)</label>
                   <Input
                     id="quality_phred"
                     type="number"
@@ -169,7 +173,7 @@ function FastpComponent() {
                   ) : null}
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="thread">Threads</Label>
+                  <label htmlFor="thread">Threads</label>
                   <Input
                     id="thread"
                     type="number"
@@ -192,12 +196,12 @@ function FastpComponent() {
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     {upload.phase === "submitting" ? (
                       <>
-                        <Loader2 className="size-4 animate-spin" aria-hidden />
+                        <LoadingOutlined className="size-4 animate-spin" aria-hidden />
                         Submitting job…
                       </>
                     ) : (
                       <>
-                        <Loader2 className="size-4 animate-spin" aria-hidden />
+                        <LoadingOutlined className="size-4 animate-spin" aria-hidden />
                         Uploading to object storage… {upload.progress}%
                       </>
                     )}
@@ -224,17 +228,17 @@ function FastpComponent() {
               ) : null}
 
               <div className="flex flex-wrap gap-2">
-                <Button type="submit" disabled={files.length === 0 || upload.busy}>
+                <Button htmlType="submit" type="primary" disabled={files.length === 0 || upload.busy}>
                   {upload.phase === "submitting" ? (
-                    <Loader2 className="size-4 animate-spin" aria-hidden />
+                    <LoadingOutlined className="size-4 animate-spin" aria-hidden />
                   ) : (
-                    <Play className="size-4" aria-hidden />
+                    <CaretRightOutlined className="size-4" aria-hidden />
                   )}
                   {files.length === 0 ? "Select files first" : upload.busy ? "Working…" : "Submit job"}
                 </Button>
                 <Button
-                  type="button"
-                  variant="outline"
+                  htmlType="button"
+                  type="default"
                   disabled={upload.busy}
                   onClick={() => {
                     setFiles([]);
@@ -243,37 +247,37 @@ function FastpComponent() {
                     upload.reset();
                   }}
                 >
-                  <RotateCcw className="size-4" aria-hidden />
+                  <RedoOutlined className="size-4" aria-hidden />
                   Reset
                 </Button>
               </div>
-            </CardContent>
+            </div>
           </Card>
 
           <div className="grid h-fit gap-4">
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-sm">
-                  <Info className="size-4 text-primary" aria-hidden />
+              <div className="mb-6">
+                <Typography.Title level={4} className="flex items-center gap-2 text-sm">
+                  <InfoCircleOutlined className="size-4 text-primary" aria-hidden />
                   How it works
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="text-sm leading-relaxed text-muted-foreground">
+                </Typography.Title>
+              </div>
+              <div className="text-sm leading-relaxed text-muted-foreground">
                 <ol className="list-decimal space-y-2 pl-4">
                   <li>Files are uploaded directly to object storage via a pre-signed URL (up to 500 MB each).</li>
                   <li>A fastp job is queued; you are taken to the result page which refreshes automatically.</li>
                   <li>When finished, the HTML report and summary statistics are available.</li>
                 </ol>
-              </CardContent>
+              </div>
             </Card>
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-sm">
-                  <FlaskConical className="size-4 text-primary" aria-hidden />
+              <div className="mb-6">
+                <Typography.Title level={4} className="flex items-center gap-2 text-sm">
+                  <ExperimentOutlined className="size-4 text-primary" aria-hidden />
                   Parameters
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="text-sm leading-relaxed text-muted-foreground">
+                </Typography.Title>
+              </div>
+              <div className="text-sm leading-relaxed text-muted-foreground">
                 <p>
                   <span className="font-medium text-foreground">trim_front1 / trim_tail1</span> — bases trimmed
                   from read 5′/3′ ends.
@@ -286,7 +290,7 @@ function FastpComponent() {
                   <span className="font-medium text-foreground">thread</span> — CPU threads for the pipeline
                   (1–64).
                 </p>
-              </CardContent>
+              </div>
             </Card>
           </div>
         </form>

@@ -10,7 +10,12 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import * as React from "react";
-import { ArrowLeft, Microscope, BarChart3, Dna } from "lucide-react";
+import {
+  AimOutlined as Microscope,
+  ArrowLeftOutlined as ArrowLeft,
+  BarChartOutlined as BarChart3,
+  DeploymentUnitOutlined as Dna,
+} from "@ant-design/icons";
 import {
   Button,
   Card,

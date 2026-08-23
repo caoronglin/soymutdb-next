@@ -2,6 +2,8 @@
  * SiteHeader — sticky top navigation with logo, flat primary nav, search
  * trigger, language switch, theme toggle, animation control, and auth menu.
  *
+ * Ant Design is the only UI library used here (`@/lib/antd` + `@ant-design/icons`).
+ *
  * Features:
  * - Scroll-reactive backdrop blur / shadow (RAF-throttled)
  * - Five flat top-level nav items (Home / Search / Tools / Contact / News),
@@ -15,17 +17,17 @@ import * as React from "react";
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import {
-  Search,
-  Menu,
-  X,
-  Sun,
-  Moon,
-  Globe,
-  ChevronDown,
-  Dna,
-} from "lucide-react";
-import { Button, cn } from "../lib/web-ui";
-import { Affix } from "@/lib/antd";
+  SearchOutlined,
+  MenuOutlined,
+  CloseOutlined,
+  SunOutlined,
+  MoonOutlined,
+  GlobalOutlined,
+  DownOutlined,
+  DeploymentUnitOutlined,
+} from "@ant-design/icons";
+import { cn } from "../lib/cn";
+import { Affix, Button, Input } from "@/lib/antd";
 import { useTheme } from "../lib/theme-provider";
 import { useI18n, type SupportedLanguage } from "../lib/i18n";
 import { AnimationControl } from "./animation-control";
@@ -64,8 +66,7 @@ const NAV_LABEL_KEYS: Record<string, string> = {
  * Primary navigation — five flat items in the approved reference order
  * (Home / Search / Tools / Latest News / Contact). The order comes from the
  * PageDefinition navigation (page-builder/seed.ts fallback) and is a single
- * source of truth for both desktop and mobile drawers. On definition/API
- * failure the same immutable five-item order is the fallback.
+ * source of truth for both desktop and mobile drawers.
  */
 const NAV_ITEMS: NavItem[] = NAVIGATION_ORDER.map((item) => ({
   to: item.route,
@@ -141,7 +142,6 @@ export function SiteHeader() {
   // Open command palette via Cmd+K is handled globally by CommandPalette;
   // this button is a visible affordance.
   const openPalette = () => {
-    // Dispatch a synthetic Cmd+K so the existing keyboard listener catches it
     document.dispatchEvent(
       new KeyboardEvent("keydown", { key: "k", metaKey: true, bubbles: true }),
     );
@@ -170,7 +170,7 @@ export function SiteHeader() {
           aria-label="SoyMutDB home"
         >
           <span className="flex size-8 items-center justify-center rounded-lg bg-gradient-to-br from-[var(--primary-gradient-start)] to-[var(--primary-gradient-end)] text-primary-foreground shadow-sm">
-            <Dna className="size-5" aria-hidden />
+            <DeploymentUnitOutlined className="size-5" aria-hidden />
           </span>
           <span className="font-display text-lg font-semibold tracking-tight">
             Soy<span className="text-gradient">Mut</span>DB
@@ -205,7 +205,7 @@ export function SiteHeader() {
             className="hidden h-9 items-center gap-2.5 rounded-lg border border-input/70 bg-muted/40 px-3 text-sm text-muted-foreground shadow-sm transition-all hover:border-border hover:bg-muted/70 hover:text-foreground md:flex md:w-44 lg:w-56"
             aria-label="Quick search (Cmd+K)"
           >
-            <Search className="size-4 shrink-0" aria-hidden />
+            <SearchOutlined className="size-4 shrink-0" aria-hidden />
             <span className="min-w-0 flex-1 truncate text-left">
               <span className="hidden lg:inline">{t("home.searchPlaceholder")}</span>
               <span className="lg:hidden">Search…</span>
@@ -223,39 +223,33 @@ export function SiteHeader() {
             onChange={changeLanguage}
           />
           <Button
-            variant="ghost"
-            size="icon"
+            type="text"
             aria-label={t("nav.theme")}
             onClick={toggleTheme}
-          >
-            {theme === "dark" ? <Sun className="size-4" aria-hidden /> : <Moon className="size-4" aria-hidden />}
-          </Button>
+            icon={theme === "dark" ? <SunOutlined /> : <MoonOutlined />}
+          />
+
           <AnimationControl />
 
           {/* Mobile search button */}
           <Button
-            variant="ghost"
-            size="icon"
+            type="text"
             className="md:hidden"
             aria-label={t("search.openPalette")}
             onClick={openPalette}
-          >
-            <Search className="size-5" aria-hidden />
-          </Button>
+            icon={<SearchOutlined />}
+          />
 
           {/* Mobile menu toggle */}
           <Button
-            ref={menuButtonRef}
-            variant="ghost"
-            size="icon"
+            type="text"
             className="lg:hidden"
             aria-label={mobileOpen ? "Close menu" : "Open menu"}
             aria-expanded={mobileOpen}
             aria-controls="mobile-nav"
             onClick={() => setMobileOpen((v) => !v)}
-          >
-            {mobileOpen ? <X className="size-5" aria-hidden /> : <Menu className="size-5" aria-hidden />}
-          </Button>
+            icon={mobileOpen ? <CloseOutlined /> : <MenuOutlined />}
+          />
         </div>
       </div>
 
@@ -267,17 +261,15 @@ export function SiteHeader() {
         >
           <div className="container-prose flex flex-col py-5">
             <form onSubmit={onSearchSubmit} role="search" className="mb-5 md:hidden">
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-                <input
-                  type="search"
-                  value={searchValue}
-                  onChange={(e) => setSearchValue(e.target.value)}
-                  placeholder={t("home.searchPlaceholder")}
-                  aria-label={t("nav.search")}
-                  className="h-11 w-full rounded-xl border border-input bg-background pl-10 pr-3 text-sm shadow-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring"
-                />
-              </div>
+              <Input
+                allowClear
+                type="search"
+                value={searchValue}
+                onChange={(e) => setSearchValue(e.target.value)}
+                placeholder={t("home.searchPlaceholder")}
+                aria-label={t("nav.search")}
+                prefix={<SearchOutlined aria-hidden />}
+              />
             </form>
 
             {/* Flat five-item nav (mirrors the desktop primary nav) */}
@@ -340,15 +332,13 @@ function LanguageSwitcher({
   return (
     <div className="relative" ref={ref}>
       <Button
-        variant="ghost"
-        size="icon"
+        type="text"
         aria-label="Language"
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen(!open)}
-      >
-        <Globe className="size-4" aria-hidden />
-      </Button>
+        icon={<GlobalOutlined />}
+      />
       {open ? (
         <div
           role="menu"
@@ -370,7 +360,7 @@ function LanguageSwitcher({
               )}
             >
               {lang.label}
-              {current === lang.code ? <ChevronDown className="size-3 -rotate-90" aria-hidden /> : null}
+              {current === lang.code ? <DownOutlined className="size-3 -rotate-90" aria-hidden /> : null}
             </button>
           ))}
         </div>

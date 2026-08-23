@@ -4,7 +4,8 @@
  */
 import type { EChartsOption } from "echarts";
 import { useECharts } from "../../lib/use-echarts";
-import { ChartEmptyState, cn } from "../../lib/web-ui";
+import { Empty } from "@/lib/antd";
+import { cn } from "@/lib/cn";
 
 export interface ImpactDistributionProps {
   data: ReadonlyArray<{ impact: "HIGH" | "MODERATE" | "LOW" | "MODIFIER"; count: number }>;
@@ -66,7 +67,7 @@ export function ImpactDistribution({ data, className }: ImpactDistributionProps)
     <figure className={cn("relative", className)}>
       <div ref={ref} className="h-64 w-full" role="img" aria-label="Variant impact distribution bar chart" />
       {loading ? <div className="skeleton-pulse absolute inset-0 rounded-lg bg-muted/40" aria-hidden /> : null}
-      <ChartEmptyState visible={ordered.length === 0 && !loading} />
+      {ordered.length === 0 && !loading ? <Empty className="absolute inset-0 flex items-center justify-center" image={Empty.PRESENTED_IMAGE_SIMPLE} /> : null}
       <figcaption className="sr-only">
         Impact distribution: {ordered.map((d) => `${d.impact} ${d.count.toLocaleString()}`).join(", ")}.
       </figcaption>
