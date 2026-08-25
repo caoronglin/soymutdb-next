@@ -254,7 +254,7 @@ jobs:
         with:
           path: release-inputs
       - name: Install workspace dependencies for Node SBOM
-        run: pnpm install --frozen-lockfile --ignore-scripts
+        run: npm_config_node_linker=hoisted pnpm install --frozen-lockfile --ignore-scripts
       - name: Build package and checksums without Docker
         run: |
           set -euo pipefail

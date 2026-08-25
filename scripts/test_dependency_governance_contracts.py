@@ -83,12 +83,12 @@ def test_graph_cli_generates_four_normalized_machine_graphs(tmp_path: Path) -> N
         {node["id"] for node in oci["nodes"]}
     )
     assert any(
-        node["id"] == "base-image:ghcr.io/astral-sh/uv:0.5.11"
+        node["id"] == "base-image:ghcr.io/astral-sh/uv:0.11.33"
         for node in oci["nodes"]
     )
     assert any(
         edge["relation"] == "copy_from"
-        and edge["to"] == "base-image:ghcr.io/astral-sh/uv:0.5.11"
+        and edge["to"] == "base-image:ghcr.io/astral-sh/uv:0.11.33"
         for edge in oci["edges"]
     )
 
@@ -236,7 +236,10 @@ def test_governance_policy_covers_every_required_gate_with_pinned_tools() -> Non
         command = check["command"]
         serialized = " ".join(command)
         assert isinstance(command, list) and command
-        assert command[0] not in {"bash", "sh"}
+        if command[0] in {"bash", "sh"}:
+            assert command[1:2] == ["-c"]
+            assert "uv export --locked" in serialized
+            assert "pip-audit==" in serialized
         assert "docker" not in serialized
         if any(
             tool in serialized

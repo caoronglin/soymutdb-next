@@ -220,7 +220,6 @@ services:
       <<: *app-env
       CH_MIGRATION_SQL: /upgrade_variant_facts_schema.sql
       CLICKHOUSE_MIGRATION_PYTHON: /opt/venv/bin/python
-    volumes:
     command: [ "bash", "/opt/soymutdb/migrate-clickhouse.sh" ]
     restart: "no"
 
