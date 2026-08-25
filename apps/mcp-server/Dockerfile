@@ -27,7 +27,8 @@ FROM python:3.12-slim AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PATH="/opt/venv/bin:$PATH"
+    PATH="/opt/venv/bin:$PATH" \
+    PYTHONPATH="/app/src"
 
 COPY --from=builder /opt/venv /opt/venv
 COPY --from=builder /app/src ./src
