@@ -48,6 +48,9 @@ class FakeResult:
     def scalar_one_or_none(self):
         return self._scalar_one_or_none
 
+    def one(self):
+        return self._rows[0]
+
 
 class FakeDB(AsyncMock):
     """AsyncMock with canned scalar/execute responses."""
@@ -68,6 +71,28 @@ def _release_row(version: str, days_ago: int, variant_count: int) -> FakeResult:
             )
         ]
     )
+
+
+@pytest.mark.asyncio
+async def test_dashboard_stats_uses_one_count_query_and_real_users():
+    db = FakeDB(
+        results=[
+            # counts: genes, mutant lines, phenotypes, assemblies, active users
+            FakeResult(rows=[(10, 4, 3, 2, 7)]),
+            FakeResult(scalar_one_or_none=None),  # latest release
+        ]
+    )
+    with patch.object(
+        stats_module.ch_service,
+        "get_dashboard_stats",
+        new=AsyncMock(return_value={"total_variants": 42}),
+    ):
+        result = await stats_module._load_dashboard_stats(db)
+
+    assert result["total_genes"] == 10
+    assert result["total_users"] == 7
+    assert db.execute.await_count == 2
+    assert db.scalar.await_count == 0
 
 
 @pytest.mark.asyncio

@@ -19,6 +19,12 @@
 - 当前 workflow 只执行 native installer dry-run 和目标配置门禁，不伪装成已经连接远程服务器；真正的 SSH/WinRM/OIDC/backup/migration/deploy/health/rollback target adapter 必须在受保护环境中补齐后才允许接入。
 - production 需要 staging 成功、显式 deploy_staging=true 和 deploy_production=true，并经过 production environment 审批。
 
+## 最近远程验证证据
+
+- `ci.yml` release run [`32843469602`](https://github.com/caoronglin/soymutdb-next/actions/runs/32843469602) 已通过前端/API/contract、amd64/arm64 Docker build/smoke、Trivy、SPDX SBOM、Kind smoke、GHCR 多架构发布、Cosign 签名/证明和 OCI release contract。
+- `baseline-validation.yml` run [`32843469562`](https://github.com/caoronglin/soymutdb-next/actions/runs/32843469562) 已通过 Windows installer/dry-run、Docker-free unit/liveness smoke、Linux PostgreSQL、Web/Admin、OpenAPI/client contract 和 deployment attestations。
+- 上述 run 只证明对应 commit 的 CI/baseline 门禁；真实生产服务器、受保护环境审批和远程回滚仍需按本文件的 deployment safety gate 执行。
+
 ## GitHub-only / 本地未执行部分
 
 本地已完成 YAML 解析、固定 SHA 检查、Linux shell 语法、native installer dry-run 和 API unit/Ruff 验证，但无法执行 GitHub runner 的 Windows PowerShell parser、Ubuntu/Windows artifact 服务、protected-environment 审批、OIDC token exchange、远程备份/迁移/部署/回滚和真实 SBOM 产物。合并后必须运行 baseline-validation.yml 并保存 release artifact、manifest、SBOM、migration head 和 smoke 日志。

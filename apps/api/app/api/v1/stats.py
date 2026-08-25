@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from structlog import get_logger
 
 from ...core.database import get_db
+from ...models.auth import User
 from ...models.content import Release, ReleaseStatus
 from ...models.genomic import Assembly, Chromosome, Gene
 from ...models.seed import SeedInventory
@@ -87,10 +88,26 @@ async def _variant_type_summary_from_ch() -> dict[str, int] | None:
 
 async def _load_dashboard_stats(db: AsyncSession) -> dict:
     """Compute dashboard aggregates (loader for the Redis cache)."""
-    total_genes = await db.scalar(select(func.count(Gene.id)))
-    total_mutant_lines = await db.scalar(select(func.count(MutantLine.id)))
-    total_phenotypes = await db.scalar(select(func.count(Phenotype.id)))
-    assemblies_count = await db.scalar(select(func.count(Assembly.id)))
+    # Keep dashboard counts in one round-trip: these independent scalar
+    # subqueries avoid five sequential pool checkouts on every cache refresh.
+    count_result = await db.execute(
+        select(
+            select(func.count(Gene.id)).scalar_subquery(),
+            select(func.count(MutantLine.id)).scalar_subquery(),
+            select(func.count(Phenotype.id)).scalar_subquery(),
+            select(func.count(Assembly.id)).scalar_subquery(),
+            select(func.count(User.id))
+            .where(User.is_deleted.is_(False))
+            .scalar_subquery(),
+        )
+    )
+    (
+        total_genes,
+        total_mutant_lines,
+        total_phenotypes,
+        assemblies_count,
+        total_users,
+    ) = count_result.one()
 
     # Current release version.
     release_result = await db.execute(
@@ -110,7 +127,7 @@ async def _load_dashboard_stats(db: AsyncSession) -> dict:
         total_genes=int(total_genes or 0),
         total_mutant_lines=int(total_mutant_lines or 0),
         total_phenotypes=int(total_phenotypes or 0),
-        total_users=0,
+        total_users=int(total_users or 0),
         assemblies_count=int(assemblies_count or 0),
         current_release=current_release.version if current_release else None,
         last_updated=datetime.now(timezone.utc),  # noqa: UP017

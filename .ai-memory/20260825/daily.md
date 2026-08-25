@@ -153,3 +153,14 @@
 - **文件**: `.github/workflows/ci.yml`
 - **决策**: 双架构 Docker、Kind 和 Windows baseline 均已通过；GHCR publish 在 `cosign attest --type slsaprovenance` 阶段拒绝 SLSA v1 的 `runDetails.builder`，报 `required field builder missing`。改为 Cosign `slsaprovenance` 所需的 SLSA v0.2 predicate（顶层 `builder`, `buildType`, `invocation`, `materials`），保留来源 revision、workflow identity、平台和 provenance SHA256。
 - **验证**: CI run `32841250150` 成功：前端/API/contract、双架构 Docker build/smoke/Trivy/SPDX、Kind smoke、GHCR 多架构 manifest、Cosign sign/attestation 与 OCI release contract 全部通过；baseline run `32841250085` 成功，Windows installer dry-run 与 Docker-free unit/liveness smoke 通过。
+
+## [下一轮优化] - Dashboard 聚合查询与真实用户统计
+
+- **文件**: `apps/api/app/api/v1/stats.py`, `apps/api/tests/test_stats_contract.py`
+- **决策**: 公共 `/stats/dashboard` 原先把 `total_users` 固定为 0，且每次缓存刷新顺序执行五次独立 count 查询。改为一次 SQLAlchemy 查询承载五个 scalar subquery，并统计未软删除的真实用户。
+- **验证**: 两个 Python 文件 `py_compile` 通过，新增回归覆盖真实用户数与单次聚合查询；完整 API pytest 需在依赖完整的 CI 环境验证。
+
+## [文档同步] - 更新 CI/CD 最新远程证据
+
+- **文件**: `docs/ci-cd-baseline.md`
+- **决策**: 补充最新成功的 CI `32843469602` 与 baseline `32843469562` 链接和通过范围，同时明确它们不等同于真实生产服务器部署、审批或远程回滚验证。
