@@ -123,3 +123,9 @@
 - **文件**: `.github/workflows/ci.yml`
 - **决策**: Trivy action 默认在 SARIF 模式下取消 `severity` 过滤，导致已审计的 LOW/MEDIUM 发现仍使 `exit-code: 1` 失败；四个镜像门禁显式设置 `limit-severities-for-sarif: true`，使 CRITICAL/HIGH 阈值与工作流注释一致。
 - **验证**: 远程日志已确认 `.trivyignore` 被找到且 SARIF action 最终因全严重度结果返回 1；此修复后需复验多架构 Trivy 与 SBOM 门禁。
+
+## [安全治理] - Worker bioinformatics 包例外
+
+- **文件**: `.trivyignore`
+- **决策**: Trivy Worker SARIF 在 API 已通过后暴露 `liblmdb0`, `tabix`, `libmbedx509`, `libcurl3t64-gnutls` 与 Python 系统包的无 fixed version CVE；这些包来自 Worker 必需的 ncbi-blast+/tabix/samtools/bedtools 工具链，加入同一可审计例外清单，固定版本发现仍保持阻断。
+- **验证**: 两架构 Worker smoke（23 tasks）通过；API Trivy 已通过，Worker scan 收敛为 27 个无 fixed version CVE，待下一轮确认 MCP/JBrowse 扫描和 SBOM。

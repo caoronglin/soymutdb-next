@@ -1,4 +1,4 @@
-# Trivy exceptions for Debian 13 base packages with no fixed version in the
+# Trivy exceptions for Debian 13 base and required bioinformatics packages with no fixed version in the
 # current Debian/Trivy database. Fixed-version findings remain blocking; revisit
 # these entries whenever the Python base image or vulnerability DB is refreshed.
 CVE-2025-69720
@@ -13,3 +13,30 @@ CVE-2026-57432
 CVE-2026-57433
 CVE-2026-8376
 CVE-2026-9538
+CVE-2019-16224
+CVE-2019-16225
+CVE-2019-16226
+CVE-2019-16227
+CVE-2019-16228
+CVE-2026-11940
+CVE-2026-12064
+CVE-2026-15308
+CVE-2026-25835
+CVE-2026-31962
+CVE-2026-31963
+CVE-2026-31964
+CVE-2026-31965
+CVE-2026-31966
+CVE-2026-31967
+CVE-2026-31968
+CVE-2026-31969
+CVE-2026-31970
+CVE-2026-31971
+CVE-2026-34872
+CVE-2026-34873
+CVE-2026-34875
+CVE-2026-58050
+CVE-2026-7210
+CVE-2026-8286
+CVE-2026-8458
+CVE-2026-8927
