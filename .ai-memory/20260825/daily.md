@@ -75,3 +75,9 @@
 - **文件**: `apps/web/src/components/home/antd-home.tsx`, `apps/web/src/routes/index.tsx`, `apps/web/src/routes/search/genes.tsx`, `apps/web/src/routes/search/location.tsx`, `apps/admin/src/routes/index.tsx`
 - **决策**: 首页最新动态改用 `/news/featured`，删除虚拟新闻；生产首页 Page Builder 资源 API 失败时不显示 legacy fallback；基因/位置查询区分 API 失败与空结果；Admin 指标去除零值 placeholder 并显示加载/错误状态。
 - **验证**: Web/Admin `tsc --noEmit` 通过；定向 ESLint 0 error（位置页保留 7 个既有 React effect warnings）；Web/Admin Vite build 通过。
+
+## [CI 修复] - CycloneDX pnpm npm-ls 错误
+
+- **文件**: `.github/workflows/baseline-validation.yml`
+- **决策**: 根据 CycloneDX npm 官方 CLI 文档，在 Node SBOM 命令加入 `--ignore-npm-errors`；pnpm 的 virtual-store 被 `npm ls` 标为 `ELSPROBLEMS` 时忽略扫描器诊断，但仍保留生成 SBOM 所需的依赖证据。移除未生效的 node-linker 环境变量。
+- **验证**: 远程日志确认失败点是 `npm-ls exited with errors: 1`；下一轮需复验 supply-chain artifact。

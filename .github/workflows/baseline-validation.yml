@@ -254,7 +254,7 @@ jobs:
         with:
           path: release-inputs
       - name: Install workspace dependencies for Node SBOM
-        run: npm_config_node_linker=hoisted pnpm install --frozen-lockfile --ignore-scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Build package and checksums without Docker
         run: |
           set -euo pipefail
@@ -276,7 +276,7 @@ jobs:
         run: |
           python -m pip install --disable-pip-version-check cyclonedx-bom==4.6.0
           cyclonedx-py environment --output-format json -o release/sbom-python.cdx.json
-          corepack pnpm dlx --yes @cyclonedx/cyclonedx-npm@1.19.0 --output-format JSON --output-file release/sbom-node.cdx.json
+          corepack pnpm dlx --yes @cyclonedx/cyclonedx-npm@1.19.0 --ignore-npm-errors --output-format JSON --output-file release/sbom-node.cdx.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: soymutdb-baseline-release
