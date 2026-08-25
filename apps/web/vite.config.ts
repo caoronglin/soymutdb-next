@@ -40,12 +40,18 @@ function cloudflareWebAnalytics(token: string | undefined): Plugin {
                 // Widen the <meta> CSP for the beacon (must stay in sync with
                 // apps/web/public/_headers, whose CSP is widened statically).
                 .replace(
-                    "script-src 'self' 'unsafe-inline'",
-                    "script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com",
+                    /script-src 'self' 'unsafe-inline'([^;"]*)/,
+                    (_match, origins: string) =>
+                        origins.includes("https://static.cloudflareinsights.com")
+                            ? _match
+                            : `script-src 'self' 'unsafe-inline'${origins} https://static.cloudflareinsights.com`,
                 )
                 .replace(
                     /connect-src 'self'([^;"]*)/,
-                    (_match, origins: string) => `connect-src 'self'${origins} https://cloudflareinsights.com`,
+                    (_match, origins: string) =>
+                        origins.includes("https://cloudflareinsights.com")
+                            ? _match
+                            : `connect-src 'self'${origins} https://cloudflareinsights.com`,
                 );
         },
     };
