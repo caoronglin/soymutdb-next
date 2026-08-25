@@ -677,7 +677,7 @@ jobs:
           test "$(kubectl -n "${namespace}" get deployment/api -o jsonpath='{.spec.template.spec.containers[0].image}')" = "soymutdb-api:ci-amd64"
           test "$(kubectl -n "${namespace}" get deployment/worker -o jsonpath='{.spec.template.spec.containers[0].image}')" = "soymutdb-worker:ci-amd64"
           worker_metrics="$(kubectl -n "${namespace}" exec deployment/worker -- python -c 'import urllib.request; print(urllib.request.urlopen("http://127.0.0.1:9808/metrics", timeout=5).read().decode())')"
-          grep -Eq '^soymutdb_worker_up[[:space:]]+1(\.0+)?$' <<<"${worker_metrics}"
+          grep -Eq '^soymutdb_worker_up(\{[^}]*\})?[[:space:]]+1(\.0+)?$' <<<"${worker_metrics}"
           kubectl -n "${namespace}" port-forward service/api 18080:80 >/tmp/soymutdb-kind-port-forward.log 2>&1 &
           port_forward_pid=$!
           cleanup() {

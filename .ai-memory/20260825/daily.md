@@ -146,4 +146,4 @@
 
 - **文件**: `.github/workflows/ci.yml`, `apps/worker/src/soymutdb_worker/metrics.py`, `apps/worker/tests/test_metrics.py`
 - **决策**: Kind smoke 不再假设 Worker runtime 内有 curl，改用 Python 标准库读取 `/metrics`；同时 queue-depth collector 只对 `redis://`/`rediss://` 启动，`memory://` 等测试 broker 记录受控 warning，不在线程中抛出 Redis URL `ValueError`。
-- **验证**: Docker 双架构 build、smoke、Trivy、SPDX SBOM 和压缩 artifact 均通过；上一轮 Kind 唯一失败是 Worker 镜像没有 curl，待本修复后的 Kind 与 publish 重跑。
+- **验证**: Docker 双架构 build、smoke、Trivy、SPDX SBOM 和压缩 artifact 均通过；Kind 已成功加载、部署并通过 API/Worker rollout，行为断言暴露 Prometheus multiprocess gauge 带 `{pid=...}` 标签，放宽为兼容可选标签后需重跑 Kind 与 publish。
