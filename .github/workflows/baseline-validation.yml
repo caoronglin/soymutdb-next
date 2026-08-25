@@ -105,7 +105,7 @@ jobs:
         run: |
           ../../.ci-venv/bin/python -m alembic upgrade head
           ../../.ci-venv/bin/python -m app.scripts.seed_page_builder
-          ../../.ci-venv/bin/python -m pytest tests/test_health_unit.py tests/test_config_security.py -q
+          env -u SOYMUTDB_DEPLOYMENT_MODE ../../.ci-venv/bin/python -m pytest tests/test_health_unit.py tests/test_config_security.py -q
           ../../.ci-venv/bin/python -m ruff check app/api/v1/health.py tests/test_health_unit.py tests/test_config_security.py
       - name: API liveness smoke
         working-directory: apps/api
@@ -176,7 +176,9 @@ jobs:
         run: .\\deploy\\windows\\install.ps1 -DryRun -SkipDatabase
       - name: Run Docker-free unit tests
         shell: pwsh
-        run: .\\.ci-venv\\Scripts\\python.exe -m pytest apps/api/tests/test_health_unit.py apps/api/tests/test_config_security.py -q
+        run: |
+          Remove-Item Env:SOYMUTDB_DEPLOYMENT_MODE -ErrorAction SilentlyContinue
+          .\\.ci-venv\\Scripts\\python.exe -m pytest apps/api/tests/test_health_unit.py apps/api/tests/test_config_security.py -q
       - name: API liveness smoke
         shell: pwsh
         working-directory: apps/api
