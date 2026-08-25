@@ -81,3 +81,9 @@
 - **文件**: `.github/workflows/baseline-validation.yml`
 - **决策**: 根据 CycloneDX npm 官方 CLI 文档，在 Node SBOM 命令加入 `--ignore-npm-errors`；pnpm 的 virtual-store 被 `npm ls` 标为 `ELSPROBLEMS` 时忽略扫描器诊断，但仍保留生成 SBOM 所需的依赖证据。移除未生效的 node-linker 环境变量。
 - **验证**: 远程日志确认失败点是 `npm-ls exited with errors: 1`；下一轮需复验 supply-chain artifact。
+
+## [CI 复盘] - uv workspace 路径
+
+- **文件**: `infra/docker/Dockerfile.api`, `infra/docker/Dockerfile.worker`
+- **决策**: 新版 uv 已能解析 lockfile，但要求本地 `soymutdb-jobs` 位于 `/app/packages/jobs-py`；此前绝对复制到 `/packages/jobs-py` 反而导致 `Distribution not found: file:///app/packages/jobs-py`，恢复相对 `/app/packages` 目标。
+- **验证**: 最新 baseline 全部通过（含 Windows）；Docker amd64/arm64 失败均收敛为该 API build 路径错误，修复后需重跑多架构构建。
