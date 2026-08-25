@@ -117,3 +117,9 @@
 - **文件**: `.github/workflows/ci.yml`
 - **决策**: Trivy SARIF 已证明例外文件可使结果归零，但 action 日志显示 `INPUT_TRIVYIGNORES` 为空；为避免依赖隐式工作目录，在四个 CRITICAL/HIGH 阻断扫描中显式设置 `trivyignores: .trivyignore`。
 - **验证**: 上一轮全镜像构建、运行时 smoke 与 JBrowse nginx 均通过；唯一失败为 Trivy API scan 未读取例外路径。
+
+## [CI 修复] - Trivy SARIF 严重度阈值
+
+- **文件**: `.github/workflows/ci.yml`
+- **决策**: Trivy action 默认在 SARIF 模式下取消 `severity` 过滤，导致已审计的 LOW/MEDIUM 发现仍使 `exit-code: 1` 失败；四个镜像门禁显式设置 `limit-severities-for-sarif: true`，使 CRITICAL/HIGH 阈值与工作流注释一致。
+- **验证**: 远程日志已确认 `.trivyignore` 被找到且 SARIF action 最终因全严重度结果返回 1；此修复后需复验多架构 Trivy 与 SBOM 门禁。
