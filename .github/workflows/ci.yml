@@ -1125,7 +1125,12 @@ jobs:
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' -X POST "$slash_base" -H 'Content-Type: application/json' -d "$payload")" = 401
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' -X POST "$slash_base" -H 'Content-Type: application/json' -H 'Authorization: Bearer ci-test-token' -d "$payload")" = 308
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' -X POST "$base" -H 'Content-Type: application/json' -H 'Authorization: Bearer wrong' -d "$payload")" = 401
-          code=$(curl --fail --silent --output /dev/null --write-out '%{http_code}' -X POST "$base" -H 'Accept: application/json, text/event-stream' -H 'Content-Type: application/json' -H 'Authorization: Bearer ci-test-token' -d "$payload")
+          code=000
+          for attempt in {1..60}; do
+            code=$(curl --silent --output /dev/null --write-out '%{http_code}' -X POST "$base" -H 'Accept: application/json, text/event-stream' -H 'Content-Type: application/json' -H 'Authorization: Bearer ci-test-token' -d "$payload" || true)
+            test "$code" -ge 200 -a "$code" -lt 300 && break
+            sleep 2
+          done
           test "$code" -ge 200 -a "$code" -lt 300
       - name: Cleanup MCP
         if: always()

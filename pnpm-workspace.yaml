@@ -23,6 +23,7 @@ overrides:
   react: 19.2.0
   react-dom: 19.2.0
   librpc-web-mod: 1.3.0
+  rxjs: 7.8.0
   # Security floors for transitive production/development utility packages.
   lodash: 4.18.1
   ansi-regex: 5.0.1

@@ -14,6 +14,7 @@ overrides:
   react: 19.2.0
   react-dom: 19.2.0
   librpc-web-mod: 1.3.0
+  rxjs: 7.8.0
   lodash: 4.18.1
   ansi-regex: 5.0.1
 
@@ -1292,7 +1293,7 @@ packages:
       mobx-state-tree: ^5.0.0
       react: 19.2.0
       react-dom: 19.2.0
-      rxjs: ^7.0.0
+      rxjs: 7.8.0
       tss-react: ^4.0.0
 
   '@jbrowse/embedded-core@2.17.0':
@@ -1303,7 +1304,7 @@ packages:
       mobx-state-tree: ^5.0.0
       react: 19.2.0
       react-dom: 19.2.0
-      rxjs: ^7.0.0
+      rxjs: 7.8.0
       tss-react: ^4.0.0
 
   '@jbrowse/plugin-alignments@2.17.0':
@@ -1317,7 +1318,7 @@ packages:
       mobx-react: ^9.0.0
       mobx-state-tree: ^5.0.0
       react: 19.2.0
-      rxjs: ^7.0.0
+      rxjs: 7.8.0
       tss-react: ^4.0.0
 
   '@jbrowse/plugin-arc@2.17.0':
@@ -1332,7 +1333,7 @@ packages:
       mobx-state-tree: ^5.0.0
       react: 19.2.0
       react-dom: 19.2.0
-      rxjs: ^7.0.0
+      rxjs: 7.8.0
 
   '@jbrowse/plugin-authentication@2.17.0':
     resolution: {integrity: sha512-+v2ROETna7a3ROtDVPkHcRIlD/R2wBH1vI0pUfQGWhpsqWXMVBua/LJO+dQMX4p1E3eezifc54JBAFq0WgI4zA==}
@@ -1344,7 +1345,7 @@ packages:
       mobx-state-tree: ^5.0.0
       react: 19.2.0
       react-dom: 19.2.0
-      rxjs: ^7.0.0
+      rxjs: 7.8.0
 
   '@jbrowse/plugin-bed@2.17.0':
     resolution: {integrity: sha512-hR1Exox/1ii6KgSI9SkNt3NW1Ag7mLIGT+jo2M/DEODhnpZlClQoPue9tqhomtwc1gLLsJ6iKtV4GP/5zyEQBQ==}
@@ -1353,7 +1354,7 @@ packages:
       mobx: ^6.0.0
       mobx-react: ^9.0.0
       mobx-state-tree: ^5.0.0
-      rxjs: ^7.0.0
+      rxjs: 7.8.0
 
   '@jbrowse/plugin-circular-view@2.17.0':
     resolution: {integrity: sha512-YBgL6fcnoYWG8PghSxDhC5ACDkflE03f89o5qUgVBGLgk1IcjEg+j7cDGqZosx8Mo3txRZRfTZ9OksuCBLfH4w==}
@@ -1377,7 +1378,7 @@ packages:
       mobx-state-tree: ^5.0.0
       react: 19.2.0
       react-dom: 19.2.0
-      rxjs: ^7.0.0
+      rxjs: 7.8.0
       tss-react: ^4.0.0
 
   '@jbrowse/plugin-data-management@2.17.0':
@@ -1405,7 +1406,7 @@ packages:
       mobx-react: ^9.0.0
       mobx-state-tree: ^5.0.0
       react: 19.2.0
-      rxjs: ^7.0.0
+      rxjs: 7.8.0
 
   '@jbrowse/plugin-gff3@2.17.0':
     resolution: {integrity: sha512-mzDv72LoY+PZ9My+gmolNlsdkvwxhOkg6Tg2sYeYytc1421nFYaI/6EASFQFt2SoAlpXUFz2PU8whJyOFr1vaw==}
@@ -1415,7 +1416,7 @@ packages:
       '@mui/material': ^6.0.0
       mobx: ^6.0.0
       mobx-state-tree: ^5.0.0
-      rxjs: ^7.0.0
+      rxjs: 7.8.0
 
   '@jbrowse/plugin-legacy-jbrowse@2.17.0':
     resolution: {integrity: sha512-KBxVNxaw7vxX9FAGn0I7svMda8JOsgd4UwruPscWJnYZBCdes4BD8NUqBPqNHonatjpd9oiXIs8RRIow3d5zug==}
@@ -1424,7 +1425,7 @@ packages:
       mobx: ^6.0.0
       mobx-react: ^9.0.0
       mobx-state-tree: ^5.0.0
-      rxjs: ^7.0.0
+      rxjs: 7.8.0
 
   '@jbrowse/plugin-linear-genome-view@2.17.0':
     resolution: {integrity: sha512-zgTK6HmqJrP4U5WywTUwODlboXgJ7aJX+GUEslzvmXlB4MzFaEK+RtchTrBVmF6wA1yD1jbpk+dygolSzZuxLg==}
@@ -1449,7 +1450,7 @@ packages:
       mobx-react: ^9.0.0
       mobx-state-tree: ^5.0.0
       react: 19.2.0
-      rxjs: ^7.0.0
+      rxjs: 7.8.0
 
   '@jbrowse/plugin-svg@2.18.0':
     resolution: {integrity: sha512-75/rv1evceNq3R0oc3FdxgfKnHwb5AW095GUCyPe74YBXcrJD1EvRXhg9fT7g1vUzPz3E+iIQOIV88xafs2fAg==}
@@ -1482,7 +1483,7 @@ packages:
       mobx-react: ^9.0.0
       mobx-state-tree: ^5.0.0
       react: 19.2.0
-      rxjs: ^7.0.0
+      rxjs: 7.8.0
       tss-react: ^4.0.0
 
   '@jbrowse/plugin-wiggle@2.17.0':
@@ -1496,7 +1497,7 @@ packages:
       mobx-react: ^9.0.0
       mobx-state-tree: ^5.0.0
       react: 19.2.0
-      rxjs: ^7.0.0
+      rxjs: 7.8.0
       tss-react: ^4.0.0
 
   '@jbrowse/product-core@2.17.0':
@@ -1507,7 +1508,7 @@ packages:
       mobx-state-tree: ^5.0.0
       react: 19.2.0
       react-dom: 19.2.0
-      rxjs: ^7.0.0
+      rxjs: 7.8.0
       tss-react: ^4.0.0
 
   '@jbrowse/react-linear-genome-view@2.17.0':
@@ -1523,7 +1524,7 @@ packages:
       mobx-state-tree: ^5.0.0
       react: 19.2.0
       react-dom: 19.2.0
-      rxjs: ^7.0.0
+      rxjs: 7.8.0
       tss-react: ^4.0.0
 
   '@jest/types@27.0.2':
@@ -4558,9 +4559,6 @@ packages:
   rope-sequence@1.3.4:
     resolution: {integrity: sha512-UT5EDe2cu2E/6O4igUr5PSFs23nvvukicWHx6GnOPlHAiiYbzNuCRQCuiUdHJQcqKalLKlrYJnjY0ySGsXNQXQ==}
 
-  rxjs@7.0.0:
-    resolution: {integrity: sha512-I1V/ArAtGJg4kmCfms8fULm0SwYgEsAf2d5WPCBGzTYm2qTjO3Tx4EDFaGjbOox8CeEsC69jQK22mnmfyA26sw==}
-
   rxjs@7.8.0:
     resolution: {integrity: sha512-F2+gxDshqmIub1KdvZkaEfGDwLNpPvk9Fs6LD/MyQxNgMds/WH9OdDDXOmxUZpME+iSK3rQCctkL0DYyytUqMg==}
 
@@ -4825,9 +4823,6 @@ packages:
     engines: {node: '>=18.12'}
     peerDependencies:
       typescript: '>=4.8.4'
-
-  tslib@2.1.0:
-    resolution: {integrity: sha512-hcVC3wYEziELGGmEEXue7D75zbwIIVUMWAVbHItGPx0ziyXxrOMQx4rQEVEV45Ut/1IotuEvwqPopzIOkDMf0A==}
 
   tslib@2.3.0:
     resolution: {integrity: sha512-N82ooyxVNm6h1riLCoyS9e3fuJ3AMG2zIZs2Gd1ATcSFjSA23Q0fzjjZeh0jbJvWVDZ0cJT8yaNNaaXHzueNjg==}
@@ -5944,54 +5939,11 @@ snapshots:
       - '@mui/system'
       - '@types/react'
 
-  '@jbrowse/core@2.17.0(960ce068e4c7a6dba690839f6d35208f)':
+  '@jbrowse/embedded-core@2.17.0(d921070cd80361f255cb20ec88822630)':
     dependencies:
       '@babel/runtime': 7.29.7
-      '@gmod/abortable-promise-cache': 2.0.1
-      '@gmod/bgzf-filehandle': 1.4.3
-      '@gmod/http-range-fetcher': 3.0.4
-      '@mui/icons-material': 6.5.0(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(@types/react@19.2.18)(react@19.2.0)
-      '@mui/material': 6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
-      '@mui/x-data-grid': 7.29.13(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(@mui/system@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
-      '@types/clone': 2.1.4
-      canvas-sequencer: 3.1.2
-      canvas2svg: 1.0.16
-      clone: 2.1.2
-      colord: 2.10.0
-      copy-to-clipboard: 3.3.1
-      deepmerge: 4.3.1
-      detect-node: 2.1.0
-      dompurify: 3.4.14
-      escape-html: 1.0.3
-      fast-deep-equal: 3.1.3
-      generic-filehandle: 3.4.0
-      is-object: 1.0.2
-      jexl: 2.3.0
-      librpc-web-mod: 1.3.0
-      load-script: 2.0.0
-      material-ui-popup-state: 5.3.7(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(@types/react@19.2.18)(react@19.2.0)
-      mobx: 6.16.1
-      mobx-react: 9.2.2(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
-      mobx-state-tree: 5.0.0(mobx@6.16.1)
-      rbush: 3.0.1
-      react: 19.2.0
-      react-dom: 19.2.0(react@19.2.0)
-      rxjs: 7.0.0
-      serialize-error: 8.0.0
-      source-map-js: 1.2.1
-      svg-path-generator: 1.1.0
-      tss-react: 4.9.21(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(@types/react@19.2.18)(react@19.2.0)
-    transitivePeerDependencies:
-      - '@emotion/react'
-      - '@emotion/styled'
-      - '@mui/system'
-      - '@types/react'
-
-  '@jbrowse/embedded-core@2.17.0(c35f9ed578a02253fd85e96f1d1241d2)':
-    dependencies:
-      '@babel/runtime': 7.29.7
-      '@jbrowse/core': 2.17.0(960ce068e4c7a6dba690839f6d35208f)
-      '@jbrowse/product-core': 2.17.0(c35f9ed578a02253fd85e96f1d1241d2)
+      '@jbrowse/core': 2.17.0(80939ee4f08b236603559827e95f3549)
+      '@jbrowse/product-core': 2.17.0(d921070cd80361f255cb20ec88822630)
       '@mui/icons-material': 6.5.0(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(@types/react@19.2.18)(react@19.2.0)
       '@mui/material': 6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       copy-to-clipboard: 3.3.1
@@ -6000,7 +5952,7 @@ snapshots:
       mobx-state-tree: 5.0.0(mobx@6.16.1)
       react: 19.2.0
       react-dom: 19.2.0(react@19.2.0)
-      rxjs: 7.0.0
+      rxjs: 7.8.0
       tss-react: 4.9.21(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(@types/react@19.2.18)(react@19.2.0)
     transitivePeerDependencies:
       - '@emotion/react'
@@ -6009,14 +5961,14 @@ snapshots:
       - '@mui/system'
       - '@types/react'
 
-  '@jbrowse/plugin-alignments@2.17.0(1feac941f2451a59681d12b7d485a8b5)':
+  '@jbrowse/plugin-alignments@2.17.0(e4362ab501d966ec2391ba8a7b419d8e)':
     dependencies:
       '@gmod/bam': 4.0.1
       '@gmod/cram': 3.0.3
       '@jbrowse/core': 2.17.0(80939ee4f08b236603559827e95f3549)
       '@jbrowse/plugin-linear-genome-view': 2.17.0(9c0eb76a847b068d97feaf98689158fc)
-      '@jbrowse/plugin-wiggle': 2.17.0(c76e47f8a98465cc04eab15778234c78)
-      '@jbrowse/sv-core': 2.17.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@jbrowse/core@2.17.0(80939ee4f08b236603559827e95f3549))(@types/react@19.2.18)(mobx-react@9.2.2(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-state-tree@5.0.0(mobx@6.16.1))(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(rxjs@7.0.0)(tss-react@4.9.21(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(@types/react@19.2.18)(react@19.2.0))
+      '@jbrowse/plugin-wiggle': 2.17.0(5213f1b503168a4c278685eef8cee2a9)
+      '@jbrowse/sv-core': 2.17.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@jbrowse/core@2.17.0(80939ee4f08b236603559827e95f3549))(@types/react@19.2.18)(mobx-react@9.2.2(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-state-tree@5.0.0(mobx@6.16.1))(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(rxjs@7.8.0)(tss-react@4.9.21(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(@types/react@19.2.18)(react@19.2.0))
       '@mui/icons-material': 6.5.0(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(@types/react@19.2.18)(react@19.2.0)
       '@mui/material': 6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       canvas2svg: 1.0.16
@@ -6028,7 +5980,7 @@ snapshots:
       mobx-react: 9.2.2(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       mobx-state-tree: 5.0.0(mobx@6.16.1)
       react: 19.2.0
-      rxjs: 7.0.0
+      rxjs: 7.8.0
       tss-react: 4.9.21(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(@types/react@19.2.18)(react@19.2.0)
     transitivePeerDependencies:
       - '@emotion/react'
@@ -6037,20 +5989,20 @@ snapshots:
       - '@types/react'
       - react-dom
 
-  '@jbrowse/plugin-arc@2.17.0(@jbrowse/core@2.17.0(80939ee4f08b236603559827e95f3549))(@jbrowse/plugin-linear-genome-view@2.17.0(9c0eb76a847b068d97feaf98689158fc))(@jbrowse/plugin-wiggle@2.17.0(c76e47f8a98465cc04eab15778234c78))(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-react@9.2.2(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-state-tree@5.0.0(mobx@6.16.1))(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(rxjs@7.0.0)':
+  '@jbrowse/plugin-arc@2.17.0(@jbrowse/core@2.17.0(80939ee4f08b236603559827e95f3549))(@jbrowse/plugin-linear-genome-view@2.17.0(9c0eb76a847b068d97feaf98689158fc))(@jbrowse/plugin-wiggle@2.17.0(5213f1b503168a4c278685eef8cee2a9))(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-react@9.2.2(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-state-tree@5.0.0(mobx@6.16.1))(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(rxjs@7.8.0)':
     dependencies:
       '@jbrowse/core': 2.17.0(80939ee4f08b236603559827e95f3549)
       '@jbrowse/plugin-linear-genome-view': 2.17.0(9c0eb76a847b068d97feaf98689158fc)
-      '@jbrowse/plugin-wiggle': 2.17.0(c76e47f8a98465cc04eab15778234c78)
+      '@jbrowse/plugin-wiggle': 2.17.0(5213f1b503168a4c278685eef8cee2a9)
       '@mui/material': 6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       mobx: 6.16.1
       mobx-react: 9.2.2(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       mobx-state-tree: 5.0.0(mobx@6.16.1)
       react: 19.2.0
       react-dom: 19.2.0(react@19.2.0)
-      rxjs: 7.0.0
+      rxjs: 7.8.0
 
-  '@jbrowse/plugin-authentication@2.17.0(@jbrowse/core@2.17.0(80939ee4f08b236603559827e95f3549))(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-react@9.2.2(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-state-tree@5.0.0(mobx@6.16.1))(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(rxjs@7.0.0)':
+  '@jbrowse/plugin-authentication@2.17.0(@jbrowse/core@2.17.0(80939ee4f08b236603559827e95f3549))(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-react@9.2.2(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-state-tree@5.0.0(mobx@6.16.1))(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(rxjs@7.8.0)':
     dependencies:
       '@jbrowse/core': 2.17.0(80939ee4f08b236603559827e95f3549)
       '@mui/material': 6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
@@ -6061,9 +6013,9 @@ snapshots:
       mobx-state-tree: 5.0.0(mobx@6.16.1)
       react: 19.2.0
       react-dom: 19.2.0(react@19.2.0)
-      rxjs: 7.0.0
+      rxjs: 7.8.0
 
-  '@jbrowse/plugin-bed@2.17.0(@jbrowse/core@2.17.0(80939ee4f08b236603559827e95f3549))(mobx-react@9.2.2(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-state-tree@5.0.0(mobx@6.16.1))(mobx@6.16.1)(rxjs@7.0.0)':
+  '@jbrowse/plugin-bed@2.17.0(@jbrowse/core@2.17.0(80939ee4f08b236603559827e95f3549))(mobx-react@9.2.2(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-state-tree@5.0.0(mobx@6.16.1))(mobx@6.16.1)(rxjs@7.8.0)':
     dependencies:
       '@flatten-js/interval-tree': 1.0.15
       '@gmod/bbi': 5.0.0
@@ -6074,7 +6026,7 @@ snapshots:
       mobx: 6.16.1
       mobx-react: 9.2.2(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       mobx-state-tree: 5.0.0(mobx@6.16.1)
-      rxjs: 7.0.0
+      rxjs: 7.8.0
 
   '@jbrowse/plugin-circular-view@2.17.0(9c0eb76a847b068d97feaf98689158fc)':
     dependencies:
@@ -6093,7 +6045,7 @@ snapshots:
     transitivePeerDependencies:
       - '@types/react'
 
-  '@jbrowse/plugin-config@2.17.0(617ed73bbd7ded37eece1ece156561f5)':
+  '@jbrowse/plugin-config@2.17.0(3b30385a82a56631bacb65ebe39bc800)':
     dependencies:
       '@jbrowse/core': 2.17.0(80939ee4f08b236603559827e95f3549)
       '@mui/icons-material': 6.5.0(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(@types/react@19.2.18)(react@19.2.0)
@@ -6104,17 +6056,17 @@ snapshots:
       pluralize: 8.0.0
       react: 19.2.0
       react-dom: 19.2.0(react@19.2.0)
-      rxjs: 7.0.0
+      rxjs: 7.8.0
       tss-react: 4.9.21(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(@types/react@19.2.18)(react@19.2.0)
     transitivePeerDependencies:
       - '@types/react'
 
-  '@jbrowse/plugin-data-management@2.17.0(4a30cc4bb0e00abae314e5711b661868)':
+  '@jbrowse/plugin-data-management@2.17.0(a3b22adba8987ec13efc5d64c585cd0f)':
     dependencies:
       '@gmod/ucsc-hub': 0.3.0
       '@jbrowse/core': 2.17.0(80939ee4f08b236603559827e95f3549)
-      '@jbrowse/plugin-config': 2.17.0(617ed73bbd7ded37eece1ece156561f5)
-      '@jbrowse/product-core': 2.17.0(c35f9ed578a02253fd85e96f1d1241d2)
+      '@jbrowse/plugin-config': 2.17.0(3b30385a82a56631bacb65ebe39bc800)
+      '@jbrowse/product-core': 2.17.0(d921070cd80361f255cb20ec88822630)
       '@mui/icons-material': 6.5.0(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(@types/react@19.2.18)(react@19.2.0)
       '@mui/material': 6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       '@mui/x-data-grid': 7.29.13(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(@mui/system@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
@@ -6133,20 +6085,20 @@ snapshots:
       - '@types/react'
       - react-dom
 
-  '@jbrowse/plugin-gccontent@2.17.0(600ca7c09bf447a1d763863ceb0b7ddd)':
+  '@jbrowse/plugin-gccontent@2.17.0(c09ad65814d1edfb4be0ad8b7db57a92)':
     dependencies:
       '@jbrowse/core': 2.17.0(80939ee4f08b236603559827e95f3549)
       '@jbrowse/plugin-linear-genome-view': 2.17.0(9c0eb76a847b068d97feaf98689158fc)
-      '@jbrowse/plugin-sequence': 2.17.0(@jbrowse/core@2.17.0(80939ee4f08b236603559827e95f3549))(@jbrowse/plugin-linear-genome-view@2.17.0(9c0eb76a847b068d97feaf98689158fc))(@jbrowse/plugin-wiggle@2.17.0(c76e47f8a98465cc04eab15778234c78))(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-react@9.2.2(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-state-tree@5.0.0(mobx@6.16.1))(mobx@6.16.1)(react@19.2.0)(rxjs@7.0.0)
-      '@jbrowse/plugin-wiggle': 2.17.0(c76e47f8a98465cc04eab15778234c78)
+      '@jbrowse/plugin-sequence': 2.17.0(@jbrowse/core@2.17.0(80939ee4f08b236603559827e95f3549))(@jbrowse/plugin-linear-genome-view@2.17.0(9c0eb76a847b068d97feaf98689158fc))(@jbrowse/plugin-wiggle@2.17.0(5213f1b503168a4c278685eef8cee2a9))(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-react@9.2.2(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-state-tree@5.0.0(mobx@6.16.1))(mobx@6.16.1)(react@19.2.0)(rxjs@7.8.0)
+      '@jbrowse/plugin-wiggle': 2.17.0(5213f1b503168a4c278685eef8cee2a9)
       '@mui/material': 6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       mobx: 6.16.1
       mobx-react: 9.2.2(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       mobx-state-tree: 5.0.0(mobx@6.16.1)
       react: 19.2.0
-      rxjs: 7.0.0
+      rxjs: 7.8.0
 
-  '@jbrowse/plugin-gff3@2.17.0(@jbrowse/core@2.17.0(80939ee4f08b236603559827e95f3549))(@jbrowse/plugin-linear-genome-view@2.17.0(9c0eb76a847b068d97feaf98689158fc))(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-state-tree@5.0.0(mobx@6.16.1))(mobx@6.16.1)(rxjs@7.0.0)':
+  '@jbrowse/plugin-gff3@2.17.0(@jbrowse/core@2.17.0(80939ee4f08b236603559827e95f3549))(@jbrowse/plugin-linear-genome-view@2.17.0(9c0eb76a847b068d97feaf98689158fc))(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-state-tree@5.0.0(mobx@6.16.1))(mobx@6.16.1)(rxjs@7.8.0)':
     dependencies:
       '@flatten-js/interval-tree': 1.0.15
       '@gmod/bgzf-filehandle': 1.4.3
@@ -6157,9 +6109,9 @@ snapshots:
       gff-nostream: 1.3.3
       mobx: 6.16.1
       mobx-state-tree: 5.0.0(mobx@6.16.1)
-      rxjs: 7.0.0
+      rxjs: 7.8.0
 
-  '@jbrowse/plugin-legacy-jbrowse@2.17.0(@jbrowse/core@2.17.0(80939ee4f08b236603559827e95f3549))(buffer@6.0.3)(mobx-react@9.2.2(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-state-tree@5.0.0(mobx@6.16.1))(mobx@6.16.1)(rxjs@7.0.0)':
+  '@jbrowse/plugin-legacy-jbrowse@2.17.0(@jbrowse/core@2.17.0(80939ee4f08b236603559827e95f3549))(buffer@6.0.3)(mobx-react@9.2.2(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-state-tree@5.0.0(mobx@6.16.1))(mobx@6.16.1)(rxjs@7.8.0)':
     dependencies:
       '@gmod/nclist': 1.0.3
       '@jbrowse/core': 2.17.0(80939ee4f08b236603559827e95f3549)
@@ -6169,7 +6121,7 @@ snapshots:
       mobx: 6.16.1
       mobx-react: 9.2.2(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       mobx-state-tree: 5.0.0(mobx@6.16.1)
-      rxjs: 7.0.0
+      rxjs: 7.8.0
       set-value: 4.1.0
     transitivePeerDependencies:
       - buffer
@@ -6194,20 +6146,20 @@ snapshots:
     transitivePeerDependencies:
       - '@types/react'
 
-  '@jbrowse/plugin-sequence@2.17.0(@jbrowse/core@2.17.0(80939ee4f08b236603559827e95f3549))(@jbrowse/plugin-linear-genome-view@2.17.0(9c0eb76a847b068d97feaf98689158fc))(@jbrowse/plugin-wiggle@2.17.0(c76e47f8a98465cc04eab15778234c78))(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-react@9.2.2(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-state-tree@5.0.0(mobx@6.16.1))(mobx@6.16.1)(react@19.2.0)(rxjs@7.0.0)':
+  '@jbrowse/plugin-sequence@2.17.0(@jbrowse/core@2.17.0(80939ee4f08b236603559827e95f3549))(@jbrowse/plugin-linear-genome-view@2.17.0(9c0eb76a847b068d97feaf98689158fc))(@jbrowse/plugin-wiggle@2.17.0(5213f1b503168a4c278685eef8cee2a9))(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-react@9.2.2(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-state-tree@5.0.0(mobx@6.16.1))(mobx@6.16.1)(react@19.2.0)(rxjs@7.8.0)':
     dependencies:
       '@gmod/abortable-promise-cache': 2.0.1
       '@gmod/indexedfasta': 2.0.2
       '@gmod/twobit': 3.0.1
       '@jbrowse/core': 2.17.0(80939ee4f08b236603559827e95f3549)
       '@jbrowse/plugin-linear-genome-view': 2.17.0(9c0eb76a847b068d97feaf98689158fc)
-      '@jbrowse/plugin-wiggle': 2.17.0(c76e47f8a98465cc04eab15778234c78)
+      '@jbrowse/plugin-wiggle': 2.17.0(5213f1b503168a4c278685eef8cee2a9)
       '@mui/material': 6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       mobx: 6.16.1
       mobx-react: 9.2.2(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       mobx-state-tree: 5.0.0(mobx@6.16.1)
       react: 19.2.0
-      rxjs: 7.0.0
+      rxjs: 7.8.0
 
   '@jbrowse/plugin-svg@2.18.0(@jbrowse/core@2.17.0(80939ee4f08b236603559827e95f3549))(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-react@9.2.2(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-state-tree@5.0.0(mobx@6.16.1))(mobx@6.16.1)(react@19.2.0)':
     dependencies:
@@ -6228,7 +6180,7 @@ snapshots:
       mobx-state-tree: 5.0.0(mobx@6.16.1)
       react: 19.2.0
 
-  '@jbrowse/plugin-variants@2.17.0(1a9b474e34aad24dff977f52cc4c5b3b)':
+  '@jbrowse/plugin-variants@2.17.0(694706484e1ec7d15248aff2171ae797)':
     dependencies:
       '@flatten-js/interval-tree': 1.0.15
       '@gmod/bgzf-filehandle': 1.4.3
@@ -6237,7 +6189,7 @@ snapshots:
       '@jbrowse/core': 2.17.0(80939ee4f08b236603559827e95f3549)
       '@jbrowse/plugin-circular-view': 2.17.0(9c0eb76a847b068d97feaf98689158fc)
       '@jbrowse/plugin-linear-genome-view': 2.17.0(9c0eb76a847b068d97feaf98689158fc)
-      '@jbrowse/sv-core': 2.17.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@jbrowse/core@2.17.0(80939ee4f08b236603559827e95f3549))(@types/react@19.2.18)(mobx-react@9.2.2(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-state-tree@5.0.0(mobx@6.16.1))(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(rxjs@7.0.0)(tss-react@4.9.21(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(@types/react@19.2.18)(react@19.2.0))
+      '@jbrowse/sv-core': 2.17.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@jbrowse/core@2.17.0(80939ee4f08b236603559827e95f3549))(@types/react@19.2.18)(mobx-react@9.2.2(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-state-tree@5.0.0(mobx@6.16.1))(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(rxjs@7.8.0)(tss-react@4.9.21(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(@types/react@19.2.18)(react@19.2.0))
       '@mui/icons-material': 6.5.0(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(@types/react@19.2.18)(react@19.2.0)
       '@mui/material': 6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       '@mui/x-data-grid': 7.29.13(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(@mui/system@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
@@ -6246,7 +6198,7 @@ snapshots:
       mobx-react: 9.2.2(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       mobx-state-tree: 5.0.0(mobx@6.16.1)
       react: 19.2.0
-      rxjs: 7.0.0
+      rxjs: 7.8.0
       tss-react: 4.9.21(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(@types/react@19.2.18)(react@19.2.0)
     transitivePeerDependencies:
       - '@emotion/react'
@@ -6256,12 +6208,12 @@ snapshots:
       - '@types/react'
       - react-dom
 
-  '@jbrowse/plugin-wiggle@2.17.0(c76e47f8a98465cc04eab15778234c78)':
+  '@jbrowse/plugin-wiggle@2.17.0(5213f1b503168a4c278685eef8cee2a9)':
     dependencies:
       '@floating-ui/react': 0.26.3(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       '@gmod/bbi': 5.0.0
       '@jbrowse/core': 2.17.0(80939ee4f08b236603559827e95f3549)
-      '@jbrowse/plugin-data-management': 2.17.0(4a30cc4bb0e00abae314e5711b661868)
+      '@jbrowse/plugin-data-management': 2.17.0(a3b22adba8987ec13efc5d64c585cd0f)
       '@jbrowse/plugin-linear-genome-view': 2.17.0(9c0eb76a847b068d97feaf98689158fc)
       '@mui/icons-material': 6.5.0(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(@types/react@19.2.18)(react@19.2.0)
       '@mui/material': 6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
@@ -6276,7 +6228,7 @@ snapshots:
       react: 19.2.0
       react-d3-axis-mod: 0.1.9(react@19.2.0)
       react-draggable: 4.7.1(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
-      rxjs: 7.0.0
+      rxjs: 7.8.0
       tss-react: 4.9.21(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(@types/react@19.2.18)(react@19.2.0)
     transitivePeerDependencies:
       - '@emotion/react'
@@ -6285,10 +6237,10 @@ snapshots:
       - '@types/react'
       - react-dom
 
-  '@jbrowse/product-core@2.17.0(c35f9ed578a02253fd85e96f1d1241d2)':
+  '@jbrowse/product-core@2.17.0(d921070cd80361f255cb20ec88822630)':
     dependencies:
       '@babel/runtime': 7.29.7
-      '@jbrowse/core': 2.17.0(960ce068e4c7a6dba690839f6d35208f)
+      '@jbrowse/core': 2.17.0(80939ee4f08b236603559827e95f3549)
       '@mui/icons-material': 6.5.0(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(@types/react@19.2.18)(react@19.2.0)
       '@mui/material': 6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       copy-to-clipboard: 3.3.1
@@ -6298,7 +6250,7 @@ snapshots:
       mobx-state-tree: 5.0.0(mobx@6.16.1)
       react: 19.2.0
       react-dom: 19.2.0(react@19.2.0)
-      rxjs: 7.0.0
+      rxjs: 7.8.0
       serialize-error: 8.0.0
       tss-react: 4.9.21(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(@types/react@19.2.18)(react@19.2.0)
     transitivePeerDependencies:
@@ -6314,32 +6266,32 @@ snapshots:
       '@emotion/cache': 11.14.0
       '@emotion/react': 11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2)
       '@emotion/styled': 11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2)
-      '@jbrowse/core': 2.17.0(960ce068e4c7a6dba690839f6d35208f)
-      '@jbrowse/embedded-core': 2.17.0(c35f9ed578a02253fd85e96f1d1241d2)
-      '@jbrowse/plugin-alignments': 2.17.0(1feac941f2451a59681d12b7d485a8b5)
-      '@jbrowse/plugin-arc': 2.17.0(@jbrowse/core@2.17.0(80939ee4f08b236603559827e95f3549))(@jbrowse/plugin-linear-genome-view@2.17.0(9c0eb76a847b068d97feaf98689158fc))(@jbrowse/plugin-wiggle@2.17.0(c76e47f8a98465cc04eab15778234c78))(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-react@9.2.2(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-state-tree@5.0.0(mobx@6.16.1))(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(rxjs@7.0.0)
-      '@jbrowse/plugin-authentication': 2.17.0(@jbrowse/core@2.17.0(80939ee4f08b236603559827e95f3549))(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-react@9.2.2(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-state-tree@5.0.0(mobx@6.16.1))(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(rxjs@7.0.0)
-      '@jbrowse/plugin-bed': 2.17.0(@jbrowse/core@2.17.0(80939ee4f08b236603559827e95f3549))(mobx-react@9.2.2(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-state-tree@5.0.0(mobx@6.16.1))(mobx@6.16.1)(rxjs@7.0.0)
+      '@jbrowse/core': 2.17.0(80939ee4f08b236603559827e95f3549)
+      '@jbrowse/embedded-core': 2.17.0(d921070cd80361f255cb20ec88822630)
+      '@jbrowse/plugin-alignments': 2.17.0(e4362ab501d966ec2391ba8a7b419d8e)
+      '@jbrowse/plugin-arc': 2.17.0(@jbrowse/core@2.17.0(80939ee4f08b236603559827e95f3549))(@jbrowse/plugin-linear-genome-view@2.17.0(9c0eb76a847b068d97feaf98689158fc))(@jbrowse/plugin-wiggle@2.17.0(5213f1b503168a4c278685eef8cee2a9))(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-react@9.2.2(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-state-tree@5.0.0(mobx@6.16.1))(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(rxjs@7.8.0)
+      '@jbrowse/plugin-authentication': 2.17.0(@jbrowse/core@2.17.0(80939ee4f08b236603559827e95f3549))(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-react@9.2.2(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-state-tree@5.0.0(mobx@6.16.1))(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(rxjs@7.8.0)
+      '@jbrowse/plugin-bed': 2.17.0(@jbrowse/core@2.17.0(80939ee4f08b236603559827e95f3549))(mobx-react@9.2.2(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-state-tree@5.0.0(mobx@6.16.1))(mobx@6.16.1)(rxjs@7.8.0)
       '@jbrowse/plugin-circular-view': 2.17.0(9c0eb76a847b068d97feaf98689158fc)
-      '@jbrowse/plugin-config': 2.17.0(617ed73bbd7ded37eece1ece156561f5)
-      '@jbrowse/plugin-data-management': 2.17.0(4a30cc4bb0e00abae314e5711b661868)
-      '@jbrowse/plugin-gccontent': 2.17.0(600ca7c09bf447a1d763863ceb0b7ddd)
-      '@jbrowse/plugin-gff3': 2.17.0(@jbrowse/core@2.17.0(80939ee4f08b236603559827e95f3549))(@jbrowse/plugin-linear-genome-view@2.17.0(9c0eb76a847b068d97feaf98689158fc))(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-state-tree@5.0.0(mobx@6.16.1))(mobx@6.16.1)(rxjs@7.0.0)
-      '@jbrowse/plugin-legacy-jbrowse': 2.17.0(@jbrowse/core@2.17.0(80939ee4f08b236603559827e95f3549))(buffer@6.0.3)(mobx-react@9.2.2(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-state-tree@5.0.0(mobx@6.16.1))(mobx@6.16.1)(rxjs@7.0.0)
+      '@jbrowse/plugin-config': 2.17.0(3b30385a82a56631bacb65ebe39bc800)
+      '@jbrowse/plugin-data-management': 2.17.0(a3b22adba8987ec13efc5d64c585cd0f)
+      '@jbrowse/plugin-gccontent': 2.17.0(c09ad65814d1edfb4be0ad8b7db57a92)
+      '@jbrowse/plugin-gff3': 2.17.0(@jbrowse/core@2.17.0(80939ee4f08b236603559827e95f3549))(@jbrowse/plugin-linear-genome-view@2.17.0(9c0eb76a847b068d97feaf98689158fc))(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-state-tree@5.0.0(mobx@6.16.1))(mobx@6.16.1)(rxjs@7.8.0)
+      '@jbrowse/plugin-legacy-jbrowse': 2.17.0(@jbrowse/core@2.17.0(80939ee4f08b236603559827e95f3549))(buffer@6.0.3)(mobx-react@9.2.2(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-state-tree@5.0.0(mobx@6.16.1))(mobx@6.16.1)(rxjs@7.8.0)
       '@jbrowse/plugin-linear-genome-view': 2.17.0(9c0eb76a847b068d97feaf98689158fc)
-      '@jbrowse/plugin-sequence': 2.17.0(@jbrowse/core@2.17.0(80939ee4f08b236603559827e95f3549))(@jbrowse/plugin-linear-genome-view@2.17.0(9c0eb76a847b068d97feaf98689158fc))(@jbrowse/plugin-wiggle@2.17.0(c76e47f8a98465cc04eab15778234c78))(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-react@9.2.2(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-state-tree@5.0.0(mobx@6.16.1))(mobx@6.16.1)(react@19.2.0)(rxjs@7.0.0)
+      '@jbrowse/plugin-sequence': 2.17.0(@jbrowse/core@2.17.0(80939ee4f08b236603559827e95f3549))(@jbrowse/plugin-linear-genome-view@2.17.0(9c0eb76a847b068d97feaf98689158fc))(@jbrowse/plugin-wiggle@2.17.0(5213f1b503168a4c278685eef8cee2a9))(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-react@9.2.2(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-state-tree@5.0.0(mobx@6.16.1))(mobx@6.16.1)(react@19.2.0)(rxjs@7.8.0)
       '@jbrowse/plugin-svg': 2.18.0(@jbrowse/core@2.17.0(80939ee4f08b236603559827e95f3549))(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-react@9.2.2(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-state-tree@5.0.0(mobx@6.16.1))(mobx@6.16.1)(react@19.2.0)
       '@jbrowse/plugin-trix': 2.17.0(@jbrowse/core@2.17.0(80939ee4f08b236603559827e95f3549))(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-react@9.2.2(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-state-tree@5.0.0(mobx@6.16.1))(mobx@6.16.1)(react@19.2.0)
-      '@jbrowse/plugin-variants': 2.17.0(1a9b474e34aad24dff977f52cc4c5b3b)
-      '@jbrowse/plugin-wiggle': 2.17.0(c76e47f8a98465cc04eab15778234c78)
-      '@jbrowse/product-core': 2.17.0(c35f9ed578a02253fd85e96f1d1241d2)
+      '@jbrowse/plugin-variants': 2.17.0(694706484e1ec7d15248aff2171ae797)
+      '@jbrowse/plugin-wiggle': 2.17.0(5213f1b503168a4c278685eef8cee2a9)
+      '@jbrowse/product-core': 2.17.0(d921070cd80361f255cb20ec88822630)
       '@mui/icons-material': 6.5.0(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(@types/react@19.2.18)(react@19.2.0)
       '@mui/material': 6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       mobx: 6.16.1
       mobx-react: 9.2.2(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       mobx-state-tree: 5.0.0(mobx@6.16.1)
       react: 19.2.0
-      rxjs: 7.0.0
+      rxjs: 7.8.0
       tss-react: 4.9.21(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(@types/react@19.2.18)(react@19.2.0)
     transitivePeerDependencies:
       - '@emotion/server'
@@ -6351,7 +6303,7 @@ snapshots:
       - react-native
       - supports-color
 
-  '@jbrowse/sv-core@2.17.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@jbrowse/core@2.17.0(80939ee4f08b236603559827e95f3549))(@types/react@19.2.18)(mobx-react@9.2.2(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-state-tree@5.0.0(mobx@6.16.1))(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(rxjs@7.0.0)(tss-react@4.9.21(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(@types/react@19.2.18)(react@19.2.0))':
+  '@jbrowse/sv-core@2.17.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@jbrowse/core@2.17.0(80939ee4f08b236603559827e95f3549))(@types/react@19.2.18)(mobx-react@9.2.2(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(mobx-state-tree@5.0.0(mobx@6.16.1))(mobx@6.16.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(rxjs@7.8.0)(tss-react@4.9.21(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(@types/react@19.2.18)(react@19.2.0))':
     dependencies:
       '@jbrowse/plugin-linear-genome-view': 2.17.0(9c0eb76a847b068d97feaf98689158fc)
       '@mui/icons-material': 6.5.0(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(@types/react@19.2.18)(react@19.2.0)
@@ -6361,7 +6313,7 @@ snapshots:
       mobx-state-tree: 5.0.0(mobx@6.16.1)
       react: 19.2.0
       react-dom: 19.2.0(react@19.2.0)
-      rxjs: 7.0.0
+      rxjs: 7.8.0
       tss-react: 4.9.21(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.0)(supports-color@10.2.2))(@types/react@19.2.18)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(@types/react@19.2.18)(react@19.2.0)
     transitivePeerDependencies:
       - '@emotion/react'
@@ -9597,10 +9549,6 @@ snapshots:
 
   rope-sequence@1.3.4: {}
 
-  rxjs@7.0.0:
-    dependencies:
-      tslib: 2.1.0
-
   rxjs@7.8.0:
     dependencies:
       tslib: 2.8.1
@@ -9860,8 +9808,6 @@ snapshots:
   ts-api-utils@2.5.0(typescript@5.9.3):
     dependencies:
       typescript: 5.9.3
-
-  tslib@2.1.0: {}
 
   tslib@2.3.0: {}
 
