@@ -469,6 +469,7 @@ jobs:
           output: trivy-api.sarif
           severity: CRITICAL,HIGH
           ignore-unfixed: false
+          trivyignores: .trivyignore
           exit-code: 1
 
       - name: Trivy scan Worker image (hard gate)
@@ -479,6 +480,7 @@ jobs:
           output: trivy-worker.sarif
           severity: CRITICAL,HIGH
           ignore-unfixed: false
+          trivyignores: .trivyignore
           exit-code: 1
 
       - name: Trivy scan MCP image (hard gate)
@@ -489,6 +491,7 @@ jobs:
           output: trivy-mcp.sarif
           severity: CRITICAL,HIGH
           ignore-unfixed: false
+          trivyignores: .trivyignore
           exit-code: 1
 
       - name: Trivy scan JBrowse image (hard gate)
@@ -499,6 +502,7 @@ jobs:
           output: trivy-jbrowse.sarif
           severity: CRITICAL,HIGH
           ignore-unfixed: false
+          trivyignores: .trivyignore
           exit-code: 1
 
       # SPDX documents are generated from the same local image IDs that passed

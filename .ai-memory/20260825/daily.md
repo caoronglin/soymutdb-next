@@ -111,3 +111,9 @@
 - **文件**: `.trivyignore`
 - **决策**: 系统升级已消除有 fixed version 的 `util-linux` 等发现；对当前 Debian/Trivy 数据库明确标记为无修复版本的 12 个基础包 CVE 建立可审计例外，保留 CRITICAL/HIGH 固定版本发现的阻断门禁。例外仅针对当前镜像基础包，后续刷新基础镜像或漏洞库时必须重新评估。
 - **验证**: 升级后两架构 API SARIF 从 64 条高危发现收敛为 17 条（去重后 12 个无 fixed version CVE），待下一轮 CI 确认全镜像扫描与 release artifact。
+
+## [CI 修复] - 显式传入 Trivy 例外文件
+
+- **文件**: `.github/workflows/ci.yml`
+- **决策**: Trivy SARIF 已证明例外文件可使结果归零，但 action 日志显示 `INPUT_TRIVYIGNORES` 为空；为避免依赖隐式工作目录，在四个 CRITICAL/HIGH 阻断扫描中显式设置 `trivyignores: .trivyignore`。
+- **验证**: 上一轮全镜像构建、运行时 smoke 与 JBrowse nginx 均通过；唯一失败为 Trivy API scan 未读取例外路径。
