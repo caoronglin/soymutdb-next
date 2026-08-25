@@ -105,3 +105,9 @@
 - **文件**: `infra/docker/Dockerfile.api`, `infra/docker/Dockerfile.worker`, `apps/mcp-server/Dockerfile`
 - **决策**: Trivy SARIF 确认 API runtime 的主要门禁来自 Debian 基础包（`util-linux`, `perl-base` 等），而不是 Python 依赖；runtime 构建统一先执行 `apt-get upgrade -y`，API 移除不必要的 `curl/wget` 并改用 Python 标准库健康检查，worker 移除不必要的 curl，MCP runtime 同步升级基础包。
 - **验证**: 两架构 JBrowse smoke 已通过；最新 Trivy API SARIF 明确包含 `CVE-2026-53612/53613` 等 Debian 包发现，修复后需复验所有镜像安全门禁。
+
+## [安全治理] - Trivy 未修复基础包例外
+
+- **文件**: `.trivyignore`
+- **决策**: 系统升级已消除有 fixed version 的 `util-linux` 等发现；对当前 Debian/Trivy 数据库明确标记为无修复版本的 12 个基础包 CVE 建立可审计例外，保留 CRITICAL/HIGH 固定版本发现的阻断门禁。例外仅针对当前镜像基础包，后续刷新基础镜像或漏洞库时必须重新评估。
+- **验证**: 升级后两架构 API SARIF 从 64 条高危发现收敛为 17 条（去重后 12 个无 fixed version CVE），待下一轮 CI 确认全镜像扫描与 release artifact。

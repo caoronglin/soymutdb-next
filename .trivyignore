@@ -1,0 +1,15 @@
+# Trivy exceptions for Debian 13 base packages with no fixed version in the
+# current Debian/Trivy database. Fixed-version findings remain blocking; revisit
+# these entries whenever the Python base image or vulnerability DB is refreshed.
+CVE-2025-69720
+CVE-2026-13221
+CVE-2026-14456
+CVE-2026-41992
+CVE-2026-42496
+CVE-2026-42497
+CVE-2026-48962
+CVE-2026-54369
+CVE-2026-57432
+CVE-2026-57433
+CVE-2026-8376
+CVE-2026-9538
