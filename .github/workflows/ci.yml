@@ -1073,6 +1073,15 @@ jobs:
         run: docker network create mcp-e2e
       - name: Start MCP server
         run: docker run -d --network mcp-e2e --name mcp-server -e SOYMUTDB_MCP_API_TOKEN=ci-test-token soymutdb-mcp:ci
+      - name: Wait for MCP HTTP server
+        run: |
+          code=000
+          for attempt in {1..60}; do
+            code=$(docker exec mcp-server python -c 'import urllib.error, urllib.request; exec("try:\n print(urllib.request.urlopen(\"http://127.0.0.1:9000/mcp\", timeout=1).status)\nexcept urllib.error.HTTPError as error:\n print(error.code)\nexcept Exception:\n print(000)")' 2>/dev/null || true)
+            test "$code" = 401 && break
+            sleep 2
+          done
+          test "$code" = 401 || { docker logs mcp-server; exit 1; }
       - name: Start nginx reverse proxy (/mcp -> mcp-server)
         run: |
           cat > /tmp/mcp-nginx.conf <<'NGINX'
