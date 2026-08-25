@@ -171,3 +171,8 @@
 - **问题**: CI 构建时把空的 `pages-dist/.nojekyll` 写入 `SHA256SUMS`，但 `actions/upload-artifact` 默认不上传隐藏文件；Pages workflow 下载 artifact 后在 `sha256sum -c` 阶段报 `.nojekyll: No such file or directory`。
 - **修复**: Pages artifact 上传显式设置 `include-hidden-files: true`，保持严格字节树校验不放宽。
 - **验证**: 失败 run `32859387653` 已定位为该问题；需由本修复触发新的 CI、baseline 和 Pages 远程门禁。
+
+## [Pages 发布修复验证] - 全链路门禁通过
+
+- **验证**: 修复提交 `88d64c0` 的 CI run [`32859672523`](https://github.com/caoronglin/soymutdb-next/actions/runs/32859672523) 通过前端/API/contract、双架构 Docker build/smoke/Trivy/SPDX、Kind smoke、GHCR 多架构发布、Cosign 签名/attestation 与 OCI release contract；baseline run [`32859671412`](https://github.com/caoronglin/soymutdb-next/actions/runs/32859671412) 通过 Windows/Linux/Web/Admin/OpenAPI/deployment 门禁。
+- **Pages**: Deploy Web to Pages run [`32862507825`](https://github.com/caoronglin/soymutdb-next/actions/runs/32862507825) 通过隐藏文件完整性、精确 artifact tree、字节级校验和 gh-pages 发布；在线 E2E run [`32862593486`](https://github.com/caoronglin/soymutdb-next/actions/runs/32862593486) 通过。

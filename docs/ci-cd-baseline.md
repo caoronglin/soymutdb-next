@@ -21,9 +21,10 @@
 
 ## 最近远程验证证据
 
-- `ci.yml` release run [`32843469602`](https://github.com/caoronglin/soymutdb-next/actions/runs/32843469602) 已通过前端/API/contract、amd64/arm64 Docker build/smoke、Trivy、SPDX SBOM、Kind smoke、GHCR 多架构发布、Cosign 签名/证明和 OCI release contract。
-- `baseline-validation.yml` run [`32843469562`](https://github.com/caoronglin/soymutdb-next/actions/runs/32843469562) 已通过 Windows installer/dry-run、Docker-free unit/liveness smoke、Linux PostgreSQL、Web/Admin、OpenAPI/client contract 和 deployment attestations。
-- 上述 run 只证明对应 commit 的 CI/baseline 门禁；真实生产服务器、受保护环境审批和远程回滚仍需按本文件的 deployment safety gate 执行。
+- `ci.yml` release run [`32859672523`](https://github.com/caoronglin/soymutdb-next/actions/runs/32859672523) 已通过前端/API/contract、amd64/arm64 Docker build/smoke、Trivy、SPDX SBOM、Kind smoke、GHCR 多架构发布、Cosign 签名/证明和 OCI release contract。
+- `baseline-validation.yml` run [`32859671412`](https://github.com/caoronglin/soymutdb-next/actions/runs/32859671412) 已通过 Windows installer/dry-run、Docker-free unit/liveness smoke、Linux PostgreSQL、Web/Admin、OpenAPI/client contract 和 deployment attestations。
+- Pages 发布 run [`32862507825`](https://github.com/caoronglin/soymutdb-next/actions/runs/32862507825) 已通过隐藏文件完整性、精确 artifact tree、字节级校验和 gh-pages 发布；在线 smoke run [`32862593486`](https://github.com/caoronglin/soymutdb-next/actions/runs/32862593486) 已通过。
+- 上述 run 只证明对应 commit 的 CI/baseline/Pages 门禁；真实生产服务器、受保护环境审批和远程回滚仍需按本文件的 deployment safety gate 执行。
 
 ## GitHub-only / 本地未执行部分
 
