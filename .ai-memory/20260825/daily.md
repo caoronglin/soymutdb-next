@@ -176,3 +176,10 @@
 
 - **验证**: 修复提交 `88d64c0` 的 CI run [`32859672523`](https://github.com/caoronglin/soymutdb-next/actions/runs/32859672523) 通过前端/API/contract、双架构 Docker build/smoke/Trivy/SPDX、Kind smoke、GHCR 多架构发布、Cosign 签名/attestation 与 OCI release contract；baseline run [`32859671412`](https://github.com/caoronglin/soymutdb-next/actions/runs/32859671412) 通过 Windows/Linux/Web/Admin/OpenAPI/deployment 门禁。
 - **Pages**: Deploy Web to Pages run [`32862507825`](https://github.com/caoronglin/soymutdb-next/actions/runs/32862507825) 通过隐藏文件完整性、精确 artifact tree、字节级校验和 gh-pages 发布；在线 E2E run [`32862593486`](https://github.com/caoronglin/soymutdb-next/actions/runs/32862593486) 通过。
+
+## [在线 smoke 修复] - 识别 GitHub Pages 子路径中的 API 请求
+
+- **文件**: `e2e/tests/online-smoke.spec.ts`
+- **问题**: 最终提交在线 smoke run `32866366266` 在 `/soymutdb-next/api/v1/...` 请求上把同源 API 404 误判成静态资源失败；API 正则只允许路径以 `/api/` 开头，未考虑 GitHub Pages repository subpath。
+- **修复**: API 路径匹配改为接受任意路径段中的 `/api/` 或其他 API route segment，同时继续拒绝真正静态资源错误；本地 Node 正则回归验证通过。
+- **验证**: 需由本修复触发新的 CI、baseline、Pages 和在线 smoke 远程门禁。

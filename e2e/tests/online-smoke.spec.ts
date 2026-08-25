@@ -63,7 +63,7 @@ const rl_ROUTES = [
  * 404); they become hard failures once a cross-origin API base is detected.
  */
 const rl_API_PATH_RE =
-  /^\/(api\/|auth\/|stats\/|genes\/|variants\/|news\/|site\/|blast\/|tools\/|analyses\/|gwas\/|notifications\/|seed-requests\/|content\/|expression\/|homolog\/|releases\/|sra\/|downloads\/|mutants\/|health\/|admin\/|widget\/|search\?)/i;
+  /(?:^|\/)(api\/|auth\/|stats\/|genes\/|variants\/|news\/|site\/|blast\/|tools\/|analyses\/|gwas\/|notifications\/|seed-requests\/|content\/|expression\/|homolog\/|releases\/|sra\/|downloads\/|mutants\/|health\/|admin\/|widget\/|search\?)/i;
 
 /**
  * Console.error messages matching these classes are tolerated (recorded in
