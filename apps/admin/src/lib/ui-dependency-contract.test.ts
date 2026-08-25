@@ -7,6 +7,7 @@ const FORBIDDEN_REFERENCES = [
   ["@soymutdb", "ui"].join("/"),
   ["packages", "ui"].join("/"),
 ];
+const DIRECT_ANTD_IMPORT = ["from", '"antd"'].join(" ");
 const TEXT_EXTENSIONS = new Set([".css", ".json", ".ts", ".tsx"]);
 
 function collectSourceFiles(directory: string): string[] {
@@ -35,6 +36,16 @@ describe("Admin UI dependency contract", () => {
       return FORBIDDEN_REFERENCES.some((reference) => source.includes(reference))
         ? [relative(ADMIN_ROOT, path)]
         : [];
+    });
+
+    expect(violations).toEqual([]);
+  });
+
+  it("routes every Admin AntD import through the explicit facade", () => {
+    const files = collectSourceFiles(resolve(ADMIN_ROOT, "src"));
+    const violations = files.flatMap((path) => {
+      const source = readFileSync(path, "utf8");
+      return source.includes(DIRECT_ANTD_IMPORT) ? [relative(ADMIN_ROOT, path)] : [];
     });
 
     expect(violations).toEqual([]);
