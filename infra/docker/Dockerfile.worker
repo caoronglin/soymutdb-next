@@ -47,7 +47,9 @@ ENV PYTHONUNBUFFERED=1 \
 
 # Bioinformatics tools: htslib, bcftools, ncbi-blast+
 # libgomp1: OpenMP runtime needed by leidenalg / python-igraph wheels.
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update \
+    && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends \
     libpq5 \
     libgomp1 \
     bcftools \
@@ -57,7 +59,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     bedtools \
     pigz \
     zstd \
-    curl \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 1000 soymutdb \
     && useradd --uid 1000 --gid soymutdb --shell /bin/bash --create-home soymutdb
