@@ -45,6 +45,10 @@ _EXAMPLE_JWT_SECRETS = {
     "your-secret-key-change-me",
 }
 
+# The API uses symmetric JWT signing; keeping the allowlist explicit prevents
+# accidentally enabling an algorithm that requires an unmaintained crypto path.
+_ALLOWED_JWT_ALGORITHMS = frozenset({"HS256", "HS384", "HS512"})
+
 
 class Settings(BaseSettings):
     """Global application settings.
@@ -338,6 +342,11 @@ class Settings(BaseSettings):
         if "*" in self.cors_origins:
             validation_errors.append(
                 "CORS origins cannot contain '*' when credentials are enabled"
+            )
+
+        if self.jwt_algorithm not in _ALLOWED_JWT_ALGORITHMS:
+            validation_errors.append(
+                "jwt_algorithm must be one of HS256, HS384, or HS512"
             )
 
         if self.app_env == "prod":

@@ -5,9 +5,9 @@ description = "SoyMutDB MCP server (FastMCP, Streamable HTTP) - tool stubs calli
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "fastmcp>=2.4,<4",
+    "fastmcp>=3.2.0,<4",
     "httpx>=0.27",
-    "uvicorn>=0.30",
+    "uvicorn>=0.35.0,<0.36.0",
     "redis>=5.0",
 ]
 

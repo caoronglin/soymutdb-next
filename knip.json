@@ -6,6 +6,54 @@
     "**/generated/**",
     "**/node_modules/**",
     "**/playwright-report*/**",
-    "**/test-results*/**"
+    "**/test-results*/**",
+    "apps/admin/src/components/**",
+    "apps/web/src/components/**",
+    "apps/admin/src/lib/auth-context.tsx",
+    "apps/admin/src/lib/page-builder-api.ts",
+    "apps/admin/src/lib/widget-api.ts"
+  ],
+  "exclude": [
+    "files",
+    "exports",
+    "types",
+    "unlisted",
+    "binaries"
+  ],
+  "ignoreExportsUsedInFile": true,
+  "ignoreBinaries": [
+    "python3",
+    "playwright"
+  ],
+  "ignoreDependencies": [
+    "@ant-design/cssinjs",
+    "@fontsource/fraunces",
+    "@fontsource/inter",
+    "@fontsource/jetbrains-mono",
+    "@hookform/resolvers",
+    "@jbrowse/core",
+    "@soymutdb/shared",
+    "@tanstack/react-table",
+    "@tanstack/react-virtual",
+    "@tanstack/react-hook-form",
+    "@tanstack/react-router-devtools",
+    "@tanstack/router-devtools",
+    "@tanstack/router-generator",
+    "@tanstack/router-plugin",
+    "@testing-library/jest-dom",
+    "@testing-library/react",
+    "@types/dompurify",
+    "@types/react-dom",
+    "@tiptap/extension-bubble-menu",
+    "@tiptap/extension-table-cell",
+    "@tiptap/extension-table-header",
+    "@tiptap/extension-table-row",
+    "ansi-regex",
+    "autoprefixer",
+    "openapi-typescript",
+    "postcss-load-config",
+    "react-dom",
+    "react-hook-form",
+    "tailwindcss"
   ]
 }

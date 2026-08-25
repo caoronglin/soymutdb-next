@@ -1,7 +1,7 @@
 """Security utilities: Argon2id password hashing, JWT, RBAC, and password strength.
 
 Argon2id is used for password hashing via ``argon2-cffi`` (NOT bcrypt).
-JWT tokens are issued with ``python-jose``.
+JWT tokens are issued with ``PyJWT``.
 """
 
 from __future__ import annotations
@@ -14,7 +14,8 @@ from typing import Any
 
 from argon2 import PasswordHasher, Type
 from argon2.exceptions import InvalidHashError, VerifyMismatchError
-from jose import JWTError, jwt
+import jwt
+from jwt import InvalidTokenError
 
 from .compat import StrEnum
 from .config import get_settings
@@ -266,7 +267,7 @@ def decode_token(token: str) -> dict[str, Any]:
         return jwt.decode(
             token, settings.jwt_secret, algorithms=[settings.jwt_algorithm]
         )
-    except JWTError as exc:
+    except InvalidTokenError as exc:
         raise ValueError(f"Invalid token: {exc}") from exc
 
 

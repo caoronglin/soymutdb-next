@@ -92,6 +92,15 @@ def test_prod_rejects_weak_or_example_jwt_secret(jwt_secret: str) -> None:
         Settings(_env_file=None, app_env="prod", **values)
 
 
+def test_rejects_non_hmac_jwt_algorithm() -> None:
+    """JWT configuration must stay on the supported HMAC algorithms."""
+    values = _production_values()
+    values["jwt_algorithm"] = "ES256"
+
+    with pytest.raises(ValidationError, match="jwt_algorithm"):
+        Settings(_env_file=None, app_env="prod", **values)
+
+
 def test_dev_warns_and_uses_localhost_cors_defaults() -> None:
     """Development remains convenient but makes its relaxed defaults visible."""
     with pytest.warns(UserWarning, match="development defaults"):
