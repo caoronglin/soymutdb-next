@@ -146,10 +146,10 @@
 
 - **文件**: `.github/workflows/ci.yml`, `apps/worker/src/soymutdb_worker/metrics.py`, `apps/worker/tests/test_metrics.py`
 - **决策**: Kind smoke 不再假设 Worker runtime 内有 curl，改用 Python 标准库读取 `/metrics`；同时 queue-depth collector 只对 `redis://`/`rediss://` 启动，`memory://` 等测试 broker 记录受控 warning，不在线程中抛出 Redis URL `ValueError`。
-- **验证**: Docker 双架构 build、smoke、Trivy、SPDX SBOM 和压缩 artifact 均通过；Kind 已成功加载、部署并通过 API/Worker rollout，行为断言暴露 Prometheus multiprocess gauge 带 `{pid=...}` 标签，放宽为兼容可选标签后需重跑 Kind 与 publish。
+- **验证**: Docker 双架构 build、smoke、Trivy、SPDX SBOM 和压缩 artifact 均通过；Kind 已成功加载、部署并通过 API/Worker rollout，行为断言暴露 Prometheus multiprocess gauge 带 `{pid=...}` 标签，兼容可选标签后 Kind smoke 与 publish 均通过。
 
 ## [发布修复] - Cosign SLSA predicate 版本
 
 - **文件**: `.github/workflows/ci.yml`
 - **决策**: 双架构 Docker、Kind 和 Windows baseline 均已通过；GHCR publish 在 `cosign attest --type slsaprovenance` 阶段拒绝 SLSA v1 的 `runDetails.builder`，报 `required field builder missing`。改为 Cosign `slsaprovenance` 所需的 SLSA v0.2 predicate（顶层 `builder`, `buildType`, `invocation`, `materials`），保留来源 revision、workflow identity、平台和 provenance SHA256。
-- **验证**: 上一轮 publish 已成功合并并校验多架构 manifest，唯一失败为 provenance schema；此修复后需重跑 GHCR 签名、attestation、release contract。
+- **验证**: CI run `32841250150` 成功：前端/API/contract、双架构 Docker build/smoke/Trivy/SPDX、Kind smoke、GHCR 多架构 manifest、Cosign sign/attestation 与 OCI release contract 全部通过；baseline run `32841250085` 成功，Windows installer dry-run 与 Docker-free unit/liveness smoke 通过。
