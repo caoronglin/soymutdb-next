@@ -87,3 +87,9 @@
 - **文件**: `infra/docker/Dockerfile.api`, `infra/docker/Dockerfile.worker`
 - **决策**: 新版 uv 已能解析 lockfile，但要求本地 `soymutdb-jobs` 位于 `/app/packages/jobs-py`；此前绝对复制到 `/packages/jobs-py` 反而导致 `Distribution not found: file:///app/packages/jobs-py`，恢复相对 `/app/packages` 目标。
 - **验证**: 最新 baseline 全部通过（含 Windows）；Docker amd64/arm64 失败均收敛为该 API build 路径错误，修复后需重跑多架构构建。
+
+## [CI 修复] - Worker runtime Python 与 shared jobs
+
+- **文件**: `infra/docker/Dockerfile.worker`
+- **决策**: worker lockfile 与 `packages/jobs-py` 均要求 Python >=3.14，runtime 原为 3.13 且 smoke 进程无法导入 `soymutdb_jobs`；统一 builder/runtime 到 `python:3.14.6-slim`，并显式设置 `/app/packages/jobs-py/src:/app/apps/worker/src`。
+- **验证**: `uv lock --check --project apps/worker` 通过；远程 Docker smoke 的唯一失败为 `ModuleNotFoundError: soymutdb_jobs`，需重跑多架构镜像门禁。
