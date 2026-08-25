@@ -164,3 +164,10 @@
 
 - **文件**: `docs/ci-cd-baseline.md`
 - **决策**: 补充最新成功的 CI `32843469602` 与 baseline `32843469562` 链接和通过范围，同时明确它们不等同于真实生产服务器部署、审批或远程回滚验证。
+
+## [Pages 发布修复] - 保留隐藏的 `.nojekyll`
+
+- **文件**: `.github/workflows/ci.yml`
+- **问题**: CI 构建时把空的 `pages-dist/.nojekyll` 写入 `SHA256SUMS`，但 `actions/upload-artifact` 默认不上传隐藏文件；Pages workflow 下载 artifact 后在 `sha256sum -c` 阶段报 `.nojekyll: No such file or directory`。
+- **修复**: Pages artifact 上传显式设置 `include-hidden-files: true`，保持严格字节树校验不放宽。
+- **验证**: 失败 run `32859387653` 已定位为该问题；需由本修复触发新的 CI、baseline 和 Pages 远程门禁。
