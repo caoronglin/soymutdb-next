@@ -31,7 +31,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH="/app/src"
 
 COPY --from=builder /opt/venv /opt/venv
-COPY --from=builder /app/src ./src
+COPY --from=builder /app/src /app/src
 
 WORKDIR /app
 
