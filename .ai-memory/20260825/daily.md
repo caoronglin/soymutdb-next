@@ -93,3 +93,9 @@
 - **文件**: `infra/docker/Dockerfile.worker`
 - **决策**: worker lockfile 与 `packages/jobs-py` 均要求 Python >=3.14，runtime 原为 3.13 且 smoke 进程无法导入 `soymutdb_jobs`；统一 builder/runtime 到 `python:3.14.6-slim`，并显式设置 `/app/packages/jobs-py/src:/app/apps/worker/src`。
 - **验证**: `uv lock --check --project apps/worker` 通过；远程 Docker smoke 的唯一失败为 `ModuleNotFoundError: soymutdb_jobs`，需重跑多架构镜像门禁。
+
+## [CI 修复] - JBrowse nginx 正则配置
+
+- **文件**: `apps/jbrowse/nginx.conf`
+- **决策**: nginx 的 `location` 正则含 `{8,}` 时必须整体加引号，否则 nginx 将其解析为未知 directive；同时移除默认已包含的 `text/html` gzip MIME，消除重复 MIME 警告。
+- **验证**: 远程 amd64/arm64 镜像均已通过 API、Worker（23 tasks）和 MCP smoke；JBrowse smoke 收敛为 nginx `unknown directive`，修复后需重跑多架构门禁。
