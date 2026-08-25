@@ -839,24 +839,25 @@ jobs:
               --arg builder "$certificate_identity" \
               --arg invocation "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
               '{
-                "buildDefinition": {
-                  "buildType": "https://github.com/soymutdb/oci-multiarch@v1",
-                  "externalParameters": {
-                    "source_repository": $repository,
-                    "source_revision": $revision,
+                "builder": {"id": $builder},
+                "buildType": "https://github.com/soymutdb/oci-multiarch@v1",
+                "invocation": {
+                  "configSource": {
+                    "uri": ("git+https://github.com/" + $repository),
+                    "digest": {"sha1": $revision},
+                    "entryPoint": ".github/workflows/ci.yml"
+                  },
+                  "parameters": {
                     "image": $image,
                     "platforms": ["linux/amd64", "linux/arm64"]
                   },
-                  "internalParameters": {},
-                  "resolvedDependencies": [{
-                    "uri": ("git+https://github.com/" + $repository),
-                    "digest": {"gitCommit": $revision}
-                  }]
+                  "environment": {"github_run_id": $invocation}
                 },
-                "runDetails": {
-                  "builder": {"id": $builder},
-                  "metadata": {"invocationId": $invocation}
-                }
+                "metadata": {"buildInvocationId": $invocation},
+                "materials": [{
+                  "uri": ("git+https://github.com/" + $repository),
+                  "digest": {"sha1": $revision}
+                }]
               }' > "$provenance"
             provenance_sha256="$(sha256sum "$provenance" | cut -d ' ' -f 1)"
 
