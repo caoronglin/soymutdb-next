@@ -183,3 +183,10 @@
 - **问题**: 最终提交在线 smoke run `32866366266` 在 `/soymutdb-next/api/v1/...` 请求上把同源 API 404 误判成静态资源失败；API 正则只允许路径以 `/api/` 开头，未考虑 GitHub Pages repository subpath。
 - **修复**: API 路径匹配改为接受任意路径段中的 `/api/` 或其他 API route segment，同时继续拒绝真正静态资源错误；本地 Node 正则回归验证通过。
 - **验证**: 需由本修复触发新的 CI、baseline、Pages 和在线 smoke 远程门禁。
+
+## [本机最小部署] - 仅 Web + Admin，无 Docker/后端
+
+- **产物**: `apps/web/dist` 与 `apps/admin/dist`；使用 `VITE_DEPLOYMENT_MODE=minimal`、本机 API 目标 `http://127.0.0.1:18000/api/v1`（该端口未启动）构建。
+- **服务**: Web `http://127.0.0.1:4173/`，Admin `http://127.0.0.1:5174/`；使用临时 Python SPA fallback 静态服务器，服务进程已独立会话保持运行；未部署 API、Worker、MCP、JBrowse、PostgreSQL、ClickHouse、Redis。
+- **验证**: Web/Admin 首页 HTTP 200、Web `/search` fallback HTTP 200、Admin 浏览器 smoke HTTP 200 且仅过滤预期 `ERR_CONNECTION_REFUSED`；Web 路由/脚本 smoke 20/20 通过。完整资源加载用例的唯一失败是后端未部署导致的预期 API 404，已未将其伪装为静态资源成功。
+- **远程证据**: 修复提交 `0aace68` 的 CI [`32866968143`](https://github.com/caoronglin/soymutdb-next/actions/runs/32866968143)、baseline [`32866966708`](https://github.com/caoronglin/soymutdb-next/actions/runs/32866966708)、Pages [`32869572544`](https://github.com/caoronglin/soymutdb-next/actions/runs/32869572544) 与在线 smoke [`32869633057`](https://github.com/caoronglin/soymutdb-next/actions/runs/32869633057) 均通过。
