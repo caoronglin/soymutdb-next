@@ -19,7 +19,7 @@ import {
   Tag,
   Typography,
   type TableColumnsType,
-} from "antd";
+} from "../../lib/antd";
 import { PlusOutlined } from "@ant-design/icons";
 import { useRouter } from "@tanstack/react-router";
 import dayjs from "dayjs";
@@ -252,7 +252,7 @@ export default function NewsListPage() {
 
   return (
     <div className="route-fade-in">
-      <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+      <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Space>
             <Typography.Text strong>{t("admin.news.title")}</Typography.Text>

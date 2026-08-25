@@ -22,32 +22,6 @@ vi.mock("@soymutdb/api-client", () => ({
   getAccessToken: vi.fn(() => null),
 }));
 
-vi.mock("../lib/admin-ui", () => ({
-  cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(" "),
-  Button: ({ children, type = "button", ...props }: React.ComponentProps<"button">) => (
-    <button type={type} {...props}>{children}</button>
-  ),
-  Input: (props: React.ComponentProps<"input">) => <input {...props} />,
-  Label: (props: React.ComponentProps<"label">) => <label {...props} />,
-  Badge: ({ children }: { children?: React.ReactNode }) => <span>{children}</span>,
-  Dialog: ({ open, children }: { open: boolean; children: React.ReactNode }) => open ? <div>{children}</div> : null,
-  DialogContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  DialogHeader: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  DialogTitle: ({ children }: { children: React.ReactNode }) => <h2>{children}</h2>,
-  DialogDescription: ({ children }: { children: React.ReactNode }) => <p>{children}</p>,
-  DialogFooter: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  PageHeader: ({ actions }: { actions?: React.ReactNode }) => <header>{actions}</header>,
-  Select: ({ value, onValueChange, children }: { value?: string; onValueChange?: (value: string) => void; children: React.ReactNode }) => (
-    <select value={value} onChange={(event) => onValueChange?.(event.target.value)}>{children}</select>
-  ),
-  SelectContent: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  SelectItem: ({ value, disabled, children }: { value: string; disabled?: boolean; children: React.ReactNode }) => (
-    <option value={value} disabled={disabled}>{children}</option>
-  ),
-  SelectTrigger: () => null,
-  SelectValue: () => null,
-  StatCard: () => <div />,
-}));
 
 vi.mock("../components/data-table", () => ({ DataTable: () => <div /> }));
 vi.mock("../components/status-badge", () => ({ StatusBadge: () => <span /> }));
@@ -93,12 +67,12 @@ async function startModulePreview(
 ) {
   await user.click(await screen.findByRole("button", { name: "New Import" }));
   const typeSelect = screen
-    .getAllByRole("combobox")
-    .find((select) => select.textContent?.includes("Module Data"));
+    .getByRole("combobox", { name: "Import Type" });
   expect(typeSelect).toBeDefined();
-  await user.selectOptions(typeSelect!, "module_tsv");
+  await user.click(typeSelect!);
+  await user.click(await screen.findByText("Module Data"));
 
-  const fileInput = container.querySelector<HTMLInputElement>('input[type="file"]');
+  const fileInput = document.body.querySelector<HTMLInputElement>('input[type="file"]');
   expect(fileInput).not.toBeNull();
   fireEvent.change(fileInput!, { target: { files: [file] } });
   await user.click(screen.getByRole("button", { name: "Preview" }));
@@ -127,7 +101,7 @@ describe("ImportsPage module preview request identity", () => {
     const file = new File(["gene_id\nG1\n"], "genes.tsv", { type: "text/tab-separated-values" });
 
     await startModulePreview(user, container, file);
-    const moduleKeyInput = container.querySelector<HTMLInputElement>("#import-module-key");
+    const moduleKeyInput = document.body.querySelector<HTMLInputElement>("#import-module-key");
     expect(moduleKeyInput).not.toBeNull();
     await user.clear(moduleKeyInput!);
     await user.type(moduleKeyInput!, "variants");
@@ -148,7 +122,7 @@ describe("ImportsPage module preview request identity", () => {
     const secondFile = new File(["gene_id\nG2\n"], "replacement.tsv", { type: "text/tab-separated-values" });
 
     await startModulePreview(user, container, firstFile);
-    const fileInput = container.querySelector<HTMLInputElement>('input[type="file"]');
+    const fileInput = document.body.querySelector<HTMLInputElement>('input[type="file"]');
     expect(fileInput).not.toBeNull();
     fireEvent.change(fileInput!, { target: { files: [secondFile] } });
 

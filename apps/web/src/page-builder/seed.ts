@@ -70,6 +70,17 @@ export const HOME_DEFINITION: PageDefinition = {
       { type: "news_list", props: { limit: 5 } },
       // Featured carousel (news-driven) — mirrors the backend home seed.
       { type: "media_carousel", props: { items: [] } },
+      {
+        type: "resource_cards",
+        props: {
+          heading: "资源导览",
+          cards: [
+            { title: "数据下载", description: "下载参考基因组、变异与注释数据", href: "/downloads" },
+            { title: "使用指南", description: "快速上手与检索帮助", href: "/guide" },
+            { title: "文献 / 出版物", description: "SoyMutDB 相关文献", href: "/publications" },
+          ],
+        },
+      },
       { type: "rich_text", props: { content: "<p>SoyMutDB home content</p>" } },
     ],
   },

@@ -13,8 +13,7 @@
  */
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { Upload, type UploadFile, type UploadProps } from "antd";
-import { App } from "antd";
+import { App, Upload, type UploadFile, type UploadProps } from "../lib/antd";
 import { UploadOutlined } from "@ant-design/icons";
 import { uploadPresign } from "@soymutdb/api-client";
 

@@ -8,7 +8,7 @@
  * NewsCreate / NewsUpdate.
  */
 import { useTranslation } from "react-i18next";
-import { Button, DatePicker, Form, Input, InputNumber, Select, Space } from "antd";
+import { Button, DatePicker, Form, Input, InputNumber, Select, Space } from "../lib/antd";
 import dayjs from "dayjs";
 import type { NewsStatus } from "@soymutdb/api-client";
 import FileUpload from "./file-upload";

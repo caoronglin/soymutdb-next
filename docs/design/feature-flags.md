@@ -13,6 +13,13 @@
 | `imports.module_tsv` | on | 是 | 新 module 导入拒绝，运行中的任务不终止 |
 | `imports.module_xlsx` | on | 是 | 新 xlsx 导入拒绝，txt/tsv/csv 不受影响 |
 | `imports.local_upload` | on | 是 | 新浏览器直传拒绝，S3 URI 高级模式仍可按策略使用 |
+| `imports.fasta` | off | 是 | FASTA 写入未闭环，新增导入拒绝（API 422 + Admin 隐藏） |
+| `imports.gff3` | off | 是 | GFF3 写入未闭环，新增导入拒绝（API 422 + Admin 隐藏） |
+| `imports.vcf` | off | 是 | VCF 写入未闭环，新增导入拒绝（API 422 + Admin 隐藏） |
+| `imports.blast_db` | off | 是 | BLAST DB 写入未闭环，新增导入拒绝（API 422 + Admin 隐藏） |
+| `imports.seed_data` | off | 是 | Seed 写入未闭环，新增导入拒绝（API 422 + Admin 隐藏） |
+| `imports.expression_csv` | off | 是 | Expression 写入未闭环，新增导入拒绝（API 422 + Admin 隐藏） |
+| `imports.homolog_csv` | off | 是 | Homolog 写入未闭环，新增导入拒绝（API 422 + Admin 隐藏） |
 | `publication.github_pages` | on | 否 | 禁止选择 GitHub Pages target |
 | `publication.cloudflare_pages` | on | 否 | 禁止选择 Cloudflare Pages target |
 

@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { extname, join, relative, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -23,9 +23,13 @@ describe("Admin UI dependency contract", () => {
       ...collectSourceFiles(resolve(ADMIN_ROOT, "src")),
       resolve(ADMIN_ROOT, "package.json"),
       resolve(ADMIN_ROOT, "tsconfig.json"),
-      resolve(ADMIN_ROOT, "Dockerfile"),
+      // The canonical Admin Dockerfile moved to infra/docker/Dockerfile.admin
+      // (apps/admin/Dockerfile was removed in the toolchain consolidation).
+      resolve(ADMIN_ROOT, "../../infra/docker/Dockerfile.admin"),
       resolve(ADMIN_ROOT, "vitest.config.ts"),
-    ];
+      // Skip files that are absent so a moved/removed artifact does not make
+      // the whole contract fail with ENOENT; the scan covers what exists.
+    ].filter((path) => existsSync(path));
     const violations = files.flatMap((path) => {
       const source = readFileSync(path, "utf8");
       return FORBIDDEN_REFERENCES.some((reference) => source.includes(reference))

@@ -12,7 +12,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { App, Tabs } from "antd";
+import { App, Tabs } from "../../lib/antd";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 // v3: table row/header/cell live in @tiptap/extension-table (the dedicated

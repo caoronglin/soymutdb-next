@@ -1,133 +1,92 @@
 #!/usr/bin/env bash
-# =====================================================================
-# SoyMutDB Linux Installation Script (docker compose 主路径)
-# =====================================================================
-# Usage: sudo bash deploy/linux/install.sh
-# 说明：生产部署以 docker compose 为主路径（容器化，systemd 仅编排
-# compose 项目）。历史 conda 裸进程部署（deploy/conda）已废弃，非主路径。
-# =====================================================================
+# SoyMutDB Linux baseline installer: native FastAPI + PostgreSQL, no Docker.
+# Usage: sudo bash deploy/linux/install.sh [--dry-run]
 set -euo pipefail
 
-# Colors
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-CYAN='\033[0;36m'
-NC='\033[0m'
+DRY_RUN=0
+if [[ "${1:-}" == "--dry-run" ]]; then DRY_RUN=1; shift; fi
+[[ $# -eq 0 ]] || { echo "usage: $0 [--dry-run]" >&2; exit 2; }
 
-INSTALL_DIR="/opt/soymutdb"
-SERVICE_USER="soymutdb"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+INSTALL_DIR="${SOYMUTDB_INSTALL_DIR:-/opt/soymutdb}"
+SERVICE_USER="${SOYMUTDB_SERVICE_USER:-soymutdb}"
+RELEASE_ID="${SOYMUTDB_RELEASE_ID:-$(date -u +%Y%m%d%H%M%S)}"
+RELEASE_DIR="${INSTALL_DIR}/releases/${RELEASE_ID}"
+ENV_DIR="${SOYMUTDB_ENV_DIR:-/etc/soymutdb}"
+ENV_FILE="${ENV_DIR}/soymutdb.env"
 
-echo -e "${CYAN}========================================${NC}"
-echo -e "${CYAN}  SoyMutDB Linux Installation (compose)${NC}"
-echo -e "${CYAN}========================================${NC}"
-echo ""
+run_step() {
+  echo "==> $*"
+  if (( DRY_RUN == 0 )); then "$@"; fi
+}
+run_shell() {
+  echo "==> $*"
+  if (( DRY_RUN == 0 )); then bash -c "$*"; fi
+}
+require_cmd() {
+  if (( DRY_RUN == 1 )); then return 0; fi
+  command -v "$1" >/dev/null 2>&1 || { echo "missing required command: $1" >&2; exit 1; }
+}
 
-# Check root
-if [[ $EUID -ne 0 ]]; then
-    echo -e "${RED}[ERROR] This script must be run as root (use sudo).${NC}"
-    exit 1
+if (( DRY_RUN == 0 && EUID != 0 )); then
+  echo "run as root or use sudo" >&2
+  exit 1
+fi
+for cmd in python3 systemctl; do require_cmd "$cmd"; done
+[[ -d "${PROJECT_ROOT}/apps/api" ]] || { echo "apps/api not found" >&2; exit 1; }
+
+run_step install -d -m 0750 "${INSTALL_DIR}/releases" "${INSTALL_DIR}/backups" "${ENV_DIR}"
+if (( DRY_RUN == 0 )); then
+  if ! id -u "${SERVICE_USER}" >/dev/null 2>&1; then
+    useradd --system --home-dir "${INSTALL_DIR}" --shell /usr/sbin/nologin "${SERVICE_USER}"
+  fi
+fi
+run_step install -d -o "${SERVICE_USER}" -g "${SERVICE_USER}" -m 0750 "${RELEASE_DIR}/apps"
+run_step cp -a "${PROJECT_ROOT}/apps/api" "${RELEASE_DIR}/apps/api"
+run_step cp -a "${PROJECT_ROOT}/deploy" "${RELEASE_DIR}/deploy"
+run_step python3 -m venv "${RELEASE_DIR}/venv"
+run_shell "${RELEASE_DIR}/venv/bin/python -m pip install --upgrade pip && ${RELEASE_DIR}/venv/bin/python -m pip install -e ${RELEASE_DIR}/apps/api"
+
+if (( DRY_RUN == 0 )); then
+  if [[ ! -f "${ENV_FILE}" ]]; then
+    if [[ -f "${PROJECT_ROOT}/.env" ]]; then
+      install -o root -g "${SERVICE_USER}" -m 0640 "${PROJECT_ROOT}/.env" "${ENV_FILE}"
+    else
+      cat >"${ENV_FILE}" <<'EOF'
+SOYMUTDB_APP_ENV=prod
+SOYMUTDB_DEPLOYMENT_MODE=baseline
+SOYMUTDB_DATABASE_URL=postgresql+asyncpg://soymutdb:CHANGE_ME@127.0.0.1:5432/soymutdb
+SOYMUTDB_JWT_SECRET=CHANGE_ME_generate_a_long_random_secret
+SOYMUTDB_CORS_ORIGINS=https://CHANGE_ME.example
+SOYMUTDB_ADMIN_EMAIL=admin@CHANGE_ME.example
+SOYMUTDB_ADMIN_PASSWORD=CHANGE_ME_use_a_long_password
+EOF
+      chown root:"${SERVICE_USER}" "${ENV_FILE}"
+      chmod 0640 "${ENV_FILE}"
+      echo "created ${ENV_FILE}; edit production secrets before starting" >&2
+    fi
+  fi
 fi
 
-# ---------------------------------------------------------------------
-# Step 1: Check Docker dependency
-# ---------------------------------------------------------------------
-echo -e "${CYAN}[1/7] Checking Docker dependency...${NC}"
-if ! command -v docker &>/dev/null; then
-    echo -e "${RED}[ERROR] docker not found. Install Docker Engine first (https://docs.docker.com/engine/install/).${NC}"
-    exit 1
-fi
-if ! docker compose version &>/dev/null; then
-    echo -e "${RED}[ERROR] docker compose plugin not found. Install docker-compose-plugin.${NC}"
-    exit 1
-fi
-echo -e "${GREEN}  Docker found: $(docker --version)${NC}"
-
-# ---------------------------------------------------------------------
-# Step 2: Create service user and directory structure
-# ---------------------------------------------------------------------
-echo -e "${CYAN}[2/7] Creating service user '${SERVICE_USER}'...${NC}"
-if id -u "${SERVICE_USER}" >/dev/null 2>&1; then
-    echo -e "${YELLOW}  User '${SERVICE_USER}' already exists, skipping.${NC}"
-else
-    useradd --system --shell /bin/bash --home-dir "${INSTALL_DIR}" --create-home "${SERVICE_USER}"
-    echo -e "${GREEN}  User '${SERVICE_USER}' created.${NC}"
+if (( DRY_RUN == 0 )); then
+  ln -sfn "${RELEASE_DIR}" "${INSTALL_DIR}/current"
+  chown -R "${SERVICE_USER}:${SERVICE_USER}" "${RELEASE_DIR}"
+  sed -e "s|@INSTALL_DIR@|${INSTALL_DIR}|g" -e "s|@SERVICE_USER@|${SERVICE_USER}|g" -e "s|@ENV_FILE@|${ENV_FILE}|g" \\
+    "${SCRIPT_DIR}/soymutdb-api.service" > /etc/systemd/system/soymutdb-api.service
+  sed -e "s|@INSTALL_DIR@|${INSTALL_DIR}|g" "${SCRIPT_DIR}/soymutdb.target" > /etc/systemd/system/soymutdb.target
+  systemctl daemon-reload
+  set -a
+  # shellcheck disable=SC1090
+  source "${ENV_FILE}"
+  set +a
+  runuser -u "${SERVICE_USER}" -- "${INSTALL_DIR}/current/venv/bin/python" -m alembic \\
+    -c "${INSTALL_DIR}/current/apps/api/alembic.ini" upgrade head
+  systemctl enable soymutdb-api.service soymutdb.target
+  systemctl restart soymutdb-api.service
 fi
 
-mkdir -p "${INSTALL_DIR}"/{apps,data,logs,config}
-mkdir -p "${INSTALL_DIR}/deploy"
-chown -R "${SERVICE_USER}:${SERVICE_USER}" "${INSTALL_DIR}"
-chmod 750 "${INSTALL_DIR}/data"
-echo -e "${GREEN}  Directories created at ${INSTALL_DIR}.${NC}"
-
-# ---------------------------------------------------------------------
-# Step 3: Copy application files (compose project)
-# ---------------------------------------------------------------------
-echo -e "${CYAN}[3/7] Copying application files...${NC}"
-cp -r "${PROJECT_ROOT}/apps/api" "${INSTALL_DIR}/apps/"
-cp -r "${PROJECT_ROOT}/apps/worker" "${INSTALL_DIR}/apps/"
-cp -r "${PROJECT_ROOT}/packages" "${INSTALL_DIR}/"
-cp -r "${PROJECT_ROOT}/infra" "${INSTALL_DIR}/"
-cp -r "${PROJECT_ROOT}/deploy/scripts" "${INSTALL_DIR}/deploy/"
-cp "${PROJECT_ROOT}/docker-compose.yml" "${INSTALL_DIR}/"
-echo -e "${GREEN}  Application files copied (incl. docker-compose.yml, deploy/scripts).${NC}"
-
-# ---------------------------------------------------------------------
-# Step 4: Create environment file from template
-# ---------------------------------------------------------------------
-echo -e "${CYAN}[4/7] Creating environment file...${NC}"
-if [[ -f "${INSTALL_DIR}/.env" ]]; then
-    echo -e "${YELLOW}  ${INSTALL_DIR}/.env already exists, keeping it.${NC}"
-elif [[ -f "${PROJECT_ROOT}/deploy/.env.example" ]]; then
-    cp "${PROJECT_ROOT}/deploy/.env.example" "${INSTALL_DIR}/.env"
-    echo -e "${YELLOW}  Copied deploy/.env.example to .env - EDIT IT with production values:${NC}"
-    echo -e "${YELLOW}    - *_IMAGE_REF (CI 发布合同中的 image@sha256)${NC}"
-    echo -e "${YELLOW}    - SOYMUTDB_JWT_SECRET / SOYMUTDB_CORS_ORIGINS (API fail-fast 必填)${NC}"
-    echo -e "${YELLOW}    - POSTGRES_PASSWORD / CLICKHOUSE_PASSWORD / REDIS_PASSWORD / MINIO_*${NC}"
-fi
-chmod 600 "${INSTALL_DIR}/.env"
-chown -R "${SERVICE_USER}:${SERVICE_USER}" "${INSTALL_DIR}"
-echo -e "${GREEN}  Environment file ready at ${INSTALL_DIR}/.env.${NC}"
-
-# ---------------------------------------------------------------------
-# Step 5: Install systemd service files
-# ---------------------------------------------------------------------
-echo -e "${CYAN}[5/7] Installing systemd service files...${NC}"
-cp "${SCRIPT_DIR}/soymutdb-api.service" /etc/systemd/system/
-cp "${SCRIPT_DIR}/soymutdb.target" /etc/systemd/system/
-rm -f /etc/systemd/system/soymutdb-worker.service /etc/systemd/system/soymutdb-beat.service
-
-systemctl daemon-reload
-echo -e "${GREEN}  Service files installed and daemon reloaded.${NC}"
-
-# ---------------------------------------------------------------------
-# Step 6: Enable services
-# ---------------------------------------------------------------------
-echo -e "${CYAN}[6/7] Enabling services...${NC}"
-systemctl enable soymutdb-api.service soymutdb.target
-echo -e "${GREEN}  Enabled soymutdb-api.service + soymutdb.target.${NC}"
-
-# ---------------------------------------------------------------------
-# Step 7: Verify compose configuration
-# ---------------------------------------------------------------------
-echo -e "${CYAN}[7/7] Verifying compose configuration...${NC}"
-if (cd "${INSTALL_DIR}" && docker compose -f docker-compose.yml config -q); then
-    echo -e "${GREEN}  docker compose config OK.${NC}"
-else
-    echo -e "${YELLOW}  Compose validation failed (missing env vars?). Fill ${INSTALL_DIR}/.env first.${NC}"
-fi
-
-echo ""
-echo -e "${GREEN}========================================${NC}"
-echo -e "${GREEN}  Installation Complete!${NC}"
-echo -e "${GREEN}========================================${NC}"
-echo ""
-echo "Next steps:"
-echo "  1. Edit ${INSTALL_DIR}/.env with production values (镜像 digest refs / 密钥 / 密码)"
-echo "  2. Start stack:  sudo systemctl start soymutdb.target"
-echo "  3. Upgrade:      sudo bash ${INSTALL_DIR}/deploy/scripts/upgrade.sh"
-echo "  4. Check status: sudo systemctl status soymutdb.target"
-echo "  5. View logs:    cd ${INSTALL_DIR} && docker compose logs -f api"
-echo ""
+echo "baseline installation prepared at ${RELEASE_DIR}"
+echo "environment: ${ENV_FILE}"
+echo "logs: journalctl -u soymutdb-api.service -f"
+echo "health: curl --fail http://127.0.0.1:8000/health"

@@ -53,6 +53,35 @@ class TestReadiness:
         assert data["checks"]["clickhouse"]["healthy"] is True
         assert data["checks"]["redis"]["healthy"] is True
 
+    async def test_readiness_baseline_reports_optional_services_without_failing(
+        self, client, monkeypatch
+    ):
+        """Baseline readiness only gates PostgreSQL and diagnoses optional services."""
+        from app.api.v1 import health
+        from app.core.config import Settings
+
+        monkeypatch.setattr(
+            health, "get_settings", lambda: Settings(_env_file=None, deployment_mode="baseline")
+        )
+        with patch("app.api.v1.health.get_redis") as get_redis, patch(
+            "app.api.v1.health.ClickHouseService.ping", new_callable=AsyncMock, return_value=False
+        ):
+            get_redis.return_value.ping = AsyncMock(
+                side_effect=ConnectionError("redis unavailable")
+            )
+            response = await client.get(f"{HEALTH_PREFIX}/ready")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ok"
+        assert data["checks"]["postgres"]["healthy"] is True
+        assert data["checks"]["clickhouse"] == {
+            "healthy": None, "required": False, "status": "disabled"
+        }
+        assert data["checks"]["redis"] == {
+            "healthy": None, "required": False, "status": "disabled"
+        }
+
     async def test_readiness_clickhouse_down(self, client):
         """Readiness probe returns 503 when ClickHouse is unavailable."""
         with patch(

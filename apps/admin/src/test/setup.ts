@@ -8,6 +8,15 @@ expect.extend(matchers);
 
 // AntD responsive components (ProTable/Grid) call window.matchMedia; jsdom
 // does not implement it. Provide a minimal always-false mock.
+if (!globalThis.ResizeObserver) {
+  class ResizeObserverMock {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  globalThis.ResizeObserver = ResizeObserverMock as typeof ResizeObserver;
+}
+
 if (!window.matchMedia) {
   Object.defineProperty(window, "matchMedia", {
     writable: true,

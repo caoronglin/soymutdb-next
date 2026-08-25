@@ -9,7 +9,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Alert, App, Button, Modal, Space, Typography } from "antd";
+import { Alert, App, Button, Modal, Space, Typography } from "../lib/antd";
 import { HolderOutlined, LoadingOutlined } from "@ant-design/icons";
 import {
   DndContext,

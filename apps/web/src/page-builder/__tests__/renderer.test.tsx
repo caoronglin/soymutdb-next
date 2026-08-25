@@ -114,6 +114,7 @@ describe("page-builder renderer (shared DTO)", () => {
         "tool_entries",
         "news_list",
         "media_carousel",
+        "resource_cards",
         "rich_text",
       ]);
     }
@@ -129,6 +130,35 @@ describe("page-builder renderer (shared DTO)", () => {
     expect(anchor).toBeTruthy();
     expect(anchor?.getAttribute("rel")).toMatch(/noopener/);
     expect(anchor?.textContent).toContain("Docs");
+  });
+
+  it("renders editable resource cards in configured order with safe image and links", () => {
+    const node: PageComponentNode = {
+      type: "resource_cards",
+      props: {
+        heading: "Resource guide",
+        cards: [
+          { title: "First", description: "First description", image_url: "https://example.com/one.png", href: "/search/genes" },
+          { title: "Second", href: "https://example.com/two" },
+        ],
+      },
+    };
+    const { container } = renderWithProviders(<RenderNode node={node} />);
+    expect(screen.getByTestId("resource-cards")).toBeTruthy();
+    expect(screen.getByText("Resource guide")).toBeTruthy();
+    expect(Array.from(container.querySelectorAll("h3")).map((element) => element.textContent)).toEqual(["First", "Second"]);
+    expect(container.querySelector("img")?.getAttribute("src")).toBe("https://example.com/one.png");
+    const external = Array.from(container.querySelectorAll("a")).find((anchor) => anchor.getAttribute("href") === "https://example.com/two");
+    expect(external?.getAttribute("rel")).toMatch(/noopener/);
+  });
+
+  it("does not render unsafe resource card image URLs", () => {
+    const node: PageComponentNode = {
+      type: "resource_cards",
+      props: { cards: [{ title: "Unsafe", image_url: "javascript:alert(1)" }] },
+    };
+    const { container } = renderWithProviders(<RenderNode node={node} />);
+    expect(container.querySelector("img")).toBeNull();
   });
 
   it("renders a rich_text node through DOMPurify (scripts and handlers stripped)", () => {

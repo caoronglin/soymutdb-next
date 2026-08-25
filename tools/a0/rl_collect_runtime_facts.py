@@ -370,9 +370,6 @@ def rl_collect_runtime_facts(
         "infra/docker/Dockerfile.worker",
         "infra/docker/Dockerfile.web",
         "infra/docker/Dockerfile.admin",
-        "apps/api/Dockerfile",
-        "apps/worker/Dockerfile",
-        "apps/admin/Dockerfile",
         "apps/jbrowse/Dockerfile",
     )
     for rl_relative_path in rl_required_paths:
@@ -510,9 +507,6 @@ def rl_collect_runtime_facts(
         "infra/docker/Dockerfile.worker",
         "infra/docker/Dockerfile.web",
         "infra/docker/Dockerfile.admin",
-        "apps/api/Dockerfile",
-        "apps/worker/Dockerfile",
-        "apps/admin/Dockerfile",
         "apps/jbrowse/Dockerfile",
     ):
         rl_validate_dockerfile_source(
@@ -1835,7 +1829,7 @@ def rl_execution_context_facts(
             "rl_context": "OpenAPI/API cwd",
             "rl_cwd": "apps/api",
             "rl_entrypoint": "app.main:app",
-            "rl_source": "README.md / apps/api/Dockerfile",
+            "rl_source": "README.md / infra/docker/Dockerfile.api",
             "rl_cwd_exists": (rl_root / "apps/api").is_dir(),
         },
         {

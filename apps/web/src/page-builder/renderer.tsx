@@ -151,6 +151,61 @@ function NewsListNode(props: { limit?: number }) {
   );
 }
 
+type ResourceCard = {
+  title?: unknown;
+  description?: unknown;
+  image_url?: unknown;
+  href?: unknown;
+};
+
+/** Render the server-validated resource directory cards in their configured order. */
+function ResourceCardsNode(props: { heading?: unknown; cards?: unknown }) {
+  const heading = typeof props.heading === "string" ? props.heading : "";
+  const cards = Array.isArray(props.cards) ? props.cards as ResourceCard[] : [];
+  if (!heading && cards.length === 0) return null;
+
+  return (
+    <section data-testid="resource-cards" className="space-y-4">
+      {heading ? <h2 className="text-xl font-semibold tracking-tight">{heading}</h2> : null}
+      {cards.length > 0 ? (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {cards.map((card, index) => {
+            const title = typeof card.title === "string" ? card.title : "";
+            const description = typeof card.description === "string" ? card.description : "";
+            const imageUrl = isSafeHref(card.image_url) && /^https?:/i.test(card.image_url)
+              ? card.image_url
+              : undefined;
+            const href = isSafeHref(card.href) ? card.href : undefined;
+            const body = (
+              <>
+                {imageUrl ? (
+                  <img src={imageUrl} alt="" className="h-40 w-full object-cover" loading="lazy" />
+                ) : null}
+                <div className="space-y-1.5 p-4">
+                  {title ? <h3 className="text-base font-semibold">{title}</h3> : null}
+                  {description ? <p className="text-sm text-muted-foreground">{description}</p> : null}
+                </div>
+              </>
+            );
+            const className = "block overflow-hidden rounded-xl border border-border bg-card transition-shadow hover:shadow-md";
+            return href ? (
+              /^https?:/i.test(href) ? (
+                <a key={`${title}-${index}`} href={href} target="_blank" rel="noopener noreferrer" className={className}>
+                  {body}
+                </a>
+              ) : (
+                <Link key={`${title}-${index}`} to={href} className={className}>{body}</Link>
+              )
+            ) : (
+              <article key={`${title}-${index}`} className={className}>{body}</article>
+            );
+          })}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function RichTextNode(props: { content?: string }) {
   if (!props.content || typeof props.content !== "string") return null;
   return (
@@ -394,6 +449,8 @@ export function RenderNode({ node }: { node: PageComponentNode }) {
       return <NewsListNode limit={props.limit as number | undefined} />;
     case "media_carousel":
       return <NewsCarousel />;
+    case "resource_cards":
+      return <ResourceCardsNode heading={props.heading} cards={props.cards} />;
     case "rich_text":
       return <RichTextNode content={props.content as string | undefined} />;
     case "tool_entries":

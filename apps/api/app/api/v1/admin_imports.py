@@ -9,7 +9,7 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.database import get_db
-from ...core.features import FeatureFlagService
+from ...core.features import IMPORT_TYPE_FEATURES, FeatureFlagService
 from ...core.exceptions import NotFoundError, ValidationError
 from ...core.security import require_admin_roles
 from ...core.task_dispatch import get_celery_client
@@ -39,6 +39,21 @@ class MultipartCompletePathRequest(MultipartCompleteRequest):
 def _require_admin(current_user: User) -> None:
     """Raise :class:`AuthorizationError` unless *current_user* is an administrator."""
     require_admin_roles(get_user_roles(current_user))
+
+
+async def _require_import_type_enabled(db: AsyncSession, import_type: str) -> None:
+    """Reject an import type whose persisted writer is not closed.
+
+    Every import type maps to a registered feature flag (see
+    ``core.features.IMPORT_TYPE_FEATURES``).  A type without a flag is
+    unsupported; a type whose flag is off is rejected up front so the caller
+    gets a clear 422 rather than a worker ``fail-closed`` after dispatch.
+    """
+    feature_key = IMPORT_TYPE_FEATURES.get(import_type)
+    if feature_key is None:
+        raise ValidationError(f"Unsupported import type '{import_type}'")
+    if not await FeatureFlagService.is_enabled(db, feature_key):
+        raise ValidationError(f"{import_type} imports are currently disabled")
 
 
 def _task_to_dict(task: ImportTask) -> dict:
@@ -210,9 +225,12 @@ async def create_import(
     """
     _require_admin(current_user)
 
+    # Every import type is gated by its own capability flag.  Types whose
+    # durable writer is not implemented default to OFF so the caller is
+    # rejected up front instead of getting a worker ``fail-closed``.
+    await _require_import_type_enabled(db, body.type)
+
     if body.type == "module_tsv":
-        if not await FeatureFlagService.is_enabled(db, "imports.module_tsv"):
-            raise ValidationError("Module TSV imports are currently disabled")
         if body.filename.lower().endswith(".xlsx") and not await FeatureFlagService.is_enabled(db, "imports.module_xlsx"):
             raise ValidationError("XLSX module imports are currently disabled")
         if not body.module_key:

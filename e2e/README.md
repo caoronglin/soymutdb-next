@@ -84,6 +84,45 @@ Point at any environment (staging, local dist preview):
 SMOKE_BASE_URL=http://localhost:4173 npx playwright test
 ```
 
+## Demo vs. Production E2E separation
+
+There are **two independent browser suites**; do not conflate them:
+
+| Suite | Config | Target | Gate semantics |
+| --- | --- | --- | --- |
+| **Demo smoke** | `playwright.config.ts` / `playwright-public.config.ts` | gh-pages **demo** site | placeholder API 404s / JBrowse CSP noise are *tolerated* and only recorded |
+| **Production gate** | `playwright-production.config.ts` / `production-gate.spec.ts` | real **production/staging** release | API 404/405, demo fixtures, placeholder origins, and fallback states are **hard failures** |
+
+The public demo site legitimately carries fixture data (`SMDB-00001` pages) and
+stubs (no real API), so the demo smoke only asserts rendering/script health. The
+production gate targets a deployment that must serve **real** release data.
+
+## Production E2E gate
+
+Target a real release deployment (production or staging) and run the strict
+gate. It asserts:
+
+- key release routes are free of `SMDB-00001` / `Demo fixture` /
+  `demonstration data` / `example.com` / `localhost` / `change-me`;
+- no static-asset HTTP >= 400 and **no API 404/405** (a 404/405 means the SPA is
+  in a fallback state, not serving release data);
+- at least one API data endpoint answers 2xx; the demo sample route
+  `/samples/SMDB-00001.html` must be a 404;
+- the `/browser` JBrowse frame loads (not CSP-blocked) and the Admin console
+  login page is reachable and renders.
+
+```bash
+PRODUCTION_BASE_URL=https://soymutdb.org \
+  npx playwright test -c playwright-production.config.ts
+
+# discover / validate the suite without a browser
+PRODUCTION_BASE_URL=https://soymutdb.org \
+  npx playwright test -c playwright-production.config.ts --list
+```
+
+`PRODUCTION_BASE_URL` is required — a missing value fails the whole gate rather
+than silently testing the wrong environment.
+
 ## Admin production-artifact gate
 
 This isolated smoke suite serves the already-built `apps/admin/dist` output

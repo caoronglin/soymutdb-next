@@ -46,7 +46,7 @@ def upgrade() -> None:
                 "CANCELLED",
                 name="analysis_job_status_enum",
             ),
-            server_default="queued",
+            server_default=sa.text("'QUEUED'::analysis_job_status_enum"),
             nullable=False,
         ),
         sa.Column("result_summary", JSONB(), nullable=True),

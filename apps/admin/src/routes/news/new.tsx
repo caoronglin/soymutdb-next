@@ -3,7 +3,7 @@
  */
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { App, Card } from "antd";
+import { App, Card } from "../../lib/antd";
 import { useRouter } from "@tanstack/react-router";
 import { createNews } from "@soymutdb/api-client";
 import { NewsForm, type NewsFormValues } from "../../components/news-form";

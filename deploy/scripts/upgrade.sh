@@ -125,6 +125,12 @@ fi
 if [[ -z "${SOYMUTDB_CORS_ORIGINS:-}" ]]; then
     fail "SOYMUTDB_CORS_ORIGINS is required (comma-separated origins, no wildcard)"
 fi
+if [[ -z "${SOYMUTDB_ADMIN_EMAIL:-}" || "${SOYMUTDB_ADMIN_EMAIL}" == "admin@soymutdb.local" || "${SOYMUTDB_ADMIN_EMAIL}" != *@* ]]; then
+    fail "SOYMUTDB_ADMIN_EMAIL must be a valid non-default admin address"
+fi
+if [[ -z "${SOYMUTDB_ADMIN_PASSWORD:-}" || "${#SOYMUTDB_ADMIN_PASSWORD}" -lt 12 ]]; then
+    fail "SOYMUTDB_ADMIN_PASSWORD must be >= 12 characters (API will refuse to start otherwise)"
+fi
 if [[ "${MINIO_ROOT_USER:-minioadmin}" == "minioadmin" || "${MINIO_ROOT_PASSWORD:-minioadmin}" == "minioadmin" ]]; then
     fail "MINIO_ROOT_USER / MINIO_ROOT_PASSWORD must not use the default 'minioadmin' (API fail-fast)"
 fi
@@ -139,7 +145,8 @@ if [[ "${POSTGRES_PASSWORD:-}" == "soymutdb_dev_password" || \
 fi
 
 for rl_credential in POSTGRES_PASSWORD CLICKHOUSE_PASSWORD REDIS_PASSWORD \
-    MINIO_ROOT_USER MINIO_ROOT_PASSWORD GRAFANA_USER GRAFANA_PASSWORD; do
+    MINIO_ROOT_USER MINIO_ROOT_PASSWORD GRAFANA_USER GRAFANA_PASSWORD \
+    SOYMUTDB_ADMIN_PASSWORD; do
     rl_credential_value="${!rl_credential:-}"
     if [[ "${rl_credential_value}" == change-me-* ]]; then
         fail "${rl_credential} must be replaced (change-me placeholder is not allowed)"

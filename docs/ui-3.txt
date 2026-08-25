@@ -1,0 +1,206 @@
+SoyMutDB 前端组件与后端接入说明（UI-3）
+======================================
+
+文档目的
+--------
+本文件面向后端、数据和运维开发者，说明公开门户与 Admin 的页面/组件职责、数据入口、请求触发条件、字段要求、失败状态和接入注意事项。前端 UI 组件统一使用 Ant Design 6（当前 workspace 版本 6.6.1）及官方 `@ant-design/icons`；`apps/admin/src/lib/admin-ui.tsx` 已删除，不得重新引入兼容层或其它 UI 组件库。
+
+重要边界：当前公开 GitHub Pages 站点是 Demo，不是生产站；Demo/fallback/虚拟 fixture 不得当作真实 Wm82v4.0 数据。生产模式由 `apps/web/src/lib/deployment.ts` fail-closed，必须配置真实 API、JBrowse origin 和真实数据证据。
+
+一、总体架构与数据流
+--------------------
+
+1. 公开 Web：`apps/web/src`
+   - 路由由 TanStack Router 管理，页面从 API client/query hooks 取数。
+   - 全局入口：`apps/web/src/routes/__root.tsx`、`apps/web/src/lib/design-system-provider.tsx`。
+   - AntD facade：`apps/web/src/lib/antd.ts`；图标来自 `@ant-design/icons`。
+   - Page Builder 加载器：`apps/web/src/page-builder/loader.ts`；发布定义由 `/` 路由通过 `usePageDefinition("/")` 取得。
+   - Renderer：`apps/web/src/page-builder/renderer.tsx`，负责安全渲染后端已校验的组件节点。
+
+2. Admin：`apps/admin/src`
+   - 全局入口和 provider：`apps/admin/src/main.tsx`、`apps/admin/src/lib/design-system-provider.tsx`。
+   - AntD facade：`apps/admin/src/lib/antd.ts`。
+   - 后端请求封装：`apps/admin/src/lib/*-api.ts`，页面通常通过 TanStack Query 调用。
+   - Page Builder：`apps/admin/src/routes/page-builder/index.tsx`、`apps/admin/src/components/page-builder/*`。
+   - Admin 页面只允许直接使用 AntD facade 或原生语义 HTML；不得新增 `admin-ui`、Lucide、Radix、Headless UI 等替代层。
+
+3. 组件边界
+   - 后端负责：鉴权、权限、数据真实性、字段校验、分页契约、版本/发布状态、危险 URL/HTML 过滤和审计。
+   - 前端负责：表单交互、加载/空/错误状态、参数序列化、结果展示、可访问性和导航。
+   - 前端不会把“没有数据”伪装成“真实数据”：请求失败、空结果、Demo fallback 和虚拟数据必须保持可区分。
+
+二、公开首页（`/`）
+-------------------
+
+页面顺序（必须保持）
+~~~~~~~~~~~~~~~~~~~~
+1. 独立 Hero/搜索区块；
+2. Hero 下方：左侧“最新动态”，右侧“滚动照片”轮播；
+3. 搜索工具入口；
+4. 资源导览（后台 Page Builder 可编辑）。
+
+主要文件
+~~~~~~~~
+- `apps/web/src/routes/index.tsx`：读取已发布 `/` PageDefinition，递归寻找 `resource_cards`，传给 `AntdHome`。
+- `apps/web/src/components/home/antd-home.tsx`：Hero、搜索、新闻、轮播、工具入口和资源导览外壳。
+- `apps/web/src/page-builder/renderer.tsx`：实际渲染 `resource_cards`。
+
+后端接入
+~~~~~~~~
+- `/page-definitions/{route}`（实际 API 路径以 `apps/web/src/page-builder/loader.ts` 为准）需要返回已发布 definition/root。
+- `resource_cards` 节点形态：
+
+  {
+    "type": "resource_cards",
+    "props": {
+      "heading": "资源导览",
+      "cards": [
+        {
+          "title": "数据下载",
+          "description": "参考基因组、变异和注释数据",
+          "image_url": "https://cdn.example.org/downloads.jpg",
+          "href": "/downloads"
+        }
+      ]
+    }
+  }
+
+- 后端 registry 已限制标题/描述长度、最多 24 张卡片、只允许安全 URL（https/http 或内部 `/...`），拒绝 `javascript:`、`data:`、inline handler、危险 raw markup 和未知字段。
+- 图片仅接受安全的 HTTP(S) URL；外部链接前端会使用 `target="_blank" rel="noopener noreferrer"`。
+- 发布后的卡片文字、图片、链接和数组顺序会直接影响首页；旧 definition 缺少 `resource_cards` 时才进入明确的 legacy fallback。
+- 后端 seed 与前端 fallback 必须同步：`apps/api/app/scripts/seed_page_builder.py`、`apps/web/src/page-builder/seed.ts`。
+
+三、公共查询页面
+----------------
+
+A. 基因 ID 搜索：`/search/genes`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+文件：`apps/web/src/routes/search/genes.tsx`。
+
+输入：
+- `assembly`：基因组版本/assembly ID；
+- `q`：一个或多个基因 ID（支持多行）；
+- `run`：深链接触发查询。
+
+后端需要提供：
+- assembly 列表及默认 assembly；
+- gene search 请求（基因 ID、assembly）；
+- 结果中至少包含 assembly、gene ID、染色体/位置、突变特征及可构造 JBrowse locus 的字段。
+
+页面状态：初始表单、查询中、空结果、错误、结果表、分页和 JBrowse 2 动作。不要在后端返回“成功”但缺少结果字段；字段缺失应进入明确的错误/不可用状态。
+
+B. 物理位置搜索：`/search/location`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+文件：`apps/web/src/routes/search/location.tsx`。
+
+输入：
+- `assembly`；
+- `chromosome`；
+- `start`、`end`（坐标范围）。
+
+后端需要提供：
+- assembly 与 chromosome 选项；
+- 区域/变异查询；
+- 结果中 assembly、chromosome、start/end、变异特征、gene ID 和 JBrowse 跳转所需 locus。
+
+前端会做基本范围校验；后端必须再次校验坐标、assembly 一致性和权限/限流。
+
+C. JBrowse 2 启动页：`/search/gbrowse`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+文件：`apps/web/src/routes/search/gbrowse.tsx`。
+
+- 前端根据 `VITE_JBROWSE_BASE_URL` 和安全 locus 参数构造跳转。
+- 后端需要保证返回的 assembly/chromosome/坐标可被 JBrowse 配置识别。
+- 外部 JBrowse iframe/origin 是否真实可用属于 staging/生产环境验收，不可用 demo screenshot 代替。
+
+D. BLAST：`/blast`
+~~~~~~~~~~~~~~~~~~~
+文件：`apps/web/src/routes/blast.tsx`。
+
+- 输入序列/FASTA、e-value、max hits 等参数；前端做基础 FASTA 结构校验。
+- 后端负责真实 BLAST job 创建、队列状态、结果/命中表、错误、限流、取消策略和数据版本追溯。
+- 页面会展示提交中、任务状态、失败和命中结果；不要返回虚假的完成状态。
+
+四、公共外壳与通用交互
+----------------------
+
+1. SiteHeader：`apps/web/src/components/site-header.tsx`
+   - 主导航、站内搜索、语言/主题、移动菜单和键盘操作。
+   - 后端通常不直接接入 header；站内搜索跳转 `/search?q=...`，查询数据由搜索页接入。
+
+2. SiteFooter：`apps/web/src/components/site-footer.tsx`
+   - 静态导航链接和版本信息；链接目标必须与后端实际启用路由一致。
+
+3. NewsList/NewsCarousel：
+   - Page Builder `news_list`/`media_carousel` 节点最终由 `apps/web/src/page-builder/renderer.tsx` 渲染；新闻数据由新闻 API 提供。
+   - 新闻列表需支持分页、标题搜索、分类过滤、空状态和请求失败；新闻 detail 使用 slug/deep link。
+
+4. 全局 API/错误：
+   - API unavailable、401/403、404、422、429、5xx 要保持不同语义；不要在生产模式自动 fallback 到 Demo 数据。
+   - 所有写操作需要后端鉴权、CSRF/权限校验、审计和幂等/冲突处理；前端显示保存失败或版本冲突。
+
+五、Admin 页面和后端接入
+------------------------
+
+1. Dashboard：`apps/admin/src/routes/index.tsx`
+   - 展示统计卡片和运行状态；后端提供可追溯的统计时间点和数据来源，不要将 placeholder 当生产指标。
+
+2. Imports：`apps/admin/src/routes/imports.tsx`
+   - 能力快照决定导入类型是否显示/可用；不支持的类型必须由 API 返回 422，不能只依赖前端隐藏。
+   - 支持文件/对象存储路径、release ID、module key、checksum、预览、提交、任务状态和幂等键。
+   - 后端必须校验文件格式、大小、checksum、release/assembly、权限和导入类型 capability。
+
+3. Page Builder：
+   - 列表：`apps/admin/src/routes/page-builder/index.tsx`；编辑器：`apps/admin/src/components/page-builder/page-builder-editor.tsx`；属性面板：`property-panel.tsx`。
+   - registry/schema 是后端权威；前端只渲染 server-approved controls。
+   - 保存是 draft/update；发布是 publish；需要版本号/冲突检测、审计和撤回策略。
+   - `resource_cards` 的 title、description、image_url、href 和顺序可在后台编辑并发布到首页。
+
+4. Content/News/Settings/Layout/Widgets：
+   - `apps/admin/src/routes/content.tsx`：静态页/新闻/出版物内容和版本；后端返回 status、version、updated_by、audit 信息。
+   - `apps/admin/src/routes/*settings.tsx`：配置读写、分区加载/失败、保存状态；敏感配置不可回显明文。
+   - `apps/admin/src/routes/layout.tsx`：页面布局/组件排序；后端必须校验节点类型、允许的 children 和 schema。
+   - `apps/admin/src/routes/widgets.tsx`、`widget-preview.tsx`、`widget-health.tsx`：widget registry、预览、健康指标；后端需提供真实 generated_at、状态、错误和缓存字段。
+   - `apps/admin/src/routes/audit.tsx`：只读审计查询；后端需分页、过滤、不可篡改记录和操作者字段。
+
+六、数据和生产上线契约
+----------------------
+
+- 首版 Release 当前冻结为 Glycine max / Williams 82 / Wm82v4.0（具体版本以 `docs/ops/first-release-data-plan.md` 为准）。
+- 门户读路径的真实来源是 PostgreSQL `genes` 与 ClickHouse `variant_facts`；write-only `module_data_rows` 不可冒充门户查询数据。
+- Route B loader 的 `--check/--plan/--emit-sql` 只证明解析和 SQL 生成；`--write/--apply` 没有真实授权和真实数据证据时必须 fail-closed。
+- 当前生产判定仍由 `docs/ops/acceptance-current-state.md` 管理；视觉通过不等于数据/授权/域名/外部依赖通过。
+
+七、联调检查清单
+----------------
+
+后端提交接口或 schema 变更时，必须同时说明：
+
+1. endpoint/method、鉴权和权限；
+2. request 字段、类型、默认值、校验边界；
+3. response 字段、空值语义、分页格式和排序；
+4. 401/403/404/409/422/429/5xx 行为；
+5. 数据版本、assembly、来源和 generated_at；
+6. 是否有写操作、幂等键、审计和回滚；
+7. 前端对应文件和已有测试；
+8. 是否需要 staging origin（API/JBrowse/对象存储）；
+9. 不得使用 Demo/虚拟数据作为生产证据。
+
+前端最终 smoke 命令
+--------------------
+
+```bash
+cd /mnt/data02/T25ronglin/code/web
+./node_modules/.bin/tsc --noEmit -p apps/web/tsconfig.json
+cd apps/admin && ./node_modules/.bin/vitest run --maxWorkers=1
+cd /mnt/data02/T25ronglin/code/web/apps/web
+VITE_DEPLOYMENT_MODE=demo \
+VITE_BASE_URL=/soymutdb-next/ \
+VITE_API_BASE_URL=https://api.soymutdb.test \
+VITE_JBROWSE_BASE_URL=https://jbrowse.soymutdb.test \
+./node_modules/.bin/vite build
+cd /mnt/data02/T25ronglin/code/web/e2e
+npm run test:visual
+```
+
+最终视觉证据：`e2e/visual-artifacts/20260825T011833Z/report.json`，15/15 通过，所有视口无横向溢出且 `undersized=0`。该证据只证明静态布局/触控 smoke，不证明真实 Wm82 数据和生产上线。

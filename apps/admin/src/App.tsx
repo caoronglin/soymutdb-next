@@ -6,7 +6,7 @@ import {
   RouterProvider,
   Outlet,
 } from "@tanstack/react-router";
-import { Skeleton } from "./lib/admin-ui";
+import { Skeleton } from "@/lib/antd";
 import AdminLayout from "./routes/__root";
 import LoginPage from "./routes/login";
 import { useAuth } from "./lib/auth-context";

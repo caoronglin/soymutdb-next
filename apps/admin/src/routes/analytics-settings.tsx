@@ -1,17 +1,7 @@
+import { BarChartOutlined, CopyOutlined, CheckOutlined, ExportOutlined, InfoCircleOutlined } from "@ant-design/icons";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { BarChart3, Copy, Check, ExternalLink, Info } from "lucide-react";
-import {
-  Badge,
-  Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  PageHeader,
-} from "../lib/admin-ui";
-
+import { Badge, Button, Card, Typography } from "@/lib/antd";
 const ENV_VAR = "VITE_CLOUDFLARE_ANALYTICS_TOKEN";
 const BEACON_ORIGIN = "https://static.cloudflareinsights.com/beacon.min.js";
 const CF_DASHBOARD_ANALYTICS_URL =
@@ -51,51 +41,48 @@ export default function AnalyticsSettingsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title={t("analyticsSettings.title")}
-        description={t("analyticsSettings.description")}
-      />
+      <div><Typography.Title level={2}>{t("analyticsSettings.title")}</Typography.Title><Typography.Text type="secondary">{t("analyticsSettings.description")}</Typography.Text></div>
 
       {/* Overview */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <BarChart3 className="size-4 text-primary" />
+
+          <Typography.Title level={5}>
+            <BarChartOutlined className="size-4 text-primary" />
             {t("analyticsSettings.overviewTitle")}
-          </CardTitle>
-          <CardDescription>{t("analyticsSettings.overviewDesc")}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+          </Typography.Title>
+          <Typography.Text type="secondary">{t("analyticsSettings.overviewDesc")}</Typography.Text>
+
+        <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="success">Cloudflare Web Analytics</Badge>
-            <Badge variant="secondary">Beacon (static JS)</Badge>
-            <Badge variant="secondary">Build-time injection</Badge>
-            <Badge variant="secondary">Cookie-free</Badge>
+            <Badge color="success">Cloudflare Web Analytics</Badge>
+            <Badge >Beacon (static JS)</Badge>
+            <Badge >Build-time injection</Badge>
+            <Badge >Cookie-free</Badge>
           </div>
           <p className="text-sm text-muted-foreground">{t("analyticsSettings.beaconNote")}</p>
           <div className="flex items-center gap-3">
             <Button
-              variant="outline"
-              size="sm"
+
+              size="small"
               onClick={() => window.open(CF_DASHBOARD_ANALYTICS_URL, "_blank", "noopener,noreferrer")}
             >
-              <ExternalLink className="size-4" />
+              <ExportOutlined className="size-4" />
               {t("analyticsSettings.dashboardLink")}
             </Button>
           </div>
-        </CardContent>
+        </div>
       </Card>
 
       {/* Configuration steps */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Info className="size-4 text-primary" />
+
+          <Typography.Title level={5}>
+            <InfoCircleOutlined className="size-4 text-primary" />
             {t("analyticsSettings.configTitle")}
-          </CardTitle>
-          <CardDescription>{t("analyticsSettings.configDesc")}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
+          </Typography.Title>
+          <Typography.Text type="secondary">{t("analyticsSettings.configDesc")}</Typography.Text>
+
+        <div className="space-y-5">
           {/* Environment variable name (copyable) */}
           <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-muted/40 p-3">
             <div className="min-w-0 flex-1">
@@ -105,8 +92,8 @@ export default function AnalyticsSettingsPage() {
               <code className="block truncate font-mono text-sm">{ENV_VAR}</code>
               <p className="mt-1 text-xs text-muted-foreground">{t("analyticsSettings.envVarHelp")}</p>
             </div>
-            <Button variant="outline" size="sm" onClick={copyEnvVar} aria-live="polite">
-              {copied ? <Check className="size-4 text-emerald-500" /> : <Copy className="size-4" />}
+            <Button  size="small" onClick={copyEnvVar} aria-live="polite">
+              {copied ? <CheckOutlined className="size-4 text-emerald-500" /> : <CopyOutlined className="size-4" />}
               {copied ? t("analyticsSettings.copied") : t("analyticsSettings.copy")}
             </Button>
           </div>
@@ -125,22 +112,22 @@ export default function AnalyticsSettingsPage() {
               </li>
             ))}
           </ol>
-        </CardContent>
+        </div>
       </Card>
 
       {/* Injection status detection */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <BarChart3 className="size-4 text-primary" />
+
+          <Typography.Title level={5}>
+            <BarChartOutlined className="size-4 text-primary" />
             {t("analyticsSettings.statusTitle")}
-          </CardTitle>
-          <CardDescription>{t("analyticsSettings.statusDesc")}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
+          </Typography.Title>
+          <Typography.Text type="secondary">{t("analyticsSettings.statusDesc")}</Typography.Text>
+
+        <div className="space-y-3">
           <div className="flex items-center gap-2">
-            <Badge variant="secondary">Build-time</Badge>
-            <Badge variant="secondary">Runtime detection: N/A</Badge>
+            <Badge >Build-time</Badge>
+            <Badge >Runtime detection: N/A</Badge>
           </div>
           <div className="rounded-lg border border-border bg-muted/40 p-3 font-mono text-xs">
             {BEACON_ORIGIN}
@@ -149,18 +136,18 @@ export default function AnalyticsSettingsPage() {
             <li>{t("analyticsSettings.statusHint1")}</li>
             <li>{t("analyticsSettings.statusHint2")}</li>
           </ul>
-        </CardContent>
+        </div>
       </Card>
 
       {/* Legacy self-hosted analytics note */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <BarChart3 className="size-4 text-primary" />
+
+          <Typography.Title level={5}>
+            <BarChartOutlined className="size-4 text-primary" />
             {t("analyticsSettings.legacyTitle")}
-          </CardTitle>
-          <CardDescription>{t("analyticsSettings.legacyDesc")}</CardDescription>
-        </CardHeader>
+          </Typography.Title>
+          <Typography.Text type="secondary">{t("analyticsSettings.legacyDesc")}</Typography.Text>
+
       </Card>
     </div>
   );

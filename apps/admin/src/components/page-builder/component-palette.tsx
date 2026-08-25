@@ -3,8 +3,8 @@
  * Clicking a component adds it as a child of the page root.
  */
 
-import { Plus } from "lucide-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../lib/admin-ui";
+import { PlusOutlined } from "@ant-design/icons";
+import { Card, Typography } from "@/lib/antd";
 import type { ComponentDescriptor, PageComponentType } from "@soymutdb/shared";
 
 interface ComponentPaletteProps {
@@ -14,14 +14,11 @@ interface ComponentPaletteProps {
 
 export function ComponentPalette({ components, onAdd }: ComponentPaletteProps) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Component Palette</CardTitle>
-        <CardDescription>
-          {components.length} server-approved component types
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-1.5">
+    <Card title="Component Palette">
+      <Typography.Text type="secondary" className="mb-3 block">
+        {components.length} server-approved component types
+      </Typography.Text>
+      <div className="space-y-1.5">
         {components.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             Registry unavailable — check your connection.
@@ -38,12 +35,12 @@ export function ComponentPalette({ components, onAdd }: ComponentPaletteProps) {
               <span className="font-mono text-xs">{c.renderer_key}</span>
               <span className="ml-2 flex items-center gap-2 text-muted-foreground">
                 {c.label}
-                <Plus className="size-3.5" />
+                <PlusOutlined className="size-3.5" />
               </span>
             </button>
           ))
         )}
-      </CardContent>
+      </div>
     </Card>
   );
 }

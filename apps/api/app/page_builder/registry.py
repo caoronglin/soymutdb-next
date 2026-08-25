@@ -99,6 +99,37 @@ class MediaCarouselConfig(_Strict):
     items: list[str] = Field(default_factory=list, max_length=12)
 
 
+class ResourceCardItem(_Strict):
+    """A safe, editor-configurable resource card (text, image, and link)."""
+
+    title: str = Field(..., min_length=1, max_length=160)
+    description: str | None = Field(default=None, max_length=1_000)
+    image_url: str | None = Field(default=None, max_length=2_048)
+    href: str | None = Field(default=None, max_length=2_048)
+
+    @field_validator("title", "description")
+    @classmethod
+    def reject_dangerous_text(cls, value: str | None, info) -> str | None:
+        if value is not None:
+            _reject_dangerous(value, field_name=info.field_name)
+        return value
+
+    @field_validator("image_url", "href")
+    @classmethod
+    def validate_safe_url(cls, value: str | None, info) -> str | None:
+        if value is None:
+            return value
+        _reject_dangerous(value, field_name=info.field_name)
+        return _validate_url(value, field_name=info.field_name)
+
+
+class ResourceCardsConfig(_Strict):
+    """Bounded resource-directory cards editable by administrators."""
+
+    heading: str | None = Field(default=None, max_length=160)
+    cards: list[ResourceCardItem] = Field(default_factory=list, max_length=24)
+
+
 class RichTextConfig(_Strict):
     content: str = Field(default="")
 
@@ -262,6 +293,7 @@ _CONFIG_MODELS: dict[str, type[BaseModel]] = {
     "navigation": NavigationConfig,
     "news_list": NewsListConfig,
     "media_carousel": MediaCarouselConfig,
+    "resource_cards": ResourceCardsConfig,
     "rich_text": RichTextConfig,
     "tool_entries": ToolEntriesConfig,
     "assembly_select": AssemblySelectConfig,
@@ -304,6 +336,7 @@ _COMPONENTS: list[ComponentDefinition] = [
     ComponentDefinition("navigation", "Navigation", NavigationConfig),
     ComponentDefinition("news_list", "News List", NewsListConfig),
     ComponentDefinition("media_carousel", "Media Carousel", MediaCarouselConfig),
+    ComponentDefinition("resource_cards", "Resource Cards", ResourceCardsConfig),
     ComponentDefinition("rich_text", "Rich Text", RichTextConfig),
     ComponentDefinition("tool_entries", "Tool Entries", ToolEntriesConfig),
     ComponentDefinition("assembly_select", "Assembly Select", AssemblySelectConfig),

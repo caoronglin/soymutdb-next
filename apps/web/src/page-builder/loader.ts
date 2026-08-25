@@ -4,7 +4,8 @@
  * Resolves the published PageDefinition for a route from the public API
  * (`GET /page-definitions/{route}`), hydrates from the SSG-embedded bootstrap
  * (`#rl-page-definition`) when the pinned version matches so the first paint
- * needs no refetch, and falls back to the immutable seed on API failure.
+ * needs no refetch. Development/demo builds may use the immutable seed when the
+ * API is unavailable; production builds fail closed instead.
  *
  * A release-pinned definition never silently downgrades: when a bootstrap
  * carries a `version`, the loader prefers it over a fresh API fetch.
@@ -12,6 +13,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { getPageDefinition } from "@soymutdb/api-client";
+import { isProductionDeploymentMode } from "../lib/deployment";
 import {
   normalizePageDefinition,
   type PageDefinitionV2,
@@ -62,8 +64,8 @@ export function pageDefinitionKey(route: string): readonly [string, string] {
 /**
  * Resolve a definition for a route. Resolution order:
  *   1. SSG bootstrap with a matching route (hydrate; no refetch).
- *   2. Public API (background; seed is the fallback if it fails).
- *   3. Immutable seed fallback for `/` when the API is unavailable.
+ *   2. Public API (background).
+ *   3. Immutable seed fallback outside strict production mode when the API is unavailable.
  */
 export function usePageDefinition(route: string) {
   const routeKey = route === "/" ? "/" : `/${route.replace(/^\/+/, "")}`;
@@ -89,8 +91,9 @@ export function usePageDefinition(route: string) {
     retry: 1,
   });
 
-  // Seed fallback when the API has no published definition for this route.
-  const fallback = normalizePageDefinition(fallbackDefinitionFor(routeKey));
+  // Production must fail closed: demo/seed definitions are not release evidence.
+  // Standard/dev and demo builds may use the explicit immutable fallback.
+  const fallback = resolveFallbackDefinition(routeKey);
 
   const definition: PageDefinitionV2 | null = query.data ?? fallback;
   return {
@@ -100,6 +103,13 @@ export function usePageDefinition(route: string) {
     isFallback: query.data == null && fallback != null,
     hasError: query.isError && fallback == null,
   };
+}
+
+/** Resolve the explicit seed only for non-production builds. */
+export function resolveFallbackDefinition(route: string): PageDefinitionV2 | null {
+  return isProductionDeploymentMode(import.meta.env.VITE_DEPLOYMENT_MODE)
+    ? null
+    : normalizePageDefinition(fallbackDefinitionFor(route));
 }
 
 /** Loose route comparison: "/" equals "" and trailing slashes are ignored. */

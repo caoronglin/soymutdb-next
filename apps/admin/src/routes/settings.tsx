@@ -1,26 +1,9 @@
+import { SaveOutlined, GlobalOutlined, DatabaseOutlined, MailOutlined, SafetyOutlined, EyeOutlined } from "@ant-design/icons";
 import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Save, Globe, Database, Mail, Shield, Eye } from "lucide-react";
 import { http } from "@soymutdb/api-client";
-import {
-  Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  Input,
-  Label,
-  PageHeader,
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-  Textarea,
-  Badge,
-} from "../lib/admin-ui";
+import { Typography, Button, Card, Input, Select, Badge } from "@/lib/antd";
 import { ConfirmDialog } from "../components/confirm-dialog";
 import { RichEditor } from "../components/rich-editor/rich-editor";
 
@@ -306,25 +289,22 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="System Settings"
-        description="Configure global platform settings. Changes require administrator approval."
-      />
+      <div><Typography.Title level={2}>System Settings</Typography.Title><Typography.Text type="secondary">Configure global platform settings. Changes require administrator approval.</Typography.Text></div>
 
       {/* General */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Globe className="size-4 text-primary" />
+        <div>
+          <Typography.Title level={5} className="flex items-center gap-2 text-base">
+            <GlobalOutlined className="size-4 text-primary" />
             General
-          </CardTitle>
-          <CardDescription>Site-wide configuration</CardDescription>
+          </Typography.Title>
+          <Typography.Text type="secondary">Site-wide configuration</Typography.Text>
           {sectionLoadError.general && <SettingsLoadError section="general" />}
-        </CardHeader>
-        <CardContent className="space-y-4">
+        </div>
+        <div className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="site-name">Site Name</Label>
+              <label htmlFor="site-name">Site Name</label>
               <Input
                 id="site-name"
                 value={general.siteName}
@@ -332,24 +312,22 @@ export default function SettingsPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="default-lang">Default Language</Label>
+              <label htmlFor="default-lang">Default Language</label>
               <Select
                 value={general.defaultLanguage}
-                onValueChange={(v) => setGeneral({ ...general, defaultLanguage: v })}
+                onChange={(v) => setGeneral({ ...general, defaultLanguage: v })}
               >
-                <SelectTrigger id="default-lang">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="en">English</SelectItem>
-                  <SelectItem value="zh">中文</SelectItem>
-                </SelectContent>
+
+
+                  <Select.Option value="en">English</Select.Option>
+                  <Select.Option value="zh">中文</Select.Option>
+
               </Select>
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="site-desc">Site Description</Label>
-            <Textarea
+            <label htmlFor="site-desc">Site Description</label>
+            <Input.TextArea
               id="site-desc"
               value={general.siteDescription}
               onChange={(e) => setGeneral({ ...general, siteDescription: e.target.value })}
@@ -361,27 +339,27 @@ export default function SettingsPage() {
               onClick={() => handleSave("general", general)}
               disabled={!sectionLoaded.general || saveMutation.isPending}
             >
-              <Save className="size-4" />
+              <SaveOutlined aria-hidden className="size-4" />
               Save Changes
             </Button>
           </div>
-        </CardContent>
+        </div>
       </Card>
 
       {/* About us content */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Globe className="size-4 text-primary" />
+        <div>
+          <Typography.Title level={5} className="flex items-center gap-2 text-base">
+            <GlobalOutlined className="size-4 text-primary" />
             {t("admin.about.title")}
-          </CardTitle>
-          <CardDescription>{t("admin.about.description")}</CardDescription>
+          </Typography.Title>
+          <Typography.Text type="secondary">{t("admin.about.description")}</Typography.Text>
           {sectionLoadError.about && <SettingsLoadError section="about" />}
-        </CardHeader>
-        <CardContent className="space-y-4">
+        </div>
+        <div className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="about-title-en">Title (English)</Label>
+              <label htmlFor="about-title-en">Title (English)</label>
               <Input
                 id="about-title-en"
                 value={about.title_en}
@@ -390,7 +368,7 @@ export default function SettingsPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="about-title-zh">Title (Chinese)</Label>
+              <label htmlFor="about-title-zh">Title (Chinese)</label>
               <Input
                 id="about-title-zh"
                 value={about.title_zh}
@@ -399,8 +377,8 @@ export default function SettingsPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="about-summary-en">Summary (English)</Label>
-              <Textarea
+              <label htmlFor="about-summary-en">Summary (English)</label>
+              <Input.TextArea
                 id="about-summary-en"
                 value={about.summary_en}
                 onChange={(e) => setAbout({ ...about, summary_en: e.target.value })}
@@ -409,8 +387,8 @@ export default function SettingsPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="about-summary-zh">Summary (Chinese)</Label>
-              <Textarea
+              <label htmlFor="about-summary-zh">Summary (Chinese)</label>
+              <Input.TextArea
                 id="about-summary-zh"
                 value={about.summary_zh}
                 onChange={(e) => setAbout({ ...about, summary_zh: e.target.value })}
@@ -419,7 +397,7 @@ export default function SettingsPage() {
               />
             </div>
             <div className="space-y-1.5 sm:col-span-2">
-              <Label htmlFor="about-content-en">Content (English)</Label>
+              <label htmlFor="about-content-en">Content (English)</label>
               <RichEditor
                 value={about.content_en}
                 onChange={(html) => setAbout({ ...about, content_en: html })}
@@ -427,7 +405,7 @@ export default function SettingsPage() {
               />
             </div>
             <div className="space-y-1.5 sm:col-span-2">
-              <Label htmlFor="about-content-zh">Content (Chinese)</Label>
+              <label htmlFor="about-content-zh">Content (Chinese)</label>
               <RichEditor
                 value={about.content_zh}
                 onChange={(html) => setAbout({ ...about, content_zh: html })}
@@ -440,27 +418,27 @@ export default function SettingsPage() {
               onClick={() => handleSave("about", about)}
               disabled={!sectionLoaded.about || saveMutation.isPending}
             >
-              <Save className="size-4" />
+              <SaveOutlined aria-hidden className="size-4" />
               Save Changes
             </Button>
           </div>
-        </CardContent>
+        </div>
       </Card>
 
       {/* Data */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Database className="size-4 text-primary" />
+        <div>
+          <Typography.Title level={5} className="flex items-center gap-2 text-base">
+            <DatabaseOutlined className="size-4 text-primary" />
             Data & Storage
-          </CardTitle>
-          <CardDescription>Database and storage configuration</CardDescription>
+          </Typography.Title>
+          <Typography.Text type="secondary">DatabaseOutlined and storage configuration</Typography.Text>
           {sectionLoadError.data && <SettingsLoadError section="data" />}
-        </CardHeader>
-        <CardContent className="space-y-4">
+        </div>
+        <div className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="default-assembly">Default Assembly</Label>
+              <label htmlFor="default-assembly">Default Assembly</label>
               <Input
                 id="default-assembly"
                 value={data.defaultAssembly}
@@ -468,7 +446,7 @@ export default function SettingsPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="max-export">Max Export Records</Label>
+              <label htmlFor="max-export">Max Export Records</label>
               <Input
                 id="max-export"
                 type="number"
@@ -477,7 +455,7 @@ export default function SettingsPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="cache-ttl">Cache TTL (seconds)</Label>
+              <label htmlFor="cache-ttl">Cache TTL (seconds)</label>
               <Input
                 id="cache-ttl"
                 type="number"
@@ -486,14 +464,14 @@ export default function SettingsPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label>ClickHouse Analytics</Label>
+              <label>ClickHouse Analytics</label>
               <div className="flex items-center gap-2 pt-2">
-                <Badge variant={data.enableClickhouse === "true" ? "success" : "secondary"}>
+                <Badge color={data.enableClickhouse === "true" ? "success" : "secondary"}>
                   {data.enableClickhouse === "true" ? "Enabled" : "Disabled"}
                 </Badge>
                 <Button
-                  variant="outline"
-                  size="sm"
+                  type="default"
+                  size="small"
                   onClick={() =>
                     setData({
                       ...data,
@@ -511,27 +489,27 @@ export default function SettingsPage() {
               onClick={() => handleSave("data", data)}
               disabled={!sectionLoaded.data || saveMutation.isPending}
             >
-              <Save className="size-4" />
+              <SaveOutlined aria-hidden className="size-4" />
               Save Changes
             </Button>
           </div>
-        </CardContent>
+        </div>
       </Card>
 
       {/* Email */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Mail className="size-4 text-primary" />
+        <div>
+          <Typography.Title level={5} className="flex items-center gap-2 text-base">
+            <MailOutlined className="size-4 text-primary" />
             Email & Notifications
-          </CardTitle>
-          <CardDescription>SMTP configuration for system emails</CardDescription>
+          </Typography.Title>
+          <Typography.Text type="secondary">SMTP configuration for system emails</Typography.Text>
           {sectionLoadError.email && <SettingsLoadError section="email" />}
-        </CardHeader>
-        <CardContent className="space-y-4">
+        </div>
+        <div className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="smtp-host">SMTP Host</Label>
+              <label htmlFor="smtp-host">SMTP Host</label>
               <Input
                 id="smtp-host"
                 value={email.smtpHost}
@@ -540,7 +518,7 @@ export default function SettingsPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="smtp-port">SMTP Port</Label>
+              <label htmlFor="smtp-port">SMTP Port</label>
               <Input
                 id="smtp-port"
                 type="number"
@@ -549,7 +527,7 @@ export default function SettingsPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="from-addr">From Address</Label>
+              <label htmlFor="from-addr">From Address</label>
               <Input
                 id="from-addr"
                 type="email"
@@ -563,27 +541,27 @@ export default function SettingsPage() {
               onClick={() => handleSave("email", email)}
               disabled={!sectionLoaded.email || saveMutation.isPending}
             >
-              <Save className="size-4" />
+              <SaveOutlined aria-hidden className="size-4" />
               Save Changes
             </Button>
           </div>
-        </CardContent>
+        </div>
       </Card>
 
       {/* Security */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Shield className="size-4 text-primary" />
+        <div>
+          <Typography.Title level={5} className="flex items-center gap-2 text-base">
+            <SafetyOutlined className="size-4 text-primary" />
             Security
-          </CardTitle>
-          <CardDescription>Authentication and access control</CardDescription>
+          </Typography.Title>
+          <Typography.Text type="secondary">Authentication and access control</Typography.Text>
           {sectionLoadError.security && <SettingsLoadError section="security" />}
-        </CardHeader>
-        <CardContent className="space-y-4">
+        </div>
+        <div className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="session-timeout">Session Timeout (minutes)</Label>
+              <label htmlFor="session-timeout">Session Timeout (minutes)</label>
               <Input
                 id="session-timeout"
                 type="number"
@@ -592,7 +570,7 @@ export default function SettingsPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="max-login">Max Login Attempts</Label>
+              <label htmlFor="max-login">Max Login Attempts</label>
               <Input
                 id="max-login"
                 type="number"
@@ -601,7 +579,7 @@ export default function SettingsPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="pw-min">Password Min Length</Label>
+              <label htmlFor="pw-min">Password Min Length</label>
               <Input
                 id="pw-min"
                 type="number"
@@ -610,14 +588,14 @@ export default function SettingsPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Two-Factor Auth</Label>
+              <label>Two-Factor Auth</label>
               <div className="flex items-center gap-2 pt-2">
-                <Badge variant={security.requireTwoFactor === "true" ? "success" : "secondary"}>
+                <Badge color={security.requireTwoFactor === "true" ? "success" : "secondary"}>
                   {security.requireTwoFactor === "true" ? "Required" : "Optional"}
                 </Badge>
                 <Button
-                  variant="outline"
-                  size="sm"
+                  type="default"
+                  size="small"
                   onClick={() =>
                     setSecurity({
                       ...security,
@@ -635,34 +613,34 @@ export default function SettingsPage() {
               onClick={() => handleSave("security", security)}
               disabled={!sectionLoaded.security || saveMutation.isPending}
             >
-              <Save className="size-4" />
+              <SaveOutlined aria-hidden className="size-4" />
               Save Changes
             </Button>
           </div>
-        </CardContent>
+        </div>
       </Card>
 
       {/* CDN Configuration */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Globe className="size-4 text-primary" />
+        <div>
+          <Typography.Title level={5} className="flex items-center gap-2 text-base">
+            <GlobalOutlined className="size-4 text-primary" />
             CDN Configuration
-          </CardTitle>
-          <CardDescription>External CDN URLs for frontend assets</CardDescription>
+          </Typography.Title>
+          <Typography.Text type="secondary">External CDN URLs for frontend assets</Typography.Text>
           {sectionLoadError.cdn && <SettingsLoadError section="cdn" />}
-        </CardHeader>
-        <CardContent className="space-y-4">
+        </div>
+        <div className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label>CDN Enabled</Label>
+              <label>CDN Enabled</label>
               <div className="flex items-center gap-2 pt-2">
-                <Badge variant={cdn.cdn_enabled === "true" ? "success" : "secondary"}>
+                <Badge color={cdn.cdn_enabled === "true" ? "success" : "secondary"}>
                   {cdn.cdn_enabled === "true" ? "Enabled" : "Disabled"}
                 </Badge>
                 <Button
-                  variant="outline"
-                  size="sm"
+                  type="default"
+                  size="small"
                   onClick={() =>
                     setCdn({
                       ...cdn,
@@ -675,7 +653,7 @@ export default function SettingsPage() {
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="cdn-echarts">ECharts CDN URL</Label>
+              <label htmlFor="cdn-echarts">ECharts CDN URL</label>
               <Input
                 id="cdn-echarts"
                 value={cdn.echarts_url}
@@ -693,34 +671,34 @@ export default function SettingsPage() {
               onClick={handleCdnSave}
               disabled={!sectionLoaded.cdn || cdnMutation.isPending}
             >
-              <Save className="size-4" />
+              <SaveOutlined aria-hidden className="size-4" />
               Save Changes
             </Button>
           </div>
-        </CardContent>
+        </div>
       </Card>
 
       {/* File Preview Configuration */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Eye className="size-4 text-primary" />
+        <div>
+          <Typography.Title level={5} className="flex items-center gap-2 text-base">
+            <EyeOutlined className="size-4 text-primary" />
             {t("admin.file_preview")}
-          </CardTitle>
-          <CardDescription>Configure inline file preview behavior</CardDescription>
+          </Typography.Title>
+          <Typography.Text type="secondary">Configure inline file preview behavior</Typography.Text>
           {sectionLoadError.filePreview && <SettingsLoadError section="filePreview" />}
-        </CardHeader>
-        <CardContent className="space-y-4">
+        </div>
+        <div className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label>{t("admin.file_preview_enabled")}</Label>
+              <label>{t("admin.file_preview_enabled")}</label>
               <div className="flex items-center gap-2 pt-2">
-                <Badge variant={filePreview.enabled === "true" ? "success" : "secondary"}>
+                <Badge color={filePreview.enabled === "true" ? "success" : "secondary"}>
                   {filePreview.enabled === "true" ? "Enabled" : "Disabled"}
                 </Badge>
                 <Button
-                  variant="outline"
-                  size="sm"
+                  type="default"
+                  size="small"
                   onClick={() =>
                     setFilePreview({
                       ...filePreview,
@@ -733,7 +711,7 @@ export default function SettingsPage() {
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="fp-max-size">{t("admin.file_preview_max_size")}</Label>
+              <label htmlFor="fp-max-size">{t("admin.file_preview_max_size")}</label>
               <Input
                 id="fp-max-size"
                 type="number"
@@ -746,7 +724,7 @@ export default function SettingsPage() {
               />
             </div>
             <div className="space-y-1.5 sm:col-span-2">
-              <Label htmlFor="fp-formats">{t("admin.file_preview_formats")}</Label>
+              <label htmlFor="fp-formats">{t("admin.file_preview_formats")}</label>
               <Input
                 id="fp-formats"
                 value={filePreview.enabled_formats}
@@ -765,11 +743,11 @@ export default function SettingsPage() {
               onClick={() => handleSave("file_preview", filePreview)}
               disabled={!sectionLoaded.filePreview || saveMutation.isPending}
             >
-              <Save className="size-4" />
+              <SaveOutlined aria-hidden className="size-4" />
               Save Changes
             </Button>
           </div>
-        </CardContent>
+        </div>
       </Card>
 
       {saveTarget && (

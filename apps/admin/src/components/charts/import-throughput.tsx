@@ -1,8 +1,7 @@
 import { useEffect, useRef } from "react";
 import * as echarts from "echarts";
-import { Card, CardHeader, CardTitle, CardContent, ChartEmptyState, cn } from "../../lib/admin-ui";
-
-
+import { cn } from "../../lib/cn";
+import { Card, Empty } from "@/lib/antd";
 export interface ImportThroughputDataPoint {
   date: string;
   imported: number;
@@ -104,16 +103,11 @@ export function ImportThroughputChart({
   }, [data]);
 
   return (
-    <Card className={cn(className)}>
-      <CardHeader>
-        <CardTitle className="text-base">Import Throughput</CardTitle>
-      </CardHeader>
-      <CardContent>
+    <Card className={cn(className)} title="Import Throughput">
         <div className="relative">
           <div ref={chartRef} className="h-64 w-full" role="img" aria-label="Import throughput chart" />
-          <ChartEmptyState visible={data.length === 0} />
-        </div>
-      </CardContent>
+          {data.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No chart data" /> : null}
+      </div>
     </Card>
   );
 }

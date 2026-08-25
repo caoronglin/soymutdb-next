@@ -1,8 +1,8 @@
 import { useEffect, useRef } from "react";
 import * as echarts from "echarts";
-import { Card, CardHeader, CardTitle, CardContent, ChartEmptyState, cn, formatFileSize } from "../../lib/admin-ui";
-
-
+import { cn } from "../../lib/cn";
+import { formatFileSize } from "../../lib/format";
+import { Card, Empty } from "@/lib/antd";
 export interface StorageGrowthDataPoint {
   date: string;
   bytes: number;
@@ -89,16 +89,11 @@ export function StorageGrowthChart({ data, className }: StorageGrowthChartProps)
   }, [data]);
 
   return (
-    <Card className={cn(className)}>
-      <CardHeader>
-        <CardTitle className="text-base">Storage Growth</CardTitle>
-      </CardHeader>
-      <CardContent>
+    <Card className={cn(className)} title="Storage Growth">
         <div className="relative">
           <div ref={chartRef} className="h-64 w-full" role="img" aria-label="Storage growth chart" />
-          <ChartEmptyState visible={data.length === 0} />
-        </div>
-      </CardContent>
+          {data.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No chart data" /> : null}
+      </div>
     </Card>
   );
 }

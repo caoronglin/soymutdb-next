@@ -12,7 +12,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { App as AntdApp } from "antd";
+import { App as AntdApp } from "../../lib/antd";
 import "@testing-library/jest-dom/vitest";
 import NewsListPage from "./index";
 import { listAdminNews } from "@soymutdb/api-client";

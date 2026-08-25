@@ -33,9 +33,9 @@ export interface paths {
         };
         /**
          * Readiness
-         * @description Readiness probe – checks PostgreSQL, ClickHouse, and Redis.
+         * @description Readiness probe with baseline and extended dependency semantics.
          *
-         *     Returns 503 if any dependency is unreachable.
+         *     Baseline gates PostgreSQL only; extended also gates ClickHouse and Redis.
          */
         get: operations["readiness_api_v1_health_ready_get"];
         put?: never;
@@ -5409,6 +5409,8 @@ export interface components {
             schema_version?: number | null;
             /** Checksum */
             checksum?: string | null;
+            /** Import Draft Id */
+            import_draft_id?: string | null;
             /** Idempotency Key */
             idempotency_key: string;
         };

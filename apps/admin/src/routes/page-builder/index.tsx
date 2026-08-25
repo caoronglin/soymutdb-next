@@ -2,26 +2,11 @@
  * Page Builder index: list page definitions with a create form.
  */
 
+import { PartitionOutlined, PlusOutlined, LoadingOutlined } from "@ant-design/icons";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { Layers, Plus, Loader2 } from "lucide-react";
-import {
-  Badge,
-  Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  Input,
-  Label,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "../../lib/admin-ui";
+import { Badge, Button, Card, Input, Table, Typography } from "@/lib/antd";
 import {
   normalizePageDefinition,
   type PageDefinitionV2,
@@ -73,110 +58,29 @@ export default function PageBuilderIndexPage() {
 
   return (
     <div className="space-y-6 p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="font-serif text-2xl font-semibold">Page Builder</h2>
-          <p className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
-            <Layers className="size-3.5" />
-            Versioned, schema-validated page definitions
-          </p>
+      <div><Typography.Title level={2}>Page Builder</Typography.Title><Typography.Text type="secondary"><PartitionOutlined /> Versioned, schema-validated page definitions</Typography.Text></div>
+      <Card title="Create a page">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="space-y-1.5"><Typography.Text>Route</Typography.Text><Input value={route} onChange={(e) => setRoute(e.target.value)} placeholder="/about-us" className="w-64" /></div>
+          <div className="space-y-1.5"><Typography.Text>Title key</Typography.Text><Input value={titleKey} onChange={(e) => setTitleKey(e.target.value)} placeholder="nav.about" className="w-64" /></div>
+          <Button type="primary" onClick={() => createMutation.mutate()} disabled={createMutation.isPending || !route || !titleKey} icon={createMutation.isPending ? <LoadingOutlined /> : <PlusOutlined />}>Create</Button>
         </div>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Create a page</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-wrap items-end gap-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="pb-route">Route</Label>
-            <Input
-              id="pb-route"
-              value={route}
-              onChange={(e) => setRoute(e.target.value)}
-              placeholder="/about-us"
-              className="w-64"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="pb-title">Title key</Label>
-            <Input
-              id="pb-title"
-              value={titleKey}
-              onChange={(e) => setTitleKey(e.target.value)}
-              placeholder="nav.about"
-              className="w-64"
-            />
-          </div>
-          <Button
-            onClick={() => createMutation.mutate()}
-            disabled={createMutation.isPending || !route || !titleKey}
-          >
-            {createMutation.isPending ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Plus className="size-4" />
-            )}
-            Create
-          </Button>
-        </CardContent>
-        {error ? (
-          <CardContent>
-            <p className="text-sm text-destructive">{error}</p>
-          </CardContent>
-        ) : null}
+        {error ? <Typography.Paragraph type="danger" className="mt-3">{error}</Typography.Paragraph> : null}
       </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Pages</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <p className="text-sm text-muted-foreground">
-              <Loader2 className="inline size-4 animate-spin" /> Loading…
-            </p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Route</TableHead>
-                  <TableHead>Title key</TableHead>
-                  <TableHead>Latest version</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {(data?.items ?? []).length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center text-muted-foreground">
-                      No pages yet.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  (data?.items ?? []).map((p) => (
-                    <TableRow key={p.id}>
-                      <TableCell className="font-mono text-sm">{p.route}</TableCell>
-                      <TableCell className="text-sm">{p.title_key}</TableCell>
-                      <TableCell className="text-sm">{p.latest_version}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{p.latest_status}</Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Link to="/page-builder/$pageId" params={{ pageId: p.id }}>
-                          <Button variant="outline" size="sm">
-                            Edit
-                          </Button>
-                        </Link>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
+      <Card title="Pages">
+        <Table
+          loading={isLoading}
+          rowKey="id"
+          dataSource={data?.items ?? []}
+          locale={{ emptyText: "No pages yet." }}
+          columns={[
+            { title: "Route", dataIndex: "route", render: (value) => <span className="font-mono text-sm">{value}</span> },
+            { title: "Title key", dataIndex: "title_key" },
+            { title: "Latest version", dataIndex: "latest_version" },
+            { title: "Status", dataIndex: "latest_status", render: (value) => <Badge color="default">{value}</Badge> },
+            { title: "Action", key: "action", align: "right", render: (_, page) => <Link to="/page-builder/$pageId" params={{ pageId: page.id }}><Button size="small">Edit</Button></Link> },
+          ]}
+        />
       </Card>
     </div>
   );

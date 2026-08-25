@@ -1,5 +1,5 @@
 import * as React from "react";
-import { App as AntdApp, ConfigProvider } from "antd";
+import { App as AntdApp, ConfigProvider } from "./antd";
 import type { Locale } from "antd/es/locale";
 import i18n from "@soymutdb/i18n";
 import { createAntdTheme, isAdminDark, loadAntdLocale } from "./antd-theme";

@@ -2,7 +2,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import type { PageDefinition } from "@soymutdb/shared";
 
-import { readPageDefinitionBootstrap, pageDefinitionKey } from "../loader";
+import { readPageDefinitionBootstrap, pageDefinitionKey, resolveFallbackDefinition } from "../loader";
 
 vi.mock("@soymutdb/api-client", () => ({
   getPageDefinition: vi.fn(),
@@ -64,6 +64,13 @@ describe("page-definition loader", () => {
   it("rejects a bootstrap whose definition has no root", () => {
     setBootstrap({ route: "/", version: 1, definition: { title_key: "x" } });
     expect(readPageDefinitionBootstrap()).toBeNull();
+  });
+
+  it("fails closed instead of using the seed in production mode", () => {
+    vi.stubEnv("VITE_DEPLOYMENT_MODE", "production");
+    expect(resolveFallbackDefinition("/")).toBeNull();
+    vi.unstubAllEnvs();
+    expect(resolveFallbackDefinition("/")).not.toBeNull();
   });
 
   it("exposes a stable route query key", () => {

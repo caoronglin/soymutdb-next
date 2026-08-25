@@ -12,15 +12,14 @@
     <meta name="author" content="SoyMutDB Consortium" />
 
     <!-- Content Security Policy: keep in sync with apps/web/public/_headers and
-         apps/web/scripts/base-template.ts (SSG pages). REPLACE the placeholder
-         domains before going live: https://api.example.com -> production API
-         origin, https://jbrowse.example.com -> deployed JBrowse origin (iframe
-         on /browse). Preview deployments: use the STAGING origins instead.
+         apps/web/scripts/base-template.ts (SSG pages). Deployment API and JBrowse
+         origins are injected by Vite from VITE_API_BASE_URL and
+         VITE_JBROWSE_BASE_URL; preview deployments use staging origins.
          When VITE_CDN_ENABLED=true, add CDN domains to script-src in BOTH this
          meta tag and the _headers CSP (e.g. cdnjs.cloudflare.com, cdn.jsdelivr.net). -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://api.example.com; frame-src 'self' https://jbrowse.example.com; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; object-src 'none'; worker-src 'self' blob:"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'; frame-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; object-src 'none'; worker-src 'self' blob:"
     />
 
     <!-- Preconnect to font origins for faster font load -->

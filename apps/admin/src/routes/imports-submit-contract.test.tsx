@@ -21,32 +21,6 @@ vi.mock("@soymutdb/api-client", () => ({
   getAccessToken: vi.fn(() => null),
 }));
 
-vi.mock("../lib/admin-ui", () => ({
-  cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(" "),
-  Button: ({ children, type = "button", ...props }: React.ComponentProps<"button">) => (
-    <button type={type} {...props}>{children}</button>
-  ),
-  Input: (props: React.ComponentProps<"input">) => <input {...props} />,
-  Label: (props: React.ComponentProps<"label">) => <label {...props} />,
-  Badge: ({ children }: { children?: React.ReactNode }) => <span>{children}</span>,
-  Dialog: ({ open, children }: { open: boolean; children: React.ReactNode }) => open ? <div>{children}</div> : null,
-  DialogContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  DialogHeader: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  DialogTitle: ({ children }: { children: React.ReactNode }) => <h2>{children}</h2>,
-  DialogDescription: ({ children }: { children: React.ReactNode }) => <p>{children}</p>,
-  DialogFooter: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  PageHeader: ({ actions }: { actions?: React.ReactNode }) => <header>{actions}</header>,
-  Select: ({ value, onValueChange, children }: { value?: string; onValueChange?: (value: string) => void; children: React.ReactNode }) => (
-    <select value={value} onChange={(event) => onValueChange?.(event.target.value)}>{children}</select>
-  ),
-  SelectContent: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  SelectItem: ({ value, disabled, children }: { value: string; disabled?: boolean; children: React.ReactNode }) => (
-    <option value={value} disabled={disabled}>{children}</option>
-  ),
-  SelectTrigger: () => null,
-  SelectValue: () => null,
-  StatCard: () => <div />,
-}));
 
 vi.mock("../components/data-table", () => ({ DataTable: () => <div /> }));
 vi.mock("../components/status-badge", () => ({ StatusBadge: () => <span /> }));
@@ -88,11 +62,9 @@ describe("ImportsPage module submit contract", () => {
     renderPage();
 
     await user.click(await screen.findByRole("button", { name: "New Import" }));
-    const moduleTypeSelect = screen
-      .getAllByRole("combobox")
-      .find((select) => select.textContent?.includes("Module Data"));
-    expect(moduleTypeSelect).toBeDefined();
-    await user.selectOptions(moduleTypeSelect!, "module_tsv");
+    const moduleTypeSelect = screen.getByRole("combobox", { name: "Import Type" });
+    await user.click(moduleTypeSelect);
+    await user.click(await screen.findByText("Module Data"));
 
     await user.type(screen.getByLabelText("Filename"), "genes.tsv");
     await user.type(screen.getByLabelText("S3 File Path"), "s3://archive/genes.tsv");

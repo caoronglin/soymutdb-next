@@ -1,18 +1,8 @@
+import { LoginOutlined, LockOutlined, SafetyCertificateOutlined, ExclamationCircleOutlined, ArrowRightOutlined } from "@ant-design/icons";
 import * as React from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { LogIn, Lock, ShieldCheck, AlertCircle, ArrowRight } from "lucide-react";
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-  CardFooter,
-  Button,
-  Input,
-  Label,
-  cn,
-} from "../lib/admin-ui";
+import { cn } from "../lib/cn";
+import { Typography, Card, Button, Input } from "@/lib/antd";
 import { ApiError } from "@soymutdb/api-client";
 import { useAuth } from "../lib/auth-context";
 
@@ -100,7 +90,7 @@ export default function LoginPage() {
         {/* Brand header */}
         <div className="mb-6 flex flex-col items-center gap-2 text-center">
           <div className="flex size-12 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
-            <ShieldCheck className="size-6" />
+            <SafetyCertificateOutlined className="size-6" />
           </div>
           <h1 className="font-serif text-2xl font-semibold">SoyMutDB Admin</h1>
           <p className="text-sm text-muted-foreground">
@@ -109,29 +99,29 @@ export default function LoginPage() {
         </div>
 
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <LogIn className="size-4" />
+          <div>
+            <Typography.Title level={5} className="flex items-center gap-2">
+              <LoginOutlined className="size-4" />
               Sign in
-            </CardTitle>
-            <CardDescription>
+            </Typography.Title>
+            <Typography.Text type="secondary">
               Enter your administrator credentials to continue.
-            </CardDescription>
-          </CardHeader>
+            </Typography.Text>
+          </div>
           <form onSubmit={handleSubmit} noValidate>
-            <CardContent className="space-y-4">
+            <div className="space-y-4">
               {error ? (
                 <div
                   role="alert"
                   className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
                 >
-                  <AlertCircle className="mt-0.5 size-4 shrink-0" />
+                  <ExclamationCircleOutlined className="mt-0.5 size-4 shrink-0" />
                   <span>{error}</span>
                 </div>
               ) : null}
 
               <div className="space-y-1.5">
-                <Label htmlFor="username">Username</Label>
+                <label htmlFor="username">Username</label>
                 <Input
                   id="username"
                   name="username"
@@ -146,9 +136,9 @@ export default function LoginPage() {
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="password">Password</Label>
+                <label htmlFor="password">Password</label>
                 <div className="relative">
-                  <Lock
+                  <LockOutlined
                     className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
                     aria-hidden
                   />
@@ -184,19 +174,19 @@ export default function LoginPage() {
                   </p>
                 </div>
               </div>
-            </CardContent>
-            <CardFooter>
-              <Button type="submit" className="w-full" disabled={submitting}>
+            </div>
+            <div>
+              <Button htmlType="submit" className="w-full" disabled={submitting}>
                 {submitting ? (
                   "Signing in…"
                 ) : (
                   <>
                     Sign in
-                    <ArrowRight className="size-4" />
+                    <ArrowRightOutlined className="size-4" />
                   </>
                 )}
               </Button>
-            </CardFooter>
+            </div>
           </form>
         </Card>
 

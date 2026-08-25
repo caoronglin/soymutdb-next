@@ -1,35 +1,11 @@
+import { ArrowLeftOutlined, AppstoreOutlined, EyeOutlined, SaveOutlined, CloseOutlined, LoadingOutlined } from "@ant-design/icons";
+import { Badge, Button, Card, Input, Select, Typography } from "@/lib/antd";
 import { useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useNavigate, Link } from "@tanstack/react-router";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import {
-  ArrowLeft,
-  Blocks,
-  Eye,
-  Save,
-  X,
-  Loader2,
-} from "lucide-react";
-import {
-  Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-  Input,
-  Label,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-  Textarea,
-  Badge,
-} from "../../lib/admin-ui";
 import { widgetApi, type WidgetCategory, type WidgetPermission } from "../../lib/widget-api";
 
 // ---------------------------------------------------------------------------
@@ -246,8 +222,8 @@ export default function WidgetEditorPage() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Link to="/widgets">
-            <Button variant="ghost" size="sm">
-              <ArrowLeft className="size-4" />
+            <Button type="text" size="small">
+              <ArrowLeftOutlined className="size-4" />
               Back
             </Button>
           </Link>
@@ -256,12 +232,12 @@ export default function WidgetEditorPage() {
               {isNew ? "New Widget" : existingWidget?.display_name ?? routeName}
             </h2>
             <p className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
-              <Blocks className="size-3.5" />
+              <AppstoreOutlined className="size-3.5" />
               {isNew ? "Define a new reusable widget" : routeName}
               {!isNew && (
                 <>
                   <span>·</span>
-                  <Badge variant={watchedIsActive ? "success" : "secondary"}>
+                  <Badge color={watchedIsActive ? "success" : "secondary"}>
                     {watchedIsActive ? "Active" : "Inactive"}
                   </Badge>
                 </>
@@ -272,19 +248,19 @@ export default function WidgetEditorPage() {
         <div className="flex items-center gap-2">
           {!isNew && (
             <Link to="/widget-preview" search={{ name: routeName }}>
-              <Button variant="outline" size="sm">
-                <Eye className="size-4" />
+              <Button type="default" size="small">
+                <EyeOutlined className="size-4" />
                 Preview
               </Button>
             </Link>
           )}
-          <Button variant="outline" size="sm" onClick={() => navigate({ to: "/widgets" })}>
-            <X className="size-4" />
+          <Button type="default" size="small" onClick={() => navigate({ to: "/widgets" })}>
+            <CloseOutlined className="size-4" />
             Cancel
           </Button>
-          <Button size="sm" onClick={handleSubmit(onSubmit)} disabled={isSaving || !isDirty}>
-            {isSaving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-            {isSaving ? "Saving…" : "Save"}
+          <Button size="small" onClick={handleSubmit(onSubmit)} disabled={isSaving || !isDirty}>
+            {isSaving ? <LoadingOutlined className="size-4 animate-spin" /> : <SaveOutlined className="size-4" />}
+            {isSaving ? "Saving…" : "SaveOutlined"}
           </Button>
         </div>
       </div>
@@ -299,16 +275,16 @@ export default function WidgetEditorPage() {
         {/* Main column */}
         <div className="space-y-6 lg:col-span-2">
           <Card>
-            <CardHeader>
-              <CardTitle>General</CardTitle>
-              <CardDescription>
+            <div>
+              <Typography.Title level={5}>General</Typography.Title>
+              <Typography.Text type="secondary">
                 Basic identity and rendering configuration.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+              </Typography.Text>
+            </div>
+            <div className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <Label htmlFor="name">Widget Name (slug)</Label>
+                  <label htmlFor="name">Widget Name (slug)</label>
                   <Input
                     id="name"
                     placeholder="e.g. recent-releases"
@@ -324,7 +300,7 @@ export default function WidgetEditorPage() {
                   )}
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="display_name">Display Name</Label>
+                  <label htmlFor="display_name">Display Name</label>
                   <Input
                     id="display_name"
                     placeholder="e.g. Recent Releases"
@@ -337,8 +313,8 @@ export default function WidgetEditorPage() {
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="description">Description</Label>
-                <Textarea
+                <label htmlFor="description">Description</label>
+                <Input.TextArea
                   id="description"
                   rows={2}
                   placeholder="Brief description shown in admin"
@@ -348,7 +324,7 @@ export default function WidgetEditorPage() {
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <Label htmlFor="template_path">Template Path</Label>
+                  <label htmlFor="template_path">Template Path</label>
                   <Input
                     id="template_path"
                     placeholder="widgets/recent-releases.njk"
@@ -359,7 +335,7 @@ export default function WidgetEditorPage() {
                   )}
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="data_source">Data Source</Label>
+                  <label htmlFor="data_source">Data Source</label>
                   <Input
                     id="data_source"
                     placeholder="e.g. /api/stats/recent-releases"
@@ -370,20 +346,20 @@ export default function WidgetEditorPage() {
                   </p>
                 </div>
               </div>
-            </CardContent>
+            </div>
           </Card>
 
           <Card>
-            <CardHeader>
-              <CardTitle>Schemas & Configuration</CardTitle>
-              <CardDescription>
+            <div>
+              <Typography.Title level={5}>Schemas & Configuration</Typography.Title>
+              <Typography.Text type="secondary">
                 Parameter schema (JSON Schema) and admin configuration as JSON.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+              </Typography.Text>
+            </div>
+            <div className="space-y-4">
               <div className="space-y-1.5">
-                <Label htmlFor="params_schema">Params Schema (JSON)</Label>
-                <Textarea
+                <label htmlFor="params_schema">Params Schema (JSON)</label>
+                <Input.TextArea
                   id="params_schema"
                   rows={8}
                   className="font-mono text-xs"
@@ -396,8 +372,8 @@ export default function WidgetEditorPage() {
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="admin_config">Admin Config (JSON)</Label>
-                <Textarea
+                <label htmlFor="admin_config">Admin Config (JSON)</label>
+                <Input.TextArea
                   id="admin_config"
                   rows={6}
                   className="font-mono text-xs"
@@ -408,57 +384,53 @@ export default function WidgetEditorPage() {
                   <p className="text-xs text-destructive">{errors.admin_config.message as string}</p>
                 )}
               </div>
-            </CardContent>
+            </div>
           </Card>
         </div>
 
         {/* Side column */}
         <div className="space-y-6">
           <Card>
-            <CardHeader>
-              <CardTitle>Settings</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
+            <div>
+              <Typography.Title level={5}>Settings</Typography.Title>
+            </div>
+            <div className="space-y-4">
               <div className="space-y-1.5">
-                <Label>Category</Label>
+                <label>Category</label>
                 <Select
                   value={watchedCategory}
-                  onValueChange={(v) => setValue("category", v as WidgetCategory, { shouldDirty: true })}
+                  onChange={(v) => setValue("category", v as WidgetCategory, { shouldDirty: true })}
                 >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
+
+
                     {WIDGET_CATEGORIES.map((c) => (
-                      <SelectItem key={c} value={c}>
+                      <Select.Option key={c} value={c}>
                         {c.charAt(0).toUpperCase() + c.slice(1)}
-                      </SelectItem>
+                      </Select.Option>
                     ))}
-                  </SelectContent>
+
                 </Select>
               </div>
 
               <div className="space-y-1.5">
-                <Label>Permissions</Label>
+                <label>Permissions</label>
                 <Select
                   value={watchedPermissions}
-                  onValueChange={(v) => setValue("permissions", v as WidgetPermission, { shouldDirty: true })}
+                  onChange={(v) => setValue("permissions", v as WidgetPermission, { shouldDirty: true })}
                 >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
+
+
                     {WIDGET_PERMISSIONS.map((p) => (
-                      <SelectItem key={p} value={p}>
+                      <Select.Option key={p} value={p}>
                         {p.charAt(0).toUpperCase() + p.slice(1)}
-                      </SelectItem>
+                      </Select.Option>
                     ))}
-                  </SelectContent>
+
                 </Select>
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="cache_ttl">Cache TTL (seconds)</Label>
+                <label htmlFor="cache_ttl">Cache TTL (seconds)</label>
                 <Input
                   id="cache_ttl"
                   type="number"
@@ -494,13 +466,13 @@ export default function WidgetEditorPage() {
                   />
                 </button>
               </div>
-            </CardContent>
-            <CardFooter className="flex-col items-stretch gap-2 border-t pt-4">
-              <Button type="submit" disabled={isSaving || !isDirty} className="w-full">
-                {isSaving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-                {isSaving ? "Saving…" : isNew ? "Create Widget" : "Save Changes"}
+            </div>
+            <div className="flex-col items-stretch gap-2 border-t pt-4">
+              <Button htmlType="submit" disabled={isSaving || !isDirty} className="w-full">
+                {isSaving ? <LoadingOutlined className="size-4 animate-spin" /> : <SaveOutlined className="size-4" />}
+                {isSaving ? "Saving…" : isNew ? "Create Widget" : "SaveOutlined Changes"}
               </Button>
-            </CardFooter>
+            </div>
           </Card>
         </div>
       </form>

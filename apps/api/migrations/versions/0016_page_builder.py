@@ -25,7 +25,7 @@ def upgrade() -> None:
         "requested",
         "published",
         name="page_definition_status_enum",
-        create_type=False,
+        create_type=True,
     )
 
     op.create_table(
@@ -115,4 +115,5 @@ def downgrade() -> None:
     )
     op.drop_table("page_definition_versions")
     op.drop_table("page_definitions")
+    op.execute("DROP TYPE IF EXISTS page_definition_status_enum")
     op.execute("DROP TYPE IF EXISTS page_definition_status_enum")

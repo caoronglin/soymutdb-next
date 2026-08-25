@@ -5,7 +5,7 @@
  */
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { App, Button, Card, Space, Spin, Typography } from "antd";
+import { App, Button, Card, Space, Spin, Typography } from "../../lib/antd";
 import { EyeOutlined } from "@ant-design/icons";
 import { useParams, useRouter } from "@tanstack/react-router";
 import dayjs from "dayjs";

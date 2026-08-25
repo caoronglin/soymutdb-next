@@ -1,30 +1,11 @@
+import { DashboardOutlined, CloudUploadOutlined, FolderOpenOutlined, FileTextOutlined, ReadOutlined, SnippetsOutlined, SettingOutlined, CheckOutlined, BarChartOutlined, LeftOutlined, RightOutlined, EnvironmentOutlined, AppstoreOutlined, LayoutOutlined, RiseOutlined, EyeOutlined, PartitionOutlined } from "@ant-design/icons";
+import type { ComponentType } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
-import {
-  LayoutDashboard,
-  Upload,
-  FolderTree,
-  FileText,
-  Newspaper,
-  ScrollText,
-  Settings,
-  ToggleRight,
-  BarChart3,
-  ChevronLeft,
-  ChevronRight,
-  Leaf,
-  Blocks,
-  LayoutTemplate,
-  Activity,
-  Eye,
-  Layers,
-  type LucideIcon,
-} from "lucide-react";
-import { cn } from "../lib/admin-ui";
-
+import { cn } from "../lib/cn";
 interface NavItem {
   path: string;
   label: string;
-  icon: LucideIcon;
+  icon: ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
   /** Optional badge count. */
   badge?: number;
 }
@@ -38,40 +19,40 @@ const NAV_SECTIONS: NavSection[] = [
   {
     label: "Overview",
     items: [
-      { path: "/", label: "Dashboard", icon: LayoutDashboard },
+      { path: "/", label: "Dashboard", icon: DashboardOutlined },
     ],
   },
   {
     label: "Data Management",
     items: [
-      { path: "/resource-catalog", label: "Resource Catalog", icon: FolderTree },
-      { path: "/imports", label: "Imports", icon: Upload },
+      { path: "/resource-catalog", label: "Resource Catalog", icon: FolderOpenOutlined },
+      { path: "/imports", label: "Imports", icon: CloudUploadOutlined },
     ],
   },
   {
     label: "Tools",
     items: [
-      { path: "/news", label: "News", icon: Newspaper },
-      { path: "/content", label: "Content", icon: FileText },
+      { path: "/news", label: "News", icon: ReadOutlined },
+      { path: "/content", label: "Content", icon: FileTextOutlined },
     ],
   },
   {
     label: "Presentation",
     items: [
-      { path: "/widgets", label: "Widgets", icon: Blocks },
-      { path: "/layout", label: "Layout Editor", icon: LayoutTemplate },
-      { path: "/widget-preview", label: "Widget Preview", icon: Eye },
-      { path: "/widget-health", label: "Widget Health", icon: Activity },
-      { path: "/page-builder", label: "Page Builder", icon: Layers },
+      { path: "/widgets", label: "Widgets", icon: AppstoreOutlined },
+      { path: "/layout", label: "Layout Editor", icon: LayoutOutlined },
+      { path: "/widget-preview", label: "Widget Preview", icon: EyeOutlined },
+      { path: "/widget-health", label: "Widget Health", icon: RiseOutlined },
+      { path: "/page-builder", label: "Page Builder", icon: PartitionOutlined },
     ],
   },
   {
     label: "Administration",
     items: [
-      { path: "/audit", label: "Audit Logs", icon: ScrollText },
-      { path: "/settings", label: "Settings", icon: Settings },
-      { path: "/features", label: "Feature Flags", icon: ToggleRight },
-      { path: "/analytics-settings", label: "Analytics", icon: BarChart3 },
+      { path: "/audit", label: "Audit Logs", icon: SnippetsOutlined },
+      { path: "/settings", label: "SettingOutlined", icon: SettingOutlined },
+      { path: "/features", label: "Feature Flags", icon: CheckOutlined },
+      { path: "/analytics-settings", label: "Analytics", icon: BarChartOutlined },
     ],
   },
 ];
@@ -101,7 +82,7 @@ export function AdminSidebar({ collapsed, onToggleCollapsed }: AdminSidebarProps
       {/* Brand */}
       <div className="flex h-14 items-center gap-2 border-b border-border px-4">
         <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-          <Leaf className="size-5" aria-hidden />
+          <EnvironmentOutlined className="size-5" aria-hidden />
         </div>
         {!collapsed && (
           <div className="min-w-0">
@@ -128,10 +109,10 @@ export function AdminSidebar({ collapsed, onToggleCollapsed }: AdminSidebarProps
           aria-expanded={!collapsed}
         >
           {collapsed ? (
-            <ChevronRight className="size-4" aria-hidden />
+            <RightOutlined className="size-4" aria-hidden />
           ) : (
             <>
-              <ChevronLeft className="size-4" aria-hidden />
+              <LeftOutlined className="size-4" aria-hidden />
               <span>Collapse</span>
             </>
           )}

@@ -302,6 +302,91 @@ const TOOLS_RESOURCES: Record<string, Record<string, unknown>> = {
   },
 };
 
+/**
+ * Homepage strings for AntdHome. These were previously only provided as React
+ * `t(...)` defaults, so any key without a default (the news list) rendered as a
+ * raw key ("home.news1") and the genome-browser tool was labelled "Gbrowse".
+ * Adding them here (a) kills the raw-keys leak and (b) renames the tool to
+ * "JBrowse 2". Keys are merged with `deep: true` into the shared `common`
+ * bundle, so `t("home.toolGbrowseLabel")` resolves on both languages.
+ */
+const HOME_RESOURCES: Record<string, Record<string, unknown>> = {
+  en: {
+    home: {
+      heroTitle: "Explore the Unknown Territories of Soybean Mutation",
+      heroSubtitle: "A next-generation multi-species mutation database — from genome to phenotype in one place.",
+      heroEyebrow: "SOYMUTDB · MULTI-SPECIES",
+      heroPrimary: "Start Exploring",
+      heroSecondary: "Learn More",
+      heroSlide2: "From twenty chromosomes to a global phenotype view",
+      heroSlide2Desc: "Covers the soybean reference genome and mutation collections, with multi-dimensional search across genes, loci and BLAST.",
+      heroSlide3: "Mutation features at a glance",
+      heroSlide3Desc: "Chromosomes, mutation types, gene loci and JBrowse 2 links presented as tables and visualizations.",
+      toolGeneLabel: "Gene ID Search",
+      toolGeneDesc: "Look up mutations by gene ID",
+      toolLocationLabel: "Position Search",
+      toolLocationDesc: "Look up by chromosome and locus",
+      toolGbrowseLabel: "JBrowse 2",
+      toolGbrowseDesc: "Browse the genome in JBrowse 2",
+      toolBlastLabel: "BLAST",
+      toolBlastDesc: "Find homologs by sequence alignment",
+      toolPrimerLabel: "Primer Design",
+      toolPrimerDesc: "Design and check PCR primers",
+      latestNews: "Latest News",
+      noNews: "No news yet",
+      newsMeta: "Latest release · SoyMutDB",
+      news1: "SoyMutDB 0.1.0 is now live",
+      news2: "Wm82.v4.0 reference genome added",
+      news3: "New variant and BLAST search tools",
+      news4: "Improved genome browser deep links",
+      news5: "Community curation is open",
+      searchPlaceholder: "Search a gene ID, locus or mutation…",
+      searchButton: "Search",
+      searchHint: "Gene IDs, chromosome loci, variant IDs and keywords",
+      featuredTools: "Search Tools",
+      openTool: "Open",
+      assemblyLabel: "Species / assembly",
+    },
+  },
+  zh: {
+    home: {
+      heroTitle: "探索大豆突变的未知疆域",
+      heroSubtitle: "新一代多物种突变数据库，从基因组到表型一站探索。",
+      heroEyebrow: "SOYMUTDB · MULTI-SPECIES",
+      heroPrimary: "开始探索",
+      heroSecondary: "了解更多",
+      heroSlide2: "从 20 条染色体到全局表型",
+      heroSlide2Desc: "覆盖大豆参考基因组与突变集合，支持基因、位点、BLAST 多维检索。",
+      heroSlide3: "突变特征一览无余",
+      heroSlide3Desc: "以表格与可视化呈现染色体、突变类型、基因位点与 JBrowse 2 跳转。",
+      toolGeneLabel: "基因 ID 检索",
+      toolGeneDesc: "按基因号查询突变",
+      toolLocationLabel: "物理位置检索",
+      toolLocationDesc: "按染色体与位点查询",
+      toolGbrowseLabel: "JBrowse 2",
+      toolGbrowseDesc: "在 JBrowse 2 中浏览基因组",
+      toolBlastLabel: "BLAST 比对",
+      toolBlastDesc: "序列比对检索同源",
+      toolPrimerLabel: "引物设计",
+      toolPrimerDesc: "设计并检查引物",
+      latestNews: "最新动态",
+      noNews: "暂无新闻",
+      newsMeta: "最新发布 · SoyMutDB",
+      news1: "SoyMutDB 0.1.0 正式上线",
+      news2: "新增 Wm82.v4.0 参考基因组",
+      news3: "新增变异与 BLAST 检索工具",
+      news4: "基因组浏览器深链接改进",
+      news5: "社区共建数据开放申请",
+      searchPlaceholder: "搜索基因 ID、染色体位点或突变…",
+      searchButton: "搜索",
+      searchHint: "支持基因 ID、染色体位点、变异 ID 与关键词",
+      featuredTools: "搜索工具",
+      openTool: "进入",
+      assemblyLabel: "物种 / 基因组",
+    },
+  },
+};
+
 export function initI18nOnce(): void {
     if (initialized) return;
     initI18n(detectLanguage());
@@ -310,6 +395,10 @@ export function initI18nOnce(): void {
         i18n.addResourceBundle(lng, "translation", bundle, true);
     }
     for (const [lng, bundle] of Object.entries(TOOLS_RESOURCES)) {
+        i18n.addResourceBundle(lng, "common", bundle, true);
+        i18n.addResourceBundle(lng, "translation", bundle, true);
+    }
+    for (const [lng, bundle] of Object.entries(HOME_RESOURCES)) {
         i18n.addResourceBundle(lng, "common", bundle, true);
         i18n.addResourceBundle(lng, "translation", bundle, true);
     }

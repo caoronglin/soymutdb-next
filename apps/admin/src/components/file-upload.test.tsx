@@ -1,5 +1,5 @@
 import { act, fireEvent, render, waitFor } from "@testing-library/react";
-import { App as AntdApp } from "antd";
+import { App as AntdApp } from "../lib/antd";
 import { uploadPresign, type UploadPresignResponse } from "@soymutdb/api-client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import FileUpload from "./file-upload";

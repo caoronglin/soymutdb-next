@@ -1,25 +1,9 @@
-import type { LucideIcon } from "lucide-react";
-import {
-  CircleDashed,
-  Download,
-  ShieldCheck,
-  CheckCircle2,
-  Archive,
-  Clock,
-  Loader2,
-  XCircle,
-  AlertCircle,
-} from "lucide-react";
-import { Badge, cn } from "../lib/admin-ui";
-
+import { DashOutlined, DownloadOutlined, SafetyCertificateOutlined, CheckCircleOutlined, InboxOutlined, ClockCircleOutlined, LoadingOutlined, CloseCircleOutlined, ExclamationCircleOutlined } from "@ant-design/icons";
+import type { ComponentType } from "react";
+import { cn } from "../lib/cn";
+import { Badge } from "@/lib/antd";
 /** Badge variant names supported by the design system. */
-type BadgeVariant =
-  | "default"
-  | "secondary"
-  | "destructive"
-  | "outline"
-  | "success"
-  | "warning";
+type BadgeVariant = "default" | "processing" | "success" | "warning" | "error";
 
 /** Release lifecycle states (state machine). */
 export type ReleaseStatus =
@@ -40,64 +24,64 @@ export type TaskStatus =
 interface StatusConfig {
   label: string;
   variant: BadgeVariant;
-  icon: LucideIcon;
+  icon: ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
   className?: string;
 }
 
 const RELEASE_STATUS_CONFIG: Record<ReleaseStatus, StatusConfig> = {
   draft: {
     label: "Draft",
-    variant: "secondary",
-    icon: CircleDashed,
+    variant: "default",
+    icon: DashOutlined,
   },
   importing: {
     label: "Importing",
     variant: "warning",
-    icon: Download,
+    icon: DownloadOutlined,
   },
   validating: {
     label: "Validating",
     variant: "warning",
-    icon: ShieldCheck,
+    icon: SafetyCertificateOutlined,
   },
   active: {
     label: "Active",
     variant: "success",
-    icon: CheckCircle2,
+    icon: CheckCircleOutlined,
   },
   archived: {
     label: "Archived",
-    variant: "secondary",
-    icon: Archive,
+    variant: "default",
+    icon: InboxOutlined,
   },
 };
 
 const TASK_STATUS_CONFIG: Record<TaskStatus, StatusConfig> = {
   pending: {
     label: "Pending",
-    variant: "secondary",
-    icon: Clock,
+    variant: "default",
+    icon: ClockCircleOutlined,
   },
   running: {
     label: "Running",
     variant: "warning",
-    icon: Loader2,
+    icon: LoadingOutlined,
     className: "animate-spin",
   },
   completed: {
     label: "Completed",
     variant: "success",
-    icon: CheckCircle2,
+    icon: CheckCircleOutlined,
   },
   failed: {
     label: "Failed",
-    variant: "destructive",
-    icon: XCircle,
+    variant: "error",
+    icon: CloseCircleOutlined,
   },
   cancelled: {
     label: "Cancelled",
-    variant: "secondary",
-    icon: AlertCircle,
+    variant: "default",
+    icon: ExclamationCircleOutlined,
   },
 };
 
@@ -120,7 +104,7 @@ export function StatusBadge({ status, type = "task", className }: StatusBadgePro
 
   if (!config) {
     return (
-      <Badge variant="outline" className={className}>
+      <Badge color="default" className={className}>
         {status}
       </Badge>
     );
@@ -128,7 +112,7 @@ export function StatusBadge({ status, type = "task", className }: StatusBadgePro
 
   const Icon = config.icon;
   return (
-    <Badge variant={config.variant} className={cn("gap-1", className)}>
+    <Badge color={config.variant} className={cn("gap-1", className)}>
       <Icon className={cn("size-3", config.className)} aria-hidden />
       {config.label}
     </Badge>

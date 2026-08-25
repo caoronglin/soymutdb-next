@@ -1,0 +1,6 @@
+##fileformat=VCFv4.2
+##INFO=<ID=ANN,Number=.,Type=String,Description="SnpEff">
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO
+TestChr01	200	.	A	G	99	PASS	ANN=G|missense_variant|MODERATE|VitGene.01G000100|VitGene.01G000100|protein_coding;DP=42;AF=0.25
+TestChr01	400	.	C	T	88	PASS	ANN=T|synonymous_variant|LOW|VitGene.01G000100|VitGene.01G000100|protein_coding;DP=31;AF=0.50
+TestChr02	150	.	G	A	75	PASS	ANN=A|stop_gained|HIGH|VitGene.02G000200|VitGene.02G000200|protein_coding;DP=20;AF=0.10

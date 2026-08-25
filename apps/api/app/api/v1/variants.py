@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.database import get_db
+from ...core.exceptions import ValidationError
 from ...core.security import RoleName
 from ...core.task_contract import EXPORT_VARIANTS_TASK
 from ...core.task_dispatch import dispatch_task
@@ -84,11 +85,13 @@ async def get_variants_by_region(
     release_context: ReleaseContext = Depends(get_release_context),
     assembly: str = Query(..., description="Assembly name (required)"),
     chromosome: str = Query(...),
-    start: int = Query(..., ge=0),
-    end: int = Query(..., ge=0),
+    start: int = Query(..., ge=1),
+    end: int = Query(..., ge=1),
     max_results: int = Query(default=1000, ge=1, le=10000),
 ) -> list[VariantResponse]:
     """Query variants in a genomic region (assembly is required)."""
+    if end < start:
+        raise ValidationError("end must be greater than or equal to start")
     return await service.get_variants_by_region(
         assembly=assembly,
         chromosome=chromosome,

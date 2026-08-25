@@ -296,7 +296,7 @@ function PrimerComponent() {
             onFinish={onSubmit}
             initialValues={{ start: undefined, end: undefined }}
           >
-            <Space direction="vertical" size="middle" className="w-full">
+            <Space orientation="vertical" size="middle" className="w-full">
               <Space.Compact>
                 <Button
                   type={mode === "region" ? "primary" : "default"}

@@ -1,8 +1,7 @@
 import { useEffect, useRef } from "react";
 import type * as echarts from "echarts";
-import { Card, CardHeader, CardTitle, CardContent, ChartEmptyState, cn } from "../../lib/admin-ui";
-
-
+import { cn } from "../../lib/cn";
+import { Card, Empty } from "@/lib/antd";
 export interface QueryLatencyDataPoint {
   date: string;
   p50: number;
@@ -98,16 +97,11 @@ export function QueryLatencyChart({ data, className }: QueryLatencyChartProps) {
   }, [data]);
 
   return (
-    <Card className={cn(className)}>
-      <CardHeader>
-        <CardTitle className="text-base">Query Latency (P50 / P95 / P99)</CardTitle>
-      </CardHeader>
-      <CardContent>
+    <Card className={cn(className)} title="Query Latency (P50 / P95 / P99)">
         <div className="relative">
           <div ref={chartRef} className="h-64 w-full" role="img" aria-label="Query latency percentiles chart" />
-          <ChartEmptyState visible={data.length === 0} />
-        </div>
-      </CardContent>
+          {data.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No chart data" /> : null}
+      </div>
     </Card>
   );
 }

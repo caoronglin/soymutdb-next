@@ -1,3 +1,4 @@
+import { ArrowLeftOutlined, EyeOutlined, HolderOutlined, LayoutOutlined, LoadingOutlined, PlusOutlined, SaveOutlined, DeleteOutlined } from "@ant-design/icons";
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -18,30 +19,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import {
-  ArrowLeft,
-  Eye,
-  GripVertical,
-  LayoutTemplate,
-  Loader2,
-  Plus,
-  Save,
-  Trash2,
-} from "lucide-react";
-import {
-  Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-  Badge,
-} from "../lib/admin-ui";
+import { Typography, Button, Card, Select, Badge } from "@/lib/antd";
 import { widgetApi, type LayoutWidget, type WidgetDefinition } from "../lib/widget-api";
 
 const PAGES = [
@@ -91,7 +69,7 @@ function SortableWidgetItem({ item, widget, onRemove }: SortableWidgetItemProps)
         className="cursor-grab touch-none rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground active:cursor-grabbing"
         aria-label="Drag to reorder"
       >
-        <GripVertical className="size-4" />
+        <HolderOutlined className="size-4" />
       </button>
       <div className="min-w-0 flex-1">
         <p className="font-mono text-sm font-medium">{item.name}</p>
@@ -100,19 +78,19 @@ function SortableWidgetItem({ item, widget, onRemove }: SortableWidgetItemProps)
         </p>
       </div>
       {widget ? (
-        <Badge variant="outline" className="text-xs">
+        <Badge color="default" className="text-xs">
           {widget.category}
         </Badge>
       ) : null}
       <Button
-        variant="ghost"
-        size="sm"
+        type="text"
+        size="small"
         className="size-8 p-0 text-destructive hover:text-destructive"
         onClick={() => onRemove(item.name)}
         title="Remove from layout"
         aria-label={`Remove ${item.name} from layout`}
       >
-        <Trash2 className="size-3.5" />
+        <DeleteOutlined className="size-3.5" />
       </Button>
     </div>
   );
@@ -204,35 +182,36 @@ export default function LayoutEditorPage() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Link to="/widgets">
-            <Button variant="ghost" size="sm">
-              <ArrowLeft className="size-4" />
+            <Button type="text" size="small">
+              <ArrowLeftOutlined className="size-4" />
               Widgets
             </Button>
           </Link>
           <div>
             <h2 className="font-serif text-2xl font-semibold">Layout Editor</h2>
             <p className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
-              <LayoutTemplate className="size-3.5" />
+              <LayoutOutlined className="size-3.5" />
               Arrange widgets on pages via drag-and-drop.
             </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <Link to="/widget-preview">
-            <Button variant="outline" size="sm">
-              <Eye className="size-4" />
+            <Button type="default" size="small">
+              <EyeOutlined className="size-4" />
               Preview
             </Button>
           </Link>
           <Button
-            size="sm"
+            size="small"
             onClick={() => saveMutation.mutate()}
             disabled={!hasCurrentBaseline || layoutLoading || saveMutation.isPending}
+          aria-label="Save Layout"
           >
             {saveMutation.isPending ? (
-              <Loader2 className="size-4 animate-spin" />
+              <LoadingOutlined className="size-4 animate-spin" />
             ) : (
-              <Save className="size-4" />
+              <SaveOutlined className="size-4" />
             )}
             {saveMutation.isPending ? "Saving…" : "Save Layout"}
           </Button>
@@ -249,32 +228,30 @@ export default function LayoutEditorPage() {
         {/* Page selector + widget order */}
         <div className="lg:col-span-2">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-4">
+            <div className="flex flex-row items-center justify-between gap-4">
               <div>
-                <CardTitle>Page Layout</CardTitle>
-                <CardDescription>
+                <Typography.Title level={5}>Page Layout</Typography.Title>
+                <Typography.Text type="secondary">
                   Drag widgets to reorder. Use the add button to insert more.
-                </CardDescription>
+                </Typography.Text>
               </div>
               <div className="w-48">
                 <Select
                   value={pageName}
-                  onValueChange={(v) => setPageName(v as PageName)}
+                  onChange={(v) => setPageName(v as PageName)}
                 >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select page" />
-                  </SelectTrigger>
-                  <SelectContent>
+
+
                     {PAGES.map((p) => (
-                      <SelectItem key={p} value={p}>
+                      <Select.Option key={p} value={p}>
                         /{p === "index" ? "" : p}
-                      </SelectItem>
+                      </Select.Option>
                     ))}
-                  </SelectContent>
+
                 </Select>
               </div>
-            </CardHeader>
-            <CardContent className="space-y-3">
+            </div>
+            <div className="space-y-3">
               {layoutLoading || (hasFetchedBaseline && !hasCurrentBaseline) ? (
                 <div className="space-y-2">
                   {Array.from({ length: 3 }).map((_, i) => (
@@ -326,7 +303,7 @@ export default function LayoutEditorPage() {
               <div className="pt-2">
                 {showAdd ? (
                   <Card className="border-dashed">
-                    <CardContent className="space-y-2 p-3">
+                    <div className="space-y-2 p-3">
                       <p className="text-xs font-medium text-muted-foreground">
                         Select a widget to add:
                       </p>
@@ -349,7 +326,7 @@ export default function LayoutEditorPage() {
                                   {w.display_name}
                                 </span>
                               </span>
-                              <Badge variant="outline" className="text-xs">
+                              <Badge color="default" className="text-xs">
                                 {w.category}
                               </Badge>
                             </button>
@@ -357,37 +334,37 @@ export default function LayoutEditorPage() {
                         )}
                       </div>
                       <Button
-                        variant="ghost"
-                        size="sm"
+                        type="text"
+                        size="small"
                         onClick={() => setShowAdd(false)}
                       >
                         Cancel
                       </Button>
-                    </CardContent>
+                    </div>
                   </Card>
                 ) : (
                   <Button
-                    variant="outline"
-                    size="sm"
+                    type="default"
+                    size="small"
                     className="w-full"
                     onClick={() => setShowAdd(true)}
                   >
-                    <Plus className="size-4" />
+                    <PlusOutlined className="size-4" />
                     Add Widget
                   </Button>
                 )}
               </div>
-            </CardContent>
+            </div>
           </Card>
         </div>
 
         {/* Info sidebar */}
         <div>
           <Card>
-            <CardHeader>
-              <CardTitle>About</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm text-muted-foreground">
+            <div>
+              <Typography.Title level={5}>About</Typography.Title>
+            </div>
+            <div className="space-y-3 text-sm text-muted-foreground">
               <p>
                 Widgets are rendered in the order listed. Drag the handle to
                 reorder; use the trash icon to remove a widget from the layout
@@ -401,7 +378,7 @@ export default function LayoutEditorPage() {
                 <p className="text-xs font-medium text-foreground">Page: /{pageName === "index" ? "" : pageName}</p>
                 <p className="mt-1 text-xs">{widgets.length} widget(s) placed</p>
               </div>
-            </CardContent>
+            </div>
           </Card>
         </div>
       </div>

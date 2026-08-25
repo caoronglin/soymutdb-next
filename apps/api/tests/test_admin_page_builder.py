@@ -410,6 +410,10 @@ async def test_registry_endpoint_is_admin_only_and_lists_components(app, client)
     assert resp.status_code == 200
     data = resp.json()["components"]
     assert len(data) >= 16
+    resource_cards = next(component for component in data if component["renderer_key"] == "resource_cards")
+    assert resource_cards["label"] == "Resource Cards"
+    card_schema = resource_cards["config_schema"]["$defs"]["ResourceCardItem"]
+    assert set(card_schema["properties"]) >= {"title", "description", "image_url", "href"}
 
 
 @pytest.mark.asyncio
@@ -468,6 +472,11 @@ def test_seed_has_five_navigation_items_and_seven_pages():
     child_types = [c["type"] for c in home["root"]["children"]]
     assert "news_list" in child_types
     assert "media_carousel" in child_types
+    resource_cards = next(child for child in home["root"]["children"] if child["type"] == "resource_cards")
+    assert resource_cards["props"]["heading"] == "资源导览"
+    assert [card["title"] for card in resource_cards["props"]["cards"]] == [
+        "数据下载", "使用指南", "文献 / 出版物"
+    ]
 
     tools = next(d for r, _t, d in SEED_PAGES if r == "/tools")
     blast = next(

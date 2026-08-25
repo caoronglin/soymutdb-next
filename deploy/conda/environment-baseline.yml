@@ -1,0 +1,13 @@
+# SoyMutDB baseline validation environment.
+# Runtime baseline: Python 3.14, PostgreSQL 16, Node 24.19.0, pnpm 11.21.0.
+# Node/pnpm are validated from .nvmrc and package.json; this environment owns
+# the API runtime and a disposable local PostgreSQL instance for smoke tests.
+name: soymutdb-baseline
+channels:
+  - conda-forge
+dependencies:
+  - python=3.14
+  - postgresql=16
+  - curl
+  - openssl
+  - pip>=25

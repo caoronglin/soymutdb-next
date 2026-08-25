@@ -84,10 +84,24 @@ jobs:
         env:
           # CI has no published release API.  Use the explicit demo fixture for
           # sample SSG instead of attempting to fetch the placeholder origin.
+          # This is the DEMO build path (VITE_DEPLOYMENT_MODE=demo). The PRODUCTION
+          # path is a separate, strict build (VITE_DEPLOYMENT_MODE=production) that
+          # requires a reachable release API, binds SOYMUTDB_RELEASE_ID, emits
+          # manifest.json + SHA256SUMS, and is gated by check-production-artifact.sh
+          # with NO --allow-demo. See docs/ops/production-build.md.
           VITE_DEPLOYMENT_MODE: demo
           VITE_API_BASE_URL: https://api.soymutdb.test
           VITE_JBROWSE_BASE_URL: https://jbrowse.soymutdb.test
         run: pnpm build
+
+      # --- Production-artifact placeholder scan (hard gate) -------------------
+      # Even the demo artifact must not bake placeholder origins (api.example.com /
+      # jbrowse.example.com / change-me) into its deployment-facing HTML. The strict
+      # production gate additionally rejects demo fixtures — that gate is not run
+      # here because this job builds the DEMO artifact with fixture data, and it is
+      # enforced in the release workflow via check-production-artifact.sh (no flag).
+      - name: Scan demo artifact for placeholder origins
+        run: bash scripts/check-production-artifact.sh apps/web/dist --allow-demo
 
       # --- G2 bundle budget gate (hard gate) ----------------------------------
       # antd ≤320KB / pro-components ≤180KB / main entry ≤200KB gzip.

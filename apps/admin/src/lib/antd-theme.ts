@@ -18,7 +18,7 @@
  *
  * 注意：本文件为纯 .ts（无 JSX），Provider 组件在 main.tsx（.tsx）。
  */
-import { theme as antdTheme, type ThemeConfig } from "antd";
+import { theme as antdTheme, type ThemeConfig } from "./antd";
 import type { Locale } from "antd/es/locale";
 import type { EffectiveMotionMode } from "./motion-policy";
 

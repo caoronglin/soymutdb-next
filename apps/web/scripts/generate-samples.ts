@@ -15,7 +15,7 @@ import { writeFileSync, mkdirSync, existsSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { renderBaseTemplate, discoverAssets } from "./base-template";
 import { FALLBACK_VARIANTS, renderSampleDetailHtml, type SampleVariant } from "./fallback-data";
-import { normalizeBasePath, resolveAppUrl, resolveDeploymentMode } from "../src/lib/deployment";
+import { normalizeBasePath, resolveAppUrl, resolveDeploymentMode, isProductionDeploymentMode } from "../src/lib/deployment";
 
 /* ------------------------------------------------------------------ */
 /*  Configuration                                                     */
@@ -28,12 +28,22 @@ const FETCH_TIMEOUT = Number(process.env.SOYMUTDB_FETCH_TIMEOUT ?? 5000);
 const SITE_URL = process.env.SOYMUTDB_SITE_URL ?? "https://soymutdb.org";
 const BASE_PATH = normalizeBasePath(process.env.VITE_BASE_URL ?? "/");
 const DEMO_MODE = resolveDeploymentMode(process.env.VITE_DEPLOYMENT_MODE) === "demo";
+const PRODUCTION_MODE = isProductionDeploymentMode(process.env.VITE_DEPLOYMENT_MODE);
 const PUBLICATION_MODE = resolvePublicationMode(process.env.SOYMUTDB_PUBLICATION_MODE, DEMO_MODE);
 const NON_RELEASE_MODE = PUBLICATION_MODE !== "release";
 const SAFE_SAMPLE_ID = /^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,126}[A-Za-z0-9])?$/;
 const SITEMAP_PATH = join(DIST_DIR, "sitemap.xml");
 
 type PublicationMode = "release" | "preview" | "demo";
+
+// Strict production guard: the sample generator must never fall back to the
+// embedded demo fixtures (SMDB-00001 etc.) or emit a non-release / demo
+// publication mode when VITE_DEPLOYMENT_MODE=production.
+if (PRODUCTION_MODE && (DEMO_MODE || PUBLICATION_MODE !== "release")) {
+    throw new Error(
+        `Production sample generation requires release data (VITE_DEPLOYMENT_MODE=production). Found DEMO_MODE=${DEMO_MODE}, PUBLICATION_MODE=${PUBLICATION_MODE} — refusing to emit demo fixtures into a production artifact.`,
+    );
+}
 
 function resolvePublicationMode(value: string | undefined, demoDeployment: boolean): PublicationMode {
     switch (value?.trim().toLowerCase()) {

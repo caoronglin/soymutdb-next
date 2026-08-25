@@ -26,6 +26,7 @@ def test_registry_contains_the_approved_component_types():
         "navigation",
         "news_list",
         "media_carousel",
+        "resource_cards",
         "rich_text",
         "tool_entries",
         "assembly_select",
@@ -283,3 +284,53 @@ def test_valid_route_accepted():
 def test_invalid_route_patterns_rejected(bad):
     with pytest.raises(ValidationError):
         validate_route(bad)
+
+
+def test_resource_cards_accept_safe_editor_text_images_and_links():
+    out = validate_definition(
+        {
+            "root": {
+                "type": "resource_cards",
+                "props": {
+                    "heading": "Resource guide",
+                    "cards": [
+                        {
+                            "title": "SoyBase",
+                            "description": "Genome and genetics resources.",
+                            "image_url": "https://cdn.example.org/soybase.png",
+                            "href": "/resources/soybase",
+                        }
+                    ],
+                },
+            }
+        }
+    )
+    card = out["root"]["props"]["cards"][0]
+    assert card["title"] == "SoyBase"
+    assert card["image_url"] == "https://cdn.example.org/soybase.png"
+
+
+@pytest.mark.parametrize("field, value", [
+    ("image_url", "javascript:alert(1)"),
+    ("image_url", "data:image/svg+xml,<svg/>") ,
+    ("href", "javascript:alert(1)"),
+])
+def test_resource_cards_reject_unsafe_image_and_link_urls(field, value):
+    card = {"title": "Unsafe", field: value}
+    with pytest.raises(ValidationError):
+        validate_definition({"root": {"type": "resource_cards", "props": {"cards": [card]}}})
+
+
+def test_resource_cards_reject_unknown_card_fields_and_scripts():
+    with pytest.raises(ValidationError):
+        validate_definition(
+            {"root": {"type": "resource_cards", "props": {
+                "cards": [{"title": "x", "renderer": "/tmp/template"}]
+            }}}
+        )
+    with pytest.raises(ValidationError):
+        validate_definition(
+            {"root": {"type": "resource_cards", "props": {
+                "cards": [{"title": "<img onerror=\"alert(1)\">"}]
+            }}}
+        )

@@ -1,30 +1,9 @@
+import { ArrowLeftOutlined, CodeOutlined, LoadingOutlined, CaretRightOutlined, FieldTimeOutlined } from "@ant-design/icons";
+import { Badge, Button, Card, Input, Select, Typography } from "@/lib/antd";
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useSearch } from "@tanstack/react-router";
 import DOMPurify from "dompurify";
-import {
-  ArrowLeft,
-  Code2,
-  Loader2,
-  Play,
-  Timer,
-} from "lucide-react";
-import {
-  Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-  Textarea,
-  Label,
-  Badge,
-} from "../lib/admin-ui";
 import { widgetApi, type WidgetPreviewResponse } from "../lib/widget-api";
 
 function isValidJson(s: string): boolean {
@@ -110,15 +89,15 @@ export default function WidgetPreviewPage() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Link to="/widgets">
-            <Button variant="ghost" size="sm">
-              <ArrowLeft className="size-4" />
+            <Button type="text" size="small">
+              <ArrowLeftOutlined className="size-4" />
               Widgets
             </Button>
           </Link>
           <div>
             <h2 className="font-serif text-2xl font-semibold">Widget Preview</h2>
             <p className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
-              <Code2 className="size-3.5" />
+              <CodeOutlined className="size-3.5" />
               Test-render widgets in a sandboxed iframe with custom parameters.
             </p>
           </div>
@@ -129,35 +108,33 @@ export default function WidgetPreviewPage() {
         {/* Controls */}
         <div className="space-y-6 lg:col-span-2">
           <Card>
-            <CardHeader>
-              <CardTitle>Preview Controls</CardTitle>
-              <CardDescription>Select a widget and provide test parameters.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+            <div>
+              <Typography.Title level={5}>Preview Controls</Typography.Title>
+              <Typography.Text type="secondary">Select a widget and provide test parameters.</Typography.Text>
+            </div>
+            <div className="space-y-4">
               <div className="space-y-1.5">
-                <Label>Widget</Label>
-                <Select value={selectedName} onValueChange={setSelectedName}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Choose a widget…" />
-                  </SelectTrigger>
-                  <SelectContent>
+                <label>Widget</label>
+                <Select value={selectedName} onChange={setSelectedName}>
+
+
                     {widgets.map((w) => (
-                      <SelectItem key={w.name} value={w.name}>
+                      <Select.Option key={w.name} value={w.name}>
                         {w.display_name}{" "}
                         <span className="ml-1 text-xs text-muted-foreground">
                           ({w.name})
                         </span>
-                      </SelectItem>
+                      </Select.Option>
                     ))}
-                  </SelectContent>
+
                 </Select>
                 {selectedWidget ? (
                   <div className="flex items-center gap-2 pt-1">
-                    <Badge variant="outline" className="text-xs">
+                    <Badge color="default" className="text-xs">
                       {selectedWidget.category}
                     </Badge>
                     <Badge
-                      variant={selectedWidget.is_active ? "success" : "secondary"}
+                      color={selectedWidget.is_active ? "success" : "secondary"}
                       className="text-xs"
                     >
                       {selectedWidget.is_active ? "Active" : "Inactive"}
@@ -167,8 +144,8 @@ export default function WidgetPreviewPage() {
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="params">Test Params (JSON)</Label>
-                <Textarea
+                <label htmlFor="params">Test Params (JSON)</label>
+                <Input.TextArea
                   id="params"
                   rows={10}
                   className="font-mono text-xs"
@@ -191,9 +168,9 @@ export default function WidgetPreviewPage() {
                 disabled={!selectedName || !validJson || previewMutation.isPending}
               >
                 {previewMutation.isPending ? (
-                  <Loader2 className="size-4 animate-spin" />
+                  <LoadingOutlined className="size-4 animate-spin" />
                 ) : (
-                  <Play className="size-4" />
+                  <CaretRightOutlined className="size-4" />
                 )}
                 {previewMutation.isPending ? "Rendering…" : "Render Preview"}
               </Button>
@@ -205,28 +182,28 @@ export default function WidgetPreviewPage() {
                     : "Preview failed"}
                 </div>
               ) : null}
-            </CardContent>
+            </div>
           </Card>
         </div>
 
         {/* Preview pane */}
         <div className="lg:col-span-3">
           <Card>
-            <CardHeader className="flex-row items-center justify-between">
+            <div className="flex-row items-center justify-between">
               <div>
-                <CardTitle>Sandbox Preview</CardTitle>
-                <CardDescription>
+                <Typography.Title level={5}>Sandbox Preview</Typography.Title>
+                <Typography.Text type="secondary">
                   Rendered output — HTML is sanitized with DOMPurify.
-                </CardDescription>
+                </Typography.Text>
               </div>
               {previewResult ? (
                 <div className="flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
-                  <Timer className="size-3" />
+                  <FieldTimeOutlined className="size-3" />
                   {previewResult.latency_ms} ms
                 </div>
               ) : null}
-            </CardHeader>
-            <CardContent>
+            </div>
+            <div>
               <div className="overflow-hidden rounded-lg border border-border bg-background">
                 <iframe
                   ref={iframeRef}
@@ -243,11 +220,11 @@ export default function WidgetPreviewPage() {
               ) : null}
               {previewMutation.isPending ? (
                 <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
-                  <Loader2 className="mr-2 size-4 animate-spin" />
+                  <LoadingOutlined className="mr-2 size-4 animate-spin" />
                   Rendering widget…
                 </div>
               ) : null}
-            </CardContent>
+            </div>
           </Card>
         </div>
       </div>

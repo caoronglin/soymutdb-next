@@ -58,7 +58,7 @@
           "health"
         ],
         "summary": "Readiness",
-        "description": "Readiness probe \u2013 checks PostgreSQL, ClickHouse, and Redis.\n\nReturns 503 if any dependency is unreachable.",
+        "description": "Readiness probe with baseline and extended dependency semantics.\n\nBaseline gates PostgreSQL only; extended also gates ClickHouse and Redis.",
         "operationId": "readiness_api_v1_health_ready_get",
         "responses": {
           "200": {
@@ -17201,6 +17201,18 @@
               }
             ],
             "title": "Checksum"
+          },
+          "import_draft_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Import Draft Id"
           },
           "idempotency_key": {
             "type": "string",

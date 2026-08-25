@@ -1,38 +1,11 @@
+import { SnippetsOutlined, DownloadOutlined, FilterOutlined, GlobalOutlined, RiseOutlined, TeamOutlined, DesktopOutlined, FileTextOutlined } from "@ant-design/icons";
+import { Badge, Button, Card, Input, Select, Table, Typography } from "@/lib/antd";
+import { StatCard } from "../components/stat-card";
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import {
-  ScrollText,
-  Download,
-  Filter,
-  Globe,
-  Activity,
-  Users,
-  Monitor,
-  FileText,
-} from "lucide-react";
 import { http } from "@soymutdb/api-client";
-import {
-  Button,
-  Input,
-  Badge,
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-  Card,
-  CardHeader,
-  CardTitle,
-  CardContent,
-  Table,
-  TableHeader,
-  TableBody,
-  TableHead,
-  TableRow,
-  TableCell,
-} from "../lib/admin-ui";
 import { DataTable, type DataTableColumn } from "../components/data-table";
-import { PageHeader, StatCard, formatNumber } from "../lib/admin-ui";
+import { formatNumber } from "../lib/format";
 
 interface AuditLog {
   id: string;
@@ -211,7 +184,7 @@ export default function AuditPage() {
       sortable: true,
       sortAccessor: (l) => l.action,
       cell: (l) => (
-        <Badge variant={l.status === "success" ? "default" : "destructive"}>
+        <Badge color={l.status === "success" ? "default" : "destructive"}>
           {l.action}
         </Badge>
       ),
@@ -251,26 +224,11 @@ export default function AuditPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Audit Logs"
-        description="Immutable record of all administrative actions. Filter and export for compliance."
-        actions={
-          <>
-            <Button variant="outline" onClick={handleExportCsv} disabled={exporting}>
-              <Download className="size-4" />
-              {exporting ? "Exporting…" : "Export CSV"}
-            </Button>
-            <Button variant="outline" onClick={handleExportPdf}>
-              <FileText className="size-4" />
-              Export PDF
-            </Button>
-          </>
-        }
-      />
+      <div className="flex flex-wrap items-start justify-between gap-4"><div><Typography.Title level={2}>Audit Logs</Typography.Title><Typography.Text type="secondary">Immutable record of all administrative actions. Filter and export for compliance.</Typography.Text></div><div className="flex gap-2"><Button onClick={handleExportCsv} disabled={exporting} icon={<DownloadOutlined />}>{exporting ? "Exporting…" : "Export CSV"}</Button><Button onClick={handleExportPdf} icon={<FileTextOutlined />}>Export PDF</Button></div></div>
 
       {/* Immutability notice */}
       <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-4 py-2.5 text-sm text-muted-foreground">
-        <ScrollText className="size-4 shrink-0 text-primary" />
+        <SnippetsOutlined className="size-4 shrink-0 text-primary" />
         <span>
           Audit logs are append-only and tamper-evident. Records cannot be modified or deleted.
         </span>
@@ -281,111 +239,109 @@ export default function AuditPage() {
         <StatCard
           label="Total Logins"
           value={formatNumber(stats?.totalLogins ?? 0)}
-          icon={<ScrollText className="size-5" />}
+          icon={<SnippetsOutlined className="size-5" />}
         />
         <StatCard
           label="Total Actions"
           value={formatNumber(stats?.totalActions ?? 0)}
-          icon={<Activity className="size-5" />}
+          icon={<RiseOutlined className="size-5" />}
         />
         <StatCard
           label="Unique IPs"
           value={formatNumber(stats?.uniqueIps ?? 0)}
-          icon={<Globe className="size-5" />}
+          icon={<GlobalOutlined className="size-5" />}
         />
         <StatCard
-          label="Active Users"
+          label="Active TeamOutlined"
           value={typeof activeUsers === "number" ? formatNumber(activeUsers) : activeUsers}
-          icon={<Users className="size-5" />}
+          icon={<TeamOutlined className="size-5" />}
         />
       </div>
 
       {/* IP distribution + period selector */}
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
-          <CardHeader className="flex-row items-center justify-between space-y-0">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Monitor className="size-4 text-primary" />
+          <div className="flex-row items-center justify-between space-y-0">
+            <Typography.Title level={5} className="flex items-center gap-2 text-base">
+              <DesktopOutlined className="size-4 text-primary" />
               Top IP Addresses
-            </CardTitle>
-            <Badge variant="secondary">
+            </Typography.Title>
+            <Badge color="default">
               {stats?.ipDistribution?.length ?? 0} IPs
             </Badge>
-          </CardHeader>
-          <CardContent>
+          </div>
+          <div>
             <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/40 hover:bg-muted/40">
-                  <TableHead>IP Address</TableHead>
-                  <TableHead>City</TableHead>
-                  <TableHead className="text-right">Access Count</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+              <thead>
+                <tr className="bg-muted/40 hover:bg-muted/40">
+                  <th>IP Address</th>
+                  <th>City</th>
+                  <th className="text-right">Access Count</th>
+                </tr>
+              </thead>
+              <tbody>
                 {statsLoading ? (
                   Array.from({ length: 5 }).map((_, i) => (
-                    <TableRow key={`ip-skeleton-${i}`}>
-                      <TableCell colSpan={3} className="py-3 text-xs text-muted-foreground">
+                    <tr key={`ip-skeleton-${i}`}>
+                      <td colSpan={3} className="py-3 text-xs text-muted-foreground">
                         Loading…
-                      </TableCell>
-                    </TableRow>
+                      </td>
+                    </tr>
                   ))
                 ) : topIps.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={3} className="py-6 text-center text-sm text-muted-foreground">
+                  <tr>
+                    <td colSpan={3} className="py-6 text-center text-sm text-muted-foreground">
                       No IP distribution data for this period.
-                    </TableCell>
-                  </TableRow>
+                    </td>
+                  </tr>
                 ) : (
                   topIps.map((row) => (
-                    <TableRow key={row.ip}>
-                      <TableCell>
+                    <tr key={row.ip}>
+                      <td>
                         <span className="font-mono text-xs">{row.ip}</span>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
+                      </td>
+                      <td className="text-sm text-muted-foreground">
                         {row.city ?? "—"}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Badge variant="outline">{row.count.toLocaleString()}</Badge>
-                      </TableCell>
-                    </TableRow>
+                      </td>
+                      <td className="text-right">
+                        <Badge color="default">{row.count.toLocaleString()}</Badge>
+                      </td>
+                    </tr>
                   ))
                 )}
-              </TableBody>
+              </tbody>
             </Table>
-          </CardContent>
+          </div>
         </Card>
 
         {/* Period selector for stats */}
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Activity className="size-4 text-primary" />
+          <div>
+            <Typography.Title level={5} className="flex items-center gap-2 text-base">
+              <RiseOutlined className="size-4 text-primary" />
               Stats Period
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
+            </Typography.Title>
+          </div>
+          <div>
             <p className="mb-3 text-sm text-muted-foreground">
               Control the aggregation window for the summary cards and IP distribution.
             </p>
-            <Select value={period} onValueChange={(v) => setPeriod(v as StatsPeriod)}>
-              <SelectTrigger className="h-9 w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="day">Day</SelectItem>
-                <SelectItem value="week">Week</SelectItem>
-                <SelectItem value="month">Month</SelectItem>
-              </SelectContent>
+            <Select value={period} onChange={(v) => setPeriod(v as StatsPeriod)}>
+
+
+                <Select.Option value="day">Day</Select.Option>
+                <Select.Option value="week">Week</Select.Option>
+                <Select.Option value="month">Month</Select.Option>
+
             </Select>
-          </CardContent>
+          </div>
         </Card>
       </div>
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative">
-          <Filter className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <FilterOutlined className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search by actor, resource, or IP..."
             value={search}
@@ -393,25 +349,23 @@ export default function AuditPage() {
             className="h-9 w-72 pl-8"
           />
         </div>
-        <Select value={actionFilter} onValueChange={setActionFilter}>
-          <SelectTrigger className="h-9 w-44">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Actions</SelectItem>
-            <SelectItem value="create">Create</SelectItem>
-            <SelectItem value="update">Update</SelectItem>
-            <SelectItem value="delete">Delete</SelectItem>
-            <SelectItem value="login">Login</SelectItem>
-            <SelectItem value="logout">Logout</SelectItem>
-            <SelectItem value="export">Export</SelectItem>
-            <SelectItem value="role_change">Role Change</SelectItem>
-          </SelectContent>
+        <Select value={actionFilter} onChange={setActionFilter}>
+
+
+            <Select.Option value="all">All Actions</Select.Option>
+            <Select.Option value="create">Create</Select.Option>
+            <Select.Option value="update">Update</Select.Option>
+            <Select.Option value="delete">Delete</Select.Option>
+            <Select.Option value="login">Login</Select.Option>
+            <Select.Option value="logout">Logout</Select.Option>
+            <Select.Option value="export">Export</Select.Option>
+            <Select.Option value="role_change">Role Change</Select.Option>
+
         </Select>
         <div className="relative">
-          <Globe className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <GlobalOutlined className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Filter by IP address..."
+            placeholder="FilterOutlined by IP address..."
             value={ipFilter}
             onChange={(e) => setIpFilter(e.target.value)}
             className="h-9 w-44 pl-8"
@@ -434,7 +388,7 @@ export default function AuditPage() {
             aria-label="End date"
           />
         </div>
-        <Badge variant="secondary">
+        <Badge color="default">
           {(data?.total ?? 0).toLocaleString()} records
         </Badge>
       </div>

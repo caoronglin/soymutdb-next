@@ -1,0 +1,12 @@
+{
+  "release_id": "9001",
+  "assembly": "VirtualSoy1.0",
+  "species": "Glycine max",
+  "tool": "soymutdb-seed",
+  "tool_version": "0.1.0",
+  "files": {
+    "genome.fa": "a8527d3eb40bdd57aedf2e457930469db0b6b85e9372dbce00338099b4e277fc",
+    "annotations.gff3": "64bf6b84b87d7bc8cf9dceec846cc15f4af7ad1b45ff3c20fd1a77053e14b101",
+    "variants.vcf": "97d8cf5e3365345751dc34af7fa8209d77677137617e83db79435513cbfc2a9f"
+  }
+}

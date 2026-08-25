@@ -1,18 +1,7 @@
+import { WarningOutlined, SafetyOutlined } from "@ant-design/icons";
 import { type ReactNode, useCallback } from "react";
-import { AlertTriangle, ShieldAlert } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-  Button,
-  Input,
-  Label,
-  cn,
-} from "../lib/admin-ui";
-
+import { cn } from "../lib/cn";
+import { Button, Input, Modal, Typography } from "@/lib/antd";
 interface ConfirmDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -67,68 +56,18 @@ export function ConfirmDialog({
   }, [onConfirm]);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className={cn(isCritical && "border-destructive/50")}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && !confirmPhrase && !loading) {
-            e.preventDefault();
-            handleConfirm();
-          }
-        }}
-      >
-        <DialogHeader>
-          <div className="flex items-start gap-3">
-            <div
-              className={cn(
-                "flex size-10 shrink-0 items-center justify-center rounded-full",
-                isDestructive
-                  ? "bg-destructive/10 text-destructive"
-                  : "bg-primary/10 text-primary",
-              )}
-            >
-              {isCritical ? (
-                <ShieldAlert className="size-5" aria-hidden />
-              ) : isDestructive ? (
-                <AlertTriangle className="size-5" aria-hidden />
-              ) : (
-                <AlertTriangle className="size-5" aria-hidden />
-              )}
-            </div>
-            <div className="min-w-0">
-              <DialogTitle>{title}</DialogTitle>
-              <DialogDescription className="mt-1.5">
-                {description}
-              </DialogDescription>
-            </div>
-          </div>
-        </DialogHeader>
-
-        {children ? <div className="text-sm">{children}</div> : null}
-
-        {confirmPhrase ? (
-          <ConfirmPhraseInput phrase={confirmPhrase} />
-        ) : null}
-
-        <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={loading}
-          >
-            {cancelLabel}
-          </Button>
-          <Button
-            variant={isDestructive ? "destructive" : "default"}
-            onClick={handleConfirm}
-            disabled={loading}
-            data-confirm-phrase={confirmPhrase}
-          >
-            {loading ? "Working…" : confirmLabel}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <Modal
+      open={open}
+      onCancel={() => onOpenChange(false)}
+      footer={[
+        <Button key="cancel" onClick={() => onOpenChange(false)} disabled={loading}>{cancelLabel}</Button>,
+        <Button key="confirm" type="primary" danger={isDestructive} onClick={handleConfirm} disabled={loading} data-confirm-phrase={confirmPhrase}>{loading ? "Working…" : confirmLabel}</Button>,
+      ]}
+      title={<div className="flex items-start gap-3"><span className={cn("flex size-10 items-center justify-center rounded-full", isDestructive ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary")}>{isCritical ? <SafetyOutlined /> : <WarningOutlined />}</span><span><Typography.Title level={4}>{title}</Typography.Title><Typography.Text type="secondary">{description}</Typography.Text></span></div>}
+    >
+      {children ? <div className="mb-4 text-sm">{children}</div> : null}
+      {confirmPhrase ? <ConfirmPhraseInput phrase={confirmPhrase} /> : null}
+    </Modal>
   );
 }
 
@@ -141,9 +80,9 @@ export function ConfirmDialog({
 function ConfirmPhraseInput({ phrase }: { phrase: string }) {
   return (
     <div className="space-y-2">
-      <Label htmlFor="confirm-phrase">
+      <Typography.Text>
         Type <code className="font-mono font-semibold">{phrase}</code> to confirm
-      </Label>
+      </Typography.Text>
       <Input
         id="confirm-phrase"
         autoComplete="off"

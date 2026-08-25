@@ -1,0 +1,330 @@
+name: SoyMutDB baseline validation and release
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      deploy_staging:
+        description: Run protected staging dry-run gates
+        required: false
+        default: false
+        type: boolean
+      deploy_production:
+        description: Run protected production dry-run gates after staging
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: baseline-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '24.19.0'
+  PYTHON_VERSION: '3.14'
+
+jobs:
+  web-admin-build:
+    name: Web and Admin baseline build
+    runs-on: ubuntu-24.04
+    env:
+      VITE_DEPLOYMENT_MODE: demo
+      VITE_BASE_URL: /
+      VITE_API_BASE_URL: https://api.soymutdb.test
+      VITE_JBROWSE_BASE_URL: https://jbrowse.soymutdb.test
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 11.21.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build:web
+      - run: pnpm build:admin
+      - name: Check static artifact contract
+        run: |
+          test -d apps/web/dist
+          test -d apps/admin/dist
+          ! grep -RInE 'localhost:8000|CHANGE_ME|VITE_API_BASE_URL' apps/web/dist apps/admin/dist
+      - run: tar -czf web-admin-dist.tgz apps/web/dist apps/admin/dist
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: web-admin-dist
+          path: web-admin-dist.tgz
+          if-no-files-found: error
+
+  api-ubuntu-postgres:
+    name: API baseline with PostgreSQL on Ubuntu
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: soymutdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d soymutdb"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+    permissions:
+      contents: read
+      actions: write
+    env:
+      SOYMUTDB_APP_ENV: dev
+      SOYMUTDB_DEPLOYMENT_MODE: baseline
+      SOYMUTDB_DATABASE_URL: postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/soymutdb
+      SOYMUTDB_JWT_SECRET: ci-only-jwt-secret-with-at-least-32-characters
+      SOYMUTDB_CORS_ORIGINS: http://127.0.0.1:4173
+      SOYMUTDB_ADMIN_EMAIL: ci@example.invalid
+      SOYMUTDB_ADMIN_PASSWORD: ci-only-admin-password-long
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install API and test dependencies
+        run: |
+          python -m venv .ci-venv
+          .ci-venv/bin/python -m pip install --upgrade pip
+          .ci-venv/bin/python -m pip install -e packages/jobs-py
+          .ci-venv/bin/python -m pip install -e apps/api pytest pytest-asyncio ruff
+      - name: Run migrations and Docker-free baseline tests
+        working-directory: apps/api
+        run: |
+          ../../.ci-venv/bin/python -m alembic upgrade head
+          ../../.ci-venv/bin/python -m app.scripts.seed_page_builder
+          ../../.ci-venv/bin/python -m pytest tests/test_health_unit.py tests/test_config_security.py -q
+          ../../.ci-venv/bin/python -m ruff check app/api/v1/health.py tests/test_health_unit.py tests/test_config_security.py
+      - name: API liveness smoke
+        working-directory: apps/api
+        run: |
+          ../../.ci-venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 > ../../api.log 2>&1 &
+          api_pid=$!
+          trap 'kill $api_pid || true' EXIT
+          for attempt in $(seq 1 30); do curl --fail http://127.0.0.1:8000/health && break || sleep 2; done
+          curl --fail http://127.0.0.1:8000/api/v1/health/live
+          curl --fail http://127.0.0.1:8000/api/v1/health/ready
+          page_definition="$(curl --fail http://127.0.0.1:8000/api/v1/page-definitions/%2F)"
+          ../../.ci-venv/bin/python -c 'import json, sys
+          payload = json.loads(sys.argv[1])
+          assert payload["status"] == "published"
+          def walk(node):
+              yield node
+              for child in node.get("children", []):
+                  yield from walk(child)
+          assert any(node.get("type") == "resource_cards" for node in walk(payload["definition"]["root"]))' "$page_definition"
+      - name: Build API wheel
+        run: |
+          .ci-venv/bin/python -m pip wheel --no-deps apps/api --wheel-dir artifacts/api
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: api-wheel-ubuntu
+          path: artifacts/api/*.whl
+          if-no-files-found: error
+
+  api-windows-baseline:
+    name: API baseline and installer dry-run on Windows
+    runs-on: windows-latest
+    permissions:
+      contents: read
+      actions: write
+    env:
+      SOYMUTDB_APP_ENV: dev
+      SOYMUTDB_DEPLOYMENT_MODE: baseline
+      SOYMUTDB_DATABASE_URL: postgresql+asyncpg://ci:ci@127.0.0.1:5432/soymutdb
+      SOYMUTDB_JWT_SECRET: ci-only-jwt-secret-with-at-least-32-characters
+      SOYMUTDB_CORS_ORIGINS: http://127.0.0.1:4173
+      SOYMUTDB_ADMIN_EMAIL: ci@example.invalid
+      SOYMUTDB_ADMIN_PASSWORD: ci-only-admin-password-long
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install API package
+        shell: pwsh
+        run: |
+          py -m venv .ci-venv
+          .\\.ci-venv\\Scripts\\python.exe -m pip install --upgrade pip
+          .\\.ci-venv\\Scripts\\python.exe -m pip install -e .\\packages\\jobs-py
+          .\\.ci-venv\\Scripts\\python.exe -m pip install -e .\\apps\\api pytest pytest-asyncio ruff
+      - name: Parse PowerShell deployment scripts
+        shell: pwsh
+        run: |
+          $errors = @()
+          Get-ChildItem deploy/windows -Filter *.ps1 | ForEach-Object {
+            $tokens = $null
+            $parseErrors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$parseErrors) | Out-Null
+            if ($parseErrors.Count -gt 0) { $errors += "$( $_.Name ): $($parseErrors | Out-String)" }
+          }
+          if ($errors.Count -gt 0) { throw ($errors -join [Environment]::NewLine) }
+      - name: Run no-Docker installer dry-run
+        shell: pwsh
+        run: .\\deploy\\windows\\install.ps1 -DryRun -SkipDatabase
+      - name: Run Docker-free unit tests
+        shell: pwsh
+        run: .\\.ci-venv\\Scripts\\python.exe -m pytest apps/api/tests/test_health_unit.py apps/api/tests/test_config_security.py -q
+      - name: API liveness smoke
+        shell: pwsh
+        working-directory: apps/api
+        run: |
+          $p = Start-Process -FilePath "..\\..\\.ci-venv\\Scripts\\python.exe" -ArgumentList "-m uvicorn app.main:app --host 127.0.0.1 --port 8000" -WorkingDirectory (Get-Location) -PassThru
+          try {
+            for ($i=0; $i -lt 30; $i++) {
+              try { $r=Invoke-WebRequest http://127.0.0.1:8000/health -UseBasicParsing; if ($r.StatusCode -eq 200) { exit 0 } } catch {}
+              Start-Sleep -Seconds 2
+            }
+            throw "API liveness did not become ready"
+          } finally { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+      - name: Build API wheel
+        shell: pwsh
+        run: .\\.ci-venv\\Scripts\\python.exe -m pip wheel --no-deps .\\apps\\api --wheel-dir artifacts\\api
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: api-wheel-windows
+          path: artifacts/api/*.whl
+          if-no-files-found: error
+
+  contract:
+    name: OpenAPI and shared client contract
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    env:
+      SOYMUTDB_APP_ENV: dev
+      SOYMUTDB_DEPLOYMENT_MODE: baseline
+      SOYMUTDB_DATABASE_URL: postgresql+asyncpg://ci:ci@127.0.0.1:5432/soymutdb
+      SOYMUTDB_JWT_SECRET: ci-only-jwt-secret-with-at-least-32-characters
+      SOYMUTDB_CORS_ORIGINS: http://127.0.0.1:4173
+      SOYMUTDB_ADMIN_EMAIL: ci@example.invalid
+      SOYMUTDB_ADMIN_PASSWORD: ci-only-admin-password-long
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 11.21.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install backend and client dependencies
+        run: |
+          python -m venv apps/api/.venv
+          apps/api/.venv/bin/python -m pip install --upgrade pip
+          apps/api/.venv/bin/python -m pip install -e packages/jobs-py
+          apps/api/.venv/bin/python -m pip install -e apps/api
+          pnpm install --frozen-lockfile
+      - name: Check OpenAPI generated client contract
+        run: pnpm --filter @soymutdb/api-client check:contract
+
+  supply-chain:
+    name: Baseline deployment bundle and attestations
+    needs: [web-admin-build, api-ubuntu-postgres, api-windows-baseline, contract]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 11.21.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          path: release-inputs
+      - name: Build package and checksums without Docker
+        run: |
+          set -euo pipefail
+          mkdir -p release/package
+          cp -a deploy release/package/deploy
+          cp -a release-inputs release/package/artifacts
+          tar -czf release/soymutdb-baseline-no-docker.tgz -C release/package .
+          sha256sum release/soymutdb-baseline-no-docker.tgz > release/SHA256SUMS
+          python - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          files=[]
+          for p in sorted(Path("release").rglob("*")):
+              if p.is_file() and p.name != "manifest.json":
+                  files.append({"path": str(p), "sha256": hashlib.sha256(p.read_bytes()).hexdigest()})
+          Path("release/manifest.json").write_text(json.dumps({"commit": os.environ["GITHUB_SHA"], "mode": "baseline", "files": files}, indent=2)+"\n")
+          PY
+      - name: Generate non-Docker CycloneDX SBOMs
+        run: |
+          python -m pip install --disable-pip-version-check cyclonedx-bom==4.6.0
+          cyclonedx-py environment --output-format json --output-file release/sbom-python.cdx.json
+          corepack pnpm dlx --yes @cyclonedx/cyclonedx-npm@1.19.0 --output-format JSON --output-file release/sbom-node.cdx.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: soymutdb-baseline-release
+          path: release
+          if-no-files-found: error
+
+  staging-dry-run:
+    name: Protected staging no-Docker dry-run
+    needs: supply-chain
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy_staging == true
+    runs-on: ubuntu-24.04
+    environment:
+      name: staging
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: soymutdb-baseline-release
+          path: release
+      - name: Validate protected target configuration
+        run: |
+          test -n "${{ vars.STAGING_HEALTH_URL }}"
+          echo "OIDC target adapter and backup credentials must be configured in the staging environment."
+      - name: Re-run native installer dry-run
+        run: bash deploy/linux/install.sh --dry-run
+      - name: Staging deployment gate
+        run: echo "No remote deployment is performed by this baseline workflow until the approved native target adapter is configured."
+
+  production-dry-run:
+    name: Protected production no-Docker dry-run
+    needs: staging-dry-run
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy_staging == true && inputs.deploy_production == true
+    runs-on: ubuntu-24.04
+    environment:
+      name: production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: soymutdb-baseline-release
+          path: release
+      - name: Validate protected target configuration
+        run: |
+          test -n "${{ vars.PRODUCTION_HEALTH_URL }}"
+          echo "OIDC target adapter, backup, migration and rollback credentials must be configured in production."
+      - name: Re-run native installer dry-run
+        run: bash deploy/linux/install.sh --dry-run
+      - name: Production deployment gate
+        run: echo "Production deployment is intentionally not automatic; connect the approved native target adapter after environment review."

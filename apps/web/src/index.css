@@ -880,3 +880,177 @@
     font-style: normal;
     font-display: swap;
 }
+
+/* -------------------------------------------------------------------------
+ * Interaction target policy (Ant Design 6 + WCAG 2.5.8)
+ *
+ * Text links remain visually compact, but their hit areas are never reduced
+ * to the line box. The responsive rule gives mobile users a 44px target while
+ * retaining the PPTX desktop density at 24px minimum.
+ * ------------------------------------------------------------------------- */
+.site-footer-link,
+.home-section-link,
+.home-news-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    padding-block: 4px;
+}
+
+.ant-carousel .slick-dots {
+    height: 28px;
+    align-items: center;
+    bottom: 8px;
+}
+
+.ant-carousel .slick-dots li,
+.ant-carousel .slick-dots li.slick-active {
+    width: 32px;
+    height: 24px;
+    margin-inline: 4px;
+}
+
+.ant-carousel .slick-dots li button,
+.ant-carousel .slick-dots li.slick-active button {
+    width: 100%;
+    min-height: 24px;
+    height: 24px;
+    border-radius: 999px;
+}
+
+/* Compact controls are still required to expose a comfortable hit area. */
+.ant-input,
+.ant-input-affix-wrapper,
+.ant-input-number,
+.ant-select-selector {
+    min-height: 32px;
+}
+
+@media (max-width: 767px) {
+    .site-footer-link,
+    .home-section-link,
+    .home-news-link {
+        min-height: 44px;
+        padding-block: 10px;
+    }
+
+    .ant-btn,
+    .ant-input,
+    .ant-input-affix-wrapper,
+    .ant-input-number,
+    .ant-select-selector,
+    .ant-checkbox-wrapper {
+        min-height: 44px;
+    }
+
+    .ant-checkbox-wrapper {
+        align-items: center;
+        display: inline-flex;
+        padding-block: 8px;
+    }
+
+    .ant-checkbox {
+        min-width: 18px;
+        min-height: 18px;
+    }
+}
+
+
+input[type="checkbox"] {
+    width: 24px;
+    height: 24px;
+    min-width: 24px;
+    min-height: 24px;
+}
+
+.ant-input-number-input {
+    min-height: 30px;
+}
+
+@media (max-width: 767px) {
+    input[type="checkbox"] {
+        width: 28px;
+        height: 28px;
+        min-width: 28px;
+        min-height: 28px;
+    }
+
+    .ant-input-number-input {
+        min-height: 42px;
+    }
+}
+
+/* AntD composite controls: the visible inner control must share the outer hit area. */
+input.ant-input,
+.ant-input-number-input {
+    min-height: 30px !important;
+    height: 30px !important;
+}
+
+.ant-input-number-handler-wrap {
+    min-height: 48px;
+}
+
+.ant-input-number-handler {
+    min-height: 24px !important;
+    height: 24px !important;
+}
+
+@media (max-width: 767px) {
+    input.ant-input,
+    .ant-input-number-input {
+        min-height: 42px !important;
+        height: 42px !important;
+    }
+
+    .ant-input-number-handler-wrap {
+        min-height: 48px;
+    }
+
+    .ant-input-number-handler {
+        min-height: 24px !important;
+        height: 24px !important;
+    }
+}
+
+.ant-select-input {
+    min-height: 30px !important;
+    height: 30px !important;
+}
+
+@media (max-width: 767px) {
+    .ant-select-input {
+        min-height: 42px !important;
+        height: 42px !important;
+    }
+}
+
+/* AntD 6.6 InputNumber renamed spinner handlers to `action`. */
+.ant-input-number-actions {
+    min-width: 24px;
+    width: 24px;
+}
+
+.ant-input-number-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px !important;
+    min-width: 24px !important;
+    height: 24px !important;
+    min-height: 24px !important;
+}
+
+@media (max-width: 767px) {
+    .ant-input-number-actions {
+        min-width: 44px;
+        width: 44px;
+    }
+
+    .ant-input-number-action {
+        width: 44px !important;
+        min-width: 44px !important;
+        height: 24px !important;
+        min-height: 24px !important;
+    }
+}

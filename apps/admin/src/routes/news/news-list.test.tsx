@@ -11,7 +11,7 @@
  */
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { App as AntdApp } from "antd";
+import { App as AntdApp } from "../../lib/antd";
 // Pulls in jest-dom matcher types (runtime registration is in setup.ts).
 import "@testing-library/jest-dom/vitest";
 import NewsListPage, { buildAdminNewsQuery } from "./index";

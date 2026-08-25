@@ -24,6 +24,17 @@ _DEFAULT_PRODUCTION_VALUES = {
     "s3_endpoint": "http://localhost:9000",
     "s3_access_key": "minioadmin",
     "s3_secret_key": "minioadmin",
+    "clickhouse_password": "soymutdb_dev_password",
+    "admin_password": "admin123",
+    "admin_email": "admin@soymutdb.local",
+}
+
+_EXAMPLE_ADMIN_PASSWORDS = {
+    "admin123",
+    "change-me",
+    "change-me-in-production",
+    "password",
+    "admin",
 }
 
 _EXAMPLE_JWT_SECRETS = {
@@ -67,6 +78,9 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------ App
     app_name: str = "SoyMutDB"
     app_env: Literal["dev", "staging", "prod"] = "dev"
+    # extended preserves the full data/async stack; baseline only requires PostgreSQL
+    # and exposes optional integrations as disabled capabilities.
+    deployment_mode: Literal["baseline", "extended"] = "extended"
     api_v1_prefix: str = "/api/v1"
     debug: bool = False
 
@@ -327,21 +341,35 @@ class Settings(BaseSettings):
             )
 
         if self.app_env == "prod":
-            required_fields = (
+            required_fields = [
                 "database_url",
                 "jwt_secret",
-                "redis_url",
-                "s3_endpoint",
-                "s3_access_key",
-                "s3_secret_key",
-            )
+            ]
+            if self.deployment_mode == "extended":
+                required_fields.extend(
+                    ["redis_url", "s3_endpoint", "s3_access_key", "s3_secret_key"]
+                )
+            for field_name in ("admin_password", "admin_email"):
+                if field_name in self.model_fields_set:
+                    required_fields.append(field_name)
             for field_name in required_fields:
                 value = getattr(self, field_name).strip()
                 if not value:
                     validation_errors.append(f"{field_name} is required in production settings")
 
+            production_default_fields = {"database_url"}
+            if self.deployment_mode == "extended":
+                production_default_fields.update(
+                    {"redis_url", "s3_endpoint", "s3_access_key", "s3_secret_key"}
+                )
+            # Optional bootstrap credentials may be omitted by focused callers;
+            # reject their placeholder only when an operator supplied the field.
+            for field_name in ("admin_password", "admin_email", "clickhouse_password"):
+                if field_name in self.model_fields_set:
+                    production_default_fields.add(field_name)
             for field_name, default_value in _DEFAULT_PRODUCTION_VALUES.items():
-                if getattr(self, field_name).strip() == default_value:
+                current_value = getattr(self, field_name).strip()
+                if field_name in production_default_fields and current_value == default_value:
                     validation_errors.append(
                         f"{field_name} must not use the development default in production settings"
                     )
@@ -351,6 +379,21 @@ class Settings(BaseSettings):
                 validation_errors.append(
                     "JWT secret must be at least 32 characters and must not be an example value"
                 )
+
+            if "admin_password" in self.model_fields_set:
+                admin_password = self.admin_password.strip()
+                if len(admin_password) < 12 or admin_password.lower() in _EXAMPLE_ADMIN_PASSWORDS:
+                    validation_errors.append(
+                        "admin password must be at least 12 characters and must not "
+                        "be an example value"
+                    )
+
+            if "admin_email" in self.model_fields_set:
+                admin_email = self.admin_email.strip()
+                if "@" not in admin_email or admin_email == "admin@soymutdb.local":
+                    validation_errors.append(
+                        "admin email must be a valid non-default address in production settings"
+                    )
 
             if not self.cors_origins:
                 validation_errors.append("CORS origins are required in production settings")

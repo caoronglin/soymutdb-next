@@ -5,12 +5,16 @@ export interface DeploymentOrigins {
 }
 
 /** Build-time deployment modes accepted by the public portal. */
-export type DeploymentMode = "standard" | "demo" | "minimal";
+export type DeploymentMode = "standard" | "demo" | "minimal" | "production";
 
 /**
  * Normalize the optional Vite mode flag. Unknown values deliberately resolve to
  * the standard mode, which keeps the normal JBrowse-origin build requirement
  * rather than silently producing a reduced deployment.
+ *
+ * `production` is the strict production-build mode: it must bind a real
+ * release and must NOT fall back to demo fixtures or embedded fallback data
+ * when the release API is unavailable. See `isProductionDeploymentMode`.
  */
 export function resolveDeploymentMode(value: string | undefined): DeploymentMode {
   switch (value?.trim().toLowerCase()) {
@@ -18,6 +22,8 @@ export function resolveDeploymentMode(value: string | undefined): DeploymentMode
       return "demo";
     case "minimal":
       return "minimal";
+    case "production":
+      return "production";
     default:
       return "standard";
   }
@@ -25,6 +31,19 @@ export function resolveDeploymentMode(value: string | undefined): DeploymentMode
 
 export function isMinimalDeploymentMode(value: string | undefined): boolean {
   return resolveDeploymentMode(value) === "minimal";
+}
+
+/**
+ * True when the build is the strict production mode (`VITE_DEPLOYMENT_MODE`
+ * set to `production`). In this mode:
+ *   - a reachable release API is REQUIRED (SSG/sample generation must fail
+ *     closed rather than fall back to embedded fixtures);
+ *   - demo fallback pages (`fallback-data.ts`) must never enter the artifact;
+ *   - a real `SOYMUTDB_RELEASE_ID` must be bound and a release manifest with
+ *     SHA-256 digests must be emitted.
+ */
+export function isProductionDeploymentMode(value: string | undefined): boolean {
+  return resolveDeploymentMode(value) === "production";
 }
 
 export function normalizeBasePath(value: string): string {

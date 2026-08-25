@@ -6,33 +6,12 @@
  * contract; saving issues an optimistic ``updateDraft`` (409 on conflict).
  */
 
+import { ArrowLeftOutlined, EyeOutlined, LoadingOutlined, RedoOutlined, ReloadOutlined, SaveOutlined, SendOutlined } from "@ant-design/icons";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import {
-  ArrowLeft,
-  Eye,
-  Loader2,
-  RotateCcw,
-  RotateCw,
-  Save,
-  Send,
-} from "lucide-react";
 import { Link } from "@tanstack/react-router";
-import {
-  Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  Input,
-  Label,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-  cn,
-} from "../../lib/admin-ui";
+import { cn } from "../../lib/cn";
+import { Button, Card, Input, Select } from "@/lib/antd";
 import type {
   ComponentDescriptor,
   PageComponentNode,
@@ -200,7 +179,7 @@ export function PageBuilderEditor({ pageId }: PageBuilderEditorProps) {
         text:
           e?.status === 409
             ? "Version conflict — refresh and re-apply your changes."
-            : (e?.message ?? "Save failed."),
+            : (e?.message ?? "SaveOutlined failed."),
       });
     },
   });
@@ -233,7 +212,7 @@ export function PageBuilderEditor({ pageId }: PageBuilderEditorProps) {
   if (isLoading || (latestVersion && !draft)) {
     return (
       <div className="p-6 text-sm text-muted-foreground">
-        <Loader2 className="inline size-4 animate-spin" /> Loading…
+        <LoadingOutlined className="inline size-4 animate-spin" /> Loading…
       </div>
     );
   }
@@ -338,8 +317,8 @@ export function PageBuilderEditor({ pageId }: PageBuilderEditorProps) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Link to="/page-builder">
-            <Button variant="ghost" size="sm">
-              <ArrowLeft className="size-4" />
+            <Button type="text" size="small">
+              <ArrowLeftOutlined className="size-4" />
               Page Builder
             </Button>
           </Link>
@@ -354,54 +333,54 @@ export function PageBuilderEditor({ pageId }: PageBuilderEditorProps) {
         </div>
         <div className="flex items-center gap-2">
           <Button
-            variant="ghost"
-            size="sm"
+            type="text"
+            size="small"
             onClick={undo}
             disabled={history.past.length === 0}
             aria-label="Undo"
           >
-            <RotateCcw className="size-4" />
+            <RedoOutlined className="size-4" />
           </Button>
           <Button
-            variant="ghost"
-            size="sm"
+            type="text"
+            size="small"
             onClick={redo}
             disabled={history.future.length === 0}
             aria-label="Redo"
           >
-            <RotateCw className="size-4" />
+            <ReloadOutlined className="size-4" />
           </Button>
           <Button
-            variant="outline"
-            size="sm"
+
+            size="small"
             onClick={() => {
               setPreviewOpen(true);
               previewMutation.mutate();
             }}
             disabled={previewMutation.isPending}
           >
-            <Eye className="size-4" />
+            <EyeOutlined className="size-4" />
             Preview
           </Button>
           <Button
-            size="sm"
+            size="small"
             onClick={() => saveMutation.mutate()}
             disabled={saveMutation.isPending || !draft}
           >
             {saveMutation.isPending ? (
-              <Loader2 className="size-4 animate-spin" />
+              <LoadingOutlined className="size-4 animate-spin" />
             ) : (
-              <Save className="size-4" />
+              <SaveOutlined className="size-4" />
             )}
-            Save Draft
+            SaveOutlined Draft
           </Button>
           <Button
-            variant="secondary"
-            size="sm"
+
+            size="small"
             onClick={() => publishMutation.mutate()}
             disabled={publishMutation.isPending}
           >
-            <Send className="size-4" />
+            <SendOutlined className="size-4" />
             Publish
           </Button>
         </div>
@@ -422,69 +401,44 @@ export function PageBuilderEditor({ pageId }: PageBuilderEditorProps) {
       ) : null}
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Theme</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <Label htmlFor="page-theme">Page theme</Label>
+        <Card title="Theme">
+          <div className="space-y-3">
+            <label htmlFor="page-theme" className="text-sm font-medium">Page theme</label>
             <Select
+              id="page-theme"
               value={draft.theme_id}
-              onValueChange={(value) =>
-                updateTheme(value as PageDefinitionTheme)
-              }
-            >
-              <SelectTrigger id="page-theme">
-                <SelectValue placeholder="Select theme" />
-              </SelectTrigger>
-              <SelectContent>
-                {PAGE_THEMES.map((theme) => (
-                  <SelectItem key={theme.value} value={theme.value}>
-                    {theme.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </CardContent>
+              options={PAGE_THEMES}
+              onChange={(value) => updateTheme(value as PageDefinitionTheme)}
+              className="w-full"
+            />
+          </div>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Responsive Layout</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
+        <Card title="Responsive Layout">
+          <div className="space-y-4">
             {LAYOUT_DEVICES.map((device) => (
               <div key={device} className="space-y-2">
-                <Label htmlFor={`layout-${device}`} className="capitalize">
+                <label htmlFor={`layout-${device}`} className="capitalize text-sm font-medium">
                   {device}
-                </Label>
+                </label>
                 <Input
                   id={`layout-${device}`}
                   type="number"
                   min={1}
                   max={24}
-                  value={String(
-                    draft.layouts[device]?.columns ?? "",
-                  )}
+                  value={String(draft.layouts[device]?.columns ?? "")}
                   onChange={(event) => {
                     const raw = event.target.value;
-                    updateLayout(
-                      device,
-                      "columns",
-                      raw === "" ? null : Number(raw),
-                    );
+                    updateLayout(device, "columns", raw === "" ? null : Number(raw));
                   }}
                 />
               </div>
             ))}
-          </CardContent>
+          </div>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Data Sources</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
+        <Card title="Data Sources">
+          <div className="space-y-2">
             {draft.data_sources.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 No bounded data source bound to this page yet.
@@ -495,26 +449,19 @@ export function PageBuilderEditor({ pageId }: PageBuilderEditorProps) {
                   key={source.id}
                   className="flex items-center justify-between gap-2 rounded-md border border-border px-3 py-2 text-sm"
                 >
-                  <span className="min-w-0 truncate">
-                    {source.id} · {source.kind}
-                  </span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => removeDataSource(source.id)}
-                  >
+                  <span className="min-w-0 truncate">{source.id} · {source.kind}</span>
+                  <Button type="text" size="small" onClick={() => removeDataSource(source.id)}>
                     Remove
                   </Button>
                 </div>
               ))
             )}
-            <Button variant="outline" size="sm" onClick={addDataSource}>
+            <Button type="default" size="small" onClick={addDataSource}>
               Add data source
             </Button>
-          </CardContent>
+          </div>
         </Card>
       </div>
-
       <div className="grid gap-4 lg:grid-cols-[240px_1fr_320px]">
         <ComponentPalette
           components={registryData?.components ?? []}
@@ -540,8 +487,8 @@ export function PageBuilderEditor({ pageId }: PageBuilderEditorProps) {
           <div className="mb-2 flex items-center justify-between">
             <h3 className="text-sm font-semibold">Live Preview</h3>
             <Button
-              variant="ghost"
-              size="sm"
+              type="text"
+              size="small"
               onClick={() => setPreviewOpen(false)}
             >
               Close

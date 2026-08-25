@@ -43,12 +43,53 @@ FEATURES: Final[dict[str, FeatureDefinition]] = {
     "imports.local_upload": FeatureDefinition(
         "imports.local_upload", True, True, "Enable browser-direct multipart uploads."
     ),
+    # The seven classic scientific import types default to OFF: their durable
+    # persistence writers are not yet implemented (data_adapters raise
+    # UnsupportedImportError; import_vcf/import_gff3/import_mutant_lines are
+    # fail-closed or count-only).  They must be hidden in Admin and rejected at
+    # the API until a writer closes the loop.  See docs/ops/first-release-data-plan.md §5.
+    "imports.fasta": FeatureDefinition(
+        "imports.fasta", False, True, "Enable FASTA reference imports (writer not yet closed)."
+    ),
+    "imports.gff3": FeatureDefinition(
+        "imports.gff3", False, True, "Enable GFF3 gene-model imports (writer not yet closed)."
+    ),
+    "imports.vcf": FeatureDefinition(
+        "imports.vcf", False, True, "Enable VCF variant imports (writer not yet closed)."
+    ),
+    "imports.blast_db": FeatureDefinition(
+        "imports.blast_db", False, True, "Enable BLAST database imports (writer not yet closed)."
+    ),
+    "imports.seed_data": FeatureDefinition(
+        "imports.seed_data", False, True, "Enable Seed data imports (writer not yet closed)."
+    ),
+    "imports.expression_csv": FeatureDefinition(
+        "imports.expression_csv", False, True, "Enable Expression CSV imports (writer not yet closed)."
+    ),
+    "imports.homolog_csv": FeatureDefinition(
+        "imports.homolog_csv", False, True, "Enable Homolog CSV imports (writer not yet closed)."
+    ),
     "publication.github_pages": FeatureDefinition(
         "publication.github_pages", True, False, "Enable GitHub Pages publication target."
     ),
     "publication.cloudflare_pages": FeatureDefinition(
         "publication.cloudflare_pages", True, False, "Enable Cloudflare Pages publication target."
     ),
+}
+
+
+#: Map an import ``type`` (``schemas.data_publishing.ImportType``) to its
+#: feature flag.  Only these flags gate import creation; any type without a
+#: registered flag is rejected as unsupported.
+IMPORT_TYPE_FEATURES: Final[dict[str, str]] = {
+    "fasta": "imports.fasta",
+    "gff3": "imports.gff3",
+    "vcf": "imports.vcf",
+    "blast_db": "imports.blast_db",
+    "seed_data": "imports.seed_data",
+    "expression_csv": "imports.expression_csv",
+    "homolog_csv": "imports.homolog_csv",
+    "module_tsv": "imports.module_tsv",
 }
 
 
@@ -162,6 +203,7 @@ __all__ = [
     "FEATURES",
     "FeatureDefinition",
     "FeatureFlagService",
+    "IMPORT_TYPE_FEATURES",
     "UnknownFeatureError",
     "get_definition",
     "parse_feature_value",

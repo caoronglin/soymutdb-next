@@ -1,39 +1,23 @@
 [Unit]
-Description=SoyMutDB - Docker Compose orchestration (api, workers, beat, stores, nginx, monitoring)
-Documentation=https://github.com/soymutdb/soymutdb
-After=network-online.target docker.service
+Description=SoyMutDB FastAPI baseline API (native, no Docker)
+After=network-online.target
 Wants=network-online.target
-Requires=docker.service
 
 [Service]
-# ------------------------------------------------------------------
-# systemd 只负责编排 docker compose 项目；容器生命周期（含一次性
-# migrate 服务）全部由 compose 管理。镜像 digest refs 与密钥从
-# /opt/soymutdb/.env 注入（compose 自动读取）。
-# 历史 conda/裸进程部署（soymutdb-worker/soymutdb-beat 单元）已废弃，
-# 由本单元统一管理。发布使用 deploy/scripts/upgrade.sh。
-# ------------------------------------------------------------------
-Type=oneshot
-RemainAfterExit=yes
-User=root
-WorkingDirectory=/opt/soymutdb
-EnvironmentFile=-/etc/default/soymutdb
-
-# 启动整个 compose 项目（postgres healthy -> migrate 完成 -> api/worker/beat/nginx 等）
-ExecStart=/usr/bin/docker compose -f /opt/soymutdb/docker-compose.yml up -d
-# 停止仅移除容器；named volumes（pgdata/chdata/redisdata/miniodata/
-# promdata/grafanadata）保留，数据不丢失
-ExecStop=/usr/bin/docker compose -f /opt/soymutdb/docker-compose.yml down
-
-# Process management
-TimeoutStartSec=600
-TimeoutStopSec=120
+Type=simple
+User=@SERVICE_USER@
+WorkingDirectory=@INSTALL_DIR@/current/apps/api
+EnvironmentFile=-@ENV_FILE@
+ExecStart=@INSTALL_DIR@/current/venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 Restart=on-failure
-RestartSec=10s
-
-# 说明：docker CLI 需要访问 /var/run/docker.sock 与项目目录，
-# 因此不使用 NoNewPrivileges/ProtectSystem/PrivateTmp 等与容器编排
-# 冲突的加固项；容器内安全由镜像与 compose 配置负责。
+RestartSec=5
+TimeoutStartSec=120
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=@INSTALL_DIR@
 
 [Install]
 WantedBy=multi-user.target

@@ -16,8 +16,8 @@ export interface BlastJob {
   name?: string;
   program: string;
   database: string;
-  status: "pending" | "running" | "completed" | "failed" | "cancelled";
-  query_sequence: string;
+  status: "pending" | "running" | "completed" | "failed" | "cancelled" | "expired";
+  query_sequence: string | null;
   parameters: Record<string, unknown>;
   hit_count: number;
   submitted_at: string;

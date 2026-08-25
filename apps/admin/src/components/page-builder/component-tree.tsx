@@ -5,6 +5,7 @@
  * with optional nested ``children`` arrays (only layout containers nest).
  */
 
+import { HolderOutlined, DeleteOutlined } from "@ant-design/icons";
 import {
   DndContext,
   closestCenter,
@@ -21,8 +22,8 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Trash2 } from "lucide-react";
-import { Button, Badge, cn } from "../../lib/admin-ui";
+import { cn } from "../../lib/cn";
+import { Badge, Button } from "@/lib/antd";
 import type { ComponentDescriptor, PageComponentNode } from "@soymutdb/shared";
 
 export interface SelectionPath {
@@ -82,23 +83,24 @@ function NodeRow({
         className="cursor-grab touch-none text-muted-foreground hover:text-foreground"
         aria-label="Drag to reorder"
       >
-        <GripVertical className="size-4" />
+        <HolderOutlined className="size-4" />
       </button>
-      <Badge variant="outline" className="font-mono text-xs">
+      <Badge className="font-mono text-xs" color="default">
         {node.type}
       </Badge>
       <span className="min-w-0 flex-1 truncate text-sm">{label}</span>
       <Button
-        variant="ghost"
-        size="sm"
-        className="size-7 p-0 text-destructive hover:text-destructive"
+        type="text"
+        size="small"
+        danger
+        className="size-7 p-0"
         onClick={(e) => {
           e.stopPropagation();
           onRemove();
         }}
         aria-label="Remove component"
       >
-        <Trash2 className="size-3.5" />
+        <DeleteOutlined className="size-3.5" />
       </Button>
     </div>
   );

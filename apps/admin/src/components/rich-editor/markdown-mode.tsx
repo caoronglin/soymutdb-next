@@ -15,7 +15,7 @@ import type { Editor } from "@tiptap/react";
 // `editor.getMarkdown()` / `setContent(..., { contentType: 'markdown' })`
 // are typed in this file.
 import "@tiptap/markdown";
-import { Alert, Button, Space } from "antd";
+import { Alert, Button, Space } from "../../lib/antd";
 import { CheckOutlined, EyeOutlined, EditOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 

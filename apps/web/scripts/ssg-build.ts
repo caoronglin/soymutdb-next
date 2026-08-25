@@ -17,12 +17,24 @@ import { writeFileSync, mkdirSync, existsSync, copyFileSync, readdirSync } from 
 import { join } from "node:path";
 import { renderBaseTemplate, discoverAssets, renderRedirectTemplate } from "./base-template";
 import { FALLBACK_PAGES, type PageLayout, type WidgetLayout } from "./fallback-data";
+import { isProductionDeploymentMode } from "../src/lib/deployment";
 
 /* ------------------------------------------------------------------ */
 /*  Configuration                                                     */
 /* ------------------------------------------------------------------ */
 
-const API_BASE = process.env.SOYMUTDB_API_URL ?? "http://localhost:8000";
+// Strict production mode: the SSG build must bind a reachable release API and
+// must never silently fall back to embedded pages when it is unavailable.
+const PRODUCTION_MODE = isProductionDeploymentMode(process.env.VITE_DEPLOYMENT_MODE);
+const API_BASE =
+    process.env.SOYMUTDB_API_URL ??
+    process.env.VITE_API_BASE_URL ??
+    (PRODUCTION_MODE ? "" : "http://localhost:8000");
+if (PRODUCTION_MODE && !API_BASE.trim()) {
+    throw new Error(
+        "Production SSG build requires SOYMUTDB_API_URL or VITE_API_BASE_URL (a real API origin) — refusing to build without a release API",
+    );
+}
 const DIST_DIR = join(process.cwd(), "dist");
 const PAGES = [
     "index",
@@ -223,10 +235,15 @@ async function build() {
     );
 
     const apiAvailable = await isApiAvailable();
+    if (PRODUCTION_MODE && !apiAvailable) {
+        throw new Error(
+            `Production SSG build requires a reachable release API at ${API_BASE} (health check failed) — refusing to emit a demo/fallback artifact. Set SOYMUTDB_API_URL/VITE_API_BASE_URL to the real release API or drop VITE_DEPLOYMENT_MODE=production.`,
+        );
+    }
     const useFallback = !apiAvailable;
     if (useFallback) {
         console.warn(
-            `[ssg-build] API at ${API_BASE} is not available — using embedded fallback data.`,
+            `[ssg-build] API at ${API_BASE} is not available — using embedded fallback data (demo/standard build).`,
         );
     } else {
         console.log(`[ssg-build] API is available — fetching live widget data.`);

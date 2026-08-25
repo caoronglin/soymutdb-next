@@ -1,6 +1,6 @@
+import { WarningOutlined, CloseOutlined, CheckOutlined } from "@ant-design/icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, ToggleLeft, ToggleRight } from "lucide-react";
-import { Button, Badge, Card, CardContent, CardHeader, CardTitle, PageHeader } from "../lib/admin-ui";
+import { Badge, Button, Card, Typography } from "@/lib/antd";
 import { capabilitiesApi, type FeatureDefinitionResponse } from "@soymutdb/api-client";
 import { resolvePluginState } from "../lib/capability-state";
 
@@ -23,20 +23,17 @@ export default function FeaturesPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Feature Flags"
-        description="Enable or disable registered capabilities atomically. Disabling rejects new requests and does not kill running jobs."
-      />
+      <div><Typography.Title level={2}>"Feature Flags"</Typography.Title><Typography.Text type="secondary">"Enable or disable registered capabilities atomically. Disabling rejects new requests and does not kill running jobs."</Typography.Text></div>
       {featuresQuery.error ? (
         <Card>
-          <CardContent role="alert" className="flex items-center gap-2 p-4 text-sm text-destructive">
-            <AlertTriangle className="size-4" /> Failed to load feature flags.
-          </CardContent>
+          <div role="alert" className="flex items-center gap-2 p-4 text-sm text-destructive">
+            <WarningOutlined className="size-4" /> Failed to load feature flags.
+          </div>
         </Card>
       ) : null}
       <Card>
-        <CardHeader><CardTitle>Registered capabilities</CardTitle></CardHeader>
-        <CardContent className="space-y-3">
+        <Typography.Title level={5}>Registered capabilities</Typography.Title>
+        <div className="space-y-3">
           {featuresQuery.isPending ? (
             <p role="status" className="text-sm text-muted-foreground">Loading feature flags…</p>
           ) : null}
@@ -48,29 +45,29 @@ export default function FeaturesPage() {
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <code className="text-sm">{feature.key}</code>
-                  {feature.public ? <Badge variant="outline">public</Badge> : <Badge variant="secondary">internal</Badge>}
+                  {feature.public ? <Badge >public</Badge> : <Badge >internal</Badge>}
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">{feature.description}</p>
                 <p className="mt-1 text-xs text-muted-foreground">disable: {feature.disable_behavior}</p>
               </div>
               <Button
-                variant={feature.enabled ? "default" : "outline"}
-                size="sm"
+                type={feature.enabled ? "primary" : "default"}
+                size="small"
                 disabled={featuresQuery.isPending || mutation.isPending}
                 onClick={() => mutation.mutate(feature)}
                 aria-label={`${feature.enabled ? "Disable" : "Enable"} ${feature.key}`}
               >
-                {feature.enabled ? <ToggleRight className="mr-1 size-4" /> : <ToggleLeft className="mr-1 size-4" />}
+                {feature.enabled ? <CheckOutlined className="mr-1 size-4" /> : <CloseOutlined className="mr-1 size-4" />}
                 {feature.enabled ? "Enabled" : "Disabled"}
               </Button>
             </div>
           ))}
-        </CardContent>
+        </div>
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>Plugin runtime</CardTitle></CardHeader>
-        <CardContent className="space-y-3">
+        <Typography.Title level={5}>Plugin runtime</Typography.Title>
+        <div className="space-y-3">
           {pluginsQuery.isPending ? (
             <p role="status" className="text-sm text-muted-foreground">Loading plugin status…</p>
           ) : null}
@@ -80,7 +77,7 @@ export default function FeaturesPage() {
               aria-label="Plugin status unavailable"
               className="flex items-center gap-2 text-sm text-destructive"
             >
-              <AlertTriangle className="size-4" /> Unable to load plugin status.
+              <WarningOutlined className="size-4" /> Unable to load plugin status.
             </div>
           ) : null}
           {pluginsQuery.isSuccess
@@ -102,7 +99,7 @@ export default function FeaturesPage() {
                           {status.reason ?? "ready"}
                         </p>
                       </div>
-                      <Badge variant={status.state === "available" ? "default" : "secondary"}>
+                      <Badge color={status.state === "available" ? "green" : "default"}>
                         {status.state === "available" ? "Available" : "Unavailable"}
                       </Badge>
                       {plugin?.version ? (
@@ -113,7 +110,7 @@ export default function FeaturesPage() {
                 },
               )
             : null}
-        </CardContent>
+        </div>
       </Card>
     </div>
   );

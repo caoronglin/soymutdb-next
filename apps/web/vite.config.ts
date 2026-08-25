@@ -44,8 +44,8 @@ function cloudflareWebAnalytics(token: string | undefined): Plugin {
                     "script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com",
                 )
                 .replace(
-                    "connect-src 'self' https://api.example.com",
-                    "connect-src 'self' https://api.example.com https://cloudflareinsights.com",
+                    /connect-src 'self'([^;"]*)/,
+                    (_match, origins: string) => `connect-src 'self'${origins} https://cloudflareinsights.com`,
                 );
         },
     };

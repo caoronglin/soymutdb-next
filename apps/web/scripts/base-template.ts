@@ -260,6 +260,15 @@ const CF_BEACON_HTML = CF_ANALYTICS_TOKEN
  */
 const BASE_PATH = normalizeBasePath(process.env.VITE_BASE_URL ?? "/");
 const MINIMAL_DEPLOYMENT = isMinimalDeploymentMode(process.env.VITE_DEPLOYMENT_MODE);
+/**
+ * Placeholder-origin documentation is intentionally stripped from the emitted
+ * HTML. Keeping a `https://api.example.com` / `https://jbrowse.example.com`
+ * note in the artifact would trip the strict production scan
+ * (scripts/check-production-artifact.sh) and is documentation-only, so it
+ * carries no runtime value. The instructions live in the SOURCE
+ * (apps/web/index.html, base-template.ts, deploy/cloudflare.md).
+ */
+const CSP_DOC_COMMENT = "";
 const CSP_CONTENT = buildCsp({
     apiOrigin: requireDeploymentOrigin(process.env.VITE_API_BASE_URL ?? process.env.SOYMUTDB_API_URL, "API"),
     jbrowseOrigin: MINIMAL_DEPLOYMENT
@@ -383,13 +392,7 @@ export function renderBaseTemplate(opts: BaseTemplateOptions): string {
 ${ogHtml}
     ${canonicalHtml}
 
-    <!-- Content Security Policy: keep in sync with apps/web/public/_headers and
-         apps/web/index.html. REPLACE the placeholder domains before going live:
-         https://api.example.com -> production API origin,
-         https://jbrowse.example.com -> deployed JBrowse origin (iframe on
-         /browser). Preview deployments: use the STAGING origins instead.
-         When VITE_CDN_ENABLED=true, add CDN domains to script-src in BOTH this
-         meta tag and the _headers CSP (e.g. cdnjs.cloudflare.com, cdn.jsdelivr.net). -->
+    ${CSP_DOC_COMMENT ? `<!-- ${CSP_DOC_COMMENT} -->` : ""}
     <meta
       http-equiv="Content-Security-Policy"
       content="${escapeHtmlAttribute(CSP_CONTENT)}"

@@ -1,0 +1,6 @@
+##gff-version 3
+TestChr01	virtual	gene	100	500	.	+	.	ID=VitGene.01G000100;Name=VitGene.01G000100;biotype=protein_coding
+TestChr01	virtual	mRNA	100	500	.	+	.	ID=VitGene.01G000100.1;Parent=VitGene.01G000100;Name=VitGene.01G000100.1
+TestChr01	virtual	exon	100	200	.	+	.	ID=VitExon001a;Parent=VitGene.01G000100.1
+TestChr01	virtual	exon	300	500	.	+	.	ID=VitExon001b;Parent=VitGene.01G000100.1
+TestChr02	virtual	gene	50	300	.	-	.	ID=VitGene.02G000200;Name=VitGene.02G000200;biotype=protein_coding

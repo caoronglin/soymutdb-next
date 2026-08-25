@@ -1,18 +1,7 @@
+import { UpOutlined, DownOutlined, SwapOutlined } from "@ant-design/icons";
 import { type ReactNode, useMemo, useState, useCallback } from "react";
-import { ChevronUp, ChevronDown, ChevronsUpDown, Inbox } from "lucide-react";
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableHead,
-  TableRow,
-  TableCell,
-  Pagination,
-  EmptyState,
-  Skeleton,
-  cn,
-} from "../lib/admin-ui";
-
+import { cn } from "../lib/cn";
+import { Empty, Pagination, Skeleton } from "@/lib/antd";
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -112,18 +101,14 @@ export function DataTable<T>({
     });
   }, [data, columns, sortKey, sortDir]);
 
-  const totalPages = page && pageSize && total
-    ? Math.max(1, Math.ceil(total / pageSize))
-    : 1;
-
   return (
     <div className={cn("space-y-4", className)}>
       <div className="rounded-xl border border-border bg-card">
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-muted/40 hover:bg-muted/40">
+        <table>
+          <thead>
+            <tr className="bg-muted/40 hover:bg-muted/40">
               {columns.map((col) => (
-                <TableHead
+                <th
                   key={col.key}
                   className={cn(
                     col.align === "right" && "text-right",
@@ -141,12 +126,12 @@ export function DataTable<T>({
                       {col.header}
                       {sortKey === col.key ? (
                         sortDir === "asc" ? (
-                          <ChevronUp className="size-3.5" aria-hidden />
+                          <UpOutlined className="size-3.5" aria-hidden />
                         ) : (
-                          <ChevronDown className="size-3.5" aria-hidden />
+                          <DownOutlined className="size-3.5" aria-hidden />
                         )
                       ) : (
-                        <ChevronsUpDown className="size-3.5 opacity-40" aria-hidden />
+                        <SwapOutlined className="size-3.5 opacity-40" aria-hidden />
                       )}
                     </button>
                   ) : (
@@ -154,35 +139,30 @@ export function DataTable<T>({
                       {col.header}
                     </span>
                   )}
-                </TableHead>
+                </th>
               ))}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
+            </tr>
+          </thead>
+          <tbody>
             {loading ? (
               Array.from({ length: 5 }).map((_, i) => (
-                <TableRow key={`skeleton-${i}`}>
+                <tr key={`skeleton-${i}`}>
                   {columns.map((col) => (
-                    <TableCell key={col.key}>
+                    <td key={col.key}>
                       <Skeleton className="h-5 w-full max-w-32" />
-                    </TableCell>
+                    </td>
                   ))}
-                </TableRow>
+                </tr>
               ))
             ) : sortedData.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={columns.length} className="p-0">
-                  <EmptyState
-                    icon={Inbox}
-                    title={emptyTitle}
-                    description={emptyDescription}
-                    className="rounded-none border-0"
-                  />
-                </TableCell>
-              </TableRow>
+              <tr>
+                <td colSpan={columns.length} className="p-0">
+                  <Empty description={emptyDescription ? `${emptyTitle}: ${emptyDescription}` : emptyTitle} />
+                </td>
+              </tr>
             ) : (
               sortedData.map((row) => (
-                <TableRow
+                <tr
                   key={rowKey(row)}
                   className={cn(
                     onRowClick && "cursor-pointer",
@@ -201,7 +181,7 @@ export function DataTable<T>({
                   }
                 >
                   {columns.map((col) => (
-                    <TableCell
+                    <td
                       key={col.key}
                       className={cn(
                         col.align === "right" && "text-right",
@@ -210,24 +190,22 @@ export function DataTable<T>({
                       )}
                     >
                       {col.cell(row)}
-                    </TableCell>
+                    </td>
                   ))}
-                </TableRow>
+                </tr>
               ))
             )}
-          </TableBody>
-        </Table>
+          </tbody>
+        </table>
       </div>
 
       {page && pageSize && total !== undefined && onPageChange ? (
         <Pagination
-          page={page}
-          totalPages={totalPages}
+          current={page}
           total={total}
           pageSize={pageSize}
-          onPageChange={onPageChange}
+          onChange={onPageChange}
           disabled={loading}
-          label="Data table pagination"
         />
       ) : null}
     </div>

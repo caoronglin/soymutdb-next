@@ -51,6 +51,8 @@ x-app-env: &app-env
   # 生产必填（此处无默认值：缺失时 prod 校验失败、API 拒绝启动）：
   SOYMUTDB_JWT_SECRET: ${SOYMUTDB_JWT_SECRET:-}
   SOYMUTDB_CORS_ORIGINS: ${SOYMUTDB_CORS_ORIGINS:-}
+  SOYMUTDB_ADMIN_EMAIL: ${SOYMUTDB_ADMIN_EMAIL:-}
+  SOYMUTDB_ADMIN_PASSWORD: ${SOYMUTDB_ADMIN_PASSWORD:-}
 
 services:
   # ------------------------------------------------------------------

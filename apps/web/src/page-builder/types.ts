@@ -46,6 +46,7 @@ export const COMPONENT_TYPE_KEYS = [
   "navigation",
   "news_list",
   "media_carousel",
+  "resource_cards",
   "rich_text",
   "tool_entries",
   "assembly_select",

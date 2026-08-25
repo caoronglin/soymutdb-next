@@ -8,7 +8,7 @@
  *   main bundle never contains tiptap/prosemirror.
  */
 import { lazy, Suspense } from "react";
-import { Skeleton } from "antd";
+import { Skeleton } from "../../lib/antd";
 
 export interface RichEditorProps {
   /** Controlled HTML content. */

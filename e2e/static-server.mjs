@@ -206,9 +206,14 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  if (pathname.startsWith(`${PREFIX}/`)) {
+  // A Vite artifact may be built for a sub-path (e.g. /soymutdb-next/) while
+  // this local server is mounted at / for visual QA. Accept both the mount
+  // prefix and the artifact's baked deployment prefix for static assets.
+  if (PREFIX === "/" && pathname.startsWith("/soymutdb-next/")) {
+    pathname = pathname.slice("/soymutdb-next".length);
+  } else if (PREFIX !== "/" && pathname.startsWith(`${PREFIX}/`)) {
     pathname = pathname.slice(PREFIX.length);
-  } else {
+  } else if (PREFIX !== "/") {
     res.writeHead(404, { "Content-Type": "text/plain" });
     res.end("not found");
     return;

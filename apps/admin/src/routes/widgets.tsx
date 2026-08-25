@@ -1,16 +1,8 @@
+import { AppstoreOutlined, EyeOutlined, EditOutlined, PlusOutlined, DeleteOutlined, RiseOutlined, LayoutOutlined } from "@ant-design/icons";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import {
-  Blocks,
-  Eye,
-  Pencil,
-  Plus,
-  Trash2,
-  Activity,
-  LayoutTemplate,
-} from "lucide-react";
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, PageHeader } from "../lib/admin-ui";
+import { Badge, Button, Card, Typography } from "@/lib/antd";
 import { DataTable, type DataTableColumn } from "../components/data-table";
 import { ConfirmDialog } from "../components/confirm-dialog";
 import { widgetApi, type WidgetDefinition } from "../lib/widget-api";
@@ -28,22 +20,22 @@ const WIDGET_CATEGORIES: Record<string, string> = {
   custom: "Custom",
 };
 
-function categoryBadgeColor(category: string): "default" | "secondary" | "outline" | "success" | "warning" {
+function categoryBadgeColor(category: string): string {
   switch (category) {
-    case "stats": return "default";
-    case "visualization": return "success";
-    case "data_table": return "warning";
-    case "search": return "secondary";
-    default: return "outline";
+    case "stats": return "blue";
+    case "visualization": return "green";
+    case "data_table": return "gold";
+    case "search": return "cyan";
+    default: return "default";
   }
 }
 
-function permissionBadge(perm: string): "default" | "secondary" | "outline" | "destructive" {
+function permissionBadge(perm: string): string {
   switch (perm) {
-    case "public": return "outline";
-    case "authenticated": return "secondary";
-    case "admin": return "destructive";
-    default: return "outline";
+    case "public": return "blue";
+    case "authenticated": return "gold";
+    case "admin": return "red";
+    default: return "default";
   }
 }
 
@@ -88,7 +80,7 @@ export default function WidgetsPage() {
       sortable: true,
       sortAccessor: (w) => w.category,
       cell: (w) => (
-        <Badge variant={categoryBadgeColor(w.category)}>
+        <Badge color={categoryBadgeColor(w.category)}>
           {WIDGET_CATEGORIES[w.category] ?? w.category}
         </Badge>
       ),
@@ -99,7 +91,7 @@ export default function WidgetsPage() {
       sortable: true,
       sortAccessor: (w) => w.permissions,
       cell: (w) => (
-        <Badge variant={permissionBadge(w.permissions)}>{w.permissions}</Badge>
+        <Badge color={permissionBadge(w.permissions)}>{w.permissions}</Badge>
       ),
     },
     {
@@ -121,9 +113,9 @@ export default function WidgetsPage() {
       sortAccessor: (w) => (w.is_active ? 1 : 0),
       cell: (w) =>
         w.is_active ? (
-          <Badge variant="success">Active</Badge>
+          <Badge color="success">Active</Badge>
         ) : (
-          <Badge variant="secondary">Inactive</Badge>
+          <Badge >Inactive</Badge>
         ),
     },
     {
@@ -134,34 +126,34 @@ export default function WidgetsPage() {
         <div className="flex items-center justify-end gap-1">
           <Link to="/widget-preview" search={{ name: w.name }}>
             <Button
-              variant="ghost"
-              size="sm"
+              type="text"
+              size="small"
               className="size-8 p-0"
               title="Preview"
               aria-label={`Preview widget ${w.display_name}`}
             >
-              <Eye className="size-3.5" />
+              <EyeOutlined className="size-3.5" />
             </Button>
           </Link>
           <Button
-            variant="ghost"
-            size="sm"
+            type="text"
+            size="small"
             className="size-8 p-0"
             onClick={() => navigate({ to: "/widgets/$name", params: { name: w.name } })}
             title="Edit"
             aria-label={`Edit widget ${w.display_name}`}
           >
-            <Pencil className="size-3.5" />
+            <EditOutlined className="size-3.5" />
           </Button>
           <Button
-            variant="ghost"
-            size="sm"
+            type="text"
+            size="small"
             className="size-8 p-0"
             onClick={() => setDeleteTarget(w)}
             title="Delete"
             aria-label={`Delete widget ${w.display_name}`}
           >
-            <Trash2 className="size-3.5 text-destructive" />
+            <DeleteOutlined className="size-3.5 text-destructive" />
           </Button>
         </div>
       ),
@@ -170,47 +162,32 @@ export default function WidgetsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Widget Manager"
-        description="Create, edit, and manage reusable UI widgets across the site."
-        actions={
-          <>
-            <Link to="/widget-health">
-              <Button variant="outline" size="sm">
-                <Activity className="size-4" />
-                Health
-              </Button>
-            </Link>
-            <Link to="/layout">
-              <Button variant="outline" size="sm">
-                <LayoutTemplate className="size-4" />
-                Layout Editor
-              </Button>
-            </Link>
-            <Link to="/widgets/$name" params={{ name: "new" }}>
-              <Button size="sm">
-                <Plus className="size-4" />
-                New Widget
-              </Button>
-            </Link>
-          </>
-        }
-      />
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <Typography.Title level={2}>Widget Manager</Typography.Title>
+          <Typography.Text type="secondary">Create, edit, and manage reusable UI widgets across the site.</Typography.Text>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Link to="/widget-health"><Button size="small" icon={<RiseOutlined />}>Health</Button></Link>
+          <Link to="/layout"><Button size="small" icon={<LayoutOutlined />}>Layout Editor</Button></Link>
+          <Link to="/widgets/$name" params={{ name: "new" }}><Button type="primary" size="small" icon={<PlusOutlined />}>New Widget</Button></Link>
+        </div>
+      </div>
 
       <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-sm">
-            <Blocks className="size-4 text-primary" />
+
+          <Typography.Title level={5}>
+            <AppstoreOutlined className="size-4 text-primary" />
             All Widgets
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
+          </Typography.Title>
+
+
           <p className="text-sm text-muted-foreground">
             Widgets are reusable UI components that can be placed on pages via the
             layout editor. Each widget has a template, data source, and optional
             parameter schema.
           </p>
-        </CardContent>
+
       </Card>
 
       <DataTable

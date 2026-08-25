@@ -8,7 +8,7 @@
  */
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { App, Button, Divider, Input, Modal, Tooltip, Upload } from "antd";
+import { App, Button, Divider, Input, Modal, Tooltip, Upload } from "../../lib/antd";
 import type { Editor } from "@tiptap/react";
 import { BubbleMenu } from "@tiptap/react/menus";
 // Type-only imports: pull in each extension's `declare module '@tiptap/core'`

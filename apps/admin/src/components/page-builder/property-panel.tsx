@@ -8,23 +8,7 @@
  * read-only code view so an unknown control is never invented client-side.
  */
 
-import {
-  Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  Input,
-  Label,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-  Textarea,
-  Badge,
-} from "../../lib/admin-ui";
+import { Badge, Button, Card, Input, Select, Typography } from "@/lib/antd";
 import type { ComponentDescriptor, PageComponentNode } from "@soymutdb/shared";
 
 type JsonSchema = Record<string, unknown>;
@@ -60,19 +44,9 @@ function FieldControl({
     return (
       <Select
         value={value == null ? undefined : String(value)}
-        onValueChange={(v) => onChange(v)}
-      >
-        <SelectTrigger>
-          <SelectValue placeholder="Select…" />
-        </SelectTrigger>
-        <SelectContent>
-          {enumValues.map((v) => (
-            <SelectItem key={String(v)} value={String(v)}>
-              {String(v)}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+        onChange={(v) => onChange(v)}
+        options={enumValues.map((v) => ({ value: String(v), label: String(v) }))}
+      />
     );
   }
 
@@ -80,16 +54,9 @@ function FieldControl({
     return (
       <Select
         value={value == null ? "false" : String(value)}
-        onValueChange={(v) => onChange(v === "true")}
-      >
-        <SelectTrigger>
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="true">true</SelectItem>
-          <SelectItem value="false">false</SelectItem>
-        </SelectContent>
-      </Select>
+        onChange={(v) => onChange(v === "true")}
+        options={[{ value: "true", label: "true" }, { value: "false", label: "false" }]}
+      />
     );
   }
 
@@ -109,7 +76,7 @@ function FieldControl({
   if (type === "array") {
     const items = Array.isArray(value) ? (value as unknown[]) : [];
     return (
-      <Textarea
+      <Input.TextArea
         rows={3}
         value={items.map((v) => (typeof v === "object" ? JSON.stringify(v) : String(v))).join("\n")}
         onChange={(e) => {
@@ -138,61 +105,57 @@ function FieldControl({
   );
 }
 
-/** A single ``{label, route}``-style object-array editor (navigation items). */
+/** Structured editor for schema object arrays, including resource card text/image/link fields. */
 function ObjectArrayControl({
   value,
+  schema,
   onChange,
 }: {
   value: unknown;
+  schema: JsonSchema;
   onChange: (v: unknown) => void;
 }) {
-  const items = Array.isArray(value)
-    ? (value as Array<Record<string, unknown>>)
-    : [];
+  const items = Array.isArray(value) ? (value as Array<Record<string, unknown>>) : [];
+  const itemSchema = (schema.items as JsonSchema | undefined) ?? {};
+  const fields = Object.keys((itemSchema.properties as Record<string, unknown> | undefined) ?? {});
+  const defaults = fields.reduce<Record<string, unknown>>((result, field) => {
+    result[field] = field === "route" || field === "href" ? "/" : "";
+    return result;
+  }, {});
+
   return (
-    <div className="space-y-1">
-      {items.map((item, i) => (
-        <div key={i} className="flex items-center gap-1">
-          <Input
-            className="flex-1"
-            value={item.label == null ? "" : String(item.label)}
-            placeholder="label"
-            onChange={(e) => {
-              const next = items.map((it, j) =>
-                j === i ? { ...it, label: e.target.value } : it,
-              );
-              onChange(next);
-            }}
-          />
-          <Input
-            className="flex-1"
-            value={item.route == null ? "" : String(item.route)}
-            placeholder="route"
-            onChange={(e) => {
-              const next = items.map((it, j) =>
-                j === i ? { ...it, route: e.target.value } : it,
-              );
-              onChange(next);
-            }}
-          />
-          <Button
-            variant="ghost"
-            size="sm"
-            className="size-7 p-0"
-            onClick={() => onChange(items.filter((_, j) => j !== i))}
-            aria-label="Remove item"
-          >
-            ×
-          </Button>
-        </div>
+    <div className="space-y-3">
+      {items.map((item, index) => (
+        <fieldset key={index} className="space-y-2 rounded-md border p-2">
+          <div className="flex items-center justify-between">
+            <legend className="text-xs font-medium text-muted-foreground">Item {index + 1}</legend>
+            <div className="flex gap-1">
+              <Button type="text" size="small" className="h-7 px-2" disabled={index === 0} onClick={() => {
+                const next = [...items]; [next[index - 1], next[index]] = [next[index], next[index - 1]]; onChange(next);
+              }}>↑</Button>
+              <Button type="text" size="small" className="h-7 px-2" disabled={index === items.length - 1} onClick={() => {
+                const next = [...items]; [next[index], next[index + 1]] = [next[index + 1], next[index]]; onChange(next);
+              }}>↓</Button>
+              <Button type="text" size="small" className="h-7 px-2" onClick={() => onChange(items.filter((_, i) => i !== index))} aria-label={`Remove item ${index + 1}`}>×</Button>
+            </div>
+          </div>
+          {fields.map((field) => (
+            <div key={field} className="space-y-1">
+              <Typography.Text className="text-xs">{field}</Typography.Text>
+              {field === "description" ? (
+                <Input.TextArea id={`object-${field}-${index}`} rows={2} value={item[field] == null ? "" : String(item[field])} onChange={(e) => {
+                  const next = items.map((entry, i) => i === index ? { ...entry, [field]: e.target.value || null } : entry); onChange(next);
+                }} />
+              ) : (
+                <Input id={`object-${field}-${index}`} type={field === "image_url" || field === "href" || field === "route" ? "url" : "text"} value={item[field] == null ? "" : String(item[field])} onChange={(e) => {
+                  const next = items.map((entry, i) => i === index ? { ...entry, [field]: e.target.value || (field === "title" || field === "label" ? "" : null) } : entry); onChange(next);
+                }} />
+              )}
+            </div>
+          ))}
+        </fieldset>
       ))}
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => onChange([...items, { label: "", route: "/" }])}
-      >
-        Add item
-      </Button>
+      <Button size="small" onClick={() => onChange([...items, defaults])}>Add item</Button>
     </div>
   );
 }
@@ -206,15 +169,8 @@ export function PropertyPanel({
 
   if (!component) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Properties</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            Select a component in the tree to edit its properties.
-          </p>
-        </CardContent>
+      <Card title="Properties">
+        <Typography.Text type="secondary">Select a component in the tree to edit its properties.</Typography.Text>
       </Card>
     );
   }
@@ -227,15 +183,9 @@ export function PropertyPanel({
   const propertyNames = Object.keys(properties);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          Properties
-          <Badge variant="outline">{component.renderer_key}</Badge>
-        </CardTitle>
-        <CardDescription>{component.label}</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <Card title={<span className="flex items-center gap-2">Properties <Badge color="default">{component.renderer_key}</Badge></span>}>
+      <Typography.Paragraph type="secondary">{component.label}</Typography.Paragraph>
+      <div className="space-y-4">
         {propertyNames.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             This component has no configurable properties.
@@ -250,15 +200,16 @@ export function PropertyPanel({
               (propSchema.items as JsonSchema)?.type === "object";
             return (
               <div key={name} className="space-y-1.5">
-                <Label htmlFor={`prop-${name}`} className="flex items-center gap-1">
+                <Typography.Text className="flex items-center gap-1">
                   {name}
                   {required.includes(name) ? (
                     <span className="text-destructive">*</span>
                   ) : null}
-                </Label>
+                </Typography.Text>
                 {isObjectArray ? (
                   <ObjectArrayControl
                     value={value}
+                    schema={propSchema}
                     onChange={(v) => onChangeProps({ ...props, [name]: v })}
                   />
                 ) : (
@@ -272,7 +223,7 @@ export function PropertyPanel({
             );
           })
         )}
-      </CardContent>
+      </div>
     </Card>
   );
 }

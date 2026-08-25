@@ -50,14 +50,14 @@ def upgrade() -> None:
         sa.Column(
             "params_schema",
             postgresql.JSONB(astext_type=sa.Text()),
-            server_default="'{}'::jsonb",
+            server_default=sa.text("'{}'::jsonb"),
             nullable=False,
         ),
         sa.Column("cache_ttl", sa.Integer(), server_default="300", nullable=False),
         sa.Column(
             "admin_config",
             postgresql.JSONB(astext_type=sa.Text()),
-            server_default="'{}'::jsonb",
+            server_default=sa.text("'{}'::jsonb"),
             nullable=False,
         ),
         sa.Column(
@@ -92,7 +92,7 @@ def upgrade() -> None:
         sa.Column(
             "widget_order",
             postgresql.JSONB(astext_type=sa.Text()),
-            server_default="'[]'::jsonb",
+            server_default=sa.text("'[]'::jsonb"),
             nullable=False,
         ),
         sa.Column("is_active", sa.Boolean(), server_default="true", nullable=False),

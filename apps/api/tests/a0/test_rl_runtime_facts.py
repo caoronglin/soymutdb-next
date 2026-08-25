@@ -134,16 +134,6 @@ FROM python:3.13-slim
 WORKDIR /app/apps/worker
 CMD ["celery", "-A", "soymutdb_worker.main:celery_app", "worker"]
 """,
-        "apps/api/Dockerfile": """
-FROM python:3.14.6-slim
-WORKDIR /app
-CMD ["uvicorn", "app.main:app"]
-""",
-        "apps/worker/Dockerfile": """
-FROM python:3.13-slim
-WORKDIR /app
-CMD ["celery", "-A", "soymutdb_worker.main", "worker"]
-""",
         "infra/docker/Dockerfile.web": """
 FROM node:24-alpine
 WORKDIR /app
@@ -153,10 +143,6 @@ CMD ["nginx", "-g", "daemon off;"]
 FROM node:24-alpine
 WORKDIR /app
 CMD ["nginx", "-g", "daemon off;"]
-""",
-        "apps/admin/Dockerfile": """
-FROM node:24-alpine
-WORKDIR /app
 """,
         "apps/jbrowse/Dockerfile": """
 FROM node:24-alpine
@@ -674,9 +660,6 @@ def test_rl_database_ast_helper_matrix_rejects_spoofed_wiring(
         "infra/docker/Dockerfile.worker",
         "infra/docker/Dockerfile.web",
         "infra/docker/Dockerfile.admin",
-        "apps/api/Dockerfile",
-        "apps/worker/Dockerfile",
-        "apps/admin/Dockerfile",
         "apps/jbrowse/Dockerfile",
     ],
 )
@@ -702,9 +685,6 @@ def test_rl_critical_runtime_inputs_missing_are_blocking(
         ("infra/docker/Dockerfile.worker", "not a dockerfile\n"),
         ("infra/docker/Dockerfile.web", "not a dockerfile\n"),
         ("infra/docker/Dockerfile.admin", "not a dockerfile\n"),
-        ("apps/api/Dockerfile", "not a dockerfile\n"),
-        ("apps/worker/Dockerfile", "not a dockerfile\n"),
-        ("apps/admin/Dockerfile", "not a dockerfile\n"),
         ("apps/jbrowse/Dockerfile", "not a dockerfile\n"),
         ("apps/api/app/main.py", "def broken(:\n"),
         ("apps/worker/src/soymutdb_worker/main.py", "def broken(:\n"),
@@ -996,15 +976,15 @@ def test_rl_source_allowlist_redacts_before_report_sanitization() -> None:
     assert rl_collector_module.rl_sanitize_report(rl_emitted) == rl_emitted
 
     rl_safe_source = rl_collector_module.rl_emit_source_value(
-        "apps/api/Dockerfile", "relative_path"
+        "infra/docker/Dockerfile.api", "relative_path"
     )
-    assert rl_safe_source == "apps/api/Dockerfile"
+    assert rl_safe_source == "infra/docker/Dockerfile.api"
     rl_safe_source_record = rl_collector_module.rl_safe_source_value(
-        "apps/api/Dockerfile", "relative_path"
+        "infra/docker/Dockerfile.api", "relative_path"
     )
     assert rl_safe_source_record == {
         "rl_classification": "observed",
-        "rl_value": "apps/api/Dockerfile",
+        "rl_value": "infra/docker/Dockerfile.api",
     }
 
 

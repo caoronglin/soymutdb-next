@@ -1,43 +1,8 @@
+import { ReadOutlined, EyeOutlined, FileTextOutlined, HistoryOutlined, EditOutlined, PlusOutlined, RedoOutlined, SaveOutlined, SendOutlined, DeleteOutlined, CloseOutlined } from "@ant-design/icons";
 import * as React from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import {
-  BookOpen,
-  Eye,
-  FileText,
-  History,
-  Newspaper,
-  Pencil,
-  Plus,
-  RotateCcw,
-  Save,
-  Send,
-  Trash2,
-  X,
-} from "lucide-react";
 import { http } from "@soymutdb/api-client";
-import {
-  Badge,
-  Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  Input,
-  Label,
-  PageHeader,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-  Textarea,
-} from "../lib/admin-ui";
+import { Modal, Typography, Badge, Button, Card, Input, Select } from "@/lib/antd";
 import { DataTable, type DataTableColumn } from "../components/data-table";
 import { ConfirmDialog } from "../components/confirm-dialog";
 
@@ -137,10 +102,10 @@ interface PageFormValues {
 // Helpers
 // ---------------------------------------------------------------------------
 
-const TYPE_CONFIG: Record<ContentType, { label: string; icon: typeof Newspaper }> = {
-  news: { label: "News", icon: Newspaper },
-  publication: { label: "Publication", icon: BookOpen },
-  page: { label: "Pages", icon: FileText },
+const TYPE_CONFIG: Record<ContentType, { label: string; icon: typeof ReadOutlined }> = {
+  news: { label: "News", icon: ReadOutlined },
+  publication: { label: "Publication", icon: ReadOutlined },
+  page: { label: "Pages", icon: FileTextOutlined },
 };
 
 function statusBadgeVariant(
@@ -194,10 +159,7 @@ export default function ContentPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Content Management"
-        description="Manage static pages, news articles, and publications with full version history."
-      />
+      <div><Typography.Title level={2}>Content Management</Typography.Title><Typography.Text type="secondary">Manage static pages, news articles, and publications with full version history.</Typography.Text></div>
 
       {/* Tabs */}
       <div className="flex items-center gap-1 border-b border-border">
@@ -392,7 +354,7 @@ function PagesTab() {
       sortable: true,
       sortAccessor: (p) => p.status,
       cell: (p) => (
-        <Badge variant={statusBadgeVariant(p.status)}>{p.status}</Badge>
+        <Badge color={statusBadgeVariant(p.status)}>{p.status}</Badge>
       ),
     },
     {
@@ -411,59 +373,59 @@ function PagesTab() {
       cell: (p) => (
         <div className="flex items-center justify-end gap-1">
           <Button
-            variant="ghost"
-            size="sm"
+            type="text"
+            size="small"
             className="size-8 p-0"
             onClick={() => openEdit(p)}
             title="Edit"
             aria-label="Edit page"
           >
-            <Pencil className="size-3.5" />
+            <EditOutlined className="size-3.5" />
           </Button>
           {p.status === "published" ? (
             <Button
-              variant="ghost"
-              size="sm"
+              type="text"
+              size="small"
               className="size-8 p-0"
               onClick={() => unpublishMutation.mutate(p.id)}
               title="Unpublish"
               aria-label="Unpublish page"
               disabled={unpublishMutation.isPending}
             >
-              <X className="size-3.5" />
+              <CloseOutlined className="size-3.5" />
             </Button>
           ) : (
             <Button
-              variant="ghost"
-              size="sm"
+              type="text"
+              size="small"
               className="size-8 p-0"
               onClick={() => publishMutation.mutate(p.id)}
               title="Publish"
               aria-label="Publish page"
               disabled={publishMutation.isPending}
             >
-              <Send className="size-3.5" />
+              <SendOutlined className="size-3.5" />
             </Button>
           )}
           <Button
-            variant="ghost"
-            size="sm"
+            type="text"
+            size="small"
             className="size-8 p-0"
             onClick={() => setVersionsTarget(p)}
             title="View Versions"
             aria-label="View version history"
           >
-            <History className="size-3.5" />
+            <HistoryOutlined className="size-3.5" />
           </Button>
           <Button
-            variant="ghost"
-            size="sm"
+            type="text"
+            size="small"
             className="size-8 p-0"
             onClick={() => setDeleteTarget(p)}
             title="Delete"
             aria-label="Delete page"
           >
-            <Trash2 className="size-3.5 text-destructive" />
+            <DeleteOutlined className="size-3.5 text-destructive" />
           </Button>
         </div>
       ),
@@ -473,18 +435,18 @@ function PagesTab() {
   return (
     <div className="space-y-4">
       <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-sm">
-            <FileText className="size-4 text-primary" />
+        <div className="pb-3">
+          <Typography.Title level={5} className="flex items-center gap-2 text-sm">
+            <FileTextOutlined className="size-4 text-primary" />
             Static Pages
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
+          </Typography.Title>
+        </div>
+        <div>
           <p className="text-sm text-muted-foreground">
             Manage static pages (e.g. About, Help, FAQ). Each edit creates a
             version snapshot that can be reviewed and restored.
           </p>
-        </CardContent>
+        </div>
       </Card>
 
       {/* Toolbar */}
@@ -492,20 +454,18 @@ function PagesTab() {
         <div className="flex flex-wrap items-center gap-3">
           <Select
             value={statusFilter}
-            onValueChange={(v) => {
+            onChange={(v) => {
               setStatusFilter(v);
               setPage(1);
             }}
           >
-            <SelectTrigger className="h-9 w-40">
-              <SelectValue placeholder="All statuses" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Statuses</SelectItem>
-              <SelectItem value="draft">Draft</SelectItem>
-              <SelectItem value="published">Published</SelectItem>
-              <SelectItem value="archived">Archived</SelectItem>
-            </SelectContent>
+
+
+              <Select.Option value="all">All Statuses</Select.Option>
+              <Select.Option value="draft">Draft</Select.Option>
+              <Select.Option value="published">Published</Select.Option>
+              <Select.Option value="archived">Archived</Select.Option>
+
           </Select>
           <Input
             placeholder="Filter by category..."
@@ -516,12 +476,12 @@ function PagesTab() {
             }}
             className="h-9 max-w-xs"
           />
-          <Badge variant="secondary">
+          <Badge color="secondary">
             {totalCount} page{totalCount === 1 ? "" : "s"}
           </Badge>
         </div>
         <Button onClick={openCreate}>
-          <Plus className="size-4" />
+          <PlusOutlined className="size-4" />
           New Page
         </Button>
       </div>
@@ -628,21 +588,21 @@ function PageFormDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{isEdit ? "Edit Page" : "New Page"}</DialogTitle>
-          <DialogDescription>
+    <Modal open={open} onCancel={() => onOpenChange(false)}>
+      <div className="max-h-[90vh] max-w-3xl overflow-y-auto">
+        <div>
+          <Typography.Title level={5}>{isEdit ? "Edit Page" : "New Page"}</Typography.Title>
+          <Typography.Text type="secondary">
             {isEdit
               ? `Editing "${editing?.title_en}". Bilingual content (EN/ZH) supported.`
               : "Create a new static page. Bilingual content (EN/ZH) supported."}
-          </DialogDescription>
-        </DialogHeader>
+          </Typography.Text>
+        </div>
 
         <form className="space-y-4" onSubmit={handleSubmit}>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5 sm:col-span-2">
-              <Label htmlFor="page-title-en">Title (English) *</Label>
+              <label htmlFor="page-title-en">Title (English) *</label>
               <Input
                 id="page-title-en"
                 value={values.title_en}
@@ -652,7 +612,7 @@ function PageFormDialog({
               />
             </div>
             <div className="space-y-1.5 sm:col-span-2">
-              <Label htmlFor="page-title-zh">Title (Chinese)</Label>
+              <label htmlFor="page-title-zh">Title (Chinese)</label>
               <Input
                 id="page-title-zh"
                 value={values.title_zh}
@@ -661,7 +621,7 @@ function PageFormDialog({
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="page-slug">Slug *</Label>
+              <label htmlFor="page-slug">Slug *</label>
               <Input
                 id="page-slug"
                 value={values.slug}
@@ -677,7 +637,7 @@ function PageFormDialog({
               ) : null}
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="page-category">Category</Label>
+              <label htmlFor="page-category">Category</label>
               <Input
                 id="page-category"
                 value={values.category}
@@ -686,7 +646,7 @@ function PageFormDialog({
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="page-sort">Sort Order</Label>
+              <label htmlFor="page-sort">Sort Order</label>
               <Input
                 id="page-sort"
                 type="number"
@@ -697,23 +657,21 @@ function PageFormDialog({
             </div>
             {!isEdit ? (
               <div className="space-y-1.5">
-                <Label htmlFor="page-status">Status</Label>
+                <label htmlFor="page-status">Status</label>
                 <Select
                   value={values.status}
-                  onValueChange={(v) => setField("status", v as PageStatus)}
+                  onChange={(v) => setField("status", v as PageStatus)}
                 >
-                  <SelectTrigger id="page-status">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="draft">Draft</SelectItem>
-                    <SelectItem value="published">Published</SelectItem>
-                  </SelectContent>
+
+
+                    <Select.Option value="draft">Draft</Select.Option>
+                    <Select.Option value="published">Published</Select.Option>
+
                 </Select>
               </div>
             ) : null}
             <div className="space-y-1.5 sm:col-span-2">
-              <Label htmlFor="page-summary">Summary</Label>
+              <label htmlFor="page-summary">Summary</label>
               <Input
                 id="page-summary"
                 value={values.summary}
@@ -722,8 +680,8 @@ function PageFormDialog({
               />
             </div>
             <div className="space-y-1.5 sm:col-span-2">
-              <Label htmlFor="page-content-en">Content (English) *</Label>
-              <Textarea
+              <label htmlFor="page-content-en">Content (English) *</label>
+              <Input.TextArea
                 id="page-content-en"
                 value={values.content_en}
                 onChange={(e) => setField("content_en", e.target.value)}
@@ -733,8 +691,8 @@ function PageFormDialog({
               />
             </div>
             <div className="space-y-1.5 sm:col-span-2">
-              <Label htmlFor="page-content-zh">Content (Chinese)</Label>
-              <Textarea
+              <label htmlFor="page-content-zh">Content (Chinese)</label>
+              <Input.TextArea
                 id="page-content-zh"
                 value={values.content_zh}
                 onChange={(e) => setField("content_zh", e.target.value)}
@@ -743,7 +701,7 @@ function PageFormDialog({
               />
             </div>
             <div className="space-y-1.5 sm:col-span-2">
-              <Label htmlFor="page-comment">Edit Comment</Label>
+              <label htmlFor="page-comment">Edit Comment</label>
               <Input
                 id="page-comment"
                 value={values.edit_comment}
@@ -764,29 +722,28 @@ function PageFormDialog({
             </p>
           ) : null}
 
-          <DialogFooter>
+          <div>
             <Button
-              type="button"
-              variant="outline"
+              type="default"
               onClick={() => onOpenChange(false)}
               disabled={loading}
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={!canSubmit}>
+            <Button htmlType="submit" disabled={!canSubmit}>
               {loading ? (
                 "Saving…"
               ) : (
                 <>
-                  <Save className="size-4" />
-                  {isEdit ? "Save Changes" : "Create Page"}
+                  <SaveOutlined className="size-4" />
+                  {isEdit ? "SaveOutlined Changes" : "Create Page"}
                 </>
               )}
             </Button>
-          </DialogFooter>
+          </div>
         </form>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </Modal>
   );
 }
 
@@ -901,25 +858,25 @@ function VersionHistoryDialog({
       cell: (v) => (
         <div className="flex items-center justify-end gap-1">
           <Button
-            variant="ghost"
-            size="sm"
+            type="text"
+            size="small"
             className="size-8 p-0"
             onClick={() => setViewing(v)}
             title="View"
             aria-label="View version content"
           >
-            <Eye className="size-3.5" />
+            <EyeOutlined className="size-3.5" />
           </Button>
           <Button
-            variant="ghost"
-            size="sm"
+            type="text"
+            size="small"
             className="size-8 p-0"
             onClick={() => setRestoreTarget(v)}
             title="Restore"
             aria-label="Restore version"
             disabled={v.version === page.current_version}
           >
-            <RotateCcw className="size-3.5" />
+            <RedoOutlined className="size-3.5" />
           </Button>
         </div>
       ),
@@ -927,18 +884,18 @@ function VersionHistoryDialog({
   ];
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <History className="size-5" />
-            Version History
-          </DialogTitle>
-          <DialogDescription>
+    <Modal open={open} onCancel={() => onOpenChange(false)}>
+      <div className="max-h-[90vh] max-w-4xl overflow-y-auto">
+        <div>
+          <Typography.Title level={5} className="flex items-center gap-2">
+            <HistoryOutlined className="size-5" />
+            Version HistoryOutlined
+          </Typography.Title>
+          <Typography.Text type="secondary">
             <span className="font-medium text-foreground">{page.title_en}</span>
             {" · "}current version v{page.current_version}
-          </DialogDescription>
-        </DialogHeader>
+          </Typography.Text>
+        </div>
 
         {viewing ? (
           <VersionDetail version={viewing} onBack={() => setViewing(null)} />
@@ -953,12 +910,12 @@ function VersionHistoryDialog({
           />
         )}
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+        <div>
+          <Button type="default" onClick={() => onOpenChange(false)}>
             Close
           </Button>
-        </DialogFooter>
-      </DialogContent>
+        </div>
+      </div>
 
       {restoreTarget && (
         <ConfirmDialog
@@ -978,7 +935,7 @@ function VersionHistoryDialog({
           ) : null}
         </ConfirmDialog>
       )}
-    </Dialog>
+    </Modal>
   );
 }
 
@@ -996,7 +953,7 @@ function VersionDetail({
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
-        <Button variant="ghost" size="sm" onClick={onBack}>
+        <Button type="text" size="small" onClick={onBack}>
           Back to list
         </Button>
         <span className="font-mono text-sm font-medium">v{version.version}</span>
@@ -1168,7 +1125,7 @@ function NewsPublicationTab({ type }: { type: "news" | "publication" }) {
       sortable: true,
       sortAccessor: (c) => c.status,
       cell: (c) => (
-        <Badge variant={statusBadgeVariant(c.status)}>{c.status}</Badge>
+        <Badge color={statusBadgeVariant(c.status)}>{c.status}</Badge>
       ),
     },
     {
@@ -1205,23 +1162,23 @@ function NewsPublicationTab({ type }: { type: "news" | "publication" }) {
       cell: (c) => (
         <div className="flex items-center justify-end gap-1">
           <Button
-            variant="ghost"
-            size="sm"
+            type="text"
+            size="small"
             className="size-8 p-0"
             title="Edit"
             aria-label="Edit content"
           >
-            <Pencil className="size-3.5" />
+            <EditOutlined className="size-3.5" />
           </Button>
           <Button
-            variant="ghost"
-            size="sm"
+            type="text"
+            size="small"
             className="size-8 p-0"
             onClick={() => setDeleteTarget(c)}
             title="Delete"
             aria-label="Delete content"
           >
-            <Trash2 className="size-3.5 text-destructive" />
+            <DeleteOutlined className="size-3.5 text-destructive" />
           </Button>
         </div>
       ),
@@ -1231,12 +1188,12 @@ function NewsPublicationTab({ type }: { type: "news" | "publication" }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <Badge variant="secondary">
+        <Badge color="secondary">
           {items.length} {config.label.toLowerCase()}
           {items.length === 1 ? "" : "s"}
         </Badge>
         <Button>
-          <Plus className="size-4" />
+          <PlusOutlined className="size-4" />
           New {config.label}
         </Button>
       </div>

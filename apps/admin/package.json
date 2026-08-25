@@ -3,7 +3,7 @@
   "version": "2.0.0",
   "private": true,
   "type": "module",
-  "description": "SoyMutDB admin console \u2014 web UI on localhost",
+  "description": "SoyMutDB admin console — web UI on localhost",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 5174",
     "build": "vite build",
@@ -48,7 +48,6 @@
     "mammoth": "^1.12.0",
     "marked": "^17.0.6",
     "echarts": "^5.5.1",
-    "lucide-react": "^0.469.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-hook-form": "^7.54.0",

@@ -1,36 +1,10 @@
+import { CloudUploadOutlined, FileExcelOutlined, DatabaseOutlined, RedoOutlined, CloseCircleOutlined, CheckCircleOutlined, LoadingOutlined, DownloadOutlined } from "@ant-design/icons";
+import { Badge, Button, Input, Modal, Select, Typography } from "@/lib/antd";
+import { StatCard } from "../components/stat-card";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import {
-  Upload,
-  FileSpreadsheet,
-  Database,
-  RotateCcw,
-  XCircle,
-  CheckCircle2,
-  Loader2,
-  Download,
-} from "lucide-react";
 import { http, apiBaseUrl, getAccessToken, capabilitiesApi } from "@soymutdb/api-client";
-import {
-  Button,
-  Input,
-  Badge,
-  cn,
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-  Label,
-  PageHeader,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-  StatCard,
-} from "../lib/admin-ui";
+import { cn } from "../lib/cn";
 import { DataTable, type DataTableColumn } from "../components/data-table";
 import { ImportPreviewTable } from "../components/import-preview-table";
 import { StatusBadge, type TaskStatus } from "../components/status-badge";
@@ -144,7 +118,7 @@ export default function ImportsPage() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
 
-  // Upload dialog state
+  // CloudUploadOutlined dialog state
   const [showUpload, setShowUpload] = useState(false);
   const [uploadType, setUploadType] = useState<ImportType>("vcf");
   const [uploadFilename, setUploadFilename] = useState("");
@@ -425,7 +399,7 @@ export default function ImportsPage() {
         );
       } catch (err) {
         setUploadError(
-          err instanceof Error ? err.message : "Upload failed.",
+          err instanceof Error ? err.message : "CloudUploadOutlined failed.",
         );
       } finally {
         setUploading(false);
@@ -509,7 +483,7 @@ export default function ImportsPage() {
     retryMutation.mutate(taskId);
   }
 
-  /** Download a module starter template in the selected format. */
+  /** DownloadOutlined a module starter template in the selected format. */
   async function handleTemplateDownload() {
     const key = templateModuleKey.trim();
     if (!key) {
@@ -563,7 +537,7 @@ export default function ImportsPage() {
         const t = enrichTask(task);
         return (
           <div className="flex items-center gap-2">
-            <FileSpreadsheet className="size-4 text-muted-foreground" />
+            <FileExcelOutlined className="size-4 text-muted-foreground" />
             <div>
               <p className="font-medium">{t.filename}</p>
               <p className="text-xs text-muted-foreground">
@@ -650,7 +624,7 @@ export default function ImportsPage() {
             <div className="flex items-center gap-1">
               {t.error_message ? (
                 <Badge
-                  variant="destructive"
+                  color="red"
                   title={t.error_message}
                   className="cursor-help"
                 >
@@ -658,12 +632,12 @@ export default function ImportsPage() {
                 </Badge>
               ) : null}
               <Button
-                variant="ghost"
-                size="sm"
+                type="text"
+                size="small"
                 onClick={() => handleRetry(t.id)}
                 disabled={retryMutation.isPending}
               >
-                <RotateCcw className="size-3.5" />
+                <RedoOutlined className="size-3.5" />
                 Retry
               </Button>
             </div>
@@ -672,19 +646,19 @@ export default function ImportsPage() {
         if (t.status === "running" || t.status === "queued") {
           return (
             <Button
-              variant="ghost"
-              size="sm"
+              type="text"
+              size="small"
               onClick={() => handleCancel(t.id)}
               disabled={cancelMutation.isPending}
               className="text-destructive hover:text-destructive"
             >
-              <XCircle className="size-3.5" />
+              <CloseCircleOutlined className="size-3.5" />
               Cancel
             </Button>
           );
         }
         return (
-          <Button variant="ghost" size="sm">
+          <Button type="text" size="small">
             Details
           </Button>
         );
@@ -714,19 +688,7 @@ export default function ImportsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <PageHeader
-        title="Data Imports"
-        description="Monitor and manage data import tasks (VCF, GFF3, FASTA, BLAST databases, expression data, homologs)."
-        actions={
-          <Button
-            onClick={openUploadDialog}
-            disabled={!capabilitiesQuery.isSuccess}
-          >
-            <Upload className="size-4" />
-            New Import
-          </Button>
-        }
-      />
+      <div className="flex flex-wrap items-start justify-between gap-4"><div><Typography.Title level={2}>Data Imports</Typography.Title><Typography.Text type="secondary">Monitor and manage data import tasks (VCF, GFF3, FASTA, BLAST databases, expression data, homologs).</Typography.Text></div><Button type="primary" onClick={openUploadDialog} disabled={!capabilitiesQuery.isSuccess} icon={<CloudUploadOutlined aria-hidden />} aria-label="New Import">New Import</Button></div>
 
       {capabilitiesQuery.isPending ? (
         <p role="status" className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
@@ -751,12 +713,12 @@ export default function ImportsPage() {
       {/* Module template download */}
       <div className="rounded-lg border bg-card p-4">
         <div className="mb-3 flex items-center gap-2">
-          <Database className="size-4 text-muted-foreground" />
+          <DatabaseOutlined className="size-4 text-muted-foreground" />
           <span className="text-sm font-medium">Module template download</span>
         </div>
         <div className="flex flex-wrap items-end gap-3">
           <div className="space-y-1.5">
-            <Label htmlFor="template-module-key">Module Key</Label>
+            <label htmlFor="template-module-key">Module Key</label>
             <Input
               id="template-module-key"
               value={templateModuleKey}
@@ -765,27 +727,25 @@ export default function ImportsPage() {
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="template-format">Format</Label>
-            <Select value={templateFormat} onValueChange={setTemplateFormat}>
-              <SelectTrigger id="template-format" className="w-32">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
+            <label htmlFor="template-format">Format</label>
+            <Select value={templateFormat} onChange={setTemplateFormat}>
+
+
                 {MODULE_TEMPLATE_FORMATS.map((f) => (
-                  <SelectItem
+                  <Select.Option
                     key={f.value}
                     value={f.value}
                     disabled={f.value === "xlsx" && !xlsxImportEnabled}
                   >
                     {f.label}
-                  </SelectItem>
+                  </Select.Option>
                 ))}
-              </SelectContent>
+
             </Select>
           </div>
           <Button
-            variant="outline"
-            size="sm"
+            type="default"
+            size="small"
             onClick={handleTemplateDownload}
             disabled={
               templateDownloading ||
@@ -794,11 +754,11 @@ export default function ImportsPage() {
             }
           >
             {templateDownloading ? (
-              <Loader2 className="size-4 animate-spin" />
+              <LoadingOutlined className="size-4 animate-spin" />
             ) : (
-              <Download className="size-4" />
+              <DownloadOutlined className="size-4" />
             )}
-            Download
+            DownloadOutlined
           </Button>
         </div>
         {templateError ? (
@@ -812,14 +772,14 @@ export default function ImportsPage() {
 
       {/* Stats */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Total Tasks" value={stats.total} icon={<Database className="size-5" />} />
+        <StatCard label="Total Tasks" value={stats.total} icon={<DatabaseOutlined className="size-5" />} />
         <StatCard
           label="Running"
           value={stats.running}
-          icon={<Loader2 className={cn("size-5", stats.running > 0 && "animate-spin")} />}
+          icon={<LoadingOutlined className={cn("size-5", stats.running > 0 && "animate-spin")} />}
         />
-        <StatCard label="Completed" value={stats.completed} icon={<CheckCircle2 className="size-5" />} />
-        <StatCard label="Failed" value={stats.failed} icon={<XCircle className="size-5" />} />
+        <StatCard label="Completed" value={stats.completed} icon={<CheckCircleOutlined className="size-5" />} />
+        <StatCard label="Failed" value={stats.failed} icon={<CloseCircleOutlined className="size-5" />} />
       </div>
 
       {/* Search */}
@@ -844,44 +804,43 @@ export default function ImportsPage() {
         emptyDescription="Submit a new import to get started."
       />
 
-      {/* Upload dialog */}
-      <Dialog open={showUpload} onOpenChange={setShowUpload}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>New Import</DialogTitle>
-            <DialogDescription>
-              Upload a local file (browser-direct to object storage) or reference
+      {/* CloudUploadOutlined dialog */}
+      <Modal open={showUpload} onCancel={() => setShowUpload(false)}>
+        <div>
+          <div>
+            <Typography.Title level={5}>New Import</Typography.Title>
+            <Typography.Text type="secondary">
+              CloudUploadOutlined a local file (browser-direct to object storage) or reference
               an already-uploaded S3 object.
-            </DialogDescription>
-          </DialogHeader>
+            </Typography.Text>
+          </div>
 
           <div className="space-y-4 py-2">
             {/* Import type */}
             <div className="space-y-1.5">
-              <Label htmlFor="import-type">Import Type</Label>
+              <label htmlFor="import-type">Import Type</label>
               <Select
+                aria-label="Import Type"
                 value={uploadType}
-                onValueChange={(v) => setUploadType(v as ImportType)}
+                onChange={(v) => setUploadType(v as ImportType)}
               >
-                <SelectTrigger id="import-type">
-                  <SelectValue placeholder="Select type" />
-                </SelectTrigger>
-                <SelectContent>
+
+
                   {ALL_IMPORT_TYPES.map((type) => (
-                    <SelectItem
+                    <Select.Option
                       key={type}
                       value={type}
                       disabled={type === "module_tsv" && !moduleImportEnabled}
                     >
                       {TYPE_LABELS[type]}
-                    </SelectItem>
+                    </Select.Option>
                   ))}
-                </SelectContent>
+
               </Select>
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="import-data-set-id">Data Set ID</Label>
+              <label htmlFor="import-data-set-id">Data Set ID</label>
               <Input
                 id="import-data-set-id"
                 type="number"
@@ -896,26 +855,24 @@ export default function ImportsPage() {
               </p>
             </div>
 
-            {/* Upload mode */}
+            {/* CloudUploadOutlined mode */}
             <div className="space-y-1.5">
-              <Label htmlFor="import-mode">Source</Label>
+              <label htmlFor="import-mode">Source</label>
               <Select
                 value={effectiveUploadMode}
-                onValueChange={(v) => setUploadMode(v as "local" | "s3")}
+                onChange={(v) => setUploadMode(v as "local" | "s3")}
               >
-                <SelectTrigger id="import-mode">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="local" disabled={!localUploadEnabled}>Local file</SelectItem>
-                  <SelectItem value="s3">S3 URI (advanced)</SelectItem>
-                </SelectContent>
+
+
+                  <Select.Option value="local" disabled={!localUploadEnabled}>Local file</Select.Option>
+                  <Select.Option value="s3">S3 URI (advanced)</Select.Option>
+
               </Select>
             </div>
 
             {effectiveUploadMode === "local" ? (
               <div className="space-y-1.5">
-                <Label>File</Label>
+                <label>File</label>
                 <FileDropInput
                   file={uploadFile}
                   onSelect={(f) => {
@@ -948,7 +905,7 @@ export default function ImportsPage() {
               <>
                 {/* Filename */}
                 <div className="space-y-1.5">
-                  <Label htmlFor="import-filename">Filename</Label>
+                  <label htmlFor="import-filename">Filename</label>
                   <Input
                     id="import-filename"
                     placeholder={
@@ -966,7 +923,7 @@ export default function ImportsPage() {
 
                 {/* S3 file path */}
                 <div className="space-y-1.5">
-                  <Label htmlFor="import-filepath">S3 File Path</Label>
+                  <label htmlFor="import-filepath">S3 File Path</label>
                   <Input
                     id="import-filepath"
                     placeholder="s3://bucket-name/path/to/file.csv"
@@ -984,7 +941,7 @@ export default function ImportsPage() {
             {uploadType === "module_tsv" ? (
               <>
                 <div className="space-y-1.5">
-                  <Label htmlFor="import-release-id">Release ID</Label>
+                  <label htmlFor="import-release-id">Release ID</label>
                   <Input
                     id="import-release-id"
                     type="number"
@@ -999,7 +956,7 @@ export default function ImportsPage() {
                   </p>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="import-module-key">Module Key</Label>
+                  <label htmlFor="import-module-key">Module Key</label>
                   <Input
                     id="import-module-key"
                     placeholder="genes"
@@ -1015,7 +972,7 @@ export default function ImportsPage() {
                 </div>
                 {effectiveUploadMode === "s3" ? (
                   <div className="space-y-1.5">
-                    <Label htmlFor="import-checksum">Checksum</Label>
+                    <label htmlFor="import-checksum">Checksum</label>
                     <Input
                       id="import-checksum"
                       placeholder="sha256 of the source file (required)"
@@ -1026,14 +983,14 @@ export default function ImportsPage() {
                 ) : null}
                 <div className="space-y-1.5">
                   <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
+                    htmlType="button"
+                    type="default"
+                    size="small"
                     disabled={!uploadFile || uploadType !== "module_tsv"}
                     onClick={checkPreview}
                   >
                     {previewState?.status === "checking" ? (
-                      <Loader2 className="size-3.5 animate-spin" />
+                      <LoadingOutlined className="size-3.5 animate-spin" />
                     ) : null}
                     Preview
                   </Button>
@@ -1080,15 +1037,16 @@ export default function ImportsPage() {
             ) : null}
           </div>
 
-          <DialogFooter>
+          <div>
             <Button
-              variant="outline"
+              type="default"
               onClick={() => setShowUpload(false)}
               disabled={submitMutation.isPending}
             >
               Cancel
             </Button>
             <Button
+              aria-label="Submit Import"
               onClick={handleUploadSubmit}
               disabled={
                 submitMutation.isPending ||
@@ -1101,17 +1059,17 @@ export default function ImportsPage() {
             >
               {submitMutation.isPending ? (
                 <>
-                  <Loader2 className="size-4 animate-spin" />
+                  <LoadingOutlined className="size-4 animate-spin" />
                   Submitting…
                 </>
               ) : (
                 <>
-                  <Upload className="size-4" />
+                  <CloudUploadOutlined className="size-4" />
                   Submit Import
                 </>
               )}
             </Button>
-          </DialogFooter>
+          </div>
 
           {submitMutation.isError ? (
             <p className="text-sm text-destructive">
@@ -1120,8 +1078,8 @@ export default function ImportsPage() {
                 : "Failed to submit import task."}
             </p>
           ) : null}
-        </DialogContent>
-      </Dialog>
+        </div>
+      </Modal>
     </div>
   );
 }
@@ -1137,7 +1095,7 @@ interface FileDropInputProps {
 function FileDropInput({ file, accept, onSelect }: FileDropInputProps) {
   return (
     <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-dashed border-border p-4 text-sm hover:border-primary">
-      <FileSpreadsheet className="size-5 text-primary" aria-hidden />
+      <FileExcelOutlined className="size-5 text-primary" aria-hidden />
       <span className="min-w-0 flex-1 truncate">{file?.name ?? "Choose a local file"}</span>
       <input
         type="file"

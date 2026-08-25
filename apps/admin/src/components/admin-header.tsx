@@ -1,16 +1,14 @@
+import { BellOutlined, MenuOutlined, SunOutlined, BulbOutlined, UserOutlined, LogoutOutlined, DownOutlined } from "@ant-design/icons";
+import type * as React from "react";
+// Ant Design icon component type is declared locally for the header.
+type IconComponent = React.ComponentType<{
+  className?: string;
+  style?: React.CSSProperties;
+  "aria-hidden"?: boolean | "true" | "false";
+}>;
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  Bell,
-  Menu,
-  Sun,
-  Moon,
-  User,
-  LogOut,
-  ChevronDown,
-  type LucideIcon,
-} from "lucide-react";
-import { Button, cn } from "../lib/admin-ui";
-
+import { cn } from "../lib/cn";
+import { Button } from "@/lib/antd";
 interface AdminHeaderProps {
   /** Mobile sidebar toggle. */
   onToggleSidebar?: () => void;
@@ -47,13 +45,13 @@ export function AdminHeader({ onToggleSidebar, title }: AdminHeaderProps) {
     <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-border bg-card/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-card/80">
       {onToggleSidebar ? (
         <Button
-          variant="ghost"
-          size="icon"
+          type="text"
+          shape="circle"
           className="lg:hidden"
           onClick={onToggleSidebar}
           aria-label="Toggle sidebar"
         >
-          <Menu className="size-5" />
+          <MenuOutlined className="size-5" />
         </Button>
       ) : null}
 
@@ -83,16 +81,16 @@ function ThemeToggle({
 }) {
   return (
     <Button
-      variant="ghost"
-      size="icon"
+      type="text"
+      shape="circle"
       onClick={onToggle}
       aria-label={`Switch to ${theme === "light" ? "dark" : "light"} theme`}
       title="Toggle theme"
     >
       {theme === "light" ? (
-        <Moon className="size-4" />
+        <BulbOutlined className="size-4" />
       ) : (
-        <Sun className="size-4" />
+        <SunOutlined className="size-4" />
       )}
     </Button>
   );
@@ -126,13 +124,13 @@ function NotificationBell() {
   return (
     <div ref={ref} className="relative">
       <Button
-        variant="ghost"
-        size="icon"
+        type="text"
+        shape="circle"
         onClick={() => setOpen((prev) => !prev)}
         aria-label={`Notifications (${unreadCount} unread)`}
         aria-expanded={open}
       >
-        <Bell className="size-4" />
+        <BellOutlined className="size-4" />
         {unreadCount > 0 ? (
           <span className="absolute right-1 top-1 flex size-4 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground">
             {unreadCount}
@@ -185,7 +183,7 @@ function NotificationBell() {
 }
 
 // ---------------------------------------------------------------------------
-// User menu
+// UserOutlined menu
 // ---------------------------------------------------------------------------
 
 function UserMenu() {
@@ -202,9 +200,9 @@ function UserMenu() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const menuItems: Array<{ label: string; icon: LucideIcon; danger?: boolean }> = [
-    { label: "Profile", icon: User },
-    { label: "Sign out", icon: LogOut, danger: true },
+  const menuItems: Array<{ label: string; icon: IconComponent; danger?: boolean }> = [
+    { label: "Profile", icon: UserOutlined },
+    { label: "Sign out", icon: LogoutOutlined, danger: true },
   ];
 
   return (
@@ -213,14 +211,14 @@ function UserMenu() {
         type="button"
         onClick={() => setOpen((prev) => !prev)}
         className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        aria-label="User menu"
+        aria-label="UserOutlined menu"
         aria-expanded={open}
       >
         <div className="flex size-7 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
           AD
         </div>
         <span className="hidden text-sm font-medium sm:inline">Admin</span>
-        <ChevronDown className="size-3.5 text-muted-foreground" />
+        <DownOutlined className="size-3.5 text-muted-foreground" />
       </button>
 
       {open ? (
@@ -229,7 +227,7 @@ function UserMenu() {
           role="menu"
         >
           <div className="border-b border-border px-4 py-3">
-            <p className="text-sm font-semibold">Admin User</p>
+            <p className="text-sm font-semibold">Admin UserOutlined</p>
             <p className="truncate text-xs text-muted-foreground">
               admin@soymutdb.org
             </p>

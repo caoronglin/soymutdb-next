@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "soymutdb-worker"
 version = "2.0.0"
 description = "SoyMutDB Celery worker — BLAST, export, ingestion, and statistics tasks"
-requires-python = ">=3.13"
+requires-python = ">=3.14"
 license = { text = "MIT" }
 dependencies = [
     "soymutdb-jobs==0.1.0",
@@ -67,14 +67,14 @@ packages = ["src/soymutdb_worker"]
 "src/soymutdb_worker" = "soymutdb_worker"
 
 [tool.ruff]
-target-version = "py313"
+target-version = "py314"
 line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W", "UP"]
 
 [tool.mypy]
-python_version = "3.13"
+python_version = "3.14"
 warn_return_any = true
 warn_unused_configs = true
 

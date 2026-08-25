@@ -1,3 +1,4 @@
+import { RiseOutlined, WarningOutlined, ArrowLeftOutlined, ExportOutlined, ClockCircleOutlined, ThunderboltOutlined, ReloadOutlined } from "@ant-design/icons";
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -5,24 +6,7 @@ import * as echarts from "echarts/core";
 import { BarChart, LineChart } from "echarts/charts";
 import { GridComponent, LegendComponent, TooltipComponent } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
-import {
-  Activity,
-  AlertTriangle,
-  ArrowLeft,
-  ArrowUpRight,
-  Clock,
-  DatabaseZap,
-  RefreshCw,
-} from "lucide-react";
-import {
-  Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  Badge,
-} from "../lib/admin-ui";
+import { Badge, Button, Card, Typography } from "@/lib/antd";
 import { widgetApi, type WidgetHealthItem } from "../lib/widget-api";
 
 
@@ -130,15 +114,15 @@ function LatencyBarChart({ widgets }: { widgets: WidgetHealthItem[] }) {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Clock className="size-4 text-primary" />
+
+        <Typography.Title level={5}>
+          <ClockCircleOutlined className="size-4 text-primary" />
           Latency per Widget (P50 / P95)
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
+        </Typography.Title>
+
+
         <div ref={chartRef} className="h-80 w-full" role="img" aria-label="Widget latency bar chart" />
-      </CardContent>
+
     </Card>
   );
 }
@@ -235,15 +219,15 @@ function CacheHitRateChart({ widgets }: { widgets: WidgetHealthItem[] }) {
 
   return (
     <Card>
-      <CardHeader className="flex-row items-center justify-between gap-2">
+
         <div>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <DatabaseZap className="size-4 text-primary" />
+          <Typography.Title level={5}>
+            <ThunderboltOutlined className="size-4 text-primary" />
             Cache Hit Rate Over Time
-          </CardTitle>
-          <CardDescription>
+          </Typography.Title>
+          <Typography.Text type="secondary">
             Select a widget to view its cache hit rate trend.
-          </CardDescription>
+          </Typography.Text>
         </div>
         <select
           className="rounded-md border border-border bg-background px-3 py-1.5 text-sm"
@@ -257,10 +241,10 @@ function CacheHitRateChart({ widgets }: { widgets: WidgetHealthItem[] }) {
             </option>
           ))}
         </select>
-      </CardHeader>
-      <CardContent>
+
+
         <div ref={chartRef} className="h-64 w-full" role="img" aria-label="Cache hit rate over time" />
-      </CardContent>
+
     </Card>
   );
 }
@@ -292,15 +276,15 @@ export default function WidgetHealthPage() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Link to="/widgets">
-            <Button variant="ghost" size="sm">
-              <ArrowLeft className="size-4" />
+            <Button type="text" size="small">
+              <ArrowLeftOutlined className="size-4" />
               Widgets
             </Button>
           </Link>
           <div>
             <h2 className="font-serif text-2xl font-semibold">Widget Health</h2>
             <p className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
-              <Activity className="size-3.5" />
+              <RiseOutlined className="size-3.5" />
               Performance, cache efficiency, and error metrics.
               {data?.generated_at ? (
                 <span className="text-xs">
@@ -311,12 +295,12 @@ export default function WidgetHealthPage() {
           </div>
         </div>
         <Button
-          variant="outline"
-          size="sm"
+
+          size="small"
           onClick={() => refetch()}
           disabled={isRefetching}
         >
-          <RefreshCw className={`size-4 ${isRefetching ? "animate-spin" : ""}`} />
+          <ReloadOutlined className={`size-4 ${isRefetching ? "animate-spin" : ""}`} />
           Refresh
         </Button>
       </div>
@@ -324,33 +308,33 @@ export default function WidgetHealthPage() {
       {/* Summary stat cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
-          <CardContent className="p-4">
+          <div className="p-4">
             <p className="text-xs text-muted-foreground">Tracked Widgets</p>
             <p className="mt-1 font-serif text-2xl font-semibold">
               {isLoading ? "…" : widgets.length}
             </p>
-          </CardContent>
+          </div>
         </Card>
         <Card>
-          <CardContent className="p-4">
+          <div className="p-4">
             <p className="text-xs text-muted-foreground">Avg P95 Latency</p>
             <p className="mt-1 font-serif text-2xl font-semibold">
               {isLoading ? "…" : formatMs(avgP95)}
             </p>
-          </CardContent>
+          </div>
         </Card>
         <Card>
-          <CardContent className="p-4">
+          <div className="p-4">
             <p className="text-xs text-muted-foreground">Cache Hit Rate</p>
             <p className="mt-1 font-serif text-2xl font-semibold">
               {isLoading ? "…" : `${(avgCacheHit * 100).toFixed(1)}%`}
             </p>
-          </CardContent>
+          </div>
         </Card>
         <Card>
-          <CardContent className="p-4">
+          <div className="p-4">
             <p className="flex items-center gap-1 text-xs text-muted-foreground">
-              <AlertTriangle className="size-3" />
+              <WarningOutlined className="size-3" />
               Total Errors (24h)
             </p>
             <p
@@ -360,7 +344,7 @@ export default function WidgetHealthPage() {
             >
               {isLoading ? "…" : totalErrors}
             </p>
-          </CardContent>
+          </div>
         </Card>
       </div>
 
@@ -369,14 +353,14 @@ export default function WidgetHealthPage() {
         {isLoading ? (
           <>
             <Card>
-              <CardContent className="p-6">
+              <div className="p-6">
                 <div className="h-80 animate-pulse rounded bg-muted" />
-              </CardContent>
+              </div>
             </Card>
             <Card>
-              <CardContent className="p-6">
+              <div className="p-6">
                 <div className="h-64 animate-pulse rounded bg-muted" />
-              </CardContent>
+              </div>
             </Card>
           </>
         ) : (
@@ -389,10 +373,10 @@ export default function WidgetHealthPage() {
 
       {/* Per-widget table */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Per-Widget Breakdown</CardTitle>
-        </CardHeader>
-        <CardContent className="overflow-x-auto">
+
+          <Typography.Title level={5}>Per-Widget Breakdown</Typography.Title>
+
+        <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
@@ -426,7 +410,7 @@ export default function WidgetHealthPage() {
                       </td>
                       <td className="py-3 pr-4 font-mono">{formatMs(w.p50_ms)}</td>
                       <td className="py-3 pr-4">
-                        <Badge variant={latencyBadge(w.p95_ms)} className="font-mono">
+                        <Badge color={latencyBadge(w.p95_ms)} className="font-mono">
                           {formatMs(w.p95_ms)}
                         </Badge>
                       </td>
@@ -438,7 +422,7 @@ export default function WidgetHealthPage() {
                       </td>
                       <td className="py-3 pr-4">
                         {w.error_count > 0 ? (
-                          <Badge variant="destructive">{w.error_count}</Badge>
+                          <Badge color="red">{w.error_count}</Badge>
                         ) : (
                           <span className="text-muted-foreground">0</span>
                         )}
@@ -449,14 +433,14 @@ export default function WidgetHealthPage() {
                           params={{ name: w.name }}
                           className="inline-flex items-center text-xs text-primary hover:underline"
                         >
-                          Inspect <ArrowUpRight className="ml-0.5 size-3" />
+                          Inspect <ExportOutlined className="ml-0.5 size-3" />
                         </Link>
                       </td>
                     </tr>
                   ))}
             </tbody>
           </table>
-        </CardContent>
+        </div>
       </Card>
     </div>
   );

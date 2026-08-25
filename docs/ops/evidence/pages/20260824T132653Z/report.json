@@ -1,0 +1,1905 @@
+{
+  "runId": "20260824T132653Z",
+  "generatedAt": "2026-08-24T13:27:28.051Z",
+  "metrics": [
+    {
+      "route": "/",
+      "viewport": "desktop",
+      "url": "http://localhost:4175/soymutdb-next/",
+      "document": {
+        "scrollWidth": 1440,
+        "clientWidth": 1440,
+        "scrollHeight": 1861
+      },
+      "visible": {
+        "main": true,
+        "heading": true,
+        "bodyTextLength": 1654
+      },
+      "interactives": {
+        "count": 52,
+        "undersized": [
+          {
+            "tag": "a",
+            "text": "Open →",
+            "width": 54,
+            "height": 22
+          },
+          {
+            "tag": "a",
+            "text": "SoyMutDB 0.1.0 is now live",
+            "width": 188,
+            "height": 16
+          },
+          {
+            "tag": "a",
+            "text": "Wm82.v4.0 reference genome added",
+            "width": 258,
+            "height": 16
+          },
+          {
+            "tag": "a",
+            "text": "New variant and BLAST search tools",
+            "width": 259,
+            "height": 16
+          },
+          {
+            "tag": "a",
+            "text": "Improved genome browser deep links",
+            "width": 262,
+            "height": 16
+          },
+          {
+            "tag": "a",
+            "text": "Community curation is open",
+            "width": 196,
+            "height": 16
+          },
+          {
+            "tag": "button",
+            "text": "1",
+            "width": 24,
+            "height": 3
+          },
+          {
+            "tag": "button",
+            "text": "2",
+            "width": 16,
+            "height": 3
+          },
+          {
+            "tag": "button",
+            "text": "3",
+            "width": 16,
+            "height": 3
+          },
+          {
+            "tag": "a",
+            "text": "Open →",
+            "width": 54,
+            "height": 22
+          },
+          {
+            "tag": "a",
+            "text": "Genes",
+            "width": 41,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Variants",
+            "width": 54,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Genome Browser",
+            "width": 112,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "BLAST",
+            "width": 45,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Tools",
+            "width": 36,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Downloads",
+            "width": 74,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Guide",
+            "width": 38,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "News",
+            "width": 36,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Seed Request",
+            "width": 93,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Publications",
+            "width": 80,
+            "height": 20
+          }
+        ]
+      },
+      "screenshot": "home--desktop.png"
+    },
+    {
+      "route": "/",
+      "viewport": "tablet",
+      "url": "http://localhost:4175/soymutdb-next/",
+      "document": {
+        "scrollWidth": 1024,
+        "clientWidth": 1024,
+        "scrollHeight": 1819
+      },
+      "visible": {
+        "main": true,
+        "heading": true,
+        "bodyTextLength": 1654
+      },
+      "interactives": {
+        "count": 52,
+        "undersized": [
+          {
+            "tag": "a",
+            "text": "Open →",
+            "width": 54,
+            "height": 22
+          },
+          {
+            "tag": "a",
+            "text": "SoyMutDB 0.1.0 is now live",
+            "width": 188,
+            "height": 16
+          },
+          {
+            "tag": "a",
+            "text": "Wm82.v4.0 reference genome added",
+            "width": 258,
+            "height": 16
+          },
+          {
+            "tag": "a",
+            "text": "New variant and BLAST search tools",
+            "width": 259,
+            "height": 16
+          },
+          {
+            "tag": "a",
+            "text": "Improved genome browser deep links",
+            "width": 262,
+            "height": 16
+          },
+          {
+            "tag": "a",
+            "text": "Community curation is open",
+            "width": 196,
+            "height": 16
+          },
+          {
+            "tag": "button",
+            "text": "1",
+            "width": 24,
+            "height": 3
+          },
+          {
+            "tag": "button",
+            "text": "2",
+            "width": 16,
+            "height": 3
+          },
+          {
+            "tag": "button",
+            "text": "3",
+            "width": 16,
+            "height": 3
+          },
+          {
+            "tag": "a",
+            "text": "Open →",
+            "width": 54,
+            "height": 22
+          },
+          {
+            "tag": "a",
+            "text": "Genes",
+            "width": 41,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Variants",
+            "width": 54,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Genome Browser",
+            "width": 112,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "BLAST",
+            "width": 45,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Tools",
+            "width": 36,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Downloads",
+            "width": 74,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Guide",
+            "width": 38,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "News",
+            "width": 36,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Seed Request",
+            "width": 93,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Publications",
+            "width": 80,
+            "height": 20
+          }
+        ]
+      },
+      "screenshot": "home--tablet.png"
+    },
+    {
+      "route": "/",
+      "viewport": "mobile",
+      "url": "http://localhost:4175/soymutdb-next/",
+      "document": {
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "scrollHeight": 2781
+      },
+      "visible": {
+        "main": true,
+        "heading": true,
+        "bodyTextLength": 1575
+      },
+      "interactives": {
+        "count": 46,
+        "undersized": [
+          {
+            "tag": "a",
+            "text": "Open →",
+            "width": 54,
+            "height": 22
+          },
+          {
+            "tag": "a",
+            "text": "SoyMutDB 0.1.0 is now live",
+            "width": 188,
+            "height": 16
+          },
+          {
+            "tag": "a",
+            "text": "Wm82.v4.0 reference genome added",
+            "width": 258,
+            "height": 16
+          },
+          {
+            "tag": "a",
+            "text": "New variant and BLAST search tools",
+            "width": 259,
+            "height": 16
+          },
+          {
+            "tag": "a",
+            "text": "Improved genome browser deep links",
+            "width": 262,
+            "height": 16
+          },
+          {
+            "tag": "a",
+            "text": "Community curation is open",
+            "width": 196,
+            "height": 16
+          },
+          {
+            "tag": "button",
+            "text": "1",
+            "width": 24,
+            "height": 3
+          },
+          {
+            "tag": "button",
+            "text": "2",
+            "width": 16,
+            "height": 3
+          },
+          {
+            "tag": "button",
+            "text": "3",
+            "width": 16,
+            "height": 3
+          },
+          {
+            "tag": "a",
+            "text": "Open →",
+            "width": 54,
+            "height": 22
+          },
+          {
+            "tag": "a",
+            "text": "Genes",
+            "width": 41,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Variants",
+            "width": 54,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Genome Browser",
+            "width": 112,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "BLAST",
+            "width": 45,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Tools",
+            "width": 36,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Downloads",
+            "width": 74,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Guide",
+            "width": 38,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "News",
+            "width": 36,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Seed Request",
+            "width": 93,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Publications",
+            "width": 80,
+            "height": 20
+          }
+        ]
+      },
+      "screenshot": "home--mobile.png"
+    },
+    {
+      "route": "/search/genes",
+      "viewport": "desktop",
+      "url": "http://localhost:4175/soymutdb-next/search/genes?external=false&run=false",
+      "document": {
+        "scrollWidth": 1440,
+        "clientWidth": 1440,
+        "scrollHeight": 1261
+      },
+      "visible": {
+        "main": true,
+        "heading": true,
+        "bodyTextLength": 686
+      },
+      "interactives": {
+        "count": 32,
+        "undersized": [
+          {
+            "tag": "input",
+            "text": "",
+            "width": 13,
+            "height": 13
+          },
+          {
+            "tag": "input",
+            "text": "",
+            "width": 198,
+            "height": 22
+          },
+          {
+            "tag": "a",
+            "text": "Genes",
+            "width": 41,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Variants",
+            "width": 54,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Genome Browser",
+            "width": 112,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "BLAST",
+            "width": 45,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Tools",
+            "width": 36,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Downloads",
+            "width": 74,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Guide",
+            "width": 38,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "News",
+            "width": 36,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Seed Request",
+            "width": 93,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Publications",
+            "width": 80,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "About",
+            "width": 42,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Help",
+            "width": 30,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "About",
+            "width": 35,
+            "height": 16
+          },
+          {
+            "tag": "a",
+            "text": "API Docs",
+            "width": 50,
+            "height": 16
+          }
+        ]
+      },
+      "screenshot": "gene-search--desktop.png"
+    },
+    {
+      "route": "/search/genes",
+      "viewport": "tablet",
+      "url": "http://localhost:4175/soymutdb-next/search/genes?external=false&run=false",
+      "document": {
+        "scrollWidth": 1024,
+        "clientWidth": 1024,
+        "scrollHeight": 1261
+      },
+      "visible": {
+        "main": true,
+        "heading": true,
+        "bodyTextLength": 686
+      },
+      "interactives": {
+        "count": 32,
+        "undersized": [
+          {
+            "tag": "input",
+            "text": "",
+            "width": 13,
+            "height": 13
+          },
+          {
+            "tag": "input",
+            "text": "",
+            "width": 198,
+            "height": 22
+          },
+          {
+            "tag": "a",
+            "text": "Genes",
+            "width": 41,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Variants",
+            "width": 54,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Genome Browser",
+            "width": 112,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "BLAST",
+            "width": 45,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Tools",
+            "width": 36,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Downloads",
+            "width": 74,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Guide",
+            "width": 38,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "News",
+            "width": 36,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Seed Request",
+            "width": 93,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Publications",
+            "width": 80,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "About",
+            "width": 42,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Help",
+            "width": 30,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "About",
+            "width": 35,
+            "height": 16
+          },
+          {
+            "tag": "a",
+            "text": "API Docs",
+            "width": 50,
+            "height": 16
+          }
+        ]
+      },
+      "screenshot": "gene-search--tablet.png"
+    },
+    {
+      "route": "/search/genes",
+      "viewport": "mobile",
+      "url": "http://localhost:4175/soymutdb-next/search/genes?external=false&run=false",
+      "document": {
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "scrollHeight": 1595
+      },
+      "visible": {
+        "main": true,
+        "heading": true,
+        "bodyTextLength": 607
+      },
+      "interactives": {
+        "count": 26,
+        "undersized": [
+          {
+            "tag": "input",
+            "text": "",
+            "width": 13,
+            "height": 13
+          },
+          {
+            "tag": "input",
+            "text": "",
+            "width": 250,
+            "height": 22
+          },
+          {
+            "tag": "a",
+            "text": "Genes",
+            "width": 41,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Variants",
+            "width": 54,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Genome Browser",
+            "width": 112,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "BLAST",
+            "width": 45,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Tools",
+            "width": 36,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Downloads",
+            "width": 74,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Guide",
+            "width": 38,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "News",
+            "width": 36,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Seed Request",
+            "width": 93,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Publications",
+            "width": 80,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "About",
+            "width": 42,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Help",
+            "width": 30,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "About",
+            "width": 35,
+            "height": 16
+          },
+          {
+            "tag": "a",
+            "text": "API Docs",
+            "width": 50,
+            "height": 16
+          }
+        ]
+      },
+      "screenshot": "gene-search--mobile.png"
+    },
+    {
+      "route": "/search/location",
+      "viewport": "desktop",
+      "url": "http://localhost:4175/soymutdb-next/search/location?external=false&run=false",
+      "document": {
+        "scrollWidth": 1440,
+        "clientWidth": 1440,
+        "scrollHeight": 1239
+      },
+      "visible": {
+        "main": true,
+        "heading": true,
+        "bodyTextLength": 701
+      },
+      "interactives": {
+        "count": 38,
+        "undersized": [
+          {
+            "tag": "input",
+            "text": "",
+            "width": 13,
+            "height": 13
+          },
+          {
+            "tag": "input",
+            "text": "",
+            "width": 198,
+            "height": 22
+          },
+          {
+            "tag": "input",
+            "text": "",
+            "width": 148,
+            "height": 22
+          },
+          {
+            "tag": "span",
+            "text": "Increase Value",
+            "width": 1,
+            "height": 15
+          },
+          {
+            "tag": "span",
+            "text": "Decrease Value",
+            "width": 1,
+            "height": 15
+          },
+          {
+            "tag": "span",
+            "text": "Increase Value",
+            "width": 1,
+            "height": 15
+          },
+          {
+            "tag": "span",
+            "text": "Decrease Value",
+            "width": 1,
+            "height": 15
+          },
+          {
+            "tag": "a",
+            "text": "Genes",
+            "width": 41,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Variants",
+            "width": 54,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Genome Browser",
+            "width": 112,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "BLAST",
+            "width": 45,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Tools",
+            "width": 36,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Downloads",
+            "width": 74,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Guide",
+            "width": 38,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "News",
+            "width": 36,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Seed Request",
+            "width": 93,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Publications",
+            "width": 80,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "About",
+            "width": 42,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Help",
+            "width": 30,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "About",
+            "width": 35,
+            "height": 16
+          }
+        ]
+      },
+      "screenshot": "location-search--desktop.png"
+    },
+    {
+      "route": "/search/location",
+      "viewport": "tablet",
+      "url": "http://localhost:4175/soymutdb-next/search/location?external=false&run=false",
+      "document": {
+        "scrollWidth": 1024,
+        "clientWidth": 1024,
+        "scrollHeight": 1239
+      },
+      "visible": {
+        "main": true,
+        "heading": true,
+        "bodyTextLength": 701
+      },
+      "interactives": {
+        "count": 38,
+        "undersized": [
+          {
+            "tag": "input",
+            "text": "",
+            "width": 13,
+            "height": 13
+          },
+          {
+            "tag": "input",
+            "text": "",
+            "width": 198,
+            "height": 22
+          },
+          {
+            "tag": "input",
+            "text": "",
+            "width": 148,
+            "height": 22
+          },
+          {
+            "tag": "span",
+            "text": "Increase Value",
+            "width": 1,
+            "height": 15
+          },
+          {
+            "tag": "span",
+            "text": "Decrease Value",
+            "width": 1,
+            "height": 15
+          },
+          {
+            "tag": "span",
+            "text": "Increase Value",
+            "width": 1,
+            "height": 15
+          },
+          {
+            "tag": "span",
+            "text": "Decrease Value",
+            "width": 1,
+            "height": 15
+          },
+          {
+            "tag": "a",
+            "text": "Genes",
+            "width": 41,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Variants",
+            "width": 54,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Genome Browser",
+            "width": 112,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "BLAST",
+            "width": 45,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Tools",
+            "width": 36,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Downloads",
+            "width": 74,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Guide",
+            "width": 38,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "News",
+            "width": 36,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Seed Request",
+            "width": 93,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Publications",
+            "width": 80,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "About",
+            "width": 42,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Help",
+            "width": 30,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "About",
+            "width": 35,
+            "height": 16
+          }
+        ]
+      },
+      "screenshot": "location-search--tablet.png"
+    },
+    {
+      "route": "/search/location",
+      "viewport": "mobile",
+      "url": "http://localhost:4175/soymutdb-next/search/location?external=false&run=false",
+      "document": {
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "scrollHeight": 1755
+      },
+      "visible": {
+        "main": true,
+        "heading": true,
+        "bodyTextLength": 622
+      },
+      "interactives": {
+        "count": 32,
+        "undersized": [
+          {
+            "tag": "input",
+            "text": "",
+            "width": 13,
+            "height": 13
+          },
+          {
+            "tag": "input",
+            "text": "",
+            "width": 250,
+            "height": 22
+          },
+          {
+            "tag": "input",
+            "text": "",
+            "width": 250,
+            "height": 22
+          },
+          {
+            "tag": "span",
+            "text": "Increase Value",
+            "width": 1,
+            "height": 15
+          },
+          {
+            "tag": "span",
+            "text": "Decrease Value",
+            "width": 1,
+            "height": 15
+          },
+          {
+            "tag": "span",
+            "text": "Increase Value",
+            "width": 1,
+            "height": 15
+          },
+          {
+            "tag": "span",
+            "text": "Decrease Value",
+            "width": 1,
+            "height": 15
+          },
+          {
+            "tag": "a",
+            "text": "Genes",
+            "width": 41,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Variants",
+            "width": 54,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Genome Browser",
+            "width": 112,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "BLAST",
+            "width": 45,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Tools",
+            "width": 36,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Downloads",
+            "width": 74,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Guide",
+            "width": 38,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "News",
+            "width": 36,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Seed Request",
+            "width": 93,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Publications",
+            "width": 80,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "About",
+            "width": 42,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Help",
+            "width": 30,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "About",
+            "width": 35,
+            "height": 16
+          }
+        ]
+      },
+      "screenshot": "location-search--mobile.png"
+    },
+    {
+      "route": "/search/gbrowse",
+      "viewport": "desktop",
+      "url": "http://localhost:4175/soymutdb-next/search/gbrowse?external=false",
+      "document": {
+        "scrollWidth": 1440,
+        "clientWidth": 1440,
+        "scrollHeight": 1297
+      },
+      "visible": {
+        "main": true,
+        "heading": true,
+        "bodyTextLength": 730
+      },
+      "interactives": {
+        "count": 31,
+        "undersized": [
+          {
+            "tag": "input",
+            "text": "",
+            "width": 13,
+            "height": 13
+          },
+          {
+            "tag": "input",
+            "text": "",
+            "width": 342,
+            "height": 22
+          },
+          {
+            "tag": "a",
+            "text": "Genes",
+            "width": 41,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Variants",
+            "width": 54,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Genome Browser",
+            "width": 112,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "BLAST",
+            "width": 45,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Tools",
+            "width": 36,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Downloads",
+            "width": 74,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Guide",
+            "width": 38,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "News",
+            "width": 36,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Seed Request",
+            "width": 93,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Publications",
+            "width": 80,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "About",
+            "width": 42,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Help",
+            "width": 30,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "About",
+            "width": 35,
+            "height": 16
+          },
+          {
+            "tag": "a",
+            "text": "API Docs",
+            "width": 50,
+            "height": 16
+          }
+        ]
+      },
+      "screenshot": "jbrowse--desktop.png"
+    },
+    {
+      "route": "/search/gbrowse",
+      "viewport": "tablet",
+      "url": "http://localhost:4175/soymutdb-next/search/gbrowse?external=false",
+      "document": {
+        "scrollWidth": 1024,
+        "clientWidth": 1024,
+        "scrollHeight": 1297
+      },
+      "visible": {
+        "main": true,
+        "heading": true,
+        "bodyTextLength": 730
+      },
+      "interactives": {
+        "count": 31,
+        "undersized": [
+          {
+            "tag": "input",
+            "text": "",
+            "width": 13,
+            "height": 13
+          },
+          {
+            "tag": "input",
+            "text": "",
+            "width": 342,
+            "height": 22
+          },
+          {
+            "tag": "a",
+            "text": "Genes",
+            "width": 41,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Variants",
+            "width": 54,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Genome Browser",
+            "width": 112,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "BLAST",
+            "width": 45,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Tools",
+            "width": 36,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Downloads",
+            "width": 74,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Guide",
+            "width": 38,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "News",
+            "width": 36,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Seed Request",
+            "width": 93,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Publications",
+            "width": 80,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "About",
+            "width": 42,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Help",
+            "width": 30,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "About",
+            "width": 35,
+            "height": 16
+          },
+          {
+            "tag": "a",
+            "text": "API Docs",
+            "width": 50,
+            "height": 16
+          }
+        ]
+      },
+      "screenshot": "jbrowse--tablet.png"
+    },
+    {
+      "route": "/search/gbrowse",
+      "viewport": "mobile",
+      "url": "http://localhost:4175/soymutdb-next/search/gbrowse?external=false",
+      "document": {
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "scrollHeight": 1517
+      },
+      "visible": {
+        "main": true,
+        "heading": true,
+        "bodyTextLength": 651
+      },
+      "interactives": {
+        "count": 25,
+        "undersized": [
+          {
+            "tag": "input",
+            "text": "",
+            "width": 13,
+            "height": 13
+          },
+          {
+            "tag": "input",
+            "text": "",
+            "width": 250,
+            "height": 22
+          },
+          {
+            "tag": "a",
+            "text": "Genes",
+            "width": 41,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Variants",
+            "width": 54,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Genome Browser",
+            "width": 112,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "BLAST",
+            "width": 45,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Tools",
+            "width": 36,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Downloads",
+            "width": 74,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Guide",
+            "width": 38,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "News",
+            "width": 36,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Seed Request",
+            "width": 93,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Publications",
+            "width": 80,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "About",
+            "width": 42,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Help",
+            "width": 30,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "About",
+            "width": 35,
+            "height": 16
+          },
+          {
+            "tag": "a",
+            "text": "API Docs",
+            "width": 50,
+            "height": 16
+          }
+        ]
+      },
+      "screenshot": "jbrowse--mobile.png"
+    },
+    {
+      "route": "/blast",
+      "viewport": "desktop",
+      "url": "http://localhost:4175/soymutdb-next/blast",
+      "document": {
+        "scrollWidth": 1440,
+        "clientWidth": 1440,
+        "scrollHeight": 980
+      },
+      "visible": {
+        "main": true,
+        "heading": true,
+        "bodyTextLength": 488
+      },
+      "interactives": {
+        "count": 34,
+        "undersized": [
+          {
+            "tag": "input",
+            "text": "",
+            "width": 309,
+            "height": 22
+          },
+          {
+            "tag": "input",
+            "text": "",
+            "width": 309,
+            "height": 22
+          },
+          {
+            "tag": "a",
+            "text": "Genes",
+            "width": 41,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Variants",
+            "width": 54,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Genome Browser",
+            "width": 112,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "BLAST",
+            "width": 45,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Tools",
+            "width": 36,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Downloads",
+            "width": 74,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Guide",
+            "width": 38,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "News",
+            "width": 36,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Seed Request",
+            "width": 93,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Publications",
+            "width": 80,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "About",
+            "width": 42,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Help",
+            "width": 30,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "About",
+            "width": 35,
+            "height": 16
+          },
+          {
+            "tag": "a",
+            "text": "API Docs",
+            "width": 50,
+            "height": 16
+          }
+        ]
+      },
+      "screenshot": "blast--desktop.png"
+    },
+    {
+      "route": "/blast",
+      "viewport": "tablet",
+      "url": "http://localhost:4175/soymutdb-next/blast",
+      "document": {
+        "scrollWidth": 1024,
+        "clientWidth": 1024,
+        "scrollHeight": 980
+      },
+      "visible": {
+        "main": true,
+        "heading": true,
+        "bodyTextLength": 488
+      },
+      "interactives": {
+        "count": 34,
+        "undersized": [
+          {
+            "tag": "input",
+            "text": "",
+            "width": 309,
+            "height": 22
+          },
+          {
+            "tag": "input",
+            "text": "",
+            "width": 309,
+            "height": 22
+          },
+          {
+            "tag": "a",
+            "text": "Genes",
+            "width": 41,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Variants",
+            "width": 54,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Genome Browser",
+            "width": 112,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "BLAST",
+            "width": 45,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Tools",
+            "width": 36,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Downloads",
+            "width": 74,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Guide",
+            "width": 38,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "News",
+            "width": 36,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Seed Request",
+            "width": 93,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Publications",
+            "width": 80,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "About",
+            "width": 42,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Help",
+            "width": 30,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "About",
+            "width": 35,
+            "height": 16
+          },
+          {
+            "tag": "a",
+            "text": "API Docs",
+            "width": 50,
+            "height": 16
+          }
+        ]
+      },
+      "screenshot": "blast--tablet.png"
+    },
+    {
+      "route": "/blast",
+      "viewport": "mobile",
+      "url": "http://localhost:4175/soymutdb-next/blast",
+      "document": {
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "scrollHeight": 1316
+      },
+      "visible": {
+        "main": true,
+        "heading": true,
+        "bodyTextLength": 409
+      },
+      "interactives": {
+        "count": 28,
+        "undersized": [
+          {
+            "tag": "input",
+            "text": "",
+            "width": 250,
+            "height": 22
+          },
+          {
+            "tag": "input",
+            "text": "",
+            "width": 250,
+            "height": 22
+          },
+          {
+            "tag": "a",
+            "text": "Genes",
+            "width": 41,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Variants",
+            "width": 54,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Genome Browser",
+            "width": 112,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "BLAST",
+            "width": 45,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Tools",
+            "width": 36,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Downloads",
+            "width": 74,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Guide",
+            "width": 38,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "News",
+            "width": 36,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Seed Request",
+            "width": 93,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Publications",
+            "width": 80,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "About",
+            "width": 42,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "Help",
+            "width": 30,
+            "height": 20
+          },
+          {
+            "tag": "a",
+            "text": "About",
+            "width": 35,
+            "height": 16
+          },
+          {
+            "tag": "a",
+            "text": "API Docs",
+            "width": 50,
+            "height": 16
+          }
+        ]
+      },
+      "screenshot": "blast--mobile.png"
+    }
+  ]
+}
