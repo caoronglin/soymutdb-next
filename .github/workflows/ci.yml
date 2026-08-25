@@ -576,10 +576,10 @@ jobs:
             printf '%s %s\n' "$image" "$image_id"
           done > validated-runtime-images/image-ids-${{ matrix.arch }}.txt
           printf '%s\n' '${{ matrix.platform }}' > validated-runtime-images/platform.txt
-          docker save --output validated-runtime-images/soymutdb-runtime-images-${{ matrix.arch }}.tar \
-            "${validated_images[@]}"
+          docker save "${validated_images[@]}" \
+            | gzip -1 > validated-runtime-images/soymutdb-runtime-images-${{ matrix.arch }}.tar.gz
           cd validated-runtime-images
-          sha256sum soymutdb-runtime-images-${{ matrix.arch }}.tar \
+          sha256sum soymutdb-runtime-images-${{ matrix.arch }}.tar.gz \
             image-ids-${{ matrix.arch }}.txt platform.txt \
             sbom-*-${{ matrix.arch }}.spdx.json > SHA256SUMS
 
@@ -637,7 +637,7 @@ jobs:
           artifact_dir=validated-runtime-images-amd64
           test "$(cat "${artifact_dir}/platform.txt")" = "linux/amd64"
           (cd "${artifact_dir}" && sha256sum -c SHA256SUMS)
-          docker load --input "${artifact_dir}/soymutdb-runtime-images-amd64.tar"
+          gzip -dc "${artifact_dir}/soymutdb-runtime-images-amd64.tar.gz" | docker load
           for image_name in api worker mcp jbrowse; do
             image="soymutdb-${image_name}:ci-amd64"
             expected_id="$(awk -v image="${image}" '$1 == image {print $2}' "${artifact_dir}/image-ids-amd64.txt")"
@@ -736,7 +736,7 @@ jobs:
             artifact_dir="validated-platforms/${artifact}"
             test "$(cat "${artifact_dir}/platform.txt")" = "linux/${arch}"
             (cd "${artifact_dir}" && sha256sum -c SHA256SUMS)
-            docker load --input "${artifact_dir}/soymutdb-runtime-images-${arch}.tar"
+            gzip -dc "${artifact_dir}/soymutdb-runtime-images-${arch}.tar.gz" | docker load
             expected_images=(api worker mcp jbrowse)
             test "$(wc -l < "${artifact_dir}/image-ids-${arch}.txt")" -eq "${#expected_images[@]}"
             for image_name in "${expected_images[@]}"; do

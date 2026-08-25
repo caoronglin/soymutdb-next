@@ -135,3 +135,9 @@
 - **文件**: `apps/jbrowse/Dockerfile`
 - **决策**: JBrowse Trivy 暴露的是 Alpine runtime 中带 fixed version 的 `libssl3`, `libxml2`, `libpng`, `libexpat`, `zlib`, `nghttp2` 等漏洞；在 nginx runtime 阶段执行 `apk upgrade --no-cache`，不将可修复漏洞加入例外清单。
 - **验证**: API、Worker、MCP 两架构 Trivy 已通过；JBrowse 构建与 nginx smoke 通过，待 Alpine 升级后的最终 scan 与 SBOM 验收。
+
+## [CI 修复] - 压缩 runtime image artifact
+
+- **文件**: `.github/workflows/ci.yml`
+- **决策**: 两架构所有 build、smoke、Trivy、SPDX SBOM 均已通过；amd64 runner 在 `docker save` 写未压缩四镜像 tar 时磁盘耗尽。改为 `docker save | gzip -1` 生成 `.tar.gz`，Kind 与 publish 校验阶段用 `gzip -dc | docker load`，保留 SHA256 校验和与下游镜像 ID 证明。
+- **验证**: arm64 本轮已通过到 SBOM/export 前；amd64 唯一失败为 `no space left on device` 的未压缩归档，压缩流修复后需重跑 Kind 与发布链路。
