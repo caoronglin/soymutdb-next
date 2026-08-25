@@ -12,6 +12,7 @@
  */
 import { createFileRoute } from "@tanstack/react-router";
 import { AntdHome } from "../components/home/antd-home";
+import { isProductionDeploymentMode } from "../lib/deployment";
 import { usePageDefinition } from "../page-builder/loader";
 import type { PageComponentNode } from "@soymutdb/shared";
 
@@ -29,6 +30,13 @@ export const Route = createFileRoute("/")({
 });
 
 function HomeComponent() {
-  const { definition } = usePageDefinition("/");
-  return <AntdHome resourceCards={definition ? findResourceCards(definition.root) : undefined} />;
+  const { definition, hasError } = usePageDefinition("/");
+  const production = isProductionDeploymentMode(import.meta.env.VITE_DEPLOYMENT_MODE);
+  return (
+    <AntdHome
+      resourceCards={definition ? findResourceCards(definition.root) : undefined}
+      allowLegacyResourceFallback={!production}
+      resourceDefinitionError={production && hasError}
+    />
+  );
 }

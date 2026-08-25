@@ -13,6 +13,7 @@
  * CSS variables (src/index.css), so the page follows light/dark mode.
  */
 import * as React from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import {
@@ -27,18 +28,22 @@ import {
 import {
   Button,
   Card,
+  Alert,
   Carousel,
   Col,
   Empty,
   Input,
   List,
   Row,
-  Tag,
   Typography,
 } from "@/lib/antd";
 import { FluidGradient } from "../fluids/fluid-gradient";
 import { useAnimation } from "@/lib/animation-context";
 import { RenderNode } from "../../page-builder/renderer";
+import { getFeaturedNews, type NewsSummary } from "@soymutdb/api-client";
+import { formatDate } from "../../lib/format";
+import { NEWS_FEATURED_KEY } from "../news-carousel";
+import { pickNewsTitle } from "../news-card";
 import type { PageComponentNode } from "@soymutdb/shared";
 
 const { Title, Paragraph, Text } = Typography;
@@ -96,15 +101,60 @@ const TOOL_ENTRIES: ToolEntry[] = [
   { key: "blast", labelKey: "home.toolBlastLabel", label: "BLAST 比对", descKey: "home.toolBlastDesc", desc: "序列比对检索同源", route: "/blast", icon: <ThunderboltOutlined /> },
 ];
 
-const NEWS_PLACEHOLDER = [
-  { id: "n1", titleKey: "home.news1", title: "SoyMutDB 0.1.0 正式上线" },
-  { id: "n2", titleKey: "home.news2", title: "新增 Wm82.v4.0 参考基因组" },
-  { id: "n3", titleKey: "home.news3", title: "新增变异与 BLAST 检索工具" },
-  { id: "n4", titleKey: "home.news4", title: "基因组浏览器深链接改进" },
-  { id: "n5", titleKey: "home.news5", title: "社区共建数据开放申请" },
-];
+function LatestNewsPanel() {
+  const { t, i18n } = useTranslation();
+  const query = useQuery({
+    queryKey: NEWS_FEATURED_KEY,
+    queryFn: getFeaturedNews,
+    staleTime: 60 * 1000,
+  });
 
-export function AntdHome({ resourceCards }: { resourceCards?: PageComponentNode }) {
+  if (query.isPending) {
+    return <div className="flex min-h-24 items-center justify-center" role="status"><span className="sr-only">{t("common.loading", { defaultValue: "Loading" })}</span><span className="animate-pulse text-sm text-muted-foreground">{t("common.loading", { defaultValue: "Loading" })}</span></div>;
+  }
+
+  if (query.isError) {
+    return <Alert type="error" showIcon message={t("home.newsUnavailable", { defaultValue: "最新动态暂不可用" })} description={t("home.newsRetry", { defaultValue: "请稍后重试，当前没有使用演示数据替代。" })} />;
+  }
+
+  const items: NewsSummary[] = query.data?.featured.slice(0, 5) ?? [];
+  return (
+    <List
+      dataSource={items}
+      split
+      locale={{ emptyText: <Empty description={t("home.noNews", { defaultValue: "暂无已发布新闻" })} /> }}
+      renderItem={(item) => (
+        <List.Item>
+          <List.Item.Meta
+            title={
+              <Link to="/news/$slug" params={{ slug: item.slug }} className="home-news-link" style={{ color: "var(--foreground)" }}>
+                {pickNewsTitle(item, i18n.language)}
+              </Link>
+            }
+            description={
+              <span className="text-xs text-muted-foreground">
+                {item.category ? `${item.category} · ` : ""}{item.published_at ? formatDate(item.published_at) : t("home.newsMeta", { defaultValue: "最新发布" })}
+              </span>
+            }
+          />
+        </List.Item>
+      )}
+    />
+  );
+}
+
+interface AntdHomeProps {
+  resourceCards?: PageComponentNode;
+  /** Demo/dev may show the documented legacy shell; production must not. */
+  allowLegacyResourceFallback?: boolean;
+  resourceDefinitionError?: boolean;
+}
+
+export function AntdHome({
+  resourceCards,
+  allowLegacyResourceFallback = false,
+  resourceDefinitionError = false,
+}: AntdHomeProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { reduced } = useAnimation();
@@ -177,23 +227,7 @@ export function AntdHome({ resourceCards }: { resourceCards?: PageComponentNode 
               </Link>
             </div>
             <Card style={{ border: "1px solid var(--border)", borderRadius: "var(--radius-lg)" }} styles={{ body: { padding: "4px 20px" } }}>
-              <List
-                dataSource={NEWS_PLACEHOLDER}
-                split
-                locale={{ emptyText: <Empty description={t("home.noNews", { defaultValue: "暂无新闻" })} /> }}
-                renderItem={(item) => (
-                  <List.Item>
-                    <List.Item.Meta
-                      title={
-                        <Link to="/news" search={{ category: undefined, page: undefined }} className="home-news-link" style={{ color: "var(--foreground)" }}>
-                          {t(item.titleKey, { defaultValue: item.title })}
-                        </Link>
-                      }
-                      description={<Tag color="green" style={{ margin: 0 }}>{t("home.newsMeta", { defaultValue: "最新发布 · SoyMutDB" })}</Tag>}
-                    />
-                  </List.Item>
-                )}
-              />
+              <LatestNewsPanel />
             </Card>
           </Col>
 
@@ -293,7 +327,14 @@ export function AntdHome({ resourceCards }: { resourceCards?: PageComponentNode 
           the page definition. The legacy static visual shell is retained only
           when an older published definition has not yet supplied this node. */}
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: "8px 24px 88px" }}>
-        {resourceCards ? <RenderNode node={resourceCards} /> : (
+        {resourceCards ? <RenderNode node={resourceCards} /> : resourceDefinitionError ? (
+          <Alert
+            type="error"
+            showIcon
+            message={t("home.resourceUnavailable", { defaultValue: "资源导览暂不可用" })}
+            description={t("home.resourceUnavailableDetail", { defaultValue: "发布的 Page Builder 内容无法从 API 获取，未使用演示内容替代。" })}
+          />
+        ) : allowLegacyResourceFallback ? (
           <section data-testid="resource-cards-fallback">
             <Title level={3} style={{ margin: "0 0 18px", fontWeight: 700 }}>
               {t("home.resourceNav", { defaultValue: "资源导览" })}
@@ -315,6 +356,8 @@ export function AntdHome({ resourceCards }: { resourceCards?: PageComponentNode 
               ))}
             </Row>
           </section>
+        ) : (
+          <Empty description={t("home.resourceUnavailable", { defaultValue: "暂无可用资源导览" })} />
         )}
       </div>
     </div>

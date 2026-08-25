@@ -69,3 +69,9 @@
 - **文件**: `.github/workflows/baseline-validation.yml`
 - **决策**: supply-chain job 在 `cyclonedx-npm` 前执行 frozen pnpm install，确保 Node SBOM 工具能读取 lockfile/node_modules，而不是因只有 artifact 输入报 `No evidence`。
 - **验证**: 远程日志已定位 `No package lock file nor npm shrinkwrap file` 与 `no node_modules dir`；下一轮 baseline 需复验 SBOM 和 attestations。
+
+## [前后端对接] - UI-3 真实数据与失败状态
+
+- **文件**: `apps/web/src/components/home/antd-home.tsx`, `apps/web/src/routes/index.tsx`, `apps/web/src/routes/search/genes.tsx`, `apps/web/src/routes/search/location.tsx`, `apps/admin/src/routes/index.tsx`
+- **决策**: 首页最新动态改用 `/news/featured`，删除虚拟新闻；生产首页 Page Builder 资源 API 失败时不显示 legacy fallback；基因/位置查询区分 API 失败与空结果；Admin 指标去除零值 placeholder 并显示加载/错误状态。
+- **验证**: Web/Admin `tsc --noEmit` 通过；定向 ESLint 0 error（位置页保留 7 个既有 React effect warnings）；Web/Admin Vite build 通过。

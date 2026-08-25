@@ -14,7 +14,7 @@ import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import * as React from "react";
-import { Button, Card, Empty, Form, Input, Select, Table, Tag, Typography, type TableColumnsType } from "@/lib/antd";
+import { Alert, Button, Card, Empty, Form, Input, Select, Table, Tag, Typography, type TableColumnsType } from "@/lib/antd";
 import { SearchOutlined } from "@ant-design/icons";
 import {
   searchGenes,
@@ -248,6 +248,14 @@ function GeneIdSearchComponent() {
                     ),
                   })) ?? []}
                 />
+                {assembliesQuery.isError ? (
+                  <Alert
+                    className="mt-2"
+                    type="error"
+                    showIcon
+                    message={t("search.genes.assembliesUnavailable", { defaultValue: "Assembly list unavailable" })}
+                  />
+                ) : null}
               </Form.Item>
               <Form.Item label={t("search.genes.geneId")} className="mb-0">
                 <Input.TextArea
@@ -284,7 +292,15 @@ function GeneIdSearchComponent() {
               {" · "}
               {formatNumber(total)}
             </p>
-            <div className="-mx-4 overflow-x-auto sm:mx-0">
+            {resultsQuery.isError ? (
+              <Alert
+                type="error"
+                showIcon
+                message={t("search.genes.resultsUnavailable", { defaultValue: "Gene search unavailable" })}
+                description={t("search.genes.resultsRetry", { defaultValue: "The API did not return a result set. Please retry later." })}
+              />
+            ) : (
+              <div className="-mx-4 overflow-x-auto sm:mx-0">
               <Table<GeneSummary>
                 rowKey="gene_id"
                 columns={columns}
@@ -312,7 +328,8 @@ function GeneIdSearchComponent() {
                   ),
                 }}
               />
-            </div>
+              </div>
+            )}
           </div>
         ) : null}
       </div>

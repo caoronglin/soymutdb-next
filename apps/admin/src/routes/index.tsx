@@ -4,7 +4,7 @@ import { Link } from "@tanstack/react-router";
 import { http } from "@soymutdb/api-client";
 import { fetchHomepageStats } from "@soymutdb/api-client";
 import { formatNumber } from "../lib/format";
-import { Typography } from "@/lib/antd";
+import { Alert, Typography } from "@/lib/antd";
 import { StatCard } from "../components/stat-card";
 import { lazy, Suspense } from "react";
 
@@ -38,26 +38,17 @@ interface DashboardSeriesResponse {
 }
 
 export default function DashboardPage() {
-  const { data: homepageStats } = useQuery({
+  const homepageStatsQuery = useQuery({
     queryKey: ["homepage-stats"],
     queryFn: fetchHomepageStats,
   });
+  const homepageStats = homepageStatsQuery.data;
 
-  const { data: dashboardStats } = useQuery<DashboardStats>({
+  const dashboardStatsQuery = useQuery<DashboardStats>({
     queryKey: ["admin-dashboard-stats"],
-    queryFn: () =>
-      http.get<DashboardStats>("/admin/dashboard-stats"),
-    placeholderData: {
-      totalUsers: 0,
-      activeReleases: 0,
-      totalVariants: 0,
-      queryP95Ms: 0,
-      usersChange: 0,
-      releasesChange: 0,
-      variantsChange: 0,
-      queryP95Change: 0,
-    },
+    queryFn: () => http.get<DashboardStats>("/admin/dashboard-stats"),
   });
+  const dashboardStats = dashboardStatsQuery.data;
 
   const { data: dashboardSeries, isLoading: seriesLoading, isError: seriesError, refetch: refetchSeries } = useQuery<DashboardSeriesResponse>({
     queryKey: ["admin-dashboard-series"],
@@ -85,11 +76,21 @@ export default function DashboardPage() {
         </div>
       </section>
 
+      {homepageStatsQuery.isError || dashboardStatsQuery.isError ? (
+        <Alert
+          type="error"
+          showIcon
+          message="Dashboard metrics unavailable"
+          description="The API did not return a current metric snapshot; no placeholder values are shown."
+          action={<button type="button" className="underline" onClick={() => { void homepageStatsQuery.refetch(); void dashboardStatsQuery.refetch(); }}>Retry</button>}
+        />
+      ) : null}
+
       {/* Stat cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="Total TeamOutlined"
-          value={formatNumber(dashboardStats?.totalUsers ?? 0)}
+          value={dashboardStatsQuery.isPending ? "…" : dashboardStatsQuery.isError ? "—" : formatNumber(dashboardStats?.totalUsers ?? 0)}
           icon={<TeamOutlined className="size-5" />}
           trend={dashboardStats?.usersChange !== undefined
             ? { value: `${dashboardStats.usersChange >= 0 ? "+" : ""}${dashboardStats.usersChange.toFixed(1)}%`, positive: dashboardStats.usersChange >= 0 }
@@ -97,7 +98,7 @@ export default function DashboardPage() {
         />
         <StatCard
           label="Active Releases"
-          value={formatNumber(homepageStats?.release_count ?? dashboardStats?.activeReleases ?? 0)}
+          value={homepageStatsQuery.isPending || dashboardStatsQuery.isPending ? "…" : homepageStatsQuery.isError || dashboardStatsQuery.isError ? "—" : formatNumber(homepageStats?.release_count ?? dashboardStats?.activeReleases ?? 0)}
           icon={<BranchesOutlined className="size-5" />}
           trend={dashboardStats?.releasesChange !== undefined
             ? { value: `${dashboardStats.releasesChange >= 0 ? "+" : ""}${dashboardStats.releasesChange.toFixed(1)}%`, positive: dashboardStats.releasesChange >= 0 }
@@ -105,7 +106,7 @@ export default function DashboardPage() {
         />
         <StatCard
           label="Total Variants"
-          value={formatNumber(homepageStats?.total_variants ?? dashboardStats?.totalVariants ?? 0)}
+          value={homepageStatsQuery.isPending || dashboardStatsQuery.isPending ? "…" : homepageStatsQuery.isError || dashboardStatsQuery.isError ? "—" : formatNumber(homepageStats?.total_variants ?? dashboardStats?.totalVariants ?? 0)}
           icon={<AimOutlined className="size-5" />}
           trend={dashboardStats?.variantsChange !== undefined
             ? { value: `${dashboardStats.variantsChange >= 0 ? "+" : ""}${dashboardStats.variantsChange.toFixed(1)}%`, positive: dashboardStats.variantsChange >= 0 }
@@ -113,7 +114,7 @@ export default function DashboardPage() {
         />
         <StatCard
           label="Query P95"
-          value={`${dashboardStats?.queryP95Ms ?? 0} ms`}
+          value={dashboardStatsQuery.isPending ? "…" : dashboardStatsQuery.isError ? "—" : `${dashboardStats?.queryP95Ms ?? 0} ms`}
           icon={<ClockCircleOutlined className="size-5" />}
           trend={dashboardStats?.queryP95Change !== undefined
             ? { value: `${dashboardStats.queryP95Change >= 0 ? "+" : ""}${dashboardStats.queryP95Change.toFixed(1)}%`, positive: dashboardStats.queryP95Change < 0 }
@@ -134,17 +135,17 @@ export default function DashboardPage() {
       <div className="grid gap-4 sm:grid-cols-3">
         <StatCard
           label="Genes"
-          value={(homepageStats?.gene_count ?? 0).toLocaleString()}
+          value={homepageStatsQuery.isPending ? "…" : homepageStatsQuery.isError ? "—" : (homepageStats?.gene_count ?? 0).toLocaleString()}
           icon={<DeploymentUnitOutlined className="size-5" />}
         />
         <StatCard
           label="Mutant Lines"
-          value={(homepageStats?.mutant_line_count ?? 0).toLocaleString()}
+          value={homepageStatsQuery.isPending ? "…" : homepageStatsQuery.isError ? "—" : (homepageStats?.mutant_line_count ?? 0).toLocaleString()}
           icon={<ExperimentOutlined className="size-5" />}
         />
         <StatCard
           label="Seed Accessions"
-          value={(homepageStats?.seed_accessions ?? 0).toLocaleString()}
+          value={homepageStatsQuery.isPending ? "…" : homepageStatsQuery.isError ? "—" : (homepageStats?.seed_accessions ?? 0).toLocaleString()}
           icon={<ExperimentOutlined className="size-5" />}
         />
       </div>

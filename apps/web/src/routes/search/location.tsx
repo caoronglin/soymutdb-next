@@ -15,6 +15,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import * as React from "react";
 import {
+  Alert,
   Button,
   Card,
   Empty,
@@ -281,6 +282,14 @@ function LocationSearchComponent() {
                     ),
                   }))}
                 />
+                {assembliesQuery.isError ? (
+                  <Alert
+                    className="mt-2"
+                    type="error"
+                    showIcon
+                    message={t("search.location.assembliesUnavailable", { defaultValue: "Assembly list unavailable" })}
+                  />
+                ) : null}
               </Form.Item>
               <div className="grid gap-4 sm:grid-cols-[1fr_120px_120px]">
                 <Form.Item label={t("search.location.chromosome")} className="mb-0">
@@ -294,6 +303,14 @@ function LocationSearchComponent() {
                     }))}
                     showSearch
                   />
+                  {chromosomesQuery.isError ? (
+                    <Alert
+                      className="mt-2"
+                      type="error"
+                      showIcon
+                      message={t("search.location.chromosomesUnavailable", { defaultValue: "Chromosome list unavailable" })}
+                    />
+                  ) : null}
                 </Form.Item>
                 <Form.Item label={t("search.location.start")} className="mb-0">
                   <InputNumber
@@ -339,7 +356,15 @@ function LocationSearchComponent() {
             <p className="mb-3 text-sm text-muted-foreground">
               {t("search.location.found", { count: data.length })}
             </p>
-            <div className="-mx-4 overflow-x-auto sm:mx-0">
+            {regionQuery.isError ? (
+              <Alert
+                type="error"
+                showIcon
+                message={t("search.location.resultsUnavailable", { defaultValue: "Region search unavailable" })}
+                description={t("search.location.resultsRetry", { defaultValue: "The API did not return a result set. Please retry later." })}
+              />
+            ) : (
+              <div className="-mx-4 overflow-x-auto sm:mx-0">
               <Table<VariantSummary>
                 rowKey="variant_id"
                 columns={columns}
@@ -361,7 +386,8 @@ function LocationSearchComponent() {
                   ),
                 }}
               />
-            </div>
+              </div>
+            )}
           </div>
         ) : null}
       </div>
