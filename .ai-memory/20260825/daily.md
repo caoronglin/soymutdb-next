@@ -141,3 +141,9 @@
 - **文件**: `.github/workflows/ci.yml`
 - **决策**: 两架构所有 build、smoke、Trivy、SPDX SBOM 均已通过；amd64 runner 在 `docker save` 写未压缩四镜像 tar 时磁盘耗尽。改为 `docker save | gzip -1` 生成 `.tar.gz`，Kind 与 publish 校验阶段用 `gzip -dc | docker load`，保留 SHA256 校验和与下游镜像 ID 证明。
 - **验证**: arm64 本轮已通过到 SBOM/export 前；amd64 唯一失败为 `no space left on device` 的未压缩归档，压缩流修复后需重跑 Kind 与发布链路。
+
+## [Kind smoke 修复] - Worker metrics 探测与 broker 兼容性
+
+- **文件**: `.github/workflows/ci.yml`, `apps/worker/src/soymutdb_worker/metrics.py`, `apps/worker/tests/test_metrics.py`
+- **决策**: Kind smoke 不再假设 Worker runtime 内有 curl，改用 Python 标准库读取 `/metrics`；同时 queue-depth collector 只对 `redis://`/`rediss://` 启动，`memory://` 等测试 broker 记录受控 warning，不在线程中抛出 Redis URL `ValueError`。
+- **验证**: Docker 双架构 build、smoke、Trivy、SPDX SBOM 和压缩 artifact 均通过；上一轮 Kind 唯一失败是 Worker 镜像没有 curl，待本修复后的 Kind 与 publish 重跑。

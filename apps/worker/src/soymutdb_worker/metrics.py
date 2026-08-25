@@ -88,6 +88,11 @@ _started = False
 _start_lock = threading.Lock()
 
 
+def _is_redis_broker(broker_url: str) -> bool:
+    """Return whether queue-depth collection can use the Redis client."""
+    return broker_url.partition(":")[0].lower() in {"redis", "rediss"}
+
+
 def _collect_queue_depth(broker_url: str, interval: float = 15.0) -> None:
     """Background loop: publish broker queue depths every ``interval`` seconds.
 
@@ -132,7 +137,7 @@ def start_metrics_server(broker_url: str | None = None) -> None:
         registry.register(multiprocess.MultiProcessCollector(registry))
         start_http_server(METRICS_PORT, registry=registry)
         WORKER_UP.set(1)
-        if broker_url:
+        if broker_url and _is_redis_broker(broker_url):
             thread = threading.Thread(
                 target=_collect_queue_depth,
                 args=(broker_url,),
@@ -140,6 +145,11 @@ def start_metrics_server(broker_url: str | None = None) -> None:
                 daemon=True,
             )
             thread.start()
+        elif broker_url:
+            logger.warning(
+                "queue_depth_collector_disabled_unsupported_broker",
+                extra={"broker_scheme": broker_url.partition(":")[0].lower()},
+            )
         _started = True
     logger.info("metrics_server_started", extra={"port": METRICS_PORT})
 

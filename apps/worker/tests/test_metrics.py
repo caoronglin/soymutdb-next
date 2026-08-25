@@ -46,6 +46,14 @@ def test_metrics_module_exposes_expected_metrics():
     )
 
 
+def test_queue_depth_collector_only_accepts_redis_brokers():
+    from soymutdb_worker import metrics
+
+    assert metrics._is_redis_broker("redis://localhost:6379/1") is True
+    assert metrics._is_redis_broker("rediss://localhost:6379/1") is True
+    assert metrics._is_redis_broker("memory://") is False
+
+
 def test_start_metrics_server_is_idempotent():
     from soymutdb_worker import metrics
 
