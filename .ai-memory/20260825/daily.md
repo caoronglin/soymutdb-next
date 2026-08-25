@@ -129,3 +129,9 @@
 - **文件**: `.trivyignore`
 - **决策**: Trivy Worker SARIF 在 API 已通过后暴露 `liblmdb0`, `tabix`, `libmbedx509`, `libcurl3t64-gnutls` 与 Python 系统包的无 fixed version CVE；这些包来自 Worker 必需的 ncbi-blast+/tabix/samtools/bedtools 工具链，加入同一可审计例外清单，固定版本发现仍保持阻断。
 - **验证**: 两架构 Worker smoke（23 tasks）通过；API Trivy 已通过，Worker scan 收敛为 27 个无 fixed version CVE，待下一轮确认 MCP/JBrowse 扫描和 SBOM。
+
+## [CI 修复] - JBrowse Alpine 系统包更新
+
+- **文件**: `apps/jbrowse/Dockerfile`
+- **决策**: JBrowse Trivy 暴露的是 Alpine runtime 中带 fixed version 的 `libssl3`, `libxml2`, `libpng`, `libexpat`, `zlib`, `nghttp2` 等漏洞；在 nginx runtime 阶段执行 `apk upgrade --no-cache`，不将可修复漏洞加入例外清单。
+- **验证**: API、Worker、MCP 两架构 Trivy 已通过；JBrowse 构建与 nginx smoke 通过，待 Alpine 升级后的最终 scan 与 SBOM 验收。

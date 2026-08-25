@@ -27,6 +27,7 @@ RUN pnpm --filter @soymutdb/jbrowse build
 
 # ---- runtime stage: nginx serves the generated static assets ----------
 FROM nginx:1.27-alpine AS runtime
+RUN apk upgrade --no-cache
 COPY --from=build /app/apps/jbrowse/dist /usr/share/nginx/html
 COPY apps/jbrowse/nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
