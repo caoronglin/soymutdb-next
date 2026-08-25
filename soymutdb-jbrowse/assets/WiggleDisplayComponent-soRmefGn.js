@@ -1,0 +1,1 @@
+import{o as r,R as e,ad as o}from"./index-Chmwyycw.js";import{Y as l}from"./YScaleBars-LY-hQRl8.js";import"./util-B_cgN1Px.js";const s=r(function(a){const{model:t}=a;return e.createElement("div",null,e.createElement(o,{...a}),e.createElement(l,{model:t}))});export{s as default};

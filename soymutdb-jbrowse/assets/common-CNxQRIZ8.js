@@ -1,0 +1,1 @@
+var e={},o;function r(){return o||(o=1,Object.defineProperty(e,"__esModule",{value:!0}),e.commonLocale=void 0,e.commonLocale={yearFormat:"YYYY",dayFormat:"D",cellMeridiemFormat:"A",monthBeforeYear:!0}),e}export{r};

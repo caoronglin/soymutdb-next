@@ -1,0 +1,3 @@
+# Non-release artifact: HTML pages declare noindex, nofollow.
+User-agent: *
+Disallow: /
