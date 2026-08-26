@@ -59,7 +59,17 @@ export default defineConfig(({ mode }) => {
                         ) {
                             return "tiptap";
                         }
-                        if (id.includes("node_modules/react") || id.includes("node_modules/react-dom")) return "react";
+                        // react 分支必须精确匹配核心包路径 —— 宽泛的
+                        // id.includes("react") 会把 @ant-design/react-slick、
+                        // react-day-picker 等依赖 rc-* 的包也打入 react chunk，
+                        // 形成 react→rc→antd→react 循环（生产白屏风险）。
+                        if (
+                            /node_modules\/(react|react-dom|react-is|scheduler|use-sync-external-store)(\/|@)/.test(
+                                id,
+                            )
+                        ) {
+                            return "react";
+                        }
                         if (id.includes("node_modules/@tanstack")) return "router";
                         // rc-* 基础组件和 antd 存在相互依赖；拆成独立 chunk 会导致
                         // ES module 初始化循环，并让生产登录页在加载时白屏。保持它们

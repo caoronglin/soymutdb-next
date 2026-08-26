@@ -13,6 +13,7 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import { useSiteContent } from "../../lib/site-content";
 import * as React from "react";
 import { Alert, Button, Card, Empty, Form, Input, Select, Table, Tag, Typography, type TableColumnsType } from "@/lib/antd";
 import { SearchOutlined } from "@ant-design/icons";
@@ -50,6 +51,7 @@ interface Submitted {
 
 function GeneIdSearchComponent() {
   const { t } = useTranslation();
+  const { get } = useSiteContent();
   const router = useRouter();
   const { q: urlQ, assembly: urlAssembly, run } = Route.useSearch();
   // This route intentionally consumes its URL once. Capturing the initial
@@ -138,7 +140,7 @@ function GeneIdSearchComponent() {
   const columns: TableColumnsType<GeneSummary> = [
     {
       // 1. Genome assembly
-      title: t("search.genes.colAssembly"),
+      title: get("search.genes.colAssembly", t("search.genes.colAssembly")),
       dataIndex: "assembly",
       key: "assembly",
       render: () => (
@@ -147,14 +149,14 @@ function GeneIdSearchComponent() {
     },
     {
       // 2. Chromosome
-      title: t("search.genes.colChromosome"),
+      title: get("search.genes.colChromosome", t("search.genes.colChromosome")),
       dataIndex: "chromosome",
       key: "chromosome",
       render: (_, row) => <span className="font-mono text-xs">{row.chromosome}</span>,
     },
     {
       // 3. Position
-      title: t("search.genes.colPosition"),
+      title: get("search.genes.colPosition", t("search.genes.colPosition")),
       dataIndex: "position",
       key: "position",
       render: (_, row) => (
@@ -165,7 +167,7 @@ function GeneIdSearchComponent() {
     },
     {
       // 4. Mutation feature
-      title: t("search.genes.colMutation"),
+      title: get("search.genes.colMutation", t("search.genes.colMutation")),
       dataIndex: "variant_count",
       key: "mutation",
       render: (_, row) =>
@@ -179,7 +181,7 @@ function GeneIdSearchComponent() {
     },
     {
       // 5. Gene ID (linked to detail)
-      title: t("search.genes.colGeneId"),
+      title: get("search.genes.colGeneId", t("search.genes.colGeneId")),
       dataIndex: "gene_id",
       key: "gene_id",
       render: (_, row) => (
@@ -195,7 +197,7 @@ function GeneIdSearchComponent() {
     },
     {
       // 6. JBrowse 2 action (base-aware, new tab)
-      title: t("search.genes.colGbrowse"),
+      title: get("search.genes.colGbrowse", t("search.genes.colGbrowse")),
       dataIndex: "jbrowse",
       key: "jbrowse",
       render: (_, row) => (
@@ -222,66 +224,70 @@ function GeneIdSearchComponent() {
   return (
     <FadeUp>
       <div className="py-6">
-        <p className="eyebrow">{t("search.genes.title")}</p>
+        <p className="eyebrow">{get("search.genes.title", t("search.genes.title"))}</p>
         <h2 className="mt-2 font-display text-2xl font-semibold tracking-tight">
-          {t("search.genes.subtitle")}
+          {get("search.genes.subtitle", t("search.genes.subtitle"))}
         </h2>
 
         <Card className="mt-6 max-w-3xl">
-          <Form layout="vertical" onFinish={submitInNewTab}>
-            <div className="grid gap-4 sm:grid-cols-[240px_1fr]">
-              <Form.Item label={t("search.genes.assembly")} className="mb-0">
-                <Select
-                  value={formAssemblyId}
-                  onChange={(v) => setAssemblyId(v)}
-                  placeholder={t("search.genes.assemblyPlaceholder")}
-                  loading={assembliesQuery.isLoading}
-                  options={assemblies?.map((a) => ({
-                    value: String(a.id),
-                    label: (
-                      <span className="flex items-center gap-2">
-                        <span>{a.name}</span>
-                        {a.is_default ? (
-                          <Tag className="m-0 text-[9px] uppercase">Default</Tag>
-                        ) : null}
-                      </span>
-                    ),
-                  })) ?? []}
+          <Form
+            layout="inline"
+            className="mt-6 flex flex-wrap items-end gap-x-4 gap-y-4"
+            onFinish={submitInNewTab}
+          >
+            <Form.Item label={get("search.genes.assembly", t("search.genes.assembly"))} className="mb-0">
+              <Select
+                value={formAssemblyId}
+                onChange={(v) => setAssemblyId(v)}
+                placeholder={get("search.genes.assemblyPlaceholder", t("search.genes.assemblyPlaceholder"))}
+                loading={assembliesQuery.isLoading}
+                style={{ width: 220 }}
+                options={assemblies?.map((a) => ({
+                  value: String(a.id),
+                  label: (
+                    <span className="flex items-center gap-2">
+                      <span>{a.name}</span>
+                      {a.is_default ? (
+                        <Tag className="m-0 text-[9px] uppercase">Default</Tag>
+                      ) : null}
+                    </span>
+                  ),
+                })) ?? []}
+              />
+              {assembliesQuery.isError ? (
+                <Alert
+                  className="mt-2"
+                  type="error"
+                  showIcon
+                  message={t("search.genes.assembliesUnavailable", { defaultValue: "Assembly list unavailable" })}
                 />
-                {assembliesQuery.isError ? (
-                  <Alert
-                    className="mt-2"
-                    type="error"
-                    showIcon
-                    message={t("search.genes.assembliesUnavailable", { defaultValue: "Assembly list unavailable" })}
-                  />
-                ) : null}
-              </Form.Item>
-              <Form.Item label={t("search.genes.geneId")} className="mb-0">
-                <Input.TextArea
-                  rows={2}
-                  value={geneIdsRaw}
-                  onChange={(e) => setGeneIdsRaw(e.target.value)}
-                  placeholder={t("search.genes.geneIdPlaceholder")}
-                  className="font-mono text-sm"
-                  aria-label={t("search.genes.geneId")}
-                />
-              </Form.Item>
-            </div>
-            <div className="mt-4 flex flex-wrap items-center gap-3">
+              ) : null}
+            </Form.Item>
+            <Form.Item label={get("search.genes.geneId", t("search.genes.geneId"))} className="mb-0">
+              <Input.TextArea
+                rows={2}
+                value={geneIdsRaw}
+                onChange={(e) => setGeneIdsRaw(e.target.value)}
+                placeholder={get("search.genes.geneIdPlaceholder", t("search.genes.geneIdPlaceholder"))}
+                className="font-mono text-sm"
+                style={{ width: 320 }}
+                aria-label={get("search.genes.geneId", t("search.genes.geneId"))}
+              />
+            </Form.Item>
+            <Form.Item className="mb-0">
               <Button
                 type="primary"
                 htmlType="submit"
                 icon={<SearchOutlined aria-hidden />}
                 loading={resultsQuery.isFetching}
               >
-                {t("search.genes.submit")}
+                {get("ui.searchButton", t("search.genes.submit"))}
               </Button>
-              <Typography.Text type="secondary" className="text-xs">
-                {t("search.genes.geneIdHint")}
-              </Typography.Text>
-            </div>
+            </Form.Item>
           </Form>
+          <Typography.Text type="secondary" className="mt-2 block text-xs">
+            {get("search.genes.geneIdHint", t("search.genes.geneIdHint"))}
+          </Typography.Text>
         </Card>
 
         {submitted ? (
@@ -297,7 +303,7 @@ function GeneIdSearchComponent() {
                 type="error"
                 showIcon
                 message={t("search.genes.resultsUnavailable", { defaultValue: "Gene search unavailable" })}
-                description={t("search.genes.resultsRetry", { defaultValue: "The API did not return a result set. Please retry later." })}
+                description={get("ui.errorRetry", t("search.genes.resultsRetry", { defaultValue: "The API did not return a result set. Please retry later." }))}
               />
             ) : (
               <div className="-mx-4 overflow-x-auto sm:mx-0">
@@ -321,7 +327,7 @@ function GeneIdSearchComponent() {
                     <Empty
                       description={
                         <Typography.Text type="secondary">
-                          {t("search.genes.noResults")}
+                          {get("ui.noResults", t("search.genes.noResults"))}
                         </Typography.Text>
                       }
                     />

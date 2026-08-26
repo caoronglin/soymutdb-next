@@ -313,13 +313,13 @@ const TOOLS_RESOURCES: Record<string, Record<string, unknown>> = {
 const HOME_RESOURCES: Record<string, Record<string, unknown>> = {
   en: {
     home: {
-      heroTitle: "Explore the Unknown Territories of Soybean Mutation",
+      heroTitle: "Explore the Unknown Territories of Multi-Species Mutation",
       heroSubtitle: "A next-generation multi-species mutation database — from genome to phenotype in one place.",
       heroEyebrow: "SOYMUTDB · MULTI-SPECIES",
       heroPrimary: "Start Exploring",
       heroSecondary: "Learn More",
-      heroSlide2: "From twenty chromosomes to a global phenotype view",
-      heroSlide2Desc: "Covers the soybean reference genome and mutation collections, with multi-dimensional search across genes, loci and BLAST.",
+      heroSlide2: "From chromosomes to a global phenotype view",
+      heroSlide2Desc: "Covers multi-species reference genomes and mutation collections, with multi-dimensional search across genes, loci and BLAST.",
       heroSlide3: "Mutation features at a glance",
       heroSlide3Desc: "Chromosomes, mutation types, gene loci and JBrowse 2 links presented as tables and visualizations.",
       toolGeneLabel: "Gene ID Search",
@@ -350,13 +350,13 @@ const HOME_RESOURCES: Record<string, Record<string, unknown>> = {
   },
   zh: {
     home: {
-      heroTitle: "探索大豆突变的未知疆域",
+      heroTitle: "探索多物种突变的未知疆域",
       heroSubtitle: "新一代多物种突变数据库，从基因组到表型一站探索。",
       heroEyebrow: "SOYMUTDB · MULTI-SPECIES",
       heroPrimary: "开始探索",
       heroSecondary: "了解更多",
-      heroSlide2: "从 20 条染色体到全局表型",
-      heroSlide2Desc: "覆盖大豆参考基因组与突变集合，支持基因、位点、BLAST 多维检索。",
+      heroSlide2: "从染色体到全局表型",
+      heroSlide2Desc: "覆盖多物种参考基因组与突变集合，支持基因、位点、BLAST 多维检索。",
       heroSlide3: "突变特征一览无余",
       heroSlide3Desc: "以表格与可视化呈现染色体、突变类型、基因位点与 JBrowse 2 跳转。",
       toolGeneLabel: "基因 ID 检索",

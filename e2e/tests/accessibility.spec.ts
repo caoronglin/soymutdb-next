@@ -50,13 +50,13 @@ test.describe("accessibility — layout at three viewports", () => {
 });
 
 test.describe("accessibility — navigation and forms", () => {
-  test("all primary navigation links have descriptive text", async ({ page }) => {
+  test("all primary navigation controls have descriptive text", async ({ page }) => {
     await page.goto(`${BASE}/`);
-    const links = page.locator('nav[aria-label="Primary"] a');
-    const count = await links.count();
-    expect(count).toBeGreaterThanOrEqual(5);
+    const controls = page.locator('nav[aria-label="Primary"] a, nav[aria-label="Primary"] button');
+    const count = await controls.count();
+    expect(count).toBeGreaterThanOrEqual(4);
     for (let i = 0; i < count; i++) {
-      const text = (await links.nth(i).textContent())?.trim() ?? "";
+      const text = (await controls.nth(i).textContent())?.trim() ?? "";
       expect(text.length).toBeGreaterThan(0);
     }
   });

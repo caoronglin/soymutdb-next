@@ -24,7 +24,6 @@ import {
   List,
   Select,
   Skeleton,
-  Space,
   Table,
   Tag,
   Typography,
@@ -41,6 +40,8 @@ import {
   type BlastJob,
 } from "@soymutdb/api-client";
 import { FadeUp } from "../components/route-motion";
+import { useSiteContent } from "../lib/site-content";
+import { compactGeneId } from "../lib/format";
 import { buildJbrowseLocusUrl } from "../lib/deployment";
 import { ensurePermission, showNotification } from "../lib/use-browser-notifications";
 import { z } from "zod";
@@ -101,6 +102,12 @@ type BlastHitLoose = {
   score?: number;
 };
 
+// Wireframe: the BLAST type dropdown is restricted to nucleotide (blastn)
+// and protein (blastp) searches — other programs remain supported server-side.
+const BLAST_PROGRAM_OPTIONS = BLAST_PROGRAMS.filter(
+  (p) => p.id === "blastn" || p.id === "blastp",
+);
+
 const blastSchema = z.object({
   program: z.string().min(1),
   database: z.string().min(1),
@@ -147,8 +154,17 @@ function validateFastaStructure(input: string): string | null {
   return null;
 }
 
+/** Extract the ID from the first FASTA header of a submitted query, if any. */
+function fastaHeaderId(sequence: string | null | undefined): string | undefined {
+  const seq = sequence?.trim();
+  if (!seq) return undefined;
+  const header = seq.split(/\r?\n/).find((line) => line.trimStart().startsWith(">"));
+  return header ? header.slice(1).trim().split(/\s+/)[0] : undefined;
+}
+
 function BlastComponent() {
   const { t } = useTranslation();
+  const { get } = useSiteContent();
   const queryClient = useQueryClient();
   const [form, setForm] = React.useState({
     program: "blastn",
@@ -170,9 +186,9 @@ function BlastComponent() {
 
   const databaseOptions: { value: string; label: React.ReactNode; disabled?: boolean }[] =
     databasesQuery.isLoading
-      ? [{ value: "__loading__", label: t("common.loading"), disabled: true }]
+      ? [{ value: "__loading__", label: get("ui.loading", t("common.loading")), disabled: true }]
       : activeDatabases.length === 0
-        ? [{ value: "__empty__", label: "No databases available", disabled: true }]
+        ? [{ value: "__empty__", label: get("ui.noResults", "No databases available"), disabled: true }]
         : activeDatabases.map((d) => ({
             value: String(d.id),
             label: (
@@ -369,40 +385,46 @@ function BlastComponent() {
   };
 
   const hits = hitsQuery.data ?? [];
+  const inputSequenceId = selectedJob ? fastaHeaderId(selectedJob.query_sequence) : undefined;
   const hitsColumns: TableColumnsType<BlastHitLoose> = [
     {
-      title: t("blast.hitSubject"),
-      dataIndex: "subject_id",
-      key: "subject",
-      render: (_, hit) => {
-        const id = hitSubjectId(hit);
-        const title = hit.subject_title ?? hit.target_title;
-        return (
-          <span className="min-w-0">
-            <span className="block truncate font-mono text-xs font-medium">{id ?? "—"}</span>
-            {title ? (
-              <span className="block truncate text-xs text-muted-foreground">{title}</span>
-            ) : null}
-          </span>
-        );
-      },
+      // Wireframe: 基因组版本 (assembly)
+      title: t("search.genes.colAssembly"),
+      key: "assembly",
+      width: 160,
+      render: () => (
+        <span className="font-mono text-xs text-muted-foreground">
+          {selectedJob ? assemblyForJob(selectedJob) ?? "—" : "—"}
+        </span>
+      ),
     },
     {
-      title: t("blast.hitScore"),
-      dataIndex: "bit_score",
-      key: "score",
-      width: 90,
+      // Wireframe: 输入序列ID (query FASTA header id, same for every hit)
+      title: get("blast.hitSequenceId", t("blast.hitSequenceId")),
+      key: "subject",
+      width: 160,
+      render: () => (
+        <span className="font-mono text-xs font-medium">{inputSequenceId ?? "—"}</span>
+      ),
+    },
+    {
+      // Wireframe: 覆盖度 (coverage/identity)
+      title: get("blast.hitCoverage", t("blast.hitCoverage")),
+      dataIndex: "percent_identity",
+      key: "identity",
+      width: 110,
       render: (_, hit) => {
-        const score = hit.bit_score ?? hit.score;
-        return score != null ? (
-          <span className="font-mono text-xs">{score.toFixed(1)}</span>
+        const identity = hit.percent_identity ?? hit.identity_percent;
+        return identity != null ? (
+          <span className="font-mono text-xs">{identity.toFixed(1)}%</span>
         ) : (
           <span className="text-muted-foreground">—</span>
         );
       },
     },
     {
-      title: t("blast.hitEValue"),
+      // Wireframe: E值
+      title: get("blast.hitEValue", t("blast.hitEValue")),
       dataIndex: "evalue",
       key: "evalue",
       width: 110,
@@ -414,81 +436,46 @@ function BlastComponent() {
         ),
     },
     {
-      title: t("blast.hitIdentity"),
-      dataIndex: "percent_identity",
-      key: "identity",
-      width: 100,
+      // Wireframe: 基因ID (button → gene ID search)
+      title: get("blast.hitGeneId", t("blast.hitGeneId")),
+      key: "gene",
+      width: 180,
       render: (_, hit) => {
-        const identity = hit.percent_identity ?? hit.identity_percent;
-        return identity != null ? (
-          <span className="font-mono text-xs">{identity.toFixed(1)}%</span>
-        ) : (
-          <span className="text-muted-foreground">—</span>
-        );
-      },
-    },
-    {
-      title: t("blast.hitLength"),
-      dataIndex: "alignment_length",
-      key: "length",
-      width: 90,
-      render: (_, hit) =>
-        hit.alignment_length != null ? (
-          <span className="font-mono text-xs">{hit.alignment_length}</span>
-        ) : (
-          <span className="text-muted-foreground">—</span>
-        ),
-    },
-    {
-      title: t("blast.hitSubjectCoords"),
-      dataIndex: "subject_start",
-      key: "subject_coords",
-      width: 160,
-      render: (_, hit) => {
-        const chr = hitSubjectId(hit);
-        const start = hitStart(hit);
-        const end = hitEnd(hit);
-        return start != null && end != null && chr ? (
-          <span className="font-mono text-xs text-muted-foreground">
-            {chr}:{start}-{end}
-          </span>
-        ) : (
-          <span className="text-muted-foreground">—</span>
-        );
-      },
-    },
-    {
-      title: t("common.actions"),
-      key: "actions",
-      width: 190,
-      render: (_, hit) => {
-        const browserUrl = selectedJob ? browserUrlFor(selectedJob, hit) : null;
         const geneId = hitSubjectId(hit);
         return (
-          <Space size={4} wrap>
-            <Button
-              size="small"
-              disabled={!browserUrl}
-              href={browserUrl ?? undefined}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              {t("blast.actions.gbrowse")}
-            </Button>
-            <Button
-              size="small"
-              disabled={!geneId}
-              onClick={() => {
-                if (!geneId) return;
-                navigate({
-                  to: "/search/genes",
-                  search: { q: geneId, run: true },
-                });
-              }}
-            >
-              {t("blast.actions.geneSearch")}
-            </Button>
-          </Space>
+          <Button
+            size="small"
+            disabled={!geneId}
+            onClick={() => {
+              if (!geneId) return;
+              navigate({
+                to: "/search/genes",
+                search: { q: geneId, run: true },
+              });
+            }}
+          >
+            {geneId ? compactGeneId(geneId, 18) : t("blast.actions.geneSearch")}
+          </Button>
+        );
+      },
+    },
+    {
+      // Wireframe: Gbrowse (button → browser new page)
+      title: t("blast.actions.gbrowse"),
+      key: "gbrowse",
+      width: 140,
+      render: (_, hit) => {
+        const browserUrl = selectedJob ? browserUrlFor(selectedJob, hit) : null;
+        return (
+          <Button
+            size="small"
+            disabled={!browserUrl}
+            href={browserUrl ?? undefined}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {t("blast.actions.gbrowse")}
+          </Button>
         );
       },
     },
@@ -512,39 +499,46 @@ function BlastComponent() {
             }
             description={<Typography.Text type="secondary">Submit a sequence for homology search</Typography.Text>}
           />
-          <Form layout="vertical" onFinish={onSubmit} className="mt-6">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Form.Item
-                label={t("blast.searchType")}
-                htmlFor="program"
-                help={errors.program ?? undefined}
-                validateStatus={errors.program ? "error" : undefined}
-              >
-                <Select
-                  id="program"
-                  value={form.program}
-                  onChange={(v) => setForm((f) => ({ ...f, program: v }))}
-                  options={BLAST_PROGRAMS.map((p) => ({ value: p.id, label: p.label }))}
-                />
-              </Form.Item>
-              <Form.Item
-                label={t("blast.database")}
-                htmlFor="database"
-                help={errors.database ?? undefined}
-                validateStatus={errors.database ? "error" : undefined}
-              >
-                <Select
-                  id="database"
-                  value={form.database}
-                  onChange={(v) => setForm((f) => ({ ...f, database: v }))}
-                  placeholder="Select database"
-                  options={databaseOptions}
-                />
-              </Form.Item>
-            </div>
+          <Form
+            layout="horizontal"
+            labelCol={{ span: 6 }}
+            wrapperCol={{ span: 18 }}
+            onFinish={onSubmit}
+            className="mt-6"
+          >
+            <Form.Item
+              label={get("blast.searchType", t("blast.searchType"))}
+              htmlFor="program"
+              help={errors.program ?? undefined}
+              validateStatus={errors.program ? "error" : undefined}
+            >
+              <Select
+                id="program"
+                value={form.program}
+                onChange={(v) => setForm((f) => ({ ...f, program: v }))}
+                options={BLAST_PROGRAM_OPTIONS.map((p) => ({ value: p.id, label: p.label }))}
+              />
+            </Form.Item>
 
             <Form.Item
-              label={t("blast.inputSequence")}
+              label={get("blast.database", t("blast.database"))}
+              htmlFor="database"
+              help={errors.database ?? undefined}
+              validateStatus={errors.database ? "error" : undefined}
+            >
+              <Select
+                id="database"
+                value={form.database}
+                onChange={(v) => setForm((f) => ({ ...f, database: v }))}
+                placeholder={get("blast.databasePlaceholder", t("blast.databasePlaceholder", {
+                  defaultValue: "Select a reference sequence type",
+                }))}
+                options={databaseOptions}
+              />
+            </Form.Item>
+
+            <Form.Item
+              label={get("blast.input", t("blast.inputSequence"))}
               htmlFor="sequence"
               help={errors.sequence ?? undefined}
               validateStatus={errors.sequence ? "error" : undefined}
@@ -553,49 +547,52 @@ function BlastComponent() {
                 id="sequence"
                 value={form.sequence}
                 onChange={(e) => setForm((f) => ({ ...f, sequence: e.target.value }))}
-                placeholder={t("blast.sequencePlaceholder")}
+                placeholder={get("blast.sequencePlaceholder", t("blast.sequencePlaceholder"))}
                 className="min-h-[160px] font-mono text-sm"
               />
             </Form.Item>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Form.Item label={t("blast.eValue")} htmlFor="e_value">
-                <Input
-                  id="e_value"
-                  value={form.e_value}
-                  onChange={(e) => setForm((f) => ({ ...f, e_value: e.target.value }))}
-                  className="font-mono"
-                />
-              </Form.Item>
-              <Form.Item label={t("blast.maxHits")} htmlFor="max_hits">
-                <Input
-                  id="max_hits"
-                  type="number"
-                  value={form.max_hits}
-                  onChange={(e) => setForm((f) => ({ ...f, max_hits: e.target.value }))}
-                  className="font-mono"
-                />
-              </Form.Item>
-            </div>
-
-            <div className="flex gap-2">
-              <Button
-                type="primary"
-                htmlType="submit"
-                loading={submitMutation.isPending}
-                icon={<Play className="size-4" aria-hidden />}
-              >
-                {t("blast.submit")}
-              </Button>
-              <Button onClick={clearForm}>{t("blast.clear")}</Button>
-            </div>
-            {submitMutation.isError ? (
-              <Alert
-                type="error"
-                showIcon
-                className="mt-4"
-                message={`Failed to submit: ${(submitMutation.error as Error).message}`}
+            <Form.Item label={t("blast.eValue")} htmlFor="e_value">
+              <Input
+                id="e_value"
+                value={form.e_value}
+                onChange={(e) => setForm((f) => ({ ...f, e_value: e.target.value }))}
+                className="font-mono"
               />
+            </Form.Item>
+
+            <Form.Item label={t("blast.maxHits")} htmlFor="max_hits">
+              <Input
+                id="max_hits"
+                type="number"
+                value={form.max_hits}
+                onChange={(e) => setForm((f) => ({ ...f, max_hits: e.target.value }))}
+                className="font-mono"
+              />
+            </Form.Item>
+
+            <Form.Item wrapperCol={{ offset: 6, span: 18 }} className="mb-0">
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="primary"
+                  htmlType="submit"
+                  loading={submitMutation.isPending}
+                  icon={<Play className="size-4" aria-hidden />}
+                >
+                  {get("blast.submit", t("blast.submit"))}
+                </Button>
+                <Button onClick={clearForm}>{t("blast.clear")}</Button>
+              </div>
+            </Form.Item>
+
+            {submitMutation.isError ? (
+              <Form.Item wrapperCol={{ offset: 6, span: 18 }} className="mb-0 mt-4">
+                <Alert
+                  type="error"
+                  showIcon
+                  message={get("ui.errorRetry", `Failed to submit: ${(submitMutation.error as Error).message}`)}
+                />
+              </Form.Item>
             ) : null}
           </Form>
         </Card>
@@ -608,7 +605,7 @@ function BlastComponent() {
           {jobsQuery.isLoading ? (
             <Skeleton active paragraph={{ rows: 3 }} title={false} />
           ) : jobs.length === 0 ? (
-            <Empty description={t("blast.noJobs")} />
+            <Empty description={get("ui.noResults", t("blast.noJobs"))} />
           ) : (
             <List<BlastJob>
               dataSource={jobs}
@@ -658,7 +655,7 @@ function BlastComponent() {
             {hitsQuery.isLoading ? (
               <Skeleton active paragraph={{ rows: 4 }} title={false} />
             ) : hits.length === 0 ? (
-              <Empty description={t("blast.noHits")} />
+              <Empty description={get("ui.noResults", t("blast.noHits"))} />
             ) : (
               <Table<BlastHitLoose>
                 rowKey={(hit) => String(hit.id ?? hit.hsp_num ?? 0)}

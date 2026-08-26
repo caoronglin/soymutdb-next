@@ -5,6 +5,7 @@ import * as React from "react";
 import { Outlet, createRootRouteWithContext, useRouterState } from "@tanstack/react-router";
 import type { QueryClient } from "@tanstack/react-query";
 import { SiteHeader } from "../components/site-header";
+import { SiteContentProvider } from "../lib/site-content";
 import { SiteFooter } from "../components/site-footer";
 import { ErrorBoundary } from "../components/error-boundary";
 import { CommandPalette } from "../components/command-palette";
@@ -37,28 +38,32 @@ function RootComponent() {
 
   if (standalone) {
     return (
-      <ErrorBoundary>
-        <a href="#main" className="skip-link">Skip to content</a>
-        <main id="main" className="flex-1">
-          {allowRouteMotion ? <React.Suspense fallback={null}><RouteMotionRuntime /></React.Suspense> : null}
-          <Outlet />
-        </main>
-      </ErrorBoundary>
+      <SiteContentProvider>
+        <ErrorBoundary>
+          <a href="#main" className="skip-link">Skip to content</a>
+          <main id="main" className="flex-1">
+            {allowRouteMotion ? <React.Suspense fallback={null}><RouteMotionRuntime /></React.Suspense> : null}
+            <Outlet />
+          </main>
+        </ErrorBoundary>
+      </SiteContentProvider>
     );
   }
 
   return (
-    <ErrorBoundary>
-      <a href="#main" className="skip-link">Skip to content</a>
-      <div className="flex min-h-screen flex-col">
-        <SiteHeader />
-        <main id="main" className="flex-1">
-          {allowRouteMotion ? <React.Suspense fallback={null}><RouteMotionRuntime /></React.Suspense> : null}
-          <Outlet />
-        </main>
-        <SiteFooter />
-      </div>
-      <CommandPalette />
-    </ErrorBoundary>
+    <SiteContentProvider>
+      <ErrorBoundary>
+        <a href="#main" className="skip-link">Skip to content</a>
+        <div className="flex min-h-screen flex-col">
+          <SiteHeader />
+          <main id="main" className="flex-1">
+            {allowRouteMotion ? <React.Suspense fallback={null}><RouteMotionRuntime /></React.Suspense> : null}
+            <Outlet />
+          </main>
+          <SiteFooter />
+        </div>
+        <CommandPalette />
+      </ErrorBoundary>
+    </SiteContentProvider>
   );
 }

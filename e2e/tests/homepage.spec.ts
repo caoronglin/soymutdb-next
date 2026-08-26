@@ -14,25 +14,24 @@ import { test, expect } from "@playwright/test";
 const BASE = "/soymutdb-next";
 
 test.describe("homepage — primary navigation", () => {
-  test("renders the five-item nav in fixed order", async ({ page }) => {
+  test("renders the grouped two-level nav in order", async ({ page }) => {
     await page.goto(`${BASE}/`);
 
     const nav = page.locator('nav[aria-label="Primary"]').first();
     await expect(nav).toBeVisible();
 
-    const labels = await nav.locator("a").allTextContents();
+    // Top-level controls: Explore / Tools / Downloads / Resources (downloads is
+    // a direct link; the other three open a dropdown "secondary menu").
+    const labels = await nav.locator("a, button").allTextContents();
     const joined = labels.map((l) => l.trim()).join("|");
-    // Order from the seed fallback: Home / Search / Tools / Latest News / Contact.
-    const home = joined.indexOf("Home");
-    const search = joined.indexOf("Search");
+    const explore = joined.indexOf("Explore");
     const tools = joined.indexOf("Tools");
-    const news = joined.indexOf("Latest News");
-    const contact = joined.indexOf("Contact");
-    expect(home).toBeGreaterThanOrEqual(0);
-    expect(search).toBeGreaterThan(home);
-    expect(tools).toBeGreaterThan(search);
-    expect(news).toBeGreaterThan(tools);
-    expect(contact).toBeGreaterThan(news);
+    const downloads = joined.indexOf("Downloads");
+    const resources = joined.indexOf("Resources");
+    expect(explore).toBeGreaterThanOrEqual(0);
+    expect(tools).toBeGreaterThan(explore);
+    expect(downloads).toBeGreaterThan(tools);
+    expect(resources).toBeGreaterThan(downloads);
   });
 });
 

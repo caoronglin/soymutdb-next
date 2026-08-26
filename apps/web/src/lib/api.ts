@@ -1,11 +1,9 @@
 /**
- * API layer — thin re-export of @soymutdb/api-client with app-side
- * conveniences: CSRF token attachment.
+ * API layer — thin re-export of @soymutdb/api-client.
  *
- * Auth coordination (refresh-on-401 via the HttpOnly cookie, single retry,
- * logout events, session restore) lives in the shared transport
- * (@soymutdb/api-client ./auth). This module only attaches the CSRF header
- * and exposes app-friendly aliases.
+ * CSRF attachment is handled centrally in the shared transport's authRequest
+ * (see packages/api-client/src/csrf.ts), so Web and Admin enforce identical
+ * mutation protection. This module only exposes app-friendly aliases.
  */
 import {
     authRequest,
@@ -18,36 +16,12 @@ import {
     type RequestOptions,
 } from "@soymutdb/api-client";
 
-const CSRF_COOKIE_NAME = "soymutdb_csrf";
-const CSRF_HEADER = "X-CSRF-Token";
-
-/** Read a cookie by name (used for CSRF token extraction). */
-function readCookie(name: string): string | null {
-    if (typeof document === "undefined") return null;
-    const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
-    return match ? decodeURIComponent(match[1]) : null;
-}
-
-/** Attach CSRF token to unsafe methods. */
-function withCsrf(options: RequestOptions, method: string): RequestOptions {
-    const unsafe = ["POST", "PUT", "PATCH", "DELETE"];
-    if (!unsafe.includes(method.toUpperCase())) return options;
-    const csrf = readCookie(CSRF_COOKIE_NAME);
-    if (!csrf) return options;
-    return {
-        ...options,
-        headers: { ...options.headers, [CSRF_HEADER]: csrf },
-    };
-}
-
 /**
- * Enhanced request: CSRF attachment on top of the shared transport's
- * auth coordination (401 → single-flight refresh → retry once; refresh
- * failure clears memory state and emits the logout event).
+ * Enhanced request: the shared transport's auth coordination (refresh-on-401,
+ * single-flight refresh, logout events) plus central CSRF attachment.
  */
 export async function secureRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-    const method = options.method ?? "GET";
-    return authRequest<T>(path, withCsrf(options, method));
+    return authRequest<T>(path, options);
 }
 
 /** HTTP helpers that route through the secure request wrapper. */

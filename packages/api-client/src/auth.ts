@@ -24,8 +24,10 @@ import {
     TimeoutPresets,
     setAuthTokens,
     clearAuth,
+    withRetry,
     type RequestOptions,
 } from "./client";
+import { attachCsrf } from "./csrf";
 
 /** Refresh endpoint (resolves to <apiBaseUrl>/auth/refresh). */
 export const AUTH_REFRESH_PATH = "/auth/refresh";
@@ -167,18 +169,30 @@ export async function authRequest<T>(
     path: string,
     options: RequestOptions = {},
 ): Promise<T> {
-    try {
-        return await request<T>(path, options);
-    } catch (err) {
-        if (err instanceof ApiError && err.status === 401 && !isRefreshEndpoint(path)) {
-            const refreshed = await refreshAccessToken();
-            if (refreshed) {
-                return await request<T>(path, options);
+    const method = options.method ?? "GET";
+    // CSRF is attached centrally so Web and Admin mutations share the same
+    // protection (no app-local bypass).
+    const secured = attachCsrf(options, method);
+    const isIdempotent = ["GET", "HEAD", "OPTIONS"].includes(method.toUpperCase());
+
+    const exec = async (): Promise<T> => {
+        try {
+            return await request<T>(path, secured);
+        } catch (err) {
+            if (err instanceof ApiError && err.status === 401 && !isRefreshEndpoint(path)) {
+                const refreshed = await refreshAccessToken();
+                if (refreshed) {
+                    return await request<T>(path, secured);
+                }
+                emitLogoutOnce();
             }
-            emitLogoutOnce();
+            throw err;
         }
-        throw err;
-    }
+    };
+
+    // Idempotent reads retry transient failures (network/timeout/5xx);
+    // non-idempotent mutations do NOT auto-retry to avoid double submission.
+    return isIdempotent ? withRetry(exec, 1) : exec();
 }
 
 /**

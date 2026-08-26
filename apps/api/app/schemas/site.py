@@ -34,3 +34,18 @@ class HomeContentResponse(BaseModel):
 
     welcome_en: str | None = None
     welcome_zh: str | None = None
+
+
+class FooterContentResponse(BaseModel):
+    """Editable footer contact block backed by ``system_settings``.
+
+    Values are plain text (``footer.*`` keys). A fresh deployment without the
+    rows returns the registered defaults so the public footer renders without
+    a separate fallback.
+    """
+
+    contact_person: str | None = None
+    contact_phone: str | None = None
+    contact_email: str | None = None
+    copyright: str | None = None
+    address: str | None = None

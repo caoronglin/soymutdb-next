@@ -12,6 +12,7 @@ import {
 } from "@ant-design/icons";
 import { Card, Typography } from "@/lib/antd";
 import { FadeUp, Stagger } from "../components/route-motion";
+import { useSiteContent } from "../lib/site-content";
 import * as React from "react";
 
 export const Route = createFileRoute("/help")({
@@ -29,6 +30,7 @@ const FAQS: ReadonlyArray<{ q: string; a: string }> = [
 
 function HelpComponent() {
   const { t } = useTranslation();
+  const { get } = useSiteContent();
 
   return (
     <div className="container-prose section-rhythm">
@@ -38,15 +40,15 @@ function HelpComponent() {
       </FadeUp>
 
       <Stagger className="mt-10 grid gap-4 md:grid-cols-3">
-        <Card className="card-lift">
+        <Card className="flex h-full flex-col" styles={{ body: { display: "flex", flexDirection: "column", flex: 1 } }}>
           <div>
             <div className="flex size-10 items-center justify-center rounded-lg bg-accent text-accent-foreground">
               <Rocket className="size-5" aria-hidden />
             </div>
-            <Typography.Title className="mt-2 text-base">{t("help.gettingStarted")}</Typography.Title>
+            <Typography.Title className="mt-2 text-base">{get("help.gettingStarted", t("help.gettingStarted"))}</Typography.Title>
             <Typography.Text>Quick start guide for new users</Typography.Text>
           </div>
-          <div>
+          <div className="mt-4">
             <ol className="list-decimal space-y-1.5 pl-4 text-sm text-muted-foreground">
               <li>Search for genes or variants using the top search bar</li>
               <li>Filter results by chromosome, type, or impact</li>
@@ -56,15 +58,15 @@ function HelpComponent() {
           </div>
         </Card>
 
-        <Card className="card-lift">
+        <Card className="flex h-full flex-col" styles={{ body: { display: "flex", flexDirection: "column", flex: 1 } }}>
           <div>
             <div className="flex size-10 items-center justify-center rounded-lg bg-accent text-accent-foreground">
               <BookOpen className="size-5" aria-hidden />
             </div>
-            <Typography.Title className="mt-2 text-base">{t("help.documentation")}</Typography.Title>
+            <Typography.Title className="mt-2 text-base">{get("help.documentation", t("help.documentation"))}</Typography.Title>
             <Typography.Text>API reference and tutorials</Typography.Text>
           </div>
-          <div>
+          <div className="mt-4">
             <ul className="space-y-1.5 text-sm text-muted-foreground">
               <li>· REST API v1 reference</li>
               <li>· JBrowse 2 configuration</li>
@@ -73,15 +75,15 @@ function HelpComponent() {
           </div>
         </Card>
 
-        <Card className="card-lift">
+        <Card className="flex h-full flex-col" styles={{ body: { display: "flex", flexDirection: "column", flex: 1 } }}>
           <div>
             <div className="flex size-10 items-center justify-center rounded-lg bg-accent text-accent-foreground">
               <Mail className="size-5" aria-hidden />
             </div>
-            <Typography.Title className="mt-2 text-base">{t("help.contact")}</Typography.Title>
+            <Typography.Title className="mt-2 text-base">{get("help.contact", t("help.contact"))}</Typography.Title>
             <Typography.Text>Get support from the team</Typography.Text>
           </div>
-          <div>
+          <div className="mt-4">
             <p className="text-sm text-muted-foreground">Email us at <span className="font-mono text-foreground">support@soymutdb.org</span> for questions about data access, technical issues, or collaboration.</p>
           </div>
         </Card>
@@ -92,13 +94,17 @@ function HelpComponent() {
           <div>
             <Typography.Title className="flex items-center gap-2">
               <HelpCircle className="size-5 text-primary" aria-hidden />
-              {t("help.faq")}
+              {get("help.faq", t("help.faq"))}
             </Typography.Title>
           </div>
           <div>
             <div className="divide-y">
               {FAQS.map((faq, i) => (
-                <FaqItem key={i} q={faq.q} a={faq.a} />
+                <FaqItem
+                  key={i}
+                  q={get("help.faq" + (i + 1) + ".q", faq.q)}
+                  a={get("help.faq" + (i + 1) + ".a", faq.a)}
+                />
               ))}
             </div>
           </div>

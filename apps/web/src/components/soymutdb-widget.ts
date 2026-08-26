@@ -16,6 +16,32 @@
  *   <soymutdb-widget name="gene-card" params='{"geneId":"Glyma.01G123400"}'></soymutdb-widget>
  */
 
+// Browser API type shims: narrow types over the previously untyped any
+// casts at the dynamic-import / Trusted Types / Network Information /
+// requestIdleCallback boundaries.
+interface TrustedTypePolicyLike {
+    createHTML: (s: string, ...args: unknown[]) => string;
+    createScript: (s: string, ...args: unknown[]) => string;
+}
+interface TrustedTypePolicyFactoryLike {
+    createPolicy: (name: string, rules: Partial<TrustedTypePolicyLike>) => TrustedTypePolicyLike;
+}
+interface NetworkInformationLike extends EventTarget {
+    effectiveType?: string;
+    saveData?: boolean;
+}
+interface IdleDeadlineLike {
+    readonly didTimeout: boolean;
+    timeRemaining(): number;
+}
+interface WindowWithBrowserApis extends Window {
+    trustedTypes?: TrustedTypePolicyFactoryLike;
+    // requestIdleCallback/cancelIdleCallback are already typed on Window;
+    // we only narrow the browser-extension property trustedTypes.
+}
+interface NavigatorWithConnection extends Navigator {
+    connection?: NetworkInformationLike;
+}
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 // ---------------------------------------------------------------------------
@@ -31,7 +57,7 @@ async function loadDOMPurify(): Promise<Purify | null> {
         // Dynamic import — works at runtime since dompurify is a dependency;
         // using eval-free indirection to avoid static module resolution issues.
         const specifier = 'dompurify';
-        const mod = (await import(/* @vite-ignore */ specifier)) as any;
+        const mod = (await import(/* @vite-ignore */ specifier)) as unknown as Purify & { default?: Purify };
         DOMPurifyInstance = mod.default ?? mod;
         return DOMPurifyInstance;
     } catch {
@@ -43,9 +69,9 @@ async function loadDOMPurify(): Promise<Purify | null> {
 function fallbackSanitize(html: string): string {
     const tpl = document.createElement('template');
     tpl.innerHTML = html;
-    const doc = tpl.content as any;
+    const doc = tpl.content;
     const forbidden = new Set(['script', 'iframe', 'form', 'object', 'embed']);
-    const walker = doc.createTreeWalker(doc, NodeFilter.SHOW_ELEMENT) as TreeWalker;
+    const walker = document.createTreeWalker(doc, NodeFilter.SHOW_ELEMENT) as TreeWalker;
     const toRemove: Element[] = [];
     let node = walker.nextNode() as Element | null;
     while (node) {
@@ -196,7 +222,7 @@ let wcTrustedPolicy: { createHTML: (s: string) => string } | null | undefined = 
 
 function getWcTrustedPolicy(): { createHTML: (s: string) => string } | null {
     if (wcTrustedPolicy !== undefined) return wcTrustedPolicy;
-    const tt = (window as any).trustedTypes;
+    const tt = (window as WindowWithBrowserApis).trustedTypes;
     if (!tt?.createPolicy) {
         wcTrustedPolicy = null;
         return null;
@@ -229,7 +255,7 @@ class SoyMutDBWidget extends HTMLElement {
             this.shadow.appendChild(style);
         }
         // Detect Save-Data
-        const conn = (navigator as any).connection;
+        const conn = (navigator as NavigatorWithConnection).connection;
         if (conn?.saveData) {
             this.dataset.saveData = 'true';
         }
@@ -386,10 +412,10 @@ class SoyMutDBWidget extends HTMLElement {
 
     private scheduleIdleInit(name: string) {
         const ric: (cb: () => void) => number =
-            (window as any).requestIdleCallback || ((cb: () => void) => window.setTimeout(cb, 200) as unknown as number);
+            (window as WindowWithBrowserApis).requestIdleCallback || ((cb: () => void) => window.setTimeout(cb, 200) as unknown as number);
         ric(() => {
             // Dev-only performance logging via PerformanceObserver.
-            const isDev = (import.meta as any).env?.DEV === true;
+            const isDev = (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV === true;
             if (isDev && typeof PerformanceObserver !== 'undefined') {
                 try {
                     const observer = new PerformanceObserver((list) => {

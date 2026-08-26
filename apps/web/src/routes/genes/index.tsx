@@ -8,6 +8,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import { useSiteContent } from "../../lib/site-content";
 import * as React from "react";
 import { ArrowRightOutlined as ArrowRight, ReloadOutlined } from "@ant-design/icons";
 import {
@@ -52,6 +53,7 @@ interface SortState {
 
 function GenesComponent() {
   const { t } = useTranslation();
+  const { get } = useSiteContent();
   const search = Route.useSearch();
   const navigate = useNavigate();
   const [q, setQ] = React.useState(search.q);
@@ -80,7 +82,7 @@ function GenesComponent() {
 
   const columns: TableColumnsType<GeneSummary> = [
     {
-      title: t("genes.geneId"),
+      title: get("genes.geneId", t("genes.geneId")),
       dataIndex: "gene_id",
       key: "gene_id",
       sorter: true,
@@ -101,7 +103,7 @@ function GenesComponent() {
       ),
     },
     {
-      title: t("genes.symbol"),
+      title: get("genes.symbol", t("genes.symbol")),
       dataIndex: "symbol",
       key: "symbol",
       sorter: true,
@@ -114,19 +116,19 @@ function GenesComponent() {
       render: (_, row) => row.symbol ?? "—",
     },
     {
-      title: t("genes.biotypeLabel"),
+      title: get("genes.biotypeLabel", t("genes.biotypeLabel")),
       dataIndex: "biotype",
       key: "biotype",
       render: (_, row) => <span className="font-mono text-xs">{row.biotype}</span>,
     },
     {
-      title: t("genes.chromosomeLabel"),
+      title: get("genes.chromosomeLabel", t("genes.chromosomeLabel")),
       dataIndex: "chromosome",
       key: "chromosome",
       render: (_, row) => <span className="font-mono text-xs">{row.chromosome}</span>,
     },
     {
-      title: t("genes.position"),
+      title: get("genes.position", t("genes.position")),
       dataIndex: "start_pos",
       key: "position",
       render: (_, row) => (
@@ -136,7 +138,7 @@ function GenesComponent() {
       ),
     },
     {
-      title: t("genes.variantCount"),
+      title: get("genes.variantCount", t("genes.variantCount")),
       dataIndex: "variant_count",
       key: "variant_count",
       sorter: true,
@@ -201,9 +203,9 @@ function GenesComponent() {
   return (
     <FadeUp>
       <div className="container-prose py-10 md:py-14">
-        <p className="eyebrow">{t("genes.title")}</p>
+        <p className="eyebrow">{get("genes.title", t("genes.title"))}</p>
         <h1 className="mt-2 font-display text-4xl font-semibold tracking-tight">
-          {t("genes.subtitle")}
+          {get("genes.subtitle", t("genes.subtitle"))}
         </h1>
 
         <Form
@@ -211,19 +213,19 @@ function GenesComponent() {
           className="mt-8 flex flex-wrap items-end gap-x-4 gap-y-4"
           onFinish={() => navigate({ to: "/genes", search: { ...search, q: q.trim(), page: 1 } })}
         >
-          <Form.Item label={t("genes.search")} className="mb-0">
+          <Form.Item label={get("genes.search", t("genes.search"))} className="mb-0">
             <Input.Search
               data-testid="genes-search"
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder={t("genes.searchPlaceholder")}
-              aria-label={t("genes.search")}
+              placeholder={get("genes.searchPlaceholder", t("genes.searchPlaceholder"))}
+              aria-label={get("genes.search", t("genes.search"))}
               allowClear
               enterButton={false}
               style={{ width: 240 }}
             />
           </Form.Item>
-          <Form.Item label={t("genes.chromosome")} className="mb-0">
+          <Form.Item label={get("genes.chromosome", t("genes.chromosome"))} className="mb-0">
             <Select
               value={search.chromosome || "all"}
               onChange={(v) =>
@@ -231,12 +233,12 @@ function GenesComponent() {
               }
               style={{ width: 170 }}
               options={[
-                { value: "all", label: t("genes.allChromosomes") },
+                { value: "all", label: get("genes.allChromosomes", t("genes.allChromosomes")) },
                 ...SOYBEAN_CHROMOSOMES.map((c) => ({ value: c, label: c })),
               ]}
             />
           </Form.Item>
-          <Form.Item label={t("genes.biotype")} className="mb-0">
+          <Form.Item label={get("genes.biotype", t("genes.biotype"))} className="mb-0">
             <Select
               value={search.biotype || "all"}
               onChange={(v) =>
@@ -244,7 +246,7 @@ function GenesComponent() {
               }
               style={{ width: 170 }}
               options={[
-                { value: "all", label: t("genes.allBiotype") },
+                { value: "all", label: get("genes.allBiotype", t("genes.allBiotype")) },
                 ...BIOTYPES.map((b) => ({ value: b, label: b })),
               ]}
             />
@@ -277,7 +279,7 @@ function GenesComponent() {
                 <Empty
                   description={
                     <Typography.Text type="secondary">
-                      {t("genes.noResults")}
+                      {get("genes.noResults", t("genes.noResults"))}
                       <br />
                       <span className="text-xs">{t("common.noResults")}</span>
                     </Typography.Text>

@@ -10,6 +10,7 @@ import * as React from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import { useSiteContent } from "../lib/site-content";
 import { http, ApiError } from "@soymutdb/api-client";
 import { Button, Card, Skeleton, Tag, Typography } from "@/lib/antd";
 import {
@@ -346,6 +347,7 @@ function Markdown({ content }: { content: string }): React.ReactElement {
 
 function GuideComponent() {
     const { t, i18n } = useTranslation();
+    const { get } = useSiteContent();
     const isZh = i18n.language?.startsWith("zh");
 
     const query = useQuery<StaticPage>({
@@ -394,7 +396,7 @@ function GuideComponent() {
                         <div className="mt-6 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                             <Tag className="gap-1">
                                 <BookOpen className="size-3" aria-hidden />
-                                {t("nav.guide")}
+                                {get("nav.guide", t("nav.guide"))}
                             </Tag>
                             {page.category ? (
                                 <Tag variant="outlined" className="gap-1">
@@ -441,7 +443,7 @@ function GuideComponent() {
                         {toc.length > 0 ? (
                             <aside className="hidden lg:block">
                                 <div className="sticky top-24">
-                                    <p className="eyebrow mb-3">{t("help.documentation")}</p>
+                                    <p className="eyebrow mb-3">{get("help.documentation", t("help.documentation"))}</p>
                                     <nav className="space-y-1 border-l pl-3 text-sm">
                                         {toc.map((item) => (
                                             <button

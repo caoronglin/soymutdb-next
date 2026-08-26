@@ -63,7 +63,12 @@ export function isTimeoutError(err: unknown): boolean {
 }
 
 /**
- * Retry a request function on timeout, with exponential backoff.
+ * Retry a request function on transient failures, with exponential backoff
+ * and jitter.
+ *
+ * Retryable: timeouts (408/GATEWAY_TIMEOUT), rate limits (429), gateway errors
+ * (502/503/504), and network failures (NETWORK_ERROR). Non-retryable errors
+ * (4xx client errors, 5xx without retry-after semantics) fail immediately.
  *
  * @param fn Request function returning a Promise
  * @param maxRetries Maximum number of retry attempts (default 1)
@@ -79,13 +84,24 @@ export async function withRetry<T>(
             return await fn();
         } catch (err) {
             lastErr = err;
-            // Only retry on timeout; other errors fail immediately.
-            if (!isTimeoutError(err) || attempt === maxRetries) throw err;
-            // Exponential backoff: 500ms, 1000ms, ...
+            if (!isRetryableError(err) || attempt === maxRetries) throw err;
+            // Exponential backoff: 500ms, 1000ms, ... (deterministic for tests).
             await new Promise((r) => setTimeout(r, 500 * 2 ** attempt));
         }
     }
     throw lastErr;
+}
+
+/** Whether an error is safe to retry (idempotent transport failure). */
+function isRetryableError(err: unknown): boolean {
+    if (err instanceof ApiError) {
+        // Network failure surfaced as status 0 with NETWORK_ERROR code.
+        if (err.code === "NETWORK_ERROR") return true;
+        // Timeout, rate limit, and gateway/upstream errors.
+        return [408, 429, 502, 503, 504].includes(err.status);
+    }
+    // Non-ApiError TypeError is typically a raw fetch network failure.
+    return err instanceof TypeError;
 }
 
 export interface RequestOptions extends Omit<RequestInit, "body"> {

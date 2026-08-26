@@ -16,6 +16,7 @@ import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
+import { useSiteContent } from "@/lib/site-content";
 import {
   ArrowRightOutlined,
   EnvironmentOutlined,
@@ -60,7 +61,7 @@ const HERO_SLIDES = [
     eyebrowKey: "home.heroEyebrow",
     eyebrow: "SOYMUTDB · MULTI-SPECIES",
     titleKey: "home.heroTitle",
-    title: "探索大豆突变的未知疆域",
+    title: "探索多物种突变的未知疆域",
     subKey: "home.heroSubtitle",
     sub: "新一代多物种突变数据库，从基因组到表型一站探索。",
   },
@@ -68,9 +69,9 @@ const HERO_SLIDES = [
     eyebrowKey: "home.heroEyebrow",
     eyebrow: "SOYMUTDB · MUTATION",
     titleKey: "home.heroSlide2",
-    title: "从 20 条染色体到全局表型",
+    title: "从染色体到全局表型",
     subKey: "home.heroSlide2Desc",
-    sub: "覆盖大豆参考基因组与突变集合，支持基因、位点、BLAST 多维检索。",
+    sub: "覆盖多物种参考基因组与突变集合，支持基因、位点、BLAST 多维检索。",
   },
   {
     eyebrowKey: "home.heroEyebrow",
@@ -156,6 +157,8 @@ export function AntdHome({
   resourceDefinitionError = false,
 }: AntdHomeProps) {
   const { t } = useTranslation();
+  const { get } = useSiteContent();
+  const heroImage = get("hero.image", "");
   const navigate = useNavigate();
   const { reduced } = useAnimation();
 
@@ -166,105 +169,103 @@ export function AntdHome({
   return (
     <div data-testid="antd-home">
       {/* ---------------------------------------------------------------- */}
-      {/* HERO (独立区块): brand intro with search, above news + carousel.   */}
+      {/* HERO (clean): brand intro + search. No heavy gradient/CTA.        */}
       {/* ---------------------------------------------------------------- */}
-      <section style={{ position: "relative", overflow: "hidden" }}>
-        <FluidGradient
-          reduced={reduced}
-          colors={HERO_PALETTES[0]}
-          style={{ minHeight: 440, borderRadius: 0, background: "linear-gradient(135deg, #052a1f 0%, #0d4a37 55%, #1b7a52 100%)" }}
-        >
-          <div style={{ position: "relative", zIndex: 1, maxWidth: 1200, margin: "0 auto", padding: "clamp(48px, 7vw, 88px) 24px" }}>
-            <Text style={{ color: "rgba(255,255,255,0.72)", letterSpacing: "0.16em", fontSize: 12, textTransform: "uppercase", fontWeight: 600 }}>
-              {t("home.heroEyebrow", { defaultValue: "SOYMUTDB · MULTI-SPECIES" })}
-            </Text>
-            <Title level={1} style={{ color: "#fff", margin: "18px 0 14px", fontSize: "clamp(2rem, 5vw, 3.25rem)", lineHeight: 1.1, maxWidth: "20ch", textShadow: "0 2px 24px rgba(0,0,0,0.35)" }}>
-              {t("home.heroTitle", { defaultValue: "探索大豆突变的未知疆域" })}
-            </Title>
-            <Paragraph style={{ color: "rgba(255,255,255,0.86)", fontSize: "clamp(1rem, 1.6vw, 1.15rem)", maxWidth: "58ch", lineHeight: 1.7 }}>
-              {t("home.heroSubtitle", { defaultValue: "新一代多物种突变数据库，从基因组到表型一站探索。" })}
-            </Paragraph>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginTop: 22, maxWidth: 720 }}>
-              <Input
-                size="large"
-                value={heroQuery}
-                onChange={(e) => setHeroQuery(e.target.value)}
-                onPressEnter={() => runHeroSearch(heroQuery)}
-                placeholder={t("home.searchPlaceholder", { defaultValue: "搜索基因 ID、染色体位点或突变…" })}
-                prefix={<SearchOutlined style={{ color: "var(--muted-foreground)" }} />}
-                style={{ flex: 1, minWidth: 220 }}
-                aria-label={t("home.searchPlaceholder", { defaultValue: "搜索基因 ID、染色体位点或突变…" })}
-              />
-              <Button type="primary" size="large" onClick={() => runHeroSearch(heroQuery)}>
-                {t("home.searchButton", { defaultValue: "搜索" })}
-              </Button>
-            </div>
-            <div style={{ marginTop: 22 }}>
-              <Button type="primary" size="large" onClick={goSearch} style={{ marginRight: 12 }}>
-                {t("home.heroPrimary", { defaultValue: "开始探索" })} <ArrowRightOutlined />
-              </Button>
-              <Button size="large" style={{ background: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.35)", color: "#fff" }}>
-                {t("home.heroSecondary", { defaultValue: "了解更多" })}
-              </Button>
-            </div>
+      <section className="border-b border-border/60 bg-background">
+        <div className="container-prose py-14 text-center md:py-20">
+          <Text className="block text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+            {get("hero.eyebrow", t("home.heroEyebrow", { defaultValue: "SOYMUTDB · MULTI-SPECIES" }))}
+          </Text>
+          <Title level={1} style={{ margin: "18px 0 14px", color: "var(--foreground)", fontSize: "clamp(2rem, 4.5vw, 3rem)", lineHeight: 1.15, fontWeight: 700 }}>
+            {get("hero.title", t("home.heroTitle", { defaultValue: "探索多物种突变的未知疆域" }))}
+          </Title>
+          <Paragraph style={{ maxWidth: "58ch", margin: "0 auto", color: "var(--muted-foreground)", fontSize: "clamp(1rem, 1.5vw, 1.1rem)", lineHeight: 1.7 }}>
+            {get("hero.subtitle", t("home.heroSubtitle", { defaultValue: "新一代多物种突变数据库，从基因组到表型一站探索。" }))}
+          </Paragraph>
+          <div role="search" className="mx-auto mt-8 flex w-full max-w-2xl flex-wrap items-center gap-2.5">
+            <Input
+              size="large"
+              value={heroQuery}
+              onChange={(e) => setHeroQuery(e.target.value)}
+              onPressEnter={() => runHeroSearch(heroQuery)}
+              placeholder={get("hero.searchPlaceholder", t("home.searchPlaceholder", { defaultValue: "搜索基因、变异、突变系…" }))}
+              prefix={<SearchOutlined style={{ color: "var(--muted-foreground)" }} />}
+              style={{ flex: 1, minWidth: 220 }}
+              aria-label={get("hero.searchPlaceholder", t("home.searchPlaceholder", { defaultValue: "搜索基因、变异、突变系…" }))}
+            />
+            <Button type="primary" size="large" onClick={() => runHeroSearch(heroQuery)}>
+              {t("home.searchButton", { defaultValue: "搜索" })}
+            </Button>
           </div>
-        </FluidGradient>
+          {heroImage ? (
+            <div className="mx-auto mt-10 aspect-[16/9] w-full max-w-3xl overflow-hidden rounded-2xl border border-border/60 shadow-sm">
+              <img
+                src={heroImage}
+                alt={t("home.heroTitle", { defaultValue: "探索多物种突变的未知疆域" })}
+                loading="lazy"
+                className="h-full w-full object-cover"
+              />
+            </div>
+          ) : null}
+        </div>
       </section>
 
       {/* ---------------------------------------------------------------- */}
       {/* TOP: 最新动态 (left) + 滚动照片 carousel (right).                   */}
       {/* ---------------------------------------------------------------- */}
-      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "40px 24px 24px" }}>
-        <Row gutter={[32, 32]}>
+      <div className="container-prose pb-6 pt-10 md:pb-8 md:pt-14">
+        <Row gutter={[32, 32]} align="stretch">
           {/* Latest news — 5 titles linking to /news. */}
-          <Col xs={24} lg={9}>
-            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 12 }}>
-              <Title level={3} style={{ margin: 0, fontWeight: 700 }}>
+          <Col xs={24} lg={9} className="flex flex-col">
+            <div className="mb-3 flex items-baseline justify-between gap-3">
+              <Title level={3} className="font-bold" style={{ margin: 0 }}>
                 {t("home.latestNews", { defaultValue: "最新动态" })}
               </Title>
-              <Link to="/news" search={{ category: undefined, page: undefined }} className="home-section-link" style={{ color: "var(--primary)", fontWeight: 500 }}>
+              <Link to="/news" search={{ category: undefined, page: undefined }} className="home-section-link shrink-0 text-primary" style={{ fontWeight: 500 }}>
                 {t("home.openTool", { defaultValue: "进入" })} →
               </Link>
             </div>
-            <Card style={{ border: "1px solid var(--border)", borderRadius: "var(--radius-lg)" }} styles={{ body: { padding: "4px 20px" } }}>
+            <Card className="flex-1 rounded-xl border border-border bg-card shadow-sm" styles={{ body: { padding: "4px 20px" } }}>
               <LatestNewsPanel />
             </Card>
           </Col>
 
           {/* Photo carousel (滚动照片) — 3-6 brand slides. */}
-          <Col xs={24} lg={15}>
-            <Carousel autoplay autoplaySpeed={5200} effect="fade">
-              {HERO_SLIDES.map((slide, i) => (
-                <div key={slide.titleKey}>
-                  <FluidGradient
-                    reduced={reduced}
-                    colors={HERO_PALETTES[i % HERO_PALETTES.length]}
-                    style={{ minHeight: 340, borderRadius: 20 }}
-                  >
-                    <div
-                      style={{
-                        position: "relative",
-                        zIndex: 1,
-                        padding: "clamp(28px, 4vw, 52px)",
-                      }}
+          <Col xs={24} lg={15} className="flex flex-col">
+            <div className="flex-1">
+              <Carousel autoplay autoplaySpeed={5200} effect="fade" className="h-full">
+                {HERO_SLIDES.map((slide, i) => (
+                  <div key={slide.titleKey} className="h-full">
+                    <FluidGradient
+                      reduced={reduced}
+                      colors={HERO_PALETTES[i % HERO_PALETTES.length]}
+                      style={{ minHeight: 340, height: "100%", borderRadius: "var(--radius-xl)" }}
                     >
-                      <Text style={{ color: "rgba(255,255,255,0.72)", letterSpacing: "0.16em", fontSize: 11, textTransform: "uppercase", fontWeight: 600 }}>
-                        {t(slide.eyebrowKey, { defaultValue: slide.eyebrow })}
-                      </Text>
-                      <Title level={2} style={{ color: "#fff", margin: "14px 0 10px", lineHeight: 1.15, textShadow: "0 2px 20px rgba(0,0,0,0.3)" }}>
-                        {t(slide.titleKey, { defaultValue: slide.title })}
-                      </Title>
-                      <Paragraph style={{ color: "rgba(255,255,255,0.86)", fontSize: 15, maxWidth: "52ch", lineHeight: 1.7 }}>
-                        {t(slide.subKey, { defaultValue: slide.sub })}
-                      </Paragraph>
-                      <Button type="primary" onClick={goSearch} style={{ marginTop: 8 }}>
-                        {t("home.heroPrimary", { defaultValue: "开始探索" })} <ArrowRightOutlined />
-                      </Button>
-                    </div>
-                  </FluidGradient>
-                </div>
-              ))}
-            </Carousel>
+                      <div
+                        style={{
+                          position: "relative",
+                          zIndex: 1,
+                          padding: "clamp(28px, 4vw, 52px)",
+                        }}
+                      >
+                        <Text style={{ color: "rgba(255,255,255,0.72)", letterSpacing: "0.16em", fontSize: 11, textTransform: "uppercase", fontWeight: 600 }}>
+                          {t(slide.eyebrowKey, { defaultValue: slide.eyebrow })}
+                        </Text>
+                        <Title level={2} style={{ color: "#fff", margin: "14px 0 10px", lineHeight: 1.15, textShadow: "0 2px 20px rgba(0,0,0,0.3)" }}>
+                          {t(slide.titleKey, { defaultValue: slide.title })}
+                        </Title>
+                        <Paragraph style={{ color: "rgba(255,255,255,0.86)", fontSize: 15, maxWidth: "52ch", lineHeight: 1.7 }}>
+                          {t(slide.subKey, { defaultValue: slide.sub })}
+                        </Paragraph>
+                        <Button type="primary" onClick={goSearch} style={{ marginTop: 8 }}>
+                          {t("home.heroPrimary", { defaultValue: "开始探索" })} <ArrowRightOutlined />
+                        </Button>
+                      </div>
+                    </FluidGradient>
+                  </div>
+                ))}
+              </Carousel>
+            </div>
           </Col>
         </Row>
       </div>
@@ -272,61 +273,60 @@ export function AntdHome({
       {/* ---------------------------------------------------------------- */}
       {/* BOTTOM: 收索工具 — five first-level directory buttons in a row.    */}
       {/* ---------------------------------------------------------------- */}
-      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "24px 24px 80px" }}>
-        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 18 }}>
+      <div className="container-prose pb-20 pt-4 md:pt-6">
+        <div className="mb-5 flex items-baseline justify-between gap-3">
           <Title level={3} style={{ margin: 0, fontWeight: 700 }}>
             {t("home.featuredTools", { defaultValue: "搜索工具" })}
           </Title>
-          <Link to="/search" className="home-section-link" style={{ color: "var(--primary)", fontWeight: 500 }}>
+          <Link to="/search" className="home-section-link shrink-0 text-primary" style={{ fontWeight: 500 }}>
             {t("home.openTool", { defaultValue: "进入" })} →
           </Link>
         </div>
 
         <Row gutter={[20, 20]}>
-          {TOOL_ENTRIES.map((tool) => (
-            <Col key={tool.key} xs={24} sm={12} lg={{ flex: 1 }}>
-              <Link to={tool.route} style={{ display: "block", textDecoration: "none", height: "100%" }}>
-                <Card
-                  hoverable
-                  style={{ height: "100%", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)" }}
-                  styles={{ body: { padding: 18, height: "100%" } }}
+          {TOOL_ENTRIES.map((tool) => {
+            const label = get(`tool.${tool.key}.label`, t(tool.labelKey, { defaultValue: tool.label }));
+            const desc = get(`tool.${tool.key}.desc`, t(tool.descKey, { defaultValue: tool.desc }));
+            const image = get(`tool.${tool.key}.image`, "");
+            return (
+              <Col key={tool.key} xs={24} sm={12} lg={{ flex: 1 }}>
+                <Link
+                  to={tool.route}
+                  className="block h-full rounded-xl outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring"
                 >
-                  <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        width: 44,
-                        height: 44,
-                        borderRadius: "var(--radius-md)",
-                        background: "var(--accent)",
-                        color: "var(--accent-foreground)",
-                        flex: "0 0 auto",
-                      }}
-                    >
-                      {tool.icon}
+                  <Card
+                    className="h-full rounded-xl border border-border bg-card shadow-sm transition-colors hover:border-primary/40"
+                    styles={{ body: { padding: 18, height: "100%" } }}
+                  >
+                    <div className="flex items-center gap-3.5">
+                      <div className="flex h-11 w-11 flex-none items-center justify-center overflow-hidden rounded-lg bg-accent text-accent-foreground">
+                        {image ? (
+                          <img src={image} alt={label} loading="lazy" className="h-full w-full object-cover" />
+                        ) : (
+                          tool.icon
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <Text strong className="block text-[15px] text-foreground">
+                          {label}
+                        </Text>
+                        <Paragraph className="mb-0 mt-1 text-[13px] leading-5 text-muted-foreground">
+                          {desc}
+                        </Paragraph>
+                      </div>
                     </div>
-                    <div style={{ minWidth: 0 }}>
-                      <Text strong style={{ display: "block", fontSize: 15, color: "var(--foreground)" }}>
-                        {t(tool.labelKey, { defaultValue: tool.label })}
-                      </Text>
-                      <Paragraph style={{ margin: "4px 0 0", color: "var(--muted-foreground)", fontSize: 13, lineHeight: 1.5 }}>
-                        {t(tool.descKey, { defaultValue: tool.desc })}
-                      </Paragraph>
-                    </div>
-                  </div>
-                </Card>
-              </Link>
-            </Col>
-          ))}
+                  </Card>
+                </Link>
+              </Col>
+            );
+          })}
         </Row>
       </div>
 
       {/* Resource guide is a published `resource_cards` component supplied by
           the page definition. The legacy static visual shell is retained only
           when an older published definition has not yet supplied this node. */}
-      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "8px 24px 88px" }}>
+      <div className="container-prose pb-24 pt-2">
         {resourceCards ? <RenderNode node={resourceCards} /> : resourceDefinitionError ? (
           <Alert
             type="error"
@@ -346,8 +346,8 @@ export function AntdHome({
                 { key: "publications", route: "/publications", label: "文献 / 出版物", desc: "SoyMutDB 相关文献" },
               ].map((r) => (
                 <Col key={r.key} xs={24} sm={12} lg={8}>
-                  <Link to={r.route} style={{ display: "block", textDecoration: "none", height: "100%" }}>
-                    <Card hoverable style={{ height: "100%", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)" }}>
+                  <Link to={r.route} className="block h-full rounded-xl outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring">
+                    <Card className="h-full rounded-xl border border-border bg-card shadow-sm transition-colors hover:border-primary/40">
                       <Text strong style={{ display: "block", fontSize: 15, color: "var(--foreground)" }}>{r.label}</Text>
                       <Paragraph style={{ margin: "4px 0 0", color: "var(--muted-foreground)", fontSize: 13, lineHeight: 1.5 }}>{r.desc}</Paragraph>
                     </Card>

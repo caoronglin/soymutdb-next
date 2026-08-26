@@ -1,21 +1,24 @@
+
 /**
- * SiteHeader — sticky top navigation with logo, flat primary nav, search
- * trigger, language switch, theme toggle, animation control, and auth menu.
+ * SiteHeader — sticky top navigation with logo, grouped dropdown primary nav,
+ * search trigger, language switch, theme toggle, animation control, and auth
+ * menu.
  *
  * Ant Design is the only UI library used here (`@/lib/antd` + `@ant-design/icons`).
  *
  * Features:
  * - Scroll-reactive backdrop blur / shadow (RAF-throttled)
- * - Five flat top-level nav items (Home / Search / Tools / Contact / News),
- *   PPTX V2 design — no secondary dropdowns; deeper pages (Downloads,
- *   Guide, …) remain reachable from the footer.
+ * - Two-level primary nav: Explore / Tools / Downloads / Resources.
+ *   Explore, Tools and Resources open dropdown panels (the "secondary menu");
+ *   Downloads is a single direct link (no dropdown).
  * - Animated underline on active nav links
  * - Cmd+K quick search trigger
- * - Smooth mobile drawer with slide-down animation
+ * - Smooth mobile drawer with a sectioned two-level menu
  */
 import * as React from "react";
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
+import { useSiteContent } from "../lib/site-content";
 import {
   SearchOutlined,
   MenuOutlined,
@@ -30,9 +33,6 @@ import { cn } from "../lib/cn";
 import { Affix, Button, Input } from "@/lib/antd";
 import { useTheme } from "../lib/theme-provider";
 import { useI18n, type SupportedLanguage } from "../lib/i18n";
-import { AnimationControl } from "./animation-control";
-import { NotificationBell } from "./notifications/notification-bell";
-import { NAVIGATION_ORDER } from "../page-builder/seed";
 
 /** True at the AntD/Tailwind `lg` breakpoint (>=1024px). */
 function useIsDesktop(): boolean {
@@ -48,33 +48,75 @@ function useIsDesktop(): boolean {
   return isDesktop;
 }
 
-interface NavItem {
-  to: string;
+type NavChild =
+  | { kind: "link"; to: string; labelKey: string }
+  | { kind: "separator" };
+
+interface NavGroupDef {
+  key: string;
   labelKey: string;
+  /** Direct link (rendered as a flat top-level item, no dropdown). */
+  to?: string;
+  /** Dropdown children (the secondary menu). */
+  children?: NavChild[];
 }
 
-/** Map the fixed seed labels to the app's i18n keys. */
-const NAV_LABEL_KEYS: Record<string, string> = {
-  Home: "nav.home",
-  Search: "nav.search",
-  Tools: "nav.tools",
-  "Latest News": "nav.latestNews",
-  Contact: "nav.contact",
-};
-
 /**
- * Primary navigation — five flat items in the approved reference order
- * (Home / Search / Tools / Latest News / Contact). The order comes from the
- * PageDefinition navigation (page-builder/seed.ts fallback) and is a single
- * source of truth for both desktop and mobile drawers.
+ * Two-level primary navigation.
+ *
+ * Explore / Tools / Resources open a dropdown ("secondary menu"); Downloads is a
+ * direct top-level link. This replaces the previous single row of flat items
+ * and the footer link map (the footer nav is no longer rendered).
  */
-const NAV_ITEMS: NavItem[] = NAVIGATION_ORDER.map((item) => ({
-  to: item.route,
-  labelKey: NAV_LABEL_KEYS[item.label] ?? item.label,
-}));
+const NAV_GROUPS: ReadonlyArray<NavGroupDef> = [
+  {
+    key: "explore",
+    labelKey: "nav.explore",
+    children: [
+      { kind: "link", to: "/genes", labelKey: "nav.genes" },
+      { kind: "link", to: "/variants", labelKey: "nav.variants" },
+      { kind: "link", to: "/browser", labelKey: "nav.browser" },
+      { kind: "link", to: "/sra", labelKey: "nav.sra" },
+      { kind: "link", to: "/compare", labelKey: "nav.compare" },
+      { kind: "link", to: "/analytics", labelKey: "nav.analytics" },
+    ],
+  },
+  {
+    key: "tools",
+    labelKey: "nav.tools",
+    children: [
+      { kind: "link", to: "/blast", labelKey: "nav.blast" },
+      { kind: "link", to: "/analyses", labelKey: "nav.analyses" },
+      { kind: "separator" },
+      { kind: "link", to: "/tools/seqfetch", labelKey: "home.tools.seqfetch" },
+      { kind: "link", to: "/tools/enrichment", labelKey: "home.tools.enrichment" },
+      { kind: "link", to: "/tools/exppattern", labelKey: "home.tools.exppattern" },
+      { kind: "separator" },
+      { kind: "link", to: "/tools", labelKey: "nav.allTools" },
+    ],
+  },
+  {
+    key: "downloads",
+    labelKey: "nav.downloads",
+    to: "/downloads",
+  },
+  {
+    key: "resources",
+    labelKey: "nav.resources",
+    children: [
+      { kind: "link", to: "/guide", labelKey: "nav.guide" },
+      { kind: "link", to: "/help", labelKey: "nav.help" },
+      { kind: "link", to: "/news", labelKey: "nav.news" },
+      { kind: "link", to: "/publications", labelKey: "nav.publications" },
+      { kind: "link", to: "/seed-request", labelKey: "nav.seedRequest" },
+      { kind: "link", to: "/about", labelKey: "nav.about" },
+    ],
+  },
+];
 
 export function SiteHeader() {
   const { t } = useTranslation();
+  const { get } = useSiteContent();
   const navigate = useNavigate();
   const routerState = useRouterState();
   const currentPath = routerState.location.pathname;
@@ -82,10 +124,12 @@ export function SiteHeader() {
   const { currentLanguage, changeLanguage } = useI18n();
   const isDesktop = useIsDesktop();
   const [mobileOpen, setMobileOpen] = React.useState(false);
+  const [openMenu, setOpenMenu] = React.useState<string | null>(null);
   const [langOpen, setLangOpen] = React.useState(false);
   const [scrolled, setScrolled] = React.useState(false);
   const [searchValue, setSearchValue] = React.useState("");
   const headerRef = React.useRef<HTMLElement | null>(null);
+  const navRef = React.useRef<HTMLElement | null>(null);
   const menuButtonRef = React.useRef<HTMLButtonElement | null>(null);
   const firstMobileLinkRef = React.useRef<HTMLAnchorElement | null>(null);
 
@@ -107,23 +151,38 @@ export function SiteHeader() {
     };
   }, []);
 
-  // Close the mobile menu on route change
+  // Close the mobile menu and any open dropdown on route change
   React.useEffect(() => {
     setMobileOpen(false);
+    setOpenMenu(null);
   }, [currentPath]);
 
-  // Escape closes the mobile menu and returns focus to the toggle
+  // Escape closes the mobile menu / dropdown and returns focus to the toggle
   React.useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       if (mobileOpen) {
         setMobileOpen(false);
         menuButtonRef.current?.focus();
+      } else if (openMenu) {
+        setOpenMenu(null);
       }
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [mobileOpen]);
+  }, [mobileOpen, openMenu]);
+
+  // Close an open dropdown when clicking outside the desktop nav
+  React.useEffect(() => {
+    if (!openMenu) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (navRef.current && !navRef.current.contains(e.target as Node)) {
+        setOpenMenu(null);
+      }
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [openMenu]);
 
   // Focus the first link when the mobile menu opens
   React.useEffect(() => {
@@ -147,8 +206,15 @@ export function SiteHeader() {
     );
   };
 
-  const isActive = (to: string): boolean =>
+  const isRouteActive = (to: string): boolean =>
     currentPath === to || (to !== "/" && currentPath.startsWith(to));
+
+  const isGroupActive = (group: NavGroupDef): boolean => {
+    if (group.to) return isRouteActive(group.to);
+    return (group.children ?? []).some(
+      (child) => child.kind === "link" && isRouteActive(child.to),
+    );
+  };
 
   const header = (
     <header
@@ -177,23 +243,83 @@ export function SiteHeader() {
           </span>
         </Link>
 
-        {/* Desktop flat nav — five primary items, centered (PPTX V2) */}
-        <nav className="mx-auto hidden items-center gap-1 lg:flex" aria-label="Primary">
-          {NAV_ITEMS.map((item) => (
-            <Link
-              key={item.to}
-              to={item.to}
-              data-active={isActive(item.to)}
-              className={cn(
-                "nav-link rounded-md px-3 py-2 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
-                isActive(item.to)
-                  ? "text-foreground"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {t(item.labelKey)}
-            </Link>
-          ))}
+        {/* Desktop grouped nav — two-level dropdown menu */}
+        <nav
+          ref={navRef}
+          className="mx-auto hidden items-center gap-1 lg:flex"
+          aria-label="Primary"
+        >
+          {NAV_GROUPS.map((group) => {
+            if (group.to) {
+              return (
+                <Link
+                  key={group.key}
+                  to={group.to}
+                  data-active={isRouteActive(group.to)}
+                  className={cn(
+                    "nav-link whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+                    isRouteActive(group.to)
+                      ? "text-foreground"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {get(group.labelKey, t(group.labelKey))}
+                </Link>
+              );
+            }
+
+            const active = isGroupActive(group);
+            const open = openMenu === group.key;
+            return (
+              <div key={group.key} className="relative">
+                <button
+                  type="button"
+                  data-active={active}
+                  aria-haspopup="menu"
+                  aria-expanded={open}
+                  onClick={() => setOpenMenu(open ? null : group.key)}
+                  className={cn(
+                    "nav-link flex items-center gap-1 whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+                    active
+                      ? "text-foreground"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {get(group.labelKey, t(group.labelKey))}
+                  <DownOutlined
+                    className={cn("size-3.5 transition-transform", open && "rotate-180")}
+                    aria-hidden
+                  />
+                </button>
+                {open ? (
+                  <div
+                    role="menu"
+                    className="absolute left-1/2 top-full z-50 mt-2 w-60 -translate-x-1/2 rounded-xl border bg-popover p-1.5 shadow-lg"
+                    style={{ animation: "fade-down 160ms cubic-bezier(0.16,1,0.3,1)" }}
+                  >
+                    {(group.children ?? []).map((child, i) =>
+                      child.kind === "separator" ? (
+                        <div key={`sep-${group.key}-${i}`} className="my-1 h-px bg-border" aria-hidden />
+                      ) : (
+                        <Link
+                          key={child.to}
+                          to={child.to}
+                          role="menuitem"
+                          onClick={() => setOpenMenu(null)}
+                          className={cn(
+                            "block rounded-lg px-3 py-2 text-sm text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
+                            isRouteActive(child.to) && "bg-accent/60 font-medium text-foreground",
+                          )}
+                        >
+                          {get(child.labelKey, t(child.labelKey))}
+                        </Link>
+                      ),
+                    )}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
         </nav>
 
         {/* Right cluster */}
@@ -202,7 +328,7 @@ export function SiteHeader() {
           <button
             type="button"
             onClick={openPalette}
-            className="hidden h-9 items-center gap-2.5 rounded-lg border border-input/70 bg-muted/40 px-3 text-sm text-muted-foreground shadow-sm transition-all hover:border-border hover:bg-muted/70 hover:text-foreground md:flex md:w-44 lg:w-56"
+            className="hidden h-9 items-center gap-2.5 rounded-lg border border-input/70 bg-muted/40 px-3 text-sm text-muted-foreground shadow-sm outline-none transition-colors hover:border-border hover:bg-muted/70 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring md:flex md:w-44 lg:w-56"
             aria-label="Quick search (Cmd+K)"
           >
             <SearchOutlined className="size-4 shrink-0" aria-hidden />
@@ -215,7 +341,6 @@ export function SiteHeader() {
               <kbd className="hidden sm:inline-flex">K</kbd>
             </span>
           </button>
-          <NotificationBell />
           <LanguageSwitcher
             open={langOpen}
             setOpen={setLangOpen}
@@ -227,17 +352,6 @@ export function SiteHeader() {
             aria-label={t("nav.theme")}
             onClick={toggleTheme}
             icon={theme === "dark" ? <SunOutlined /> : <MoonOutlined />}
-          />
-
-          <AnimationControl />
-
-          {/* Mobile search button */}
-          <Button
-            type="text"
-            className="md:hidden"
-            aria-label={t("search.openPalette")}
-            onClick={openPalette}
-            icon={<SearchOutlined />}
           />
 
           {/* Mobile menu toggle */}
@@ -253,7 +367,7 @@ export function SiteHeader() {
         </div>
       </div>
 
-      {/* Mobile drawer — smooth slide-down with flat grouped sections */}
+      {/* Mobile drawer — sectioned two-level menu */}
       {mobileOpen ? (
         <div
           id="mobile-nav"
@@ -272,24 +386,62 @@ export function SiteHeader() {
               />
             </form>
 
-            {/* Flat five-item nav (mirrors the desktop primary nav) */}
-            <nav aria-label="Primary" className="flex flex-col gap-1">
-              {NAV_ITEMS.map((item, itemIndex) => (
-                <Link
-                  key={item.to}
-                  to={item.to}
-                  onClick={() => setMobileOpen(false)}
-                  ref={itemIndex === 0 ? firstMobileLinkRef : undefined}
-                  className={cn(
-                    "flex items-center rounded-xl px-4 py-3 text-[15px] font-medium transition-colors",
-                    isActive(item.to)
-                      ? "bg-primary/10 text-primary"
-                      : "text-foreground/80 hover:bg-accent",
-                  )}
-                >
-                  {t(item.labelKey)}
-                </Link>
-              ))}
+            {/* Sectioned two-level nav (mirrors the desktop groups) */}
+            <nav aria-label="Primary" className="flex flex-col">
+              {NAV_GROUPS.map((group) => {
+                if (group.to) {
+                  return (
+                    <Link
+                      key={group.key}
+                      to={group.to}
+                      onClick={() => setMobileOpen(false)}
+                      ref={(el) => {
+                        if (el && !firstMobileLinkRef.current) firstMobileLinkRef.current = el;
+                      }}
+                      className={cn(
+                        "flex items-center rounded-xl px-4 py-3 text-[15px] font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+                        isRouteActive(group.to)
+                          ? "bg-primary/10 text-primary"
+                          : "text-foreground/80 hover:bg-accent",
+                      )}
+                    >
+                      {get(group.labelKey, t(group.labelKey))}
+                    </Link>
+                  );
+                }
+
+                return (
+                  <div key={group.key} className="mt-5 first:mt-0">
+                    <p className="px-1 pb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/70">
+                      {get(group.labelKey, t(group.labelKey))}
+                    </p>
+                    <div className="flex flex-col">
+                      {(group.children ?? []).map((child, i) =>
+                        child.kind === "separator" ? (
+                          <div key={`sep-${group.key}-${i}`} className="my-1 h-px bg-border" aria-hidden />
+                        ) : (
+                          <Link
+                            key={child.to}
+                            to={child.to}
+                            onClick={() => setMobileOpen(false)}
+                            ref={(el) => {
+                              if (el && !firstMobileLinkRef.current) firstMobileLinkRef.current = el;
+                            }}
+                            className={cn(
+                              "flex items-center rounded-xl px-4 py-3 text-[15px] font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+                              isRouteActive(child.to)
+                                ? "bg-primary/10 text-primary"
+                                : "text-foreground/80 hover:bg-accent",
+                            )}
+                          >
+                            {get(child.labelKey, t(child.labelKey))}
+                          </Link>
+                        ),
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </nav>
           </div>
         </div>
@@ -355,7 +507,7 @@ function LanguageSwitcher({
                 setOpen(false);
               }}
               className={cn(
-                "flex w-full items-center justify-between rounded-md px-3 py-2 text-sm transition-colors hover:bg-accent",
+                "flex w-full items-center justify-between rounded-md px-3 py-2 text-sm outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring",
                 current === lang.code && "bg-accent/60",
               )}
             >

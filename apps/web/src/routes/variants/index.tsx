@@ -9,6 +9,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
+import { useSiteContent } from "../../lib/site-content";
 import { DownloadOutlined as Download, LeftOutlined, ReloadOutlined, RightOutlined } from "@ant-design/icons";
 import {
   Button,
@@ -49,6 +50,7 @@ interface SortState {
 
 function VariantsComponent() {
   const { t } = useTranslation();
+  const { get } = useSiteContent();
   const search = Route.useSearch();
   const navigate = useNavigate();
 
@@ -83,19 +85,19 @@ function VariantsComponent() {
 
   const columns: TableColumnsType<VariantSummary> = [
     {
-      title: "Variant ID",
+      title: get("variants.variantId", "Variant ID"),
       dataIndex: "variant_id",
       key: "variant_id",
       render: (_, row) => <span className="font-mono text-xs">{row.variant_id.slice(0, 12)}…</span>,
     },
     {
-      title: t("variants.chromosomeLabel"),
+      title: get("variants.chromosomeLabel", t("variants.chromosomeLabel")),
       dataIndex: "chromosome",
       key: "chromosome",
       render: (_, row) => <span className="font-mono text-xs">{row.chromosome}</span>,
     },
     {
-      title: t("variants.positionLabel"),
+      title: get("variants.positionLabel", t("variants.positionLabel")),
       dataIndex: "position",
       key: "position",
       sorter: true,
@@ -117,7 +119,7 @@ function VariantsComponent() {
       ),
     },
     {
-      title: t("variants.variantTypeLabel"),
+      title: get("variants.variantTypeLabel", t("variants.variantTypeLabel")),
       dataIndex: "variant_type",
       key: "variant_type",
       render: (_, row) => (
@@ -125,14 +127,14 @@ function VariantsComponent() {
       ),
     },
     {
-      title: t("variants.impactLabel"),
+      title: get("variants.impactLabel", t("variants.impactLabel")),
       dataIndex: "impact",
       key: "impact",
       render: (_, row) =>
         row.impact ? <ImpactBadge impact={row.impact} /> : <span className="text-muted-foreground">—</span>,
     },
     {
-      title: t("variants.geneSymbol"),
+      title: get("variants.geneSymbol", t("variants.geneSymbol")),
       dataIndex: "gene_symbol",
       key: "gene_symbol",
       render: (_, row) =>
@@ -182,18 +184,18 @@ function VariantsComponent() {
       <div className="container-prose py-10 md:py-14">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="eyebrow">{t("variants.title")}</p>
+            <p className="eyebrow">{get("variants.title", t("variants.title"))}</p>
             <h1 className="mt-2 font-display text-4xl font-semibold tracking-tight">
-              {t("variants.subtitle")}
+              {get("variants.subtitle", t("variants.subtitle"))}
             </h1>
           </div>
           <Button icon={<Download className="size-4" aria-hidden />}>
-            {t("variants.export")}
+            {get("variants.export", t("variants.export"))}
           </Button>
         </div>
 
         <Form layout="inline" className="mt-8 flex flex-wrap items-end gap-x-4 gap-y-4">
-          <Form.Item label={t("variants.chromosome")} className="mb-0">
+          <Form.Item label={get("variants.chromosome", t("variants.chromosome"))} className="mb-0">
             <Select
               value={search.chromosome || "all"}
               onChange={(v) =>
@@ -201,12 +203,12 @@ function VariantsComponent() {
               }
               style={{ width: 170 }}
               options={[
-                { value: "all", label: t("variants.allChromosomes") },
+                { value: "all", label: get("variants.allChromosomes", t("variants.allChromosomes")) },
                 ...SOYBEAN_CHROMOSOMES.map((c) => ({ value: c, label: c })),
               ]}
             />
           </Form.Item>
-          <Form.Item label={t("variants.variantType")} className="mb-0">
+          <Form.Item label={get("variants.variantType", t("variants.variantType"))} className="mb-0">
             <Select
               value={search.variant_type || "all"}
               onChange={(v) =>
@@ -214,12 +216,12 @@ function VariantsComponent() {
               }
               style={{ width: 170 }}
               options={[
-                { value: "all", label: t("variants.allTypes") },
+                { value: "all", label: get("variants.allTypes", t("variants.allTypes")) },
                 ...VARIANT_TYPES.map((v) => ({ value: v, label: v })),
               ]}
             />
           </Form.Item>
-          <Form.Item label={t("variants.impact")} className="mb-0">
+          <Form.Item label={get("variants.impact", t("variants.impact"))} className="mb-0">
             <Select
               value={search.impact || "all"}
               onChange={(v) =>
@@ -227,7 +229,7 @@ function VariantsComponent() {
               }
               style={{ width: 170 }}
               options={[
-                { value: "all", label: t("variants.allImpacts") },
+                { value: "all", label: get("variants.allImpacts", t("variants.allImpacts")) },
                 ...IMPACTS.map((i) => ({ value: i, label: i })),
               ]}
             />
@@ -252,7 +254,7 @@ function VariantsComponent() {
                 <Empty
                   description={
                     <Typography.Text type="secondary">
-                      {t("variants.noResults")}
+                      {get("variants.noResults", t("variants.noResults"))}
                       <br />
                       <span className="text-xs">{t("common.noResults")}</span>
                     </Typography.Text>

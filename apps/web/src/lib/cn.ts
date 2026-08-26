@@ -1,6 +1,3 @@
-type ClassValue = string | false | null | undefined;
-
-/** Dependency-free class-name joiner (AntD migration: decoupled from web-ui). */
-export function cn(...values: ClassValue[]): string {
-  return values.filter(Boolean).join(" ");
-}
+// Re-export the shared class-name joiner. Kept as an app-local alias so
+// existing "@/lib/cn" imports keep working during the shared-package migration.
+export { cn } from "@soymutdb/shared/cn";

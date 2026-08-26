@@ -14,7 +14,9 @@ type SettingsSection =
   | "email"
   | "security"
   | "cdn"
-  | "filePreview";
+  | "filePreview"
+  | "footer"
+  | "content";
 
 const initialSettingsLoadState: Record<SettingsSection, boolean> = {
   general: false,
@@ -24,6 +26,8 @@ const initialSettingsLoadState: Record<SettingsSection, boolean> = {
   security: false,
   cdn: false,
   filePreview: false,
+  footer: false,
+  content: false,
 };
 
 const initialSettingsLoadErrorState: Record<SettingsSection, boolean> = {
@@ -34,6 +38,8 @@ const initialSettingsLoadErrorState: Record<SettingsSection, boolean> = {
   security: false,
   cdn: false,
   filePreview: false,
+  footer: false,
+  content: false,
 };
 
 const settingsSectionLabels: Record<SettingsSection, string> = {
@@ -44,7 +50,112 @@ const settingsSectionLabels: Record<SettingsSection, string> = {
   security: "Security settings",
   cdn: "CDN Configuration settings",
   filePreview: "File Preview settings",
+  footer: "Footer settings",
+  content: "Site content settings",
 };
+
+type ContentArea = "hero" | "tools" | "search" | "blast" | "help" | "generic";
+
+interface ContentField {
+  key: string;
+  area: ContentArea;
+  label: string;
+  textarea?: boolean;
+  defaultValue: string;
+}
+
+/**
+ * Registered content.* keys (short form, without the content. prefix) plus
+ * the English default values. Mirrors apps/api/app/core/settings_registry.py
+ * so a fresh deployment shows today's strings until an administrator edits.
+ */
+const CONTENT_FIELDS: ContentField[] = [
+  { key: "hero.eyebrow", area: "hero", label: "Hero eyebrow", defaultValue: "SOYMUTDB · MULTI-SPECIES" },
+  { key: "hero.title", area: "hero", label: "Hero title", defaultValue: "Explore the Unknown Territories of Multi-Species Mutation" },
+  { key: "hero.subtitle", area: "hero", label: "Hero subtitle", textarea: true, defaultValue: "A next-generation multi-species mutation database — from genome to phenotype in one place." },
+  { key: "hero.searchPlaceholder", area: "hero", label: "Search placeholder", defaultValue: "Search a gene ID, locus or mutation…" },
+  { key: "hero.image", area: "hero", label: "Hero image URL", defaultValue: "" },
+  { key: "tool.gene.label", area: "tools", label: "Gene tool label", defaultValue: "Gene ID Search" },
+  { key: "tool.gene.desc", area: "tools", label: "Gene tool description", defaultValue: "Look up mutations by gene ID" },
+  { key: "tool.gene.image", area: "tools", label: "Gene tool image URL", defaultValue: "" },
+  { key: "tool.location.label", area: "tools", label: "Location tool label", defaultValue: "Position Search" },
+  { key: "tool.location.desc", area: "tools", label: "Location tool description", defaultValue: "Look up by chromosome and locus" },
+  { key: "tool.location.image", area: "tools", label: "Location tool image URL", defaultValue: "" },
+  { key: "tool.gbrowse.label", area: "tools", label: "GBrowse tool label", defaultValue: "JBrowse 2" },
+  { key: "tool.gbrowse.desc", area: "tools", label: "GBrowse tool description", defaultValue: "Browse the genome in JBrowse 2" },
+  { key: "tool.gbrowse.image", area: "tools", label: "GBrowse tool image URL", defaultValue: "" },
+  { key: "tool.blast.label", area: "tools", label: "BLAST tool label", defaultValue: "BLAST" },
+  { key: "tool.blast.desc", area: "tools", label: "BLAST tool description", defaultValue: "Find homologs by sequence alignment" },
+  { key: "tool.blast.image", area: "tools", label: "BLAST tool image URL", defaultValue: "" },
+  { key: "tool.primer.label", area: "tools", label: "Primer tool label", defaultValue: "Primer Design" },
+  { key: "tool.primer.desc", area: "tools", label: "Primer tool description", defaultValue: "Design and check PCR primers" },
+  { key: "tool.primer.image", area: "tools", label: "Primer tool image URL", defaultValue: "" },
+  { key: "search.genes.title", area: "search", label: "Gene search title", defaultValue: "Gene ID Search" },
+  { key: "search.genes.subtitle", area: "search", label: "Gene search subtitle", defaultValue: "Find genes by gene ID in a genome version" },
+  { key: "search.genes.colAssembly", area: "search", label: "Gene results column: genome version", defaultValue: "Genome version" },
+  { key: "search.genes.colChromosome", area: "search", label: "Gene results column: chromosome", defaultValue: "Chromosome" },
+  { key: "search.genes.colPosition", area: "search", label: "Gene results column: position", defaultValue: "Position" },
+  { key: "search.genes.colMutation", area: "search", label: "Gene results column: mutation feature", defaultValue: "Mutation feature" },
+  { key: "search.genes.colGeneId", area: "search", label: "Gene results column: gene ID", defaultValue: "Gene ID" },
+  { key: "search.genes.colGbrowse", area: "search", label: "Gene results column: JBrowse 2", defaultValue: "JBrowse 2" },
+  { key: "search.location.title", area: "search", label: "Location search title", defaultValue: "Physical Location Search" },
+  { key: "search.location.subtitle", area: "search", label: "Location search subtitle", defaultValue: "Find variants and genes in a genomic region" },
+  { key: "search.location.colAssembly", area: "search", label: "Location results column: genome version", defaultValue: "Genome version" },
+  { key: "search.location.colChromosome", area: "search", label: "Location results column: chromosome", defaultValue: "Chromosome" },
+  { key: "search.location.colPosition", area: "search", label: "Location results column: position", defaultValue: "Position" },
+  { key: "search.location.colMutation", area: "search", label: "Location results column: mutation feature", defaultValue: "Mutation feature" },
+  { key: "search.location.colGeneId", area: "search", label: "Location results column: gene ID", defaultValue: "Gene ID" },
+  { key: "search.location.colGbrowse", area: "search", label: "Location results column: JBrowse 2", defaultValue: "JBrowse 2" },
+  { key: "blast.searchType", area: "blast", label: "BLAST type label", defaultValue: "BLAST Type" },
+  { key: "blast.database", area: "blast", label: "BLAST database label", defaultValue: "Reference sequence type" },
+  { key: "blast.databasePlaceholder", area: "blast", label: "BLAST database placeholder", defaultValue: "Select a reference sequence type" },
+  { key: "blast.input", area: "blast", label: "BLAST input label", defaultValue: "Input Sequence" },
+  { key: "blast.inputSequence", area: "blast", label: "BLAST input sequence label", defaultValue: "Input Sequence" },
+  { key: "blast.sequencePlaceholder", area: "blast", label: "BLAST sequence placeholder", textarea: true, defaultValue: "Paste sequence in FASTA format..." },
+  { key: "blast.submit", area: "blast", label: "BLAST submit button", defaultValue: "BLAST" },
+  { key: "blast.eValue", area: "blast", label: "BLAST E-value label", defaultValue: "E-value threshold" },
+  { key: "blast.maxHits", area: "blast", label: "BLAST max hits label", defaultValue: "Max hits" },
+  { key: "blast.hitSequenceId", area: "blast", label: "BLAST hit column: sequence ID", defaultValue: "Sequence ID" },
+  { key: "blast.hitGeneId", area: "blast", label: "BLAST hit column: gene ID", defaultValue: "Gene ID" },
+  { key: "blast.hitCoverage", area: "blast", label: "BLAST hit column: coverage", defaultValue: "Coverage" },
+  { key: "blast.hitEValue", area: "blast", label: "BLAST hit column: E-value", defaultValue: "E-value" },
+  { key: "help.gettingStarted", area: "help", label: "Help: getting started", defaultValue: "Getting Started" },
+  { key: "help.documentation", area: "help", label: "Help: documentation", defaultValue: "Documentation" },
+  { key: "help.contact", area: "help", label: "Help: contact", defaultValue: "Contact Support" },
+  { key: "help.faq", area: "help", label: "Help: FAQ heading", defaultValue: "Frequently Asked Questions" },
+  { key: "help.faq1.q", area: "help", label: "FAQ 1 question", defaultValue: "How do I search for a gene?" },
+  { key: "help.faq1.a", area: "help", label: "FAQ 1 answer", textarea: true, defaultValue: "Use the search bar at the top of any page, or visit the Genes page to filter by chromosome, biotype, or keyword. Gene IDs follow the Glyma.01G000100 format." },
+  { key: "help.faq2.q", area: "help", label: "FAQ 2 question", defaultValue: "How do I download variant data?" },
+  { key: "help.faq2.a", area: "help", label: "FAQ 2 answer", textarea: true, defaultValue: "Visit the Downloads page for the files currently published for a release. Check each item's format, assembly, release, and provenance metadata before using it in an analysis." },
+  { key: "help.faq3.q", area: "help", label: "FAQ 3 question", defaultValue: "Can I request mutant seeds?" },
+  { key: "help.faq3.a", area: "help", label: "FAQ 3 answer", textarea: true, defaultValue: "Open the Seed Request page to see whether requests are currently enabled and to review the eligibility and distribution terms shown during submission." },
+  { key: "help.faq4.q", area: "help", label: "FAQ 4 question", defaultValue: "How do I cite SoyMutDB?" },
+  { key: "help.faq4.a", area: "help", label: "FAQ 4 answer", textarea: true, defaultValue: "Use the citation and provenance metadata published with the exact data release you used. A journal citation or DOI is shown only after it has been verified by the project maintainers." },
+  { key: "help.faq5.q", area: "help", label: "FAQ 5 question", defaultValue: "What genome assembly is used?" },
+  { key: "help.faq5.a", area: "help", label: "FAQ 5 answer", textarea: true, defaultValue: "The assembly is part of the search, record, browser, and download context. Confirm the displayed assembly before comparing or combining genomic coordinates." },
+  { key: "help.faq6.q", area: "help", label: "FAQ 6 question", defaultValue: "How often is the data updated?" },
+  { key: "help.faq6.a", area: "help", label: "FAQ 6 answer", textarea: true, defaultValue: "Release versions and publication dates are announced on the News and Downloads pages. SoyMutDB does not promise a fixed release cadence on this Help page." },
+  { key: "ui.searchButton", area: "generic", label: "Search button text", defaultValue: "Search" },
+  { key: "ui.submit", area: "generic", label: "Submit button text", defaultValue: "Submit" },
+  { key: "ui.loading", area: "generic", label: "Loading text", defaultValue: "Loading..." },
+  { key: "ui.errorRetry", area: "generic", label: "Error retry text", defaultValue: "Retry" },
+  { key: "ui.noResults", area: "generic", label: "No results text", defaultValue: "No results found" },
+];
+
+const SITE_CONTENT_DEFAULTS: Record<string, string> = Object.fromEntries(
+  CONTENT_FIELDS.map((field) => [field.key, field.defaultValue]),
+);
+
+const CONTENT_AREA_LABELS: Record<ContentArea, string> = {
+  hero: "Hero",
+  tools: "Tool cards",
+  search: "Search pages",
+  blast: "BLAST",
+  help: "Help",
+  generic: "Generic UI",
+};
+
+const CONTENT_AREA_ORDER: ContentArea[] = ["hero", "tools", "search", "blast", "help", "generic"];
 
 function isConfigurationRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -111,6 +222,18 @@ export default function SettingsPage() {
     summary_zh: "",
     content_en: "",
     content_zh: "",
+  });
+
+  const [footer, setFooter] = useState({
+    contact_person: "联系人: 周玲",
+    contact_phone: "电话: 025-84391957",
+    contact_email: "电子邮件: zlingxiaoyao@163.com",
+    copyright: "© {{year}} SoyMutDB. All rights reserved.",
+    address: "地址: 南京市玄武区钟灵街50号 邮编210014",
+  });
+
+  const [siteContent, setSiteContent] = useState<Record<string, string>>({
+    ...SITE_CONTENT_DEFAULTS,
   });
 
   useEffect(() => {
@@ -248,6 +371,45 @@ export default function SettingsPage() {
       setSectionLoaded((loaded) => ({ ...loaded, about: true }));
     }).catch(() => {
       setSectionLoadError((errors) => ({ ...errors, about: true }));
+    });
+  }, []);
+
+  useEffect(() => {
+    http.get("/admin/settings/footer").then((res: unknown) => {
+      if (!isConfigurationRecord(res)) {
+        setSectionLoadError((errors) => ({ ...errors, footer: true }));
+        return;
+      }
+      setFooter({
+        contact_person: String(res.contact_person ?? "联系人: 周玲"),
+        contact_phone: String(res.contact_phone ?? "电话: 025-84391957"),
+        contact_email: String(res.contact_email ?? "电子邮件: zlingxiaoyao@163.com"),
+        copyright: String(res.copyright ?? "© {{year}} SoyMutDB. All rights reserved."),
+        address: String(res.address ?? "地址: 南京市玄武区钟灵街50号 邮编210014"),
+      });
+      setSectionLoadError((errors) => ({ ...errors, footer: false }));
+      setSectionLoaded((loaded) => ({ ...loaded, footer: true }));
+    }).catch(() => {
+      setSectionLoadError((errors) => ({ ...errors, footer: true }));
+    });
+  }, []);
+
+  useEffect(() => {
+    http.get("/admin/settings/content").then((res: unknown) => {
+      if (!isConfigurationRecord(res)) {
+        setSectionLoadError((errors) => ({ ...errors, content: true }));
+        return;
+      }
+      const merged: Record<string, string> = { ...SITE_CONTENT_DEFAULTS };
+      for (const key of Object.keys(merged)) {
+        const value = res[key];
+        if (typeof value === "string") merged[key] = value;
+      }
+      setSiteContent(merged);
+      setSectionLoadError((errors) => ({ ...errors, content: false }));
+      setSectionLoaded((loaded) => ({ ...loaded, content: true }));
+    }).catch(() => {
+      setSectionLoadError((errors) => ({ ...errors, content: true }));
     });
   }, []);
 
@@ -742,6 +904,121 @@ export default function SettingsPage() {
             <Button
               onClick={() => handleSave("file_preview", filePreview)}
               disabled={!sectionLoaded.filePreview || saveMutation.isPending}
+            >
+              <SaveOutlined aria-hidden className="size-4" />
+              Save Changes
+            </Button>
+          </div>
+        </div>
+      </Card>
+
+      {/* Site content (backend-editable frontend text + image URLs) */}
+      <Card>
+        <div>
+          <Typography.Title level={5} className="flex items-center gap-2 text-base">
+            <GlobalOutlined className="size-4 text-primary" />
+            Site Content
+          </Typography.Title>
+          <Typography.Text type="secondary">Backend-editable frontend text and image URLs (served by GET /site/content).</Typography.Text>
+          {sectionLoadError.content && <SettingsLoadError section="content" />}
+        </div>
+        <div className="space-y-4">
+          {CONTENT_AREA_ORDER.map((area) => (
+            <div key={area} className="space-y-3">
+              <Typography.Title level={5} className="mb-1">{CONTENT_AREA_LABELS[area]}</Typography.Title>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {CONTENT_FIELDS.filter((field) => field.area === area).map((field) => (
+                  <div key={field.key} className="space-y-1.5">
+                    <label htmlFor={`content-${field.key}`}>{field.label}</label>
+                    {field.textarea ? (
+                      <Input.TextArea
+                        id={`content-${field.key}`}
+                        rows={2}
+                        value={siteContent[field.key] ?? ""}
+                        onChange={(e) => setSiteContent({ ...siteContent, [field.key]: e.target.value })}
+                      />
+                    ) : (
+                      <Input
+                        id={`content-${field.key}`}
+                        value={siteContent[field.key] ?? ""}
+                        onChange={(e) => setSiteContent({ ...siteContent, [field.key]: e.target.value })}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+          <div className="flex justify-end">
+            <Button
+              onClick={() => handleSave("content", siteContent)}
+              disabled={!sectionLoaded.content || saveMutation.isPending}
+            >
+              <SaveOutlined aria-hidden className="size-4" />
+              Save Changes
+            </Button>
+          </div>
+        </div>
+      </Card>
+
+      {/* Footer contact block */}
+      <Card>
+        <div>
+          <Typography.Title level={5} className="flex items-center gap-2 text-base">
+            <GlobalOutlined className="size-4 text-primary" />
+            Footer
+          </Typography.Title>
+          <Typography.Text type="secondary">Editable footer contact information</Typography.Text>
+          {sectionLoadError.footer && <SettingsLoadError section="footer" />}
+        </div>
+        <div className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <label htmlFor="footer-contact-person">Contact Person</label>
+              <Input
+                id="footer-contact-person"
+                value={footer.contact_person}
+                onChange={(e) => setFooter({ ...footer, contact_person: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label htmlFor="footer-contact-phone">Contact Phone</label>
+              <Input
+                id="footer-contact-phone"
+                value={footer.contact_phone}
+                onChange={(e) => setFooter({ ...footer, contact_phone: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label htmlFor="footer-contact-email">Contact Email</label>
+              <Input
+                id="footer-contact-email"
+                value={footer.contact_email}
+                onChange={(e) => setFooter({ ...footer, contact_email: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label htmlFor="footer-address">Address</label>
+              <Input
+                id="footer-address"
+                value={footer.address}
+                onChange={(e) => setFooter({ ...footer, address: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5 sm:col-span-2">
+              <label htmlFor="footer-copyright">Copyright</label>
+              <Input
+                id="footer-copyright"
+                value={footer.copyright}
+                onChange={(e) => setFooter({ ...footer, copyright: e.target.value })}
+                placeholder="© {{year}} SoyMutDB. All rights reserved."
+              />
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <Button
+              onClick={() => handleSave("footer", footer)}
+              disabled={!sectionLoaded.footer || saveMutation.isPending}
             >
               <SaveOutlined aria-hidden className="size-4" />
               Save Changes

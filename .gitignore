@@ -186,3 +186,6 @@ apps/api/.venv
 .ai-memory/*/
 !.ai-memory/project_memory.md
 !.ai-memory/handoff.md
+
+# Local no-Docker deployment data (conda envs, data plane, logs) — created by the local deploy flow
+.deploy/

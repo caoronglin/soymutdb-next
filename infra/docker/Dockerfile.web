@@ -37,19 +37,10 @@ ENV NODE_ENV=production
 # Build the web frontend (includes SSG via vite build + code splitting)
 RUN pnpm --filter @soymutdb/web build
 
-# Pre-compress static assets with gzip for gzip_static support
-# This creates .gz files alongside original assets so nginx can serve
-# pre-compressed versions without on-the-fly compression overhead.
-RUN find apps/web/dist -type f \( \
-    -name "*.js" -o \
-    -name "*.css" -o \
-    -name "*.html" -o \
-    -name "*.svg" -o \
-    -name "*.json" -o \
-    -name "*.woff" -o \
-    -name "*.woff2" -o \
-    -name "*.ttf" \
-    \) -exec gzip -k -9 {} \; || true
+# Pre-compress static assets with gzip for gzip_static support.
+# Shared script (infra/docker/precompress.sh) is used by both web and admin.
+COPY infra/docker/precompress.sh /tmp/precompress.sh
+RUN sh /tmp/precompress.sh apps/web/dist
 
 # Ensure /samples/ directory exists (SSG sample pages go here)
 RUN mkdir -p apps/web/dist/samples

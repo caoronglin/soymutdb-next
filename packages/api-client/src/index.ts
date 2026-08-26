@@ -29,6 +29,8 @@ export {
   AUTH_REFRESH_PATH,
 } from "./auth";
 
+export { attachCsrf } from "./csrf";
+
 export * from "./genes";
 export * from "./variants";
 export * from "./blast";

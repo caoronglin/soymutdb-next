@@ -58,6 +58,8 @@ export default tseslint.config(
             // API-layer code legitimately uses `any` at trust boundaries.
             "@typescript-eslint/no-explicit-any": "warn",
             "no-empty": ["error", { allowEmptyCatch: true }],
+            // 生产代码禁止 console.log/console.info（保留 warn/error 用于错误边界与安全告警）。
+            "no-console": ["warn", { allow: ["warn", "error"] }],
         },
     },
     {

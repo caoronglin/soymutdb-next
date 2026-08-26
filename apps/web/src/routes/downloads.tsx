@@ -13,6 +13,7 @@ import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import { useSiteContent } from "../lib/site-content";
 import {
   DatabaseOutlined as Database,
   DeploymentUnitOutlined as Dna,
@@ -76,6 +77,7 @@ function getFileFormat(name: string): string {
 
 function DownloadsComponent() {
   const { t } = useTranslation();
+  const { get } = useSiteContent();
   const [preview, setPreview] = useState<{ files: DownloadFile[]; index: number } | null>(null);
 
   const { data: files, isLoading, error } = useQuery({
@@ -107,9 +109,9 @@ function DownloadsComponent() {
   return (
     <div className="container-prose section-rhythm">
       <FadeUp>
-        <p className="eyebrow">{t("downloads.title")}</p>
+        <p className="eyebrow">{get("downloads.title", t("downloads.title"))}</p>
         <h1 className="mt-2 font-display text-4xl font-semibold tracking-tight">
-          {t("downloads.subtitle")}
+          {get("downloads.subtitle", t("downloads.subtitle"))}
         </h1>
       </FadeUp>
 
@@ -143,7 +145,7 @@ function DownloadsComponent() {
                   <span className="flex size-10 items-center justify-center rounded-lg bg-accent text-accent-foreground">
                     <Icon className="size-5" aria-hidden />
                   </span>
-                  {t(group.titleKey)}
+                  {get(group.titleKey, t(group.titleKey))}
                 </Typography.Title>
                 <Typography.Text>
                   {group.files.length} {t("common.items")}
@@ -154,10 +156,10 @@ function DownloadsComponent() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b text-left text-xs text-muted-foreground">
-                        <th className="py-2 pr-4 font-medium">{t("downloads.fileName")}</th>
-                        <th className="py-2 pr-4 font-medium">{t("downloads.format")}</th>
-                        <th className="py-2 pr-4 font-medium">{t("downloads.fileSize")}</th>
-                        <th className="py-2 pr-4 font-medium">{t("downloads.lastUpdated")}</th>
+                        <th className="py-2 pr-4 font-medium">{get("downloads.fileName", t("downloads.fileName"))}</th>
+                        <th className="py-2 pr-4 font-medium">{get("downloads.format", t("downloads.format"))}</th>
+                        <th className="py-2 pr-4 font-medium">{get("downloads.fileSize", t("downloads.fileSize"))}</th>
+                        <th className="py-2 pr-4 font-medium">{get("downloads.lastUpdated", t("downloads.lastUpdated"))}</th>
                         <th className="py-2 font-medium text-right">{t("common.actions")}</th>
                       </tr>
                     </thead>
@@ -192,7 +194,7 @@ function DownloadsComponent() {
                               <div className="flex items-center justify-end gap-1">
                                 {isTooLarge ? (
                                   <Tag className="text-[10px]">
-                                    {t("downloads.too_large")}
+                                    {get("downloads.too_large", t("downloads.too_large"))}
                                   </Tag>
                                 ) : (
                                   <Button
@@ -202,14 +204,14 @@ function DownloadsComponent() {
                                     onClick={() => handlePreview(file)}
                                   >
                                     <Eye className="size-3.5" aria-hidden />
-                                    <span className="hidden sm:inline">{t("downloads.preview")}</span>
+                                    <span className="hidden sm:inline">{get("downloads.preview", t("downloads.preview"))}</span>
                                   </Button>
                                 )}
                                 <Button
                                   type="text"
                                  
                                   className="h-8 w-8"
-                                  aria-label={t("downloads.download")}
+                                  aria-label={get("downloads.download", t("downloads.download"))}
                                   onClick={() => handleDownload(file)}
                                 >
                                   <Download className="size-4" aria-hidden />

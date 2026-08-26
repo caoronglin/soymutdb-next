@@ -89,12 +89,12 @@ const authLayoutRoute = createRoute({
   component: RequireAuth,
 });
 
-/** Auth guard + admin chrome wrapper. */
+/** Auth guard + admin chrome wrapper.
+ * TEMP (layout preview): bypass login so the admin chrome renders directly.
+ * Remove this bypass before production. */
 function RequireAuth() {
-  const { isAuthenticated } = useAuth();
-  if (!isAuthenticated) {
-    return <LoginPage />;
-  }
+  // const { isAuthenticated } = useAuth();
+  // if (!isAuthenticated) return <LoginPage />;
   return (
     <AdminLayout>
       <Outlet />

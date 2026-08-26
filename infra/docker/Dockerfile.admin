@@ -37,17 +37,10 @@ ENV NODE_ENV=production
 
 RUN pnpm --filter @soymutdb/admin build
 
-# Pre-compress static assets with gzip for gzip_static
-RUN find apps/admin/dist -type f \( \
-    -name "*.js" -o \
-    -name "*.css" -o \
-    -name "*.html" -o \
-    -name "*.svg" -o \
-    -name "*.json" -o \
-    -name "*.woff" -o \
-    -name "*.woff2" -o \
-    -name "*.ttf" \
-    \) -exec gzip -k -9 {} \; || true
+# Pre-compress static assets with gzip for gzip_static support.
+# Shared script (infra/docker/precompress.sh) is used by both web and admin.
+COPY infra/docker/precompress.sh /tmp/precompress.sh
+RUN sh /tmp/precompress.sh apps/admin/dist
 
 # ---------- Stage 3: Runtime ----------
 FROM nginx:1.27-alpine AS runtime

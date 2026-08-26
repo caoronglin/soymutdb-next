@@ -13,6 +13,7 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import { useSiteContent } from "../../lib/site-content";
 import * as React from "react";
 import {
   Alert,
@@ -69,6 +70,7 @@ interface RegionQuery {
 
 function LocationSearchComponent() {
   const { t } = useTranslation();
+  const { get } = useSiteContent();
   const router = useRouter();
   const { assembly: urlAssembly, chromosome: urlChromosome, start: urlStart, end: urlEnd, run } =
     Route.useSearch();
@@ -168,21 +170,21 @@ function LocationSearchComponent() {
   const columns: TableColumnsType<VariantSummary> = [
     {
       // 1. Genome assembly
-      title: t("search.location.colAssembly"),
+      title: get("search.genes.colAssembly", t("search.location.colAssembly")),
       dataIndex: "assembly",
       key: "assembly",
       render: () => <span className="font-mono text-xs">{selectedAssembly?.name ?? "—"}</span>,
     },
     {
       // 2. Chromosome
-      title: t("search.location.colChromosome"),
+      title: get("search.genes.colChromosome", t("search.location.colChromosome")),
       dataIndex: "chromosome",
       key: "chromosome",
       render: (_, row) => <span className="font-mono text-xs">{row.chromosome}</span>,
     },
     {
       // 3. Position
-      title: t("search.location.colPosition"),
+      title: get("search.genes.colPosition", t("search.location.colPosition")),
       dataIndex: "position",
       key: "position",
       render: (_, row) => (
@@ -193,7 +195,7 @@ function LocationSearchComponent() {
     },
     {
       // 4. Mutation feature
-      title: t("search.location.colMutation"),
+      title: get("search.genes.colMutation", t("search.location.colMutation")),
       dataIndex: "mutation",
       key: "mutation",
       render: (_, row) => (
@@ -202,7 +204,7 @@ function LocationSearchComponent() {
     },
     {
       // 5. Gene ID (linked to detail when present)
-      title: t("search.location.colGeneId"),
+      title: get("search.genes.colGeneId", t("search.location.colGeneId")),
       dataIndex: "gene_id",
       key: "gene_id",
       render: (_, row) =>
@@ -221,7 +223,7 @@ function LocationSearchComponent() {
     },
     {
       // 6. JBrowse 2 action (base-aware, new tab)
-      title: t("search.location.colGbrowse"),
+      title: get("search.genes.colGbrowse", t("search.location.colGbrowse")),
       dataIndex: "gbrowse",
       key: "gbrowse",
       render: (_, row) => (
@@ -256,83 +258,86 @@ function LocationSearchComponent() {
   return (
     <FadeUp>
       <div className="py-6">
-        <p className="eyebrow">{t("search.location.title")}</p>
+        <p className="eyebrow">{get("search.location.title", t("search.location.title"))}</p>
         <h2 className="mt-2 font-display text-2xl font-semibold tracking-tight">
-          {t("search.location.subtitle")}
+          {get("search.location.subtitle", t("search.location.subtitle"))}
         </h2>
 
         <Card className="mt-6 max-w-3xl">
-          <Form layout="vertical" onFinish={submitInNewTab}>
-            <div className="grid gap-4 sm:grid-cols-[240px_1fr]">
-              <Form.Item label={t("search.location.assembly")} className="mb-0">
-                <Select
-                  value={assemblyId}
-                  onChange={(v) => setAssemblyId(v)}
-                  placeholder={t("search.location.assemblyPlaceholder")}
-                  loading={assembliesQuery.isLoading}
-                  options={assemblies.map((a) => ({
-                    value: String(a.id),
-                    label: (
-                      <span className="flex items-center gap-2">
-                        <span>{a.name}</span>
-                        {a.is_default ? (
-                          <Tag className="m-0 text-[9px] uppercase">Default</Tag>
-                        ) : null}
-                      </span>
-                    ),
-                  }))}
+          <Form
+            layout="horizontal"
+            onFinish={submitInNewTab}
+            labelCol={{ xs: 24, sm: 8 }}
+            wrapperCol={{ xs: 24, sm: 16 }}
+          >
+            <Form.Item label={get("search.location.assembly", t("search.location.assembly"))} className="mb-0">
+              <Select
+                value={assemblyId}
+                onChange={(v) => setAssemblyId(v)}
+                placeholder={get("search.location.assemblyPlaceholder", t("search.location.assemblyPlaceholder"))}
+                loading={assembliesQuery.isLoading}
+                options={assemblies.map((a) => ({
+                  value: String(a.id),
+                  label: (
+                    <span className="flex items-center gap-2">
+                      <span>{a.name}</span>
+                      {a.is_default ? (
+                        <Tag className="m-0 text-[9px] uppercase">Default</Tag>
+                      ) : null}
+                    </span>
+                  ),
+                }))}
+              />
+              {assembliesQuery.isError ? (
+                <Alert
+                  className="mt-2"
+                  type="error"
+                  showIcon
+                  message={t("search.location.assembliesUnavailable", { defaultValue: "Assembly list unavailable" })}
                 />
-                {assembliesQuery.isError ? (
+              ) : null}
+            </Form.Item>
+            <div className="mt-6 grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-3">
+              <Form.Item label={get("search.location.chromosome", t("search.location.chromosome"))} className="mb-0">
+                <Select
+                  value={chromosome}
+                  onChange={(v) => setChromosome(v)}
+                  loading={chromosomesQuery.isLoading}
+                  options={chromosomes.map((item) => ({
+                    value: item.name,
+                    label: item.name,
+                  }))}
+                  showSearch
+                />
+                {chromosomesQuery.isError ? (
                   <Alert
                     className="mt-2"
                     type="error"
                     showIcon
-                    message={t("search.location.assembliesUnavailable", { defaultValue: "Assembly list unavailable" })}
+                    message={t("search.location.chromosomesUnavailable", { defaultValue: "Chromosome list unavailable" })}
                   />
                 ) : null}
               </Form.Item>
-              <div className="grid gap-4 sm:grid-cols-[1fr_120px_120px]">
-                <Form.Item label={t("search.location.chromosome")} className="mb-0">
-                  <Select
-                    value={chromosome}
-                    onChange={(v) => setChromosome(v)}
-                    loading={chromosomesQuery.isLoading}
-                    options={chromosomes.map((item) => ({
-                      value: item.name,
-                      label: item.name,
-                    }))}
-                    showSearch
-                  />
-                  {chromosomesQuery.isError ? (
-                    <Alert
-                      className="mt-2"
-                      type="error"
-                      showIcon
-                      message={t("search.location.chromosomesUnavailable", { defaultValue: "Chromosome list unavailable" })}
-                    />
-                  ) : null}
-                </Form.Item>
-                <Form.Item label={t("search.location.start")} className="mb-0">
-                  <InputNumber
-                    value={start}
-                    onChange={setStart}
-                    min={1}
-                    className="w-full"
-                    placeholder="1"
-                    aria-label={t("search.location.start")}
-                  />
-                </Form.Item>
-                <Form.Item label={t("search.location.end")} className="mb-0">
-                  <InputNumber
-                    value={end}
-                    onChange={setEnd}
-                    min={1}
-                    className="w-full"
-                    placeholder="2000"
-                    aria-label={t("search.location.end")}
-                  />
-                </Form.Item>
-              </div>
+              <Form.Item label={get("search.location.start", t("search.location.start"))} className="mb-0">
+                <InputNumber
+                  value={start}
+                  onChange={setStart}
+                  min={1}
+                  className="w-full"
+                  placeholder="1"
+                  aria-label={get("search.location.start", t("search.location.start"))}
+                />
+              </Form.Item>
+              <Form.Item label={get("search.location.end", t("search.location.end"))} className="mb-0">
+                <InputNumber
+                  value={end}
+                  onChange={setEnd}
+                  min={1}
+                  className="w-full"
+                  placeholder="2000"
+                  aria-label={get("search.location.end", t("search.location.end"))}
+                />
+              </Form.Item>
             </div>
             <div className="mt-4 flex flex-wrap items-center gap-3">
               <Button
@@ -342,10 +347,10 @@ function LocationSearchComponent() {
                 disabled={!formValid}
                 loading={regionQuery.isFetching}
               >
-                {t("search.location.submit")}
+                {get("search.location.submit", t("search.location.submit"))}
               </Button>
               <Typography.Text type="secondary" className="text-xs">
-                {t("search.location.formatHint")}
+                {get("search.location.formatHint", t("search.location.formatHint"))}
               </Typography.Text>
             </div>
           </Form>
@@ -361,7 +366,7 @@ function LocationSearchComponent() {
                 type="error"
                 showIcon
                 message={t("search.location.resultsUnavailable", { defaultValue: "Region search unavailable" })}
-                description={t("search.location.resultsRetry", { defaultValue: "The API did not return a result set. Please retry later." })}
+                description={get("ui.errorRetry", t("search.location.resultsRetry", { defaultValue: "The API did not return a result set. Please retry later." }))}
               />
             ) : (
               <div className="-mx-4 overflow-x-auto sm:mx-0">
@@ -379,7 +384,7 @@ function LocationSearchComponent() {
                     <Empty
                       description={
                         <Typography.Text type="secondary">
-                          {t("search.location.noResults")}
+                          {get("ui.noResults", t("search.location.noResults"))}
                         </Typography.Text>
                       }
                     />
