@@ -25,6 +25,7 @@ _DEFAULT_PRODUCTION_VALUES = {
     "s3_access_key": "minioadmin",
     "s3_secret_key": "minioadmin",
     "clickhouse_password": "soymutdb_dev_password",
+    "analytics_ip_salt": "soymutdb-analytics-dev",
     "admin_password": "admin123",
     "admin_email": "admin@soymutdb.local",
 }
@@ -120,6 +121,11 @@ class Settings(BaseSettings):
     clickhouse_connect_timeout: int = 10
     clickhouse_send_receive_timeout: int = 30
     clickhouse_max_execution_time: int = 30
+    # Override in deployments; the development default is intentionally non-secret.
+    analytics_ip_salt: str = "soymutdb-analytics-dev"
+    # Only direct peers listed here may supply a client IP through X-Forwarded-For.
+    # The empty default prevents direct callers from spoofing telemetry hashes.
+    analytics_trusted_proxy_ips: tuple[str, ...] = ()
     max_sync_rows: int = 10000
 
     # ----------------------------------------------------------------- Redis
@@ -353,6 +359,7 @@ class Settings(BaseSettings):
             required_fields = [
                 "database_url",
                 "jwt_secret",
+                "analytics_ip_salt",
             ]
             if self.deployment_mode == "extended":
                 required_fields.extend(
@@ -366,7 +373,7 @@ class Settings(BaseSettings):
                 if not value:
                     validation_errors.append(f"{field_name} is required in production settings")
 
-            production_default_fields = {"database_url"}
+            production_default_fields = {"database_url", "analytics_ip_salt"}
             if self.deployment_mode == "extended":
                 production_default_fields.update(
                     {"redis_url", "s3_endpoint", "s3_access_key", "s3_secret_key"}
@@ -403,6 +410,12 @@ class Settings(BaseSettings):
                     validation_errors.append(
                         "admin email must be a valid non-default address in production settings"
                     )
+
+            analytics_salt = self.analytics_ip_salt.strip()
+            if len(analytics_salt) < 32 or analytics_salt == "soymutdb-analytics-dev":
+                validation_errors.append(
+                    "analytics_ip_salt must be at least 32 characters and must not use the development default"
+                )
 
             if not self.cors_origins:
                 validation_errors.append("CORS origins are required in production settings")

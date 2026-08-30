@@ -14,7 +14,9 @@ from fastapi import (
     Response,
 )
 
+from ...core.config import get_settings
 from ...core.security import RoleName, has_role
+from ...schemas.analytics import WebVitalEvent
 from ...services.analytics_service import (
     TRACKING_PIXEL,
     AnalyticsService,
@@ -64,13 +66,17 @@ def _is_dnt(request: Request) -> bool:
 
 
 def _client_ip(request: Request) -> str:
-    """Best-effort client IP, honouring X-Forwarded-For behind proxies."""
+    """Return a forwarded IP only when the immediate peer is trusted.
+
+    Direct callers control ``X-Forwarded-For``; accepting it unconditionally
+    lets them spoof the value that is privacy-hashed for telemetry.
+    """
+    peer_ip = request.client.host if request.client and request.client.host else ""
+    trusted_proxies = set(get_settings().analytics_trusted_proxy_ips)
     xff = request.headers.get("x-forwarded-for")
-    if xff:
+    if xff and peer_ip in trusted_proxies:
         return xff.split(",")[0].strip()
-    if request.client and request.client.host:
-        return request.client.host
-    return ""
+    return peer_ip
 
 
 # --------------------------------------------------------------------------- #
@@ -78,12 +84,25 @@ def _client_ip(request: Request) -> str:
 # --------------------------------------------------------------------------- #
 
 
+def _tracking_response(request: Request) -> tuple[Response, str]:
+    """Create a no-store pixel response and bind its session cookie."""
+    response = Response(content=TRACKING_PIXEL, media_type="image/gif")
+    session_id = _resolve_session_id(request, response)
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, private"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    return response, session_id
+
+
 @router.get("/track.gif", include_in_schema=False)
 async def track_pixel(
     request: Request,
-    response: Response,
     background_tasks: BackgroundTasks,
-    event: str = Query(default="pageview", pattern="^(pageview|click|search|widget)$"),
+    event: str = Query(
+        default="pageview",
+        pattern="^(pageview|click|search|widget|performance)$",
+    ),
     page: str | None = Query(default=None, max_length=255),
     path: str | None = Query(default=None, max_length=1024),
     widget: str | None = Query(default=None, max_length=255),
@@ -91,6 +110,12 @@ async def track_pixel(
     ref: str | None = Query(default=None, max_length=1024),
     source: str | None = Query(default=None, max_length=255),
     duration: int = Query(default=0, ge=0, le=86_400_000),
+    name: str | None = Query(default=None, pattern="^(LCP|FID|INP|CLS|TTFB|FCP)$"),
+    value: float | None = Query(default=None, ge=0, le=86_400_000),
+    rating: str | None = Query(
+        default=None,
+        pattern="^(good|needs-improvement|poor)$",
+    ),
 ) -> Response:
     """1×1 transparent GIF pixel – non-blocking event collector.
 
@@ -98,40 +123,63 @@ async def track_pixel(
     as a background task so the HTTP round-trip is never delayed.
     Respects the ``DNT: 1`` header by skipping persistence.
     """
-    session_id = _resolve_session_id(request, response)
+    response, session_id = _tracking_response(request)
     user_agent = request.headers.get("user-agent", "")
     ip_raw = _client_ip(request)
     ip_hash = hash_ip(ip_raw) if ip_raw else ""
-    referrer = ref or request.headers.get("referer", "")
 
-    # If DNT is set we still return the pixel (so pages render cleanly) but
-    # skip writing to ClickHouse.
     if not _is_dnt(request):
-        background_tasks.add_task(
-            analytics.record_event,
-            session_id=session_id,
-            event_type=event,
-            page=page,
-            path=path,
-            widget_name=widget,
-            search_query=q,
-            source=source,
-            referrer=referrer,
-            user_agent=user_agent[:500],
-            ip_hash=ip_hash,
-            duration_ms=duration,
-        )
+        if event == "performance":
+            if name is not None and value is not None and rating is not None:
+                background_tasks.add_task(
+                    analytics.record_web_vital,
+                    session_id=session_id,
+                    name=name,
+                    value=value,
+                    rating=rating,
+                    path=path or request.url.path,
+                    user_agent=user_agent,
+                    ip_hash=ip_hash,
+                )
+        else:
+            background_tasks.add_task(
+                analytics.record_event,
+                session_id=session_id,
+                event_type=event,
+                page=page,
+                path=path,
+                widget_name=widget,
+                search_query=q,
+                source=source,
+                referrer=ref or request.headers.get("referer", ""),
+                user_agent=user_agent[:500],
+                ip_hash=ip_hash,
+                duration_ms=duration,
+            )
+    return response
 
-    # Cache-busting headers + pixel body.
-    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, private"
-    response.headers["Pragma"] = "no-cache"
-    response.headers["Expires"] = "0"
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    return Response(
-        content=TRACKING_PIXEL,
-        media_type="image/gif",
-        status_code=200,
-    )
+
+@router.post("/track.gif", include_in_schema=False)
+async def track_pixel_beacon(
+    request: Request,
+    payload: WebVitalEvent,
+    background_tasks: BackgroundTasks,
+) -> Response:
+    """Accept the JSON payload emitted by navigator.sendBeacon."""
+    response, session_id = _tracking_response(request)
+    if not _is_dnt(request):
+        ip_raw = _client_ip(request)
+        background_tasks.add_task(
+            analytics.record_web_vital,
+            session_id=session_id,
+            name=payload.name,
+            value=payload.value,
+            rating=payload.rating,
+            path=payload.url or request.url.path,
+            user_agent=request.headers.get("user-agent", ""),
+            ip_hash=hash_ip(ip_raw) if ip_raw else "",
+        )
+    return response
 
 
 # --------------------------------------------------------------------------- #

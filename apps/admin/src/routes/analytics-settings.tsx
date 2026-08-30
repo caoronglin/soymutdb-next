@@ -32,34 +32,34 @@ export default function AnalyticsSettingsPage() {
   };
 
   const steps = [
-    { title: t("analyticsSettings.step1Title"), desc: t("analyticsSettings.step1Desc") },
-    { title: t("analyticsSettings.step2Title"), desc: t("analyticsSettings.step2Desc") },
-    { title: t("analyticsSettings.step3Title"), desc: t("analyticsSettings.step3Desc") },
-    { title: t("analyticsSettings.step4Title"), desc: t("analyticsSettings.step4Desc") },
-    { title: t("analyticsSettings.step5Title"), desc: t("analyticsSettings.step5Desc") },
+    { title: t("admin.analyticsSettings.step1Title", { defaultValue: "Create a Web Analytics site" }), desc: t("admin.analyticsSettings.step1Desc", { defaultValue: "Cloudflare Dashboard → Analytics & Logs → Web Analytics → Add a site. Pick the portal domain (e.g. www.example.com). No DNS/proxy change is required — the beacon works on any static host." }) },
+    { title: t("admin.analyticsSettings.step2Title", { defaultValue: "Copy the beacon token" }), desc: t("admin.analyticsSettings.step2Desc", { defaultValue: "Open the installation snippet of the new site and copy the token from data-cf-beacon (a short hex string)." }) },
+    { title: t("admin.analyticsSettings.step3Title", { defaultValue: "Set the Pages environment variable" }), desc: t("admin.analyticsSettings.step3Desc", { defaultValue: "In the soymutdb-web Pages project: Settings → Environment variables → Add variable VITE_CLOUDFLARE_ANALYTICS_TOKEN with the token value (Production and Preview), then redeploy." }) },
+    { title: t("admin.analyticsSettings.step4Title", { defaultValue: "Redeploy" }), desc: t("admin.analyticsSettings.step4Desc", { defaultValue: "Trigger a new production deployment so the token is baked into the built index.html. Older deployments created before the variable was added contain no beacon." }) },
+    { title: t("admin.analyticsSettings.step5Title", { defaultValue: "Verify" }), desc: t("admin.analyticsSettings.step5Desc", { defaultValue: "Open the portal and view the page source: it should contain static.cloudflareinsights.com/beacon.min.js. Traffic then appears in Cloudflare Dashboard → Web Analytics (may take a few minutes)." }) },
   ];
 
   return (
     <div className="space-y-6">
-      <div><Typography.Title level={2}>{t("analyticsSettings.title")}</Typography.Title><Typography.Text type="secondary">{t("analyticsSettings.description")}</Typography.Text></div>
+      <div><Typography.Title level={2}>{t("admin.analyticsSettings.title", { defaultValue: "Analytics Settings" })}</Typography.Title><Typography.Text type="secondary">{t("admin.analyticsSettings.description", { defaultValue: "Visitor statistics for the public portal via Cloudflare Web Analytics." })}</Typography.Text></div>
 
       {/* Overview */}
       <Card>
 
           <Typography.Title level={5}>
             <BarChartOutlined className="size-4 text-primary" />
-            {t("analyticsSettings.overviewTitle")}
+            {t("admin.analyticsSettings.overviewTitle", { defaultValue: "Overview" })}
           </Typography.Title>
-          <Typography.Text type="secondary">{t("analyticsSettings.overviewDesc")}</Typography.Text>
+          <Typography.Text type="secondary">{t("admin.analyticsSettings.overviewDesc", { defaultValue: "Cloudflare Web Analytics is a free, privacy-first, cookie-free traffic analytics service. The portal (apps/web) loads it through a single static JavaScript beacon embedded at build time — no Workers, KV or D1 involved, so the deployment stays pure static hosting." })}</Typography.Text>
 
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge color="success">Cloudflare Web Analytics</Badge>
-            <Badge >Beacon (static JS)</Badge>
-            <Badge >Build-time injection</Badge>
-            <Badge >Cookie-free</Badge>
+            <Badge color="success">{t("admin.analyticsSettings.badgeCloudflare", { defaultValue: "Cloudflare Web Analytics" })}</Badge>
+            <Badge >{t("admin.analyticsSettings.badgeBeacon", { defaultValue: "Beacon (static JS)" })}</Badge>
+            <Badge >{t("admin.analyticsSettings.badgeBuildTimeInjection", { defaultValue: "Build-time injection" })}</Badge>
+            <Badge >{t("admin.analyticsSettings.badgeCookieFree", { defaultValue: "Cookie-free" })}</Badge>
           </div>
-          <p className="text-sm text-muted-foreground">{t("analyticsSettings.beaconNote")}</p>
+          <p className="text-sm text-muted-foreground">{t("admin.analyticsSettings.beaconNote", { defaultValue: "Only the public portal (apps/web) loads the beacon; this admin console and the JBrowse app do not." })}</p>
           <div className="flex items-center gap-3">
             <Button
 
@@ -67,7 +67,7 @@ export default function AnalyticsSettingsPage() {
               onClick={() => window.open(CF_DASHBOARD_ANALYTICS_URL, "_blank", "noopener,noreferrer")}
             >
               <ExportOutlined className="size-4" />
-              {t("analyticsSettings.dashboardLink")}
+              {t("admin.analyticsSettings.dashboardLink", { defaultValue: "Open Cloudflare Dashboard" })}
             </Button>
           </div>
         </div>
@@ -78,23 +78,23 @@ export default function AnalyticsSettingsPage() {
 
           <Typography.Title level={5}>
             <InfoCircleOutlined className="size-4 text-primary" />
-            {t("analyticsSettings.configTitle")}
+            {t("admin.analyticsSettings.configTitle", { defaultValue: "Configuration" })}
           </Typography.Title>
-          <Typography.Text type="secondary">{t("analyticsSettings.configDesc")}</Typography.Text>
+          <Typography.Text type="secondary">{t("admin.analyticsSettings.configDesc", { defaultValue: "The beacon token is a VITE_* variable injected at BUILD time into the portal HTML. This page is a documentation-only interface: it does not store the token, does not call the backend, and cannot change the running site." })}</Typography.Text>
 
         <div className="space-y-5">
           {/* Environment variable name (copyable) */}
           <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-muted/40 p-3">
             <div className="min-w-0 flex-1">
               <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                {t("analyticsSettings.envVar")}
+                {t("admin.analyticsSettings.envVar", { defaultValue: "Environment variable" })}
               </p>
               <code className="block truncate font-mono text-sm">{ENV_VAR}</code>
-              <p className="mt-1 text-xs text-muted-foreground">{t("analyticsSettings.envVarHelp")}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{t("admin.analyticsSettings.envVarHelp", { defaultValue: "Set it in the Cloudflare Pages project \"soymutdb-web\" → Settings → Environment variables, for both Production and Preview. Values cannot be read back from the dashboard after saving." })}</p>
             </div>
             <Button  size="small" onClick={copyEnvVar} aria-live="polite">
               {copied ? <CheckOutlined className="size-4 text-emerald-500" /> : <CopyOutlined className="size-4" />}
-              {copied ? t("analyticsSettings.copied") : t("analyticsSettings.copy")}
+              {copied ? t("admin.analyticsSettings.copied", { defaultValue: "Copied" }) : t("admin.analyticsSettings.copy", { defaultValue: "Copy" })}
             </Button>
           </div>
 
@@ -120,21 +120,21 @@ export default function AnalyticsSettingsPage() {
 
           <Typography.Title level={5}>
             <BarChartOutlined className="size-4 text-primary" />
-            {t("analyticsSettings.statusTitle")}
+            {t("admin.analyticsSettings.statusTitle", { defaultValue: "Injection status" })}
           </Typography.Title>
-          <Typography.Text type="secondary">{t("analyticsSettings.statusDesc")}</Typography.Text>
+          <Typography.Text type="secondary">{t("admin.analyticsSettings.statusDesc", { defaultValue: "The token is injected into the portal HTML at build time, so this page cannot detect the current injection state at runtime (the admin bundle never carries the value). Use the checks below instead." })}</Typography.Text>
 
         <div className="space-y-3">
           <div className="flex items-center gap-2">
-            <Badge >Build-time</Badge>
-            <Badge >Runtime detection: N/A</Badge>
+            <Badge >{t("admin.analyticsSettings.badgeBuildTime", { defaultValue: "Build-time" })}</Badge>
+            <Badge >{t("admin.analyticsSettings.badgeRuntimeDetection", { defaultValue: "Runtime detection: N/A" })}</Badge>
           </div>
           <div className="rounded-lg border border-border bg-muted/40 p-3 font-mono text-xs">
             {BEACON_ORIGIN}
           </div>
           <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-            <li>{t("analyticsSettings.statusHint1")}</li>
-            <li>{t("analyticsSettings.statusHint2")}</li>
+            <li>{t("admin.analyticsSettings.statusHint1", { defaultValue: "Open the portal in a browser → View page source (Ctrl/Cmd+U) → search for \"cloudflareinsights\". Found means the beacon is injected in the current deployment." })}</li>
+            <li>{t("admin.analyticsSettings.statusHint2", { defaultValue: "Or check Cloudflare Dashboard → Web Analytics: if the site shows traffic shortly after a deployment, the beacon is working." })}</li>
           </ul>
         </div>
       </Card>
@@ -144,9 +144,9 @@ export default function AnalyticsSettingsPage() {
 
           <Typography.Title level={5}>
             <BarChartOutlined className="size-4 text-primary" />
-            {t("analyticsSettings.legacyTitle")}
+            {t("admin.analyticsSettings.legacyTitle", { defaultValue: "Legacy self-hosted analytics" })}
           </Typography.Title>
-          <Typography.Text type="secondary">{t("analyticsSettings.legacyDesc")}</Typography.Text>
+          <Typography.Text type="secondary">{t("admin.analyticsSettings.legacyDesc", { defaultValue: "The API-side ClickHouse analytics endpoint and the portal /analytics page remain available as a fallback / detail source. Cloudflare Web Analytics is the primary visitor-statistics channel." })}</Typography.Text>
 
       </Card>
     </div>

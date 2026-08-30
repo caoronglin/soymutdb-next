@@ -13,13 +13,17 @@ from typing import Any
 
 from structlog import get_logger
 
+from ..core.config import get_settings
 from ..core.database import get_clickhouse_client
 
 logger = get_logger(__name__)
 
 EVENTS_TABLE = "analytics_events"
+WEB_VITALS_TABLE = "web_vitals"
 
 VALID_EVENT_TYPES = {"pageview", "click", "search", "widget"}
+VALID_WEB_VITAL_NAMES = {"LCP", "FID", "INP", "CLS", "TTFB", "FCP"}
+VALID_WEB_VITAL_RATINGS = {"good", "needs-improvement", "poor"}
 
 # 1×1 transparent GIF (43 bytes) – cached once at module load.
 TRACKING_PIXEL: bytes = (
@@ -29,9 +33,10 @@ TRACKING_PIXEL: bytes = (
 )
 
 
-def hash_ip(ip: str, salt: str = "soymutdb-analytics") -> str:
+def hash_ip(ip: str, salt: str | None = None) -> str:
     """Return a salted SHA-256 hex digest of *ip* (never store raw IPs)."""
-    return hashlib.sha256(f"{salt}:{ip}".encode()).hexdigest()
+    effective_salt = salt if salt is not None else get_settings().analytics_ip_salt
+    return hashlib.sha256(f"{effective_salt}:{ip}".encode()).hexdigest()
 
 
 class AnalyticsService:
@@ -112,6 +117,48 @@ class AnalyticsService:
             logger.exception(
                 "analytics_insert_failed",
                 event_type=event_type,
+                session_id=session_id[:8],
+            )
+
+    async def record_web_vital(
+        self,
+        *,
+        session_id: str,
+        name: str,
+        value: float,
+        rating: str,
+        path: str = "",
+        user_agent: str = "",
+        ip_hash: str = "",
+    ) -> None:
+        """Store one validated Web Vital in its short-retention table."""
+        if name not in VALID_WEB_VITAL_NAMES or rating not in VALID_WEB_VITAL_RATINGS:
+            logger.warning("invalid_web_vital", name=name, rating=rating)
+            return
+        try:
+            client = await self._get_client()
+            await client.insert(
+                WEB_VITALS_TABLE,
+                data=[[
+                    datetime.now(UTC),
+                    session_id,
+                    name,
+                    value,
+                    rating,
+                    path,
+                    user_agent[:500],
+                    ip_hash,
+                ]],
+                column_names=[
+                    "timestamp", "session_id", "metric_name", "value", "rating",
+                    "path", "user_agent", "ip_hash",
+                ],
+            )
+        except Exception:
+            # RUM is best-effort and must never affect page delivery.
+            logger.exception(
+                "web_vital_insert_failed",
+                name=name,
                 session_id=session_id[:8],
             )
 

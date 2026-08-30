@@ -123,3 +123,42 @@ INSERT INTO density_10kb SELECT release_key, chromosome, intDiv(position, 10000)
 INSERT INTO density_100kb SELECT release_key, chromosome, intDiv(position, 100000) * 100000 AS bin_start, count() FROM variant_facts GROUP BY release_key, chromosome, bin_start;
 INSERT INTO density_1mb SELECT release_key, chromosome, intDiv(position, 1000000) * 1000000 AS bin_start, count() FROM variant_facts GROUP BY release_key, chromosome, bin_start;
 INSERT INTO substitution_spectrum SELECT release_key, mutant_line_surrogate_id, ref_allele, alt_allele, count() FROM variant_facts WHERE variant_type = 'SNP' AND length(ref_allele) = 1 AND length(alt_allele) = 1 GROUP BY release_key, mutant_line_surrogate_id, ref_allele, alt_allele;
+
+-- ============================================================
+-- STAGE 4: privacy-preserving operational analytics
+-- ============================================================
+-- These tables are additive and idempotent. Raw IPs are never stored; the API
+-- writes a deployment-salted hash to ``ip_hash``.
+CREATE TABLE IF NOT EXISTS analytics_events (
+    timestamp      DateTime64(3, 'UTC'),
+    session_id     String,
+    event_type     LowCardinality(String),
+    page           String DEFAULT '',
+    path           String DEFAULT '',
+    widget_name    String DEFAULT '',
+    search_query   String DEFAULT '',
+    source         String DEFAULT '',
+    referrer       String DEFAULT '',
+    user_agent     String DEFAULT '',
+    ip_hash        String DEFAULT '',
+    duration_ms    UInt32 DEFAULT 0
+) ENGINE = MergeTree()
+PARTITION BY toYYYYMM(timestamp)
+ORDER BY (timestamp, event_type, session_id)
+TTL timestamp + INTERVAL 2 YEAR
+SETTINGS index_granularity = 8192;
+
+CREATE TABLE IF NOT EXISTS web_vitals (
+    timestamp      DateTime64(3, 'UTC'),
+    session_id     String,
+    metric_name    LowCardinality(String),
+    value          Float64,
+    rating         LowCardinality(String),
+    path           String DEFAULT '',
+    user_agent     String DEFAULT '',
+    ip_hash        String DEFAULT ''
+) ENGINE = MergeTree()
+PARTITION BY toYYYYMM(timestamp)
+ORDER BY (metric_name, toDate(timestamp), session_id)
+TTL timestamp + INTERVAL 90 DAY
+SETTINGS index_granularity = 8192;

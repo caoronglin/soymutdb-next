@@ -104,6 +104,15 @@ async def get_clickhouse_client() -> Any:
             secure=settings.clickhouse_secure,
             connect_timeout=settings.clickhouse_connect_timeout,
             send_receive_timeout=settings.clickhouse_send_receive_timeout,
+            # Single-row telemetry inserts are buffered by ClickHouse instead
+            # of creating one MergeTree part per request. Telemetry is
+            # best-effort, so the HTTP call does not wait for the flush.
+            settings={
+                "async_insert": 1,
+                "wait_for_async_insert": 0,
+                "async_insert_max_data_size": 1_000_000,
+                "async_insert_busy_timeout_ms": 1_000,
+            },
         )
     return _clickhouse_client
 

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import type * as echarts from "echarts";
+import { useTranslation } from "react-i18next";
 import { cn } from "../../lib/cn";
 import { Card, Empty } from "@/lib/antd";
 export interface QueryLatencyDataPoint {
@@ -21,6 +22,7 @@ interface QueryLatencyChartProps {
 export function QueryLatencyChart({ data, className }: QueryLatencyChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const instanceRef = useRef<echarts.ECharts | null>(null);
+  const { t } = useTranslation();
 
   useEffect(() => {
     if (!chartRef.current) return;
@@ -65,28 +67,28 @@ export function QueryLatencyChart({ data, className }: QueryLatencyChartProps) {
       },
       yAxis: {
         type: "value",
-        name: "Latency (ms)",
+        name: t("admin.charts.latencyMs", { defaultValue: "Latency (ms)" }),
         axisLine: { lineStyle: { color: isDark ? "#3a4a3a" : "#e0e5e0" } },
         axisLabel: { color: isDark ? "#a8b8a8" : "#5a6b5a", fontSize: 11 },
         splitLine: { lineStyle: { color: isDark ? "#2a3a2a" : "#f0f4f0" } },
       },
       series: [
         {
-          name: "P50",
+          name: t("admin.charts.p50", { defaultValue: "P50" }),
           type: "line",
           smooth: true,
           data: data.map((d) => d.p50),
           itemStyle: { color: "#2f7d32" },
         },
         {
-          name: "P95",
+          name: t("admin.charts.p95", { defaultValue: "P95" }),
           type: "line",
           smooth: true,
           data: data.map((d) => d.p95),
           itemStyle: { color: "#e6a817" },
         },
         {
-          name: "P99",
+          name: t("admin.charts.p99", { defaultValue: "P99" }),
           type: "line",
           smooth: true,
           data: data.map((d) => d.p99),
@@ -94,13 +96,13 @@ export function QueryLatencyChart({ data, className }: QueryLatencyChartProps) {
         },
       ],
     });
-  }, [data]);
+  }, [data, t]);
 
   return (
-    <Card className={cn(className)} title="Query Latency (P50 / P95 / P99)">
+    <Card className={cn(className)} title={t("admin.charts.queryLatency", { defaultValue: "Query Latency (P50 / P95 / P99)" })}>
         <div className="relative">
-          <div ref={chartRef} className="h-64 w-full" role="img" aria-label="Query latency percentiles chart" />
-          {data.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No chart data" /> : null}
+          <div ref={chartRef} className="h-64 w-full" role="img" aria-label={t("admin.charts.queryLatencyAria", { defaultValue: "Query latency percentiles chart" })} />
+          {data.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("admin.charts.noData", { defaultValue: "No chart data" })} /> : null}
       </div>
     </Card>
   );

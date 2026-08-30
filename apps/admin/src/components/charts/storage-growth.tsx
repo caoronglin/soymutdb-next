@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import * as echarts from "echarts";
+import { useTranslation } from "react-i18next";
 import { cn } from "../../lib/cn";
 import { formatFileSize } from "../../lib/format";
 import { Card, Empty } from "@/lib/antd";
@@ -20,6 +21,7 @@ interface StorageGrowthChartProps {
 export function StorageGrowthChart({ data, className }: StorageGrowthChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const instanceRef = useRef<echarts.ECharts | null>(null);
+  const { t } = useTranslation();
 
   useEffect(() => {
     if (!chartRef.current) return;
@@ -70,7 +72,7 @@ export function StorageGrowthChart({ data, className }: StorageGrowthChartProps)
       },
       series: [
         {
-          name: "Storage",
+          name: t("admin.charts.storage", { defaultValue: "Storage" }),
           type: "line",
           smooth: true,
           showSymbol: false,
@@ -86,13 +88,13 @@ export function StorageGrowthChart({ data, className }: StorageGrowthChartProps)
         },
       ],
     });
-  }, [data]);
+  }, [data, t]);
 
   return (
-    <Card className={cn(className)} title="Storage Growth">
+    <Card className={cn(className)} title={t("admin.charts.storageGrowth", { defaultValue: "Storage Growth" })}>
         <div className="relative">
-          <div ref={chartRef} className="h-64 w-full" role="img" aria-label="Storage growth chart" />
-          {data.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No chart data" /> : null}
+          <div ref={chartRef} className="h-64 w-full" role="img" aria-label={t("admin.charts.storageGrowthAria", { defaultValue: "Storage growth chart" })} />
+          {data.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("admin.charts.noData", { defaultValue: "No chart data" })} /> : null}
       </div>
     </Card>
   );

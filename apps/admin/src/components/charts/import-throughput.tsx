@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import * as echarts from "echarts";
+import { useTranslation } from "react-i18next";
 import { cn } from "../../lib/cn";
 import { Card, Empty } from "@/lib/antd";
 export interface ImportThroughputDataPoint {
@@ -23,6 +24,7 @@ export function ImportThroughputChart({
 }: ImportThroughputChartProps) {
  const chartRef = useRef<HTMLDivElement>(null);
   const instanceRef = useRef<echarts.ECharts | null>(null);
+  const { t } = useTranslation();
 
   useEffect(() => {
     if (!chartRef.current) return;
@@ -53,7 +55,7 @@ export function ImportThroughputChart({
         textStyle: { color: isDark ? "#f0f4f0" : "#1a2b1a" },
       },
       legend: {
-        data: ["Imported", "Failed"],
+        data: [t("admin.charts.imported", { defaultValue: "Imported" }), t("admin.charts.failed", { defaultValue: "Failed" })],
         textStyle: { color: isDark ? "#a8b8a8" : "#5a6b5a" },
         top: 0,
       },
@@ -66,14 +68,14 @@ export function ImportThroughputChart({
       },
       yAxis: {
         type: "value",
-        name: "Records",
+        name: t("admin.charts.records", { defaultValue: "Records" }),
         axisLine: { lineStyle: { color: isDark ? "#3a4a3a" : "#e0e5e0" } },
         axisLabel: { color: isDark ? "#a8b8a8" : "#5a6b5a", fontSize: 11 },
         splitLine: { lineStyle: { color: isDark ? "#2a3a2a" : "#f0f4f0" } },
       },
       series: [
         {
-          name: "Imported",
+          name: t("admin.charts.imported", { defaultValue: "Imported" }),
           type: "line",
           smooth: true,
           data: data.map((d) => d.imported),
@@ -86,7 +88,7 @@ export function ImportThroughputChart({
           },
         },
         {
-          name: "Failed",
+          name: t("admin.charts.failed", { defaultValue: "Failed" }),
           type: "line",
           smooth: true,
           data: data.map((d) => d.failed),
@@ -100,13 +102,13 @@ export function ImportThroughputChart({
         },
       ],
     });
-  }, [data]);
+  }, [data, t]);
 
   return (
-    <Card className={cn(className)} title="Import Throughput">
+    <Card className={cn(className)} title={t("admin.charts.importThroughput", { defaultValue: "Import Throughput" })}>
         <div className="relative">
-          <div ref={chartRef} className="h-64 w-full" role="img" aria-label="Import throughput chart" />
-          {data.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No chart data" /> : null}
+          <div ref={chartRef} className="h-64 w-full" role="img" aria-label={t("admin.charts.importThroughputAria", { defaultValue: "Import throughput chart" })} />
+          {data.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("admin.charts.noData", { defaultValue: "No chart data" })} /> : null}
       </div>
     </Card>
   );

@@ -18,6 +18,7 @@ def _production_values() -> dict[str, object]:
         "s3_access_key": "production-access-key",
         "s3_secret_key": "production-secret-key",
         "clickhouse_password": "strong-clickhouse-password",
+        "analytics_ip_salt": "a-production-analytics-salt-with-at-least-32-chars",
         "admin_password": "a-strong-production-admin-password",
         "admin_email": "ops@example.com",
         "cors_origins": ["https://app.example.com"],
@@ -26,7 +27,7 @@ def _production_values() -> dict[str, object]:
 
 @pytest.mark.parametrize(
     "missing_field",
-    ["database_url", "jwt_secret", "redis_url", "s3_endpoint", "s3_access_key", "s3_secret_key",
+    ["database_url", "jwt_secret", "analytics_ip_salt", "redis_url", "s3_endpoint", "s3_access_key", "s3_secret_key",
      "admin_password", "admin_email"],
 )
 def test_prod_rejects_missing_required_infrastructure(missing_field: str) -> None:
@@ -131,6 +132,7 @@ def test_baseline_prod_does_not_require_optional_services() -> None:
         deployment_mode="baseline",
         database_url="postgresql+asyncpg://api:strong-db-password@db:5432/soymutdb",
         jwt_secret="a-production-jwt-secret-with-at-least-32-chars",
+        analytics_ip_salt="a-production-analytics-salt-with-at-least-32-chars",
         admin_password="a-strong-production-admin-password",
         admin_email="ops@example.com",
         cors_origins=["https://app.example.com"],
