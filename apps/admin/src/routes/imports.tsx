@@ -7,6 +7,7 @@ import { http, apiBaseUrl, getAccessToken, capabilitiesApi, adminImportStudioApi
 import { cn } from "../lib/cn";
 import { DataTable, type DataTableColumn } from "../components/data-table";
 import { ImportPreviewTable } from "../components/import-preview-table";
+import { ImportDraftEditor } from "../components/import-draft-editor";
 import { StatusBadge, type TaskStatus } from "../components/status-badge";
 import {
   uploadModuleFile,
@@ -811,7 +812,13 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
             <div className="text-sm">
               <Typography.Text strong>{resumeDraftQuery.data.filename}</Typography.Text>
               <Typography.Text type="secondary" className="ml-2">{resumeDraftQuery.data.status} · {resumeDraftQuery.data.row_count} rows · {resumeDraftQuery.data.column_count} columns · {resumeDraftQuery.data.field_mapping.length} mapped fields</Typography.Text>
-              <p className="mt-2 text-xs text-muted-foreground">Draft state was loaded from its persisted dataset version. Mapping, patch, validation, and commit remain server-side lifecycle operations.</p>
+              <ImportDraftEditor
+                draft={resumeDraftQuery.data}
+                onUpdated={() => {
+                  void resumeDraftQuery.refetch();
+                  void draftsQuery.refetch();
+                }}
+              />
             </div>
           ) : null}
         </section>
