@@ -3,10 +3,22 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
+
+
+class WebVitalEvent(BaseModel):
+    """Validated browser Web Vitals payload sent to the beacon endpoint."""
+
+    event: Literal["performance"] = "performance"
+    name: Literal["LCP", "FID", "INP", "CLS", "TTFB", "FCP"]
+    value: float = Field(..., ge=0, le=86_400_000)
+    rating: Literal["good", "needs-improvement", "poor"]
+    id: str | None = Field(default=None, max_length=255)
+    url: str = Field(default="", max_length=2048)
+    ts: int | None = Field(default=None, ge=0)
 
 
 class DashboardStats(BaseModel):
