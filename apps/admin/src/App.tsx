@@ -7,6 +7,8 @@ import {
   Outlet,
 } from "@tanstack/react-router";
 import { Skeleton } from "@/lib/antd";
+import { ErrorBoundary } from "./components/error-boundary";
+import { RouteErrorBoundary } from "./components/route-error-boundary";
 import AdminLayout from "./routes/__root";
 import LoginPage from "./routes/login";
 import { useAuth } from "./lib/auth-context";
@@ -54,9 +56,11 @@ function RouteLoading() {
 /** Wrap a lazy component in a Suspense boundary. */
 function withSuspense(Component: React.LazyExoticComponent<React.ComponentType>) {
   return (
-    <Suspense fallback={<RouteLoading />}>
-      <Component />
-    </Suspense>
+    <RouteErrorBoundary>
+      <Suspense fallback={<RouteLoading />}>
+        <Component />
+      </Suspense>
+    </RouteErrorBoundary>
   );
 }
 
@@ -68,7 +72,11 @@ function withSuspense(Component: React.LazyExoticComponent<React.ComponentType>)
  * standalone, outside the AdminLayout.
  */
 const rootRoute = createRootRoute({
-  component: () => <Outlet />,
+  component: () => (
+    <ErrorBoundary>
+      <Outlet />
+    </ErrorBoundary>
+  ),
 });
 
 /** Public login route — no AdminLayout, no auth guard. */
