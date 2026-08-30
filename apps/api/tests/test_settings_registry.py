@@ -109,6 +109,11 @@ def test_registry_contains_only_bounded_safe_product_defaults() -> None:
         if definition.kind is SettingKind.SECRET:
             continue
         normalized_key = definition.full_key.lower()
+        # These are bounded, public BLAST form labels ("Reference sequence
+        # type"), not connection settings. Variant-prefixed copies are safe
+        # for the same reason.
+        if normalized_key.endswith(("blast.database", "blast.databaseplaceholder")):
+            continue
         assert not any(
             forbidden in normalized_key
             for forbidden in ("database", "dsn", "jwt", "token", "digest", "topology")
@@ -139,11 +144,15 @@ def test_safe_product_defaults_reject_unregistered_values(
 
 
 def test_registry_serializes_known_values_to_canonical_storage_strings() -> None:
-    from app.core.settings_registry import validate_setting_update
+    from app.core.settings_registry import SettingValidationError, validate_setting_update
 
     assert validate_setting_update("data", "maxExportRecords", 2500) == "2500"
     assert validate_setting_update("data", "enableClickhouse", "OFF") == "false"
     assert validate_setting_update("general", "defaultLanguage", "zh") == "zh"
+    assert validate_setting_update("general", "primaryColor", "#ABCDEF") == "#abcdef"
+
+    with pytest.raises(SettingValidationError, match="hexadecimal color"):
+        validate_setting_update("general", "primaryColor", "#12ab")
 
 
 def test_registry_rejects_unknown_keys() -> None:
@@ -183,3 +192,28 @@ def test_registry_rejects_ambiguous_boolean_values() -> None:
 
     with pytest.raises(SettingValidationError, match="boolean"):
         validate_setting_update("features", "registration", "sometimes")
+
+
+def test_site_variant_settings_are_isolated_and_share_validation() -> None:
+    from app.core.settings_registry import (
+        SETTINGS_REGISTRY,
+        SettingValidationError,
+        validate_setting_update,
+    )
+
+    external = SETTINGS_REGISTRY["content_external.hero.title"]
+    internal = SETTINGS_REGISTRY["content_internal.hero.title"]
+    assert external.section == "content_external"
+    assert internal.section == "content_internal"
+    assert external.default != internal.default
+    assert (
+        validate_setting_update("content_external", "hero.title", "Public")
+        == "Public"
+    )
+    assert (
+        validate_setting_update("content_internal", "hero.title", "Private")
+        == "Private"
+    )
+
+    with pytest.raises(SettingValidationError, match="Unknown setting"):
+        validate_setting_update("content_internal", "not_registered", "value")

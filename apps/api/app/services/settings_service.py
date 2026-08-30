@@ -21,6 +21,11 @@ from ..core.settings_registry import (
     registered_keys_for_section,
     validate_setting_update,
 )
+from ..core.site_variant import (
+    SITE_VARIANTS,
+    legacy_section_for_variant,
+    variant_section,
+)
 from ..models.system_settings import SystemSetting, SystemSettingRevision
 from ..schemas.settings import (
     SettingsDocumentResponse,
@@ -29,7 +34,23 @@ from ..schemas.settings import (
     SettingValue,
 )
 
-_RICH_TEXT_KEYS = frozenset({("about", "content_en"), ("about", "content_zh")})
+_RICH_TEXT_KEYS = frozenset(
+    {
+        ("about", "content_en"),
+        ("about", "content_zh"),
+        ("home", "welcome_en"),
+        ("home", "welcome_zh"),
+    }
+    | {
+        (variant_section(section, variant), key)
+        for section, keys in {
+            "about": ("content_en", "content_zh"),
+            "home": ("welcome_en", "welcome_zh"),
+        }.items()
+        for variant in SITE_VARIANTS
+        for key in keys
+    }
+)
 
 
 def _canonical_values(
@@ -129,22 +150,40 @@ async def _live_snapshot(
         raise ValidationError(f"Unknown settings section '{section}'")
     prefix = f"{section}."
     full_keys = [f"{prefix}{key}" for key in keys]
+    legacy_section = legacy_section_for_variant(section)
+    legacy_prefix = f"{legacy_section}." if legacy_section else None
+    if legacy_prefix:
+        full_keys.extend(
+            f"{legacy_prefix}{key}"
+            for key in keys
+            if f"{legacy_prefix}{key}" not in full_keys
+        )
     rows = (
         (await db.execute(select(SystemSetting).where(SystemSetting.key.in_(full_keys))))
         .scalars()
         .all()
     )
-    row_map = {row.key: row for row in rows if row.key in full_keys}
+    selected_rows = {row.key: row for row in rows if row.key.startswith(prefix)}
+    row_map = {row.key: row for row in selected_rows.values() if row.key in full_keys}
     snapshot: dict[str, str] = {}
-    for full_key, row in row_map.items():
-        short_key = full_key.removeprefix(prefix)
+    for row in rows:
+        if row.key.startswith(prefix):
+            short_key = row.key.removeprefix(prefix)
+            validation_section = section
+        elif legacy_prefix and legacy_section is not None and row.key.startswith(legacy_prefix):
+            short_key = row.key.removeprefix(legacy_prefix)
+            if short_key in snapshot:
+                continue
+            validation_section = legacy_section
+        else:
+            continue
         try:
-            value = validate_setting_update(section, short_key, row.value)
+            value = validate_setting_update(validation_section, short_key, row.value)
         except SettingValidationError as exc:
-            raise ValidationError(f"Stored setting '{full_key}' is invalid") from exc
+            raise ValidationError(f"Stored setting '{row.key}' is invalid") from exc
         snapshot[short_key] = (
             sanitize_rich_html(value)
-            if (section, short_key) in _RICH_TEXT_KEYS
+            if (validation_section, short_key) in _RICH_TEXT_KEYS
             else value
         )
     return row_map, snapshot

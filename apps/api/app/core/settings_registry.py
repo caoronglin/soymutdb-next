@@ -9,14 +9,17 @@ are never accepted by the runtime settings API.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Final
 from urllib.parse import urlsplit
 
+from .site_variant import SITE_VARIANT_BASE_SECTIONS, SITE_VARIANTS, SiteVariant, variant_section
+
 
 class SettingKind(StrEnum):
     STRING = "string"
+    COLOR = "color"
     INTEGER = "integer"
     BOOLEAN = "boolean"
     ENUM = "enum"
@@ -141,6 +144,18 @@ _DEFINITIONS = (
         requires_approval=False,
         allowed_values=frozenset({"light", "dark", "system"}),
     ),
+    _definition(
+        "general",
+        "primaryColor",
+        SettingKind.COLOR,
+        default="#2f6f4f",
+        permission=SettingPermission.ADMINISTRATOR,
+        scope=SettingScope.GLOBAL,
+        hot_reload=True,
+        redaction=SettingRedaction.NONE,
+        requires_approval=False,
+        max_length=7,
+    ),
     # Footer contact block — editable by admins at runtime and served to
     # the public site footer via GET /site/footer.
     _definition(
@@ -256,6 +271,30 @@ _DEFINITIONS = (
     _definition(
         "about",
         "content_zh",
+        default="",
+        permission=SettingPermission.ADMINISTRATOR,
+        scope=SettingScope.GLOBAL,
+        hot_reload=True,
+        redaction=SettingRedaction.NONE,
+        requires_approval=False,
+        max_length=200_000,
+    ),
+    # Homepage welcome block.  It is registered here as well as the legacy
+    # public endpoint so both generated sites can be edited independently.
+    _definition(
+        "home",
+        "welcome_en",
+        default="",
+        permission=SettingPermission.ADMINISTRATOR,
+        scope=SettingScope.GLOBAL,
+        hot_reload=True,
+        redaction=SettingRedaction.NONE,
+        requires_approval=False,
+        max_length=200_000,
+    ),
+    _definition(
+        "home",
+        "welcome_zh",
         default="",
         permission=SettingPermission.ADMINISTRATOR,
         scope=SettingScope.GLOBAL,
@@ -584,6 +623,17 @@ _DEFINITIONS = (
         hot_reload=True,
         redaction=SettingRedaction.NONE,
         requires_approval=False,
+    ),
+    _definition(
+        "cdn",
+        "enabled",
+        SettingKind.BOOLEAN,
+        default=False,
+        permission=SettingPermission.ADMINISTRATOR,
+        scope=SettingScope.GLOBAL,
+        hot_reload=False,
+        redaction=SettingRedaction.NONE,
+        requires_approval=True,
     ),
     _definition(
         "cdn",
@@ -1960,7 +2010,10 @@ _DEFINITIONS = (
     _definition(
         "content",
         "guide.subtitle",
-        default="Comprehensive guide for NCBI database retrieval including BLAST, Entrez, JBrowse, and E-utilities",
+        default=(
+            "Comprehensive guide for NCBI database retrieval including BLAST, Entrez, "
+            "JBrowse, and E-utilities"
+        ),
         permission=SettingPermission.ADMINISTRATOR,
         scope=SettingScope.GLOBAL,
         hot_reload=True,
@@ -2091,6 +2144,35 @@ _DEFINITIONS = (
     ),
 )
 
+# Variant-specific copies preserve the existing settings validation, optimistic
+# revisions, and audit trail while keeping every site's values in a separate
+# namespace.  The selected variant is explicit at build/request time; the API
+# never infers it from the visitor.
+_SITE_VARIANT_DEFAULT_OVERRIDES: Final[dict[tuple[str, str], SettingDefault]] = {
+    (SiteVariant.INTERNAL.value, "hero.eyebrow"): "SOYMUTDB · INTERNAL RESEARCH",
+    (SiteVariant.INTERNAL.value, "hero.title"): "Internal Research Workspace for SoyMutDB",
+    (SiteVariant.INTERNAL.value, "hero.subtitle"): (
+        "A private workspace for curators and collaborators to review mutation "
+        "data, releases, and analysis tools."
+    ),
+    (SiteVariant.INTERNAL.value, "nav.home"): "Research Workspace",
+    (SiteVariant.INTERNAL.value, "nav.about"): "Project Notes",
+}
+
+_SITE_VARIANT_DEFINITIONS = tuple(
+    replace(
+        definition,
+        section=variant_section(definition.section, variant),
+        default=_SITE_VARIANT_DEFAULT_OVERRIDES.get(
+            (variant.value, definition.key), definition.default
+        ),
+    )
+    for definition in _DEFINITIONS
+    if definition.section in SITE_VARIANT_BASE_SECTIONS
+    for variant in SITE_VARIANTS
+)
+_DEFINITIONS = (*_DEFINITIONS, *_SITE_VARIANT_DEFINITIONS)
+
 SETTINGS_REGISTRY: Final[dict[str, SettingDefinition]] = {
     definition.full_key: definition for definition in _DEFINITIONS
 }
@@ -2098,6 +2180,7 @@ SETTINGS_REGISTRY: Final[dict[str, SettingDefinition]] = {
 _TRUE_VALUES: Final = frozenset({"1", "true", "yes", "on", "enabled"})
 _FALSE_VALUES: Final = frozenset({"0", "false", "no", "off", "disabled"})
 _EMAIL_RE: Final = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+_HEX_COLOR_RE: Final = re.compile(r"^#[0-9a-fA-F]{6}$")
 
 
 def get_setting_definition(section: str, key: str) -> SettingDefinition:
@@ -2168,6 +2251,12 @@ def validate_setting_update(section: str, key: str, value: object) -> str:
                 f"Setting '{definition.full_key}' must be one of: "
                 + ", ".join(sorted(definition.allowed_values))
             )
+    elif definition.kind is SettingKind.COLOR:
+        if not _HEX_COLOR_RE.fullmatch(string_value):
+            raise SettingValidationError(
+                f"Setting '{definition.full_key}' must be a 6-digit hexadecimal color"
+            )
+        return string_value.lower()
     elif definition.kind is SettingKind.EMAIL:
         if not _EMAIL_RE.fullmatch(string_value):
             raise SettingValidationError(

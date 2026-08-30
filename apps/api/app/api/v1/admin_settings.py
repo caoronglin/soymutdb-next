@@ -23,6 +23,7 @@ from ...core.settings_registry import (
     registered_keys_for_section,
     validate_setting_update,
 )
+from ...core.site_variant import legacy_section_for_variant
 from ...models.auth import User
 from ...models.system_settings import SystemSetting
 from ...schemas.error import ErrorResponse
@@ -119,13 +120,28 @@ async def get_settings(
         raise NotFoundError(f"Settings section '{section}' not found")
     prefix = f"{section}."
     full_keys = [f"{prefix}{key}" for key in allowed_keys]
+    legacy_section = legacy_section_for_variant(section)
+    legacy_prefix = f"{legacy_section}." if legacy_section else None
+    if legacy_prefix:
+        full_keys.extend(
+            f"{legacy_prefix}{key}"
+            for key in allowed_keys
+            if f"{legacy_prefix}{key}" not in full_keys
+        )
     stmt = select(SystemSetting).where(SystemSetting.key.in_(full_keys))
     result = await db.execute(stmt)
     rows = result.scalars().all()
 
     settings: dict[str, Any] = {}
     for row in rows:
-        short_key = row.key[len(prefix) :]
+        if row.key.startswith(prefix):
+            short_key = row.key[len(prefix) :]
+        elif legacy_prefix and row.key.startswith(legacy_prefix):
+            short_key = row.key[len(legacy_prefix) :]
+            if short_key in settings:
+                continue
+        else:
+            continue
         if short_key in allowed_keys:
             settings[short_key] = row.value
 

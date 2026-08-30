@@ -108,6 +108,26 @@ class TaskDispatchError(ServiceUnavailableError):
 
 
 # ---------------------------------------------------------------------------
+# Error-code contract catalog
+# ---------------------------------------------------------------------------
+
+def _iter_error_types(error_type: type[SoyMutDBError]) -> list[type[SoyMutDBError]]:
+    """Return a flattened domain-error hierarchy for contract export."""
+    out = [error_type]
+    for child in error_type.__subclasses__():
+        out.extend(_iter_error_types(child))
+    return out
+
+
+def error_code_catalog() -> dict[str, str]:
+    """Return the deterministic public catalog of domain error codes."""
+    return {
+        error_type.error_code: (error_type.__doc__ or "").strip()
+        for error_type in sorted(_iter_error_types(SoyMutDBError), key=lambda item: item.error_code)
+    }
+
+
+# ---------------------------------------------------------------------------
 # Unified error envelope
 # ---------------------------------------------------------------------------
 

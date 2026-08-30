@@ -3,9 +3,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import SettingsPage from "./settings";
 
-const { getMock, putMock } = vi.hoisted(() => ({
+const { getMock, putMock, cdnGetMock, cdnPatchMock } = vi.hoisted(() => ({
   getMock: vi.fn(),
   putMock: vi.fn(),
+  cdnGetMock: vi.fn(),
+  cdnPatchMock: vi.fn(),
 }));
 
 vi.mock("react-i18next", () => ({
@@ -16,6 +18,10 @@ vi.mock("@soymutdb/api-client", () => ({
   http: {
     get: getMock,
     put: putMock,
+  },
+  adminSettingsApi: {
+    get: cdnGetMock,
+    patch: cdnPatchMock,
   },
 }));
 
@@ -57,7 +63,6 @@ const endpoints = [
   "/admin/settings/data",
   "/admin/settings/email",
   "/admin/settings/security",
-  "/admin/cdn-config",
   "/admin/settings/file_preview",
 ] as const;
 
@@ -78,12 +83,16 @@ function renderPage() {
 beforeEach(() => {
   getMock.mockReset();
   putMock.mockReset();
+  cdnGetMock.mockReset();
+  cdnPatchMock.mockReset();
   putMock.mockResolvedValue({});
+  cdnPatchMock.mockResolvedValue({ section: "cdn", version: 2, values: { enabled: true, url: "https://cdn.example/echarts.js" } });
   requests = Object.fromEntries(endpoints.map((endpoint) => [endpoint, deferred()])) as Record<
     (typeof endpoints)[number],
     Deferred
   >;
-  getMock.mockImplementation((endpoint: string) => requests[endpoint as keyof typeof requests]?.promise);
+  getMock.mockImplementation((endpoint: string) => requests[endpoint as keyof typeof requests]?.promise ?? Promise.resolve({}));
+  cdnGetMock.mockResolvedValue({ section: "cdn", version: 1, values: { enabled: true, url: "https://cdn.example/echarts.js" } });
 });
 
 describe("SettingsPage save protection", () => {
@@ -98,14 +107,7 @@ describe("SettingsPage save protection", () => {
     renderPage();
     await act(async () => {
       for (const endpoint of endpoints) {
-        requests[endpoint].resolve(
-          endpoint === "/admin/cdn-config"
-            ? {
-                enabled: true,
-                urls: ["https://cdn.example/echarts.js"],
-              }
-            : {},
-        );
+        requests[endpoint].resolve({});
       }
       await Promise.resolve();
     });
@@ -119,11 +121,9 @@ describe("SettingsPage save protection", () => {
     fireEvent.click(saveButtons[5]);
 
     await waitFor(() => {
-      expect(putMock).toHaveBeenCalledWith("/admin/cdn-config", {
-        json: {
-          enabled: true,
-          urls: ["https://cdn.example/echarts.js"],
-        },
+      expect(cdnPatchMock).toHaveBeenCalledWith("cdn", 1, {
+        enabled: true,
+        url: "https://cdn.example/echarts.js",
       });
     });
   });
@@ -167,6 +167,7 @@ describe("SettingsPage save protection", () => {
       for (const endpoint of endpoints) {
         expect(getMock).toHaveBeenCalledWith(endpoint);
       }
+      expect(cdnGetMock).toHaveBeenCalledWith("cdn");
     });
 
     act(() => {

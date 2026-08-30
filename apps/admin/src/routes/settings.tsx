@@ -1,15 +1,23 @@
-import { SaveOutlined, GlobalOutlined, DatabaseOutlined, MailOutlined, SafetyOutlined, EyeOutlined } from "@ant-design/icons";
-import { useEffect, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { SaveOutlined, GlobalOutlined, DatabaseOutlined, MailOutlined, SafetyOutlined, EyeOutlined, BgColorsOutlined } from "@ant-design/icons";
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { http } from "@soymutdb/api-client";
-import { Typography, Button, Card, Input, Select, Badge } from "@/lib/antd";
+import { adminSettingsApi, http, type SiteVariant } from "@soymutdb/api-client";
+import { Typography, Button, Card, ColorPicker, Input, Select, Badge } from "@/lib/antd";
 import { ConfirmDialog } from "../components/confirm-dialog";
 import { RichEditor } from "../components/rich-editor/rich-editor";
+import {
+  ANTD_PRIMARY_HEX,
+  isValidAdminPrimaryColor,
+  readAdminPrimaryColor,
+  saveAdminPrimaryColor,
+} from "../lib/antd-theme";
+import { SETTINGS_CARD_DOMAINS, type SettingsCard, type SettingsDomain } from "./settings/domains";
 
 type SettingsSection =
   | "general"
   | "about"
+  | "home"
   | "data"
   | "email"
   | "security"
@@ -27,6 +35,7 @@ const initialSettingsLoadState: Record<SettingsSection, boolean> = {
   cdn: false,
   filePreview: false,
   footer: false,
+  home: false,
   content: false,
 };
 
@@ -39,12 +48,14 @@ const initialSettingsLoadErrorState: Record<SettingsSection, boolean> = {
   cdn: false,
   filePreview: false,
   footer: false,
+  home: false,
   content: false,
 };
 
 const settingsSectionLabels: Record<SettingsSection, string> = {
   general: "General settings",
   about: "About settings",
+  home: "Homepage welcome settings",
   data: "Data & Storage settings",
   email: "Email & Notifications settings",
   security: "Security settings",
@@ -54,6 +65,25 @@ const settingsSectionLabels: Record<SettingsSection, string> = {
   content: "Site content settings",
 };
 
+const SITE_VARIANT_OPTIONS: Array<{ value: SiteVariant; label: string; description: string }> = [
+  {
+    value: "external",
+    label: "External site",
+    description: "Public-facing content served without authentication.",
+  },
+  {
+    value: "internal",
+    label: "Internal site",
+    description: "Private content for authenticated viewers; deploy behind SSO or a private network.",
+  },
+];
+
+type SiteContentBaseSection = "about" | "home" | "footer" | "content";
+
+function siteVariantSection(base: SiteContentBaseSection, variant: SiteVariant): string {
+  return base + "_" + variant;
+}
+
 type ContentArea = "hero" | "tools" | "search" | "blast" | "help" | "generic";
 
 interface ContentField {
@@ -62,89 +92,27 @@ interface ContentField {
   label: string;
   textarea?: boolean;
   defaultValue: string;
+  kind?: "string" | "color" | "integer" | "boolean" | "enum" | "email" | "url";
+  allowedValues?: string[];
+  maxLength?: number;
+}
+
+interface SettingsFieldSchema {
+  kind: ContentField["kind"];
+  default: string | number | boolean | null;
+  allowed_values: string[];
+  max_length: number;
+}
+
+interface SettingsSchemaResponse {
+  sections?: Record<string, { fields?: Record<string, SettingsFieldSchema> }>;
 }
 
 /**
- * Registered content.* keys (short form, without the content. prefix) plus
- * the English default values. Mirrors apps/api/app/core/settings_registry.py
- * so a fresh deployment shows today's strings until an administrator edits.
+ * Content metadata is intentionally not duplicated here. The API registry is
+ * authoritative for editable keys, defaults, kinds, and validation limits;
+ * this UI only groups the returned keys for presentation.
  */
-const CONTENT_FIELDS: ContentField[] = [
-  { key: "hero.eyebrow", area: "hero", label: "Hero eyebrow", defaultValue: "SOYMUTDB · MULTI-SPECIES" },
-  { key: "hero.title", area: "hero", label: "Hero title", defaultValue: "Explore the Unknown Territories of Multi-Species Mutation" },
-  { key: "hero.subtitle", area: "hero", label: "Hero subtitle", textarea: true, defaultValue: "A next-generation multi-species mutation database — from genome to phenotype in one place." },
-  { key: "hero.searchPlaceholder", area: "hero", label: "Search placeholder", defaultValue: "Search a gene ID, locus or mutation…" },
-  { key: "hero.image", area: "hero", label: "Hero image URL", defaultValue: "" },
-  { key: "tool.gene.label", area: "tools", label: "Gene tool label", defaultValue: "Gene ID Search" },
-  { key: "tool.gene.desc", area: "tools", label: "Gene tool description", defaultValue: "Look up mutations by gene ID" },
-  { key: "tool.gene.image", area: "tools", label: "Gene tool image URL", defaultValue: "" },
-  { key: "tool.location.label", area: "tools", label: "Location tool label", defaultValue: "Position Search" },
-  { key: "tool.location.desc", area: "tools", label: "Location tool description", defaultValue: "Look up by chromosome and locus" },
-  { key: "tool.location.image", area: "tools", label: "Location tool image URL", defaultValue: "" },
-  { key: "tool.gbrowse.label", area: "tools", label: "GBrowse tool label", defaultValue: "JBrowse 2" },
-  { key: "tool.gbrowse.desc", area: "tools", label: "GBrowse tool description", defaultValue: "Browse the genome in JBrowse 2" },
-  { key: "tool.gbrowse.image", area: "tools", label: "GBrowse tool image URL", defaultValue: "" },
-  { key: "tool.blast.label", area: "tools", label: "BLAST tool label", defaultValue: "BLAST" },
-  { key: "tool.blast.desc", area: "tools", label: "BLAST tool description", defaultValue: "Find homologs by sequence alignment" },
-  { key: "tool.blast.image", area: "tools", label: "BLAST tool image URL", defaultValue: "" },
-  { key: "tool.primer.label", area: "tools", label: "Primer tool label", defaultValue: "Primer Design" },
-  { key: "tool.primer.desc", area: "tools", label: "Primer tool description", defaultValue: "Design and check PCR primers" },
-  { key: "tool.primer.image", area: "tools", label: "Primer tool image URL", defaultValue: "" },
-  { key: "search.genes.title", area: "search", label: "Gene search title", defaultValue: "Gene ID Search" },
-  { key: "search.genes.subtitle", area: "search", label: "Gene search subtitle", defaultValue: "Find genes by gene ID in a genome version" },
-  { key: "search.genes.colAssembly", area: "search", label: "Gene results column: genome version", defaultValue: "Genome version" },
-  { key: "search.genes.colChromosome", area: "search", label: "Gene results column: chromosome", defaultValue: "Chromosome" },
-  { key: "search.genes.colPosition", area: "search", label: "Gene results column: position", defaultValue: "Position" },
-  { key: "search.genes.colMutation", area: "search", label: "Gene results column: mutation feature", defaultValue: "Mutation feature" },
-  { key: "search.genes.colGeneId", area: "search", label: "Gene results column: gene ID", defaultValue: "Gene ID" },
-  { key: "search.genes.colGbrowse", area: "search", label: "Gene results column: JBrowse 2", defaultValue: "JBrowse 2" },
-  { key: "search.location.title", area: "search", label: "Location search title", defaultValue: "Physical Location Search" },
-  { key: "search.location.subtitle", area: "search", label: "Location search subtitle", defaultValue: "Find variants and genes in a genomic region" },
-  { key: "search.location.colAssembly", area: "search", label: "Location results column: genome version", defaultValue: "Genome version" },
-  { key: "search.location.colChromosome", area: "search", label: "Location results column: chromosome", defaultValue: "Chromosome" },
-  { key: "search.location.colPosition", area: "search", label: "Location results column: position", defaultValue: "Position" },
-  { key: "search.location.colMutation", area: "search", label: "Location results column: mutation feature", defaultValue: "Mutation feature" },
-  { key: "search.location.colGeneId", area: "search", label: "Location results column: gene ID", defaultValue: "Gene ID" },
-  { key: "search.location.colGbrowse", area: "search", label: "Location results column: JBrowse 2", defaultValue: "JBrowse 2" },
-  { key: "blast.searchType", area: "blast", label: "BLAST type label", defaultValue: "BLAST Type" },
-  { key: "blast.database", area: "blast", label: "BLAST database label", defaultValue: "Reference sequence type" },
-  { key: "blast.databasePlaceholder", area: "blast", label: "BLAST database placeholder", defaultValue: "Select a reference sequence type" },
-  { key: "blast.input", area: "blast", label: "BLAST input label", defaultValue: "Input Sequence" },
-  { key: "blast.inputSequence", area: "blast", label: "BLAST input sequence label", defaultValue: "Input Sequence" },
-  { key: "blast.sequencePlaceholder", area: "blast", label: "BLAST sequence placeholder", textarea: true, defaultValue: "Paste sequence in FASTA format..." },
-  { key: "blast.submit", area: "blast", label: "BLAST submit button", defaultValue: "BLAST" },
-  { key: "blast.eValue", area: "blast", label: "BLAST E-value label", defaultValue: "E-value threshold" },
-  { key: "blast.maxHits", area: "blast", label: "BLAST max hits label", defaultValue: "Max hits" },
-  { key: "blast.hitSequenceId", area: "blast", label: "BLAST hit column: sequence ID", defaultValue: "Sequence ID" },
-  { key: "blast.hitGeneId", area: "blast", label: "BLAST hit column: gene ID", defaultValue: "Gene ID" },
-  { key: "blast.hitCoverage", area: "blast", label: "BLAST hit column: coverage", defaultValue: "Coverage" },
-  { key: "blast.hitEValue", area: "blast", label: "BLAST hit column: E-value", defaultValue: "E-value" },
-  { key: "help.gettingStarted", area: "help", label: "Help: getting started", defaultValue: "Getting Started" },
-  { key: "help.documentation", area: "help", label: "Help: documentation", defaultValue: "Documentation" },
-  { key: "help.contact", area: "help", label: "Help: contact", defaultValue: "Contact Support" },
-  { key: "help.faq", area: "help", label: "Help: FAQ heading", defaultValue: "Frequently Asked Questions" },
-  { key: "help.faq1.q", area: "help", label: "FAQ 1 question", defaultValue: "How do I search for a gene?" },
-  { key: "help.faq1.a", area: "help", label: "FAQ 1 answer", textarea: true, defaultValue: "Use the search bar at the top of any page, or visit the Genes page to filter by chromosome, biotype, or keyword. Gene IDs follow the Glyma.01G000100 format." },
-  { key: "help.faq2.q", area: "help", label: "FAQ 2 question", defaultValue: "How do I download variant data?" },
-  { key: "help.faq2.a", area: "help", label: "FAQ 2 answer", textarea: true, defaultValue: "Visit the Downloads page for the files currently published for a release. Check each item's format, assembly, release, and provenance metadata before using it in an analysis." },
-  { key: "help.faq3.q", area: "help", label: "FAQ 3 question", defaultValue: "Can I request mutant seeds?" },
-  { key: "help.faq3.a", area: "help", label: "FAQ 3 answer", textarea: true, defaultValue: "Open the Seed Request page to see whether requests are currently enabled and to review the eligibility and distribution terms shown during submission." },
-  { key: "help.faq4.q", area: "help", label: "FAQ 4 question", defaultValue: "How do I cite SoyMutDB?" },
-  { key: "help.faq4.a", area: "help", label: "FAQ 4 answer", textarea: true, defaultValue: "Use the citation and provenance metadata published with the exact data release you used. A journal citation or DOI is shown only after it has been verified by the project maintainers." },
-  { key: "help.faq5.q", area: "help", label: "FAQ 5 question", defaultValue: "What genome assembly is used?" },
-  { key: "help.faq5.a", area: "help", label: "FAQ 5 answer", textarea: true, defaultValue: "The assembly is part of the search, record, browser, and download context. Confirm the displayed assembly before comparing or combining genomic coordinates." },
-  { key: "help.faq6.q", area: "help", label: "FAQ 6 question", defaultValue: "How often is the data updated?" },
-  { key: "help.faq6.a", area: "help", label: "FAQ 6 answer", textarea: true, defaultValue: "Release versions and publication dates are announced on the News and Downloads pages. SoyMutDB does not promise a fixed release cadence on this Help page." },
-  { key: "ui.searchButton", area: "generic", label: "Search button text", defaultValue: "Search" },
-  { key: "ui.submit", area: "generic", label: "Submit button text", defaultValue: "Submit" },
-  { key: "ui.loading", area: "generic", label: "Loading text", defaultValue: "Loading..." },
-  { key: "ui.errorRetry", area: "generic", label: "Error retry text", defaultValue: "Retry" },
-  { key: "ui.noResults", area: "generic", label: "No results text", defaultValue: "No results found" },
-];
-
-const SITE_CONTENT_DEFAULTS: Record<string, string> = Object.fromEntries(
-  CONTENT_FIELDS.map((field) => [field.key, field.defaultValue]),
-);
 
 const CONTENT_AREA_LABELS: Record<ContentArea, string> = {
   hero: "Hero",
@@ -162,25 +130,34 @@ function isConfigurationRecord(value: unknown): value is Record<string, unknown>
 }
 
 function SettingsLoadError({ section }: { section: SettingsSection }) {
+  const { t } = useTranslation();
+  const sectionLabel = t(`admin.settings.section_${section}`, { defaultValue: settingsSectionLabels[section] });
   return (
     <p className="text-sm text-destructive" role="alert">
-      Unable to load {settingsSectionLabels[section]}. Refresh the page and try again.
+      {t("admin.settings.loadError", { defaultValue: "Unable to load {{section}}. Refresh the page and try again.", section: sectionLabel })}
     </p>
   );
 }
 
-export default function SettingsPage() {
+export default function SettingsPage({ domain }: { domain?: SettingsDomain }) {
   const { t } = useTranslation();
+  const isCardVisible = (card: SettingsCard) => !domain || SETTINGS_CARD_DOMAINS[card].includes(domain);
   const queryClient = useQueryClient();
   const [saveTarget, setSaveTarget] = useState<string | null>(null);
   const [sectionLoaded, setSectionLoaded] = useState(initialSettingsLoadState);
   const [sectionLoadError, setSectionLoadError] = useState(initialSettingsLoadErrorState);
+  const [siteVariant, setSiteVariant] = useState<SiteVariant>("external");
+  const aboutSection = siteVariantSection("about", siteVariant);
+  const homeSection = siteVariantSection("home", siteVariant);
+  const footerSection = siteVariantSection("footer", siteVariant);
+  const contentSection = siteVariantSection("content", siteVariant);
 
   const [general, setGeneral] = useState({
     siteName: "SoyMutDB",
     siteDescription: "Comprehensive multi-species mutant database for functional genomics research (soybean as the first/default species)",
     defaultLanguage: "en",
     defaultTheme: "light",
+    primaryColor: readAdminPrimaryColor(),
   });
 
   const [data, setData] = useState({
@@ -205,9 +182,10 @@ export default function SettingsPage() {
   });
 
   const [cdn, setCdn] = useState({
-    cdn_enabled: "false",
-    echarts_url: "",
+    enabled: false,
+    url: "",
   });
+  const [cdnVersion, setCdnVersion] = useState<number | null>(null);
 
   const [filePreview, setFilePreview] = useState({
     enabled: "true",
@@ -224,6 +202,11 @@ export default function SettingsPage() {
     content_zh: "",
   });
 
+  const [home, setHome] = useState({
+    welcome_en: "",
+    welcome_zh: "",
+  });
+
   const [footer, setFooter] = useState({
     contact_person: "联系人: 周玲",
     contact_phone: "电话: 025-84391957",
@@ -232,9 +215,43 @@ export default function SettingsPage() {
     address: "地址: 南京市玄武区钟灵街50号 邮编210014",
   });
 
-  const [siteContent, setSiteContent] = useState<Record<string, string>>({
-    ...SITE_CONTENT_DEFAULTS,
+  const [siteContent, setSiteContent] = useState<Record<string, string>>({});
+  const contentSchemaQuery = useQuery({
+    queryKey: ["admin-settings-schema"],
+    queryFn: () => http.get<SettingsSchemaResponse>("/admin/settings/schema"),
+    staleTime: 5 * 60_000,
   });
+  const contentFields = useMemo<ContentField[]>(() => {
+    const fields = contentSchemaQuery.data?.sections?.[contentSection]?.fields;
+    if (!fields) return [];
+    return Object.entries(fields).map(([key, schema]) => {
+      const area = key.split(".")[0];
+      const safeArea: ContentArea = CONTENT_AREA_ORDER.includes(area as ContentArea)
+        ? (area as ContentArea)
+        : "generic";
+      const defaultValue = schema.default == null ? "" : String(schema.default);
+      return {
+        key,
+        area: safeArea,
+        label: key,
+        textarea: key.endsWith(".desc") || key.endsWith(".subtitle") || key.endsWith(".a") || key.endsWith(".q"),
+        defaultValue,
+        kind: schema.kind,
+        allowedValues: schema.allowed_values,
+        maxLength: schema.max_length,
+      };
+    });
+  }, [contentSchemaQuery.data, contentSection]);
+
+  const primaryColorPresets = useMemo(
+    () => [
+      {
+        label: t("admin.settings.colorPresets", { defaultValue: "SoyMutDB palette" }),
+        colors: [ANTD_PRIMARY_HEX, "#1677ff", "#722ed1", "#eb2f96", "#d4380d", "#08979c"],
+      },
+    ],
+    [t],
+  );
 
   useEffect(() => {
     http.get("/admin/settings/general").then((res: unknown) => {
@@ -250,7 +267,13 @@ export default function SettingsPage() {
         ),
         defaultLanguage: String(res.defaultLanguage ?? "en"),
         defaultTheme: String(res.defaultTheme ?? "light"),
+        primaryColor: (() => {
+          const candidate = String(res.primaryColor ?? readAdminPrimaryColor());
+          return isValidAdminPrimaryColor(candidate) ? candidate.toLowerCase() : ANTD_PRIMARY_HEX;
+        })(),
       });
+      const primaryColor = String(res.primaryColor ?? readAdminPrimaryColor());
+      if (isValidAdminPrimaryColor(primaryColor)) saveAdminPrimaryColor(primaryColor);
       setSectionLoadError((errors) => ({ ...errors, general: false }));
       setSectionLoaded((loaded) => ({ ...loaded, general: true }));
     }).catch(() => {
@@ -316,18 +339,12 @@ export default function SettingsPage() {
   }, []);
 
   useEffect(() => {
-    http.get("/admin/cdn-config").then((res: unknown) => {
-      if (!isConfigurationRecord(res)) {
-        setSectionLoadError((errors) => ({ ...errors, cdn: true }));
-        return;
-      }
-      const cdnUrls = Array.isArray(res.urls)
-        ? res.urls.filter((url): url is string => typeof url === "string")
-        : [];
+    adminSettingsApi.get("cdn").then((document) => {
       setCdn({
-        cdn_enabled: String(res.enabled ?? false),
-        echarts_url: cdnUrls[0] ?? "",
+        enabled: document.values.enabled === true,
+        url: typeof document.values.url === "string" ? document.values.url : "",
       });
+      setCdnVersion(document.version);
       setSectionLoadError((errors) => ({ ...errors, cdn: false }));
       setSectionLoaded((loaded) => ({ ...loaded, cdn: true }));
     }).catch(() => {
@@ -354,7 +371,9 @@ export default function SettingsPage() {
   }, []);
 
   useEffect(() => {
-    http.get("/admin/settings/about").then((res: unknown) => {
+    let cancelled = false;
+    http.get("/admin/settings/" + aboutSection).then((res: unknown) => {
+      if (cancelled) return;
       if (!isConfigurationRecord(res)) {
         setSectionLoadError((errors) => ({ ...errors, about: true }));
         return;
@@ -370,12 +389,15 @@ export default function SettingsPage() {
       setSectionLoadError((errors) => ({ ...errors, about: false }));
       setSectionLoaded((loaded) => ({ ...loaded, about: true }));
     }).catch(() => {
-      setSectionLoadError((errors) => ({ ...errors, about: true }));
+      if (!cancelled) setSectionLoadError((errors) => ({ ...errors, about: true }));
     });
-  }, []);
+    return () => { cancelled = true; };
+  }, [aboutSection]);
 
   useEffect(() => {
-    http.get("/admin/settings/footer").then((res: unknown) => {
+    let cancelled = false;
+    http.get("/admin/settings/" + footerSection).then((res: unknown) => {
+      if (cancelled) return;
       if (!isConfigurationRecord(res)) {
         setSectionLoadError((errors) => ({ ...errors, footer: true }));
         return;
@@ -390,28 +412,55 @@ export default function SettingsPage() {
       setSectionLoadError((errors) => ({ ...errors, footer: false }));
       setSectionLoaded((loaded) => ({ ...loaded, footer: true }));
     }).catch(() => {
-      setSectionLoadError((errors) => ({ ...errors, footer: true }));
+      if (!cancelled) setSectionLoadError((errors) => ({ ...errors, footer: true }));
     });
-  }, []);
+    return () => { cancelled = true; };
+  }, [footerSection]);
 
   useEffect(() => {
-    http.get("/admin/settings/content").then((res: unknown) => {
+    let cancelled = false;
+    http.get("/admin/settings/" + homeSection).then((res: unknown) => {
+      if (cancelled) return;
+      if (!isConfigurationRecord(res)) {
+        setSectionLoadError((errors) => ({ ...errors, home: true }));
+        return;
+      }
+      setHome({
+        welcome_en: String(res.welcome_en ?? ""),
+        welcome_zh: String(res.welcome_zh ?? ""),
+      });
+      setSectionLoadError((errors) => ({ ...errors, home: false }));
+      setSectionLoaded((loaded) => ({ ...loaded, home: true }));
+    }).catch(() => {
+      if (!cancelled) setSectionLoadError((errors) => ({ ...errors, home: true }));
+    });
+    return () => { cancelled = true; };
+  }, [homeSection]);
+
+  useEffect(() => {
+    if (contentSchemaQuery.isError) return;
+    const schemaFields = contentSchemaQuery.data?.sections?.[contentSection]?.fields;
+    if (!schemaFields) return;
+    let cancelled = false;
+    http.get("/admin/settings/" + contentSection).then((res: unknown) => {
+      if (cancelled) return;
       if (!isConfigurationRecord(res)) {
         setSectionLoadError((errors) => ({ ...errors, content: true }));
         return;
       }
-      const merged: Record<string, string> = { ...SITE_CONTENT_DEFAULTS };
-      for (const key of Object.keys(merged)) {
+      const merged: Record<string, string> = {};
+      for (const [key, schema] of Object.entries(schemaFields)) {
         const value = res[key];
-        if (typeof value === "string") merged[key] = value;
+        merged[key] = typeof value === "string" ? value : String(schema.default ?? "");
       }
       setSiteContent(merged);
       setSectionLoadError((errors) => ({ ...errors, content: false }));
       setSectionLoaded((loaded) => ({ ...loaded, content: true }));
     }).catch(() => {
-      setSectionLoadError((errors) => ({ ...errors, content: true }));
+      if (!cancelled) setSectionLoadError((errors) => ({ ...errors, content: true }));
     });
-  }, []);
+    return () => { cancelled = true; };
+  }, [contentSchemaQuery.data, contentSchemaQuery.isError, contentSection]);
 
   const saveMutation = useMutation({
     mutationFn: async (params: { section: string; values: Record<string, string> }) => {
@@ -432,14 +481,18 @@ export default function SettingsPage() {
 
   const cdnMutation = useMutation({
     mutationFn: async () => {
-      return http.put("/admin/cdn-config", {
-        json: {
-          enabled: cdn.cdn_enabled === "true",
-          urls: cdn.echarts_url ? [cdn.echarts_url] : [],
-        },
+      if (cdnVersion === null) throw new Error("CDN settings have not loaded");
+      return adminSettingsApi.patch("cdn", cdnVersion, {
+        enabled: cdn.enabled,
+        url: cdn.url,
       });
     },
-    onSuccess: () => {
+    onSuccess: (document) => {
+      setCdn({
+        enabled: document.values.enabled === true,
+        url: typeof document.values.url === "string" ? document.values.url : "",
+      });
+      setCdnVersion(document.version);
       queryClient.invalidateQueries({ queryKey: ["admin-settings"] });
       setSaveTarget("cdn");
     },
@@ -450,23 +503,23 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div><Typography.Title level={2}>System Settings</Typography.Title><Typography.Text type="secondary">Configure global platform settings. Changes require administrator approval.</Typography.Text></div>
+    <div className="mx-auto max-w-5xl space-y-6">
+      <div><Typography.Title level={2}>{t("admin.settings.title", { defaultValue: "System Settings" })}</Typography.Title><Typography.Text type="secondary">{t("admin.settings.subtitle", { defaultValue: "Configure global platform settings. Changes require administrator approval." })}</Typography.Text></div>
 
       {/* General */}
-      <Card>
+      <Card hidden={!isCardVisible("general")}>
         <div>
           <Typography.Title level={5} className="flex items-center gap-2 text-base">
             <GlobalOutlined className="size-4 text-primary" />
-            General
+            {t("admin.settings.generalSection", { defaultValue: "General" })}
           </Typography.Title>
-          <Typography.Text type="secondary">Site-wide configuration</Typography.Text>
+          <Typography.Text type="secondary">{t("admin.settings.generalSubtitle", { defaultValue: "Site-wide configuration" })}</Typography.Text>
           {sectionLoadError.general && <SettingsLoadError section="general" />}
         </div>
         <div className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <label htmlFor="site-name">Site Name</label>
+              <label htmlFor="site-name">{t("admin.settings.siteName", { defaultValue: "Site Name" })}</label>
               <Input
                 id="site-name"
                 value={general.siteName}
@@ -474,26 +527,47 @@ export default function SettingsPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <label htmlFor="default-lang">Default Language</label>
+              <label htmlFor="default-lang">{t("admin.settings.defaultLanguage", { defaultValue: "Default Language" })}</label>
               <Select
                 value={general.defaultLanguage}
                 onChange={(v) => setGeneral({ ...general, defaultLanguage: v })}
               >
 
 
-                  <Select.Option value="en">English</Select.Option>
+                  <Select.Option value="en">{t("admin.settings.languageEnglish", { defaultValue: "English" })}</Select.Option>
                   <Select.Option value="zh">中文</Select.Option>
 
               </Select>
             </div>
           </div>
           <div className="space-y-1.5">
-            <label htmlFor="site-desc">Site Description</label>
+            <label htmlFor="site-desc">{t("admin.settings.siteDescription", { defaultValue: "Site Description" })}</label>
             <Input.TextArea
               id="site-desc"
               value={general.siteDescription}
               onChange={(e) => setGeneral({ ...general, siteDescription: e.target.value })}
               rows={2}
+            />
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-dashed border-border bg-muted/20 p-4">
+            <div className="flex min-w-0 items-start gap-3">
+              <BgColorsOutlined className="mt-0.5 text-primary" aria-hidden />
+              <div className="min-w-0">
+                <p className="font-medium">{t("admin.settings.primaryColor", { defaultValue: "Primary color" })}</p>
+                <p className="text-sm text-muted-foreground">{t("admin.settings.primaryColorHint", { defaultValue: "Controls Ant Design buttons, links, tags, and selected states." })}</p>
+              </div>
+            </div>
+            <ColorPicker
+              value={general.primaryColor}
+              format="hex"
+              showText
+              aria-label={t("admin.settings.primaryColor", { defaultValue: "Primary color" })}
+              presets={primaryColorPresets}
+              onChangeComplete={(color) => {
+                const next = color.toHexString();
+                setGeneral((current) => ({ ...current, primaryColor: next }));
+                saveAdminPrimaryColor(next);
+              }}
             />
           </div>
           <div className="flex justify-end">
@@ -502,14 +576,58 @@ export default function SettingsPage() {
               disabled={!sectionLoaded.general || saveMutation.isPending}
             >
               <SaveOutlined aria-hidden className="size-4" />
-              Save Changes
+              {t("admin.settings.saveChanges", { defaultValue: "Save Changes" })}
             </Button>
           </div>
         </div>
       </Card>
 
+      {/* Explicit site variant selector */}
+      <Card hidden={!isCardVisible("variant")} className="border-primary/20 bg-primary/[0.03]">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <Typography.Title level={5} className="mb-1 flex items-center gap-2 text-base">
+              <GlobalOutlined className="size-4 text-primary" />
+              {t("admin.settings.siteVariantTitle", { defaultValue: "Site variant content" })}
+            </Typography.Title>
+            <Typography.Text type="secondary">
+              {t("admin.settings.siteVariantSubtitle", { defaultValue: "Choose which independently generated site you are editing. The choice is stored in a separate, audited settings namespace." })}
+            </Typography.Text>
+          </div>
+          <div className="w-full shrink-0 sm:w-72">
+            <label className="sr-only" htmlFor="site-variant">
+              {t("admin.settings.siteVariantLabel", { defaultValue: "Site variant" })}
+            </label>
+            <Select
+              id="site-variant"
+              value={siteVariant}
+              className="w-full"
+              onChange={(value) => {
+                const nextVariant = value as SiteVariant;
+                setSiteVariant(nextVariant);
+                setSectionLoaded((loaded) => ({ ...loaded, about: false, home: false, footer: false, content: false }));
+                setSectionLoadError((errors) => ({ ...errors, about: false, home: false, footer: false, content: false }));
+              }}
+            >
+              {SITE_VARIANT_OPTIONS.map((option) => (
+                <Select.Option key={option.value} value={option.value}>
+                  {option.value === "internal"
+                    ? t("admin.settings.siteVariantInternal", { defaultValue: "Internal site" })
+                    : t("admin.settings.siteVariantExternal", { defaultValue: "External site" })}
+                </Select.Option>
+              ))}
+            </Select>
+          </div>
+        </div>
+        <p className="mt-3 rounded-md border border-border/70 bg-background/70 p-3 text-xs text-muted-foreground" role="status">
+          {siteVariant === "internal"
+            ? t("admin.settings.internalSiteSecurityNotice", { defaultValue: "Internal content is authenticated and must be deployed behind SSO, Cloudflare Access, VPN, or a private network. This selector is not a substitute for network access control." })
+            : t("admin.settings.externalSiteNotice", { defaultValue: "External content is public and can be cached by the edge after a successful audited save." })}
+        </p>
+      </Card>
+
       {/* About us content */}
-      <Card>
+      <Card hidden={!isCardVisible("about")}>
         <div>
           <Typography.Title level={5} className="flex items-center gap-2 text-base">
             <GlobalOutlined className="size-4 text-primary" />
@@ -521,16 +639,16 @@ export default function SettingsPage() {
         <div className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <label htmlFor="about-title-en">Title (English)</label>
+              <label htmlFor="about-title-en">{t("admin.settings.titleEnglish", { defaultValue: "Title (English)" })}</label>
               <Input
                 id="about-title-en"
                 value={about.title_en}
                 onChange={(e) => setAbout({ ...about, title_en: e.target.value })}
-                placeholder="About SoyMutDB"
+                placeholder={t("admin.settings.placeholderAboutTitle", { defaultValue: "About SoyMutDB" })}
               />
             </div>
             <div className="space-y-1.5">
-              <label htmlFor="about-title-zh">Title (Chinese)</label>
+              <label htmlFor="about-title-zh">{t("admin.settings.titleChinese", { defaultValue: "Title (Chinese)" })}</label>
               <Input
                 id="about-title-zh"
                 value={about.title_zh}
@@ -539,17 +657,17 @@ export default function SettingsPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <label htmlFor="about-summary-en">Summary (English)</label>
+              <label htmlFor="about-summary-en">{t("admin.settings.summaryEnglish", { defaultValue: "Summary (English)" })}</label>
               <Input.TextArea
                 id="about-summary-en"
                 value={about.summary_en}
                 onChange={(e) => setAbout({ ...about, summary_en: e.target.value })}
                 rows={2}
-                placeholder="Short introduction shown on the About page"
+                placeholder={t("admin.settings.placeholderAboutSummary", { defaultValue: "Short introduction shown on the About page" })}
               />
             </div>
             <div className="space-y-1.5">
-              <label htmlFor="about-summary-zh">Summary (Chinese)</label>
+              <label htmlFor="about-summary-zh">{t("admin.settings.summaryChinese", { defaultValue: "Summary (Chinese)" })}</label>
               <Input.TextArea
                 id="about-summary-zh"
                 value={about.summary_zh}
@@ -558,16 +676,16 @@ export default function SettingsPage() {
                 placeholder="关于我们页面的简短介绍"
               />
             </div>
-            <div className="space-y-1.5 sm:col-span-2">
-              <label htmlFor="about-content-en">Content (English)</label>
+            <div className="space-y-1.5">
+              <label htmlFor="about-content-en">{t("admin.settings.contentEnglishLabel", { defaultValue: "Content (English)" })}</label>
               <RichEditor
                 value={about.content_en}
                 onChange={(html) => setAbout({ ...about, content_en: html })}
-                placeholder="Full page content in English (rich text / Markdown supported)"
+                placeholder={t("admin.settings.placeholderAboutContentEnglish", { defaultValue: "Full page content in English (rich text / Markdown supported)" })}
               />
             </div>
-            <div className="space-y-1.5 sm:col-span-2">
-              <label htmlFor="about-content-zh">Content (Chinese)</label>
+            <div className="space-y-1.5">
+              <label htmlFor="about-content-zh">{t("admin.settings.contentChineseLabel", { defaultValue: "Content (Chinese)" })}</label>
               <RichEditor
                 value={about.content_zh}
                 onChange={(html) => setAbout({ ...about, content_zh: html })}
@@ -577,30 +695,71 @@ export default function SettingsPage() {
           </div>
           <div className="flex justify-end">
             <Button
-              onClick={() => handleSave("about", about)}
+              onClick={() => handleSave(aboutSection, about)}
               disabled={!sectionLoaded.about || saveMutation.isPending}
             >
               <SaveOutlined aria-hidden className="size-4" />
-              Save Changes
+              {t("admin.settings.saveChanges", { defaultValue: "Save Changes" })}
             </Button>
           </div>
         </div>
       </Card>
 
+      {/* Homepage welcome content */}
+      <Card hidden={!isCardVisible("home")}>
+        <div>
+          <Typography.Title level={5} className="flex items-center gap-2 text-base">
+            <GlobalOutlined className="size-4 text-primary" />
+            {t("admin.settings.homeContentSection", { defaultValue: "Homepage welcome" })}
+          </Typography.Title>
+          <Typography.Text type="secondary">
+            {t("admin.settings.homeContentSubtitle", { defaultValue: "Variant-specific bilingual welcome content for the generated homepage." })}
+          </Typography.Text>
+          {sectionLoadError.home && <SettingsLoadError section="home" />}
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <label htmlFor="home-welcome-en">{t("admin.settings.contentEnglishLabel", { defaultValue: "Content (English)" })}</label>
+            <RichEditor
+              value={home.welcome_en}
+              onChange={(html) => setHome({ ...home, welcome_en: html })}
+              placeholder={t("admin.settings.homeWelcomeEnglishPlaceholder", { defaultValue: "Welcome content in English" })}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="home-welcome-zh">{t("admin.settings.contentChineseLabel", { defaultValue: "Content (Chinese)" })}</label>
+            <RichEditor
+              value={home.welcome_zh}
+              onChange={(html) => setHome({ ...home, welcome_zh: html })}
+              placeholder={t("admin.settings.homeWelcomeChinesePlaceholder", { defaultValue: "首页欢迎内容（中文）" })}
+            />
+          </div>
+        </div>
+        <div className="flex justify-end">
+          <Button
+            onClick={() => handleSave(homeSection, home)}
+            disabled={!sectionLoaded.home || saveMutation.isPending}
+          >
+            <SaveOutlined aria-hidden className="size-4" />
+            {t("admin.settings.saveChanges", { defaultValue: "Save Changes" })}
+          </Button>
+        </div>
+      </Card>
+
       {/* Data */}
-      <Card>
+      <Card hidden={!isCardVisible("data")}>
         <div>
           <Typography.Title level={5} className="flex items-center gap-2 text-base">
             <DatabaseOutlined className="size-4 text-primary" />
-            Data & Storage
+            {t("admin.settings.dataSection", { defaultValue: "Data & Storage" })}
           </Typography.Title>
-          <Typography.Text type="secondary">DatabaseOutlined and storage configuration</Typography.Text>
+          <Typography.Text type="secondary">{t("admin.settings.dataSubtitle", { defaultValue: "Database and storage configuration" })}</Typography.Text>
           {sectionLoadError.data && <SettingsLoadError section="data" />}
         </div>
         <div className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <label htmlFor="default-assembly">Default Assembly</label>
+              <label htmlFor="default-assembly">{t("admin.settings.defaultAssembly", { defaultValue: "Default Assembly" })}</label>
               <Input
                 id="default-assembly"
                 value={data.defaultAssembly}
@@ -608,7 +767,7 @@ export default function SettingsPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <label htmlFor="max-export">Max Export Records</label>
+              <label htmlFor="max-export">{t("admin.settings.maxExportRecords", { defaultValue: "Max Export Records" })}</label>
               <Input
                 id="max-export"
                 type="number"
@@ -617,7 +776,7 @@ export default function SettingsPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <label htmlFor="cache-ttl">Cache TTL (seconds)</label>
+              <label htmlFor="cache-ttl">{t("admin.settings.cacheTtlSeconds", { defaultValue: "Cache TTL (seconds)" })}</label>
               <Input
                 id="cache-ttl"
                 type="number"
@@ -626,10 +785,10 @@ export default function SettingsPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <label>ClickHouse Analytics</label>
+              <label>{t("admin.settings.clickhouseAnalytics", { defaultValue: "ClickHouse Analytics" })}</label>
               <div className="flex items-center gap-2 pt-2">
                 <Badge color={data.enableClickhouse === "true" ? "success" : "secondary"}>
-                  {data.enableClickhouse === "true" ? "Enabled" : "Disabled"}
+                  {data.enableClickhouse === "true" ? t("admin.settings.enabled", { defaultValue: "Enabled" }) : t("admin.settings.disabled", { defaultValue: "Disabled" })}
                 </Badge>
                 <Button
                   type="default"
@@ -641,7 +800,7 @@ export default function SettingsPage() {
                     })
                   }
                 >
-                  Toggle
+                  {t("admin.settings.toggle", { defaultValue: "Toggle" })}
                 </Button>
               </div>
             </div>
@@ -652,35 +811,35 @@ export default function SettingsPage() {
               disabled={!sectionLoaded.data || saveMutation.isPending}
             >
               <SaveOutlined aria-hidden className="size-4" />
-              Save Changes
+              {t("admin.settings.saveChanges", { defaultValue: "Save Changes" })}
             </Button>
           </div>
         </div>
       </Card>
 
       {/* Email */}
-      <Card>
+      <Card hidden={!isCardVisible("email")}>
         <div>
           <Typography.Title level={5} className="flex items-center gap-2 text-base">
             <MailOutlined className="size-4 text-primary" />
-            Email & Notifications
+            {t("admin.settings.emailSection", { defaultValue: "Email & Notifications" })}
           </Typography.Title>
-          <Typography.Text type="secondary">SMTP configuration for system emails</Typography.Text>
+          <Typography.Text type="secondary">{t("admin.settings.emailSubtitle", { defaultValue: "SMTP configuration for system emails" })}</Typography.Text>
           {sectionLoadError.email && <SettingsLoadError section="email" />}
         </div>
         <div className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <label htmlFor="smtp-host">SMTP Host</label>
+              <label htmlFor="smtp-host">{t("admin.settings.smtpHost", { defaultValue: "SMTP Host" })}</label>
               <Input
                 id="smtp-host"
                 value={email.smtpHost}
                 onChange={(e) => setEmail({ ...email, smtpHost: e.target.value })}
-                placeholder="smtp.gmail.com"
+                placeholder={t("admin.settings.placeholderSmtpHost", { defaultValue: "smtp.gmail.com" })}
               />
             </div>
             <div className="space-y-1.5">
-              <label htmlFor="smtp-port">SMTP Port</label>
+              <label htmlFor="smtp-port">{t("admin.settings.smtpPort", { defaultValue: "SMTP Port" })}</label>
               <Input
                 id="smtp-port"
                 type="number"
@@ -689,7 +848,7 @@ export default function SettingsPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <label htmlFor="from-addr">From Address</label>
+              <label htmlFor="from-addr">{t("admin.settings.fromAddress", { defaultValue: "From Address" })}</label>
               <Input
                 id="from-addr"
                 type="email"
@@ -704,26 +863,26 @@ export default function SettingsPage() {
               disabled={!sectionLoaded.email || saveMutation.isPending}
             >
               <SaveOutlined aria-hidden className="size-4" />
-              Save Changes
+              {t("admin.settings.saveChanges", { defaultValue: "Save Changes" })}
             </Button>
           </div>
         </div>
       </Card>
 
       {/* Security */}
-      <Card>
+      <Card hidden={!isCardVisible("security")}>
         <div>
           <Typography.Title level={5} className="flex items-center gap-2 text-base">
             <SafetyOutlined className="size-4 text-primary" />
-            Security
+            {t("admin.settings.securitySection", { defaultValue: "Security" })}
           </Typography.Title>
-          <Typography.Text type="secondary">Authentication and access control</Typography.Text>
+          <Typography.Text type="secondary">{t("admin.settings.securitySubtitle", { defaultValue: "Authentication and access control" })}</Typography.Text>
           {sectionLoadError.security && <SettingsLoadError section="security" />}
         </div>
         <div className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <label htmlFor="session-timeout">Session Timeout (minutes)</label>
+              <label htmlFor="session-timeout">{t("admin.settings.sessionTimeout", { defaultValue: "Session Timeout (minutes)" })}</label>
               <Input
                 id="session-timeout"
                 type="number"
@@ -732,7 +891,7 @@ export default function SettingsPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <label htmlFor="max-login">Max Login Attempts</label>
+              <label htmlFor="max-login">{t("admin.settings.maxLoginAttempts", { defaultValue: "Max Login Attempts" })}</label>
               <Input
                 id="max-login"
                 type="number"
@@ -741,7 +900,7 @@ export default function SettingsPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <label htmlFor="pw-min">Password Min Length</label>
+              <label htmlFor="pw-min">{t("admin.settings.passwordMinLength", { defaultValue: "Password Min Length" })}</label>
               <Input
                 id="pw-min"
                 type="number"
@@ -750,10 +909,10 @@ export default function SettingsPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <label>Two-Factor Auth</label>
+              <label>{t("admin.settings.twoFactorAuth", { defaultValue: "Two-Factor Auth" })}</label>
               <div className="flex items-center gap-2 pt-2">
                 <Badge color={security.requireTwoFactor === "true" ? "success" : "secondary"}>
-                  {security.requireTwoFactor === "true" ? "Required" : "Optional"}
+                  {security.requireTwoFactor === "true" ? t("admin.settings.required", { defaultValue: "Required" }) : t("admin.settings.optional", { defaultValue: "Optional" })}
                 </Badge>
                 <Button
                   type="default"
@@ -765,7 +924,7 @@ export default function SettingsPage() {
                     })
                   }
                 >
-                  Toggle
+                  {t("admin.settings.toggle", { defaultValue: "Toggle" })}
                 </Button>
               </div>
             </div>
@@ -776,29 +935,29 @@ export default function SettingsPage() {
               disabled={!sectionLoaded.security || saveMutation.isPending}
             >
               <SaveOutlined aria-hidden className="size-4" />
-              Save Changes
+              {t("admin.settings.saveChanges", { defaultValue: "Save Changes" })}
             </Button>
           </div>
         </div>
       </Card>
 
       {/* CDN Configuration */}
-      <Card>
+      <Card hidden={!isCardVisible("cdn")}>
         <div>
           <Typography.Title level={5} className="flex items-center gap-2 text-base">
             <GlobalOutlined className="size-4 text-primary" />
-            CDN Configuration
+            {t("admin.settings.cdnSection", { defaultValue: "CDN Configuration" })}
           </Typography.Title>
-          <Typography.Text type="secondary">External CDN URLs for frontend assets</Typography.Text>
+          <Typography.Text type="secondary">{t("admin.settings.cdnSubtitle", { defaultValue: "External CDN URLs for frontend assets" })}</Typography.Text>
           {sectionLoadError.cdn && <SettingsLoadError section="cdn" />}
         </div>
         <div className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <label>CDN Enabled</label>
+              <label>{t("admin.settings.cdnEnabled", { defaultValue: "CDN Enabled" })}</label>
               <div className="flex items-center gap-2 pt-2">
-                <Badge color={cdn.cdn_enabled === "true" ? "success" : "secondary"}>
-                  {cdn.cdn_enabled === "true" ? "Enabled" : "Disabled"}
+                <Badge color={cdn.enabled ? "success" : "secondary"}>
+                  {cdn.enabled ? t("admin.settings.enabled", { defaultValue: "Enabled" }) : t("admin.settings.disabled", { defaultValue: "Disabled" })}
                 </Badge>
                 <Button
                   type="default"
@@ -806,27 +965,26 @@ export default function SettingsPage() {
                   onClick={() =>
                     setCdn({
                       ...cdn,
-                      cdn_enabled: cdn.cdn_enabled === "true" ? "false" : "true",
+                      enabled: !cdn.enabled,
                     })
                   }
                 >
-                  Toggle
+                  {t("admin.settings.toggle", { defaultValue: "Toggle" })}
                 </Button>
               </div>
             </div>
             <div className="space-y-1.5">
-              <label htmlFor="cdn-echarts">ECharts CDN URL</label>
+              <label htmlFor="cdn-echarts">{t("admin.settings.echartsUrl", { defaultValue: "ECharts CDN URL" })}</label>
               <Input
                 id="cdn-echarts"
-                value={cdn.echarts_url}
-                onChange={(e) => setCdn({ ...cdn, echarts_url: e.target.value })}
-                placeholder="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.1/echarts.min.js"
+                value={cdn.url}
+                onChange={(e) => setCdn({ ...cdn, url: e.target.value })}
+                placeholder={t("admin.settings.placeholderEchartsUrl", { defaultValue: "https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.1/echarts.min.js" })}
               />
             </div>
           </div>
           <p className="text-xs text-muted-foreground">
-            CDN URLs are used at build time. Changes require a rebuild to take effect. For
-            production, consider nginx edge caching as a fallback.
+            {t("admin.settings.cdnNote", { defaultValue: "CDN URLs are used at build time. Changes require a rebuild to take effect. For production, consider nginx edge caching as a fallback." })}
           </p>
           <div className="flex justify-end">
             <Button
@@ -834,20 +992,20 @@ export default function SettingsPage() {
               disabled={!sectionLoaded.cdn || cdnMutation.isPending}
             >
               <SaveOutlined aria-hidden className="size-4" />
-              Save Changes
+              {t("admin.settings.saveChanges", { defaultValue: "Save Changes" })}
             </Button>
           </div>
         </div>
       </Card>
 
       {/* File Preview Configuration */}
-      <Card>
+      <Card hidden={!isCardVisible("filePreview")}>
         <div>
           <Typography.Title level={5} className="flex items-center gap-2 text-base">
             <EyeOutlined className="size-4 text-primary" />
             {t("admin.file_preview")}
           </Typography.Title>
-          <Typography.Text type="secondary">Configure inline file preview behavior</Typography.Text>
+          <Typography.Text type="secondary">{t("admin.settings.filePreviewSubtitle", { defaultValue: "Configure inline file preview behavior" })}</Typography.Text>
           {sectionLoadError.filePreview && <SettingsLoadError section="filePreview" />}
         </div>
         <div className="space-y-4">
@@ -856,7 +1014,7 @@ export default function SettingsPage() {
               <label>{t("admin.file_preview_enabled")}</label>
               <div className="flex items-center gap-2 pt-2">
                 <Badge color={filePreview.enabled === "true" ? "success" : "secondary"}>
-                  {filePreview.enabled === "true" ? "Enabled" : "Disabled"}
+                  {filePreview.enabled === "true" ? t("admin.settings.enabled", { defaultValue: "Enabled" }) : t("admin.settings.disabled", { defaultValue: "Disabled" })}
                 </Badge>
                 <Button
                   type="default"
@@ -868,7 +1026,7 @@ export default function SettingsPage() {
                     })
                   }
                 >
-                  Toggle
+                  {t("admin.settings.toggle", { defaultValue: "Toggle" })}
                 </Button>
               </div>
             </div>
@@ -896,7 +1054,7 @@ export default function SettingsPage() {
                 placeholder="fasta,vcf,gff3,csv,tsv,png,jpg,svg,txt"
               />
               <p className="text-xs text-muted-foreground">
-                Comma-separated list of supported file formats.
+                {t("admin.settings.filePreviewFormatsHelp", { defaultValue: "Comma-separated list of supported file formats." })}
               </p>
             </div>
           </div>
@@ -906,30 +1064,30 @@ export default function SettingsPage() {
               disabled={!sectionLoaded.filePreview || saveMutation.isPending}
             >
               <SaveOutlined aria-hidden className="size-4" />
-              Save Changes
+              {t("admin.settings.saveChanges", { defaultValue: "Save Changes" })}
             </Button>
           </div>
         </div>
       </Card>
 
       {/* Site content (backend-editable frontend text + image URLs) */}
-      <Card>
+      <Card hidden={!isCardVisible("content")}>
         <div>
           <Typography.Title level={5} className="flex items-center gap-2 text-base">
             <GlobalOutlined className="size-4 text-primary" />
-            Site Content
+            {t("admin.settings.siteContentSection", { defaultValue: "Site Content" })}
           </Typography.Title>
-          <Typography.Text type="secondary">Backend-editable frontend text and image URLs (served by GET /site/content).</Typography.Text>
-          {sectionLoadError.content && <SettingsLoadError section="content" />}
+          <Typography.Text type="secondary">{t("admin.settings.siteContentSubtitle", { defaultValue: "Backend-editable frontend text and image URLs (served by GET /site/content)." })}</Typography.Text>
+          {(sectionLoadError.content || contentSchemaQuery.isError) && <SettingsLoadError section="content" />}
         </div>
         <div className="space-y-4">
           {CONTENT_AREA_ORDER.map((area) => (
             <div key={area} className="space-y-3">
-              <Typography.Title level={5} className="mb-1">{CONTENT_AREA_LABELS[area]}</Typography.Title>
+              <Typography.Title level={5} className="mb-1">{t(`admin.settings.contentArea_${area}`, { defaultValue: CONTENT_AREA_LABELS[area] })}</Typography.Title>
               <div className="grid gap-4 sm:grid-cols-2">
-                {CONTENT_FIELDS.filter((field) => field.area === area).map((field) => (
+                {contentFields.filter((field) => field.area === area).map((field) => (
                   <div key={field.key} className="space-y-1.5">
-                    <label htmlFor={`content-${field.key}`}>{field.label}</label>
+                    <label htmlFor={`content-${field.key}`}>{t(`admin.settings.contentField_${field.key.replace(/\./g, "_")}`, { defaultValue: field.label })}</label>
                     {field.textarea ? (
                       <Input.TextArea
                         id={`content-${field.key}`}
@@ -951,30 +1109,30 @@ export default function SettingsPage() {
           ))}
           <div className="flex justify-end">
             <Button
-              onClick={() => handleSave("content", siteContent)}
-              disabled={!sectionLoaded.content || saveMutation.isPending}
+              onClick={() => handleSave(contentSection, siteContent)}
+              disabled={!sectionLoaded.content || contentSchemaQuery.isPending || contentSchemaQuery.isError || saveMutation.isPending}
             >
               <SaveOutlined aria-hidden className="size-4" />
-              Save Changes
+              {t("admin.settings.saveChanges", { defaultValue: "Save Changes" })}
             </Button>
           </div>
         </div>
       </Card>
 
       {/* Footer contact block */}
-      <Card>
+      <Card hidden={!isCardVisible("footer")}>
         <div>
           <Typography.Title level={5} className="flex items-center gap-2 text-base">
             <GlobalOutlined className="size-4 text-primary" />
-            Footer
+            {t("admin.settings.footerSection", { defaultValue: "Footer" })}
           </Typography.Title>
-          <Typography.Text type="secondary">Editable footer contact information</Typography.Text>
+          <Typography.Text type="secondary">{t("admin.settings.footerSubtitle", { defaultValue: "Editable footer contact information" })}</Typography.Text>
           {sectionLoadError.footer && <SettingsLoadError section="footer" />}
         </div>
         <div className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <label htmlFor="footer-contact-person">Contact Person</label>
+              <label htmlFor="footer-contact-person">{t("admin.settings.contactPerson", { defaultValue: "Contact Person" })}</label>
               <Input
                 id="footer-contact-person"
                 value={footer.contact_person}
@@ -982,7 +1140,7 @@ export default function SettingsPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <label htmlFor="footer-contact-phone">Contact Phone</label>
+              <label htmlFor="footer-contact-phone">{t("admin.settings.contactPhone", { defaultValue: "Contact Phone" })}</label>
               <Input
                 id="footer-contact-phone"
                 value={footer.contact_phone}
@@ -990,7 +1148,7 @@ export default function SettingsPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <label htmlFor="footer-contact-email">Contact Email</label>
+              <label htmlFor="footer-contact-email">{t("admin.settings.contactEmail", { defaultValue: "Contact Email" })}</label>
               <Input
                 id="footer-contact-email"
                 value={footer.contact_email}
@@ -998,7 +1156,7 @@ export default function SettingsPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <label htmlFor="footer-address">Address</label>
+              <label htmlFor="footer-address">{t("admin.settings.address", { defaultValue: "Address" })}</label>
               <Input
                 id="footer-address"
                 value={footer.address}
@@ -1006,22 +1164,22 @@ export default function SettingsPage() {
               />
             </div>
             <div className="space-y-1.5 sm:col-span-2">
-              <label htmlFor="footer-copyright">Copyright</label>
+              <label htmlFor="footer-copyright">{t("admin.settings.copyright", { defaultValue: "Copyright" })}</label>
               <Input
                 id="footer-copyright"
                 value={footer.copyright}
                 onChange={(e) => setFooter({ ...footer, copyright: e.target.value })}
-                placeholder="© {{year}} SoyMutDB. All rights reserved."
+                placeholder={t("admin.settings.placeholderCopyright", { defaultValue: "© {{year}} SoyMutDB. All rights reserved." })}
               />
             </div>
           </div>
           <div className="flex justify-end">
             <Button
-              onClick={() => handleSave("footer", footer)}
+              onClick={() => handleSave(footerSection, footer)}
               disabled={!sectionLoaded.footer || saveMutation.isPending}
             >
               <SaveOutlined aria-hidden className="size-4" />
-              Save Changes
+              {t("admin.settings.saveChanges", { defaultValue: "Save Changes" })}
             </Button>
           </div>
         </div>
@@ -1031,9 +1189,9 @@ export default function SettingsPage() {
         <ConfirmDialog
           open={Boolean(saveTarget)}
           onOpenChange={(open) => !open && setSaveTarget(null)}
-          title="Settings Saved"
-          description={`The ${saveTarget} settings have been updated successfully.`}
-          confirmLabel="OK"
+          title={t("admin.settings.settingsSaved", { defaultValue: "Settings Saved" })}
+          description={t("admin.settings.settingsSavedDesc", { defaultValue: "The {{section}} settings have been updated successfully.", section: saveTarget })}
+          confirmLabel={t("admin.settings.ok", { defaultValue: "OK" })}
           onConfirm={() => setSaveTarget(null)}
         />
       )}
