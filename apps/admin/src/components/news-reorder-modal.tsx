@@ -40,6 +40,7 @@ interface SortableRowProps {
 }
 
 function SortableRow({ article }: SortableRowProps) {
+  const { t } = useTranslation();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: article.id });
   return (
@@ -56,7 +57,7 @@ function SortableRow({ article }: SortableRowProps) {
         {...attributes}
         {...listeners}
         className="cursor-grab touch-none text-muted-foreground"
-        aria-label="drag"
+        aria-label={t("admin.news.reorder.drag", { defaultValue: "Drag" })}
       >
         <HolderOutlined />
       </span>

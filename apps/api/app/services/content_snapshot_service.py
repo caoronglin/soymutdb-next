@@ -6,7 +6,7 @@ Builds the frozen snapshot contract served by ``GET /content/snapshot``
 .. code-block:: jsonc
 
     {
-      "schema_version": 1,
+      "schema_version": 2,
       "generated_at": "ISO8601",
       "news": {
         "source_total": 128,   // DB public-visible total
@@ -15,7 +15,9 @@ Builds the frozen snapshot contract served by ``GET /content/snapshot``
         "items": [ /* public NewsSummary, published_at desc */ ]
       },
       "news_detail": { "<slug>": { /* public detail HTML */ } | null },
-      "about": { title_en, title_zh, summary_en, summary_zh, content_en, content_zh }
+      "about": { title_en, title_zh, summary_en, summary_zh, content_en, content_zh },
+      "publications": [ /* newest bilingual publications, capped at 100 */ ],
+      "static_pages": [ /* published StaticPage entries, sort_order/slug ascending */ ]
     }
 
 Visibility rules are identical to the public news endpoints (status=published
@@ -34,13 +36,20 @@ from datetime import UTC, datetime
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models.content import NewsArticle
+from ..models.content import NewsArticle, Publication, StaticPage
 from ..models.system_settings import SystemSetting
+from ..schemas.content import PublicationResponse, StaticPageResponse
 from ..schemas.news import NewsDetailResponse, NewsSummaryResponse
 from .news_service import NewsService
 
 #: Hard cap on the number of articles included in a snapshot (list + detail).
 SNAPSHOT_MAX_ARTICLES = 500
+
+#: Hard cap on the number of publications included in a snapshot.
+SNAPSHOT_MAX_PUBLICATIONS = 100
+
+#: Hard cap on published static pages included in a snapshot.
+SNAPSHOT_MAX_PAGES = 200
 
 #: ``about.*`` keys served by the snapshot (mirrors ``site.py``).
 _ABOUT_KEYS = (
@@ -122,7 +131,7 @@ class ContentSnapshotService:
                 news_detail[row.slug] = None
 
         snapshot: dict[str, object] = {
-            "schema_version": 1,
+            "schema_version": 2,
             "generated_at": now.isoformat(),
             "news": {
                 "source_total": source_total,
@@ -132,6 +141,10 @@ class ContentSnapshotService:
             },
             "news_detail": news_detail,
             "about": await self._load_about(db),
+            "publications": await self._load_publications(db),
+            # Unpublished pages are deliberately omitted: emitting a null or
+            # draft record would let SSG retain stale public output.
+            "static_pages": await self._load_static_pages(db),
         }
 
         # Release-aware metadata: present for explicit builds, absent for the
@@ -155,5 +168,52 @@ class ContentSnapshotService:
         values: dict[str, str] = {row.key[len(prefix):]: row.value for row in rows}
         return {key: values.get(key) for key in _ABOUT_KEYS}
 
+    async def _load_publications(self, db: AsyncSession) -> list[dict[str, object]]:
+        """Return the newest publications (year desc, id desc) as dicts."""
+        stmt = (
+            select(Publication)
+            .order_by(Publication.year.desc().nullslast(), Publication.id.desc())
+            .limit(SNAPSHOT_MAX_PUBLICATIONS)
+        )
+        rows = (await db.execute(stmt)).scalars().all()
+        return [
+            PublicationResponse(
+                id=str(p.id),
+                title=p.title,
+                title_zh=p.title_zh,
+                authors=p.authors,
+                authors_zh=p.authors_zh,
+                journal=p.journal,
+                year=p.year,
+                doi=p.doi,
+                pmid=p.pmid,
+                abstract=p.abstract,
+                abstract_zh=p.abstract_zh,
+                is_featured=p.is_featured,
+                created_at=p.created_at,
+            ).model_dump(mode="json")
+            for p in rows
+        ]
 
-__all__ = ["ContentSnapshotService", "SNAPSHOT_MAX_ARTICLES"]
+
+    async def _load_static_pages(self, db: AsyncSession) -> list[dict[str, object]]:
+        """Return published pages in the deterministic public navigation order."""
+        stmt = (
+            select(StaticPage)
+            .where(StaticPage.status == "published")
+            .order_by(StaticPage.sort_order.asc(), StaticPage.slug.asc())
+            .limit(SNAPSHOT_MAX_PAGES)
+        )
+        rows = (await db.execute(stmt)).scalars().all()
+        return [
+            StaticPageResponse.model_validate(page).model_dump(mode="json")
+            for page in rows
+        ]
+
+
+__all__ = [
+    "ContentSnapshotService",
+    "SNAPSHOT_MAX_ARTICLES",
+    "SNAPSHOT_MAX_PAGES",
+    "SNAPSHOT_MAX_PUBLICATIONS",
+]

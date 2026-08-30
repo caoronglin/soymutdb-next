@@ -29,6 +29,8 @@ export interface NewsSummary {
   slug: string;
   category: string | null;
   cover_url: string | null;
+  cover_asset_id: string | null;
+  cover_alt_text: string | null;
   featured_sort: number;
   carousel_group: string | null;
   carousel_sort: number;

@@ -1,18 +1,22 @@
 import { request } from "./client";
+import { authRequest } from "./auth";
 
 /**
- * Typed public site-information endpoints (D4).
- *
- *   GET /api/v1/site/about → SiteAbout
- *   GET /api/v1/site/home  → SiteHome
- *
- * Backed by the `about.*` / `home.*` rows in `system_settings` (edited via
- * the admin Settings UI). Every field is optional — a fresh deployment
- * without the rows returns null for each key. Response shapes mirror
- * apps/api/app/schemas/site.py (AboutContentResponse / HomeContentResponse).
+ * Typed site variants.  The build pipeline selects one variant explicitly;
+ * the client never guesses from hostname, headers, or visitor identity.
  */
+export type SiteVariant = "external" | "internal";
 
-/** Editable "About us" content (bilingual, all fields optional). */
+export const SITE_VARIANTS = ["external", "internal"] as const satisfies readonly SiteVariant[];
+
+function siteRequest<T>(path: string, variant: SiteVariant): Promise<T> {
+  const options = { params: { variant } };
+  return variant === "internal"
+    ? authRequest<T>(path, options)
+    : request<T>(path, { ...options, auth: false });
+}
+
+/** Editable About content (bilingual, all fields optional). */
 export interface SiteAbout {
   title_en: string | null;
   title_zh: string | null;
@@ -22,9 +26,9 @@ export interface SiteAbout {
   content_zh: string | null;
 }
 
-/** Fetch the public "About us" content. */
-export function getSiteAbout(): Promise<SiteAbout> {
-  return request<SiteAbout>("/site/about", { auth: false });
+/** Fetch the About content for one explicit site variant. */
+export function getSiteAbout(variant: SiteVariant = "external"): Promise<SiteAbout> {
+  return siteRequest<SiteAbout>("/site/about", variant);
 }
 
 /** Editable homepage welcome block (bilingual rich HTML, all fields optional). */
@@ -33,9 +37,9 @@ export interface SiteHome {
   welcome_zh: string | null;
 }
 
-/** Fetch the public homepage welcome content. */
-export function getSiteHome(): Promise<SiteHome> {
-  return request<SiteHome>("/site/home", { auth: false });
+/** Fetch the homepage welcome content for one explicit site variant. */
+export function getSiteHome(variant: SiteVariant = "external"): Promise<SiteHome> {
+  return siteRequest<SiteHome>("/site/home", variant);
 }
 
 /** Editable footer contact block (plain text, defaults filled by the API). */
@@ -47,23 +51,20 @@ export interface SiteFooter {
   address: string | null;
 }
 
-/** Fetch the public footer contact content. */
-export function getSiteFooter(): Promise<SiteFooter> {
-  return request<SiteFooter>("/site/footer", { auth: false });
+/** Fetch the footer contact content for one explicit site variant. */
+export function getSiteFooter(variant: SiteVariant = "external"): Promise<SiteFooter> {
+  return siteRequest<SiteFooter>("/site/footer", variant);
 }
 
 /**
- * Editable site content (backend-editable text + image URLs).
+ * Editable frontend content (server-validated text and image URLs).
  *
- * A flat {@link Record} of short content keys (e.g. "hero.title") to their
- * resolved values. The public GET /api/v1/site/content endpoint returns every
- * registered content.* key, filling any missing row with its registered
- * default, so a fresh deployment always receives a complete object.
+ * The response remains a flat map for compatibility with useSiteContent; the
+ * variant is an explicit query parameter and is isolated on the server.
  */
 export type SiteContent = Record<string, string>;
 
-/** Fetch the public editable site-content map (no auth required). */
-export function getSiteContent(): Promise<SiteContent> {
-  return request<SiteContent>("/site/content", { auth: false });
+/** Fetch the editable site-content map for one explicit site variant. */
+export function getSiteContent(variant: SiteVariant = "external"): Promise<SiteContent> {
+  return siteRequest<SiteContent>("/site/content", variant);
 }
-

@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 
 _FIXTURE_SNAPSHOT: dict = {
-    "schema_version": 1,
+    "schema_version": 2,
     "generated_at": datetime(2026, 8, 9, 10, 0, 0, tzinfo=UTC).isoformat(),
     "news": {
         "source_total": 2,
@@ -58,6 +58,39 @@ _FIXTURE_SNAPSHOT: dict = {
         "content_en": "<p>About content</p>",
         "content_zh": None,
     },
+    "static_pages": [
+        {
+            "id": "page-1",
+            "slug": "release-notes",
+            "title_en": "Release Notes",
+            "title_zh": None,
+            "content_en": "<p>Notes</p>",
+            "content_zh": None,
+            "status": "published",
+            "category": "docs",
+            "summary": "Notes",
+            "sort_order": 0,
+            "created_at": "2026-08-09T08:00:00+00:00",
+            "updated_at": "2026-08-09T08:00:00+00:00",
+        }
+    ],
+    "publications": [
+        {
+            "id": "1",
+            "title": "SoyMutDB paper",
+            "title_zh": "SoyMutDB 论文",
+            "authors": "Zhang et al.",
+            "authors_zh": "张等",
+            "journal": "Plant Journal",
+            "year": 2026,
+            "doi": "10.1234/example",
+            "pmid": None,
+            "abstract": "A study.",
+            "abstract_zh": "一项研究。",
+            "is_featured": True,
+            "created_at": "2026-08-09T08:00:00+00:00",
+        }
+    ],
 }
 
 
@@ -87,12 +120,14 @@ class TestContentSnapshot:
         resp = self.client.get("/api/v1/content/snapshot")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["schema_version"] == 1
+        assert data["schema_version"] == 2
         assert "generated_at" in data
         assert data["news"]["included_total"] == 2
         assert data["news"]["truncated"] is False
         assert data["news_detail"]["test-news"]["content_en"].startswith("<h1>")
         assert data["about"]["title_en"] == "About Us"
+        assert data["publications"][0]["title_zh"] == "SoyMutDB 论文"
+        assert data["static_pages"][0]["slug"] == "release-notes"
 
     def test_snapshot_etag_and_304(self) -> None:
         first = self.client.get("/api/v1/content/snapshot")

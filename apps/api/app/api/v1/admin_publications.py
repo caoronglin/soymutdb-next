@@ -37,12 +37,15 @@ def _to_response(p: Publication) -> PublicationResponse:
     return PublicationResponse(
         id=str(p.id),
         title=p.title,
+        title_zh=p.title_zh,
         authors=p.authors,
+        authors_zh=p.authors_zh,
         journal=p.journal,
         year=p.year,
         doi=p.doi,
         pmid=p.pmid,
         abstract=p.abstract,
+        abstract_zh=p.abstract_zh,
         is_featured=p.is_featured,
         created_at=p.created_at,
     )
@@ -107,12 +110,15 @@ async def create_publication(
     _require_admin(current_user)
     pub = Publication(
         title=payload.title,
+        title_zh=payload.title_zh,
         authors=payload.authors,
+        authors_zh=payload.authors_zh,
         journal=payload.journal,
         year=payload.year,
         doi=payload.doi,
         pmid=payload.pmid,
         abstract=payload.abstract,
+        abstract_zh=payload.abstract_zh,
         is_featured=payload.is_featured,
     )
     db.add(pub)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Annotated
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -73,12 +74,15 @@ class NewsCreate(BaseModel):
 class PublicationResponse(BaseModel):
     id: str
     title: str
+    title_zh: str | None = None
     authors: str
+    authors_zh: str | None = None
     journal: str | None = None
     year: int | None = None
     doi: str | None = None
     pmid: str | None = None
     abstract: str | None = None
+    abstract_zh: str | None = None
     is_featured: bool = False
     created_at: datetime
 
@@ -94,12 +98,15 @@ class PublicationResponse(BaseModel):
 
 class PublicationCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=1024)
+    title_zh: str | None = Field(default=None, max_length=1024)
     authors: str = Field(..., min_length=1)
+    authors_zh: str | None = Field(default=None)
     journal: str | None = Field(default=None, max_length=256)
     year: int | None = Field(default=None, ge=1000, le=3000)
     doi: str | None = Field(default=None, max_length=256)
     pmid: str | None = Field(default=None, max_length=32)
     abstract: str | None = None
+    abstract_zh: str | None = None
     is_featured: bool = False
 
     @field_validator("doi")
@@ -112,12 +119,15 @@ class PublicationCreate(BaseModel):
 
 class PublicationUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=1024)
+    title_zh: str | None = Field(default=None, max_length=1024)
     authors: str | None = Field(default=None, min_length=1)
+    authors_zh: str | None = Field(default=None)
     journal: str | None = Field(default=None, max_length=256)
     year: int | None = Field(default=None, ge=1000, le=3000)
     doi: str | None = Field(default=None, max_length=256)
     pmid: str | None = Field(default=None, max_length=32)
     abstract: str | None = None
+    abstract_zh: str | None = None
     is_featured: bool | None = None
 
     @field_validator("doi")
@@ -188,6 +198,41 @@ class StaticPageDetailResponse(StaticPageResponse):
     author_name: str | None = None
     published_at: datetime | None = None
     current_version: int = 1
+
+
+class StaticPageMigrationDryRunRequest(BaseModel):
+    """Optional unique StaticPage slug selection for a non-mutating preview."""
+
+    slugs: list[
+        Annotated[
+            str,
+            Field(min_length=1, max_length=256, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$"),
+        ]
+    ] | None = Field(default=None, max_length=200)
+
+    @field_validator("slugs")
+    @classmethod
+    def _reject_duplicate_slugs(cls, value: list[str] | None) -> list[str] | None:
+        if value is not None and len(set(value)) != len(value):
+            raise ValueError("slugs must not contain duplicates")
+        return value
+
+
+class StaticPageMigrationItemResponse(BaseModel):
+    static_page_id: int
+    slug: str
+    route: str
+    outcome: str
+    error_code: str | None = None
+    message: str | None = None
+
+
+class StaticPageMigrationDryRunResponse(BaseModel):
+    dry_run: bool
+    created: int
+    skipped: int
+    invalid: int
+    items: list[StaticPageMigrationItemResponse] = Field(default_factory=list)
 
 
 class ContentVersionResponse(BaseModel):

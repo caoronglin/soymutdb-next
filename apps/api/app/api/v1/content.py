@@ -25,7 +25,7 @@ from ...schemas.content import (
 )
 from ...services.cache import get_or_set
 from ...services.content_snapshot_service import ContentSnapshotService
-from ...utils.s3 import generate_presigned_url, parse_s3_path
+from ...utils.s3 import generate_presigned_url
 
 router = APIRouter(prefix="/content", tags=["content"])
 
@@ -47,7 +47,7 @@ async def content_snapshot(
 
     Frozen contract in ``docs/design/static-content-richtext-2026-08.md``
     §4.1: schema_version/generated_at/news{source_total,included_total,
-    truncated,items}/news_detail{slug: detail|null}/about.
+    truncated,items}/news_detail{slug: detail|null}/about/publications.
 
     Release-aware: pass ``release_id`` (and optionally
     ``page_definition_version``) to build an immutable, release-pinned
@@ -144,7 +144,7 @@ async def list_publications(
     """List publications."""
     result = await db.execute(
         select(Publication)
-        .order_by(Publication.year.desc())
+        .order_by(Publication.year.desc().nullslast(), Publication.id.desc())
         .limit(limit)
     )
     return [_pub_to_response(p) for p in result.scalars().all()]
@@ -267,12 +267,15 @@ def _pub_to_response(p: Publication) -> PublicationResponse:
     return PublicationResponse(
         id=str(p.id),
         title=p.title,
+        title_zh=p.title_zh,
         authors=p.authors,
+        authors_zh=p.authors_zh,
         journal=p.journal,
         year=p.year,
         doi=p.doi,
         pmid=p.pmid,
         abstract=p.abstract,
+        abstract_zh=p.abstract_zh,
         is_featured=p.is_featured,
         created_at=p.created_at,
     )

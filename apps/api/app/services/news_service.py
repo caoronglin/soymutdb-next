@@ -21,15 +21,17 @@ import hashlib
 import hmac
 import time
 from datetime import UTC, datetime
+from uuid import UUID
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.config import get_settings
-from ..core.exceptions import ConflictError, NotFoundError
+from ..core.exceptions import ConflictError, NotFoundError, ValidationError
 from ..core.sanitize import sanitize_rich_html
 from ..models.content import NewsArticle
+from ..models.media import MediaAsset, MediaAssetStatus
 from ..schemas.news import (
     CarouselGroupResponse,
     NewsCreate,
@@ -41,6 +43,7 @@ from ..schemas.news import (
     NewsSummaryResponse,
     NewsUpdate,
 )
+from .media_service import validate_public_media_url
 
 #: Preview token lifetime (seconds) – 15 minutes per the operations plan.
 PREVIEW_TTL_SECONDS = 900
@@ -62,6 +65,33 @@ def _is_visible(article: NewsArticle, *, now: datetime | None = None) -> bool:
     if article.visible_to is not None and article.visible_to < now:
         return False
     return True
+
+
+async def _resolve_cover(
+    db: AsyncSession,
+    *,
+    asset_id: UUID | None,
+    cover_url: str | None,
+    alt_text: str | None,
+) -> tuple[UUID | None, str | None, str | None]:
+    """Resolve a library asset or validate a legacy HTTPS cover URL."""
+    if asset_id is not None:
+        asset = await db.scalar(
+            select(MediaAsset).where(
+                MediaAsset.id == asset_id,
+                MediaAsset.status == MediaAssetStatus.READY.value,
+            )
+        )
+        if asset is None:
+            raise ValidationError("cover_asset_id must reference a ready media asset")
+        effective_alt = (alt_text or asset.alt_text or "").strip() or None
+        if not effective_alt:
+            raise ValidationError("cover_alt_text is required for a cover asset")
+        return asset.id, asset.public_url, effective_alt
+    resolved_url = validate_public_media_url(cover_url)
+    if resolved_url is None:
+        return None, None, None
+    return None, resolved_url, (alt_text or "").strip() or None
 
 
 # ---------------------------------------------------------------------------
@@ -317,6 +347,12 @@ class NewsService:
         ``published_at``.
         """
         published = payload.status == NewsStatus.PUBLISHED
+        cover_asset_id, cover_url, cover_alt_text = await _resolve_cover(
+            db,
+            asset_id=payload.cover_asset_id,
+            cover_url=payload.cover_url,
+            alt_text=payload.cover_alt_text,
+        )
         article = NewsArticle(
             title_en=payload.title_en,
             title_zh=payload.title_zh,
@@ -328,7 +364,9 @@ class NewsService:
             ),
             slug=payload.slug,
             category=payload.category,
-            cover_url=payload.cover_url,
+            cover_asset_id=cover_asset_id,
+            cover_url=cover_url,
+            cover_alt_text=cover_alt_text,
             featured_sort=payload.featured_sort,
             carousel_group=payload.carousel_group,
             carousel_sort=payload.carousel_sort,
@@ -383,7 +421,6 @@ class NewsService:
         for field in (
             "title_zh",
             "category",
-            "cover_url",
             "carousel_group",
             "visible_from",
             "visible_to",
@@ -399,6 +436,52 @@ class NewsService:
                 else None
             )
 
+        # A library asset is canonical. The legacy URL path remains available
+        # for older integrations, but unsafe schemes and storage URLs are rejected.
+        if "cover_asset_id" in provided:
+            if payload.cover_asset_id is None and payload.cover_url:
+                # Existing integrations may send an explicit null asset id
+                # alongside their still-valid legacy HTTPS URL.
+                article.cover_asset_id = None
+                article.cover_url = validate_public_media_url(payload.cover_url)
+                article.cover_alt_text = (
+                    (payload.cover_alt_text or "").strip() or None
+                    if "cover_alt_text" in provided
+                    else None
+                )
+            elif payload.cover_asset_id is None:
+                article.cover_asset_id = None
+                article.cover_url = None
+                article.cover_alt_text = None
+            else:
+                resolved_id, resolved_url, resolved_alt = await _resolve_cover(
+                    db,
+                    asset_id=payload.cover_asset_id,
+                    cover_url=None,
+                    alt_text=(
+                        payload.cover_alt_text
+                        if "cover_alt_text" in provided
+                        else article.cover_alt_text
+                    ),
+                )
+                article.cover_asset_id = resolved_id
+                article.cover_url = resolved_url
+                article.cover_alt_text = resolved_alt
+        elif "cover_url" in provided:
+            article.cover_asset_id = None
+            article.cover_url = validate_public_media_url(payload.cover_url)
+            article.cover_alt_text = (
+                (payload.cover_alt_text or "").strip() or None
+                if payload.cover_url
+                else None
+            )
+        if "cover_alt_text" in provided and "cover_asset_id" not in provided:
+            article.cover_alt_text = (
+                (payload.cover_alt_text or "").strip() or None
+                if article.cover_url
+                else None
+            )
+
         # status wins when both are supplied (status is the source of truth).
         if payload.status is not None:
             self._apply_status(article, payload.status)
@@ -407,6 +490,13 @@ class NewsService:
                 article,
                 NewsStatus.PUBLISHED if payload.is_published else NewsStatus.DRAFT,
             )
+
+        if (
+            article.visible_from is not None
+            and article.visible_to is not None
+            and article.visible_from >= article.visible_to
+        ):
+            raise ValidationError("visible_from must be earlier than visible_to")
 
         try:
             await db.commit()
@@ -465,3 +555,4 @@ class NewsService:
                 article.published_at = _utcnow()
         else:
             article.is_published = False
+            article.published_at = None

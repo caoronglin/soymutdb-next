@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query, Request, Response, status
 from sqlalchemy import and_, func, select
@@ -19,8 +19,11 @@ from ...schemas.content import (
     PageStatus,
     StaticPageCreate,
     StaticPageDetailResponse,
+    StaticPageMigrationDryRunRequest,
+    StaticPageMigrationDryRunResponse,
     StaticPageUpdate,
 )
+from ...services.static_page_migration_service import migrate_static_pages
 from .deps import get_current_user, get_user_roles
 
 router = APIRouter(prefix="/admin/content", tags=["admin-content"])
@@ -42,6 +45,20 @@ async def _get_current_version(db: AsyncSession, page_id: int) -> int:
     )
     current = result.scalar_one_or_none()
     return int(current) if current is not None else 0
+
+
+async def _get_current_versions(
+    db: AsyncSession, page_ids: list[int]
+) -> dict[int, int]:
+    """Load current version numbers for a page list in one grouped query."""
+    if not page_ids:
+        return {}
+    result = await db.execute(
+        select(ContentVersion.page_id, func.max(ContentVersion.version))
+        .where(ContentVersion.page_id.in_(page_ids))
+        .group_by(ContentVersion.page_id)
+    )
+    return {page_id: int(version) for page_id, version in result.all() if version is not None}
 
 
 def _page_to_detail_response(
@@ -128,13 +145,42 @@ async def list_pages(
     result = await db.execute(stmt)
     pages = result.scalars().all()
 
-    items: list[StaticPageDetailResponse] = []
-    for p in pages:
-        cv = await _get_current_version(db, p.id)
-        items.append(_page_to_detail_response(p, cv))
+    current_versions = await _get_current_versions(db, [p.id for p in pages])
+    items = [_page_to_detail_response(p, current_versions.get(p.id, 0)) for p in pages]
 
     return {"items": items, "total": total}
 
+
+
+@router.post(
+    "/pages/migrate-to-page-builder/dry-run",
+    response_model=StaticPageMigrationDryRunResponse,
+)
+async def dry_run_page_builder_migration(
+    payload: StaticPageMigrationDryRunRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StaticPageMigrationDryRunResponse:
+    """Preview a StaticPage migration without mutating source or target rows."""
+    _require_admin(current_user)
+    report = await migrate_static_pages(db, dry_run=True, slugs=payload.slugs)
+    return StaticPageMigrationDryRunResponse(
+        dry_run=report.dry_run,
+        created=report.created,
+        skipped=report.skipped,
+        invalid=report.invalid,
+        items=[
+            {
+                "static_page_id": item.static_page_id,
+                "slug": item.slug,
+                "route": item.route,
+                "outcome": item.outcome,
+                "error_code": item.error_code,
+                "message": item.message,
+            }
+            for item in report.items
+        ],
+    )
 
 # ---------------------------------------------------------------------------
 # 2. Get a single page
@@ -178,7 +224,7 @@ async def create_page(
 
     published_at: datetime | None = None
     if payload.status == PageStatus.PUBLISHED:
-        published_at = datetime.now(timezone.utc)
+        published_at = datetime.now(datetime.UTC)
 
     page = StaticPage(
         slug=payload.slug,
@@ -335,7 +381,7 @@ async def publish_page(
 
     page.status = PageStatus.PUBLISHED.value
     if page.published_at is None:
-        page.published_at = datetime.now(timezone.utc)
+        page.published_at = datetime.now(datetime.UTC)
     await db.commit()
     await db.refresh(page)
 

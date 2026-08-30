@@ -25,6 +25,8 @@ export default function NewsNewPage() {
         slug: values.slug,
         category: values.category || null,
         cover_url: values.cover_url || null,
+        cover_asset_id: values.cover_asset_id || null,
+        cover_alt_text: values.cover_alt_text || null,
         featured_sort: values.featured_sort ?? 0,
         carousel_group: values.carousel_group || null,
         carousel_sort: values.carousel_sort ?? 0,

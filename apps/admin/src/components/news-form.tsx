@@ -12,6 +12,7 @@ import { Button, DatePicker, Form, Input, InputNumber, Select, Space } from "../
 import dayjs from "dayjs";
 import type { NewsStatus } from "@soymutdb/api-client";
 import FileUpload from "./file-upload";
+import { MediaPicker } from "./media-picker";
 import { RichEditor } from "./rich-editor/rich-editor";
 
 /** Form values (Dayjs for the two datetime fields). */
@@ -23,6 +24,8 @@ export interface NewsFormValues {
   slug: string;
   category?: string;
   cover_url?: string;
+  cover_asset_id?: string;
+  cover_alt_text?: string;
   status: NewsStatus;
   featured_sort: number;
   carousel_group?: string;
@@ -111,20 +114,88 @@ export function NewsForm({
           placeholder={t("admin.news.form.categoryPlaceholder")}
         />
       </Form.Item>
+      <Form.Item name="cover_url" hidden>
+        <Input />
+      </Form.Item>
+      <Form.Item name="cover_asset_id" hidden>
+        <Input />
+      </Form.Item>
       <Form.Item
-        name="cover_url"
         label={t("admin.news.form.coverUrl")}
         tooltip={t("admin.news.form.coverUrlHelp")}
         extra={t("admin.news.form.coverUrlUploadHint")}
       >
-        <FileUpload purpose="news" maxSizeMB={10} accept="image/*" />
+        <Form.Item noStyle shouldUpdate>
+          {({ getFieldValue, setFieldsValue }) => {
+            const coverUrl = getFieldValue("cover_url") as string | undefined;
+            const coverAssetId = getFieldValue("cover_asset_id") as string | undefined;
+            const coverAltText = getFieldValue("cover_alt_text") as string | undefined;
+            return (
+              <Space direction="vertical" size="middle" className="w-full">
+                <MediaPicker
+                  value={coverAssetId}
+                  previewUrl={coverUrl}
+                  previewAlt={coverAltText}
+                  purpose="news"
+                  disabled={submitting}
+                  onChange={(asset) => {
+                    setFieldsValue({
+                      cover_asset_id: asset?.id ?? null,
+                      cover_url: asset?.public_url ?? null,
+                      cover_alt_text: asset?.alt_text ?? null,
+                    });
+                  }}
+                />
+                <FileUpload
+                  value={coverUrl}
+                  purpose="news"
+                  maxSizeMB={10}
+                  accept="image/jpeg,image/png,image/webp"
+                  buttonText={t("admin.media.picker.uploadNew")}
+                  onUploaded={(asset) => {
+                    setFieldsValue({
+                      cover_asset_id: asset.id,
+                      cover_url: asset.public_url,
+                      cover_alt_text: asset.alt_text ?? null,
+                    });
+                  }}
+                  onChange={(next) => {
+                    const url = Array.isArray(next) ? next[0] : next;
+                    setFieldsValue({
+                      cover_url: url ?? null,
+                      ...(url ? {} : { cover_asset_id: null, cover_alt_text: null }),
+                    });
+                  }}
+                />
+                <Form.Item
+                  name="cover_alt_text"
+                  label={t("admin.news.form.coverAltText")}
+                  extra={t("admin.news.form.coverAltTextHelp")}
+                  rules={[
+                    ({ getFieldValue: readField }) => ({
+                      validator(_, text) {
+                        const assetId = readField("cover_asset_id");
+                        if (assetId && !String(text ?? "").trim()) {
+                          return Promise.reject(new Error(t("admin.news.form.coverAltTextRequired")));
+                        }
+                        return Promise.resolve();
+                      },
+                    }),
+                  ]}
+                >
+                  <Input.TextArea rows={2} maxLength={2000} showCount />
+                </Form.Item>
+              </Space>
+            );
+          }}
+        </Form.Item>
       </Form.Item>
       <Form.Item
         name="status"
         label={t("admin.news.form.status")}
         rules={[{ required: true }]}
       >
-        <Select options={STATUS_OPTIONS} />
+        <Select options={STATUS_OPTIONS.map((opt) => ({ value: opt.value, label: t(`admin.news.status.${opt.value}`) }))} />
       </Form.Item>
       <Form.Item
         name="featured_sort"

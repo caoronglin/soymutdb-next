@@ -20,8 +20,9 @@ is kept in sync by the service layer (double-write, migration 0010).
 from __future__ import annotations
 
 from datetime import datetime
+from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from ..core.compat import StrEnum
 
@@ -53,6 +54,8 @@ class NewsSummaryResponse(BaseModel):
     slug: str
     category: str | None = None
     cover_url: str | None = None
+    cover_asset_id: UUID | None = None
+    cover_alt_text: str | None = None
     featured_sort: int = 0
     carousel_group: str | None = None
     carousel_sort: int = 0
@@ -115,6 +118,8 @@ class NewsCreate(BaseModel):
     slug: str = Field(..., pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
     category: str | None = Field(default=None, max_length=64)
     cover_url: str | None = Field(default=None, max_length=1024)
+    cover_asset_id: UUID | None = None
+    cover_alt_text: str | None = Field(default=None, max_length=2000)
     featured_sort: int = Field(default=0, ge=0)
     carousel_group: str | None = Field(default=None, max_length=64)
     carousel_sort: int = Field(default=0, ge=0)
@@ -122,6 +127,16 @@ class NewsCreate(BaseModel):
     visible_from: datetime | None = None
     visible_to: datetime | None = None
     is_published: bool = False
+
+    @model_validator(mode="after")
+    def _visibility_window_is_ordered(self):
+        if (
+            self.visible_from is not None
+            and self.visible_to is not None
+            and self.visible_from >= self.visible_to
+        ):
+            raise ValueError("visible_from must be earlier than visible_to")
+        return self
 
 
 class NewsUpdate(BaseModel):
@@ -134,6 +149,8 @@ class NewsUpdate(BaseModel):
     )
     category: str | None = Field(default=None, max_length=64)
     cover_url: str | None = Field(default=None, max_length=1024)
+    cover_asset_id: UUID | None = None
+    cover_alt_text: str | None = Field(default=None, max_length=2000)
     featured_sort: int | None = Field(default=None, ge=0)
     carousel_group: str | None = Field(default=None, max_length=64)
     carousel_sort: int | None = Field(default=None, ge=0)
@@ -141,6 +158,16 @@ class NewsUpdate(BaseModel):
     visible_from: datetime | None = None
     visible_to: datetime | None = None
     is_published: bool | None = None
+
+    @model_validator(mode="after")
+    def _visibility_window_is_ordered(self):
+        if (
+            self.visible_from is not None
+            and self.visible_to is not None
+            and self.visible_from >= self.visible_to
+        ):
+            raise ValueError("visible_from must be earlier than visible_to")
+        return self
 
 
 class NewsReorderItem(BaseModel):

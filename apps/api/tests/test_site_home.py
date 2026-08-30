@@ -7,6 +7,7 @@ rich-HTML welcome block).  Uses a mocked DB session — no PostgreSQL required
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -25,17 +26,23 @@ def _make_mock_session():
     return session
 
 
-def _make_client(mock_session):
-    """Build an ASGI test client for the site router with overridden DB."""
+def _make_client(mock_session, current_user=None):
+    """Build an ASGI test client for the site router with overridden dependencies."""
+    from app.api.v1.deps import get_optional_user
     from app.api.v1.site import router
 
     app = FastAPI()
+    from app.core.exceptions import SoyMutDBError, soy_mut_db_exception_handler
+
+    app.add_exception_handler(SoyMutDBError, soy_mut_db_exception_handler)
     app.include_router(router, prefix="/api/v1")
 
     async def override_get_db():
         yield mock_session
 
     app.dependency_overrides[get_db] = override_get_db
+    if current_user is not None:
+        app.dependency_overrides[get_optional_user] = lambda: current_user
     transport = ASGITransport(app=app)
     return AsyncClient(transport=transport, base_url="http://test")
 
@@ -84,3 +91,50 @@ class TestSiteHome:
         assert response.status_code == 200
         body = response.json()
         assert body == {"welcome_en": None, "welcome_zh": None}
+
+    async def test_internal_variant_requires_authentication(self):
+        """Internal content cannot be read by an anonymous request."""
+        mock_session = _make_mock_session()
+
+        async with _make_client(mock_session) as client:
+            response = await client.get("/api/v1/site/home?variant=internal")
+
+        assert response.status_code == 401
+        assert response.json()["error"]["code"] == "authentication_failed"
+
+    async def test_external_variant_sets_public_cache_policy(self):
+        mock_session = _make_mock_session()
+
+        async with _make_client(mock_session) as client:
+            response = await client.get("/api/v1/site/home?variant=external")
+
+        assert response.status_code == 200
+        assert response.headers["cache-control"] == (
+            "public, max-age=60, stale-while-revalidate=300"
+        )
+
+
+    async def test_internal_variant_is_private_and_not_shared_cacheable(self):
+        mock_session = _make_mock_session()
+        viewer = SimpleNamespace(
+            role_rel=SimpleNamespace(name="viewer"),
+            is_superuser=False,
+        )
+
+        async with _make_client(mock_session, viewer) as client:
+            response = await client.get("/api/v1/site/home?variant=internal")
+
+        assert response.status_code == 200
+        assert response.headers["cache-control"] == "private, no-store"
+        assert response.headers["vary"] == "Authorization"
+
+def test_internal_variant_accepts_viewer_role():
+    from app.api.v1.site import _ensure_variant_access
+    from app.core.site_variant import SiteVariant
+
+    viewer = SimpleNamespace(
+        role_rel=SimpleNamespace(name="viewer"),
+        is_superuser=False,
+    )
+
+    _ensure_variant_access(SiteVariant.INTERNAL, viewer)

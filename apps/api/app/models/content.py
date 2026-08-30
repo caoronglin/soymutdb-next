@@ -119,7 +119,16 @@ class NewsArticle(Base, TimestampMixin):
         String(256), unique=True, nullable=False, index=True
     )
     category: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # cover_url remains for backwards compatibility; new editors should bind
+    # cover_asset_id so the media library is the canonical source.
+    cover_asset_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("media_assets.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     cover_url: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    cover_alt_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     featured_sort: Mapped[int] = mapped_column(
         Integer, default=0, server_default="0", nullable=False
     )
@@ -166,12 +175,15 @@ class Publication(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     title: Mapped[str] = mapped_column(String(1024), nullable=False)
+    title_zh: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     authors: Mapped[str] = mapped_column(Text, nullable=False)
+    authors_zh: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     journal: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
     year: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     doi: Mapped[Optional[str]] = mapped_column(String(256), nullable=True, unique=True)
     pmid: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, unique=True)
     abstract: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    abstract_zh: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_featured: Mapped[bool] = mapped_column(
         default=False, server_default="false", nullable=False
     )
