@@ -39,7 +39,9 @@ jobs:
       VITE_JBROWSE_BASE_URL: https://jbrowse.soymutdb.test
     permissions:
       contents: read
-      actions: write
+      # Artifact upload/download use the Actions runtime token; this workflow
+      # never cancels or mutates workflow runs, including on PR code.
+      actions: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
@@ -80,7 +82,9 @@ jobs:
           --health-interval 10s --health-timeout 5s --health-retries 10
     permissions:
       contents: read
-      actions: write
+      # Artifact upload/download use the Actions runtime token; this workflow
+      # never cancels or mutates workflow runs, including on PR code.
+      actions: read
     env:
       SOYMUTDB_APP_ENV: dev
       SOYMUTDB_DEPLOYMENT_MODE: baseline
@@ -139,7 +143,9 @@ jobs:
     runs-on: windows-latest
     permissions:
       contents: read
-      actions: write
+      # Artifact upload/download use the Actions runtime token; this workflow
+      # never cancels or mutates workflow runs, including on PR code.
+      actions: read
     env:
       SOYMUTDB_APP_ENV: dev
       SOYMUTDB_DEPLOYMENT_MODE: baseline
@@ -241,7 +247,9 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
-      actions: write
+      # Artifact upload/download use the Actions runtime token; this workflow
+      # never cancels or mutates workflow runs, including on PR code.
+      actions: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1

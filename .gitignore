@@ -189,3 +189,15 @@ apps/api/.venv
 
 # Local no-Docker deployment data (conda envs, data plane, logs) — created by the local deploy flow
 .deploy/
+
+# Workspace-local Mamba validation runtime (PostgreSQL binaries, data and logs)
+.mamba-root/
+.validation/
+
+# Local service state and generated validation output (never release inputs)
+dump.rdb
+appendonlydir/
+apps/worker/celerybeat-schedule
+e2e/visual-artifacts/
+eslint_out.txt
+tsc_out.txt

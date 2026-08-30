@@ -39,9 +39,14 @@ jobs:
     name: Online smoke test (gh-pages)
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # workflow_run fires on BOTH success and failure of pages.yml — only
-    # smoke-test when the deployment actually succeeded.
-    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    # workflow_run fires for every Pages workflow conclusion. Only smoke-test a
+    # successful Pages deployment triggered from this repository's main branch;
+    # this prevents a no-op foreign/non-main Pages run from testing an old site.
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4

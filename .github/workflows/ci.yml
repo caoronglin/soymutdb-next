@@ -91,6 +91,11 @@ jobs:
       - name: Install dependencies (frozen lockfile)
         run: pnpm install --frozen-lockfile
 
+      - name: i18n locale key parity (hard gate)
+        run: |
+          pnpm --filter @soymutdb/i18n check:locale-keys -- --self-test
+          pnpm --filter @soymutdb/i18n check:locale-keys
+
       - name: Build all apps (hard gate)
         env:
           # CI has no published release API.  Use the explicit demo fixture for
@@ -145,6 +150,15 @@ jobs:
           python -m venv apps/api/.venv
           apps/api/.venv/bin/pip install --quiet -e packages/jobs-py
           apps/api/.venv/bin/pip install --quiet -e apps/api
+
+      - name: Page Builder registry contract check (hard gate)
+        run: python3 scripts/check_page_registry.py
+
+      - name: Web query-key architecture check (hard gate)
+        run: python3 scripts/check_web_query_keys.py
+
+      - name: Admin content architecture check (hard gate)
+        run: python3 scripts/check_admin_content_architecture.py
 
       - name: API client contract check (hard gate)
         run: pnpm --filter @soymutdb/api-client check:contract
@@ -240,6 +254,11 @@ jobs:
         continue-on-error: true
         working-directory: apps/api
         run: .venv/bin/ruff check app
+
+      - name: Architecture guard (hard gate)
+        run: |
+          apps/api/.venv/bin/python scripts/check_architecture.py --self-test
+          apps/api/.venv/bin/python scripts/check_architecture.py
 
       # testcontainers-postgres boots a real postgres:16-alpine container on the
       # runner's docker daemon (ubuntu-latest ships docker). The A0
