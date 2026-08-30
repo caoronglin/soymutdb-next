@@ -1430,7 +1430,7 @@ export interface paths {
          *
          *     Frozen contract in ``docs/design/static-content-richtext-2026-08.md``
          *     §4.1: schema_version/generated_at/news{source_total,included_total,
-         *     truncated,items}/news_detail{slug: detail|null}/about.
+         *     truncated,items}/news_detail{slug: detail|null}/about/publications.
          *
          *     Release-aware: pass ``release_id`` (and optionally
          *     ``page_definition_version``) to build an immutable, release-pinned
@@ -2175,6 +2175,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/content/pages/migrate-to-page-builder/dry-run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dry Run Page Builder Migration
+         * @description Preview a StaticPage migration without mutating source or target rows.
+         */
+        post: operations["dry_run_page_builder_migration_api_v1_admin_content_pages_migrate_to_page_builder_dry_run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/content/pages/{page_id}": {
         parameters: {
             query?: never;
@@ -2301,6 +2321,42 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/media": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Media */
+        get: operations["list_media_api_v1_admin_media_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/media/{asset_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Media */
+        get: operations["read_media_api_v1_admin_media__asset_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Media */
+        delete: operations["delete_media_api_v1_admin_media__asset_id__delete"];
+        options?: never;
+        head?: never;
+        /** Patch Media */
+        patch: operations["patch_media_api_v1_admin_media__asset_id__patch"];
         trace?: never;
     };
     "/api/v1/admin/news": {
@@ -2885,7 +2941,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List Drafts
+         * @description List persisted Import Studio drafts for dashboard resume only.
+         *
+         *     This endpoint never creates or validates a draft and exposes no mutable
+         *     source metadata, so dashboard discovery cannot fabricate an import source.
+         */
+        get: operations["list_drafts_api_v1_admin_imports_studio_drafts_get"];
         put?: never;
         /**
          * Create Draft
@@ -3436,7 +3499,7 @@ export interface paths {
         };
         /**
          * Get About Content
-         * @description Return the editable "About us" content (bilingual, optional).
+         * @description Return bilingual About content for the explicitly selected site.
          */
         get: operations["get_about_content_api_v1_site_about_get"];
         put?: never;
@@ -3456,14 +3519,53 @@ export interface paths {
         };
         /**
          * Get Home Content
-         * @description Return the editable homepage welcome block (bilingual, optional).
-         *
-         *     Values are rich HTML authored by administrators.  The generic
-         *     ``PUT /admin/settings/{section}`` endpoint only sanitizes its
-         *     ``content_*`` keys, so every value is re-sanitized here on read —
-         *     defence in depth against rows written by any other path.
+         * @description Return the variant-specific homepage welcome block.
          */
         get: operations["get_home_content_api_v1_site_home_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/site/footer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Footer Content
+         * @description Return the variant-specific footer, with registered defaults.
+         */
+        get: operations["get_footer_content_api_v1_site_footer_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/site/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Site Content
+         * @description Return all editable frontend labels for one explicit site variant.
+         *
+         *     The response is intentionally flat for compatibility with the existing
+         *     useSiteContent contract. The namespace and authorization boundary remain
+         *     server-side, so variant=internal cannot be enumerated anonymously.
+         */
+        get: operations["get_site_content_api_v1_site_content_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5006,6 +5108,26 @@ export interface components {
             /** Mappings */
             mappings?: components["schemas"]["FieldMappingItem"][];
         };
+        /**
+         * FooterContentResponse
+         * @description Editable footer contact block backed by ``system_settings``.
+         *
+         *     Values are plain text (``footer.*`` keys). A fresh deployment without the
+         *     rows returns the registered defaults so the public footer renders without
+         *     a separate fallback.
+         */
+        FooterContentResponse: {
+            /** Contact Person */
+            contact_person?: string | null;
+            /** Contact Phone */
+            contact_phone?: string | null;
+            /** Contact Email */
+            contact_email?: string | null;
+            /** Copyright */
+            copyright?: string | null;
+            /** Address */
+            address?: string | null;
+        };
         /** GeneDetail */
         GeneDetail: {
             /** Id */
@@ -5428,6 +5550,31 @@ export interface components {
             /** Column Count */
             column_count: number;
         };
+        /** ImportDraftListItemResponse */
+        ImportDraftListItemResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Dataset Version Id
+             * Format: uuid
+             */
+            dataset_version_id: string;
+            /** Module Key */
+            module_key?: string | null;
+            /** Filename */
+            filename: string;
+            /** Row Count */
+            row_count: number;
+            /** Column Count */
+            column_count: number;
+            /** Status */
+            status: string;
+            /** Updated At */
+            updated_at?: unknown | null;
+        };
         /** ImportDraftResponse */
         ImportDraftResponse: {
             /**
@@ -5690,6 +5837,98 @@ export interface components {
             /** Marked */
             marked: number;
         };
+        /** MediaAssetListResponse */
+        MediaAssetListResponse: {
+            /** Items */
+            items: components["schemas"]["MediaAssetResponse"][];
+            /** Total */
+            total: number;
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+        };
+        /** MediaAssetResponse */
+        MediaAssetResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Object Key */
+            object_key: string;
+            /** Public Url */
+            public_url: string;
+            /** Original Filename */
+            original_filename: string;
+            /** Purpose */
+            purpose: string;
+            /** Content Type */
+            content_type: string;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Checksum Sha256 */
+            checksum_sha256: string;
+            /** Width */
+            width?: number | null;
+            /** Height */
+            height?: number | null;
+            /** Alt Text */
+            alt_text?: string | null;
+            /** Caption */
+            caption?: string | null;
+            /** Credit */
+            credit?: string | null;
+            /**
+             * Is Decorative
+             * @default false
+             */
+            is_decorative: boolean;
+            status: components["schemas"]["MediaAssetStatus"];
+            /**
+             * Uploaded By
+             * Format: uuid
+             */
+            uploaded_by: string;
+            /** Verified At */
+            verified_at?: string | null;
+            /** Archived At */
+            archived_at?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Usage Count
+             * @default 0
+             */
+            usage_count: number;
+        };
+        /**
+         * MediaAssetStatus
+         * @enum {string}
+         */
+        MediaAssetStatus: "pending" | "ready" | "archived";
+        /**
+         * MediaAssetUpdateRequest
+         * @description Editable accessibility metadata; object identity is immutable.
+         */
+        MediaAssetUpdateRequest: {
+            /** Alt Text */
+            alt_text?: string | null;
+            /** Caption */
+            caption?: string | null;
+            /** Credit */
+            credit?: string | null;
+            /** Is Decorative */
+            is_decorative?: boolean | null;
+        };
         /** MultipartCompletePathRequest */
         MultipartCompletePathRequest: {
             /** Object Key */
@@ -5824,6 +6063,10 @@ export interface components {
             category?: string | null;
             /** Cover Url */
             cover_url?: string | null;
+            /** Cover Asset Id */
+            cover_asset_id?: string | null;
+            /** Cover Alt Text */
+            cover_alt_text?: string | null;
             /**
              * Featured Sort
              * @default 0
@@ -5865,6 +6108,10 @@ export interface components {
             category?: string | null;
             /** Cover Url */
             cover_url?: string | null;
+            /** Cover Asset Id */
+            cover_asset_id?: string | null;
+            /** Cover Alt Text */
+            cover_alt_text?: string | null;
             /**
              * Featured Sort
              * @default 0
@@ -5995,6 +6242,10 @@ export interface components {
             category?: string | null;
             /** Cover Url */
             cover_url?: string | null;
+            /** Cover Asset Id */
+            cover_asset_id?: string | null;
+            /** Cover Alt Text */
+            cover_alt_text?: string | null;
             /**
              * Featured Sort
              * @default 0
@@ -6043,6 +6294,10 @@ export interface components {
             category?: string | null;
             /** Cover Url */
             cover_url?: string | null;
+            /** Cover Asset Id */
+            cover_asset_id?: string | null;
+            /** Cover Alt Text */
+            cover_alt_text?: string | null;
             /** Featured Sort */
             featured_sort?: number | null;
             /** Carousel Group */
@@ -6510,8 +6765,12 @@ export interface components {
         PublicationCreate: {
             /** Title */
             title: string;
+            /** Title Zh */
+            title_zh?: string | null;
             /** Authors */
             authors: string;
+            /** Authors Zh */
+            authors_zh?: string | null;
             /** Journal */
             journal?: string | null;
             /** Year */
@@ -6522,6 +6781,8 @@ export interface components {
             pmid?: string | null;
             /** Abstract */
             abstract?: string | null;
+            /** Abstract Zh */
+            abstract_zh?: string | null;
             /**
              * Is Featured
              * @default false
@@ -6592,8 +6853,12 @@ export interface components {
         PublicationUpdate: {
             /** Title */
             title?: string | null;
+            /** Title Zh */
+            title_zh?: string | null;
             /** Authors */
             authors?: string | null;
+            /** Authors Zh */
+            authors_zh?: string | null;
             /** Journal */
             journal?: string | null;
             /** Year */
@@ -6604,6 +6869,8 @@ export interface components {
             pmid?: string | null;
             /** Abstract */
             abstract?: string | null;
+            /** Abstract Zh */
+            abstract_zh?: string | null;
             /** Is Featured */
             is_featured?: boolean | null;
         };
@@ -6919,7 +7186,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "string" | "integer" | "boolean" | "enum" | "email" | "url";
+            kind: "string" | "color" | "integer" | "boolean" | "enum" | "email" | "url";
             default: components["schemas"]["SettingValue"] | null;
             /**
              * Permission
@@ -7080,6 +7347,12 @@ export interface components {
             /** Request Id */
             request_id?: string | null;
         };
+        /**
+         * SiteVariant
+         * @description The two independently generated SoyMutDB site artifacts.
+         * @enum {string}
+         */
+        SiteVariant: "external" | "internal";
         /** StaticPageCreate */
         StaticPageCreate: {
             /** Slug */
@@ -7153,6 +7426,42 @@ export interface components {
              * @default 1
              */
             current_version: number;
+        };
+        /**
+         * StaticPageMigrationDryRunRequest
+         * @description Optional unique StaticPage slug selection for a non-mutating preview.
+         */
+        StaticPageMigrationDryRunRequest: {
+            /** Slugs */
+            slugs?: string[] | null;
+        };
+        /** StaticPageMigrationDryRunResponse */
+        StaticPageMigrationDryRunResponse: {
+            /** Dry Run */
+            dry_run: boolean;
+            /** Created */
+            created: number;
+            /** Skipped */
+            skipped: number;
+            /** Invalid */
+            invalid: number;
+            /** Items */
+            items?: components["schemas"]["StaticPageMigrationItemResponse"][];
+        };
+        /** StaticPageMigrationItemResponse */
+        StaticPageMigrationItemResponse: {
+            /** Static Page Id */
+            static_page_id: number;
+            /** Slug */
+            slug: string;
+            /** Route */
+            route: string;
+            /** Outcome */
+            outcome: string;
+            /** Error Code */
+            error_code?: string | null;
+            /** Message */
+            message?: string | null;
         };
         /** StaticPageResponse */
         StaticPageResponse: {
@@ -7880,8 +8189,12 @@ export interface components {
             id: string;
             /** Title */
             title: string;
+            /** Title Zh */
+            title_zh?: string | null;
             /** Authors */
             authors: string;
+            /** Authors Zh */
+            authors_zh?: string | null;
             /** Journal */
             journal?: string | null;
             /** Year */
@@ -7892,6 +8205,8 @@ export interface components {
             pmid?: string | null;
             /** Abstract */
             abstract?: string | null;
+            /** Abstract Zh */
+            abstract_zh?: string | null;
             /**
              * Is Featured
              * @default false
@@ -12517,6 +12832,48 @@ export interface operations {
             };
         };
     };
+    dry_run_page_builder_migration_api_v1_admin_content_pages_migrate_to_page_builder_dry_run_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaticPageMigrationDryRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaticPageMigrationDryRunResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     get_page_api_v1_admin_content_pages__page_id__get: {
         parameters: {
             query?: never;
@@ -12819,6 +13176,173 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StaticPageDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_media_api_v1_admin_media_get: {
+        parameters: {
+            query?: {
+                search?: string | null;
+                purpose?: string | null;
+                /** @description ready or archived; pending is reserved for upload sessions */
+                status?: components["schemas"]["MediaAssetStatus"];
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaAssetListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_media_api_v1_admin_media__asset_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaAssetResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    delete_media_api_v1_admin_media__asset_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    patch_media_api_v1_admin_media__asset_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MediaAssetUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaAssetResponse"];
                 };
             };
             /** @description Validation Error */
@@ -14349,6 +14873,44 @@ export interface operations {
             };
         };
     };
+    list_drafts_api_v1_admin_imports_studio_drafts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportDraftListItemResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     create_draft_api_v1_admin_imports_studio_drafts_post: {
         parameters: {
             query?: never;
@@ -15580,7 +16142,9 @@ export interface operations {
     };
     get_about_content_api_v1_site_about_get: {
         parameters: {
-            query?: never;
+            query?: {
+                variant?: components["schemas"]["SiteVariant"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -15602,7 +16166,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
             /** @description Internal Server Error */
@@ -15618,7 +16182,9 @@ export interface operations {
     };
     get_home_content_api_v1_site_home_get: {
         parameters: {
-            query?: never;
+            query?: {
+                variant?: components["schemas"]["SiteVariant"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -15640,7 +16206,89 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_footer_content_api_v1_site_footer_get: {
+        parameters: {
+            query?: {
+                variant?: components["schemas"]["SiteVariant"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FooterContentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_site_content_api_v1_site_content_get: {
+        parameters: {
+            query?: {
+                variant?: components["schemas"]["SiteVariant"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
             /** @description Internal Server Error */

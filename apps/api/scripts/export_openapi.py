@@ -33,14 +33,27 @@ def main() -> int:
         default="openapi.json",
         help="Destination JSON file (default: ./openapi.json)",
     )
+    parser.add_argument(
+        "--error-codes-output",
+        help="Optional destination for the generated error-code catalog JSON.",
+    )
     args = parser.parse_args()
 
     from app.main import app
 
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(app.openapi(), indent=2))
+    schema = app.openapi()
+    output.write_text(json.dumps(schema, indent=2))
     print(f"openapi exported -> {output}")
+
+    if args.error_codes_output:
+        from app.core.exceptions import error_code_catalog
+
+        error_codes_output = Path(args.error_codes_output)
+        error_codes_output.parent.mkdir(parents=True, exist_ok=True)
+        error_codes_output.write_text(json.dumps(error_code_catalog(), indent=2, sort_keys=True) + "\n")
+        print(f"error-code catalog exported -> {error_codes_output}")
     return 0
 
 

@@ -7,6 +7,7 @@
 
 export {
   request,
+  requestBlob,
   apiBaseUrl,
   setAuthTokens,
   clearAuth,
@@ -15,12 +16,14 @@ export {
   TimeoutPresets,
   isTimeoutError,
   withRetry,
+  type IdempotentRetryOptions,
   type RequestOptions,
 } from "./client";
 
 export {
   http,
   authRequest,
+  authRequestBlob,
   refreshAccessToken,
   restoreSession,
   onAuthLogout,
@@ -47,8 +50,11 @@ export * from "./analyses";
 export * from "./tools";
 export * from "./news";
 export * from "./site";
+export * from "./publications";
+export * from "./admin-publications";
 export * from "./admin-news";
 export * from "./admin-uploads";
+export * from "./admin-media";
 export * from "./admin-plugins";
 export * from "./admin-imports";
 export * from "./admin-import-studio";

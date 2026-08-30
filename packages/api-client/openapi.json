@@ -1689,7 +1689,7 @@
             "required": true,
             "schema": {
               "type": "integer",
-              "minimum": 0,
+              "minimum": 1,
               "title": "Start"
             }
           },
@@ -1699,7 +1699,7 @@
             "required": true,
             "schema": {
               "type": "integer",
-              "minimum": 0,
+              "minimum": 1,
               "title": "End"
             }
           },
@@ -4637,7 +4637,7 @@
           "content"
         ],
         "summary": "Content Snapshot",
-        "description": "Public content snapshot for static builds (E2-2).\n\nFrozen contract in ``docs/design/static-content-richtext-2026-08.md``\n\u00a74.1: schema_version/generated_at/news{source_total,included_total,\ntruncated,items}/news_detail{slug: detail|null}/about.\n\nRelease-aware: pass ``release_id`` (and optionally\n``page_definition_version``) to build an immutable, release-pinned\nsnapshot whose cache key differs by release.  Without an explicit\n``release_id`` the mutable active-release alias is served, for interactive\npublic reads only.\n\nAggregation is cached in Redis for 60 s (cache.py); the response carries\nan ETag so build-time fetchers can short-circuit with 304.",
+        "description": "Public content snapshot for static builds (E2-2).\n\nFrozen contract in ``docs/design/static-content-richtext-2026-08.md``\n\u00a74.1: schema_version/generated_at/news{source_total,included_total,\ntruncated,items}/news_detail{slug: detail|null}/about/publications.\n\nRelease-aware: pass ``release_id`` (and optionally\n``page_definition_version``) to build an immutable, release-pinned\nsnapshot whose cache key differs by release.  Without an explicit\n``release_id`` the mutable active-release alias is served, for interactive\npublic reads only.\n\nAggregation is cached in Redis for 60 s (cache.py); the response carries\nan ETag so build-time fetchers can short-circuit with 304.",
         "operationId": "content_snapshot_api_v1_content_snapshot_get",
         "parameters": [
           {
@@ -7380,6 +7380,63 @@
         }
       }
     },
+    "/api/v1/admin/content/pages/migrate-to-page-builder/dry-run": {
+      "post": {
+        "tags": [
+          "admin-content"
+        ],
+        "summary": "Dry Run Page Builder Migration",
+        "description": "Preview a StaticPage migration without mutating source or target rows.",
+        "operationId": "dry_run_page_builder_migration_api_v1_admin_content_pages_migrate_to_page_builder_dry_run_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StaticPageMigrationDryRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaticPageMigrationDryRunResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/admin/content/pages/{page_id}": {
       "get": {
         "tags": [
@@ -7841,6 +7898,295 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/media": {
+      "get": {
+        "tags": [
+          "admin-media"
+        ],
+        "summary": "List Media",
+        "operationId": "list_media_api_v1_admin_media_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 128
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "name": "purpose",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 32
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Purpose"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/MediaAssetStatus",
+              "description": "ready or archived; pending is reserved for upload sessions",
+              "default": "ready"
+            },
+            "description": "ready or archived; pending is reserved for upload sessions"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 24,
+              "title": "Page Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaAssetListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/media/{asset_id}": {
+      "get": {
+        "tags": [
+          "admin-media"
+        ],
+        "summary": "Read Media",
+        "operationId": "read_media_api_v1_admin_media__asset_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "asset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Asset Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaAssetResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "admin-media"
+        ],
+        "summary": "Patch Media",
+        "operationId": "patch_media_api_v1_admin_media__asset_id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "asset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Asset Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MediaAssetUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaAssetResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "admin-media"
+        ],
+        "summary": "Delete Media",
+        "operationId": "delete_media_api_v1_admin_media__asset_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "asset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Asset Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
           },
           "422": {
             "description": "Validation Error",
@@ -10208,6 +10554,55 @@
       }
     },
     "/api/v1/admin/imports/studio/drafts": {
+      "get": {
+        "tags": [
+          "admin-import-studio"
+        ],
+        "summary": "List Drafts",
+        "description": "List persisted Import Studio drafts for dashboard resume only.\n\nThis endpoint never creates or validates a draft and exposes no mutable\nsource metadata, so dashboard discovery cannot fabricate an import source.",
+        "operationId": "list_drafts_api_v1_admin_imports_studio_drafts_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ImportDraftListItemResponse"
+                  },
+                  "type": "array",
+                  "title": "Response List Drafts Api V1 Admin Imports Studio Drafts Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
       "post": {
         "tags": [
           "admin-import-studio"
@@ -12257,8 +12652,24 @@
           "site"
         ],
         "summary": "Get About Content",
-        "description": "Return the editable \"About us\" content (bilingual, optional).",
+        "description": "Return bilingual About content for the explicitly selected site.",
         "operationId": "get_about_content_api_v1_site_about_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "variant",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/SiteVariant",
+              "default": "external"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -12275,7 +12686,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -12299,8 +12710,24 @@
           "site"
         ],
         "summary": "Get Home Content",
-        "description": "Return the editable homepage welcome block (bilingual, optional).\n\nValues are rich HTML authored by administrators.  The generic\n``PUT /admin/settings/{section}`` endpoint only sanitizes its\n``content_*`` keys, so every value is re-sanitized here on read \u2014\ndefence in depth against rows written by any other path.",
+        "description": "Return the variant-specific homepage welcome block.",
         "operationId": "get_home_content_api_v1_site_home_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "variant",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/SiteVariant",
+              "default": "external"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -12317,7 +12744,127 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/site/footer": {
+      "get": {
+        "tags": [
+          "site"
+        ],
+        "summary": "Get Footer Content",
+        "description": "Return the variant-specific footer, with registered defaults.",
+        "operationId": "get_footer_content_api_v1_site_footer_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "variant",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/SiteVariant",
+              "default": "external"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FooterContentResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/site/content": {
+      "get": {
+        "tags": [
+          "site"
+        ],
+        "summary": "Get Site Content",
+        "description": "Return all editable frontend labels for one explicit site variant.\n\nThe response is intentionally flat for compatibility with the existing\nuseSiteContent contract. The namespace and authorization boundary remain\nserver-side, so variant=internal cannot be enumerated anonymously.",
+        "operationId": "get_site_content_api_v1_site_content_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "variant",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/SiteVariant",
+              "default": "external"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Get Site Content Api V1 Site Content Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -16146,6 +16693,68 @@
         "type": "object",
         "title": "FieldMappingUpdateRequest"
       },
+      "FooterContentResponse": {
+        "properties": {
+          "contact_person": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Person"
+          },
+          "contact_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Phone"
+          },
+          "contact_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Email"
+          },
+          "copyright": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Copyright"
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          }
+        },
+        "type": "object",
+        "title": "FooterContentResponse",
+        "description": "Editable footer contact block backed by ``system_settings``.\n\nValues are plain text (``footer.*`` keys). A fresh deployment without the\nrows returns the registered defaults so the public footer renders without\na separate fallback."
+      },
       "GeneDetail": {
         "properties": {
           "id": {
@@ -17270,6 +17879,66 @@
         ],
         "title": "ImportDraftCreateRequest"
       },
+      "ImportDraftListItemResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "dataset_version_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Dataset Version Id"
+          },
+          "module_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Module Key"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "row_count": {
+            "type": "integer",
+            "title": "Row Count"
+          },
+          "column_count": {
+            "type": "integer",
+            "title": "Column Count"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "updated_at": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "dataset_version_id",
+          "filename",
+          "row_count",
+          "column_count",
+          "status"
+        ],
+        "title": "ImportDraftListItemResponse"
+      },
       "ImportDraftResponse": {
         "properties": {
           "id": {
@@ -17986,6 +18655,260 @@
         "title": "MarkReadResponse",
         "description": "Number of rows flipped to read."
       },
+      "MediaAssetListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MediaAssetResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "MediaAssetListResponse"
+      },
+      "MediaAssetResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "object_key": {
+            "type": "string",
+            "title": "Object Key"
+          },
+          "public_url": {
+            "type": "string",
+            "title": "Public Url"
+          },
+          "original_filename": {
+            "type": "string",
+            "title": "Original Filename"
+          },
+          "purpose": {
+            "type": "string",
+            "title": "Purpose"
+          },
+          "content_type": {
+            "type": "string",
+            "title": "Content Type"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes"
+          },
+          "checksum_sha256": {
+            "type": "string",
+            "title": "Checksum Sha256"
+          },
+          "width": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Width"
+          },
+          "height": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Height"
+          },
+          "alt_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alt Text"
+          },
+          "caption": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Caption"
+          },
+          "credit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credit"
+          },
+          "is_decorative": {
+            "type": "boolean",
+            "title": "Is Decorative",
+            "default": false
+          },
+          "status": {
+            "$ref": "#/components/schemas/MediaAssetStatus"
+          },
+          "uploaded_by": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Uploaded By"
+          },
+          "verified_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verified At"
+          },
+          "archived_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "usage_count": {
+            "type": "integer",
+            "title": "Usage Count",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "object_key",
+          "public_url",
+          "original_filename",
+          "purpose",
+          "content_type",
+          "size_bytes",
+          "checksum_sha256",
+          "status",
+          "uploaded_by",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "MediaAssetResponse"
+      },
+      "MediaAssetStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "ready",
+          "archived"
+        ],
+        "title": "MediaAssetStatus"
+      },
+      "MediaAssetUpdateRequest": {
+        "properties": {
+          "alt_text": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alt Text"
+          },
+          "caption": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Caption"
+          },
+          "credit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 512
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credit"
+          },
+          "is_decorative": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Decorative"
+          }
+        },
+        "type": "object",
+        "title": "MediaAssetUpdateRequest",
+        "description": "Editable accessibility metadata; object identity is immutable."
+      },
       "MultipartCompletePathRequest": {
         "properties": {
           "object_key": {
@@ -18332,6 +19255,30 @@
             ],
             "title": "Cover Url"
           },
+          "cover_asset_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cover Asset Id"
+          },
+          "cover_alt_text": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cover Alt Text"
+          },
           "featured_sort": {
             "type": "integer",
             "minimum": 0.0,
@@ -18444,6 +19391,29 @@
               }
             ],
             "title": "Cover Url"
+          },
+          "cover_asset_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cover Asset Id"
+          },
+          "cover_alt_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cover Alt Text"
           },
           "featured_sort": {
             "type": "integer",
@@ -18785,6 +19755,29 @@
             ],
             "title": "Cover Url"
           },
+          "cover_asset_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cover Asset Id"
+          },
+          "cover_alt_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cover Alt Text"
+          },
           "featured_sort": {
             "type": "integer",
             "title": "Featured Sort",
@@ -18934,6 +19927,30 @@
               }
             ],
             "title": "Cover Url"
+          },
+          "cover_asset_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cover Asset Id"
+          },
+          "cover_alt_text": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cover Alt Text"
           },
           "featured_sort": {
             "anyOf": [
@@ -20103,10 +21120,33 @@
             "minLength": 1,
             "title": "Title"
           },
+          "title_zh": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title Zh"
+          },
           "authors": {
             "type": "string",
             "minLength": 1,
             "title": "Authors"
+          },
+          "authors_zh": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authors Zh"
           },
           "journal": {
             "anyOf": [
@@ -20167,6 +21207,17 @@
               }
             ],
             "title": "Abstract"
+          },
+          "abstract_zh": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Abstract Zh"
           },
           "is_featured": {
             "type": "boolean",
@@ -20344,6 +21395,18 @@
             ],
             "title": "Title"
           },
+          "title_zh": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title Zh"
+          },
           "authors": {
             "anyOf": [
               {
@@ -20355,6 +21418,17 @@
               }
             ],
             "title": "Authors"
+          },
+          "authors_zh": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authors Zh"
           },
           "journal": {
             "anyOf": [
@@ -20415,6 +21489,17 @@
               }
             ],
             "title": "Abstract"
+          },
+          "abstract_zh": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Abstract Zh"
           },
           "is_featured": {
             "anyOf": [
@@ -21100,6 +22185,7 @@
             "type": "string",
             "enum": [
               "string",
+              "color",
               "integer",
               "boolean",
               "enum",
@@ -21545,6 +22631,15 @@
         "title": "SignedUrlResponse",
         "description": "Pre-signed URL response with RBAC-validated access."
       },
+      "SiteVariant": {
+        "type": "string",
+        "enum": [
+          "external",
+          "internal"
+        ],
+        "title": "SiteVariant",
+        "description": "The two independently generated SoyMutDB site artifacts."
+      },
       "StaticPageCreate": {
         "properties": {
           "slug": {
@@ -21760,6 +22855,116 @@
         ],
         "title": "StaticPageDetailResponse",
         "description": "Extended response with summary, category, status, author, version info."
+      },
+      "StaticPageMigrationDryRunRequest": {
+        "properties": {
+          "slugs": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "maxLength": 256,
+                  "minLength": 1,
+                  "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                },
+                "type": "array",
+                "maxItems": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slugs"
+          }
+        },
+        "type": "object",
+        "title": "StaticPageMigrationDryRunRequest",
+        "description": "Optional unique StaticPage slug selection for a non-mutating preview."
+      },
+      "StaticPageMigrationDryRunResponse": {
+        "properties": {
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run"
+          },
+          "created": {
+            "type": "integer",
+            "title": "Created"
+          },
+          "skipped": {
+            "type": "integer",
+            "title": "Skipped"
+          },
+          "invalid": {
+            "type": "integer",
+            "title": "Invalid"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/StaticPageMigrationItemResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "dry_run",
+          "created",
+          "skipped",
+          "invalid"
+        ],
+        "title": "StaticPageMigrationDryRunResponse"
+      },
+      "StaticPageMigrationItemResponse": {
+        "properties": {
+          "static_page_id": {
+            "type": "integer",
+            "title": "Static Page Id"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "route": {
+            "type": "string",
+            "title": "Route"
+          },
+          "outcome": {
+            "type": "string",
+            "title": "Outcome"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "static_page_id",
+          "slug",
+          "route",
+          "outcome"
+        ],
+        "title": "StaticPageMigrationItemResponse"
       },
       "StaticPageResponse": {
         "properties": {
@@ -23598,9 +24803,31 @@
             "type": "string",
             "title": "Title"
           },
+          "title_zh": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title Zh"
+          },
           "authors": {
             "type": "string",
             "title": "Authors"
+          },
+          "authors_zh": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authors Zh"
           },
           "journal": {
             "anyOf": [
@@ -23656,6 +24883,17 @@
               }
             ],
             "title": "Abstract"
+          },
+          "abstract_zh": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Abstract Zh"
           },
           "is_featured": {
             "type": "boolean",

@@ -16,7 +16,8 @@ API_DIR="$REPO_ROOT/apps/api"
 echo ">> exporting OpenAPI from backend..."
 export PYTHONPATH="$REPO_ROOT"
 "$API_DIR/.venv/bin/python" "$API_DIR/scripts/export_openapi.py" \
-  --output "$PKG_DIR/openapi.json"
+  --output "$PKG_DIR/openapi.json" \
+  --error-codes-output "$PKG_DIR/error-codes.json"
 
 echo ">> generating TypeScript client types..."
 pnpm exec openapi-typescript "$PKG_DIR/openapi.json" \
