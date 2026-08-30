@@ -186,6 +186,17 @@ class ImportDraftResponse(BaseModel):
     updated_at: Any | None = None
 
 
+class ImportDraftListItemResponse(BaseModel):
+    id: uuid.UUID
+    dataset_version_id: uuid.UUID
+    module_key: str | None = None
+    filename: str
+    row_count: int
+    column_count: int
+    status: str
+    updated_at: Any | None = None
+
+
 class PublicationManifestResponse(BaseModel):
     id: uuid.UUID
     import_draft_id: uuid.UUID
@@ -204,6 +215,7 @@ __all__ = [
     "ImportCommitRequest",
     "ImportDraftCreateRequest",
     "ImportDraftResponse",
+    "ImportDraftListItemResponse",
     "ImportValidationRequest",
     "PublicationManifestResponse",
 ]

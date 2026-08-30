@@ -3,7 +3,7 @@ import { Badge, Button, Input, Modal, Select, Typography } from "@/lib/antd";
 import { StatCard } from "../components/stat-card";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { http, apiBaseUrl, getAccessToken, capabilitiesApi } from "@soymutdb/api-client";
+import { http, apiBaseUrl, getAccessToken, capabilitiesApi, adminImportStudioApi, type ImportDraftListItemResponse, type ImportDraftResponse } from "@soymutdb/api-client";
 import { cn } from "../lib/cn";
 import { DataTable, type DataTableColumn } from "../components/data-table";
 import { ImportPreviewTable } from "../components/import-preview-table";
@@ -112,14 +112,24 @@ const MODULE_TEMPLATE_FORMATS = [
 // Component
 // ---------------------------------------------------------------------------
 
-export default function ImportsPage() {
+export interface ImportsPageProps {
+  /** Opens the existing upload dialog for the route-compatible submit entry. */
+  initialUploadOpen?: boolean;
+}
+
+export default function ImportsPage({ initialUploadOpen = false }: ImportsPageProps) {
   const queryClient = useQueryClient();
+  // A resume link names a server-created draft; the legacy upload wizard never
+  // supplies or recreates this identifier.
+  const resumeDraftId = typeof window === "undefined"
+    ? null
+    : new URLSearchParams(window.location.search).get("draft");
 
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
 
   // CloudUploadOutlined dialog state
-  const [showUpload, setShowUpload] = useState(false);
+  const [showUpload, setShowUpload] = useState(initialUploadOpen);
   const [uploadType, setUploadType] = useState<ImportType>("vcf");
   const [uploadFilename, setUploadFilename] = useState("");
   const [uploadFilePath, setUploadFilePath] = useState("");
@@ -163,6 +173,16 @@ export default function ImportsPage() {
         params: { page, page_size: 20, search },
       }),
     placeholderData: { items: [], total: 0, page, page_size: 20 },
+  });
+
+  const draftsQuery = useQuery<ImportDraftListItemResponse[]>({
+    queryKey: ["admin-import-studio-drafts"],
+    queryFn: () => adminImportStudioApi.listDrafts(),
+  });
+  const resumeDraftQuery = useQuery<ImportDraftResponse>({
+    queryKey: ["admin-import-studio-draft", resumeDraftId],
+    queryFn: () => adminImportStudioApi.getDraft(resumeDraftId!),
+    enabled: Boolean(resumeDraftId),
   });
 
   const capabilitiesQuery = useQuery({
@@ -781,6 +801,45 @@ export default function ImportsPage() {
         <StatCard label="Completed" value={stats.completed} icon={<CheckCircleOutlined className="size-5" />} />
         <StatCard label="Failed" value={stats.failed} icon={<CloseCircleOutlined className="size-5" />} />
       </div>
+
+      {resumeDraftId ? (
+        <section aria-labelledby="resume-draft-heading" className="rounded-lg border border-primary/30 bg-primary/5 p-4">
+          <Typography.Title id="resume-draft-heading" level={5} className="!mb-1">Resume saved import draft</Typography.Title>
+          {resumeDraftQuery.isPending ? <Typography.Text type="secondary">Loading trusted draft state…</Typography.Text> : null}
+          {resumeDraftQuery.isError ? <Typography.Text type="danger">This saved draft is unavailable or you no longer have access.</Typography.Text> : null}
+          {resumeDraftQuery.data ? (
+            <div className="text-sm">
+              <Typography.Text strong>{resumeDraftQuery.data.filename}</Typography.Text>
+              <Typography.Text type="secondary" className="ml-2">{resumeDraftQuery.data.status} · {resumeDraftQuery.data.row_count} rows · {resumeDraftQuery.data.column_count} columns · {resumeDraftQuery.data.field_mapping.length} mapped fields</Typography.Text>
+              <p className="mt-2 text-xs text-muted-foreground">Draft state was loaded from its persisted dataset version. Mapping, patch, validation, and commit remain server-side lifecycle operations.</p>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
+      <section aria-labelledby="import-drafts-heading" className="rounded-lg border p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <Typography.Title id="import-drafts-heading" level={5} className="!mb-0">Saved Import Drafts</Typography.Title>
+            <Typography.Text type="secondary">Only server-created drafts from trusted dataset versions appear here.</Typography.Text>
+          </div>
+          <Button size="small" onClick={() => draftsQuery.refetch()} loading={draftsQuery.isFetching}>Refresh</Button>
+        </div>
+        {draftsQuery.isError ? <Typography.Text type="danger">Saved drafts are unavailable. Existing imports are unaffected.</Typography.Text> : null}
+        {draftsQuery.data?.length ? (
+          <ul className="mt-3 space-y-2" aria-label="Saved Import Drafts">
+            {draftsQuery.data.map((draft) => (
+              <li key={draft.id} className="flex items-center justify-between gap-3 rounded border p-2">
+                <div>
+                  <Typography.Text strong>{draft.filename}</Typography.Text>
+                  <Typography.Text type="secondary" className="ml-2 text-xs">{draft.status} · {draft.row_count} rows · {draft.column_count} columns</Typography.Text>
+                </div>
+                <Button size="small" href={`/imports?draft=${encodeURIComponent(draft.id)}`}>Resume</Button>
+              </li>
+            ))}
+          </ul>
+        ) : !draftsQuery.isLoading ? <Typography.Text type="secondary">No server-backed import drafts are available to resume.</Typography.Text> : null}
+      </section>
 
       {/* Search */}
       <Input

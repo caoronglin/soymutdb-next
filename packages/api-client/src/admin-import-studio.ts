@@ -61,6 +61,17 @@ export interface ImportDraftResponse {
   updated_at: string | null;
 }
 
+export interface ImportDraftListItemResponse {
+  id: string;
+  dataset_version_id: string;
+  module_key: string | null;
+  filename: string;
+  row_count: number;
+  column_count: number;
+  status: string;
+  updated_at: string | null;
+}
+
 export interface FieldMappingItem {
   source_field: string;
   target_field: string;
@@ -95,6 +106,9 @@ export const adminImportStudioApi = {
     return http.post<ImportDraftResponse>("/admin/imports/studio/drafts", {
       json: body,
     });
+  },
+  listDrafts() {
+    return http.get<ImportDraftListItemResponse[]>("/admin/imports/studio/drafts");
   },
   getDraft(id: string) {
     return http.get<ImportDraftResponse>(

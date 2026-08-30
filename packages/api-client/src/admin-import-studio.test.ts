@@ -94,6 +94,25 @@ describe("admin import studio client", () => {
     ).resolves.toEqual(draft());
   });
 
+  it("lists dashboard-safe draft summaries", async () => {
+    const drafts = [
+      {
+        id: "draft-1",
+        dataset_version_id: "version-1",
+        module_key: "genes",
+        filename: "genes.tsv",
+        row_count: 10,
+        column_count: 5,
+        status: "draft",
+        updated_at: "2026-08-30T00:00:00Z",
+      },
+    ];
+    mockGet.mockResolvedValueOnce(drafts);
+
+    await expect(adminImportStudioApi.listDrafts()).resolves.toEqual(drafts);
+    expect(mockGet).toHaveBeenCalledWith("/admin/imports/studio/drafts");
+  });
+
   it("updates mapping, validates, and commits with explicit confirm", async () => {
     mockPut.mockResolvedValueOnce(draft());
     mockPost.mockResolvedValueOnce(draft()).mockResolvedValueOnce(draft());

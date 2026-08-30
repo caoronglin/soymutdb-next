@@ -8,7 +8,13 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.api.v1.import_studio import add_patches, commit_draft, create_dataset_version, create_draft
+from app.api.v1.import_studio import (
+    add_patches,
+    commit_draft,
+    create_dataset_version,
+    create_draft,
+    list_drafts,
+)
 from app.core.exceptions import ConflictError
 from app.models.import_studio import ImportDraftStatus
 from app.schemas.import_studio import (
@@ -182,3 +188,46 @@ async def test_commit_locks_the_draft_and_rejects_a_second_commit() -> None:
 
     assert any("FOR UPDATE" in statement for statement in db.statements)
     assert db.committed == 0
+
+class _ListResult:
+    def __init__(self, rows: list[object]) -> None:
+        self.rows = rows
+
+    def scalars(self) -> _ListResult:
+        return self
+
+    def all(self) -> list[object]:
+        return self.rows
+
+
+class _DraftListDB:
+    def __init__(self) -> None:
+        self.rows = [
+            SimpleNamespace(
+                id=uuid.uuid4(),
+                dataset_version_id=uuid.uuid4(),
+                module_key="genes",
+                filename="genes.tsv",
+                row_count=10,
+                column_count=5,
+                status=ImportDraftStatus.DRAFT.value,
+                updated_at=datetime.now(UTC),
+            )
+        ]
+
+    async def execute(self, _statement: object) -> _ListResult:
+        return _ListResult(self.rows)
+
+
+@pytest.mark.asyncio
+async def test_list_drafts_returns_resume_metadata_without_source_details() -> None:
+    result = await list_drafts(
+        db=_DraftListDB(),  # type: ignore[arg-type]
+        current_user=_admin(),  # type: ignore[arg-type]
+    )
+
+    assert len(result) == 1
+    assert result[0].filename == "genes.tsv"
+    assert result[0].status == "draft"
+    assert not hasattr(result[0], "object_key")
+    assert not hasattr(result[0], "checksum_sha256")

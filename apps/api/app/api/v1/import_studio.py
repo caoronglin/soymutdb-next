@@ -32,6 +32,7 @@ from ...schemas.import_studio import (
     ImportCommitRequest,
     ImportDraftCreateRequest,
     ImportDraftResponse,
+    ImportDraftListItemResponse,
     ImportValidationRequest,
     PublicationManifestResponse,
 )
@@ -231,6 +232,35 @@ async def create_draft(
     await db.commit()
     await db.refresh(row)
     return _draft_response(row)
+
+
+@router.get("/drafts", response_model=list[ImportDraftListItemResponse])
+async def list_drafts(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[ImportDraftListItemResponse]:
+    """List persisted Import Studio drafts for dashboard resume only.
+
+    This endpoint never creates or validates a draft and exposes no mutable
+    source metadata, so dashboard discovery cannot fabricate an import source.
+    """
+    _require_admin(current_user)
+    rows = (
+        await db.execute(select(ImportDraft).order_by(ImportDraft.updated_at.desc()))
+    ).scalars().all()
+    return [
+        ImportDraftListItemResponse(
+            id=row.id,
+            dataset_version_id=row.dataset_version_id,
+            module_key=row.module_key,
+            filename=row.filename,
+            row_count=row.row_count,
+            column_count=row.column_count,
+            status=_status_value(row.status),
+            updated_at=row.updated_at,
+        )
+        for row in rows
+    ]
 
 
 @router.get("/drafts/{draft_id}", response_model=ImportDraftResponse)
