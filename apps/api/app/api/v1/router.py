@@ -14,6 +14,7 @@ from . import (
     admin_features,
     admin_imports,
     admin_modules,
+    admin_media,
     admin_news,
     admin_page_builder,
     admin_plugins,
@@ -89,6 +90,7 @@ api_router.include_router(page_definitions.router)
 api_router.include_router(admin.router)
 api_router.include_router(admin_features.router)
 api_router.include_router(admin_content.router)
+api_router.include_router(admin_media.router)
 api_router.include_router(admin_news.router)
 api_router.include_router(admin_page_builder.router)
 api_router.include_router(admin_plugins.router)
