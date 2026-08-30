@@ -75,6 +75,8 @@ services:
   postgres:
     profiles: [ "core" ]
     image: postgres:18.4-alpine
+    # pg_stat_statements must be preloaded before the extension can collect.
+    command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements", "-c", "pg_stat_statements.track=all", "-c", "pg_stat_statements.max=10000"]
     environment:
       POSTGRES_DB: soymutdb
       POSTGRES_USER: soymutdb

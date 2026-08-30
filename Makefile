@@ -152,6 +152,10 @@ smoke-test: ## Run k6 smoke test
 stress-test: ## Run k6 stress test
 	k6 run tests/load/variant-stress.js
 
+.PHONY: slow-query-report
+slow-query-report: ## Append pg_stat_statements Top-20 weekly baseline
+	bash scripts/slow-query-report.sh
+
 # =====================================================================
 # Building
 # =====================================================================
