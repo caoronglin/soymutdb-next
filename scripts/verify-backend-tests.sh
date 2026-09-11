@@ -65,6 +65,12 @@ step "API pytest (full tree)"
   PYTHONPATH="${REPO_ROOT}" "${VENV_PYTHON}" -m pytest tests -q
 )
 
+step "Worker test package marker (cross-module imports must resolve)"
+# Cheap and it must fail before the expensive worker install: a collection error
+# aborts the whole worker run, so a broken import here would hide every other
+# worker test. Catches files that are present-but-untracked too.
+"${VENV_PYTHON}" scripts/check_worker_test_package.py
+
 step "Worker analysis dependencies"
 "${VENV_PYTHON}" -m pip install --quiet -e apps/worker
 "${VENV_PYTHON}" -c "import scanpy, anndata, leidenalg, igraph, matplotlib; print('analysis deps OK:', scanpy.__version__)"

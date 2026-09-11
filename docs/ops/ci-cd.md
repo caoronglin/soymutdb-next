@@ -192,6 +192,40 @@ while IFS='=' read -r key value; do export "${key}=${value}"; done <<< "${PG_ENV
 键**（它是 pipeline 级，写在 stage 里会被静默丢弃）、resolver 必须保留"外部 URL
 优先"和驱动级就绪探针、门禁脚本不得再出现 `source`。
 
+### worker 测试的 `from tests.<module> import` 需要一个包标记
+
+数据库真的能连上之后，worker 套件立刻在**收集阶段**就挂了——一个用例都没跑：
+
+```
+apps/worker/tests/test_gene_resolution.py:25: in <module>
+    from tests.test_module_tsv_postgres_integration import postgres_engine
+E   ModuleNotFoundError: No module named 'tests.test_module_tsv_postgres_integration'
+```
+
+`test_gene_resolution.py` 按**包路径**复用共享集成 fixture。这个 import 只有在
+`apps/worker/tests` 是可导入包、并以 `tests` 出现在 `sys.path` 上时才成立。
+pytest 默认的 `prepend` 导入模式把**测试目录本身**放进 `sys.path`，每个文件按顶层
+模块导入——单文件够用，跨模块 import 不够。
+
+**它为什么一直没被发现**：这个模块从来没有真正运行过。stage 连不上数据库，
+整个文件被 Testcontainers 的失败挡在后面。所以"只让数据库可达"会把
+116 个 error 换成 1 个 collection error——而 collection error 会**中断整轮**，
+于是 worker 套件里剩下的用例一个都不会执行。
+
+修法是补上 `apps/worker/tests/__init__.py`（与 `apps/api/tests/__init__.py` 对称），
+并加 `scripts/check_worker_test_package.py` 作为门禁。它检查四件事：
+
+1. `__init__.py` 存在；
+2. 它**被 git 跟踪**（只存在于工作区、不在 checkout 里的文件等于不存在——
+   本仓库已经因为一条未锚定的 `.gitignore` 丢过 `.cnb/env/`）；
+3. 每一处 `from tests.<module> import` 指向的模块真实存在且是 `test_*`；
+4. 按 pytest 真正使用的导入模式**实测可解析**——注意那不是仓库根目录，
+   第一次写这个检查时就是想当然地用了仓库根，结果检查自己先失败了。这条
+   打印实际解析路径，避免"检查通过但门禁跑起来仍然挂"。
+
+它在 worker 依赖安装**之前**执行：collection error 会吞掉整轮，这个检查又便宜，
+必须抢在昂贵的安装之前失败。
+
 ### `.cnb/env/Dockerfile.*` 只能出现在 `docker.build`，不能是 `image:`
 
 第一次真实构建在 `Frontend verification` stage **脚本执行前**就失败了：

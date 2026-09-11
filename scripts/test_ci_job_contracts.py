@@ -1877,6 +1877,10 @@ class DeliveryArchitectureTests(unittest.TestCase):
             "with-postgres-service.sh",
             "--print-exports",
             "export SOYMUTDB_RUN_POSTGRES_INTEGRATION=1",
+            # The worker suite reuses a fixture by package path, and a broken
+            # import aborts collection for the whole run. This must stay a hard
+            # step *before* the worker install so it fails fast and cheaply.
+            "scripts/check_worker_test_package.py",
         ):
             self.assertIn(marker, backend, marker)
         self.assertNotIn("source \"${PG_ENV_FILE}\"", backend)
