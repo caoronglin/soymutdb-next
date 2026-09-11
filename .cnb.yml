@@ -48,20 +48,27 @@ main:
       # 16 cores: pnpm install + turbo build + three vitest projects + Python.
       runner:
         cpus: 16
-      # `volumes` is a PIPELINE-level key (docker.volumes), not a stage key. A
-      # stage-level `volumes:` fails the whole build in Prepare, before any
-      # stage runs:
-      #   Unsupported volume type. 不支持的数据卷类型: /cache/pnpm-store
-      # Declaring it here mounts the same paths into every container of the
-      # pipeline, and only paths declared here (plus /workspace) cross a
-      # container boundary -- see scripts/setup-workspace.sh.
+      # Pipeline-level data volumes (`docker.volumes`). Two rules bite here:
+      #
+      #   1. `volumes` is a PIPELINE key, not a stage key. A stage-level
+      #      `volumes:` is not in the CNB schema and aborts the build in
+      #      Prepare, before any stage runs.
+      #   2. The entry format is `<path>[:<type>]`, NOT Docker's
+      #      `host:container`. `- /cache/pnpm-store:/cache/pnpm-store` is read
+      #      as a path with an unknown *type*, which Prepare rejects with:
+      #        Unsupported volume type. 不支持的数据卷类型: /cache/pnpm-store
+      #      Grouping is `<group>:<path>:<type>`, so a bare mount is just
+      #      `- /cache/pnpm-store` (type defaults to copy-on-write).
+      #
+      # Only the paths declared here (plus /workspace) cross a container
+      # boundary -- see scripts/setup-workspace.sh.
       docker:
         volumes:
-          - /cache/pnpm-store:/cache/pnpm-store
-          # Turbo's cache. A relative path is resolved against the workspace,
-          # and the workspace is already shared, so .turbo must NOT be a volume:
-          # it is a descendant of /workspace, and a volume nested inside another
-          # shared path is rejected ("存在包含关系的卷路径").
+          # pnpm store, shared by every container in the pipeline.
+          - /cache/pnpm-store
+          # Turbo's cache is intentionally NOT declared: it lives inside
+          # /workspace, which is already shared, and CNB rejects a volume whose
+          # path is a descendant of another shared path ("存在包含关系的卷路径").
       env:
         # The offline demo build must not need a live release API.
         VITE_DEPLOYMENT_MODE: demo
@@ -96,7 +103,7 @@ main:
       # Pipeline-level volumes; see the note on the pull_request pipeline.
       docker:
         volumes:
-          - /cache/pnpm-store:/cache/pnpm-store
+          - /cache/pnpm-store
       env:
         VITE_DEPLOYMENT_MODE: demo
         VITE_API_BASE_URL: https://api.soymutdb.test
@@ -350,7 +357,7 @@ $:
         volumes:
           # Deps are linked from the store instead of re-downloaded when the
           # environment container is cycled, exactly as in the delivery stages.
-          - /cache/pnpm-store:/cache/pnpm-store
+          - /cache/pnpm-store
           # `.turbo` is intentionally NOT declared: it lives inside /workspace,
           # which is already shared, and CNB rejects a volume whose path is a
           # descendant of another shared path ("存在包含关系的卷路径").
@@ -380,7 +387,7 @@ $:
       # Pipeline-level volumes; see the note on the pull_request pipeline.
       docker:
         volumes:
-          - /cache/pnpm-store:/cache/pnpm-store
+          - /cache/pnpm-store
       env:
         VITE_DEPLOYMENT_MODE: demo
         VITE_API_BASE_URL: https://api.soymutdb.test
@@ -417,7 +424,7 @@ $:
       docker:
         image: cnbcool/default-dev-env
         volumes:
-          - /cache/pnpm-store:/cache/pnpm-store
+          - /cache/pnpm-store
       services:
         - docker
         - name: vscode
@@ -455,7 +462,7 @@ $:
       # Pipeline-level volumes; see the note on the pull_request pipeline.
       docker:
         volumes:
-          - /cache/pnpm-store:/cache/pnpm-store
+          - /cache/pnpm-store
       env:
         SOYMUTDB_RUN_POSTGRES_INTEGRATION: "1"
         SOYMUTDB_ACCEPTANCE_DIR: artifacts/acceptance

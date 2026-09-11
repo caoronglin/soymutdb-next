@@ -107,8 +107,9 @@ checkout 也不带 `node_modules`。修复：
 | --- | --- |
 | 用 "Setup workspace with cache" stage 预置后续 stage | 删除该 stage；每个 job 自己引导 |
 | `frontend_install` / `dependency_governance_step` 直接调 `pnpm` | 先调 `scripts/setup-workspace.sh`（`corepack enable` + `command -v pnpm` 校验 + install） |
-| pnpm/turbo 缓存无显式挂载 | `volumes: /cache/pnpm-store`、`.turbo`，让"每容器装一次"变成链接而非下载 |
-| 契约测试未覆盖容器生命周期 | 新增 `test_no_stage_depends_on_another_stages_container_state`（沿调用链检查 + 禁止 "Setup workspace" stage 名 + 强制 store volume） |
+| pnpm/turbo 缓存无显式挂载 | 流水线级 `docker.volumes: - /cache/pnpm-store`，让"每容器装一次"变成链接而非下载；`.turbo` 不再单独挂载（嵌套在共享的 `/workspace` 下会被拒） |
+| 卷条目误用 Docker `host:container` 写法 | 改为 CNB 语法 `<path>[:<type>]`；`- /cache/pnpm-store:/cache/pnpm-store` 会让 Prepare 报 `Unsupported volume type` |
+| 契约测试未覆盖容器生命周期与卷语法 | 新增 `test_no_stage_depends_on_another_stages_container_state`（沿调用链检查 + 禁止 "Setup workspace" stage 名 + 强制 store volume）与 `CnbVolumeGrammarTests`（按 CNB 语法解析卷条目） |
 
 `setup-workspace.sh` 在 `corepack enable` 之后立即 `command -v pnpm` 校验：引导
 失败要在本 stage 报错，而不是留到三个 stage 之后变成一个看起来像脚本 bug 的

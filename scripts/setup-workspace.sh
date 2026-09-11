@@ -24,9 +24,10 @@
 #         bash scripts/ci-job-steps.sh run frontend
 #         scripts/ci-job-steps.sh: line 89: pnpm: command not found   (exit 127)
 #
-#     * The checkout does not carry the install either. Only paths declared as
-#       stage `volumes` survive between stages (here: the pnpm store + turbo
-#       cache), so `node_modules` must be materialised per stage.
+#     * The checkout does not carry the install either. Only the paths
+#       declared as pipeline `docker.volumes` survive between containers (here:
+#       the pnpm store; turbo's cache rides along inside the always-shared
+#       /workspace), so `node_modules` must be materialised per stage.
 #
 #   `pnpm install --frozen-lockfile` is therefore idempotent and cheap when the
 #   store volume is warm: it links from the store rather than re-downloading.

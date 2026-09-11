@@ -9,12 +9,16 @@
 name: verify
 runner:
   cpus: 16
-# `volumes` is a PIPELINE-level key (`docker.volumes`). A stage-level `volumes:`
-# is not in the CNB schema and aborts the build in Prepare with
+# `volumes` is a PIPELINE-level key (`docker.volumes`), and each entry follows
+# CNB's grammar `<path>[:<type>]` -- not Docker's `host:container`. A stage-level
+# `volumes:` key, or an entry like `- /cache/pnpm-store:/cache/pnpm-store`, both
+# abort the build in Prepare with:
 # "Unsupported volume type. 不支持的数据卷类型: /cache/pnpm-store".
 docker:
   volumes:
-    - /cache/pnpm-store:/cache/pnpm-store
+    # pnpm store only; `.turbo` sits under the always-shared /workspace and must
+    # not be declared as a nested volume ("存在包含关系的卷路径").
+    - /cache/pnpm-store
 env:
   VITE_DEPLOYMENT_MODE: demo
   VITE_API_BASE_URL: https://api.soymutdb.test
