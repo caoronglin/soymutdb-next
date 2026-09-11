@@ -110,6 +110,49 @@ frontend_install() {
   ensure_workspace
 }
 
+# The frontend gate ends with the OpenAPI client contract, which exports the
+# backend schema and therefore needs a Python interpreter with the API's
+# dependencies. In a fresh CNB container that venv does not exist, and the gate
+# died with:
+#
+#   scripts/check-contract.sh: line 18: /workspace/apps/api/.venv/bin/python:
+#   No such file or directory
+#   [ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL] @soymutdb/api-client@2.0.0
+#   check:contract: `bash scripts/check-contract.sh`
+#
+# The GitHub mirror escapes this because `actions/setup-python` puts a system
+# `python3` on PATH and the workflow prepares the venv by hand; CNB runs the
+# gate in `node:24.19.0`, which has no Python at all. Bootstrap the venv exactly
+# where check-contract.sh already looks for it, from the same closed dependency
+# set the API job installs, so no gate is skipped and the contract is still
+# checked on every provider.
+SOYMUTDB_CI_VENV_PYTHON="${SOYMUTDB_CI_VENV_PYTHON:-python3}"
+
+ensure_api_venv() {
+  local venv="${REPO_ROOT}/apps/api/.venv"
+  # Idempotent: the backend job may have already created it, and a warm stage
+  # should not reinstall. Only the generated venv python is authoritative.
+  if [[ -x "${venv}/bin/python" ]]; then
+    echo "[ci-job-steps] API virtualenv already present: ${venv}" >&2
+    return 0
+  fi
+
+  if ! command -v "${SOYMUTDB_CI_VENV_PYTHON}" >/dev/null 2>&1; then
+    log "cannot prepare ${venv}: ${SOYMUTDB_CI_VENV_PYTHON} is not on PATH"
+    log "the stage image must provide Python ${PYTHON_VERSION} for the OpenAPI contract gate"
+    return 1
+  fi
+
+  log "creating API virtualenv for the OpenAPI contract gate"
+  "${SOYMUTDB_CI_VENV_PYTHON}" -m venv "${venv}"
+  "${venv}/bin/pip" install --upgrade pip
+  # Mirror api_install: the contract exports app.main's OpenAPI document, so the
+  # API and its local jobs package must be importable. No [dev] extra here: the
+  # gate imports the app, it does not run the test tree.
+  "${venv}/bin/pip" install --quiet -e "${REPO_ROOT}/packages/jobs-py"
+  "${venv}/bin/pip" install --quiet -e "${REPO_ROOT}/apps/api"
+}
+
 frontend_build_demo() {
   VITE_DEPLOYMENT_MODE="${SOYMUTDB_CI_DEMO_MODE}" \
   VITE_API_BASE_URL="${SOYMUTDB_CI_DEMO_API_URL}" \
@@ -119,6 +162,7 @@ frontend_build_demo() {
 
 frontend_run() {
   frontend_install
+  ensure_api_venv
   bash "${REPO_ROOT}/scripts/verify-frontend-artifacts.sh"
 }
 

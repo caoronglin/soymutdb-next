@@ -20,7 +20,7 @@ stages:
   volumes:
   - /cache/pnpm-store:/cache/pnpm-store
 - name: Frontend verification
-  image: node:24.19.0
+  image: .cnb/env/Dockerfile.frontend
   script: bash scripts/ci-job-steps.sh run frontend
 - name: API + Worker verification
   image: python:3.14

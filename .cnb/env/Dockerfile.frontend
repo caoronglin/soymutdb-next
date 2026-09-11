@@ -1,0 +1,83 @@
+# =============================================================================
+# SoyMutDB — CNB frontend verification environment
+# =============================================================================
+# Referenced by .cnb.yml as the stage image for:
+#
+#   scripts/ci-job-steps.sh run frontend   (PR / push / manual verify stages)
+#
+# Why this image exists
+#   `scripts/verify-frontend-artifacts.sh` ends with the OpenAPI client contract
+#   (`packages/api-client/scripts/check-contract.sh`), which exports
+#   `app.main`'s OpenAPI document from `apps/api/.venv/bin/python`. The gate
+#   therefore needs BOTH toolchains in one container.
+#
+#   The stage used to run on `node:24.19.0`, which carries no Python, so the
+#   build failed with:
+#
+#     scripts/check-contract.sh: line 18: /workspace/apps/api/.venv/bin/python:
+#     No such file or directory
+#
+#   The GitHub mirror never hit this because `actions/setup-python` puts a
+#   system interpreter on PATH. Pinning a dual-toolchain image here is what lets
+#   both providers run identical bytes instead of one silently skipping a gate.
+#
+# Constraints
+#   * The base tag MUST stay version-pinned. scripts/check-toolchain-pins.py
+#     rejects an untagged or `:latest` FROM in .cnb/env/*.
+#   * The Node and Python versions MUST match the repository pins
+#     (Node 24.19.0 / Python 3.14), asserted by the same guard.
+#   * No credentials: this image only builds, tests and exports a schema.
+# =============================================================================
+
+# --- Python 3.14, exactly the PYTHON_VERSION pin ----------------------------
+# `node:24.19.0` is Debian-based and ships no Python, so the interpreter is
+# taken from the same `python:3.14` image the API job runs on. That keeps the
+# exporter on the pinned interpreter instead of whatever a distro package would
+# provide.
+FROM python:3.14 AS python-runtime
+
+# --- Node 24.19.0, exactly the .nvmrc pin -----------------------------------
+FROM node:24.19.0
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+# Runtime libraries the copied Python 3.14 build links against. They are present
+# in the `python:3.14` (Debian bookworm-slim) base but NOT in `node:24.19.0`,
+# and `COPY --from` does not bring them: without this the interpreter at
+# /usr/local/bin/python3 dies with `error while loading shared libraries`. The
+# list mirrors `ldd /usr/local/bin/python3` on the source image; the build-time
+# smoke check below fails if any of them is missing, so the list cannot silently
+# go stale.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      bash \
+      ca-certificates \
+      coreutils \
+      curl \
+      git \
+      make \
+      libbz2-1.0 \
+      libexpat1 \
+      libffi8 \
+      liblzma5 \
+      libncursesw6 \
+      libreadline8 \
+      libsqlite3-0 \
+      libssl3 \
+      libtirpc3 \
+      libuuid1 \
+      zlib1g \
+ && rm -rf /var/lib/apt/lists/*
+
+COPY --from=python-runtime /usr/local /usr/local
+
+# Fail loudly at build time if either toolchain drifted or a runtime library is
+# missing. A broken interpreter must break the image build, not the first
+# contract gate of a paid remote run.
+RUN node --version \
+ && python3 --version \
+ && python3 -m venv /tmp/venv-check \
+ && /tmp/venv-check/bin/python -c "import ssl, sqlite3, lzma, bz2, ctypes, uuid" \
+ && rm -rf /tmp/venv-check
+
+WORKDIR /workspace

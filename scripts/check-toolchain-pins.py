@@ -42,6 +42,17 @@ EXPECTED_PYTHON_MIN = (3, 14)
 # releases without any review noticing.
 BUILD_ENV_DOCKERFILES = (
     ".cnb/env/Dockerfile.build-tools",
+    # The frontend gate exports the backend OpenAPI schema, so its stage image
+    # must carry Node AND Python. Both pins live in this Dockerfile.
+    ".cnb/env/Dockerfile.frontend",
+)
+
+# (dockerfile, tag the base image must use) for images whose base pins a
+# toolchain the repository also pins. A floating or off-version tag would let the
+# environment that runs (or signs) the gates move without review.
+PINNED_BUILD_ENV_BASES = (
+    (".cnb/env/Dockerfile.frontend", f"node:{EXPECTED_NODE}"),
+    (".cnb/env/Dockerfile.frontend", "python:3.14"),
 )
 
 # Shared scripts that carry a SOYMUTDB_CI_*_VERSION default.
@@ -145,6 +156,32 @@ def check_build_env_images(errors: list[str]) -> None:
                 )
 
 
+def check_build_env_toolchain_tags(errors: list[str]) -> None:
+    """The frontend stage image must pin the exact Node/Python versions.
+
+    `check_build_env_images` only rejects a completely untagged `FROM`. That is
+    enough for the release tooling image, but not for the image that runs the
+    frontend gates: it must track `.nvmrc` and the Python pin, or the gate would
+    run on a toolchain the repository never declared.
+    """
+    for relative, expected_tag in PINNED_BUILD_ENV_BASES:
+        path = ROOT / relative
+        if not path.is_file():
+            _fail(errors, f"missing build environment image: {relative}")
+            continue
+        tags = {
+            line.strip().split()[1]
+            for line in path.read_text(encoding="utf-8").splitlines()
+            if line.strip().upper().startswith("FROM ") and len(line.split()) > 1
+        }
+        if expected_tag not in tags:
+            _fail(
+                errors,
+                f"{relative}: no FROM uses {expected_tag!r} "
+                f"(found {sorted(tags)!r})",
+            )
+
+
 def check_pin_sources(errors: list[str]) -> None:
     expected = {
         "NODE_VERSION": EXPECTED_NODE,
@@ -181,6 +218,7 @@ def main() -> int:
     check_pnpm(errors)
     check_python(errors)
     check_build_env_images(errors)
+    check_build_env_toolchain_tags(errors)
     check_pin_sources(errors)
 
     if args.json:

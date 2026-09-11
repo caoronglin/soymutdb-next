@@ -91,6 +91,23 @@ def _iter_script_bodies(node: object, path: str = ""):
             yield from _iter_script_bodies(value, f"{path}[{index}]")
 
 
+def _iter_pipelines(node: object):
+    """Yield every pipeline object, whatever branch/event nests it.
+
+    The CNB config is `branch -> event -> [pipeline]`. Walking it generically
+    keeps the assertions from hard-coding a shape that a new event would break.
+    """
+    if isinstance(node, dict):
+        if "stages" in node or "name" in node:
+            yield node
+            return
+        for value in node.values():
+            yield from _iter_pipelines(value)
+    elif isinstance(node, list):
+        for value in node:
+            yield from _iter_pipelines(value)
+
+
 def _cnb_config_files() -> tuple[Path, ...]:
     return (CNB_CONFIG, *sorted((ROOT / ".cnb").glob("*.yml"))) + tuple(
         ROOT / name for name in PIPELINE_FILES
@@ -851,6 +868,135 @@ class DeliveryArchitectureTests(unittest.TestCase):
                         f"{branch}/{event}/{pipeline_name}/{stage['name']}: "
                         "pnpm stage without a persistent store volume",
                     )
+
+    def test_frontend_stage_can_reach_the_openapi_contract_gate(self) -> None:
+        """The frontend gate ends with a Python-backed contract check.
+
+        Regression for a real CNB build:
+
+            ==> API client contract
+            $ bash scripts/check-contract.sh
+            >> exporting OpenAPI from backend...
+            scripts/check-contract.sh: line 18:
+            /workspace/apps/api/.venv/bin/python: No such file or directory
+            [ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL] @soymutdb/api-client@2.0.0
+            check:contract: `bash scripts/check-contract.sh`
+
+        `verify-frontend-artifacts.sh` closes with
+        `pnpm --filter @soymutdb/api-client check:contract`, and that script
+        exports the backend OpenAPI document from `apps/api/.venv/bin/python`.
+        CNB ran the gate in `node:24.19.0`, which carries no Python, so the venv
+        could neither exist nor be created. The GitHub mirror escaped the same
+        failure only because `actions/setup-python` installs an interpreter.
+
+        Every one of these is load-bearing; dropping any of them re-opens the
+        failure without changing the failure message.
+        """
+        # 1. The gate really is a hard, non-skippable step of the frontend
+        #    script, or nothing below would matter.
+        gate = (ROOT / "scripts/verify-frontend-artifacts.sh").read_text(encoding="utf-8")
+        self.assertIn("@soymutdb/api-client check:contract", gate)
+        self.assertIn(
+            "SOYMUTDB_CI_SKIP_CONTRACT",
+            gate,
+            "the contract gate must be the only thing an explicit skip flag bypasses",
+        )
+
+        # 2. The contract script must keep exporting the schema with the venv
+        #    interpreter, so the venv is genuinely required.
+        contract = (ROOT / "packages/api-client/scripts/check-contract.sh").read_text(
+            encoding="utf-8"
+        )
+        # The contract script resolves the venv from the package root, so the
+        # marker is the relative venv path, not a literal absolute one.
+        self.assertIn(".venv/bin/python", contract)
+        self.assertIn('API_DIR="$REPO_ROOT/apps/api"', contract)
+
+        # 3. The frontend job body must create that venv before running the gate.
+        steps = (ROOT / "scripts/ci-job-steps.sh").read_text(encoding="utf-8")
+
+        def function_bodies(text: str) -> dict[str, str]:
+            bodies: dict[str, str] = {}
+            for match in re.finditer(r"^(\w+)\(\) \{\n", text, re.M):
+                start = match.end()
+                end = text.index("\n}\n", start)
+                bodies[match.group(1)] = text[start:end]
+            return bodies
+
+        bodies = function_bodies(steps)
+        self.assertIn("ensure_api_venv", bodies)
+
+        venv_body = bodies["ensure_api_venv"]
+        self.assertIn("apps/api/.venv", venv_body)
+        self.assertIn("-m venv", venv_body)
+        # The export imports `app.main`, so both the API package and its local
+        # jobs dependency must be installed, matching the API job's install.
+        self.assertIn("packages/jobs-py", venv_body)
+        self.assertIn("apps/api", venv_body)
+
+        # frontend_run must actually call it, in the same container as the gate.
+        self.assertRegex(
+            bodies["frontend_run"],
+            r"(?m)^\s*ensure_api_venv\s*$",
+        )
+
+        # 4. The stage image must provide Python, or step 3 fails at run time in
+        #    a way the log only reveals as a missing venv binary.
+        frontend_images = set()
+        for config in _cnb_config_files():
+            document = yaml.safe_load(config.read_text(encoding="utf-8"))
+            for pipeline in _iter_pipelines(document):
+                for stage in pipeline.get("stages", []):
+                    if "run frontend" in str(stage.get("script", "")):
+                        frontend_images.add(str(stage.get("image", "")))
+
+        self.assertTrue(frontend_images, "no CNB stage runs the frontend job")
+        for image in frontend_images:
+            if image.startswith(".cnb/env/"):
+                dockerfile = ROOT / image
+                self.assertTrue(
+                    dockerfile.is_file(),
+                    f"{image} runs the frontend gate but is not committed",
+                )
+                # Present is not enough. `.gitignore` once had an unanchored
+                # `env/` pattern that matched `.cnb/env/` at any depth, so these
+                # files existed in the working tree but never in a checkout and
+                # the schema-documenting test above still passed. Ask git.
+                ignored = subprocess.run(
+                    ["git", "check-ignore", "--quiet", image],
+                    cwd=ROOT,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertNotEqual(
+                    ignored.returncode,
+                    0,
+                    f"{image} is ignored by .gitignore; a CNB checkout would not have it",
+                )
+                docker_text = dockerfile.read_text(encoding="utf-8")
+                self.assertRegex(
+                    docker_text,
+                    r"(?m)^FROM python:3\.14",
+                    f"{image} must carry Python for the OpenAPI contract gate",
+                )
+                self.assertRegex(
+                    docker_text,
+                    r"(?m)^FROM node:24\.19\.0",
+                    f"{image} must carry the pinned Node toolchain",
+                )
+            else:
+                # A plain upstream image cannot satisfy both toolchains; reject
+                # it instead of letting the contract gate fail on a missing venv.
+                self.assertNotRegex(
+                    image,
+                    r"^node:",
+                    f"{image} has no Python; the frontend contract gate would fail",
+                )
+                self.assertRegex(
+                    image,
+                    r"^python:",
+                    f"{image} must provide Python for the OpenAPI contract gate",
+                )
 
     def test_every_cnb_stage_script_target_exists_on_disk(self) -> None:
         """No stage may reference a script that is not in the repository."""

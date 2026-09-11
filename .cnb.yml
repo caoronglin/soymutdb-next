@@ -58,8 +58,14 @@ main:
         # a bootstrap stage would not prepare the stages after it. Each job body
         # bootstraps itself via scripts/setup-workspace.sh. The volumes below are
         # the only state that crosses a container boundary.
+        # The frontend gate closes with the OpenAPI client contract, which
+        # exports the backend schema and therefore needs Python 3.14. The image
+        # must carry both toolchains: node:24.19.0 has no Python at all, and the
+        # GitHub mirror only avoids this because actions/setup-python provides
+        # one. This repo hashes to a single pinned tag that is not floating, so
+        # the toolchain cannot move without a reviewed change.
         - name: Frontend verification
-          image: node:24.19.0
+          image: .cnb/env/Dockerfile.frontend
           volumes:
             - /cache/pnpm-store:/cache/pnpm-store
             - .turbo:/workspace/.turbo
@@ -91,8 +97,14 @@ main:
         # a bootstrap stage would not prepare the stages after it. Each job body
         # bootstraps itself via scripts/setup-workspace.sh. The volumes below are
         # the only state that crosses a container boundary.
+        # The frontend gate closes with the OpenAPI client contract, which
+        # exports the backend schema and therefore needs Python 3.14. The image
+        # must carry both toolchains: node:24.19.0 has no Python at all, and the
+        # GitHub mirror only avoids this because actions/setup-python provides
+        # one. This repo hashes to a single pinned tag that is not floating, so
+        # the toolchain cannot move without a reviewed change.
         - name: Frontend verification
-          image: node:24.19.0
+          image: .cnb/env/Dockerfile.frontend
           volumes:
             - /cache/pnpm-store:/cache/pnpm-store
             - .turbo:/workspace/.turbo
@@ -376,8 +388,14 @@ $:
         # a bootstrap stage would not prepare the stages after it. Each job body
         # bootstraps itself via scripts/setup-workspace.sh. The volumes below are
         # the only state that crosses a container boundary.
+        # The frontend gate closes with the OpenAPI client contract, which
+        # exports the backend schema and therefore needs Python 3.14. The image
+        # must carry both toolchains: node:24.19.0 has no Python at all, and the
+        # GitHub mirror only avoids this because actions/setup-python provides
+        # one. This repo hashes to a single pinned tag that is not floating, so
+        # the toolchain cannot move without a reviewed change.
         - name: Frontend verification
-          image: node:24.19.0
+          image: .cnb/env/Dockerfile.frontend
           volumes:
             - /cache/pnpm-store:/cache/pnpm-store
             - .turbo:/workspace/.turbo
