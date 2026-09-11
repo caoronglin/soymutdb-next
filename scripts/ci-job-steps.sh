@@ -189,14 +189,44 @@ frontend_run() {
 # -----------------------------------------------------------------------------
 # api-tests — Python venv, architecture guard, pytest, worker pytest
 # -----------------------------------------------------------------------------
+# The venv interpreter, not whatever `python` happens to be on PATH. The stage
+# image is pinned to PYTHON_VERSION, so accepting a stray interpreter would let
+# the suite run against a backend the repository never declared.
 api_install() {
-  python -m venv apps/api/.venv
-  apps/api/.venv/bin/pip install --upgrade pip
-  apps/api/.venv/bin/pip install --quiet -e packages/jobs-py
-  apps/api/.venv/bin/pip install -e "apps/api[dev]"
+  local interpreter="${SOYMUTDB_CI_VENV_PYTHON}"
+  local venv="${REPO_ROOT}/apps/api/.venv"
+
+  if ! command -v "${interpreter}" >/dev/null 2>&1; then
+    log "cannot build ${venv}: ${interpreter} is not on PATH"
+    log "the api-tests stage image must provide Python ${PYTHON_VERSION}"
+    return 1
+  fi
+
+  if ! interpreter_matches_pin "${interpreter}"; then
+    log "cannot build ${venv}: ${interpreter} is $("${interpreter}" -V 2>&1), not ${PYTHON_VERSION}"
+    return 1
+  fi
+
+  # Absolute paths: this container's cwd is not guaranteed to be the checkout,
+  # and a relative `apps/api/.venv` would create the venv somewhere else while
+  # check-contract.sh keeps looking under the repo root.
+  rm -rf "${venv}"
+  "${interpreter}" -m venv "${venv}"
+  "${venv}/bin/pip" install --upgrade pip
+  "${venv}/bin/pip" install --quiet -e "${REPO_ROOT}/packages/jobs-py"
+  "${venv}/bin/pip" install -e "${REPO_ROOT}/apps/api[dev]"
 }
 
-api_run() {
+# The job name in the catalog is `api-tests`, so the dispatcher resolves
+# `api_tests_run`. This function used to be called `api_run`, which meant the
+# documented command died before any test ran:
+#
+#   $ bash scripts/ci-job-steps.sh run api-tests
+#   unknown job: api-tests
+#
+# The contract tests pinned the string `run api-tests`, so they passed while the
+# step itself exited 2. Name it after the job.
+api_tests_run() {
   api_install
   bash "${REPO_ROOT}/scripts/verify-backend-tests.sh"
 }

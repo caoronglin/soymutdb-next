@@ -1331,6 +1331,70 @@ class DeliveryArchitectureTests(unittest.TestCase):
             f"documented but not implemented: {documented_commands - implemented}",
         )
 
+    def test_every_advertised_job_actually_dispatches(self) -> None:
+        """`run <job>` must resolve for every job `list` prints.
+
+        Regression for a real CNB build. `api-tests` was advertised by `list`
+        and invoked by five pipeline stages, but its body was named `api_run`,
+        while the dispatcher resolves `<job with - as _>_run`. The stage died in
+        1.6s with no test executed:
+
+            $ bash scripts/ci-job-steps.sh run api-tests
+            unknown job: api-tests
+            Finished, code: 2
+
+        The sibling contract only asserted the *string* `run api-tests` was
+        present in the pipeline configs, so it passed the entire time. This test
+        exercises the dispatcher itself. It never runs a job body, so it stays
+        fast and toolchain-free: the dispatcher is asked to resolve each name
+        with its own rule, then verified with `declare -F`.
+        """
+        steps = ROOT / "scripts/ci-job-steps.sh"
+        catalog = subprocess.run(
+            ["bash", str(steps), "list"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        jobs = catalog.stdout.split()
+        self.assertTrue(jobs, "the job catalog is empty")
+
+        # Resolve each advertised job exactly as `main()` does.
+        resolver = "; ".join(
+            f'if declare -F "{job.replace("-", "_")}_run" >/dev/null; '
+            f'then echo "OK {job}"; else echo "MISSING {job}"; fi'
+            for job in jobs
+        )
+        # `main "$@"` would execute the job instead of only defining it, so the
+        # library is sourced with that single dispatch line removed.
+        source_without_dispatch = 'source <(sed "s|^main \\"\\$@\\"$||" "$1")'
+        resolved = subprocess.run(
+            ["bash", "-c", f'{source_without_dispatch}; {resolver}', "bash", str(steps)],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(
+            resolved.returncode,
+            0,
+            f"dispatcher probe failed:\n{resolved.stdout}\n{resolved.stderr}",
+        )
+
+        reported = [line.split(None, 1) for line in resolved.stdout.splitlines() if line.strip()]
+        self.assertEqual(
+            len(reported),
+            len(jobs),
+            f"dispatcher probe reported {len(reported)} of {len(jobs)} jobs: {resolved.stdout}",
+        )
+
+        missing = [job for verdict, job in reported if verdict == "MISSING"]
+        self.assertEqual(
+            missing,
+            [],
+            "jobs advertised by `list` but not dispatchable by `run`: " + ", ".join(missing),
+        )
+
     def test_smoke_profiles_cover_every_layer_and_never_fake_a_pass(self) -> None:
         smoke = (ROOT / "scripts/smoke.sh").read_text(encoding="utf-8")
         for profile in ("contracts", "static", "runtime", "e2e", "images"):
