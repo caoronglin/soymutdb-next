@@ -324,6 +324,81 @@ class DeliveryArchitectureTests(unittest.TestCase):
             declared,
         )
 
+    def test_archived_pipeline_files_do_not_drift_from_the_root_config(self) -> None:
+        """`.cnb/pipelines/*.yml` must mirror `.cnb.yml`, not lag behind it.
+
+        These files are advertised (and asserted above) as the reviewable record
+        of what each job runs. Nothing compared their *content* to `.cnb.yml`,
+        so they silently became historical:
+
+          * `.cnb/pipelines/verify.yml` still declared a stage-level
+            `services: [postgres:16]` after the root config moved `services` to
+            the pipeline level, i.e. the exact shape whose silent no-op started
+            the PostgreSQL outage this suite documents at length.
+          * the same file carried none of the root pipeline's `push` stages
+            (Pages artifact build/upload, verification-evidence upload).
+
+        A mirror that disagrees with its source of truth is worse than no
+        mirror: it is the document a reviewer reads to decide whether the
+        pipeline is correct. Compare the parts that carry meaning -- declared
+        services, the env the gate bodies read, and the delegated job commands --
+        so the two cannot disagree on a question a reviewer would ask.
+        """
+        root_verify = None
+        for pipeline in _cnb_pipelines("main", "push"):
+            if pipeline.get("name") == "verify":
+                root_verify = pipeline
+        self.assertIsNotNone(root_verify, "missing main/push verify pipeline")
+
+        archived = yaml.safe_load(
+            (ROOT / ".cnb/pipelines/verify.yml").read_text(encoding="utf-8")
+        )
+
+        # 1. Services are a PIPELINE-level key; the archived file must place
+        #    them exactly where the root config does.
+        self.assertEqual(
+            root_verify.get("services"),
+            archived.get("services"),
+            "archived verify pipeline declares different pipeline-level services",
+        )
+        for stage in archived.get("stages", []) or []:
+            self.assertNotIn("services", stage, f"stage-level services: {stage}")
+
+        # 2. The build environment the gate bodies actually read.
+        for key in ("VITE_DEPLOYMENT_MODE", "VITE_API_BASE_URL", "VITE_JBROWSE_BASE_URL"):
+            self.assertEqual(
+                root_verify.get("env", {}).get(key),
+                archived.get("env", {}).get(key),
+                f"archived verify pipeline disagrees on {key}",
+            )
+
+        # 3. Every stage the root pipeline runs must appear in the mirror with
+        #    the same delegated command (an artifact-upload stage has settings
+        #    rather than a script, so compare `script` when present).
+        def _stage_map(pipeline: dict) -> dict[str, str]:
+            mapped: dict[str, str] = {}
+            for stage in pipeline.get("stages", []) or []:
+                if not isinstance(stage, dict) or "name" not in stage:
+                    continue
+                mapped[str(stage["name"])] = str(
+                    stage.get("script") or _flatten(stage.get("settings") or {})
+                )
+            return mapped
+
+        root_stages = _stage_map(root_verify)
+        archived_stages = _stage_map(archived)
+        self.assertEqual(
+            set(root_stages),
+            set(archived_stages),
+            "the archived verify pipeline runs a different stage list than .cnb.yml",
+        )
+        for name, script in root_stages.items():
+            self.assertEqual(
+                script,
+                archived_stages[name],
+                f"archived verify pipeline stage {name!r} is stale",
+            )
+
     def test_web_trigger_events_have_matching_pipelines(self) -> None:
         document = _cnb()
         fallback = document.get("$", {})
