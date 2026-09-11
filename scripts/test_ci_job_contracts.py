@@ -490,6 +490,55 @@ class DeliveryArchitectureTests(unittest.TestCase):
                             "pnpm job without a persistent store volume",
                         )
 
+    def test_i18n_test_mock_interpolates_like_the_real_library(self) -> None:
+        """The shared double must substitute {{name}}, not return it literally.
+
+        Real CNB failure, after the stable-`t` fix removed the render loop:
+
+            src/routes/imports/import-validation-report.test.tsx
+            Unable to find an element with the text: /1 validation errors/
+              <p>{{errors}} validation errors</p>
+
+        The component interpolates a default and the test asserts the result. Two
+        separate gaps produced the literal template: that test did not mock
+        `react-i18next` at all (and uninitialised i18next returns `defaultValue`
+        verbatim), and the shared double returned it verbatim too. The test now
+        uses the shared double, which is why the substitution is asserted here.
+        """
+        for app in ("apps/admin", "apps/web"):
+            mock = (ROOT / app / "src/test/mocks.ts").read_text(encoding="utf-8")
+            # Substitution is implemented with a replace() over a `{{name}}`
+            # pattern. Assert the mechanism rather than its exact spelling.
+            self.assertIn(
+                ".replace(",
+                mock,
+                f"{app}/src/test/mocks.ts must substitute {{{{name}}}} placeholders",
+            )
+            self.assertIn(
+                "{{",
+                mock.replace("{{", "{{"),
+                f"{app}/src/test/mocks.ts must handle {{{{name}}}} placeholders",
+            )
+            self.assertIn("(match, name", mock.replace("(match, name", "(match, name"))
+            self.assertIn("defaultValue", mock, app)
+
+        # Any test that asserts an interpolated default must mock i18next with the
+        # shared double (otherwise nothing substitutes the placeholder).
+        import_failures = []
+        for test_file in sorted(ROOT.glob("apps/admin/src/**/*.test.ts*")) + sorted(
+            ROOT.glob("apps/web/src/**/*.test.ts*")
+        ):
+            text = test_file.read_text(encoding="utf-8")
+            asserts_interpolation = "validation errors" in text and "getByText" in text
+            if asserts_interpolation and "test/mocks" not in text:
+                import_failures.append(str(test_file.relative_to(ROOT)))
+        self.assertEqual(
+            import_failures,
+            [],
+            "these tests assert interpolated output but do not use the shared "
+            "i18n double:\n" + "\n".join(import_failures),
+        )
+
     def test_i18n_test_mocks_do_not_return_a_fresh_t_per_render(self) -> None:
         """An inline `useTranslation` mock makes effects loop forever.
 
