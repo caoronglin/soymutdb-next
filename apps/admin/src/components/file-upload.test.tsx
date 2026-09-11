@@ -226,8 +226,9 @@ describe("FileUpload multipart POST", () => {
     chooseFile(container, makeFile().file);
 
     await waitFor(() => {
+      // The message is the rendered translation, not the raw i18n key.
       expect(messageError).toHaveBeenCalledWith(
-        expect.stringContaining("presignMustUsePost"),
+        expect.stringContaining("Upload presign response must use POST"),
       );
     });
     expect(MockXMLHttpRequest.instances).toHaveLength(0);
@@ -242,8 +243,9 @@ describe("FileUpload multipart POST", () => {
     chooseFile(container, file);
 
     await waitFor(() => {
+      // The message is the rendered translation, not the raw i18n key.
       expect(messageError).toHaveBeenCalledWith(
-        expect.stringContaining("fileMimeRequired"),
+        expect.stringContaining("File MIME type is required"),
       );
     });
     expect(arrayBuffer).not.toHaveBeenCalled();

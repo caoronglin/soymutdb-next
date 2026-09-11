@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import SettingsPage from "./settings";
@@ -58,14 +58,43 @@ function deferred(): Deferred {
   return { promise, resolve, reject };
 }
 
+/**
+ * Every section the page loads over `http.get`. Sections that carry site
+ * content are variant-scoped (`<base>_<variant>`); the page defaults to the
+ * `external` variant. `cdn` is excluded because it loads through
+ * `adminSettingsApi.get("cdn")` and is asserted separately.
+ */
 const endpoints = [
   "/admin/settings/general",
-  "/admin/settings/about",
+  "/admin/settings/about_external",
+  "/admin/settings/home_external",
   "/admin/settings/data",
   "/admin/settings/email",
   "/admin/settings/security",
   "/admin/settings/file_preview",
+  "/admin/settings/footer_external",
+  "/admin/settings/content_external",
 ] as const;
+
+// The page renders one save action per section; keep this in sync with the
+// section list in `settings.tsx`.
+const SECTION_COUNT = 10;
+
+/**
+ * Sections that surface a load-error alert when their request fails. `cdn`
+ * resolves through `adminSettingsApi.get` and `content` only loads once the
+ * schema query returns fields, so neither is part of this failure scenario.
+ */
+const LOAD_ERROR_SECTIONS = 8;
+
+/**
+ * `content_external` is only requested after the schema query returns fields.
+ * With no schema mocked it is never fetched, so rejecting its deferred would
+ * leave an unhandled rejection and make the whole run exit non-zero.
+ */
+const SECTION_ENDPOINTS = endpoints.filter(
+  (endpoint) => endpoint !== "/admin/settings/content_external",
+);
 
 let requests: Record<(typeof endpoints)[number], Deferred>;
 
@@ -117,9 +146,16 @@ describe("SettingsPage save protection", () => {
     await waitFor(() =>
       expect(echartsInput).toHaveValue("https://cdn.example/echarts.js"),
     );
-    const saveButtons = screen.getAllByRole("button", { name: "Save Changes" });
-    expect(saveButtons[5]).toBeEnabled();
-    fireEvent.click(saveButtons[5]);
+    // Resolve the CDN card's own save action structurally instead of trusting a
+    // positional index, which silently retargets when a section is added.
+    const cdnUrlInput = screen.getByLabelText("ECharts CDN URL");
+    const cdnCard = cdnUrlInput.closest(".ant-card");
+    expect(cdnCard).not.toBeNull();
+    const cdnSave = within(cdnCard as HTMLElement).getByRole("button", {
+      name: "Save Changes",
+    });
+    expect(cdnSave).toBeEnabled();
+    fireEvent.click(cdnSave);
 
     await waitFor(() => {
       expect(cdnPatchMock).toHaveBeenCalledWith("cdn", 1, {
@@ -133,24 +169,30 @@ describe("SettingsPage save protection", () => {
     renderPage();
 
     act(() => {
-      for (const endpoint of endpoints) {
+      for (const endpoint of SECTION_ENDPOINTS) {
         requests[endpoint].reject(new Error(`${endpoint} unavailable`));
       }
     });
 
     const errors = await screen.findAllByRole("alert");
-    expect(errors).toHaveLength(7);
+    expect(errors).toHaveLength(LOAD_ERROR_SECTIONS);
     expect(errors.map((error) => error.textContent)).toEqual([
       "Unable to load General settings. Refresh the page and try again.",
       "Unable to load About settings. Refresh the page and try again.",
+      "Unable to load Homepage welcome settings. Refresh the page and try again.",
       "Unable to load Data & Storage settings. Refresh the page and try again.",
       "Unable to load Email & Notifications settings. Refresh the page and try again.",
       "Unable to load Security settings. Refresh the page and try again.",
-      "Unable to load CDN Configuration settings. Refresh the page and try again.",
       "Unable to load File Preview settings. Refresh the page and try again.",
+      "Unable to load Footer settings. Refresh the page and try again.",
     ]);
 
+    // A section whose load failed must not offer a save action. Only the CDN
+    // section resolved successfully in this scenario, so it is excluded.
+    const cdnUrlInput = screen.getByLabelText("ECharts CDN URL");
+    const cdnCard = cdnUrlInput.closest(".ant-card");
     for (const button of screen.getAllByRole("button", { name: "Save Changes" })) {
+      if (cdnCard?.contains(button)) continue;
       expect(button).toBeDisabled();
     }
   });
@@ -159,13 +201,16 @@ describe("SettingsPage save protection", () => {
     renderPage();
 
     const saveButtons = screen.getAllByRole("button", { name: "Save Changes" });
-    expect(saveButtons).toHaveLength(7);
+    expect(saveButtons).toHaveLength(SECTION_COUNT);
     for (const button of saveButtons) {
       expect(button).toBeDisabled();
     }
 
     await waitFor(() => {
+      // `content_external` only loads once the schema query yields fields, so it
+      // is excluded from the request assertions here.
       for (const endpoint of endpoints) {
+        if (endpoint === "/admin/settings/content_external") continue;
         expect(getMock).toHaveBeenCalledWith(endpoint);
       }
       expect(cdnGetMock).toHaveBeenCalledWith("cdn");
@@ -178,7 +223,10 @@ describe("SettingsPage save protection", () => {
     });
 
     await waitFor(() => {
+      // The content section stays disabled until its schema arrives; every
+      // other section becomes actionable once its configuration resolves.
       for (const button of saveButtons) {
+        if (button === saveButtons[SECTION_COUNT - 2]) continue;
         expect(button).toBeEnabled();
       }
     });

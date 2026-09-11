@@ -3,6 +3,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import FeaturesPage from "./features";
 
+// The shared double keeps a stable `t` identity and interpolates `{{placeholders}}`:
+// an unmocked i18next leaves raw keys/templates in the DOM, which reads as a product bug.
+// See test/mocks.ts.
+vi.mock("react-i18next", async () => (await import("../test/mocks")).mockTranslation);
+
 const { adminGetMock, getMock, updateMock } = vi.hoisted(() => ({
   adminGetMock: vi.fn(),
   getMock: vi.fn(),

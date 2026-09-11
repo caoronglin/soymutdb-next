@@ -3,6 +3,7 @@ import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { SiteContentProvider } from "@/lib/site-content";
 
 const state = vi.hoisted(() => ({
   search: {
@@ -56,6 +57,9 @@ vi.mock("@tanstack/react-router", async () => {
 vi.mock("@soymutdb/api-client", () => ({
   getAssemblies: state.getAssemblies,
   searchGenes: state.searchGenes,
+  // The route stamps the active release onto its API calls; no release is
+  // pinned in this test, so the anonymous default (`null`) applies.
+  getReleaseId: () => null,
 }));
 
 // The shared double keeps a stable `t` identity: an inline
@@ -192,8 +196,12 @@ function renderRoute() {
   const Component = (Route as unknown as { component: React.ComponentType }).component;
 
   return render(
+    // The gene route reads site copy through the provider; without it the
+    // component throws instead of rendering the assembly context.
     <QueryClientProvider client={queryClient}>
-      <Component />
+      <SiteContentProvider>
+        <Component />
+      </SiteContentProvider>
     </QueryClientProvider>,
   );
 }

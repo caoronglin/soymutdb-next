@@ -6,7 +6,7 @@ import { PartitionOutlined, PlusOutlined, LoadingOutlined } from "@ant-design/ic
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { Badge, Button, Card, Input, Select, Table, Typography } from "@/lib/antd";
 import { AdminUsageGuide } from "../../components/admin-usage-guide";
 import { pageBuilderApi } from "../../lib/page-builder-api";
@@ -17,6 +17,7 @@ import {
 
 export default function PageBuilderIndexPage() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { t } = useTranslation();
   const [route, setRoute] = useState("");
   const [titleKey, setTitleKey] = useState("");
@@ -51,8 +52,10 @@ export default function PageBuilderIndexPage() {
       setRoute("");
       setTitleKey("");
       setError(null);
-      // Navigate to the new editor.
-      window.location.hash = `#/page-builder/${created.id}`;
+      // Navigate to the new editor through the router rather than assigning to
+      // `window.location` (mutating a global inside a component is rejected by
+      // the react-hooks/immutability lint rule and bypasses route preloading).
+      navigate({ to: "/page-builder/$pageId", params: { pageId: created.id } });
     },
     onError: (err: unknown) => {
       const e = err as { message?: string };

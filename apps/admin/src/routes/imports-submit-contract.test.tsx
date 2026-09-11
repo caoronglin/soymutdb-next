@@ -64,7 +64,9 @@ describe("ImportsPage module submit contract", () => {
     await user.click(await screen.findByRole("button", { name: "New Import" }));
     const moduleTypeSelect = screen.getByRole("combobox", { name: "Import Type" });
     await user.click(moduleTypeSelect);
-    await user.click(await screen.findByText("Module Data"));
+    // antd renders the selected option's label both in the trigger and in the
+    // open dropdown, so scope the click to the dropdown option.
+    await user.click(await screen.findByRole("option", { name: "Module Data" }));
 
     await user.type(screen.getByLabelText("Filename"), "genes.tsv");
     await user.type(screen.getByLabelText("S3 File Path"), "s3://archive/genes.tsv");

@@ -5,6 +5,12 @@ import { fileURLToPath } from "node:url";
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
 export default defineConfig({
+  // Mirror the build-time constants declared in `vite.config.ts`. Without them
+  // any module that branches on the site variant (e.g. `src/lib/site-content.tsx`)
+  // throws `__SOYMUTDB_INTERNAL_SITE__ is not defined` under test.
+  define: {
+    __SOYMUTDB_INTERNAL_SITE__: false,
+  },
   resolve: {
     // Keep test resolution aligned with Vite and tsconfig's @/* contract.
     alias: {
