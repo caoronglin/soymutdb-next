@@ -6,6 +6,19 @@ vi.mock("../../components/import-preview-table", () => ({
   ImportPreviewTable: ({ rows }: { rows: unknown[] }) => <div data-testid="preview-table">{rows.length} rows</div>,
 }));
 
+// This component interpolates its default:
+//
+//   t("admin.ops.validationErrors", {
+//     errors: String(count),
+//     defaultValue: "{{errors}} validation errors",
+//   })
+//
+// and the test asserts "1 validation errors". Without an initialised i18next,
+// `t` returns `defaultValue` verbatim, so the DOM contains the literal
+// `{{errors}} validation errors`. The shared double substitutes placeholders the
+// way i18next does, and keeps a stable `t` identity. See src/test/mocks.ts.
+vi.mock("react-i18next", async () => (await import("../../test/mocks")).mockTranslation);
+
 describe("ImportValidationReport", () => {
   it("keeps unavailable preview reasons visible", () => {
     render(<ImportValidationReport preview={{ status: "unavailable", reason: "Inspection service unavailable" }} />);

@@ -11,6 +11,39 @@ SCRIPT = ROOT / "scripts/dependency_governance.py"
 CONFIG = ROOT / "dependency-governance.json"
 
 
+def _cnb_job(pipeline_text: str, job_name: str) -> str:
+    """Extract one stage (``- name:``) or pipeline entry from CNB config."""
+    match = re.search(
+        rf"^(?P<indent>[ \t]*)- name: {re.escape(job_name)}\n"
+        rf"(?:(?P=indent)[ \t]+.*\n|\n)*",
+        pipeline_text,
+        flags=re.MULTILINE,
+    )
+    if match is None:
+        # Fall back to a wide slice for entries with deeply nested bodies.
+        match = re.search(
+            rf"^\s*- name: {re.escape(job_name)}\n.*?(?=^\s*- name: |\Z)",
+            pipeline_text,
+            flags=re.MULTILINE | re.DOTALL,
+        )
+    assert match is not None, f"missing CNB job/stage: {job_name}"
+    return match.group(0)
+
+
+def _cnb_pipeline(name: str, branch: str = "main", event: str = "push") -> str:
+    """Serialize one CNB pipeline's definition for assertion purposes."""
+    document = yaml.safe_load((ROOT / ".cnb.yml").read_text(encoding="utf-8"))
+    for pipeline in document.get(branch, {}).get(event, []):
+        if pipeline.get("name") == name:
+            return json.dumps(pipeline, ensure_ascii=False)
+    raise AssertionError(f"missing CNB pipeline: {name}")
+
+
+def _plain(value: object) -> str:
+    """Serialize parsed configuration for substring assertions."""
+    return json.dumps(value, ensure_ascii=False)
+
+
 def _workflow_job(workflow: str, job_name: str) -> str:
     match = re.search(
         rf"^  {re.escape(job_name)}:\n.*?(?=^  [a-z0-9-]+:\n|\Z)",
@@ -273,20 +306,30 @@ def test_i18n_workspace_unifies_react_and_react_dom_runtime() -> None:
     assert "react-dom@19.2.8(react@19.2.0)" not in lockfile
 
 
-def test_ci_generates_and_uploads_evidence_before_image_builds() -> None:
-    workflow_path = ROOT / ".github/workflows/ci.yml"
-    workflow_text = workflow_path.read_text(encoding="utf-8")
-    workflow = yaml.safe_load(workflow_text)
-    job = workflow["jobs"]["dependency-governance"]
-    job_text = _workflow_job(workflow_text, "dependency-governance")
+def test_evidence_is_generated_and_uploaded_before_image_builds() -> None:
+    """Governance evidence must exist before any image is built or published."""
+    job_text = _cnb_pipeline("verify")
+    shared = (ROOT / "scripts/ci-job-steps.sh").read_text(encoding="utf-8")
+    package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
 
-    assert job["permissions"] == {"contents": "read"}
-    assert "continue-on-error" not in job_text
-    assert "Generate machine dependency graphs" in job_text
-    assert "Run dependency governance gates" in job_text
-    assert "Upload dependency governance evidence" in job_text
-    assert job_text.count("if: always()") >= 2
-    assert "dependency-governance-${{ github.sha }}" in job_text
-    assert "uv==0.11.33" in job_text
-    assert "PyYAML==6.0.3" in job_text
-    assert "dependency-governance" in workflow["jobs"]["docker-build"]["needs"]
+    # The gates themselves live in the shared job library and the root scripts.
+    assert "deps:graphs" in package["scripts"]
+    assert "deps:audit" in package["scripts"]
+    assert "pnpm deps:graphs" in shared
+    assert "pnpm deps:audit" in shared
+    # A failing graph must not hide the remaining analyzers.
+    assert "|| rc=$?" in shared
+    assert "UV_CACHE_DIR" in shared
+
+    # The CNB verify pipeline runs the gate as a hard stage and uploads the
+    # evidence; image pipelines live in the same branch and come after it.
+    assert "scripts/ci-job-steps.sh run dependency-governance" in job_text
+    document = yaml.safe_load((ROOT / ".cnb.yml").read_text(encoding="utf-8"))
+    names = [pipeline["name"] for pipeline in document["main"]["push"]]
+    assert names.index("verify") < names.index("docker-images (amd64)")
+
+    verify_job = json.loads(job_text)
+    assert verify_job["endStages"], "verification evidence must be uploaded"
+    assert any(
+        "artifacts" in json.dumps(stage) for stage in verify_job["endStages"]
+    )

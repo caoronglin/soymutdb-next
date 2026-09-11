@@ -1,0 +1,410 @@
+# =============================================================================
+# SoyMutDB Next — CNB delivery pipeline (source of truth)
+# =============================================================================
+# This file is the authoritative definition of the delivery chain. The GitHub
+# workflows under .github/workflows are retained as a mirror for contributors who
+# still open pull requests on GitHub, and both providers call the SAME scripts:
+#
+#   scripts/ci-job-steps.sh               job bodies (verify, api, governance…)
+#   scripts/verify-frontend-artifacts.sh  frontend gates
+#   scripts/verify-backend-tests.sh       API/worker gates
+#   scripts/build-release-image.sh        build + smoke + scan + SBOM + export
+#   scripts/release-contract.golden.sh    merge + sign + attest + publish
+#   scripts/build-pages-artifact.sh       static site build
+#   scripts/verify-pages-artifact.sh      publication-time verification
+#   scripts/smoke.sh                      local/CI smoke layers
+#
+# Nothing about *what* is built or *how* it is verified lives in this file; it
+# only sequences jobs and wires credentials. That is what keeps CNB and GitHub
+# from drifting apart, and scripts/test_ci_job_contracts.py enforces it.
+#
+# Structure
+#   main  → pull_request / push / nightly: the full verification suite
+#   $     → release and publication: main pushes, tags and manual triggers.
+#           `tag_push` and `issue.*` are repository-level events and may only be
+#           declared under the `$` fallback branch.
+#
+# Version pins (Node 24.19.0 / pnpm 11.21.0 / Python 3.14 / uv 0.11.33) mirror
+# package.json, .nvmrc and the Dockerfiles; the contract test fails when any of
+# these disagree.
+#
+# Security
+#   PR events get a restricted CNB_TOKEN, so every credential-bearing pipeline
+#   (registry login, signing, publication) is main-push, tag or manual only.
+# =============================================================================
+main:
+  # ---------------------------------------------------------------------------
+  # Pull requests — verification only, no credentials, nothing published
+  # ---------------------------------------------------------------------------
+  pull_request:
+    - name: verify
+      # 16 cores: pnpm install + turbo build + three vitest projects + Python.
+      runner:
+        cpus: 16
+      env:
+        # The offline demo build must not need a live release API.
+        VITE_DEPLOYMENT_MODE: demo
+        VITE_API_BASE_URL: https://api.soymutdb.test
+        VITE_JBROWSE_BASE_URL: https://jbrowse.soymutdb.test
+      stages:
+        # No "setup workspace" stage: every CNB stage gets a fresh container, so
+        # a bootstrap stage would not prepare the stages after it. Each job body
+        # bootstraps itself via scripts/setup-workspace.sh. The volumes below are
+        # the only state that crosses a container boundary.
+        - name: Frontend verification
+          image: node:24.19.0
+          volumes:
+            - /cache/pnpm-store:/cache/pnpm-store
+            - .turbo:/workspace/.turbo
+          script: bash scripts/ci-job-steps.sh run frontend
+        - name: API + Worker verification
+          image: python:3.14
+          services:
+            - postgres:16
+          script: bash scripts/ci-job-steps.sh run api-tests
+        - name: Dependency governance
+          image: node:24.19.0
+          volumes:
+            - /cache/pnpm-store:/cache/pnpm-store
+          script: bash scripts/ci-job-steps.sh run dependency-governance
+
+  # ---------------------------------------------------------------------------
+  # main — verify, then prove the images, the projections and the MCP transport
+  # ---------------------------------------------------------------------------
+  push:
+    - name: verify
+      runner:
+        cpus: 16
+      env:
+        VITE_DEPLOYMENT_MODE: demo
+        VITE_API_BASE_URL: https://api.soymutdb.test
+        VITE_JBROWSE_BASE_URL: https://jbrowse.soymutdb.test
+      stages:
+        # No "setup workspace" stage: every CNB stage gets a fresh container, so
+        # a bootstrap stage would not prepare the stages after it. Each job body
+        # bootstraps itself via scripts/setup-workspace.sh. The volumes below are
+        # the only state that crosses a container boundary.
+        - name: Frontend verification
+          image: node:24.19.0
+          volumes:
+            - /cache/pnpm-store:/cache/pnpm-store
+            - .turbo:/workspace/.turbo
+          script: bash scripts/ci-job-steps.sh run frontend
+        - name: API + Worker verification
+          image: python:3.14
+          services:
+            - postgres:16
+          script: bash scripts/ci-job-steps.sh run api-tests
+        - name: Dependency governance
+          image: node:24.19.0
+          volumes:
+            - /cache/pnpm-store:/cache/pnpm-store
+          script: bash scripts/ci-job-steps.sh run dependency-governance
+        - name: Build the checksummed Pages artifact
+          image: node:24.19.0
+          volumes:
+            - /cache/pnpm-store:/cache/pnpm-store
+            - .turbo:/workspace/.turbo
+          # Both scripts carry a bash shebang and bootstrap their own container
+          # (build-pages-artifact.sh runs `pnpm --filter ... build`).
+          script: bash scripts/build-pages-artifact.sh && bash scripts/verify-pages-artifact.sh pages-dist
+        - name: Upload GitHub Pages demo artifact
+          image: cnbcool/artifact
+          settings:
+            path: pages-dist
+            name: pages-demo-dist
+      endStages:
+        - name: Upload verification evidence
+          image: cnbcool/artifact
+          settings:
+            path: artifacts
+            name: verification-evidence-$CNB_COMMIT_SHORT
+
+    - name: clickhouse-migration
+      runner:
+        cpus: 8
+      stages:
+        # A real ClickHouse server is required: the legacy fixture migration and
+        # its idempotence proof are hard gates, not simulated.
+        # Python 3.14 to match PYTHON_VERSION: the migration script and its
+        # assertions run on the same interpreter as the rest of the delivery
+        # chain, so a 3.12-only drift cannot hide here.
+        - name: Migrate the legacy ClickHouse fixture
+          image: python:3.14
+          services:
+            - docker
+          script: bash scripts/ci-job-steps.sh run clickhouse-migration
+
+    - name: mcp-e2e
+      runner:
+        cpus: 8
+      stages:
+        # Authenticated transport through the production nginx semantics. The
+        # build-tools image has curl/bash preinstalled, so no per-run package
+        # install lands on the critical path.
+        - name: MCP transport smoke through nginx
+          image: .cnb/env/Dockerfile.build-tools
+          services:
+            - docker
+          script: bash scripts/ci-job-steps.sh run mcp-e2e
+
+    # Two native-architecture image pipelines. Separate pipelines rather than a
+    # matrix: each architecture must build on its own native runner so the
+    # exported image architecture is proven, never emulated or assumed.
+    - name: docker-images (amd64)
+      runner:
+        cpus: 16
+      env:
+        SOYMUTDB_CI_ARCH: amd64
+        SOYMUTDB_CI_OUTPUT_DIR: validate-runtime-images-amd64
+      stages:
+        - name: Verify images for linux/amd64
+          image: .cnb/env/Dockerfile.build-tools
+          services:
+            - docker
+          script: bash scripts/ci-job-steps.sh run image-build
+      endStages:
+        - name: Upload validated runtime images (amd64)
+          image: cnbcool/artifact
+          settings:
+            path: validate-runtime-images-amd64
+            name: validated-runtime-images-amd64
+
+    - name: docker-images (arm64)
+      runner:
+        cpus: 16
+        tags: cnb:arch:arm64:v8
+      env:
+        SOYMUTDB_CI_ARCH: arm64
+        SOYMUTDB_CI_OUTPUT_DIR: validate-runtime-images-arm64
+      stages:
+        - name: Verify images for linux/arm64
+          image: .cnb/env/Dockerfile.build-tools
+          services:
+            - docker
+          script: bash scripts/ci-job-steps.sh run image-build
+      endStages:
+        - name: Upload validated runtime images (arm64)
+          image: cnbcool/artifact
+          settings:
+            path: validate-runtime-images-arm64
+            name: validated-runtime-images-arm64
+
+  # ---------------------------------------------------------------------------
+  # Nightly — online smoke test against the deployed public site
+  # ---------------------------------------------------------------------------
+  "crontab: 0 2 * * *":
+    - name: smoke
+      runner:
+        cpus: 8
+      env:
+        SMOKE_BASE_URL: https://soymutdb.example.com
+      stages:
+        - name: Install Playwright browsers
+          image: node:24.19.0
+          script: bash -c 'cd e2e && npm ci && npx playwright install --with-deps chromium'
+        - name: Run online smoke tests
+          image: node:24.19.0
+          script: bash -c 'cd e2e && CI=1 npx playwright test'
+      failStages:
+        - name: Upload smoke failure artifacts
+          image: cnbcool/artifact
+          settings:
+            path: e2e/playwright-report
+            name: e2e-smoke-failure
+
+# =============================================================================
+# Repository-level events
+# =============================================================================
+# `tag_push` and `issue.*` may only be declared under the `$` fallback branch.
+# Release and publication live here too: they consume artifacts produced by the
+# `main` pipelines but are triggered by main pushes, tags or manual buttons.
+# =============================================================================
+$:
+  push:
+    # Publication consumes the two verified packages; it never rebuilds.
+    - name: release
+      runner:
+        cpus: 8
+      imports:
+        # Registry credentials and the OIDC issuer live in the CNB secret store.
+        - https://cnb.cool/crl-code/mutlidb/-/blob/main/.cnb/env/release.yml
+      stages:
+        - name: Publish signed multi-architecture release
+          image: .cnb/env/Dockerfile.build-tools
+          services:
+            - docker
+          script: bash scripts/ci-job-steps.sh run release
+      endStages:
+        - name: Upload signed OCI release contract
+          image: cnbcool/artifact
+          settings:
+            path: release-contract
+            name: oci-release-contract-$CNB_COMMIT_SHORT
+
+    # Static-site publication: byte copy of the verified artifact, no rebuild.
+    - name: publish
+      runner:
+        cpus: 4
+      stages:
+        # verify + stage: the stage body stays a single `bash <script>` call so
+        # the platform's default `sh` never interprets it.
+        - name: Verify and stage the CI-built artifact before publication
+          image: .cnb/env/Dockerfile.build-tools
+          script: bash scripts/stage-pages-publication.sh verify
+          env:
+            PAGES_ARTIFACT_DIR: pages-dist
+            PAGES_PUBLISH_DIR: pages-publish
+        - name: Hand the verified tree to the publication adapter
+          image: .cnb/env/Dockerfile.build-tools
+          script: bash scripts/stage-pages-publication.sh publish
+          env:
+            PAGES_PUBLISH_DIR: pages-publish
+      endStages:
+        - name: Upload verified publication tree
+          image: cnbcool/artifact
+          settings:
+            path: pages-dist
+            name: pages-verified-tree-$CNB_COMMIT_SHORT
+
+  # ---------------------------------------------------------------------------
+  # Tags — release images for an explicit version
+  # ---------------------------------------------------------------------------
+  tag_push:
+    - name: release-tagged
+      runner:
+        cpus: 16
+      env:
+        SOYMUTDB_CI_ARCH: amd64
+        SOYMUTDB_CI_OUTPUT_DIR: validate-runtime-images-amd64
+      stages:
+        - name: Verify images for this tag
+          image: .cnb/env/Dockerfile.build-tools
+          services:
+            - docker
+          script: bash scripts/ci-job-steps.sh run image-build
+        - name: Publish the signed tagged release
+          image: .cnb/env/Dockerfile.build-tools
+          services:
+            - docker
+          # RELEASE_TAG is injected through the stage environment rather than
+          # prefixed inline, so the stage body stays a plain `bash <script>`
+          # invocation that cannot pick up the platform's default shell.
+          # On tag_push, CNB_BRANCH holds the tag name.
+          env:
+            RELEASE_TAG: $CNB_BRANCH
+          script: bash scripts/ci-job-steps.sh run release
+      endStages:
+        - name: Upload signed tagged release contract
+          image: cnbcool/artifact
+          settings:
+            path: release-contract
+            name: oci-release-contract-$CNB_BRANCH
+
+  # ---------------------------------------------------------------------------
+  # Web triggers — manual entry points declared in .cnb/web_trigger.yml
+  # ---------------------------------------------------------------------------
+  web_trigger_verify:
+    - name: verify-manual
+      runner:
+        cpus: 16
+      env:
+        VITE_DEPLOYMENT_MODE: demo
+        VITE_API_BASE_URL: https://api.soymutdb.test
+        VITE_JBROWSE_BASE_URL: https://jbrowse.soymutdb.test
+      stages:
+        # No "setup workspace" stage: every CNB stage gets a fresh container, so
+        # a bootstrap stage would not prepare the stages after it. Each job body
+        # bootstraps itself via scripts/setup-workspace.sh. The volumes below are
+        # the only state that crosses a container boundary.
+        - name: Frontend verification
+          image: node:24.19.0
+          volumes:
+            - /cache/pnpm-store:/cache/pnpm-store
+            - .turbo:/workspace/.turbo
+          script: bash scripts/ci-job-steps.sh run frontend
+        - name: API + Worker verification
+          image: python:3.14
+          services:
+            - postgres:16
+          script: bash scripts/ci-job-steps.sh run api-tests
+
+  web_trigger_docker-images:
+    - name: images-manual-amd64
+      runner:
+        cpus: 16
+      env:
+        SOYMUTDB_CI_ARCH: amd64
+        SOYMUTDB_CI_OUTPUT_DIR: validate-runtime-images-amd64
+      stages:
+        - name: Verify images (amd64)
+          image: .cnb/env/Dockerfile.build-tools
+          services:
+            - docker
+          script: bash scripts/ci-job-steps.sh run image-build
+    - name: images-manual-arm64
+      runner:
+        cpus: 16
+        tags: cnb:arch:arm64:v8
+      env:
+        SOYMUTDB_CI_ARCH: arm64
+        SOYMUTDB_CI_OUTPUT_DIR: validate-runtime-images-arm64
+      stages:
+        - name: Verify images (arm64)
+          image: .cnb/env/Dockerfile.build-tools
+          services:
+            - docker
+          script: bash scripts/ci-job-steps.sh run image-build
+
+  web_trigger_release:
+    - name: release-manual
+      runner:
+        cpus: 8
+      imports:
+        - https://cnb.cool/crl-code/mutlidb/-/blob/main/.cnb/env/release.yml
+      stages:
+        - name: Publish the signed release
+          image: .cnb/env/Dockerfile.build-tools
+          services:
+            - docker
+          script: bash scripts/ci-job-steps.sh run release
+      endStages:
+        - name: Upload signed release contract
+          image: cnbcool/artifact
+          settings:
+            path: release-contract
+            name: oci-release-contract-$CNB_COMMIT_SHORT
+
+  web_trigger_publish:
+    - name: publish-manual
+      runner:
+        cpus: 4
+      stages:
+        # verify + stage: the stage body stays a single `bash <script>` call so
+        # the platform's default `sh` never interprets it.
+        - name: Verify and stage the CI-built artifact before publication
+          image: .cnb/env/Dockerfile.build-tools
+          script: bash scripts/stage-pages-publication.sh verify
+          env:
+            PAGES_ARTIFACT_DIR: pages-dist
+            PAGES_PUBLISH_DIR: pages-publish
+        - name: Hand the verified tree to the publication adapter
+          image: .cnb/env/Dockerfile.build-tools
+          script: bash scripts/stage-pages-publication.sh publish
+          env:
+            PAGES_PUBLISH_DIR: pages-publish
+      endStages:
+        - name: Upload verified publication tree
+          image: cnbcool/artifact
+          settings:
+            path: pages-dist
+            name: pages-verified-tree-$CNB_COMMIT_SHORT
+
+  # ---------------------------------------------------------------------------
+  # NPC — Issue-driven tasks handled inside the repository pipeline
+  # ---------------------------------------------------------------------------
+  issue.comment@npc:
+    - name: npc
+      stages:
+        - name: Handle the NPC request
+          script: echo "Handled by the .cnb.yml npc pipeline"

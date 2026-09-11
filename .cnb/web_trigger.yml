@@ -1,0 +1,44 @@
+# =============================================================================
+# SoyMutDB — CNB web triggers
+# =============================================================================
+# Manual entry points for the delivery pipelines. These let an Issue-driven task
+# (or a reviewer) start verification, image builds, or publication on a branch
+# without pushing a commit.
+#
+# Each button raises `web_trigger_<name>`; the matching pipeline lives in
+# `.cnb.yml` under the `$` fallback branch.
+# =============================================================================
+branch:
+  - reg: ^main$
+    buttons:
+      - name: 运行完整验证
+        description: 在所选分支上运行前端、API/Worker 与依赖治理全套门禁
+        event: web_trigger_verify
+        permissions:
+          roles: [master, developer]
+
+      - name: 构建并校验发布镜像
+        description: 构建 amd64/arm64 镜像，执行运行时冒烟、Trivy 扫描与 SPDX SBOM 导出
+        event: web_trigger_docker-images
+        permissions:
+          roles: [master, developer]
+
+      - name: 发布签名多架构 Release
+        description: 合并已校验的镜像包并发布带签名与 attestation 的 OCI release
+        event: web_trigger_release
+        permissions:
+          roles: [master]
+
+      - name: 发布静态站点
+        description: 校验并发布已验证的静态站点制品（字节级复制，不重新构建）
+        event: web_trigger_publish
+        permissions:
+          roles: [master]
+
+  - reg: ^feature/
+    buttons:
+      - name: 运行完整验证
+        description: 在特性分支上运行全套验证门禁
+        event: web_trigger_verify
+        permissions:
+          roles: [master, developer]

@@ -1,0 +1,47 @@
+# =============================================================================
+# SoyMutDB — OCI release pipeline (CNB)
+# =============================================================================
+# Turns the platform-verified image packages produced by the `docker-images`
+# pipeline into one signed multi-architecture release, using the same script the
+# GitHub mirror calls (scripts/release-contract.golden.sh).
+#
+# Source of truth: `.cnb.yml` (`$` -> `push` -> `release`). This file exists so
+# the release definition can be reviewed and unit-tested in isolation.
+#
+# Secrets (configure in the CNB UI, never in the repository):
+#   $SOYMUTDB_RELEASE_COSIGN_KEY  optional offline cosign key
+#   $SOYMUTDB_OIDC_ISSUER         OIDC issuer to verify against
+#
+# The release job body lives once, in scripts/release-contract.golden.sh: it
+# resolves the verified per-architecture packages, logs into the registry,
+# merges the manifest, signs keylessly through the pipeline OIDC identity, emits
+# SLSA + SPDX attestations and writes the checksummed release contract. It
+# installs (and checksum-verifies) cosign itself. Re-inlining any part of that
+# sequence here would fork the release definition away from the script both
+# providers run, which scripts/test_ci_job_contracts.py fails on.
+#
+# Signing identity
+#   Signing is keyless: the Sigstore identity is minted from this pipeline's
+#   OIDC token, so no long-lived signing key is stored in the repository. The
+#   resulting attestations carry the CNB pipeline identity as their provenance
+#   subject, which is what makes the release verifiable after the fact. Setting
+#   $SOYMUTDB_RELEASE_COSIGN_KEY switches to an offline cosign key for
+#   environments without OIDC; see .cnb/examples/release-secrets.example.yml.
+
+env:
+  RELEASE_OUTPUT_DIR: release-contract
+
+stages:
+  - name: Publish signed multi-architecture release
+    # A CNB stage body is executed with `sh`, which rejects bash-only syntax.
+    # Pinning the interpreter here keeps the stage runnable regardless of the
+    # platform default. See docs/ops/ci-cd.md, "Stage shell".
+    script: bash scripts/release-contract.golden.sh
+
+  - name: Upload signed OCI release contract
+    image: cnbcool/artifact
+    settings:
+      # The release contract is the only artifact a deployer needs: digests,
+      # provenance, SBOMs and their checksums.
+      path: release-contract
+      name: oci-release-contract-$CNB_COMMIT_SHORT

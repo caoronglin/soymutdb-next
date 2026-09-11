@@ -432,7 +432,25 @@ def _oci_graph() -> dict[str, Any]:
             else:
                 current_stage = release_id
 
-    return _graph("oci", {"workflow": ".github/workflows/ci.yml"}, nodes, edges)
+    # Pipeline configurations are a graph input, not a hidden constant: the
+    # CNB pipeline is the primary delivery path and the GitHub workflows remain
+    # the secondary mirror. Record every declared source so reproducibility does
+    # not depend on one CI vendor's file staying in place.
+    pipeline_sources = [
+        "scripts/check-dockerfile-copy.sh",
+        "scripts/check-supply-chain.sh",
+    ]
+    for config_path in (
+        ".cnb.yml",
+        ".github/workflows/ci.yml",
+        ".github/workflows/baseline-validation.yml",
+        ".github/workflows/pages.yml",
+        ".github/workflows/e2e-smoke.yml",
+    ):
+        if (ROOT / config_path).is_file():
+            pipeline_sources.append(config_path)
+
+    return _graph("oci", {"pipelines": pipeline_sources}, nodes, edges)
 
 
 def generate_graphs(output: Path) -> int:

@@ -149,6 +149,12 @@ tools/code-review/reports/
 .venv/
 venv/
 env/
+# `env/` above is a virtualenv pattern and matches at any depth, which silently
+# swallowed .cnb/env/ — the CNB build environment image and release config that
+# .cnb.yml references by path. They were "added" repeatedly and never committed;
+# only a local contract test noticed, a remote build later. Re-include the
+# tracked delivery directory explicitly.
+!/.cnb/env/
 
 # ---------------------------------------------------------------------------
 # Docker volumes / local dev data

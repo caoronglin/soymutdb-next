@@ -1,0 +1,11 @@
+# =============================================================================
+# SoyMutDB — dependency governance pipeline (CNB)
+# =============================================================================
+# Source of truth: the `Dependency governance` stage of `.cnb.yml`.
+# Fails closed on any unavailable analyzer instead of skipping it.
+# =============================================================================
+name: SoyMutDB dependency governance
+stages:
+- name: Dependency governance
+  image: node:24.19.0
+  script: bash scripts/ci-job-steps.sh run dependency-governance

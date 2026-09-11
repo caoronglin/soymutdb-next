@@ -1,0 +1,36 @@
+# =============================================================================
+# SoyMutDB — release pipeline configuration
+# =============================================================================
+# Imported by the release pipeline and by the manual release button:
+#
+#   .cnb.yml  $/push/release          imports: .cnb/env/release.yml
+#   .cnb.yml  $/web_trigger_release   imports: .cnb/env/release.yml
+#
+# Scope: this file carries the *non-secret* configuration the release path
+# reads from the environment. It is committed, so it is reviewed in pull
+# requests and readable by anyone who can read the repository.
+#
+# What MUST NOT go in here
+#   Secrets. Registry credentials live in the platform secret store and are
+#   injected at run time; the release contract signs keylessly by default, so
+#   there is no long-lived signing key to store in the first place. A credential
+#   added here would be public the moment it lands, and would also break the
+#   credential-boundary contract that scripts/test_ci_job_contracts.py enforces
+#   (PR pipelines must stay credential-free).
+#
+# Values are references, not copies
+#   An `imports:` entry is resolved by the CNB platform at build time, so only
+#   the keys below are meaningful here; the values demonstrate the shape and are
+#   overridden by whatever the importing pipeline provides.
+#
+# See docs/ops/ci-cd.md ("`.cnb/env/` 的两个引用文件") for where the credential
+# boundary sits, and .cnb/examples/release-secrets.example.yml for the secret
+# store layout.
+# =============================================================================
+env:
+  # OIDC issuer that `cosign verify` is pinned to during release.
+  # scripts/release-contract.golden.sh reads this as $SOYMUTDB_OIDC_ISSUER and
+  # falls back to GitHub's issuer, so the same release contract works under both
+  # providers instead of silently verifying against the wrong trust root.
+  # Override with the CNB issuer when releasing from CNB.
+  SOYMUTDB_OIDC_ISSUER: https://token.actions.githubusercontent.com

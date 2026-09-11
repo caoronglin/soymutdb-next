@@ -442,9 +442,11 @@ def test_ci_kind_smoke_consumes_the_checksum_verified_amd64_archive_after_docker
     assert "matrix.arch == 'amd64'" in docker_job.group(0)
     job = kind_job.group(0)
     assert "needs: docker-build" in job
-    assert "validated-runtime-images-amd64" in job
+    # The amd64 package is produced by scripts/build-release-image.sh under the
+    # `validate-runtime-images-*` prefix and consumed here by checksum.
+    assert "validate-runtime-images-amd64" in job
     assert "sha256sum -c SHA256SUMS" in job
-    assert "docker load --input" in job
+    assert "docker load" in job
     assert re.search(
         r"kind load docker-image\s+soymutdb-api:ci-amd64\s+soymutdb-worker:ci-amd64",
         job,
@@ -455,9 +457,12 @@ def test_ci_kind_smoke_consumes_the_checksum_verified_amd64_archive_after_docker
     assert re.search(r"kubectl -n .* rollout status deployment/api", job)
     assert re.search(r"kubectl -n .* rollout status deployment/worker", job)
     assert "/api/v1/health/live" in job
+    # Worker metrics are read with the Python standard library: the runtime
+    # image deliberately does not ship curl.
     assert "soymutdb_worker_up" in job
-    assert "curl --fail --silent --show-error http://127.0.0.1:9808/metrics" in job
-    assert "grep -Eq '^soymutdb_worker_up[[:space:]]+1(\\.0+)?$'" in job
+    assert "urllib.request" in job
+    assert "127.0.0.1:9808/metrics" in job
+    assert "soymutdb_worker_up(\\{[^}]*\\})?[[:space:]]+1" in job
     assert "docker build" not in job
     assert "linux/amd64" in job
     assert "multi-architecture Kubernetes" not in job

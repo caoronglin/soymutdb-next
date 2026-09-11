@@ -43,18 +43,20 @@ vi.mock("@soymutdb/api-client", () => ({
   setAccessToken: state.setAccessToken,
 }));
 
+// The custom key map stays, but the function is hoisted to module scope so its
+// identity is stable across renders. A per-render `t` makes any component that
+// lists `t` in an effect dependency re-run that effect on every render.
+const LOGIN_TRANSLATIONS: Record<string, string> = {
+  "auth.email": "Email",
+  "auth.password": "Password",
+  "auth.loginButton": "Sign in",
+  "common.loading": "Loading",
+  "loginPage.invalidCredentials": "Invalid email or password.",
+  "loginPage.loginUnavailable": "Unable to sign in. Please try again.",
+};
+const loginT = (key: string): string => LOGIN_TRANSLATIONS[key] ?? key;
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({
-    t: (key: string) =>
-      ({
-        "auth.email": "Email",
-        "auth.password": "Password",
-        "auth.loginButton": "Sign in",
-        "common.loading": "Loading",
-        "loginPage.invalidCredentials": "Invalid email or password.",
-        "loginPage.loginUnavailable": "Unable to sign in. Please try again.",
-      })[key] ?? key,
-  }),
+  useTranslation: () => ({ t: loginT, i18n: { language: "en" }, ready: true }),
 }));
 
 vi.mock("../../components/route-motion", () => ({

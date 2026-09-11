@@ -99,3 +99,64 @@
 **适用范围**: Web 制品、origin、API 授权、CORS、缓存和 Service Worker
 **禁止使用**: federated search source；按 host/IP/cookie/user-agent 推断的访客分类
 **来源**: 2026-09-06 用户需求与现有 `SiteVariant` 契约
+
+
+## Delivery Architecture: CNB 主链路 + GitHub 镜像
+
+**日期**: 2026-09-11
+**状态**: IMPLEMENTED_UNVERIFIED（CNB 真实构建待平台触发）
+
+### 决策
+
+交付链路改为 **`.cnb.yml` 为单一事实来源**，GitHub Actions 保留为镜像。关键不是
+"翻译 YAML"，而是先把构建/测试/扫描/签名逻辑从 YAML 里抽成脚本，再让两个
+provider 引用同一批脚本。
+
+### 理由
+
+- 原 `ci.yml` 有 1189 行内联逻辑；迁移到 CNB 若重写一份，之后必然双向漂移。
+- 内联逻辑无法本地复现，任何失败只能推远端等 CI。
+- 抽成脚本后 GitHub 侧可先回归验证，等价性可证，而非凭信心重写。
+
+### 落地文件
+
+- `.cnb.yml`、`.cnb/pipelines/*`、`.cnb/web_trigger.yml`、`.cnb/env/*`
+- `scripts/ci-job-steps.sh`、`verify-frontend-artifacts.sh`、`verify-backend-tests.sh`、
+  `build-release-image.sh`、`release-contract.golden.sh`、`build-pages-artifact.sh`、
+  `verify-pages-artifact.sh`、`mcp-transport-smoke.sh`、`smoke.sh`
+- `scripts/test_ci_job_contracts.py`（18 用例，防逻辑回流 YAML）
+
+### 不可违反的规则
+
+1. **逻辑不得内联回 workflow/流水线**：契约测试会失败。
+2. **镜像校验与发布分离**：校验 pipeline 无 registry 凭据且不 push；发布 pipeline
+   不做 `docker build`。发出去的字节必然等于验过的字节。
+3. **PR 事件不得持有发布凭据**：CNB 的 PR `CNB_TOKEN` 权限受限。
+4. **冒烟不得伪通过**：前置条件缺失必须 `SKIPPED` + 原因，且不计入通过数。
+5. **工具链固定一致**：Node 24.19.0 / pnpm 11.21.0 / Python 3.14 / uv 0.11.33。
+
+### 有意保留在 GitHub
+
+Kind/Kubernetes 运行时冒烟（依赖嵌套 docker 与 `helm/kind-action`）、Windows 安装器
+dry-run、受保护环境 staging/production dry-run、CycloneDX baseline SBOM。这些
+workflow 顶部均有 MIRROR NOTICE。
+
+### 验证证据（2026-09-11 本机）
+
+- `scripts/test_ci_job_contracts.py` → 18 passed
+- `bash scripts/smoke.sh --profile contracts` → 134 passed，SMOKE PASS
+- CNB 校验器（YAML + 语义 + Schema）→ 三项通过
+- `pnpm install --frozen-lockfile` + `pnpm build:web` → 成功；`--profile static` PASS
+- 一次性 PostgreSQL 15（55432）+ Python 3.14：
+  migrations 0035 全链 → live ok → ready postgres healthy → `/search` 503 空库
+  fail-closed → `--profile runtime` PASS
+- 后端回归对照：改动前后同为 **33 failed / 1445 passed**，零影响
+
+### 未验证
+
+CNB 真实构建、Docker 镜像构建/Trivy/SBOM（本机无 daemon）、Playwright E2E、ClickHouse 迁移。
+
+### 撤销条件
+
+若 CNB 平台不可用或团队决定回落 GitHub-only：`git revert` 本次提交即可；所有 GitHub
+workflow 保留完整可用路径，未删除任何 job。

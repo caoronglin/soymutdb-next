@@ -20,6 +20,39 @@ Treat biological identity and genomic coordinates as explicit contracts:
 
 The `external` and `internal` site variants are separate build/deployment security boundaries. Select the variant explicitly at build/runtime; never infer it from host, IP, cookies, or user agent. Keep artifacts, origins, CORS allowlists, service-worker namespaces, and caches separate. Cache keys for biological search must include site variant, release, assembly, query, and filters; internal responses are private and must not enter shared caches. Do not confuse site variants with federated search sources such as NCBI or UniProt.
 
+## Delivery Pipeline
+
+`.cnb.yml` is the authoritative delivery pipeline. The GitHub workflows under
+`.github/workflows` are a mirror and must not grow logic of their own: every job
+body calls a checked-in script so both providers execute identical bytes.
+
+```
+scripts/ci-job-steps.sh               job bodies (list / run <job>)
+scripts/verify-frontend-artifacts.sh  frontend gates
+scripts/verify-backend-tests.sh       API + worker gates
+scripts/build-release-image.sh        build + runtime smoke + scan + SBOM + export
+scripts/release-contract.golden.sh    merge + sign + attest + publish verified images
+scripts/build-pages-artifact.sh       static site artifact
+scripts/verify-pages-artifact.sh      publication-time byte verification
+scripts/smoke.sh                      unified smoke layers
+```
+
+Rules enforced by `scripts/test_ci_job_contracts.py`:
+
+- Adding build/test/scan logic to a workflow instead of a shared script fails.
+- Image verification and image publication stay separate pipelines; the verifier
+  holds no registry credentials and the publisher never rebuilds.
+- Pull-request pipelines never hold release credentials.
+- Node/pnpm/Python pins must agree across `.nvmrc`, `package.json`, `.cnb.yml`
+  and the workflows.
+
+Smoke testing: `bash scripts/smoke.sh [--profile contracts|static|runtime|e2e|images]`.
+A layer whose prerequisites are missing is reported `SKIPPED` with the reason and
+never counted as a pass.
+
+See `docs/ops/ci-cd.md` (architecture and release flow) and
+`docs/dev/pipeline-migration.md` (migration mapping and evidence).
+
 ## Build, Test, and Development Commands
 
 Use Node.js 24 (`.nvmrc` pins 24.19.0 and `package.json` permits only `>=24 <25`), Python 3.14+, and the pinned pnpm version (`pnpm@11.21.0`). Install dependencies with `pnpm install`.
@@ -48,6 +81,15 @@ Use Vitest for TypeScript unit tests, pytest for API/worker/shared-Python tests,
 Changes to mutant identity, search, assemblies, releases, visibility, caching, or site variants must follow `docs/dev/database-core-contract.md`. At minimum, cover the external/internal × public/internal identifier × v4/v5 matrix at the appropriate unit, PostgreSQL integration, frontend, artifact, and E2E layers. Every public-boundary change requires a negative leakage test asserting that internal identifiers and unreleased records are absent from response bodies, URLs, client-visible logs, and `dist/external`.
 
 Database migrations require upgrade/downgrade coverage and a PostgreSQL-backed test; API shape changes require OpenAPI/client contract validation. Dual-site behavior is not complete until both artifacts build and their access/cache policies are verified. Skipped or xfailed privacy, identity, or assembly-isolation scenarios do not satisfy the merge gate. Record exact commands and pass/fail counts in the PR.
+
+## Toolchain Pins
+
+| Component | Version | Declared in |
+| --- | --- | --- |
+| Node | 24.19.0 | `.nvmrc`, `.node-version`, `package.json`, `.cnb.yml` |
+| pnpm | 11.21.0 | `package.json`, `.cnb.yml` |
+| Python | 3.14 | `apps/*/pyproject.toml`, `.cnb.yml` |
+| uv | 0.11.33 | Dockerfiles, governance pipeline |
 
 ## Commit & Pull Request Guidelines
 

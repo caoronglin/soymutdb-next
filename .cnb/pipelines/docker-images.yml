@@ -1,0 +1,36 @@
+# =============================================================================
+# SoyMutDB — release image verification pipelines (CNB)
+# =============================================================================
+# Source of truth: `.cnb.yml` (`main` -> `push` -> docker-images).
+# Each architecture runs on its own native runner so the exported image
+# architecture is independently proven, never assumed from the tag.
+# =============================================================================
+name: SoyMutDB release images
+env:
+  SOYMUTDB_CI_EXPORT: '1'
+stages:
+- name: docker-images (amd64)
+  runner:
+    cpus: 16
+  env:
+    SOYMUTDB_CI_ARCH: amd64
+    SOYMUTDB_CI_OUTPUT_DIR: validate-runtime-images-amd64
+  stages:
+  - name: Verify images for linux/amd64
+    image: .cnb/env/Dockerfile.build-tools
+    services:
+    - docker
+    script: bash scripts/ci-job-steps.sh run image-build
+- name: docker-images (arm64)
+  runner:
+    cpus: 16
+    tags: cnb:arch:arm64:v8
+  env:
+    SOYMUTDB_CI_ARCH: arm64
+    SOYMUTDB_CI_OUTPUT_DIR: validate-runtime-images-arm64
+  stages:
+  - name: Verify images for linux/arm64
+    image: .cnb/env/Dockerfile.build-tools
+    services:
+    - docker
+    script: bash scripts/ci-job-steps.sh run image-build

@@ -10,6 +10,11 @@
 #
 # No API/worker is deployed; API requests use the same-origin /api/v1 demo URL
 # and render existing unavailable/empty states on GitHub Pages.
+#
+# MIRROR NOTICE: the authoritative publication pipeline is `.cnb.yml`
+# (`publish` -> publish-web) which calls the same
+# scripts/{build,verify}-pages-artifact.sh. Nothing here may rebuild source;
+# publication is a byte copy of the verified tree.
 # =============================================================================
 name: Deploy Web to Pages
 
@@ -79,15 +84,11 @@ jobs:
             --name pages-demo-dist --dir /tmp/pages-dist
           test -f /tmp/pages-dist/SHA256SUMS
 
+      # Entry points, full checksum coverage (hidden files included) and an
+      # exact byte-tree match, using the same script the CNB publish pipeline
+      # runs before it copies the tree anywhere.
       - name: Verify exact Pages artifact tree
-        run: |
-          set -euo pipefail
-          test -f /tmp/pages-dist/index.html
-          test -f /tmp/pages-dist/soymutdb-jbrowse/index.html
-          (
-            cd /tmp/pages-dist
-            sha256sum -c SHA256SUMS
-          )
+        run: bash scripts/verify-pages-artifact.sh /tmp/pages-dist
 
       - name: Prepare Pages deployment branch
         run: |
@@ -106,10 +107,12 @@ jobs:
       - name: Verify deployed Pages tree is byte-identical
         run: |
           set -euo pipefail
+          # verify-pages-artifact.sh already proved the artifact is internally
+          # consistent; here we prove the checkout matches it byte for byte.
           find /tmp/pages-dist -type f -printf '%P\n' | LC_ALL=C sort > /tmp/pages-expected-files
           find . -path './.git' -prune -o -type f -printf '%P\n' | LC_ALL=C sort > /tmp/pages-actual-files
           diff -u /tmp/pages-expected-files /tmp/pages-actual-files
-          sha256sum -c /tmp/pages-dist/SHA256SUMS
+          (cd /tmp/pages-dist && sha256sum -c SHA256SUMS)
 
       - name: Deploy all apps to pages (gh-pages) branch
         run: |

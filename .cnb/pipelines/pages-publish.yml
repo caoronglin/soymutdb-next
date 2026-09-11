@@ -1,0 +1,31 @@
+# =============================================================================
+# SoyMutDB — Pages publication pipeline (CNB)
+# =============================================================================
+# Publication is a byte copy of the artifact the verify pipeline built and
+# checksummed. It never installs a JS toolchain and never rebuilds the bundle,
+# so the published tree always equals the verified bytes.
+#
+# Source of truth: `.cnb.yml` (`$` -> `push` -> `publish` -> `publish-web`).
+# =============================================================================
+name: SoyMutDB Pages publication
+
+env:
+  PAGES_ARTIFACT_DIR: pages-dist
+  PAGES_PUBLISH_DIR: pages-publish
+
+# Every stage body is a `bash <script>` invocation. CNB executes a stage script
+# with `sh`, which rejects the bash syntax these bodies used to rely on.
+
+stages:
+  - name: Verify the CI-built artifact before publication
+    # Pinned interpreter: a CNB stage body is executed with `sh`.
+    # verify-pages-artifact.sh enforces entry points, full checksum coverage
+    # (hidden files included), and an exact byte-tree match, and verifies the
+    # artifact digest BEFORE anything is published.
+    script: bash scripts/stage-pages-publication.sh verify
+
+  - name: Record publication evidence
+    image: cnbcool/artifact
+    settings:
+      path: pages-publish
+      name: pages-verified-tree-$CNB_COMMIT_SHORT

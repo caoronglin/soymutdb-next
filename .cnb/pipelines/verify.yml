@@ -1,0 +1,46 @@
+# =============================================================================
+# SoyMutDB — verification pipeline (CNB)
+# =============================================================================
+# Source of truth: `.cnb.yml` (`main` -> `push` -> `verify`). Recorded here so
+# the job list is reviewable in isolation and asserted by
+# scripts/test_ci_job_contracts.py. The GitHub mirror workflow calls the same
+# scripts/ci-job-steps.sh entry points.
+# =============================================================================
+name: verify
+runner:
+  cpus: 16
+env:
+  VITE_DEPLOYMENT_MODE: demo
+  VITE_API_BASE_URL: https://api.soymutdb.test
+  VITE_JBROWSE_BASE_URL: https://jbrowse.soymutdb.test
+stages:
+- name: Setup workspace with cache
+  image: node:24.19.0
+  script: bash scripts/setup-workspace.sh
+  volumes:
+  - /cache/pnpm-store:/cache/pnpm-store
+- name: Frontend verification
+  image: node:24.19.0
+  script: bash scripts/ci-job-steps.sh run frontend
+- name: API + Worker verification
+  image: python:3.14
+  services:
+  - postgres:16
+  script: bash scripts/ci-job-steps.sh run api-tests
+- name: Dependency governance
+  image: node:24.19.0
+  script: bash scripts/ci-job-steps.sh run dependency-governance
+- name: Build the checksummed Pages artifact
+  image: node:24.19.0
+  script: bash scripts/build-pages-artifact.sh && bash scripts/verify-pages-artifact.sh pages-dist
+- name: Upload GitHub Pages demo artifact
+  image: cnbcool/artifact
+  settings:
+    path: pages-dist
+    name: pages-demo-dist
+endStages:
+- name: Upload verification evidence
+  image: cnbcool/artifact
+  settings:
+    path: artifacts
+    name: verification-evidence-$CNB_COMMIT_SHORT

@@ -1,5 +1,15 @@
 name: SoyMutDB baseline validation and release
 
+# =============================================================================
+# MIRROR NOTICE
+# =============================================================================
+# The authoritative delivery pipeline is `.cnb.yml`. This workflow is retained
+# as a GitHub-side mirror for the baseline/attestation gates that CNB does not
+# yet cover (Windows installer dry-run, protected staging/production dry-runs).
+# It calls the same checked-in scripts as the CNB pipelines, so no build or
+# verification logic is duplicated here.
+# =============================================================================
+
 on:
   pull_request:
   push:
@@ -52,8 +62,10 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm build:web
-      - run: pnpm build:admin
+      - name: Build web and admin applications
+        # Baseline builds both apps with the same offline demo contract the CNB
+        # verify pipeline uses, minus the gates that need the API virtualenv.
+        run: bash scripts/build-static-apps.sh
       - name: Check static artifact contract
         run: |
           test -d apps/web/dist

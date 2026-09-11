@@ -45,6 +45,27 @@
 
 前端代码不直连数据库；数据统一经 API / worker 层。Tauri 桌面壳与 Rust 热路径（`core-rs`）已清理移除，当前仅保留 Web-only Admin。
 
+## 构建与交付
+
+交付链路由 **CNB 主链路** 定义（`.cnb.yml`），GitHub Actions 作为镜像保留，两者
+调用同一批脚本，因此不存在"两边行为不一致"的可能。
+
+```bash
+pnpm ci:jobs                                  # 列出可用交付任务
+pnpm ci:verify                                # 前端门禁
+pnpm ci:api                                   # 后端门禁（需一次性 PostgreSQL）
+pnpm ci:images                                # 镜像构建/冒烟/扫描/SBOM（不发布）
+pnpm ci:release                               # 签名并发布 OCI release
+
+bash scripts/smoke.sh                         # 统一冒烟：contracts/static/runtime/e2e/images
+bash scripts/smoke.sh --list                  # 查看可用 layer
+```
+
+* 完整架构、流水线拓扑、镜像打包发布流程与冒烟分层：`docs/ops/ci-cd.md`
+* 迁移对照、保留项、验证证据与前置缺陷：`docs/dev/pipeline-migration.md`
+
+> 冒烟约定：前置条件缺失时输出 `SKIPPED: <原因>` 并计入 summary，**不会冒充通过**。
+
 ## Quick start
 
 ### Prerequisites
