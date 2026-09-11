@@ -6,11 +6,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { SiteContentProvider } from "@/lib/site-content";
 
 const state = vi.hoisted(() => ({
+  // URL search params restored by the route. Each field is optional: a test
+  // clears them to exercise the pristine (no deep link) form state.
   search: {
     q: "Glyma.02G000100",
     assembly: "alt-assembly",
     run: true,
-  },
+  } as { q?: string; assembly?: string; run?: boolean },
   getAssemblies: vi.fn(),
   searchGenes: vi.fn(),
 }));
@@ -49,7 +51,18 @@ vi.mock("@tanstack/react-router", async () => {
       );
     },
     useRouter: () => ({
-      buildLocation: ({ to }: { to: string }) => ({ href: to }),
+      // Mirror the router contract: `to` + `search` produce a URL with the
+      // search params applied, so a regression that drops `q`/`assembly`/`run`
+      // is observable here.
+      buildLocation: ({ to, search }: { to: string; search?: Record<string, unknown> }) => {
+        const params = new URLSearchParams(
+          Object.entries(search ?? {})
+            .filter(([, value]) => value != null)
+            .map(([key, value]) => [key, String(value)]),
+        );
+        const query = params.toString();
+        return { href: query ? `${to}?${query}` : to };
+      },
     }),
   };
 });
@@ -269,6 +282,61 @@ describe("gene search assembly context", () => {
     expect(new URL(geneHref ?? "", "https://portal.example.invalid").searchParams.get("assembly")).toBe(
       alternateAssembly.id,
     );
+  });
+
+  it("disables submit until a genome-version context is resolved", async () => {
+    let resolveAssemblies: (value: unknown) => void = () => {};
+    state.getAssemblies.mockReturnValue(
+      new Promise((resolve) => {
+        resolveAssemblies = resolve;
+      }),
+    );
+
+    renderRoute();
+
+    // No assembly list yet → the submit control must not silently discard the
+    // request; it reports that the genome-version context is unresolved.
+    const submit = screen.getByText("search.genes.submit") as HTMLButtonElement;
+    expect(submit.tagName).toBe("BUTTON");
+    expect(submit.disabled).toBe(true);
+
+    resolveAssemblies([defaultAssembly]);
+
+    await waitFor(() => {
+      expect((screen.getByText("search.genes.submit") as HTMLButtonElement).disabled).toBe(false);
+    });
+  });
+
+  it("opens a parameterized result view once the assembly context is available", async () => {
+    state.search = { q: undefined, assembly: undefined, run: false };
+    const opened: string[] = [];
+    const originalOpen = window.open;
+    window.open = ((url?: string | URL) => {
+      opened.push(String(url));
+      return null;
+    }) as typeof window.open;
+
+    try {
+      renderRoute();
+
+      const input = screen.getByRole("textbox", { name: "search.genes.geneId" });
+      const { fireEvent } = await import("@testing-library/react");
+      fireEvent.change(input, { target: { value: "Glyma.01G000100" } });
+
+      const submit = screen.getByText("search.genes.submit") as HTMLButtonElement;
+      await waitFor(() => {
+        expect(submit.disabled).toBe(false);
+      });
+      fireEvent.click(submit);
+
+      expect(opened).toHaveLength(1);
+      const url = new URL(opened[0] ?? "", "https://portal.example.invalid");
+      expect(url.searchParams.get("q")).toBe("Glyma.01G000100");
+      expect(url.searchParams.get("assembly")).toBe(defaultAssembly.id);
+      expect(url.searchParams.get("run")).toBe("true");
+    } finally {
+      window.open = originalOpen;
+    }
   });
 
   it("preselects an assembly-only deep link without starting a gene search", async () => {

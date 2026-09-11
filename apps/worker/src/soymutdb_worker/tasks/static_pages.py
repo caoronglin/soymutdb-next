@@ -268,6 +268,41 @@ def _render_gene_html(
     return report.render()
 
 
+def gene_object_key(
+    accession: str,
+    *,
+    assembly_id: int | str,
+    release_id: int | str | None,
+    extension: str,
+) -> str:
+    """Build the object-storage key for a pre-rendered gene artifact.
+
+    The key namespace is ``{release_id}/{assembly_id}/genes/{accession}``.
+
+    Both the release and the assembly are part of the namespace: an accession
+    is only unique *within* an assembly (v4 and v5 are distinct coordinate
+    namespaces), and the same assembly is republished under each release.
+    Omitting either would let one artifact silently overwrite another.
+
+    ``release_id`` is optional for backward compatibility with archives written
+    before release-scoped publishing; when omitted the namespace degrades to
+    ``{assembly_id}/genes/{accession}``.
+    """
+    accession = accession.strip()
+    if not accession:
+        raise ValueError("accession must be a non-empty string")
+    if "/" in accession or "\\" in accession:
+        raise ValueError(f"accession must not contain a path separator: {accession!r}")
+    if extension not in {"json.gz", "html.gz"}:
+        raise ValueError(f"unsupported artifact extension: {extension!r}")
+
+    parts: list[str] = []
+    if release_id is not None:
+        parts.append(str(release_id))
+    parts.extend([str(assembly_id), "genes", f"{accession}.{extension}"])
+    return "/".join(parts)
+
+
 def _upload_gzipped(
     s3_client,
     bucket: str,
@@ -423,13 +458,6 @@ def build_static_pages(
                 if s3_client is not None:
                     # Namespace keys by release/assembly so v4 and v5 genes
                     # with the same accession never overwrite each other.
-                    prefix_parts: list[str] = []
-                    if release_id is not None:
-                        prefix_parts.append(str(release_id))
-                    prefix_parts.append(str(row.assembly_id))
-                    prefix_parts.append("genes")
-                    key_prefix = "/".join(prefix_parts)
-
                     # --- JSON ---
                     json_bytes = json.dumps(cache_data, default=_serialize_value).encode(
                         "utf-8"
@@ -437,7 +465,12 @@ def build_static_pages(
                     _upload_gzipped(
                         s3_client,
                         bucket,
-                        f"{key_prefix}/{row.accession}.json.gz",
+                        gene_object_key(
+                            row.accession,
+                            assembly_id=row.assembly_id,
+                            release_id=release_id,
+                            extension="json.gz",
+                        ),
                         json_bytes,
                         content_type="application/json",
                     )
@@ -453,7 +486,12 @@ def build_static_pages(
                     _upload_gzipped(
                         s3_client,
                         bucket,
-                        f"{key_prefix}/{row.accession}.html.gz",
+                        gene_object_key(
+                            row.accession,
+                            assembly_id=row.assembly_id,
+                            release_id=release_id,
+                            extension="html.gz",
+                        ),
                         html_str.encode("utf-8"),
                         content_type="text/html",
                     )

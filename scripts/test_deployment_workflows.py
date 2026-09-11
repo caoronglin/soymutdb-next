@@ -77,7 +77,11 @@ def test_publish_keeps_local_to_registry_image_name_mapping() -> None:
     golden = (ROOT / "scripts/release-contract.golden.sh").read_text(encoding="utf-8")
 
     assert "soymutdb-mcp:ci-${ARCH}" in verification
-    assert "local_names=(api worker mcp jbrowse)" in golden
+    # The local names are the single source of the image set: the package
+    # verifier reads the same list, so "the four images" cannot be edited in one
+    # place and silently skipped in the other.
+    assert "RUNTIME_IMAGES=(api worker mcp jbrowse)" in golden
+    assert "local_names=(\"${RUNTIME_IMAGES[@]}\")" in golden
     assert "remote_names=(api worker mcp-server jbrowse)" in golden
     assert 'docker tag "soymutdb-${local_names[$index]}:ci-${arch}" "${image}"' in golden
 
@@ -245,12 +249,22 @@ def test_real_postgresql_worker_integration_environment_is_required() -> None:
     # the privacy/identity/assembly matrix into skips.
     assert "export SOYMUTDB_RUN_POSTGRES_INTEGRATION=1" in backend
 
-    # CNB supplies a real PostgreSQL service next to the API test pipeline.
+    # CNB supplies the service the gate needs to reach a database. It is
+    # `docker`, not a `postgres` service: `services` only implements docker and
+    # vscode, and `services: - postgres:16` was accepted while starting NOTHING
+    # (measured: no DNS entry, nothing on 5432, no docker socket), which sent
+    # the suite to Testcontainers and produced 116 docker stack traces.
     api_pipeline = _cnb_pipeline("verify")
-    assert "postgres:16" in api_pipeline
+    assert '"docker"' in api_pipeline
+    assert "postgres:16" not in api_pipeline
     cnb_api_record = (ROOT / ".cnb/pipelines/api.yml").read_text(encoding="utf-8")
     assert "SOYMUTDB_RUN_POSTGRES_INTEGRATION" in cnb_api_record
-    assert "postgres" in cnb_api_record
+    assert "- docker" in cnb_api_record
+
+    # The database itself comes from the gate, which must fail closed.
+    resolver = ROOT / "scripts" / "with-postgres-service.sh"
+    assert resolver.is_file()
+    assert "with-postgres-service.sh" in backend
 
 
 def test_publish_is_the_only_registry_writer_and_loads_verified_artifacts() -> None:

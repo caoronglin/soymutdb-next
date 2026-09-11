@@ -166,6 +166,55 @@ Slow-network / CN-network tips:
 - The suite is already hardened: `workers=1`, `retries=1`, 60 s per-test
   timeout. Transient connection resets are retried once before failing.
 
+
+## 本地离线公开站 E2E（正确构建命令，勿再踩坑）
+
+`playwright-public.config.ts` 由 `static-server.mjs` 在 `/soymutdb-next` 前缀下
+同源提供 `apps/web/dist`，并把 API 基址指向同源 mock，因此构建必须绑定 **base**
+与 **同源 API origin**，否则 SPA 资源/动态 import 404（历史上曾导致 20+/29 失败）。
+
+```bash
+cd <repo-root>
+
+# 单站制品（E2E 用，必须落在 apps/web/dist）
+GOMAXPROCS=2 VITE_DEPLOYMENT_MODE=demo \
+  VITE_BASE_URL=/soymutdb-next/ \
+  VITE_API_BASE_URL=http://localhost:4173/soymutdb-next/api/v1 \
+  VITE_JBROWSE_BASE_URL=http://localhost:4173/soymutdb-next/jbrowse/ \
+  pnpm --filter @soymutdb/web build
+
+# 公开站 E2E（无 Docker / 无后端可运行）
+cd e2e && npx playwright test -c playwright-public.config.ts
+```
+
+注意：
+
+- 构建会触发 esbuild 的 Go 运行时 `newosproc` 崩溃 → 必须 `GOMAXPROCS=2`。
+- 本环境 `CI=true` 会让 `build-sites.ts` 判定为生产构建并要求
+  `SOYMUTDB_SITE_URL` / `SOYMUTDB_INTERNAL_SITE_URL`。跑双站制品时显式覆盖：
+  `CI= VITE_DEPLOYMENT_MODE=demo ... pnpm --filter @soymutdb/web build:sites`。
+- 双站制品后做泄漏扫描：
+  `python3 scripts/check_site_artifact_isolation.py --external-root apps/web/dist/external --internal-root apps/web/dist/internal --sentinel "Internal Research Workspace for SoyMutDB"`
+  （哨兵必须真实存在于 internal；当前生产哨兵为
+  `Internal Research Workspace for SoyMutDB`）。
+
+### 交互前的就绪等待（重要）
+
+web 制品是 **replacement-render SPA**：构建期 SSG 标记是惰性的，React 首次提交
+（handoff）后才可交互。`src/main.tsx` 在 `<html>` 上以 `data-app-ready` 通告该边界。
+
+因此任何交互前必须等待就绪，否则点击会落在静态回退上并被静默丢弃。用
+`e2e/tests/helpers.ts` 的 `gotoReady(page, url)` / `waitForAppReady(page)`：
+
+```ts
+import { gotoReady } from "./helpers";
+await gotoReady(page, "/soymutdb-next/login");
+```
+
+另外 `/search/genes` 的提交按钮在 genome version（assembly）解析完成前
+保持 disabled——缺少 assembly 的请求在 v4/v5 命名空间下是歧义的，因此按钮
+显式报告"尚未可选"，而不是静默丢弃提交。测试应等待 `toBeEnabled()`。
+
 ## Known issues / false-positive notes
 
 - **Document status 404 on 6 routes**: GitHub Pages currently serves

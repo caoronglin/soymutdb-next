@@ -32,16 +32,21 @@ env:
   VITE_DEPLOYMENT_MODE: demo
   VITE_API_BASE_URL: https://api.soymutdb.test
   VITE_JBROWSE_BASE_URL: https://jbrowse.soymutdb.test
+services:
+- docker
 stages:
 - name: Frontend verification
   script: bash scripts/ci-job-steps.sh run frontend
 - name: API + Worker verification
   image: python:3.14
-  services:
-  - postgres:16
   script: bash scripts/ci-job-steps.sh run api-tests
+# No stage `image:`: the job needs Node AND Python 3.14. The graph generator
+# imports PyYAML and every Python analyzer shells out to uv, while
+# `node:24.19.0` -- the image this stage used to pin -- carries no Python at
+# all. The pipeline-level environment (`.cnb/env/Dockerfile.frontend`) is the
+# one image that provides both toolchains, and the job body installs the
+# PyYAML/uv pins itself so neither provider can skip the gate.
 - name: Dependency governance
-  image: node:24.19.0
   script: bash scripts/ci-job-steps.sh run dependency-governance
 - name: Build the checksummed Pages artifact
   image: node:24.19.0

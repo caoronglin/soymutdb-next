@@ -26,6 +26,7 @@ scripts/setup-workspace.sh       单容器引导（corepack + pnpm install），
 scripts/ci-job-steps.sh          任务体：list / run <job>
 scripts/verify-frontend-artifacts.sh
 scripts/verify-backend-tests.sh
+scripts/with-postgres-service.sh 一次性 PostgreSQL（dind 起容器 + 驱动级就绪探针）
 scripts/build-static-apps.sh
 scripts/build-release-image.sh   构建 → 冒烟 → 扫描 → SBOM → 导出
 scripts/release-contract.golden.sh 合并 → 签名 → attestation → 发布
@@ -93,6 +94,182 @@ CNB 的每个 stage 跑在**自己的新容器**里。`corepack enable` 只是�
   检查每个 `pnpm` job 是否真的到达引导脚本，并禁止再出现 "Setup workspace" 这类
   stage 名，同时要求 pnpm job 必须挂 store volume。
 
+### `services:` 是 **Pipeline 级**键——写在 stage 里等于没写
+
+`api-tests` 门禁先后踩了两个坑，都是 `services:` 的**位置/取值**问题。
+
+**第一个坑：写数据库名没用。** 早期声明：
+
+```yaml
+- name: API + Worker verification
+  image: python:3.14
+  services:
+    - postgres:16        # ← 被接受，但什么都不启动
+  script: bash scripts/ci-job-steps.sh run api-tests
+```
+
+CNB 接受该声明，**然后什么都没起**（探针构建 `cnb-j0g-1k285hm3b`）：
+
+```
+CLOSED postgres 5432 [Errno -2] Name or service not known
+CLOSED 127.0.0.1 5432 [Errno 111] Connection refused
+/var/run/docker.sock missing
+getent hosts postgres → （空）
+```
+
+`services` 目前**只实现 `docker`（dind）和 `vscode`**，其他名字既不会报错也不会生效。
+
+**第二个坑：即使改成了 `docker`，写在 stage 里仍然不生效。**
+`services` 在 CNB 语法里是 **Pipeline 级**配置项
+（[grammar.md#pipeline-services](https://docs.cnb.cool/zh/build/grammar.md#pipeline-services)），
+与 `stages`、`docker`、`env` 同级；**Stage / Job 的配置项里没有 `services`**
+（见 grammar.md 的 Stage 配置项概览表）。写在 stage 里会被静默丢弃，于是 dind
+daemon 和 docker CLI 都不会注入，门禁在解析数据库时直接失败：
+
+```
+[postgres-service] docker CLI is unavailable: this stage must declare `services: [docker]`
+```
+
+（真实构建 `cnb-m06-1k28813m9`。）
+
+正确写法是把它提升到 **Pipeline 级**，与 `stages:` 平级：
+
+```yaml
+- name: verify
+  runner:
+    cpus: 16
+  docker:
+    volumes:
+      - /cache/pnpm-store
+  services:          # ← Pipeline 级：与 stages / docker / env 同级
+    - docker         # 真实 dind daemon + docker CLI
+  env:
+    SOYMUTDB_RUN_POSTGRES_INTEGRATION: "1"
+  stages:
+    - name: Frontend verification
+      script: bash scripts/ci-job-steps.sh run frontend
+    - name: API + Worker verification
+      image: python:3.14
+      script: bash scripts/ci-job-steps.sh run api-tests
+```
+
+对「stage 本身就是一个嵌套 pipeline」的写法（`stages:` 内部再出现 `stages:`，
+例如 `.cnb/pipelines/docker-images.yml` 的按架构构建），`services` 要放在**内层
+那个 pipeline** 上，同样与内层 `stages:` 平级。
+
+代价与取舍：`services` 是 Pipeline 级，无法只对单个 stage 生效，所以声明后
+**同一 pipeline 的所有 stage** 都会拿到 dind daemon。这对本项目无害：真正需要
+dind 的门禁各自在脚本里显式调用 `docker`，其余 stage 忽略即可；比"门禁静默拿不到
+docker"要好得多。
+
+`scripts/with-postgres-service.sh` 负责在拿到 dind 之后起数据库：
+
+1. 已经有 `SOYMUTDB_TEST_DATABASE_URL`（开发者本机 / GitHub runner）→ **原样沿用**，
+   完全不动 testcontainers 路径；
+2. 否则通过 dind daemon 起 `postgres:16-alpine`，**显式**
+   `-p 127.0.0.1:5432:5432`（不要用 `--network host`：它会被接受，但 daemon
+   的网络命名空间与 stage 容器不是同一个）；
+3. 用 **asyncpg** 真的跑一次 `select 1` 才算就绪。只调 `pg_isready` 不够——
+   官方镜像 initdb 期间会先在一个**临时 socket** 上提供服务，`pg_isready`
+   照样返回 0，于是脚本会在数据库其实已经可用时宣布它不可用（这正是第一次
+   修复时踩到的坑，日志里还顺手 dump 了一份完全健康的 initdb 日志）；
+4. 失败即**非零退出**，绝不降级成 skip：隐私/身份/组装矩阵是合并门禁，
+   `pytest.skip` 在这里等同于把门禁关掉。
+
+消费方式是 `--print-exports`（POSIX 的 `KEY=VALUE`）而不是 `source`：
+
+```bash
+PG_ENV="$(bash scripts/with-postgres-service.sh --print-exports)"
+while IFS='=' read -r key value; do export "${key}=${value}"; done <<< "${PG_ENV}"
+```
+
+原因和上面 `set -o pipefail` 是同一个：CNB stage 用 `sh`（dash）执行，
+`source` 在 dash 里不存在（实测报 `sh: 4: source: not found`，退出码 127）。
+
+契约测试 `test_postgres_backed_stages_declare_a_real_service_and_resolve_a_database`
+锁定这些事实：跑数据库门禁的 **pipeline** 必须声明 `services: [docker]`、不得出现
+`postgres`/`mysql`/`redis` 之类的伪服务名、**任何 stage 都不得再出现 `services:`
+键**（它是 pipeline 级，写在 stage 里会被静默丢弃）、resolver 必须保留"外部 URL
+优先"和驱动级就绪探针、门禁脚本不得再出现 `source`。
+
+### 治理 stage 需要**双工具链**，且自己装 PyYAML 与 uv
+
+治理门禁两边都要：
+
+* `pnpm deps:graphs|deps:audit` 走 Node/pnpm；
+* `scripts/dependency_governance.py` 既 `import yaml`（读锁文件与策略），又用
+  `uv`/`uvx` 跑 Deptry / license 分析器。
+
+早期 stage 用了 `image: node:24.19.0` 覆盖。基础镜像里的 `python3` 是给 node-gyp
+用的**裸解释器**，没有 pip、没有 site-packages，于是真实构建
+`cnb-mqg-1k289oe96` 直接死在导入阶段：
+
+```
+$ python3 scripts/dependency_governance.py graphs --output artifacts/dependency-graphs
+ModuleNotFoundError: No module named 'yaml'
+```
+
+**不能只装 PyYAML。** 如果 `python3 -m pip` 本身不可用（裸 `node:*` 就是这样），
+"装 PyYAML"只会把 `No module named 'yaml'` 换成 `No module named pip`，真实原因
+再次被掩盖；而就算装上了 PyYAML，缺 `uv` 也会让每个分析器被判 unavailable——
+fail-closed 门禁把这个当失败，等于门禁没跑。
+
+修法是两件事一起：
+
+1. **不要给治理 stage 钉 Node-only 的 `image:`**。让它继承 pipeline 默认的
+   `docker.build` 镜像（`.cnb/env/Dockerfile.frontend`），该镜像基于
+   `python:3.14`，同时带 Node 24 + pnpm + 可用的 pip/venv。三处都要改：
+   `.cnb.yml` 的 PR/main 两条 verify，以及独立流水线文件
+   `.cnb/pipelines/verify.yml`；`.cnb/pipelines/dependency-governance.yml` 也要
+   显式声明同一个 `docker.build`（外加 pnpm store 卷，否则安装结果落在会被丢弃的
+   容器层里）。
+2. **在 job body 里装齐并钉住版本**：`scripts/ci-job-steps.sh` 的
+   `ensure_governance_python` 先校验 `python3` 命中 `PYTHON_VERSION` 的
+   major.minor（不匹配即 fail closed），再探测 `import yaml`（满足即静默返回，
+   热容器零成本、开发者本机不被干扰），否则用 `ensure_governance_pip`（`pip`
+   缺失时先 `ensurepip`）安装固定版本的 `PyYAML==6.0.3`，最后确保
+   `uv==${UV_VERSION}`（0.11.33，与 Dockerfile / `check-toolchain-pins.py` 同一
+   pin）存在。任何一步失败都**非零退出**，绝不降级成 skip。
+
+版本钉在共享脚本里，GitHub workflow 与 CNB 才会解析出同一个分析器。
+`scripts/test_ci_job_contracts.py` 锁定 PyYAML/uv 两个 pin、pip 自举路径，以及
+"任何能跑治理 stage 的配置都不得钉 Node-only `image:`"这条不变量——包含
+`.cnb/pipelines/verify.yml` 这份只查根配置时容易漏掉的第三份副本。
+
+### worker 测试的 `from tests.<module> import` 需要一个包标记
+
+数据库真的能连上之后，worker 套件立刻在**收集阶段**就挂了——一个用例都没跑：
+
+```
+apps/worker/tests/test_gene_resolution.py:25: in <module>
+    from tests.test_module_tsv_postgres_integration import postgres_engine
+E   ModuleNotFoundError: No module named 'tests.test_module_tsv_postgres_integration'
+```
+
+`test_gene_resolution.py` 按**包路径**复用共享集成 fixture。这个 import 只有在
+`apps/worker/tests` 是可导入包、并以 `tests` 出现在 `sys.path` 上时才成立。
+pytest 默认的 `prepend` 导入模式把**测试目录本身**放进 `sys.path`，每个文件按顶层
+模块导入——单文件够用，跨模块 import 不够。
+
+**它为什么一直没被发现**：这个模块从来没有真正运行过。stage 连不上数据库，
+整个文件被 Testcontainers 的失败挡在后面。所以"只让数据库可达"会把
+116 个 error 换成 1 个 collection error——而 collection error 会**中断整轮**，
+于是 worker 套件里剩下的用例一个都不会执行。
+
+修法是补上 `apps/worker/tests/__init__.py`（与 `apps/api/tests/__init__.py` 对称），
+并加 `scripts/check_worker_test_package.py` 作为门禁。它检查四件事：
+
+1. `__init__.py` 存在；
+2. 它**被 git 跟踪**（只存在于工作区、不在 checkout 里的文件等于不存在——
+   本仓库已经因为一条未锚定的 `.gitignore` 丢过 `.cnb/env/`）；
+3. 每一处 `from tests.<module> import` 指向的模块真实存在且是 `test_*`；
+4. 按 pytest 真正使用的导入模式**实测可解析**——注意那不是仓库根目录，
+   第一次写这个检查时就是想当然地用了仓库根，结果检查自己先失败了。这条
+   打印实际解析路径，避免"检查通过但门禁跑起来仍然挂"。
+
+它在 worker 依赖安装**之前**执行：collection error 会吞掉整轮，这个检查又便宜，
+必须抢在昂贵的安装之前失败。
+
 ### `.cnb/env/Dockerfile.*` 只能出现在 `docker.build`，不能是 `image:`
 
 第一次真实构建在 `Frontend verification` stage **脚本执行前**就失败了：
@@ -155,12 +332,14 @@ CNB 文档明确"任务级仅支持 `image` 配置，不支持 `dockerfile`"。�
 | main push | `clickhouse-migration` | 真实 ClickHouse 遗留迁移 + 幂等复跑 |
 | main push | `mcp-e2e` | nginx 后的 MCP 鉴权契约 |
 | main push | `docker-images (amd64)` / `(arm64)` | 原生架构构建 → 冒烟 → Trivy → SPDX → 导出 |
-| main push / tag / 手动 | `release` | 合并双架构 manifest、keyless 签名、SLSA+SPDX attestation |
+| main push / tag / 手动 | `release` | 取回双架构包 → 校验同源 → 合并 manifest、keyless 签名、SLSA+SPDX attestation |
 | main push / 手动 | `publish` | 字节级复制已验证静态树（**不重新构建**） |
 | 每日 02:00 | `smoke` | 线上站点 Playwright 冒烟 |
 
 镜像校验与发布**刻意分离**：校验流水线没有任何 registry 写权限，发布流水线不做
-任何 `docker build`。这样"发出去的字节"必然等于"验过的字节"。
+任何 `docker build`。这样"发出去的字节"必然等于"验过的字节"。分离的代价是两条
+流水线之间没有隐式传递——制品要显式取回、顺序要显式声明，见
+"镜像构建与打包发布"一节。
 
 ## 4. 镜像构建与打包发布
 
@@ -172,21 +351,75 @@ CNB 文档明确"任务级仅支持 `image` 配置，不支持 `dockerfile`"。�
 4. 断言 `docker image inspect .Architecture` 等于目标平台（原生，非仿真）
 5. Trivy CRITICAL/HIGH 硬门禁（`.trivyignore` 为可审计例外）
 6. 逐镜像 SPDX SBOM
-7. 导出 `validate-runtime-images-<arch>/`：压缩 tar + image ID 清单 + `SHA256SUMS`
+7. 导出 `validate-runtime-images-<arch>/`：压缩 tar + image ID 清单 +
+   `platform.txt`、`revision.txt` + `SHA256SUMS`
 
 **打包发布**（`scripts/release-contract.golden.sh`，provider 无关）：
 
-1. 校验两个架构包（checksum + image ID + 架构）
-2. 推送 `<registry>/<owner>/<image>:<tag>-<arch>`
-3. 合并 manifest，断言平台集合恰为 `linux/amd64,linux/arm64`
-4. 对每个镜像 digest 与平台 digest 做 keyless `cosign sign` + SLSA provenance +
+1. 取回两个架构包（见下节"制品必须被显式取回"）
+2. 校验两个架构包（checksum + image ID + 架构 + 两包同源同一 revision）
+3. 推送 `<registry>/<owner>/<image>:<tag>-<arch>`
+4. 合并 manifest，断言平台集合恰为 `linux/amd64,linux/arm64`
+5. 对每个镜像 digest 与平台 digest 做 keyless `cosign sign` + SLSA provenance +
    SPDX attestation，并**立即 verify**
-5. 输出 `release-contract/`：`release-manifest.json`（只引用 digest）、
+6. 输出 `release-contract/`：`release-manifest.json`（只引用 digest）、
    provenance、SBOM、`OCI_SHA256SUMS`、`SHA256SUMS`、签名的 manifest blob
 
 registry 命名空间、源码身份、pipeline id 全部来自环境变量
 （`RELEASE_REGISTRY_OWNER` / `SOURCE_REPOSITORY` / `SOURCE_REVISION`），
 因此 GitHub 与 CNB 产出结构完全一致。
+
+### 制品必须被显式取回，发布必须被显式排序
+
+校验与发布是**两条独立流水线**（各自的事件、各自的 runner），平台不会替它们
+传递文件。校验产物以"上传的制品"存在，取回属于**发布方**的责任：
+
+| | GitHub Actions | CNB |
+| --- | --- | --- |
+| 取回 | `actions/download-artifact`（`pattern: validated-runtime-images-*`） | `cnbcool/attachments` 的 `DOWNLOAD`，插件在流水线内运行 |
+| 排序 | `needs: [docker-build, kubernetes-kind]` | `cnb:await` / `cnb:resolve` |
+
+CNB 侧原本**两边都缺**，于是第一次真实发布死在第一步：
+
+```
+==> Verify and load both platform packages
+missing validated package for amd64: validated-platforms/validated-runtime-images-amd64
+```
+
+**取回**：`scripts/release-contract.golden.sh` 的 section 0 用
+[`cnbcool/attachments`](https://cnb.cool/cnb/plugins/cnbcool/attachments) 的
+`DOWNLOAD` 模式把制品落到 `validated-platforms/validated-runtime-images-<arch>/`。
+它是 **fail-closed** 的：两个架构都必须到手、取不到即非零退出；期望的镜像集合
+是脚本里的常量，不从"上传了什么"反推，所以只跑完一半的 `docker-images` 不可能
+被发布。`SOYMUTDB_ARTIFACT_FETCH_CMD=none` 表示"制品已在
+`${VALIDATED_ROOT}` 下"，此时**仍然**要求两个架构都在。
+
+**排序**：一次 `main` push 会同时启动该事件下的所有流水线，发布因此会和两条
+原生架构镜像流水线**抢跑**。`docker-images (amd64)` 在 `stages` 的**最后**放一个
+`cnb:resolve`（该位置有意义：`stages` 顺序执行，resolve 时镜像已经构建、冒烟、
+扫描、SBOM、导出完毕），`release` 的**第一个** stage 放对应的 `cnb:await`。
+未 resolve 会被死锁检测报出来，而不是无限等待。
+
+两条约束缺一不可：只 await 而不取回，目录依然是空的；只取回而不 await，发布
+会与构建抢跑。`cnb:await`/`cnb:resolve` 只能用于**同一事件**的流水线之间，因此
+release 用 `resources.pipelines` 声明它等待的那个事件内流水线。`await` 也只能
+出现在 `stages`（不能在 `endStages`/`failStages`），所以它是一条 stage 而不是
+结束阶段。
+
+### 两个架构包必须描述同一个 revision
+
+`docker-images` 的每个平台各自跑在原生 runner 上，两条流水线是两次独立构建。
+发布若把**某次**构建的 amd64 包和**另一次**构建的 arm64 包合在一起，它依然
+"由校验过的字节组成"，却不对应任何一个 revision——而 `SOURCE_REVISION` 记录的
+是发布流水线自己的 commit，于是签名背书的 provenance 是假的。
+
+因此校验包新增 `revision.txt`（由 `SOURCE_REVISION` 写出，和其它成员一起进
+`SHA256SUMS`），发布方在加载后做两道比较：
+
+* 两个包互相比较：不同源 → 失败；
+* 与 `SOURCE_REVISION` 比较：不一致 → **拒绝签名**，并打印两个 revision。
+
+`SOYMUTDB_VALIDATED_ARCHES` 可覆盖参与校验的架构集合（默认 `amd64 arm64`）。
 
 ## 5. 冒烟测试
 

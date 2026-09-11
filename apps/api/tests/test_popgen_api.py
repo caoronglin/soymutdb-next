@@ -123,6 +123,15 @@ class MissingGeneDb:
             def scalar_one_or_none():
                 return None
 
+            @staticmethod
+            def scalars():
+                class Scalars:
+                    @staticmethod
+                    def all():
+                        return []
+
+                return Scalars()
+
         return Result()
 
 

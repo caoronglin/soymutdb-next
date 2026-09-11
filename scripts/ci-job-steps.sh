@@ -83,6 +83,89 @@ export SOYMUTDB_CI_DEMO_JBROWSE_URL="${SOYMUTDB_CI_DEMO_JBROWSE_URL:-https://jbr
 
 log() { printf '[ci-job-steps] %s\n' "$*" >&2; }
 
+# `pnpm deps:graphs|deps:audit` shell out to scripts/dependency_governance.py,
+# which imports PyYAML AND drives `uv`/`uvx` for the Deptry/license analyzers.
+# The GitHub mirror installs both explicitly
+# (`python -m pip install --quiet PyYAML==6.0.3 uv==0.11.33`), but the CNB
+# governance stage ran in `node:24.19.0`, whose only Python is the bare
+# interpreter from the base image (for node-gyp, with no pip) -- so the job
+# died before any analyzer ran:
+#
+#   $ python3 scripts/dependency_governance.py graphs --output ...
+#   ModuleNotFoundError: No module named 'yaml'
+#
+# Installing them here rather than in the pipeline keeps both providers on the
+# same bytes and the same pins, and keeps `scripts/` the single source of truth.
+# `UV_VERSION` is the same pin the Dockerfiles and `check-toolchain-pins.py`
+# enforce, so the analyzers cannot run on a different uv than production.
+GOVERNANCE_PYYAML_VERSION="${SOYMUTDB_CI_PYYAML_VERSION:-${SOYMUTDB_CI_GOVERNANCE_PYYAML_VERSION:-6.0.3}}"
+
+# Debian-based `node:*` images ship a bare `python3` (for node-gyp) without the
+# `pip` module. A bare `python3 -m pip` therefore fails there, so bootstrap pip
+# with `ensurepip` before giving up: the failure this whole function exists to
+# fix must not be replaced by "No module named pip".
+ensure_governance_pip() {
+  local interpreter="$1"
+  "${interpreter}" -m pip --version >/dev/null 2>&1 && return 0
+  log "pip is unavailable for ${interpreter}; bootstrapping it with ensurepip"
+  "${interpreter}" -m ensurepip --upgrade >/dev/null 2>&1 && return 0
+  log "cannot bootstrap pip; the governance gate needs PyYAML and uv"
+  return 1
+}
+
+governance_pip_install() {
+  local interpreter="$1"
+  shift
+  PIP_NO_CACHE_DIR=1 PIP_ROOT_USER_ACTION=ignore PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    "${interpreter}" -m pip install --quiet --break-system-packages "$@"
+}
+
+ensure_governance_python() {
+  local interpreter
+  interpreter="$(command -v python3 || true)"
+  [[ -n "${interpreter}" ]] || {
+    log "the governance stage image must provide python3 for the dependency graphs"
+    log "it runs scripts/dependency_governance.py and every Python analyzer"
+    return 1
+  }
+
+  # Fail closed on an interpreter the repository never declared: the analyzers
+  # resolve dependencies against the pinned Python, so running them under a
+  # stray 3.11 would report findings for a toolchain nothing ships.
+  if ! interpreter_matches_pin "${interpreter}"; then
+    log "cannot run dependency governance: ${interpreter} is $("${interpreter}" -V 2>&1), not ${PYTHON_VERSION}"
+    return 1
+  fi
+
+  # Idempotent and quiet when already satisfied, so a warm container pays
+  # nothing and a developer machine is not disturbed.
+  if ! "${interpreter}" -c 'import yaml' >/dev/null 2>&1; then
+    ensure_governance_pip "${interpreter}" || return 1
+    log "installing PyYAML==${GOVERNANCE_PYYAML_VERSION} for the dependency graphs"
+    governance_pip_install "${interpreter}" "PyYAML==${GOVERNANCE_PYYAML_VERSION}" || return 1
+  fi
+
+  "${interpreter}" -c 'import yaml' >/dev/null 2>&1 || {
+    log "PyYAML is still not importable by ${interpreter}"
+    return 1
+  }
+
+  # The audit policy drives `uvx`; without it every analyzer is reported
+  # unavailable, which the fail-closed gate counts as a failure anyway. Install
+  # the pinned uv now so the gate produces evidence instead of a toolchain error.
+  if ! command -v uv >/dev/null 2>&1; then
+    ensure_governance_pip "${interpreter}" || return 1
+    log "installing uv==${UV_VERSION} for the governance analyzers"
+    governance_pip_install "${interpreter}" "uv==${UV_VERSION}" || return 1
+  fi
+
+  if ! command -v uv >/dev/null 2>&1; then
+    log "uv is unavailable; the Deptry/license analyzers cannot run"
+    log "the governance gate is fail-closed, so this is an error, not a skip"
+    return 1
+  fi
+}
+
 # -----------------------------------------------------------------------------
 # Job catalog
 # -----------------------------------------------------------------------------
@@ -234,10 +317,31 @@ api_tests_run() {
 # -----------------------------------------------------------------------------
 # dependency-governance — graphs + fail-closed audits
 # -----------------------------------------------------------------------------
+# Knip loads `apps/web/vite.config.ts` to resolve the Vitest project graph, and
+# that config *validates its own deployment origins at import time*: an unset
+# VITE_API_BASE_URL throws
+#
+#   Error: API origin is required for production deployment
+#     at requireDeploymentOrigin (apps/web/src/lib/deployment.ts:87)
+#     at /workspace/apps/web/vite.config.ts:91
+#
+# before Knip analyses a single file. The gate then dies with a bare Node stack
+# trace and `knip: failed (analyzer_exit_nonzero)`, which reads as an unused-code
+# finding but is a missing environment variable. The values mirror
+# `frontend_build_demo` (and the GitHub mirror's dependency-governance job): the
+# demo fixture origins the offline verification build already uses.
+dependency_governance_env() {
+  export VITE_DEPLOYMENT_MODE="${SOYMUTDB_CI_DEMO_MODE}"
+  export VITE_API_BASE_URL="${SOYMUTDB_CI_DEMO_API_URL}"
+  export VITE_JBROWSE_BASE_URL="${SOYMUTDB_CI_DEMO_JBROWSE_URL}"
+}
+
 dependency_governance_step() {
   # `pnpm deps:*` needs an installed workspace, and this is a different container
   # from the frontend job: bootstrap instead of assuming.
   ensure_workspace
+  ensure_governance_python
+  dependency_governance_env
 
   local rc=0
   pnpm deps:graphs || rc=$?

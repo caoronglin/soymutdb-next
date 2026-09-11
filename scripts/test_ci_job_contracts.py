@@ -38,6 +38,7 @@ SHARED_SCRIPTS = (
     "scripts/stage-pages-publication.sh",
     "scripts/verify-frontend-artifacts.sh",
     "scripts/verify-backend-tests.sh",
+    "scripts/with-postgres-service.sh",
     "scripts/build-static-apps.sh",
     "scripts/build-release-image.sh",
     "scripts/release-contract.golden.sh",
@@ -322,6 +323,81 @@ class DeliveryArchitectureTests(unittest.TestCase):
             },
             declared,
         )
+
+    def test_archived_pipeline_files_do_not_drift_from_the_root_config(self) -> None:
+        """`.cnb/pipelines/*.yml` must mirror `.cnb.yml`, not lag behind it.
+
+        These files are advertised (and asserted above) as the reviewable record
+        of what each job runs. Nothing compared their *content* to `.cnb.yml`,
+        so they silently became historical:
+
+          * `.cnb/pipelines/verify.yml` still declared a stage-level
+            `services: [postgres:16]` after the root config moved `services` to
+            the pipeline level, i.e. the exact shape whose silent no-op started
+            the PostgreSQL outage this suite documents at length.
+          * the same file carried none of the root pipeline's `push` stages
+            (Pages artifact build/upload, verification-evidence upload).
+
+        A mirror that disagrees with its source of truth is worse than no
+        mirror: it is the document a reviewer reads to decide whether the
+        pipeline is correct. Compare the parts that carry meaning -- declared
+        services, the env the gate bodies read, and the delegated job commands --
+        so the two cannot disagree on a question a reviewer would ask.
+        """
+        root_verify = None
+        for pipeline in _cnb_pipelines("main", "push"):
+            if pipeline.get("name") == "verify":
+                root_verify = pipeline
+        self.assertIsNotNone(root_verify, "missing main/push verify pipeline")
+
+        archived = yaml.safe_load(
+            (ROOT / ".cnb/pipelines/verify.yml").read_text(encoding="utf-8")
+        )
+
+        # 1. Services are a PIPELINE-level key; the archived file must place
+        #    them exactly where the root config does.
+        self.assertEqual(
+            root_verify.get("services"),
+            archived.get("services"),
+            "archived verify pipeline declares different pipeline-level services",
+        )
+        for stage in archived.get("stages", []) or []:
+            self.assertNotIn("services", stage, f"stage-level services: {stage}")
+
+        # 2. The build environment the gate bodies actually read.
+        for key in ("VITE_DEPLOYMENT_MODE", "VITE_API_BASE_URL", "VITE_JBROWSE_BASE_URL"):
+            self.assertEqual(
+                root_verify.get("env", {}).get(key),
+                archived.get("env", {}).get(key),
+                f"archived verify pipeline disagrees on {key}",
+            )
+
+        # 3. Every stage the root pipeline runs must appear in the mirror with
+        #    the same delegated command (an artifact-upload stage has settings
+        #    rather than a script, so compare `script` when present).
+        def _stage_map(pipeline: dict) -> dict[str, str]:
+            mapped: dict[str, str] = {}
+            for stage in pipeline.get("stages", []) or []:
+                if not isinstance(stage, dict) or "name" not in stage:
+                    continue
+                mapped[str(stage["name"])] = str(
+                    stage.get("script") or _flatten(stage.get("settings") or {})
+                )
+            return mapped
+
+        root_stages = _stage_map(root_verify)
+        archived_stages = _stage_map(archived)
+        self.assertEqual(
+            set(root_stages),
+            set(archived_stages),
+            "the archived verify pipeline runs a different stage list than .cnb.yml",
+        )
+        for name, script in root_stages.items():
+            self.assertEqual(
+                script,
+                archived_stages[name],
+                f"archived verify pipeline stage {name!r} is stale",
+            )
 
     def test_web_trigger_events_have_matching_pipelines(self) -> None:
         document = _cnb()
@@ -937,6 +1013,57 @@ class DeliveryArchitectureTests(unittest.TestCase):
                 f"{name} needs pnpm but never reaches scripts/setup-workspace.sh; "
                 "it would fail with `pnpm: command not found` in its own container",
             )
+
+        # The governance job body must bootstrap the Python modules its own
+        # `pnpm deps:*` scripts import. The GitHub mirror installs
+        # `PyYAML==6.0.3 uv==0.11.33` by hand; the CNB stage ran in
+        # `node:24.19.0`, which has no PyYAML and no pip, and died with
+        # `ModuleNotFoundError: No module named 'yaml'`.
+        self.assertIn("ensure_governance_python", bodies["dependency_governance_step"])
+        governance_python = bodies["ensure_governance_python"]
+        self.assertIn("import yaml", governance_python)
+        self.assertIn("PyYAML==", governance_python)
+        # `uv`/`uvx` drive the Deptry/license analyzers; without it every one is
+        # reported unavailable, which the fail-closed gate treats as a failure.
+        self.assertIn("uv==${UV_VERSION}", governance_python)
+        # It must be pinned, or the two providers can resolve different linters.
+        self.assertIn("GOVERNANCE_PYYAML_VERSION", steps)
+        self.assertIn("SOYMUTDB_CI_GOVERNANCE_PYYAML_VERSION", steps)
+        # A bare `node:*` python has no pip, so the job body must be able to
+        # bootstrap it; otherwise the install above fails with
+        # `No module named pip` and the real cause is hidden again.
+        # The pip bootstrap is reached from the PyYAML installer, not from the
+        # step directly.
+        self.assertIn("ensure_governance_pip", governance_python)
+        self.assertIn("ensurepip", bodies["ensure_governance_pip"])
+
+        # A stage `image:` overrides the pipeline environment, so a Node-only
+        # pin is exactly the regression: the gate also needs an interpreter.
+        # Check every config that can run the stage, including the standalone
+        # pipeline records -- `.cnb/pipelines/verify.yml` is a third copy that a
+        # root-config-only assertion would miss.
+        for config in _cnb_config_files():
+            document = yaml.safe_load(config.read_text(encoding="utf-8"))
+            for pipeline in _iter_pipelines(document):
+                build = (pipeline.get("docker") or {}).get("build")
+                inherited = build if isinstance(build, dict) else {}
+                for stage in pipeline.get("stages", []):
+                    if "run dependency-governance" not in str(stage.get("script", "")):
+                        continue
+                    image = str(stage.get("image", ""))
+                    self.assertNotIn(
+                        "node:",
+                        image,
+                        f"{config.name}/{stage.get('name')}: image={image!r} has no "
+                        "Python, but the governance gate runs a Python script",
+                    )
+                    if not image:
+                        self.assertTrue(
+                            inherited.get("dockerfile"),
+                            f"{config.name}/{stage.get('name')}: the stage drops its "
+                            "`image:` without a pipeline-level docker.build to "
+                            "inherit a dual-toolchain environment from",
+                        )
 
         # And the stage that runs them must mount the store, or the install
         # caches into a container layer that is thrown away.
@@ -1713,8 +1840,16 @@ class DeliveryArchitectureTests(unittest.TestCase):
         # PostgreSQL integration is mandatory for the backend layer: the
         # privacy/identity/assembly matrix must fail closed, not skip green.
         self.assertEqual(pipeline["env"]["SOYMUTDB_RUN_POSTGRES_INTEGRATION"], "1")
-        backend_stage = pipeline["stages"][1]
-        self.assertIn("postgres:16", backend_stage["services"])
+        # `services` is a PIPELINE-level key, not a stage key: a stage-level
+        # `services:` is silently dropped and the dind daemon never starts.
+        self.assertIn("docker", pipeline["services"])
+        self.assertNotIn("postgres:16", pipeline["services"])
+        for stage in pipeline["stages"]:
+            self.assertNotIn(
+                "services",
+                stage,
+                "`services` is a pipeline key; on a stage it is ignored",
+            )
         self.assertIn(
             "pnpm-store",
             " ".join(str(v) for v in pipeline["docker"]["volumes"]),
@@ -1730,6 +1865,155 @@ class DeliveryArchitectureTests(unittest.TestCase):
         text = _flatten(pipeline)
         for forbidden in ("docker login", "docker push", "cosign"):
             self.assertNotIn(forbidden, text, forbidden)
+
+    def test_postgres_backed_stages_declare_a_real_service_and_resolve_a_database(self) -> None:
+        """The PostgreSQL gate must depend on a service CNB actually starts.
+
+        Regression for the first real CNB build of the api-tests stage
+        (cnb-ubo-1k2852ukb). The stage declared:
+
+            services:
+              - postgres:16
+
+        CNB accepted the declaration and started NOTHING. Measured in a probe
+        build on the same runner (cnb-j0g-1k285hm3b):
+
+            CLOSED postgres 5432 [Errno -2] Name or service not known
+            CLOSED 127.0.0.1 5432 [Errno 111] Connection refused
+            /var/run/docker.sock missing
+
+        `services` only implements `docker` and `vscode`, so any other name is
+        a silent no-op. The suite therefore fell through to Testcontainers and
+        every database-backed test errored with a docker stack trace:
+
+            docker.errors.DockerException: Error while fetching server API
+            version: ('Connection aborted.', FileNotFoundError(2, ...))
+
+        ...116 ERRORS that read as 116 product failures. The fix is a service
+        the platform does start (`docker`) plus a resolver that fails closed.
+        """
+        forbidden = {"postgres", "postgresql", "mysql", "mariadb", "redis", "mongo"}
+
+        database_stages: list[tuple[str, dict]] = []
+        for config in _cnb_config_files():
+            document = yaml.safe_load(config.read_text(encoding="utf-8"))
+            for pipeline in _iter_pipelines(document):
+                for stage in pipeline.get("stages", []) or []:
+                    if not isinstance(stage, dict):
+                        continue
+                    body = _flatten(stage)
+                    if "api-tests" not in body and "--profile backend" not in body:
+                        continue
+                    database_stages.append((config.name, pipeline))
+
+                    # `services` is a PIPELINE-level key (docs.cnb.cool
+                    # grammar.md#pipeline-services: siblings of `stages`,
+                    # `docker`, `env`). Declaring it inside a Stage is silently
+                    # ignored: the stage then has no dind daemon and no docker
+                    # CLI, which is exactly the observed failure
+                    #   [postgres-service] docker CLI is unavailable:
+                    #   this stage must declare `services: [docker]`
+                    # on the real build cnb-m06-1k28813m9. Assert on the
+                    # pipeline, never on the stage.
+                    services = pipeline.get("services") or []
+                    names = {
+                        entry if isinstance(entry, str) else entry.get("name")
+                        for entry in services
+                    }
+                    self.assertNotIn(
+                        forbidden,
+                        names,
+                        f"{config.name}: `services:` only implements docker and "
+                        "vscode; a database name here is accepted and starts "
+                        "nothing",
+                    )
+                    self.assertIn(
+                        "docker",
+                        names,
+                        f"{config.name}: the PostgreSQL gate needs the pipeline "
+                        "to declare `services: [docker]` so it can start a "
+                        "database through the dind daemon",
+                    )
+                    # And it must NOT be misplaced on the stage: a stage-level
+                    # `services` is not in the Stage schema and is dropped.
+                    for stage in pipeline.get("stages", []) or []:
+                        if not isinstance(stage, dict) or "stages" in stage:
+                            continue
+                        self.assertNotIn(
+                            "services",
+                            stage,
+                            f"{config.name}/{stage.get('name')}: `services` "
+                            "is a pipeline key; on a stage it is silently "
+                            "ignored and the dind daemon never starts",
+                        )
+
+        self.assertTrue(
+            database_stages,
+            "no pipeline stage runs the PostgreSQL-backed gate; the privacy, "
+            "identity and assembly matrix would never execute",
+        )
+        # The same misplaced-key hazard applies to every pipeline in the
+        # repository, not just the database gate: `services` on a Stage is
+        # always a no-op, so forbid it everywhere and keep the fix from
+        # regressing one file at a time.
+        for config in _cnb_config_files():
+            document = yaml.safe_load(config.read_text(encoding="utf-8"))
+            for pipeline in _iter_pipelines(document):
+                for stage in pipeline.get("stages", []) or []:
+                    if not isinstance(stage, dict):
+                        continue
+                    # A stage MAY be a whole nested pipeline (`stages:` inside
+                    # the stage). That inner object is a pipeline, so its own
+                    # `services:` is legal pipeline configuration -- `.cnb.yml`
+                    # uses this shape for the per-architecture image builds.
+                    if "stages" in stage:
+                        continue
+                    if "services" in stage:
+                        self.fail(
+                            f"{config.name}/{stage.get('name')}: `services` is "
+                            "a pipeline-level key; declaring it on a stage is "
+                            "silently ignored"
+                        )
+
+        # The resolver itself must stay fail-closed and driver-accurate.
+        resolver = (ROOT / "scripts/with-postgres-service.sh").read_text(encoding="utf-8")
+        self.assertIn("set -euo pipefail", resolver)
+        # An explicit caller-provided database is honoured, so local runs and
+        # the GitHub runner (where Testcontainers works) are unaffected.
+        self.assertIn("SOYMUTDB_TEST_DATABASE_URL", resolver)
+        marker = 'if [[ -n "${SOYMUTDB_TEST_DATABASE_URL:-}" ]]'
+        self.assertIn(
+            marker,
+            resolver,
+            "an explicitly provided database must short-circuit the bootstrap",
+        )
+        # Readiness must be proven with the suite's own driver: the vendor
+        # image serves `pg_isready` from a temporary socket during initdb, so a
+        # TCP-level check alone reports a healthy server as unusable.
+        self.assertIn("asyncpg.connect", resolver)
+        self.assertIn("pg_isready", resolver)
+        # It must never fall back to "skip because there is no database".
+        for skip in ("pytest.skip", "SKIPPED", "exit 0 #"):
+            self.assertNotIn(skip, resolver, skip)
+
+        # The gate consumes the resolver's output without `source`, because a
+        # CNB stage body runs under `sh` where `source` does not exist.
+        backend = (ROOT / "scripts/verify-backend-tests.sh").read_text(encoding="utf-8")
+        for marker in (
+            "with-postgres-service.sh",
+            "--print-exports",
+            "export SOYMUTDB_RUN_POSTGRES_INTEGRATION=1",
+            # The worker suite reuses a fixture by package path, and a broken
+            # import aborts collection for the whole run. This must stay a hard
+            # step *before* the worker install so it fails fast and cheaply.
+            "scripts/check_worker_test_package.py",
+        ):
+            self.assertIn(marker, backend, marker)
+        self.assertNotIn("source \"${PG_ENV_FILE}\"", backend)
+
+        # `--ensure` must write a POSIX `KEY=VALUE` file, not shell `export`
+        # lines, for the same reason.
+        self.assertNotIn("printf 'export SOYMUTDB_TEST_DATABASE_URL", resolver)
 
     def test_acceptance_entry_point_never_reports_a_missing_prerequisite_as_a_pass(self) -> None:
         """The acceptance/smoke difference is deliberate and must stay visible.
@@ -1821,6 +2105,217 @@ class DeliveryArchitectureTests(unittest.TestCase):
         self.assertIn("CNB_DOCKER_REGISTRY", golden)
         self.assertNotIn("github.repository_owner", golden)
         self.assertRegex(golden, re.compile(r"CNB_TOKEN"))
+
+
+class ArchivedPipelineMirrorTests(unittest.TestCase):
+    """`.cnb/pipelines/release.yml` must mirror the release pipeline.
+
+    The archived files are the reviewable record of what each pipeline runs, so
+    a reviewer reading `release.yml` must see the same stages `.cnb.yml`
+    executes. Only `verify.yml` was ever compared, and `release.yml` is the one
+    a release reviewer opens, so it gets the same treatment here.
+    """
+
+    def _release_documents(self) -> tuple[dict, dict]:
+        root = next(
+            pipeline
+            for pipeline in _cnb_pipelines("$", "push")
+            if pipeline["name"] == "release"
+        )
+        archived = yaml.safe_load(
+            (ROOT / ".cnb/pipelines/release.yml").read_text(encoding="utf-8")
+        )
+        return root, archived
+
+    def test_release_pipeline_file_mirrors_the_root_config(self) -> None:
+        root, archived = self._release_documents()
+
+        def _stage_map(pipeline: dict, key: str = "stages") -> dict[str, str]:
+            mapped: dict[str, str] = {}
+            for stage in pipeline.get(key, []) or []:
+                if not isinstance(stage, dict) or "name" not in stage:
+                    continue
+                if stage.get("type"):
+                    body = f"{stage['type']}:{stage['options'].get('key')}"
+                else:
+                    body = str(
+                        stage.get("script")
+                        or _flatten(stage.get("settings") or {})
+                    )
+                mapped[str(stage["name"])] = body
+            return mapped
+
+        # `.cnb.yml` splits the terminal upload into `endStages`; the archived
+        # pipeline (and the provider-neutral pipeline file convention) lists it
+        # as a final stage. Compare the concatenation, and compare the two
+        # ordered lists separately.
+        root_stages = _stage_map(root)
+        archived_stages = _stage_map(archived)
+        root_end = _stage_map(root, "endStages")
+        self.assertEqual(
+            list(root_stages) + list(root_end),
+            list(archived_stages),
+            "the archived release pipeline runs a different stage list than .cnb.yml",
+        )
+        # Acceptance criterion: the archived file must name the same delegated
+        # job, whichever indirection the copy uses. `.cnb.yml` goes through the
+        # shared job entrypoint, the archived file calls the golden script the
+        # entrypoint forwards to; both are the one implementation.
+        delegations = {
+            "bash scripts/ci-job-steps.sh run release": "release",
+            "bash scripts/release-contract.golden.sh": "release",
+        }
+        for name, body in {**root_stages, **root_end}.items():
+            expected = delegations.get(body, body)
+            actual = delegations.get(archived_stages[name], archived_stages[name])
+            self.assertEqual(
+                expected, actual, f"archived release stage {name!r} is stale"
+            )
+
+        # The start gate is the part most likely to be dropped when someone
+        # edits one copy: the wait must be present in BOTH, and first.
+        for pipeline in (root, archived):
+            stages = pipeline["stages"]
+            self.assertEqual("cnb:await", stages[0].get("type"))
+            self.assertEqual(
+                "validated-runtime-images-amd64", stages[0]["options"]["key"]
+            )
+
+        # The pipeline holding the registry credentials is the one that fetches
+        # and signs, and it is the only place the artifact plugin may appear.
+        self.assertIn("cnbcool/artifact", _flatten(root))
+        self.assertNotIn("cnbcool/attachments", _flatten(root))
+
+
+class ReleasePublisherTests(unittest.TestCase):
+    """The publisher must be able to obtain the packages it verifies.
+
+    Regression for a release that could never run on CNB. `docker-images (amd64)`
+    and `docker-images (arm64)` are separate pipelines on separate native
+    runners; the publisher is a third one. The GitHub mirror bridges that with
+    an explicit `actions/download-artifact`, the CNB release pipeline had no
+    equivalent, so a real release died at the first step:
+
+      ==> Verify and load both platform packages
+      missing validated package for amd64: validated-platforms/validated-runtime-images-amd64
+
+    These contracts pin the four things that fix requires: the fetch exists, it
+    is fail-closed for BOTH architectures, it never uses a credential-free
+    pipeline, and the release cannot start before the packages do.
+    """
+
+    def _release_pipeline(self) -> dict:
+        pipelines = [
+            pipeline
+            for pipeline in _cnb_pipelines("$", "push")
+            if pipeline["name"] == "release"
+        ]
+        self.assertEqual(1, len(pipelines), "expected exactly one release pipeline")
+        return pipelines[0]
+
+    def test_publisher_fetches_the_packages_it_verifies(self) -> None:
+        golden = (ROOT / "scripts/release-contract.golden.sh").read_text(encoding="utf-8")
+
+        # Section 0 exists and runs before any verification.
+        self.assertIn("materialize_platform_packages", golden)
+        self.assertLess(
+            golden.index("materialize_platform_packages\n"),
+            golden.index("Verify and load both platform packages"),
+        )
+
+        # It uses the plugin the platform documents for CI artifacts.
+        self.assertIn("cnbcool/attachments", golden)
+        self.assertIn("PLUGIN_TYPE=DOWNLOAD", golden)
+        # ...and both architectures, never a single one discovered at runtime.
+        self.assertRegex(golden, re.compile(r"RUNTIME_PACKAGE_ARCHES=\(amd64 arm64\)"))
+
+        # Fail-closed: a package that does not materialize aborts the run.
+        self.assertIn("failed to fetch the", golden)
+        self.assertNotIn("continue", golden.split("fetch_platform_package")[1][:2000])
+
+        # The verify pipelines stay credential-free; the fetch lives here.
+        for pipeline in _cnb_pipelines("main", "pull_request"):
+            self.assertNotIn("cnbcool/attachments", _flatten(pipeline))
+
+    def test_platform_packages_must_describe_one_revision(self) -> None:
+        golden = (ROOT / "scripts/release-contract.golden.sh").read_text(encoding="utf-8")
+        verification = (ROOT / "scripts/build-release-image.sh").read_text(encoding="utf-8")
+
+        # The verify pipeline records the revision it built from...
+        self.assertIn("revision.txt", verification)
+        self.assertIn("SOURCE_REVISION", verification)
+        # ...and checksums it with the rest of the package.
+        export_step = verification[verification.index("Export validated runtime images") :]
+        self.assertIn("revision.txt", export_step[export_step.index("sha256sum") :])
+
+        # The publisher compares both packages against each other and against
+        # the revision the contract records: verified bytes from two different
+        # builds would describe no single revision, so the provenance the
+        # release signs would be false.
+        self.assertIn("revision.txt", golden)
+        self.assertIn("platform packages disagree on the revision", golden)
+        self.assertIn("but this release records", golden)
+
+        # Both verify pipelines stamp the same variable the publisher reads.
+        for name in ("docker-images (amd64)", "docker-images (arm64)"):
+            pipeline = next(
+                pipeline
+                for pipeline in _cnb_pipelines("main", "push")
+                if pipeline["name"] == name
+            )
+            self.assertIn("SOURCE_REVISION", pipeline.get("env", {}), name)
+
+    def test_release_starts_only_after_the_verified_packages_exist(self) -> None:
+        """Every pipeline of a `main` push starts at once; the release must not.
+
+        The packages arrive as uploaded artifacts, so "the release pipeline runs
+        after the image pipelines" is not automatic: without an explicit order
+        the publisher races the builds it consumes.
+        """
+        release = self._release_pipeline()
+
+        await_jobs = [
+            stage
+            for stage in release["stages"]
+            if stage.get("type") == "cnb:await"
+        ]
+        self.assertEqual(1, len(await_jobs), "the release must await the image pipeline")
+        self.assertEqual(
+            "validated-runtime-images-amd64", await_jobs[0]["options"]["key"]
+        )
+        # The gate must be the FIRST stage: waiting after publishing is useless.
+        self.assertIs(await_jobs[0], release["stages"][0])
+
+        # The matching resolve is the verify pipeline's LAST job, so it fires
+        # only once the images exist and are exported.
+        verify = next(
+            pipeline
+            for pipeline in _cnb_pipelines("main", "push")
+            if pipeline["name"] == "docker-images (amd64)"
+        )
+        resolves = [
+            stage for stage in verify["stages"] if stage.get("type") == "cnb:resolve"
+        ]
+        self.assertEqual(1, len(resolves), "the image pipeline must hand off")
+        self.assertEqual(
+            await_jobs[0]["options"]["key"], resolves[0]["options"]["key"]
+        )
+        self.assertIs(resolves[0], verify["stages"][-1])
+
+        # `cnb:await` / `cnb:resolve` only pair between pipelines of the SAME
+        # event, so the release must name the image pipeline as a resource of
+        # the event it runs in.
+        resources = _flatten(release.get("resources", {}))
+        self.assertIn("docker-images (amd64)", resources)
+        # Neither of these jobs may run outside `stages`.
+        for pipeline in _cnb_pipelines("$", "push"):
+            for key in ("endStages", "failStages"):
+                for stage in pipeline.get(key, []) or []:
+                    self.assertNotIn(
+                        stage.get("type"),
+                        {"cnb:await", "cnb:resolve"},
+                        f"{pipeline['name']}: {key} cannot hold {stage.get('type')}",
+                    )
 
 
 class CnbVolumeGrammarTests(unittest.TestCase):

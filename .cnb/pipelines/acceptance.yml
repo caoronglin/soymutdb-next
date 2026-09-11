@@ -47,6 +47,8 @@ env:
   SOYMUTDB_RUN_POSTGRES_INTEGRATION: '1'
   SOYMUTDB_ACCEPTANCE_DIR: artifacts/acceptance
 
+services:
+  - docker
 stages:
   - name: Delivery contracts
     image: python:3.14
@@ -54,8 +56,6 @@ stages:
 
   - name: API + Worker acceptance
     image: python:3.14
-    services:
-      - postgres:16
     script: bash scripts/acceptance.sh --profile backend
 
   - name: Static artifact acceptance

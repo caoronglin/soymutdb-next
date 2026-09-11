@@ -10,6 +10,7 @@ in-memory FASTA stand-in so the FAI offset math is exercised end-to-end.
 from __future__ import annotations
 
 import asyncio
+import itertools
 from typing import Any
 
 import pytest
@@ -79,16 +80,26 @@ def _fake_read_bytes(path: str, byte_range: tuple[int, int] | None = None) -> by
     return FASTA_BYTES[b_start : b_end + 1]
 
 
+_NEXT_GENE_PK = itertools.count(1)
+
+
 def _make_gene(
-    gene_id: str,
+    accession: str,
     chromosome: Chromosome,
     assembly: Assembly,
     start: int,
     end: int,
     strand: str = "+",
 ) -> Gene:
+    """A gene row keyed by its assembly-scoped accession.
+
+    ``gene_pk`` is the surrogate persistence key; the public identity of a gene
+    is its accession within an assembly namespace, so callers pass the
+    accession here.
+    """
     gene = Gene(
-        id=gene_id,
+        gene_pk=next(_NEXT_GENE_PK),
+        accession=accession,
         assembly_id=assembly.id,
         chromosome_id=chromosome.id,
         start=start,

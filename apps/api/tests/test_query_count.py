@@ -145,7 +145,10 @@ class TestGeneDetailQueryCount:
         tx.exons = []
 
         gene = MagicMock()
-        gene.id = "Glyma.01G000100"
+        # Identity contract: genes carry a surrogate `gene_pk` plus the
+        # assembly-scoped `accession`; the public response exposes the accession.
+        gene.gene_pk = 501
+        gene.accession = "Glyma.01G000100"
         gene.assembly_id = 1
         gene.chromosome_id = "1"
         chromosome = MagicMock()
@@ -163,7 +166,7 @@ class TestGeneDetailQueryCount:
         gene.updated_at = None
 
         db = MagicMock()
-        db.execute = AsyncMock(return_value=_make_exec_result(scalar_one=gene))
+        db.execute = AsyncMock(return_value=_make_exec_result(scalars_list=[gene]))
 
         detail = await GeneService().get_gene(
             db,

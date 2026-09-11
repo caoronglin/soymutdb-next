@@ -43,6 +43,34 @@ def _make_mock_session():
     return session
 
 
+def _make_gene(accession: str, gene_pk: int = 501):
+    """A Gene row as resolved by ``find_by_accessions``.
+
+    Genes are keyed by ``gene_pk`` (surrogate); ``accession`` is the
+    assembly-scoped public identity. The endpoint resolves the accession
+    first, so every gene-scoped test needs this row in its query stream.
+    """
+    gene = MagicMock()
+    gene.gene_pk = gene_pk
+    gene.accession = accession
+    gene.assembly_id = 1
+    return gene
+
+
+def _result(rows):
+    r = MagicMock()
+    r.scalars.return_value.all.return_value = rows
+    return r
+
+
+def _gene_then(rows, accession="Glyma.01G000100", gene_pk=501):
+    """Sequence the two executes of the gene-scoped endpoint.
+
+    Order: accession -> gene resolution, then the homolog query.
+    """
+    return [_result([_make_gene(accession, gene_pk)]), _result(rows)]
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -50,10 +78,15 @@ def _make_mock_session():
 
 @pytest.fixture
 def mock_homolog():
-    """Return a mock GeneHomolog dict-like object."""
+    """Return a mock GeneHomolog dict-like object.
+
+    ``GeneHomolog.gene_id`` is the surrogate ``gene_pk``; the response exposes
+    the gene's assembly-scoped ``accession`` via the ``gene`` relationship.
+    """
     h = MagicMock()
     h.id = 1
-    h.gene_id = "Glyma.01G000100"
+    h.gene_id = 501
+    h.gene.accession = "Glyma.01G000100"
     h.homolog_species = "Arabidopsis thaliana"
     h.homolog_gene_id = "AT1G01010"
     h.homolog_type = "ortholog"
@@ -109,9 +142,7 @@ class TestGetGeneHomologs:
 
     async def test_get_homologs_found(self, client, mock_session, mock_homolog):
         """Existing gene with homologs returns homolog list."""
-        result = MagicMock()
-        result.scalars.return_value.all.return_value = [mock_homolog]
-        mock_session.execute.return_value = result
+        mock_session.execute.side_effect = _gene_then([mock_homolog])
 
         response = await client.get(
             "/api/v1/homologs/genes/Glyma.01G000100/homologs"
@@ -125,6 +156,9 @@ class TestGetGeneHomologs:
 
     async def test_get_homologs_empty(self, client, mock_session):
         """Gene with no homologs returns empty list."""
+        mock_session.execute.side_effect = _gene_then(
+            [], accession="Glyma.99G999999", gene_pk=999
+        )
         response = await client.get(
             "/api/v1/homologs/genes/Glyma.99G999999/homologs"
         )
@@ -147,9 +181,7 @@ class TestGetGeneHomologs:
         h2.homolog_type = "paralog"
         h2.source = "Ensembl"
 
-        result = MagicMock()
-        result.scalars.return_value.all.return_value = [h1, h2]
-        mock_session.execute.return_value = result
+        mock_session.execute.side_effect = _gene_then([h1, h2])
 
         response = await client.get(
             "/api/v1/homologs/genes/Glyma.01G000100/homologs"
@@ -167,9 +199,9 @@ class TestGetGeneHomologs:
         next_homolog.homolog_gene_id = "Glyma.02G000200"
         next_homolog.homolog_type = "paralog"
         next_homolog.source = "Ensembl"
-        result = MagicMock()
-        result.scalars.return_value.all.return_value = [mock_homolog, next_homolog]
-        mock_session.execute.return_value = result
+        mock_session.execute.side_effect = _gene_then(
+            [mock_homolog, next_homolog]
+        )
 
         response = await client.get(
             "/api/v1/homologs/genes/Glyma.01G000100/homologs?limit=1"
@@ -179,6 +211,27 @@ class TestGetGeneHomologs:
         assert len(data["homologs"]) == 1
         assert data["has_more"] is True
         assert data["next_cursor"] == "1"
+
+    async def test_get_homologs_unknown_gene_is_404(self, client, mock_session):
+        """An accession that resolves to no gene must not disclose homologs."""
+        mock_session.execute.side_effect = [_result([])]
+        response = await client.get(
+            "/api/v1/homologs/genes/Glyma.77G777777/homologs"
+        )
+        assert response.status_code == 404
+
+    async def test_get_homologs_ambiguous_assembly_is_rejected(
+        self, client, mock_session
+    ):
+        """The same accession in two assemblies must be disambiguated, not picked."""
+        mock_session.execute.side_effect = [
+            _result([_make_gene("Glyma.01G000100", 501), _make_gene("Glyma.01G000100", 601)])
+        ]
+        response = await client.get(
+            "/api/v1/homologs/genes/Glyma.01G000100/homologs"
+        )
+        assert response.status_code == 422
+        assert response.json()["error"]["details"]["code"] == "ambiguous_assembly"
 
     async def test_get_homologs_rejects_unbounded_limit(self, client):
         response = await client.get(
@@ -207,9 +260,7 @@ class TestSearchHomologs:
     async def test_search_by_gene_id(self, client, mock_session, mock_homolog):
         """Search by gene_id returns matching homologs."""
         mock_session.scalar.return_value = 1
-        result = MagicMock()
-        result.scalars.return_value.all.return_value = [mock_homolog]
-        mock_session.execute.return_value = result
+        mock_session.execute.side_effect = _gene_then([mock_homolog])
 
         response = await client.get(
             "/api/v1/homologs/search?gene_id=Glyma.01G000100"
@@ -255,9 +306,7 @@ class TestSearchHomologs:
     ):
         """Multiple search filters are applied together."""
         mock_session.scalar.return_value = 1
-        result = MagicMock()
-        result.scalars.return_value.all.return_value = [mock_homolog]
-        mock_session.execute.return_value = result
+        mock_session.execute.side_effect = _gene_then([mock_homolog])
 
         response = await client.get(
             "/api/v1/homologs/search"

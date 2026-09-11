@@ -7,10 +7,13 @@ The table name is hardcoded to ``variant_facts``.
 
 from __future__ import annotations
 
+import functools
 import time
+from collections.abc import Awaitable, Callable
 from typing import Any, cast
 
 from clickhouse_connect.driver.asyncclient import AsyncClient
+from clickhouse_connect.driver.exceptions import ClickHouseError
 from structlog import get_logger
 
 from ..core.database import get_clickhouse_client
@@ -30,6 +33,39 @@ ANALYTICS_EVENTS_TABLE = "analytics_events"
 # ``clickhouse_connect.get_async_client`` is a coroutine factory (its
 # annotation in core.database lies); cast to Any so we can await it.
 _async_client_factory = cast(Any, get_clickhouse_client)
+
+#: Message shared by every capability-unavailable response. It names the
+#: capability, never the host/port or a stack trace.
+CLICKHOUSE_UNAVAILABLE_MESSAGE = (
+    "Variant analytics projection (ClickHouse) is unavailable"
+)
+
+
+def _capability_guarded[T](
+    func: Callable[..., Awaitable[T]],
+) -> Callable[..., Awaitable[T]]:
+    """Translate ClickHouse driver/transport failures into 503.
+
+    ClickHouse is a *required capability* in extended deployments and an
+    *absent capability* in baseline/disposable ones. A connection failure,
+    timeout, or driver error must surface as ``503 service_unavailable`` with a
+    capability-level message — never as an unhandled ``500`` and never with
+    host/port details. Callers that deliberately degrade (e.g. the dashboard
+    counters) catch ``ServiceUnavailableError`` explicitly.
+    """
+
+    @functools.wraps(func)
+    async def wrapper(*args: Any, **kwargs: Any) -> T:
+        try:
+            return await func(*args, **kwargs)
+        except ClickHouseError as exc:
+            logger.warning(
+                "clickhouse_capability_unavailable",
+                operation=func.__name__,
+            )
+            raise ServiceUnavailableError(CLICKHOUSE_UNAVAILABLE_MESSAGE) from exc
+
+    return wrapper
 
 
 class ClickHouseService:
@@ -133,6 +169,7 @@ class ClickHouseService:
     # Public query API
     # ------------------------------------------------------------------ #
 
+    @_capability_guarded
     async def count_variants(
         self,
         params: VariantFilterParams,
@@ -153,6 +190,7 @@ class ClickHouseService:
             return 0
         return int(result.first_row[0])
 
+    @_capability_guarded
     async def query_variants(
         self,
         params: VariantFilterParams,
@@ -203,6 +241,7 @@ class ClickHouseService:
         columns = result.column_names
         return [dict(zip(columns, row)) for row in result.result_rows]
 
+    @_capability_guarded
     async def query_variants_by_region(
         self,
         assembly: str,
@@ -253,6 +292,7 @@ class ClickHouseService:
         columns = result.column_names
         return [dict(zip(columns, row)) for row in result.result_rows]
 
+    @_capability_guarded
     async def get_variant_by_id(
         self,
         variant_id: str,
@@ -285,6 +325,7 @@ class ClickHouseService:
         columns = result.column_names
         return dict(zip(columns, result.first_row))
 
+    @_capability_guarded
     async def get_dashboard_stats(self) -> dict[str, Any]:
         """Aggregate dashboard statistics."""
         query = f"""
@@ -306,6 +347,7 @@ class ClickHouseService:
         columns = result.column_names
         return dict(zip(columns, result.first_row))
 
+    @_capability_guarded
     async def get_variant_type_distribution(
         self, assembly: str | None = None
     ) -> dict[str, int]:
@@ -328,6 +370,7 @@ class ClickHouseService:
             result = await client.query(query)
         return {row[0]: int(row[1]) for row in result.result_rows}
 
+    @_capability_guarded
     async def get_chromosome_density(
         self,
         assembly: str,
@@ -366,6 +409,7 @@ class ClickHouseService:
         except Exception:
             return False
 
+    @_capability_guarded
     async def get_query_latency_percentile(
         self, percentile: float = 0.95, days: int = 30
     ) -> float:
@@ -386,6 +430,7 @@ class ClickHouseService:
             return 0.0
         value = result.first_row[0]
         return float(value or 0.0)
+    @_capability_guarded
     async def get_query_latency_series(
         self, days: int = 30
     ) -> list[dict[str, Any]]:

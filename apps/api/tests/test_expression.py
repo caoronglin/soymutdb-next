@@ -30,7 +30,7 @@ def _make_mock_session():
     """Return an ``AsyncMock``-backed session that returns empty results.
 
     All query methods (``execute``, ``scalar``, ``add``, ``commit``) are
-    ``AsyncMock`` instances so they can be ``await``\ ed.
+    ``AsyncMock`` instances so they can be awaited.
     """
     session = MagicMock()
     # Use AsyncMock for methods that are awaited
@@ -62,6 +62,30 @@ def _make_exec_result(scalars_list=None, scalar_one=None, scalar_val=0):
     return r
 
 
+def _make_gene(accession: str, gene_pk: int = 701):
+    """A Gene row as resolved by ``find_by_accessions``.
+
+    ``gene_pk`` is the surrogate key stored on expression rows; ``accession``
+    is the assembly-scoped public identity returned in responses.
+    """
+    gene = MagicMock()
+    gene.gene_pk = gene_pk
+    gene.accession = accession
+    gene.assembly_id = 1
+    return gene
+
+
+def _gene_then(rows, accession="Glyma.01G000100", gene_pk=701):
+    """Sequence the two executes of a gene-scoped endpoint.
+
+    Order: accession -> gene resolution, then the expression query.
+    """
+    return [
+        _make_exec_result(scalars_list=[_make_gene(accession, gene_pk)]),
+        _make_exec_result(scalars_list=rows),
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -89,7 +113,10 @@ def mock_expression_data(mock_library):
     """Return a mock ExpressionData dict-like object."""
     ed = MagicMock()
     ed.id = 1
-    ed.gene_id = "Glyma.01G000100"
+    # Expression rows are keyed by the gene's surrogate key; the response
+    # exposes the assembly-scoped accession through the `gene` relationship.
+    ed.gene_id = 701
+    ed.gene.accession = "Glyma.01G000100"
     ed.library_id = 1
     ed.fpkm = 12.5
     ed.tpm = 25.0
@@ -256,8 +283,7 @@ class TestGetGeneExpression:
         self, client, mock_session, mock_expression_data
     ):
         """Existing gene returns expression data."""
-        data_result = _make_exec_result(scalars_list=[mock_expression_data])
-        mock_session.execute.return_value = data_result
+        mock_session.execute.side_effect = _gene_then([mock_expression_data])
 
         response = await client.get(
             "/api/v1/expression/genes/Glyma.01G000100/expression"
@@ -271,6 +297,9 @@ class TestGetGeneExpression:
 
     async def test_gene_expression_empty(self, client, mock_session):
         """Gene with no expression data returns empty list."""
+        mock_session.execute.side_effect = _gene_then(
+            [], accession="Glyma.99G999999", gene_pk=999
+        )
         response = await client.get(
             "/api/v1/expression/genes/Glyma.99G999999/expression"
         )
@@ -283,8 +312,7 @@ class TestGetGeneExpression:
         self, client, mock_session, mock_expression_data
     ):
         """Filters (tissue, treatment, fpkm range) are applied."""
-        data_result = _make_exec_result(scalars_list=[mock_expression_data])
-        mock_session.execute.return_value = data_result
+        mock_session.execute.side_effect = _gene_then([mock_expression_data])
 
         response = await client.get(
             "/api/v1/expression/genes/Glyma.01G000100/expression"
@@ -299,12 +327,13 @@ class TestGetGeneExpression:
         """One extra row produces a cursor instead of an unbounded response."""
         next_row = MagicMock()
         next_row.id = 2
+        next_row.gene.accession = "Glyma.01G000100"
         next_row.library = mock_expression_data.library
         next_row.fpkm = 1.0
         next_row.tpm = 2.0
         next_row.raw_count = 3
-        mock_session.execute.return_value = _make_exec_result(
-            scalars_list=[mock_expression_data, next_row]
+        mock_session.execute.side_effect = _gene_then(
+            [mock_expression_data, next_row]
         )
 
         response = await client.get(
@@ -345,8 +374,7 @@ class TestSearchExpression:
     ):
         """Search returns matched expression data rows."""
         mock_session.scalar.return_value = 1  # total
-        data_result = _make_exec_result(scalars_list=[mock_expression_data])
-        mock_session.execute.return_value = data_result
+        mock_session.execute.side_effect = _gene_then([mock_expression_data])
 
         response = await client.get(
             "/api/v1/expression/search?gene_id=Glyma.01G000100"

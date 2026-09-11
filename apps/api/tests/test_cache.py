@@ -247,7 +247,9 @@ class TestEndpointCacheIntegration:
                 "variant_count": 10,
                 "gene_count": 100,
                 "mutant_line_count": 5,
-                "status": "active",
+                # Lifecycle value from the authoritative release enum
+                # (app/models/content.py ReleaseStatus).
+                "status": "published",
                 "published_at": "2026-08-01T00:00:00+00:00",
                 "created_at": "2026-07-01T00:00:00+00:00",
                 "updated_at": "2026-07-01T00:00:00+00:00",

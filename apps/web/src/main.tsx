@@ -163,6 +163,24 @@ function SsgHandoff({ children }: { children: React.ReactNode }) {
 
     return children;
 }
+/**
+ * Announce the interactive window on `<html data-app-ready>`.
+ *
+ * The DOM handoff happens as soon as the outer shell commits, but the route
+ * tree is only interactive once the lazily loaded design system resolves and
+ * the browser has painted. This sits *inside* the Suspense boundary and marks
+ * readiness from an effect (post-commit, pre-paint), so a client that waits for
+ * the signal can safely interact. The DOM handoff alone would be too early:
+ * clicks landing during the suspended window are silently discarded.
+ */
+function AppReadySignal() {
+    React.useLayoutEffect(() => {
+        document.documentElement.dataset.appReady = "true";
+    }, []);
+
+    return null;
+}
+
 
 createRoot(rootEl).render(
     <React.StrictMode>
@@ -172,6 +190,7 @@ createRoot(rootEl).render(
                     <AnimationProvider>
                         <React.Suspense fallback={<RouterProvider router={router} />}>
                             <DesignSystemProvider>
+                                <AppReadySignal />
                                 <RouterProvider router={router} />
                                 {null /* devtools hidden */}
                             </DesignSystemProvider>

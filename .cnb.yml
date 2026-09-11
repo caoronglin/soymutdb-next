@@ -86,6 +86,14 @@ main:
           # input that can move the environment the frontend gate runs in.
           by:
             - .cnb/env/Dockerfile.frontend
+      # `services` is a PIPELINE-level key (grammar.md#pipeline-services):
+      # a sibling of `stages`, `docker` and `env`. `postgres:16` is accepted
+      # but starts NOTHING; on a Stage the whole key is silently dropped and
+      # the gate dies with "docker CLI is unavailable". `docker` is the real
+      # service -- the API/worker gate starts its own disposable PostgreSQL
+      # through the dind daemon (scripts/with-postgres-service.sh).
+      services:
+        - docker
       stages:
         # No "setup workspace" stage: every CNB stage gets a fresh container, so
         # a bootstrap stage would not prepare the stages after it. Each job body
@@ -105,11 +113,20 @@ main:
           script: bash scripts/ci-job-steps.sh run frontend
         - name: API + Worker verification
           image: python:3.14
-          services:
-            - postgres:16
           script: bash scripts/ci-job-steps.sh run api-tests
+        # No `image:` override on purpose. The gate is BOTH:
+        #   * Node-backed -- `pnpm deps:graphs` / `pnpm deps:audit`;
+        #   * Python-backed -- `scripts/dependency_governance.py` imports PyYAML
+        #     and drives `uv`/`uvx` for the Deptry/license analyzers.
+        # The `node:24.19.0` override that used to be here ships no Python
+        # packaging toolchain (its python3 is the bare node-gyp interpreter,
+        # without pip), so the job body could not install its pins and real
+        # build cnb-mqg-1k289oe96 died with `ModuleNotFoundError: No module
+        # named 'yaml'`. The pipeline's default `docker.build` image
+        # (.cnb/env/Dockerfile.frontend) carries BOTH toolchains, exactly as the
+        # frontend contract gate needs, so inherit it and let the job body pin
+        # PyYAML/uv itself.
         - name: Dependency governance
-          image: node:24.19.0
           script: bash scripts/ci-job-steps.sh run dependency-governance
 
   # ---------------------------------------------------------------------------
@@ -135,6 +152,14 @@ main:
           # input that can move the environment the frontend gate runs in.
           by:
             - .cnb/env/Dockerfile.frontend
+      # `services` is a PIPELINE-level key (grammar.md#pipeline-services):
+      # a sibling of `stages`, `docker` and `env`. `postgres:16` is accepted
+      # but starts NOTHING; on a Stage the whole key is silently dropped and
+      # the gate dies with "docker CLI is unavailable". `docker` is the real
+      # service -- the API/worker gate starts its own disposable PostgreSQL
+      # through the dind daemon (scripts/with-postgres-service.sh).
+      services:
+        - docker
       stages:
         # No "setup workspace" stage: every CNB stage gets a fresh container, so
         # a bootstrap stage would not prepare the stages after it. Each job body
@@ -154,11 +179,20 @@ main:
           script: bash scripts/ci-job-steps.sh run frontend
         - name: API + Worker verification
           image: python:3.14
-          services:
-            - postgres:16
           script: bash scripts/ci-job-steps.sh run api-tests
+        # No `image:` override on purpose. The gate is BOTH:
+        #   * Node-backed -- `pnpm deps:graphs` / `pnpm deps:audit`;
+        #   * Python-backed -- `scripts/dependency_governance.py` imports PyYAML
+        #     and drives `uv`/`uvx` for the Deptry/license analyzers.
+        # The `node:24.19.0` override that used to be here ships no Python
+        # packaging toolchain (its python3 is the bare node-gyp interpreter,
+        # without pip), so the job body could not install its pins and real
+        # build cnb-mqg-1k289oe96 died with `ModuleNotFoundError: No module
+        # named 'yaml'`. The pipeline's default `docker.build` image
+        # (.cnb/env/Dockerfile.frontend) carries BOTH toolchains, exactly as the
+        # frontend contract gate needs, so inherit it and let the job body pin
+        # PyYAML/uv itself.
         - name: Dependency governance
-          image: node:24.19.0
           script: bash scripts/ci-job-steps.sh run dependency-governance
         - name: Build the checksummed Pages artifact
           image: node:24.19.0
@@ -180,6 +214,8 @@ main:
     - name: clickhouse-migration
       runner:
         cpus: 8
+      services:
+        - docker
       stages:
         # A real ClickHouse server is required: the legacy fixture migration and
         # its idempotence proof are hard gates, not simulated.
@@ -188,8 +224,6 @@ main:
         # chain, so a 3.12-only drift cannot hide here.
         - name: Migrate the legacy ClickHouse fixture
           image: python:3.14
-          services:
-            - docker
           script: bash scripts/ci-job-steps.sh run clickhouse-migration
 
     - name: mcp-e2e
@@ -206,13 +240,13 @@ main:
           dockerfile: .cnb/env/Dockerfile.build-tools
           by:
           - .cnb/env/Dockerfile.build-tools
+      services:
+        - docker
       stages:
         # Authenticated transport through the production nginx semantics. The
         # build-tools image has curl/bash preinstalled, so no per-run package
         # install lands on the critical path.
         - name: MCP transport smoke through nginx
-          services:
-            - docker
           script: bash scripts/ci-job-steps.sh run mcp-e2e
 
     # Two native-architecture image pipelines. Separate pipelines rather than a
@@ -224,6 +258,11 @@ main:
       env:
         SOYMUTDB_CI_ARCH: amd64
         SOYMUTDB_CI_OUTPUT_DIR: validate-runtime-images-amd64
+        # Stamp the package with the revision it was built from. The publisher
+        # reads it back and refuses to sign a release whose two platform
+        # packages disagree or that does not match the revision it records.
+        # CNB_COMMIT is this build's commit, which is the checkout below.
+        SOURCE_REVISION: $CNB_COMMIT
       # CNB accepts a Dockerfile only in `docker.build`, and `docker.build`
       # is pipeline-scoped: the platform's runner passes a stage-level
       # `image:` straight to `docker pull`, so a repository path in it fails
@@ -235,11 +274,22 @@ main:
           dockerfile: .cnb/env/Dockerfile.build-tools
           by:
           - .cnb/env/Dockerfile.build-tools
+      services:
+        - docker
       stages:
         - name: Verify images for linux/amd64
-          services:
-            - docker
           script: bash scripts/ci-job-steps.sh run image-build
+        # Release the `release` pipeline's start gate. This job is LAST in the
+        # pipeline on purpose: `stages` run in order, so by the time it resolves,
+        # the images have been built, smoke-tested, scanned, SBOM'd and exported.
+        # Resolving earlier would let the publisher start against a package that
+        # does not exist yet -- the exact race the gate exists to close.
+        #
+        # Do not add a job after this one.
+        - name: Hand the amd64 package to the release pipeline
+          type: cnb:resolve
+          options:
+            key: validated-runtime-images-amd64
       endStages:
         - name: Upload validated runtime images (amd64)
           image: cnbcool/artifact
@@ -254,6 +304,9 @@ main:
       env:
         SOYMUTDB_CI_ARCH: arm64
         SOYMUTDB_CI_OUTPUT_DIR: validate-runtime-images-arm64
+        # Same stamp as the amd64 pipeline: both packages must name one revision
+        # for the publisher to accept the pair.
+        SOURCE_REVISION: $CNB_COMMIT
       # CNB accepts a Dockerfile only in `docker.build`, and `docker.build`
       # is pipeline-scoped: the platform's runner passes a stage-level
       # `image:` straight to `docker pull`, so a repository path in it fails
@@ -265,10 +318,10 @@ main:
           dockerfile: .cnb/env/Dockerfile.build-tools
           by:
           - .cnb/env/Dockerfile.build-tools
+      services:
+        - docker
       stages:
         - name: Verify images for linux/arm64
-          services:
-            - docker
           script: bash scripts/ci-job-steps.sh run image-build
       endStages:
         - name: Upload validated runtime images (arm64)
@@ -311,6 +364,33 @@ $:
   push:
     # Publication consumes the two verified packages; it never rebuilds.
     - name: release
+      # `resources` is the event-level start gate: the pipelines named here are
+      # the ones this event is guaranteed to have started. Declaring the image
+      # verifiers is what makes the `docker-images` pipelines part of the `$` ->
+      # `push` event at all, and therefore what lets `cnb:await` below pair with
+      # their resolves ("await and resolve only work between pipelines of the
+      # SAME event"). `main` -> `push` also starts a `docker-images (amd64)`, so
+      # it is listed as well; the resource declaration is per event, and the two
+      # are the same pipeline body.
+      #
+      # The publisher runs on main pushes, tags and manual buttons, but it may
+      # only start once the artifacts it consumes exist. Every pipeline of a
+      # `main` push event starts at the same moment, so without a start gate the
+      # release races the two native-architecture image pipelines and
+      # scripts/release-contract.golden.sh dies with
+      #
+      #   ==> Verify and load both platform packages
+      #   missing validated package for amd64: validated-platforms/validated-runtime-images-amd64
+      #
+      # on a run where those packages were about to be produced.
+      #
+      # `cnb:await` is the platform's ordered start: it holds this pipeline until
+      # the `docker-images (amd64)` pipeline of the same event resolves the key,
+      # and the resolve is that pipeline's last job -- after the artifact upload.
+      # A failed resolve is reported as a dead lock rather than waiting forever.
+      resources:
+        pipelines:
+          - name: docker-images (amd64)
       runner:
         cpus: 8
       imports:
@@ -327,10 +407,14 @@ $:
           dockerfile: .cnb/env/Dockerfile.build-tools
           by:
           - .cnb/env/Dockerfile.build-tools
+      services:
+        - docker
       stages:
+        - name: Wait for the verified amd64 image package
+          type: cnb:await
+          options:
+            key: validated-runtime-images-amd64
         - name: Publish signed multi-architecture release
-          services:
-            - docker
           script: bash scripts/ci-job-steps.sh run release
       endStages:
         - name: Upload signed OCI release contract
@@ -394,14 +478,12 @@ $:
           dockerfile: .cnb/env/Dockerfile.build-tools
           by:
           - .cnb/env/Dockerfile.build-tools
+      services:
+        - docker
       stages:
         - name: Verify images for this tag
-          services:
-            - docker
           script: bash scripts/ci-job-steps.sh run image-build
         - name: Publish the signed tagged release
-          services:
-            - docker
           # RELEASE_TAG is injected through the stage environment rather than
           # prefixed inline, so the stage body stays a plain `bash <script>`
           # invocation that cannot pick up the platform's default shell.
@@ -492,6 +574,14 @@ $:
           # input that can move the environment the frontend gate runs in.
           by:
             - .cnb/env/Dockerfile.frontend
+      # `services` is a PIPELINE-level key (grammar.md#pipeline-services):
+      # a sibling of `stages`, `docker` and `env`. `postgres:16` is accepted
+      # but starts NOTHING; on a Stage the whole key is silently dropped and
+      # the gate dies with "docker CLI is unavailable". `docker` is the real
+      # service -- the API/worker gate starts its own disposable PostgreSQL
+      # through the dind daemon (scripts/with-postgres-service.sh).
+      services:
+        - docker
       stages:
         # No "setup workspace" stage: every CNB stage gets a fresh container, so
         # a bootstrap stage would not prepare the stages after it. Each job body
@@ -511,8 +601,6 @@ $:
           script: bash scripts/ci-job-steps.sh run frontend
         - name: API + Worker verification
           image: python:3.14
-          services:
-            - postgres:16
           script: bash scripts/ci-job-steps.sh run api-tests
 
   # ---------------------------------------------------------------------------
@@ -573,14 +661,15 @@ $:
       env:
         SOYMUTDB_RUN_POSTGRES_INTEGRATION: "1"
         SOYMUTDB_ACCEPTANCE_DIR: artifacts/acceptance
+      # Pipeline-level `services` (see the pull_request pipeline note).
+      services:
+        - docker
       stages:
         - name: Delivery contracts
           image: python:3.14
           script: bash scripts/acceptance.sh --profile contracts
         - name: API + Worker acceptance
           image: python:3.14
-          services:
-            - postgres:16
           script: bash scripts/acceptance.sh --profile backend
         - name: Static artifact acceptance
           image: node:24.19.0
@@ -610,10 +699,10 @@ $:
           dockerfile: .cnb/env/Dockerfile.build-tools
           by:
           - .cnb/env/Dockerfile.build-tools
+      services:
+        - docker
       stages:
         - name: Verify images (amd64)
-          services:
-            - docker
           script: bash scripts/ci-job-steps.sh run image-build
     - name: images-manual-arm64
       runner:
@@ -633,10 +722,10 @@ $:
           dockerfile: .cnb/env/Dockerfile.build-tools
           by:
           - .cnb/env/Dockerfile.build-tools
+      services:
+        - docker
       stages:
         - name: Verify images (arm64)
-          services:
-            - docker
           script: bash scripts/ci-job-steps.sh run image-build
 
   web_trigger_release:
@@ -656,10 +745,10 @@ $:
           dockerfile: .cnb/env/Dockerfile.build-tools
           by:
           - .cnb/env/Dockerfile.build-tools
+      services:
+        - docker
       stages:
         - name: Publish the signed release
-          services:
-            - docker
           script: bash scripts/ci-job-steps.sh run release
       endStages:
         - name: Upload signed release contract

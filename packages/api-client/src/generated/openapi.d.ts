@@ -881,6 +881,12 @@ export interface paths {
         /**
          * Chromosome Density
          * @description Variant density across a chromosome.
+         *
+         *     Density is computed entirely from the ClickHouse projection, so an
+         *     unavailable projection is reported as capability-unavailable (503). The
+         *     response model also requires a concrete ``chromosome_length``: fabricating
+         *     ``0`` here would both violate the contract and present an empty chromosome
+         *     as a real result.
          */
         get: operations["chromosome_density_api_v1_stats_density_get"];
         put?: never;
@@ -7511,7 +7517,7 @@ export interface components {
              * @default 0
              */
             mutant_line_count: number;
-            status: components["schemas"]["ReleaseStatus-Output"];
+            status: components["schemas"]["ReleaseStatus"];
             /** Published At */
             published_at?: string | null;
             /**
@@ -7529,12 +7535,7 @@ export interface components {
          * ReleaseStatus
          * @enum {string}
          */
-        "ReleaseStatus-Input": "draft" | "validated" | "ready" | "published" | "rolled_back" | "validated" | "published" | "rolled_back";
-        /**
-         * ReleaseStatus
-         * @enum {string}
-         */
-        "ReleaseStatus-Output": "draft" | "staging" | "active" | "archived";
+        ReleaseStatus: "draft" | "validated" | "ready" | "published" | "rolled_back" | "validated" | "published" | "rolled_back";
         /** ReleaseSummary */
         ReleaseSummary: {
             /** Release Version */
@@ -11252,7 +11253,7 @@ export interface operations {
     list_releases_api_v1_releases_get: {
         parameters: {
             query?: {
-                status?: components["schemas"]["ReleaseStatus-Input"] | null;
+                status?: components["schemas"]["ReleaseStatus"] | null;
             };
             header?: never;
             path?: never;
