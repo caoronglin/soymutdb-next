@@ -939,17 +939,54 @@ class DeliveryArchitectureTests(unittest.TestCase):
                 "it would fail with `pnpm: command not found` in its own container",
             )
 
-        # The governance job body must bootstrap the Python module its own
-        # `pnpm deps:*` scripts import. The GitHub mirror installs PyYAML by
-        # hand; the CNB stage runs in `node:24.19.0`, which has no PyYAML, and
-        # died with `ModuleNotFoundError: No module named 'yaml'`.
+        # The governance job body must bootstrap the Python modules its own
+        # `pnpm deps:*` scripts import. The GitHub mirror installs
+        # `PyYAML==6.0.3 uv==0.11.33` by hand; the CNB stage ran in
+        # `node:24.19.0`, which has no PyYAML and no pip, and died with
+        # `ModuleNotFoundError: No module named 'yaml'`.
         self.assertIn("ensure_governance_python", bodies["dependency_governance_step"])
         governance_python = bodies["ensure_governance_python"]
         self.assertIn("import yaml", governance_python)
         self.assertIn("PyYAML==", governance_python)
+        # `uv`/`uvx` drive the Deptry/license analyzers; without it every one is
+        # reported unavailable, which the fail-closed gate treats as a failure.
+        self.assertIn("uv==${UV_VERSION}", governance_python)
         # It must be pinned, or the two providers can resolve different linters.
         self.assertIn("GOVERNANCE_PYYAML_VERSION", steps)
         self.assertRegex(steps, r"GOVERNANCE_PYYAML_VERSION:-\d+\.\d+\.\d+")
+        # A bare `node:*` python has no pip, so the job body must be able to
+        # bootstrap it; otherwise the install above fails with
+        # `No module named pip` and the real cause is hidden again.
+        # The pip bootstrap is reached from the PyYAML installer, not from the
+        # step directly.
+        self.assertIn("ensure_governance_pip", governance_python)
+        self.assertIn("ensurepip", bodies["ensure_governance_pip"])
+
+        # The governance stage must not pin a Node-only `image:`: the gate needs
+        # Python too, so it inherits the pipeline's dual-toolchain default.
+        document = yaml.safe_load(CNB_CONFIG.read_text(encoding="utf-8"))
+        for branch, event in (
+            ("main", "pull_request"),
+            ("main", "push"),
+            ("$", "web_trigger_verify"),
+        ):
+            for pipeline in _cnb_pipelines(branch, event):
+                for stage in pipeline.get("stages", []):
+                    if "run dependency-governance" not in str(stage.get("script", "")):
+                        continue
+                    self.assertNotIn(
+                        "image",
+                        stage,
+                        f"{branch}/{event}/{pipeline['name']}/{stage.get('name')}: "
+                        "the governance gate needs both Node and Python; a "
+                        "Node-only `image:` override is what broke it",
+                    )
+        # The standalone pipeline record must declare the same dual-toolchain
+        # image, or a manual run of that file has no Python at all.
+        standalone = (ROOT / ".cnb/pipelines/dependency-governance.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(".cnb/env/Dockerfile.frontend", standalone)
 
         # And the stage that runs them must mount the store, or the install
         # caches into a container layer that is thrown away.

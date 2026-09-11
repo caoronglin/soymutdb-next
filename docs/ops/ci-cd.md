@@ -192,22 +192,44 @@ while IFS='=' read -r key value; do export "${key}=${value}"; done <<< "${PG_ENV
 键**（它是 pipeline 级，写在 stage 里会被静默丢弃）、resolver 必须保留"外部 URL
 优先"和驱动级就绪探针、门禁脚本不得再出现 `source`。
 
-### 治理 stage 必须自己装 PyYAML
+### 治理 stage 需要**双工具链**，且自己装 PyYAML 与 uv
 
-`pnpm deps:graphs|deps:audit` 会调用 `scripts/dependency_governance.py`，而它
-`import yaml`。GitHub mirror 显式 `python -m pip install --quiet PyYAML==6.0.3`，
-但 CNB 的治理 stage 跑在 `node:24.19.0` 里——基础镜像里那个 `python3` 是裸解释器，
-没有任何 site-packages：
+治理门禁两边都要：
+
+* `pnpm deps:graphs|deps:audit` 走 Node/pnpm；
+* `scripts/dependency_governance.py` 既 `import yaml`（读锁文件与策略），又用
+  `uv`/`uvx` 跑 Deptry / license 分析器。
+
+早期 stage 用了 `image: node:24.19.0` 覆盖。基础镜像里的 `python3` 是给 node-gyp
+用的**裸解释器**，没有 pip、没有 site-packages，于是真实构建
+`cnb-mqg-1k289oe96` 直接死在导入阶段：
 
 ```
 $ python3 scripts/dependency_governance.py graphs --output artifacts/dependency-graphs
 ModuleNotFoundError: No module named 'yaml'
 ```
 
-修法是在 `scripts/ci-job-steps.sh` 里加 `ensure_governance_python`：先探测
-`import yaml`，已满足就静默返回（热容器零成本、开发者本机不被干扰），否则安装
-**固定版本**的 PyYAML。版本钉在共享脚本里，两个 provider 才不会各自解析出不同的
-依赖分析器。
+**不能只装 PyYAML。** 如果 `python3 -m pip` 本身不可用（裸 `node:*` 就是这样），
+"装 PyYAML"只会把 `No module named 'yaml'` 换成 `No module named pip`，真实原因
+再次被掩盖；而就算装上了 PyYAML，缺 `uv` 也会让每个分析器被判 unavailable——
+fail-closed 门禁把这个当失败，等于门禁没跑。
+
+修法是两件事一起：
+
+1. **不要给治理 stage 钉 Node-only 的 `image:`**。让它继承 pipeline 默认的
+   `docker.build` 镜像（`.cnb/env/Dockerfile.frontend`），该镜像基于
+   `python:3.14`，同时带 Node 24 + pnpm + 可用的 pip/venv。独立流水线文件
+   `.cnb/pipelines/dependency-governance.yml` 也要显式声明同一个 `docker.build`。
+2. **在 job body 里装齐并钉住版本**：`scripts/ci-job-steps.sh` 的
+   `ensure_governance_python` 先探测 `import yaml`（满足即静默返回，热容器零成本、
+   开发者本机不被干扰），否则用 `ensure_governance_pip`（`pip` 缺失时先
+   `ensurepip`）安装固定版本的 `PyYAML==6.0.3`，再确保 `uv==${UV_VERSION}`
+   （0.11.33，与 Dockerfile / `check-toolchain-pins.py` 同一 pin）存在。
+   任何一步失败都**非零退出**，绝不降级成 skip。
+
+版本钉在共享脚本里，GitHub workflow 与 CNB 才会解析出同一个分析器；契约测试
+`test_scripts_that_run_pnpm_bootstrap_their_own_container` 同时锁定 PyYAML/uv 两个
+pin、pip 自举路径，以及"治理 stage 不得钉 Node-only `image:`"这条不变量。
 
 ### worker 测试的 `from tests.<module> import` 需要一个包标记
 

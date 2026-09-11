@@ -115,7 +115,16 @@ main:
           image: python:3.14
           script: bash scripts/ci-job-steps.sh run api-tests
         - name: Dependency governance
-          image: node:24.19.0
+          # No `image:` override on purpose. The gate is Python-backed
+          # (`scripts/dependency_governance.py` imports PyYAML and drives `uvx`
+          # for the analyzers) AND Node-backed (`pnpm deps:graphs`). The bare
+          # `node:24.19.0` override ships no Python packaging toolchain (no pip),
+          # so the job body could not install its pins -- real build
+          # cnb-mqg-1k289oe96 died with `ModuleNotFoundError: No module named
+          # 'yaml'`. The pipeline's default `docker.build` image
+          # (.cnb/env/Dockerfile.frontend) carries BOTH toolchains, exactly as
+          # the frontend contract gate needs, so inherit it and let the job body
+          # pin PyYAML/uv itself.
           script: bash scripts/ci-job-steps.sh run dependency-governance
 
   # ---------------------------------------------------------------------------
@@ -170,7 +179,16 @@ main:
           image: python:3.14
           script: bash scripts/ci-job-steps.sh run api-tests
         - name: Dependency governance
-          image: node:24.19.0
+          # No `image:` override on purpose. The gate is Python-backed
+          # (`scripts/dependency_governance.py` imports PyYAML and drives `uvx`
+          # for the analyzers) AND Node-backed (`pnpm deps:graphs`). The bare
+          # `node:24.19.0` override ships no Python packaging toolchain (no pip),
+          # so the job body could not install its pins -- real build
+          # cnb-mqg-1k289oe96 died with `ModuleNotFoundError: No module named
+          # 'yaml'`. The pipeline's default `docker.build` image
+          # (.cnb/env/Dockerfile.frontend) carries BOTH toolchains, exactly as
+          # the frontend contract gate needs, so inherit it and let the job body
+          # pin PyYAML/uv itself.
           script: bash scripts/ci-job-steps.sh run dependency-governance
         - name: Build the checksummed Pages artifact
           image: node:24.19.0
