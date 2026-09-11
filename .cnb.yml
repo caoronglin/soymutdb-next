@@ -114,13 +114,18 @@ main:
         - name: API + Worker verification
           image: python:3.14
           script: bash scripts/ci-job-steps.sh run api-tests
-        # No stage `image:`: the job needs Node AND Python 3.14 (the graph
-        # generator imports PyYAML, the analyzers shell out to uv), and the
-        # pipeline-level `docker.build` above is the only image that carries
-        # both toolchains. `node:24.19.0` has no Python at all, so the gate
-        # died with `ModuleNotFoundError: No module named 'yaml'` while the
-        # GitHub mirror escaped it through `actions/setup-python`. The job body
-        # installs PyYAML/uv itself, but it cannot conjure an interpreter.
+        # No `image:` override on purpose. The gate is BOTH:
+        #   * Node-backed -- `pnpm deps:graphs` / `pnpm deps:audit`;
+        #   * Python-backed -- `scripts/dependency_governance.py` imports PyYAML
+        #     and drives `uv`/`uvx` for the Deptry/license analyzers.
+        # The `node:24.19.0` override that used to be here ships no Python
+        # packaging toolchain (its python3 is the bare node-gyp interpreter,
+        # without pip), so the job body could not install its pins and real
+        # build cnb-mqg-1k289oe96 died with `ModuleNotFoundError: No module
+        # named 'yaml'`. The pipeline's default `docker.build` image
+        # (.cnb/env/Dockerfile.frontend) carries BOTH toolchains, exactly as the
+        # frontend contract gate needs, so inherit it and let the job body pin
+        # PyYAML/uv itself.
         - name: Dependency governance
           script: bash scripts/ci-job-steps.sh run dependency-governance
 
@@ -175,13 +180,18 @@ main:
         - name: API + Worker verification
           image: python:3.14
           script: bash scripts/ci-job-steps.sh run api-tests
-        # No stage `image:`: the job needs Node AND Python 3.14 (the graph
-        # generator imports PyYAML, the analyzers shell out to uv), and the
-        # pipeline-level `docker.build` above is the only image that carries
-        # both toolchains. `node:24.19.0` has no Python at all, so the gate
-        # died with `ModuleNotFoundError: No module named 'yaml'` while the
-        # GitHub mirror escaped it through `actions/setup-python`. The job body
-        # installs PyYAML/uv itself, but it cannot conjure an interpreter.
+        # No `image:` override on purpose. The gate is BOTH:
+        #   * Node-backed -- `pnpm deps:graphs` / `pnpm deps:audit`;
+        #   * Python-backed -- `scripts/dependency_governance.py` imports PyYAML
+        #     and drives `uv`/`uvx` for the Deptry/license analyzers.
+        # The `node:24.19.0` override that used to be here ships no Python
+        # packaging toolchain (its python3 is the bare node-gyp interpreter,
+        # without pip), so the job body could not install its pins and real
+        # build cnb-mqg-1k289oe96 died with `ModuleNotFoundError: No module
+        # named 'yaml'`. The pipeline's default `docker.build` image
+        # (.cnb/env/Dockerfile.frontend) carries BOTH toolchains, exactly as the
+        # frontend contract gate needs, so inherit it and let the job body pin
+        # PyYAML/uv itself.
         - name: Dependency governance
           script: bash scripts/ci-job-steps.sh run dependency-governance
         - name: Build the checksummed Pages artifact

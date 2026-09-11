@@ -192,42 +192,49 @@ while IFS='=' read -r key value; do export "${key}=${value}"; done <<< "${PG_ENV
 键**（它是 pipeline 级，写在 stage 里会被静默丢弃）、resolver 必须保留"外部 URL
 优先"和驱动级就绪探针、门禁脚本不得再出现 `source`。
 
-### 治理 stage 必须自带 Python 工具链（PyYAML + uv）
+### 治理 stage 需要**双工具链**，且自己装 PyYAML 与 uv
 
-`pnpm deps:graphs|deps:audit` 会调用 `scripts/dependency_governance.py`，而它
-`import yaml`；它随后执行的每个分析器命令又都是 `uv`/`uvx` 调用（deptry、
-`uv export`、pip-audit）。GitHub mirror 用一行显式安装把两者都补上：
+治理门禁两边都要：
 
-```
-python -m pip install --quiet PyYAML==6.0.3 uv==0.11.33
-```
+* `pnpm deps:graphs|deps:audit` 走 Node/pnpm；
+* `scripts/dependency_governance.py` 既 `import yaml`（读锁文件与策略），又用
+  `uv`/`uvx` 跑 Deptry / license 分析器。
 
-CNB 的治理 stage 没有对应步骤，于是门禁在任何分析器跑起来之前就挂了：
+早期 stage 用了 `image: node:24.19.0` 覆盖。基础镜像里的 `python3` 是给 node-gyp
+用的**裸解释器**，没有 pip、没有 site-packages，于是真实构建
+`cnb-mqg-1k289oe96` 直接死在导入阶段：
 
 ```
 $ python3 scripts/dependency_governance.py graphs --output artifacts/dependency-graphs
 ModuleNotFoundError: No module named 'yaml'
 ```
 
-`PyYAML` 是**未声明**依赖——没有任何 pyproject 列它，所以它此前只是碰巧存在于
-mirror 上。修法两处，缺一不可：
+**不能只装 PyYAML。** 如果 `python3 -m pip` 本身不可用（裸 `node:*` 就是这样），
+"装 PyYAML"只会把 `No module named 'yaml'` 换成 `No module named pip`，真实原因
+再次被掩盖；而就算装上了 PyYAML，缺 `uv` 也会让每个分析器被判 unavailable——
+fail-closed 门禁把这个当失败，等于门禁没跑。
 
-1. `scripts/ci-job-steps.sh` 新增 `ensure_governance_tooling`：先校验 `python3`
-   存在且命中 `PYTHON_VERSION` 钉住的 major.minor（不匹配就 fail closed，避免在
-   仓库从未声明的解释器上跑分析器），再探测 `import yaml` 与 `command -v uv`，
-   缺哪个装哪个。安装走 `governance_pip_install`，裸 `pip install` 被
-   externally-managed 拒绝时回退 `--break-system-packages`（容器是一次性的）。
-   版本钉在共享脚本里（`SOYMUTDB_CI_PYYAML_VERSION` / `SOYMUTDB_CI_UV_VERSION`），
-   两个 provider 才不会各自解析出不同的分析器版本。
-2. 三个阶段（`.cnb.yml` 的 PR/main 两条 verify、`.cnb/pipelines/verify.yml`）
-   去掉 `image: node:24.19.0`，改用 `.cnb/env/Dockerfile.frontend` 这个
-   Node + Python 双工具链镜像（仅 `docker.build` 能引用 Dockerfile）。
-   `.cnb/pipelines/dependency-governance.yml` 作为独立 pipeline 补上自己的
-   `docker.build` 与 pnpm store 卷。job body 能装 PyYAML/uv，但变不出解释器。
+修法是两件事一起：
 
-`scripts/test_ci_job_contracts.py` 的
-`test_dependency_governance_stage_can_reach_its_python_tooling` 把以上每条都钉住，
-包括共享 pin 必须与 GitHub 步骤的写法一致。
+1. **不要给治理 stage 钉 Node-only 的 `image:`**。让它继承 pipeline 默认的
+   `docker.build` 镜像（`.cnb/env/Dockerfile.frontend`），该镜像基于
+   `python:3.14`，同时带 Node 24 + pnpm + 可用的 pip/venv。三处都要改：
+   `.cnb.yml` 的 PR/main 两条 verify，以及独立流水线文件
+   `.cnb/pipelines/verify.yml`；`.cnb/pipelines/dependency-governance.yml` 也要
+   显式声明同一个 `docker.build`（外加 pnpm store 卷，否则安装结果落在会被丢弃的
+   容器层里）。
+2. **在 job body 里装齐并钉住版本**：`scripts/ci-job-steps.sh` 的
+   `ensure_governance_python` 先校验 `python3` 命中 `PYTHON_VERSION` 的
+   major.minor（不匹配即 fail closed），再探测 `import yaml`（满足即静默返回，
+   热容器零成本、开发者本机不被干扰），否则用 `ensure_governance_pip`（`pip`
+   缺失时先 `ensurepip`）安装固定版本的 `PyYAML==6.0.3`，最后确保
+   `uv==${UV_VERSION}`（0.11.33，与 Dockerfile / `check-toolchain-pins.py` 同一
+   pin）存在。任何一步失败都**非零退出**，绝不降级成 skip。
+
+版本钉在共享脚本里，GitHub workflow 与 CNB 才会解析出同一个分析器。
+`scripts/test_ci_job_contracts.py` 锁定 PyYAML/uv 两个 pin、pip 自举路径，以及
+"任何能跑治理 stage 的配置都不得钉 Node-only `image:`"这条不变量——包含
+`.cnb/pipelines/verify.yml` 这份只查根配置时容易漏掉的第三份副本。
 
 ### worker 测试的 `from tests.<module> import` 需要一个包标记
 
