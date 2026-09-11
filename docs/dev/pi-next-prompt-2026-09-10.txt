@@ -1,0 +1,57 @@
+执行 docs/dev/pi-next-tasks-2026-09-10.md 定义的第二轮站点核心验收与部署任务。
+若无法读取该文件，按以下要点执行：
+
+【起点】仓库 SoyMutDB（monorepo: apps/{web,admin,jbrowse,api,worker,mcp-server}, packages/*）。
+基线提交 d8d73fa57 已推送到 cnb(https://cnb.cool/crl-code/mutlidb) 与 origin。
+开工先复核 git rev-parse HEAD / git status --short，保留用户未提交修改，不清理工作树。
+
+【必读】根 AGENTS.md、docs/dev/database-core-contract.md（规范）、
+docs/dev/pi-website-deployment-handoff.md（D0-D6、H01-H16）、
+docs/dev/deployment-status.md（现状与缺口）、docs/dev/mamba-validation-environment.md。
+
+【环境事实（无 Docker 默认成立）】
+- 隔离 PG：mamba PostgreSQL16，端口 55432，trust；二进制 .mamba-root/envs/postgres16/bin；
+  一次性库 soymutdb_validation（迁移/冒烟）与 soymutdb_testfixtures（pytest fixture，每次 drop/create）。
+- API 用 apps/api/.venv/bin/python（3.14）；worker 用 apps/worker/.venv/bin/python。
+- 从仓库根跑 API 全套：apps/api/.venv/bin/python -m pytest apps/api/tests -q --rootdir=.
+- 构建必须设 GOMAXPROCS=2（否则 esbuild newosproc 崩溃）。
+- 不要用 pkill -f "uvicorn app.main:app"（会杀掉自身 shell）。
+- 双站/E2E 构建必须绑定 base 与同源 mock origin，否则 SPA 资源 404：
+    GOMAXPROCS=2 VITE_DEPLOYMENT_MODE=demo VITE_BASE_URL=/soymutdb-next/ \
+      VITE_API_BASE_URL=http://localhost:4173/soymutdb-next/api/v1 \
+      VITE_JBROWSE_BASE_URL=http://localhost:4173/soymutdb-next/jbrowse/ \
+      pnpm --filter @soymutdb/web build:sites      # 双站制品（扫描对象）
+      pnpm --filter @soymutdb/web build            # 单站制品（E2E 用，落 apps/web/dist）
+- 部署预检与原生冒烟：bash scripts/deploy/preflight.sh --environment development
+                      bash scripts/deploy/smoke.sh --environment development
+- 泄漏扫描：python3 scripts/check_site_artifact_isolation.py \
+    --external-root apps/web/dist/external --internal-root apps/web/dist/internal \
+    --sentinel "Internal Research Workspace for SoyMutDB"
+
+【任务优先级】
+T1(P0) 修复公开站 E2E 剩余 4 例（先按上述正确构建复现）：
+  tests/blast.spec.ts:14 /blast 表单未渲染；tests/blast.spec.ts:28 空 FASTA 校验超时；
+  tests/public-login.spec.ts:77 POST+401 超时；
+  tests/search.spec.ts:37 window.open 未触发（疑似 getAssemblies 数据缺失导致 formAssemblyId 为空）。
+  禁用删除断言/放宽匹配/skip。完成后把正确构建命令写进 e2e/README.md。
+T2(P0) 清理既有回归债（隔离 PG）：API 31 failed（exppattern/seqfetch/homolog/expression 等）、
+  admin lint 30 文件 + test 22 failed。逐个给「根因→归属（产品缺陷/测试过期/环境缺失）→处置」。
+T3(P1) R07 对象存储隔离：对象键 {release_id}/{assembly_id}/genes/{accession}；
+  有真实 MinIO 则验证双版本同名不覆盖、未发布对象不可公开；无则记 IMPLEMENTED_UNVERIFIED 并写复现步骤。
+T4(P1) CH 依赖端点统一「能力不可用→503」，核对 /variants/region、导出、统计；无环境则记 BLOCKED。
+T5(P2) 更新 docs/dev/deployment-status.md（状态/证据/遗留），区分 实现完成/测试通过/环境就绪/已部署。
+
+【硬约束】public_id 为唯一对外身份（internal_id 不得出现在响应/URL/制品/日志，匿名内部键查询不确认存在性）；
+v4/v5 独立命名空间且 assembly 上下文贯穿查询-缓存-对象键，歧义不静默回落；release 与 assembly 独立；
+external/internal 制品/origin/缓存/Service Worker 分离，内部响应 private,no-store，noindex 不是鉴权；
+PostgreSQL 权威，CH 为投影，迁移按扩展/回填/收缩，生产降级不得自动执行；
+不得 skip/xfail/削弱断言换取绿灯；不擅自升级依赖、不 force push、不清理工作树；
+不打印 token/密码/连接串；生产部署与真实数据发布需另行明确授权。
+
+【交付】逐项：状态 / 改动文件 / 行为变化；命令+cwd+退出码+pass/fail/skip/xfail 计数与证据路径；
+未完成项及所需环境或授权；DEV_READY/STAGING_READY/PRODUCTION_READY 分别是否授予及依据；
+下一条可复现命令；回滚方法（迁移降级命令、脚本清理、适用范围）。
+不得把本轮完成宣称为整体 W0–W7 或生产可发布。
+
+【业务输入缺口（不得自行拍板）】public_id 最终格式与签发语义、内部角色与审计保留期、
+无 assembly 查询的消歧策略、v4↔v5 映射展示规则与证据等级、真实科研数据来源与许可。
