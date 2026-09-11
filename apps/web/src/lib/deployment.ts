@@ -111,3 +111,54 @@ export function buildCsp(origins: DeploymentOrigins, analytics = false): string 
     "base-uri 'self'", "form-action 'self'", "frame-ancestors 'self'", "object-src 'none'", "worker-src 'self' blob:",
   ].join("; ");
 }
+
+/**
+ * Hosts the Vite development server accepts.
+ *
+ * Vite 6 rejects any request whose `Host` header is not allowlisted:
+ *
+ *   Blocked request. This host ("cnb-38o-1k28dm5ta-001.cnb.space") is not allowed.
+ *   To allow this host, add "cnb-38o-1k28dm5ta-001.cnb.space" to
+ *   `server.allowedHosts` in vite.config.js.
+ *
+ * That is exactly what a cloud development environment hits: CNB proxies every
+ * preview port through a generated `*.cnb.space` / `*.cnb.run` host, and the
+ * hostname is different for every environment, so it cannot be listed by hand.
+ *
+ * Scope: `server` (and `preview`) only. This is a development-server transport
+ * rule and is never consulted by `vite build`, so no host becomes trustworthy
+ * in a built artifact and no CSP changes with it.
+ *
+ * Security: `allowedHosts: true` would accept ANY hostname, which turns a
+ * forwarded preview URL into a DNS-rebinding pivot. The generated platform
+ * domains are matched exactly instead, and anything else must be listed
+ * explicitly in `SOYMUTDB_DEV_ALLOWED_HOSTS` (comma/space separated, `*` globs
+ * supported) — an opt-in extension, not a wildcard.
+ */
+const CNB_DEV_HOST_SUFFIXES = [".cnb.space", ".cnb.run"] as const;
+
+/** Bare platform apexes. `*.cnb.space` does NOT match `cnb.space` itself. */
+const CNB_DEV_HOSTS = ["cnb.space", "cnb.run", "localhost", "127.0.0.1", "[::1]"] as const;
+
+function normalizeDevHost(entry: string): string {
+    const value = entry.trim().replace(/^https?:\/\//i, "");
+    if (!value) return "";
+    // Drop anything after the host: a path, a query or a `:port` suffix. The
+    // configured port is already in the `Host` header Vite compares against,
+    // so keeping it would make a working entry silently not match.
+    return value.replace(/[/?#].*$/, "").replace(/:\d+$/, "").toLowerCase();
+}
+
+export function resolveDevAllowedHosts(value: string | undefined): true | string[] {
+    const raw = value?.trim();
+    // `true` here is an explicit "I know what I am doing" for a non-CNB tunnel
+    // that cannot be enumerated. It is never the default.
+    if (raw === "true" || raw === "*") return true;
+
+    const hosts = new Set<string>([...CNB_DEV_HOSTS, ...CNB_DEV_HOST_SUFFIXES]);
+    for (const entry of (raw ?? "").split(/[\s,]+/)) {
+        const host = normalizeDevHost(entry);
+        if (host) hosts.add(host);
+    }
+    return [...hosts];
+}

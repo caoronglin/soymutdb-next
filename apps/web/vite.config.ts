@@ -2,7 +2,13 @@ import { defineConfig, loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildCsp, isMinimalDeploymentMode, normalizeBasePath, requireDeploymentOrigin } from "./src/lib/deployment";
+import {
+    buildCsp,
+    isMinimalDeploymentMode,
+    normalizeBasePath,
+    requireDeploymentOrigin,
+    resolveDevAllowedHosts,
+} from "./src/lib/deployment";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
@@ -119,12 +125,24 @@ export default defineConfig(({ mode }) => {
         server: {
             port: 5173,
             host: "0.0.0.0",
+            // The CNB preview proxy reaches this server through a generated
+            // `*.cnb.space` host, and Vite 6 rejects any Host it does not know
+            // ("Blocked request. This host ... is not allowed"). The platform
+            // hostnames are matched by pattern rather than by value because a
+            // new hostname is minted for every cloud development environment.
+            // Dev transport only: `server`/`preview` never affect a build.
+            allowedHosts: resolveDevAllowedHosts(env.SOYMUTDB_DEV_ALLOWED_HOSTS),
             proxy: {
                 "/api": {
                     target: apiProxyTarget,
                     changeOrigin: true,
                 },
             },
+        },
+        preview: {
+            port: 4173,
+            host: "0.0.0.0",
+            allowedHosts: resolveDevAllowedHosts(env.SOYMUTDB_DEV_ALLOWED_HOSTS),
         },
         build: {
             target: "es2022",

@@ -17,6 +17,43 @@ function normalizeBasePath(value: string): string {
     return `/${trimmed.replace(/^\/+|\/+$/g, "")}/`;
 }
 
+/**
+ * Duplicated from `apps/web/src/lib/deployment.ts` on purpose: the apps do not
+ * import each other's source (only `packages/*` are shared), and the rule is
+ * small enough to read in place. Keep the two in sync —
+ * `scripts/test_ci_job_contracts.py` asserts that each config calls this helper
+ * and that the web copy is executed against the generated CNB hostname.
+ */
+const CNB_DEV_HOST_SUFFIXES = [".cnb.space", ".cnb.run"];
+const CNB_DEV_HOSTS = ["cnb.space", "cnb.run", "localhost", "127.0.0.1", "[::1]"];
+
+function normalizeDevHost(entry: string): string {
+    const value = entry.trim().replace(/^https?:\/\//i, "");
+    if (!value) return "";
+    return value.replace(/[/?#].*$/, "").replace(/:\d+$/, "").toLowerCase();
+}
+
+/**
+ * Hosts the dev server accepts. CNB proxies preview ports through a generated
+ * `*.cnb.space` host, which Vite 6 blocks by default:
+ *
+ *   Blocked request. This host ("cnb-38o-1k28dm5ta-001.cnb.space") is not allowed.
+ *
+ * The hostname is minted per environment, so the platform domains are matched by
+ * pattern; anything else is opted in through `SOYMUTDB_DEV_ALLOWED_HOSTS`. This
+ * is a `server`/`preview` transport rule only and never affects a build.
+ */
+function resolveDevAllowedHosts(value: string | undefined): true | string[] {
+    const raw = value?.trim();
+    if (raw === "true" || raw === "*") return true;
+    const hosts = new Set<string>([...CNB_DEV_HOSTS, ...CNB_DEV_HOST_SUFFIXES]);
+    for (const entry of (raw ?? "").split(/[\s,]+/)) {
+        const host = normalizeDevHost(entry);
+        if (host) hosts.add(host);
+    }
+    return [...hosts];
+}
+
 function resolveApiOrigin(value: string | undefined, deploymentMode: string): string | null {
     const candidate = value?.trim();
     if (!candidate) {
@@ -89,12 +126,20 @@ export default defineConfig(({ mode }) => {
         server: {
             port: 5174,
             host: "0.0.0.0",
+            // See resolveDevAllowedHosts: the CNB preview proxy uses a
+            // generated `*.cnb.space` host that Vite 6 blocks by default.
+            allowedHosts: resolveDevAllowedHosts(env.SOYMUTDB_DEV_ALLOWED_HOSTS),
             proxy: {
                 "/api": {
                     target: apiProxyTarget,
                     changeOrigin: true,
                 },
             },
+        },
+        preview: {
+            port: 5174,
+            host: "0.0.0.0",
+            allowedHosts: resolveDevAllowedHosts(env.SOYMUTDB_DEV_ALLOWED_HOSTS),
         },
         build: {
             target: "es2022",

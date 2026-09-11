@@ -5,10 +5,10 @@
   "type": "module",
   "description": "SoyMutDB admin console — web UI on localhost",
   "scripts": {
-    "dev": "vite --host 127.0.0.1 --port 5174",
+    "dev": "vite --host 0.0.0.0 --port 5174",
     "build": "vite build",
     "build:web": "vite build",
-    "preview": "vite preview --host 127.0.0.1 --port 5174",
+    "preview": "vite preview --host 0.0.0.0 --port 5174",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
     "clean": "rimraf dist .turbo",

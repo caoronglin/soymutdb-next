@@ -11,7 +11,9 @@ Run with: python3 -m unittest scripts.test_ci_job_contracts -v
 from __future__ import annotations
 
 import json
+import os
 import re
+import shutil
 import subprocess
 import unittest
 from pathlib import Path
@@ -178,6 +180,104 @@ def _iter_pipelines(node: object):
     elif isinstance(node, list):
         for value in node:
             yield from _iter_pipelines(value)
+
+
+class _DevAllowlist:
+    """The shipped `resolveDevAllowedHosts` plus Vite's own matching rule.
+
+    Vite does not do a plain membership test on `allowedHosts`: an entry that
+    starts with a dot (`.cnb.space`) matches that domain *and every subdomain*,
+    which is exactly what a generated `cnb-38o-1k28dm5ta-001.cnb.space` needs.
+    Re-deriving that rule inside the test would let the assertion agree with
+    itself while the dev server still blocked the request, so both halves are
+    taken from the code that ships: the allowlist from
+    `apps/web/src/lib/deployment.ts`, the matching rule from Vite itself
+    (`server.allowedHosts` is normalized into RegExps over the host, without the
+    port — github.com/vitejs/vite, `createServer`).
+    """
+
+    def __init__(self, entries: list[str] | bool) -> None:
+        self.raw = entries
+        self.is_wildcard = entries is True
+        self.entries: list[str] = [] if entries is True else sorted(entries)
+        explicit = [] if entries is True else list(entries)
+        self._wildcard = any(entry in ("*", "true") for entry in explicit)
+        # Vite: an entry that starts with a dot means "this domain and every
+        # subdomain"; every other entry is an exact host.
+        self._suffixes = [entry[1:].lower() for entry in explicit if entry.startswith(".")]
+        self._exact = {
+            entry.lower() for entry in explicit if entry and not entry.startswith(".")
+        }
+
+    def accept(self, host: str, value: str | None = None) -> bool:
+        """Would Vite accept this `Host` header?
+
+        `value` keeps the signature parallel to `_load_dev_allowlist`; the
+        allowlist is already bound to it at construction time.
+        """
+        del value
+        if self.is_wildcard or self._wildcard:
+            return True
+        # The Host header carries a port and an optional IPv6 bracket; Vite
+        # matches on the hostname alone.
+        hostname = host.strip().lower()
+        if hostname.startswith("["):
+            hostname = hostname[: hostname.index("]") + 1]
+        else:
+            hostname = hostname.rsplit(":", 1)[0]
+        if hostname in self._exact:
+            return True
+        return any(hostname == suffix or hostname.endswith("." + suffix) for suffix in self._suffixes)
+
+
+def _load_dev_allowlist(value: str | None = None) -> _DevAllowlist:
+    """Evaluate the SHIPPED `resolveDevAllowedHosts` and expose its matcher.
+
+    A static assertion on the source text cannot answer "does this allowlist
+    cover the generated CNB hostname?" -- the answer lives in the matching
+    rules. The helper is therefore extracted, executed through Node's built-in
+    TypeScript support (the repository's Node 24 pin runs a `.ts` file
+    directly), and probed with a table of real hosts, so the test and the dev
+    server cannot disagree about the pattern.
+    """
+    source = (ROOT / "apps/web/src/lib/deployment.ts").read_text(encoding="utf-8")
+    # From the first helper constant to the end of the helper: the function
+    # closes over `CNB_DEV_HOSTS` / `CNB_DEV_HOST_SUFFIXES`, so extracting only
+    # the function body would evaluate against free variables.
+    start = source.index("const CNB_DEV_HOST_SUFFIXES")
+    body = source[start:].replace("export function", "function")
+
+    node = shutil.which("node")
+    if node is None:  # pragma: no cover - all CI images carry Node 24
+        raise unittest.SkipTest("node is required to evaluate the allowlist helper")
+
+    program = (
+        "import fs from 'node:fs';\n"
+        "import os from 'node:os';\n"
+        "import path from 'node:path';\n"
+        "import { spawnSync } from 'node:child_process';\n"
+        "const helper = fs.readFileSync(0, 'utf8');\n"
+        "const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'allowed-hosts-'));\n"
+        "const file = path.join(dir, 'helper.ts');\n"
+        "fs.writeFileSync(file, helper + \"\\nprocess.stdout.write(JSON.stringify("
+        "resolveDevAllowedHosts(process.env.PROBE_VALUE)));\\n\");\n"
+        "const result = spawnSync(process.execPath, [file], { encoding: 'utf8' });\n"
+        "if (result.status !== 0) { process.stderr.write(result.stderr); process.exit(1); }\n"
+        "process.stdout.write(result.stdout);\n"
+    )
+    completed = subprocess.run(
+        [node, "--input-type=module", "-e", program],
+        input=body,
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PROBE_VALUE": value or ""},
+    )
+    if completed.returncode != 0:
+        raise AssertionError(
+            f"could not evaluate resolveDevAllowedHosts:\n{completed.stderr}"
+        )
+    return _DevAllowlist(json.loads(completed.stdout))
 
 
 def _cnb_config_files() -> tuple[Path, ...]:
@@ -1779,6 +1879,219 @@ class DeliveryArchitectureTests(unittest.TestCase):
         self.assertGreater(
             pipelines_checked, 0, "the pnpm store volume is required for caching"
         )
+
+    def test_cloud_development_preview_survives_a_generated_hostname(self) -> None:
+        """The CNB preview proxy must not be blocked by Vite's `allowedHosts`.
+
+        Real report (Issue #10):
+
+            Blocked request. This host ("cnb-38o-1k28dm5ta-001.cnb.space") is
+            not allowed.
+            To allow this host, add "cnb-38o-1k28dm5ta-001.cnb.space" to
+            `server.allowedHosts` in vite.config.js.
+
+        Vite 6 rejects any request whose `Host` is not allowlisted, and CNB
+        mints a NEW `*.cnb.space` hostname for every environment. So neither
+        half of the obvious fix is enough on its own:
+
+          * hard-coding the reported hostname fixes exactly one environment;
+          * `allowedHosts: true` accepts ANY hostname, which turns a forwarded
+            preview URL into a DNS-rebinding pivot.
+
+        The contract is therefore: the three dev servers (`web`, `admin`,
+        `jbrowse`) resolve an allowlist through the shared helper, the helper
+        matches the platform domains by pattern, and both the config and the
+        bootstrap script stay additive instead of restrictive.
+        """
+        # 1. The helper exists in the apps that serve a dev server, matches the
+        #    platform domains by pattern, and never defaults to a wildcard.
+        deployment = (ROOT / "apps/web/src/lib/deployment.ts").read_text(encoding="utf-8")
+        self.assertIn("export function resolveDevAllowedHosts", deployment)
+        self.assertIn(".cnb.space", deployment)
+        self.assertIn(".cnb.run", deployment)
+        self.assertIn("normalizeDevHost", deployment)
+        # The reported hostname must be covered by the PATTERN, not by a
+        # literal copy of it: a new environment gets a new id. The comment above
+        # the helper quotes the message, so assert on the code that builds the
+        # allowlist rather than on the file.
+        constants = deployment[
+            deployment.index("const CNB_DEV_HOST_SUFFIXES"):
+            deployment.index("export function resolveDevAllowedHosts")
+        ]
+        self.assertNotIn("cnb-38o-1k28dm5ta-001.cnb.space", constants)
+
+        # The reported hostname, and every hostname the platform can mint for
+        # the next environment, must be accepted.
+        allowlist = _load_dev_allowlist()
+        self.assertFalse(allowlist.is_wildcard)
+        for host in (
+            # The exact hostname from the Issue report, with and without the
+            # port the proxy appends.
+            "cnb-38o-1k28dm5ta-001.cnb.space",
+            "cnb-38o-1k28dm5ta-001.cnb.space:8686",
+            # The only-preview form documented in only-preview.md.
+            "cnb-38o-1k28dm5ta-001-8686.cnb.space",
+            # `*.cnb.run` is the other documented preview domain
+            # (business-preview.md: https://<id>-{{port}}.cnb.run).
+            "fjisdofi21-5173.cnb.run",
+            "cnb.space",
+            "cnb.run",
+            # Loopback: the readiness wait and any local browser.
+            "localhost:5173",
+            "localhost",
+            "127.0.0.1:8686",
+        ):
+            self.assertTrue(
+                allowlist.accept(host),
+                f"Vite would block {host!r}; the CNB preview would show the "
+                "blocked-host page instead of the portal",
+            )
+
+        # ...and it must still not be a wildcard: a DNS-rebinding host, a host
+        # that merely contains the platform domain, and a look-alike domain are
+        # all rejected.
+        for host in (
+            "evil.example.com",
+            "cnb.space.evil.com",
+            "evil-cnb.space",
+            "notcnb.space",
+            "cnb.spacex",
+        ):
+            self.assertFalse(
+                allowlist.accept(host),
+                f"the allowlist accepts {host!r}; `allowedHosts` is a security "
+                "boundary, not a formality",
+            )
+
+        # An operator-provided host is additive, and so is `true` (the
+        # documented escape hatch for a tunnel that cannot be enumerated).
+        extended = _load_dev_allowlist("staging.example.com, https://tunnel.foo.io:8080/x")
+        for host in ("staging.example.com", "tunnel.foo.io", "cnb-38o-1k28dm5ta-001.cnb.space"):
+            self.assertTrue(extended.accept(host), host)
+        self.assertFalse(extended.accept("other.example.com"))
+        self.assertTrue(_load_dev_allowlist("true").accept("anything.example.com"))
+        self.assertFalse(_load_dev_allowlist().accept("anything.example.com"))
+
+        # 2. Every Vite config with a dev server uses it, and never a wildcard.
+        #    A dep name is NOT a host: resolving the helper through the dep name
+        #    is what proves the literal in `allowedHosts:` is a call, not a
+        #    hard-coded list that would pass while the helper went unused.
+        configs = {
+            "apps/web/vite.config.ts": 'resolveDevAllowedHosts(env.SOYMUTDB_DEV_ALLOWED_HOSTS)',
+            "apps/admin/vite.config.ts": "resolveDevAllowedHosts(env.SOYMUTDB_DEV_ALLOWED_HOSTS)",
+            "apps/jbrowse/vite.config.ts": "resolveDevAllowedHosts(env.SOYMUTDB_DEV_ALLOWED_HOSTS)",
+        }
+        for relative, expected in configs.items():
+            source = (ROOT / relative).read_text(encoding="utf-8")
+            self.assertIn(expected, source, relative)
+            # `server` and `preview` both answer the proxy; a config that fixes
+            # only one still shows the blocked-host page for the other.
+            self.assertEqual(
+                source.count("allowedHosts:"),
+                2,
+                f"{relative}: `server` and `preview` both need an allowlist",
+            )
+            self.assertNotIn("allowedHosts: true", source, relative)
+            self.assertNotIn('allowedHosts: "*"', source, relative)
+            self.assertNotIn('allowedHosts: ["*"]', source, relative)
+
+        # 3. The bootstrap script derives the same variable from the platform.
+        script = (ROOT / "scripts/start-cloud-dev.sh").read_text(encoding="utf-8")
+        self.assertIn("SOYMUTDB_DEV_ALLOWED_HOSTS", script)
+        self.assertIn("CNB_VSCODE_PROXY_URI", script)
+        for domain in ("cnb.space", "cnb.run"):
+            self.assertIn(domain, script)
+
+        # 4. `dev` and `preview` must BOTH bind all interfaces. `vite preview`
+        #    does not read the config's `server.host` (it has its own
+        #    `preview.host` section), and the admin scripts hard-coded
+        #    127.0.0.1, which contradicts `host: "0.0.0.0"` in its config and
+        #    makes the CNB preview unreachable.
+        for app, port in (("web", 5173), ("admin", 5174), ("jbrowse", 5175)):
+            scripts = json.loads(
+                (ROOT / f"apps/{app}/package.json").read_text(encoding="utf-8")
+            )["scripts"]
+            for name in ("dev", "preview"):
+                self.assertIn(
+                    "0.0.0.0",
+                    scripts[name],
+                    f"apps/{app}: `{name}` must bind all interfaces so the CNB "
+                    "preview proxy can reach it",
+                )
+                self.assertNotIn("127.0.0.1", scripts[name], f"apps/{app}: {name}")
+
+        # 5. `vite preview` loads vite.config.ts, and the web config validates
+        #    its deployment origins AT IMPORT TIME. Without a default the
+        #    preview-shaped environment dies with
+        #      Error: API origin is required for production deployment
+        #    before serving anything, which is a worse failure than the origin
+        #    problem the validation exists to catch.
+        self.assertIn("VITE_API_BASE_URL", script)
+        for origin in ("VITE_API_BASE_URL", "VITE_JBROWSE_BASE_URL", "VITE_DEPLOYMENT_MODE"):
+            self.assertIn(
+                origin,
+                script,
+                "the bootstrap must default the origins the config validates",
+            )
+
+    def test_cloud_development_frontend_image_prewarms_the_pnpm_store(self) -> None:
+        """The build image must ship a warm store through a `VOLUME`.
+
+        CNB shares a path declared with the Docker `VOLUME` instruction between
+        the pipeline container and every later container of the same pipeline
+        (build-env.md, "Volume 共享"). The image filesystem is NOT what a
+        pipeline's `docker.volumes` mount carries, so a store written below
+        /cache without a VOLUME declaration is discarded by the very mount that
+        is supposed to make it persistent -- and `--frozen-lockfile` then
+        re-downloads the whole lockfile on the first run of every environment.
+
+        The warm-up is also why `build.by` has to list the lockfile: a store
+        baked from a manifest set that no longer matches `pnpm-lock.yaml` would
+        be served as a cache hit forever.
+        """
+        dockerfile = (ROOT / ".cnb/env/Dockerfile.frontend").read_text(encoding="utf-8")
+        self.assertIn("VOLUME /cache/pnpm-store", dockerfile)
+        self.assertIn("pnpm config set store-dir /cache/pnpm-store", dockerfile)
+        # Metadata only: no package tarball, no installation, so the store can
+        # never disagree with the lockfile gate.
+        self.assertIn("pnpm fetch --lockfile-only", dockerfile)
+        # Metadata only. Comments may mention the install; no RUN instruction
+        # may perform one, because a store baked from a resolved install can
+        # disagree with the lockfile the gate checks against.
+        run_lines = "\n".join(
+            line for line in dockerfile.splitlines() if line.startswith("RUN ")
+        )
+        self.assertNotIn("pnpm install", run_lines)
+        # The VOLUME must be declared AFTER the warm-up, or the engine copies an
+        # empty (not yet created) directory into the share.
+        self.assertLess(
+            dockerfile.index("pnpm fetch --lockfile-only"),
+            dockerfile.index("VOLUME /cache/pnpm-store"),
+            "VOLUME must be declared after the store is populated",
+        )
+        # A hard-coded pnpm version would let the image warm a store with a
+        # pnpm the pipeline never activates.
+        self.assertIn("ARG PNPM_VERSION=11.21.0", dockerfile)
+
+        document = _cnb()
+        frontend_builds = [
+            pipeline["docker"]["build"]
+            for pipeline in (
+                *_cnb_pipelines("main", "pull_request"),
+                *_cnb_pipelines("main", "push"),
+                *_cnb_pipelines("$", "web_trigger_verify"),
+            )
+            if pipeline.get("docker", {}).get("build", {}).get("dockerfile")
+            == ".cnb/env/Dockerfile.frontend"
+        ]
+        self.assertEqual(len(frontend_builds), 3, "expected three frontend pipelines")
+        for build in frontend_builds:
+            self.assertIn(".cnb/env/Dockerfile.frontend", build["by"])
+            self.assertIn(
+                "pnpm-lock.yaml",
+                build["by"],
+                "the store warm-up must be rebuilt when the lockfile changes",
+            )
 
     def test_cloud_development_buttons_share_one_bootstrap(self) -> None:
         """The manual preview pipeline must not fork the environment prep.

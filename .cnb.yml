@@ -81,11 +81,22 @@ main:
           - /cache/pnpm-store
         build:
           dockerfile: .cnb/env/Dockerfile.frontend
-          # Rebuild the image only when the Dockerfile changes; the stage bodies
-          # bootstrap their own toolchains via scripts/, so this is the only
-          # input that can move the environment the frontend gate runs in.
+          # The image solves a problem the checkout does not have: it ships the
+          # Node + Python toolchains, AND it pre-warms the pnpm store through a
+          # `VOLUME /cache/pnpm-store` declaration, which is how CNB shares data
+          # between containers (the image filesystem alone is not carried into
+          # the `docker.volumes` mount below). Rebuilding has to track both
+          # inputs:
+          #   * the Dockerfile — the toolchain pins;
+          #   * `pnpm-lock.yaml` + the manifests — the store warm-up, so the
+          #     baked store matches the lockfile the gate installs from.
+          # The cache key is derived from the union, so a lockfile-only change
+          # now rebuilds the store instead of silently serving a stale one.
           by:
             - .cnb/env/Dockerfile.frontend
+            - pnpm-lock.yaml
+            - package.json
+            - pnpm-workspace.yaml
       # `services` is a PIPELINE-level key (grammar.md#pipeline-services):
       # a sibling of `stages`, `docker` and `env`. `postgres:16` is accepted
       # but starts NOTHING; on a Stage the whole key is silently dropped and
@@ -147,11 +158,22 @@ main:
           - /cache/pnpm-store
         build:
           dockerfile: .cnb/env/Dockerfile.frontend
-          # Rebuild the image only when the Dockerfile changes; the stage bodies
-          # bootstrap their own toolchains via scripts/, so this is the only
-          # input that can move the environment the frontend gate runs in.
+          # The image solves a problem the checkout does not have: it ships the
+          # Node + Python toolchains, AND it pre-warms the pnpm store through a
+          # `VOLUME /cache/pnpm-store` declaration, which is how CNB shares data
+          # between containers (the image filesystem alone is not carried into
+          # the `docker.volumes` mount below). Rebuilding has to track both
+          # inputs:
+          #   * the Dockerfile — the toolchain pins;
+          #   * `pnpm-lock.yaml` + the manifests — the store warm-up, so the
+          #     baked store matches the lockfile the gate installs from.
+          # The cache key is derived from the union, so a lockfile-only change
+          # now rebuilds the store instead of silently serving a stale one.
           by:
             - .cnb/env/Dockerfile.frontend
+            - pnpm-lock.yaml
+            - package.json
+            - pnpm-workspace.yaml
       # `services` is a PIPELINE-level key (grammar.md#pipeline-services):
       # a sibling of `stages`, `docker` and `env`. `postgres:16` is accepted
       # but starts NOTHING; on a Stage the whole key is silently dropped and
@@ -569,11 +591,22 @@ $:
           - /cache/pnpm-store
         build:
           dockerfile: .cnb/env/Dockerfile.frontend
-          # Rebuild the image only when the Dockerfile changes; the stage bodies
-          # bootstrap their own toolchains via scripts/, so this is the only
-          # input that can move the environment the frontend gate runs in.
+          # The image solves a problem the checkout does not have: it ships the
+          # Node + Python toolchains, AND it pre-warms the pnpm store through a
+          # `VOLUME /cache/pnpm-store` declaration, which is how CNB shares data
+          # between containers (the image filesystem alone is not carried into
+          # the `docker.volumes` mount below). Rebuilding has to track both
+          # inputs:
+          #   * the Dockerfile — the toolchain pins;
+          #   * `pnpm-lock.yaml` + the manifests — the store warm-up, so the
+          #     baked store matches the lockfile the gate installs from.
+          # The cache key is derived from the union, so a lockfile-only change
+          # now rebuilds the store instead of silently serving a stale one.
           by:
             - .cnb/env/Dockerfile.frontend
+            - pnpm-lock.yaml
+            - package.json
+            - pnpm-workspace.yaml
       # `services` is a PIPELINE-level key (grammar.md#pipeline-services):
       # a sibling of `stages`, `docker` and `env`. `postgres:16` is accepted
       # but starts NOTHING; on a Stage the whole key is silently dropped and
