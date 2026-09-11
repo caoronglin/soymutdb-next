@@ -1,0 +1,63 @@
+# =============================================================================
+# SoyMutDB — Pages publication pipeline (CNB)
+# =============================================================================
+# Publication is a byte copy of the artifact the verify pipeline built and
+# checksummed. It never installs a JS toolchain and never rebuilds the bundle,
+# so the published tree always equals the verified bytes.
+#
+# Source of truth: `.cnb.yml` (`$` -> `push` -> `publish` -> `publish-web`).
+# =============================================================================
+name: SoyMutDB Pages publication
+
+env:
+  PAGES_ARTIFACT_DIR: pages-dist
+  PAGES_PUBLISH_DIR: pages-publish
+
+stages:
+  - name: Verify the CI-built artifact before publication
+    script: |
+      set -euo pipefail
+      # verify-pages-artifact.sh enforces entry points, full checksum coverage
+      # (hidden files included), and an exact byte-tree match. When a publication
+      # id and manifest digest are supplied it also verifies the artifact digest
+      # BEFORE anything is published.
+      test -d "$PAGES_ARTIFACT_DIR" || {
+        echo "pages artifact missing; the verify pipeline must run first" >&2
+        exit 1
+      }
+      bash scripts/verify-pages-artifact.sh "$PAGES_ARTIFACT_DIR"
+
+  - name: Stage the verified tree for publication
+    script: |
+      set -euo pipefail
+      rm -rf "$PAGES_PUBLISH_DIR"
+      mkdir -p "$PAGES_PUBLISH_DIR"
+      cp -a "$PAGES_ARTIFACT_DIR/." "$PAGES_PUBLISH_DIR/"
+      test -f "$PAGES_PUBLISH_DIR/index.html"
+      test -f "$PAGES_PUBLISH_DIR/soymutdb-jbrowse/index.html"
+      test -f "$PAGES_PUBLISH_DIR/SHA256SUMS"
+      (
+        cd "$PAGES_PUBLISH_DIR"
+        sha256sum -c SHA256SUMS
+      )
+
+  - name: Publish the verified static tree
+    script: |
+      set -euo pipefail
+      # The publication target (object storage / static host) is deliberately
+      # adapter-driven: the pipeline records what it published and leaves the
+      # transport to the environment's configured adapter.
+      if [[ -n "${SOYMUTDB_PAGES_PUBLISH_ADAPTER:-}" ]]; then
+        # shellcheck disable=SC1090
+        source "$SOYMUTDB_PAGES_PUBLISH_ADAPTER"
+        publish_pages_tree "$PAGES_PUBLISH_DIR"
+      else
+        echo "No SOYMUTDB_PAGES_PUBLISH_ADAPTER configured."
+        echo "Verified tree staged at $PAGES_PUBLISH_DIR for manual publication."
+      fi
+
+  - name: Record publication evidence
+    image: cnbcool/artifact
+    settings:
+      path: pages-publish
+      name: pages-verified-tree-$CNB_COMMIT_SHORT

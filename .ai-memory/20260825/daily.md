@@ -190,3 +190,10 @@
 - **服务**: Web `http://127.0.0.1:4173/`，Admin `http://127.0.0.1:5174/`；使用临时 Python SPA fallback 静态服务器，服务进程已独立会话保持运行；未部署 API、Worker、MCP、JBrowse、PostgreSQL、ClickHouse、Redis。
 - **验证**: Web/Admin 首页 HTTP 200、Web `/search` fallback HTTP 200、Admin 浏览器 smoke HTTP 200 且仅过滤预期 `ERR_CONNECTION_REFUSED`；Web 路由/脚本 smoke 20/20 通过。完整资源加载用例的唯一失败是后端未部署导致的预期 API 404，已未将其伪装为静态资源成功。
 - **远程证据**: 修复提交 `0aace68` 的 CI [`32866968143`](https://github.com/caoronglin/soymutdb-next/actions/runs/32866968143)、baseline [`32866966708`](https://github.com/caoronglin/soymutdb-next/actions/runs/32866966708)、Pages [`32869572544`](https://github.com/caoronglin/soymutdb-next/actions/runs/32869572544) 与在线 smoke [`32869633057`](https://github.com/caoronglin/soymutdb-next/actions/runs/32869633057) 均通过。
+
+## [交付架构] - CNB 主链路迁移与统一冒烟入口
+
+- **文件**: `.cnb.yml`、`.cnb/pipelines/*`、`.cnb/web_trigger.yml`、`.cnb/env/*`、`scripts/ci-job-steps.sh`、`scripts/verify-frontend-artifacts.sh`、`scripts/verify-backend-tests.sh`、`scripts/build-release-image.sh`、`scripts/release-contract.golden.sh`、`scripts/build-pages-artifact.sh`、`scripts/verify-pages-artifact.sh`、`scripts/mcp-transport-smoke.sh`、`scripts/assert-clickhouse-migration.py`、`scripts/smoke.sh`、`scripts/test_ci_job_contracts.py`、`.github/workflows/*`、`package.json`、`docs/ops/ci-cd.md`、`docs/dev/pipeline-migration.md`
+- **决策**: 先把 1189 行内联 CI 逻辑抽成脚本，再让 GitHub workflow 与 `.cnb.yml` 引用同一批脚本（GitHub 侧先回归验证等价性，再写 CNB）。镜像校验与发布拆分流水线：校验无 registry 凭据且不 push，发布不做 docker build。新增统一冒烟入口，缺失前置条件必须 `SKIPPED` 而非静默通过。
+- **验证**: `scripts/test_ci_job_contracts.py` 18 passed；`smoke.sh --profile contracts` 134 passed / SMOKE PASS；CNB 校验器三项通过；`pnpm build:web` + `--profile static` PASS；一次性 PostgreSQL 15 + Python 3.14 下 `--profile runtime` PASS（migrations 0035 / live ok / ready postgres healthy / 空库搜索 503 fail-closed）；`smoke.sh --profile e2e`；后端回归改动前后同为 33 failed / 1445 passed（零影响，前置缺陷）。
+- **未验证**: CNB 真实构建、Docker 镜像构建与 Trivy/SBOM（本机无 daemon）、Playwright E2E、ClickHouse 迁移。

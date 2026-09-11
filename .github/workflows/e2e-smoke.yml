@@ -16,6 +16,10 @@
 #
 # Note: e2e/ is an independent npm package (own package.json + lockfile),
 # intentionally outside the pnpm workspace — no root package.json changes.
+#
+# MIRROR NOTICE: the authoritative nightly smoke job is the CNB `smoke`
+# pipeline (`.cnb.yml` -> "crontab: 0 2 * * *"). Both run the same
+# e2e/tests/online-smoke.spec.ts assertions against a deployed site.
 # =============================================================================
 name: E2E Smoke (online)
 

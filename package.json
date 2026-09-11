@@ -2,7 +2,7 @@
   "name": "soymutdb",
   "version": "2.0.0",
   "private": true,
-  "description": "SoyMutDB Next — comprehensive soybean mutant database with SSG public portal and web admin console",
+  "description": "SoyMutDB Next \u2014 comprehensive soybean mutant database with SSG public portal and web admin console",
   "packageManager": "pnpm@11.21.0",
   "engines": {
     "node": ">=24.0.0 <25",
@@ -17,6 +17,8 @@
     "check:web-query-keys": "python3 scripts/check_web_query_keys.py",
     "check:admin-content-architecture": "python3 scripts/check_admin_content_architecture.py",
     "test": "turbo run test",
+    "smoke": "bash scripts/smoke.sh",
+    "smoke:artifact": "bash scripts/verify-frontend-artifacts.sh --artifact-only",
     "dev:web": "pnpm --filter @soymutdb/web dev",
     "dev:admin": "pnpm --filter @soymutdb/admin dev",
     "build:web": "pnpm --filter @soymutdb/web build",
@@ -25,7 +27,12 @@
     "deps:graphs": "python3 scripts/dependency_governance.py graphs --output artifacts/dependency-graphs",
     "deps:audit": "python3 scripts/dependency_governance.py audit --config dependency-governance.json --output artifacts/dependency-audit",
     "review": "python3 tools/code-review/review.py --project apps --output tools/code-review/reports/manual",
-    "clean": "turbo run clean && rimraf node_modules"
+    "clean": "turbo run clean && rimraf node_modules",
+    "ci:verify": "bash scripts/ci-job-steps.sh run frontend",
+    "ci:api": "bash scripts/ci-job-steps.sh run api-tests",
+    "ci:images": "bash scripts/ci-job-steps.sh run image-build",
+    "ci:release": "bash scripts/ci-job-steps.sh run release",
+    "ci:jobs": "bash scripts/ci-job-steps.sh list"
   },
   "devDependencies": {
     "turbo": "^2.3.0",

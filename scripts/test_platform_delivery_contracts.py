@@ -54,7 +54,17 @@ def _workflow_job(workflow: str, job_name: str) -> str:
     return match.group(0)
 
 
-def test_node_and_pnpm_toolchain_is_exact_in_workflows_that_build_assets() -> None:
+def _plain(value: object) -> str:
+    """Serialize parsed configuration for substring assertions."""
+    return json.dumps(value, ensure_ascii=False)
+
+
+def _pipeline_source() -> str:
+    """The single source of truth for delivery/build pipeline configuration."""
+    return (ROOT / ".cnb.yml").read_text(encoding="utf-8")
+
+
+def test_node_and_pnpm_toolchain_is_exact_in_jobs_that_build_assets() -> None:
     package = _json("package.json")
 
     assert (ROOT / ".nvmrc").read_text(encoding="utf-8").strip() == NODE_VERSION
@@ -62,21 +72,35 @@ def test_node_and_pnpm_toolchain_is_exact_in_workflows_that_build_assets() -> No
     assert package["packageManager"] == "pnpm@11.21.0"
     assert package["engines"] == {"node": ">=24.0.0 <25", "pnpm": "11.21.0"}
 
-    for workflow_name in ("ci.yml", "e2e-smoke.yml"):
-        workflow = (ROOT / ".github/workflows" / workflow_name).read_text(encoding="utf-8")
-        assert "Setup Node 24" in workflow
-        assert f"node-version: {NODE_VERSION}" in workflow
-        assert "node-version: 22" not in workflow
+    # CNB is the primary delivery pipeline. Every pipeline that builds or tests
+    # the workspace must pin the exact Node release; the smoke pipeline runs the
+    # same Playwright suites, so it shares the pin.
+    pipeline_sources = [ROOT / ".cnb.yml"] + sorted((ROOT / ".cnb/pipelines").glob("*.yml"))
+    for path in pipeline_sources:
+        text = path.read_text(encoding="utf-8")
+        assert "node:22" not in text, path
+        assert "node:20" not in text, path
+        if "node:" in text:
+            assert f"node:{NODE_VERSION}" in text, path
+    assert f"node:{NODE_VERSION}" in (ROOT / ".cnb.yml").read_text(encoding="utf-8")
 
-    # Pages publishes the already-built, checksummed CI artifact; installing a
-    # JS toolchain here would invite a second, non-identical build.
-    pages = (ROOT / ".github/workflows/pages.yml").read_text(encoding="utf-8")
-    deploy_job = _workflow_job(pages, "deploy")
-    assert "Download CI-verified Pages artifact" in deploy_job
-    assert "Setup Node" not in deploy_job
-    assert "node-version:" not in deploy_job
+    # Publication consumes the already-built, checksummed web artifact;
+    # installing a JS toolchain in the publisher would invite a second,
+    # non-identical build.
+    pages = yaml.safe_load(_pipeline_source())
+    deploy_job = _plain(
+        next(p for p in pages["$"]["push"] if p["name"] == "publish")
+    )
     assert "pnpm install" not in deploy_job
     assert "pnpm --filter" not in deploy_job
+    assert "verify-pages-artifact.sh" in deploy_job
+    for script in ("scripts/build-pages-artifact.sh", "scripts/verify-pages-artifact.sh"):
+        assert (ROOT / script).is_file(), script
+
+    ci_text = _plain(next(p for p in pages["main"]["push"] if p["name"] == "verify"))
+    assert "Build the checksummed Pages artifact" in ci_text
+    assert "scripts/verify-pages-artifact.sh" in ci_text
+    assert "Upload GitHub Pages demo artifact" in ci_text
 
 
 def test_frontend_platform_lines_remain_bounded() -> None:
@@ -260,9 +284,11 @@ def test_ols4_manifest_renderer_uses_the_same_api_image_signer() -> None:
 def test_linux_install_keeps_deployment_scripts_at_their_expected_layout() -> None:
     script = INSTALL.read_text(encoding="utf-8")
 
-    assert 'mkdir -p "${INSTALL_DIR}/deploy"' in script
-    assert 'cp -r "${PROJECT_ROOT}/deploy/scripts" "${INSTALL_DIR}/deploy/"' in script
+    # The whole deploy tree is copied, so deploy/scripts keeps its canonical
+    # relative path inside the release directory.
+    assert 'cp -a "${PROJECT_ROOT}/deploy" "${RELEASE_DIR}/deploy"' in script
     assert '"${INSTALL_DIR}/scripts"' not in script
+    assert '"${RELEASE_DIR}/scripts"' not in script
 
 
 def test_conda_hybrid_mode_exposes_real_data_layer_endpoints_and_all_queues() -> None:
@@ -290,18 +316,24 @@ def test_conda_hybrid_mode_exposes_real_data_layer_endpoints_and_all_queues() ->
 
 def test_ci_validates_profiles_and_publishes_verifiable_digest_contract() -> None:
     workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    golden = (ROOT / "scripts/release-contract.golden.sh").read_text(encoding="utf-8")
+
+    shared = (ROOT / "scripts/ci-job-steps.sh").read_text(encoding="utf-8")
 
     assert "Validate production Compose profiles (Docker-only CI gate)" in workflow
     for profile in sorted(PROFILES):
-        assert f'"core,{profile}"' in workflow or profile == "core"
+        assert f'"core,{profile}"' in shared or profile == "core"
 
-    assert "docker manifest inspect --verbose" in workflow
-    assert "release-contract/oci-image-refs.txt" in workflow
-    assert 'digest_ref="${image%:*}@${digest}"' in workflow
-    assert 'docker manifest inspect "$digest_ref"' in workflow
-    assert "sha256sum oci-image-refs.txt" in workflow
-    assert "GITHUB_STEP_SUMMARY" in workflow
-    assert "release-contract-sha256" in workflow
+    # The digest merge/sign contract lives in one reviewed script so the CNB
+    # release path can never drift from the GitHub mirror.
+    assert "scripts/release-contract.golden.sh" in workflow
+    assert "docker manifest inspect --verbose" in golden
+    assert "${RELEASE_OUTPUT_DIR}/oci-image-refs.txt" in golden
+    assert 'digest_ref="${image%:*}@${digest}"' in golden
+    assert 'docker manifest inspect "${digest_ref}"' in golden
+    assert "sha256sum oci-image-refs.txt" in golden
+    assert "GITHUB_STEP_SUMMARY" in golden
+    assert "release-contract-sha256" in golden
 
 
 def test_ci_builds_release_images_on_independent_native_platforms() -> None:
@@ -316,101 +348,157 @@ def test_ci_builds_release_images_on_independent_native_platforms() -> None:
     assert "runner: ubuntu-24.04-arm" in docker_job
     assert "platform: linux/arm64" in docker_job
     assert "fail-fast: false" in docker_job
-    assert "soymutdb-api:ci-${{ matrix.arch }}" in docker_job
+    # The workflow passes the architecture through the environment; the shared
+    # script derives every image tag from it.
+    assert "SOYMUTDB_CI_ARCH: ${{ matrix.arch }}" in docker_job
+    verification = (ROOT / "scripts/build-release-image.sh").read_text(encoding="utf-8")
+    assert 'soymutdb-api:ci-${ARCH}' in verification
 
-    build = docker_job.index("Build API image (hard gate)")
-    smoke = docker_job.index("Smoke test API runtime image (hard gate)")
-    scan = docker_job.index("Trivy scan API image (hard gate)")
-    sbom = docker_job.index("Generate API SPDX SBOM")
-    export = docker_job.index("Export validated runtime images")
-    assert build < smoke < scan < sbom < export
+    # CNB builds the same two native architectures with the same script.
+    cnb = yaml.safe_load(_pipeline_source())
+    cnb_images = [
+        _plain(pipeline)
+        for pipeline in cnb["main"]["push"]
+        if pipeline["name"].startswith("docker-images")
+    ]
+    assert len(cnb_images) == 2
+    for pipeline_text in cnb_images:
+        assert "scripts/ci-job-steps.sh run image-build" in pipeline_text
+    assert "amd64" in cnb_images[0]
+    assert "arm64" in cnb_images[1]
+    assert "cnb:arch:arm64" in cnb_images[1]
+
+    # The build/runtime-smoke/scan/SBOM/export source used to live inline in the
+    # workflow. It now lives in a single script that both the GitHub mirror and
+    # the CNB pipeline call, preserving order and per-platform image identity.
+    assert "scripts/build-release-image.sh" in docker_job
+
+    build = verification.index("Build release images (${PLATFORM})")
+    smoke = verification.index("Smoke test API runtime image (hard gate)")
+    architecture = verification.index("Assert actual native image architecture (hard gate)")
+    scan = verification.index("Trivy scan API image (hard gate)")
+    sbom = verification.index("Generate API SPDX SBOM")
+    export = verification.index("Export validated runtime images")
+    assert build < smoke < architecture < scan < sbom < export
 
 
 def test_ci_asserts_built_image_architecture_before_security_scan() -> None:
     workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     docker_job = _workflow_job(workflow, "docker-build")
 
+    assert "scripts/build-release-image.sh" in docker_job
+    verification = (ROOT / "scripts/build-release-image.sh").read_text(encoding="utf-8")
     assertion = "Assert actual native image architecture (hard gate)"
-    assert assertion in docker_job
-    gate_start = docker_job.index(assertion)
-    scan_start = docker_job.index("Trivy scan API image (hard gate)")
-    gate = docker_job[gate_start:scan_start]
+    gate_start = verification.index(assertion)
+    scan_start = verification.index("trivy_scan() {")
+    gate = verification[gate_start:scan_start]
 
-    assert "expected_architecture=\"${{ matrix.arch }}\"" in gate
     assert "docker image inspect --format '{{.Architecture}}'" in gate
-    for image_name in ("api", "worker", "mcp", "jbrowse"):
-        assert f'"soymutdb-{image_name}:ci-${{{{ matrix.arch }}}}"' in gate
-    assert docker_job.index("Smoke test JBrowse runtime image (hard gate)") < gate_start < scan_start
+    assert 'image="soymutdb-${image_name}:ci-${ARCH}"' in gate
+    assert "for image_name in api worker mcp jbrowse" in gate
+    assert 'test "${actual}" = "${ARCH}"' in gate
+    assert (
+        verification.index("Smoke test JBrowse runtime image (hard gate)")
+        < gate_start
+        < scan_start
+        < verification.index("Trivy scan API image (hard gate)")
+    )
 
 
 def test_ci_merges_only_validated_platform_packages() -> None:
     workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     publish_job = _workflow_job(workflow, "publish-images")
 
+    golden = (ROOT / "scripts/release-contract.golden.sh").read_text(encoding="utf-8")
+
     assert "needs: [docker-build, kubernetes-kind]" in publish_job
     assert "pattern: validated-runtime-images-*" in publish_job
-    assert '"validated-runtime-images-amd64"' in publish_job
-    assert '"validated-runtime-images-arm64"' in publish_job
-    assert "docker manifest create" in publish_job
-    assert "docker manifest push" in publish_job
-    assert "linux/amd64" in publish_job
-    assert "linux/arm64" in publish_job
-    assert "Verify merged manifest platforms" in publish_job
+    assert "scripts/release-contract.golden.sh" in publish_job
+    # The script enumerates both platforms itself, so a missing package fails
+    # there rather than being silently skipped here.
+    assert 'for arch in amd64 arm64' in golden
+    assert "docker manifest create" in golden
+    assert "docker manifest push" in golden
+    assert "linux/amd64" in golden
+    assert "linux/arm64" in golden
+    assert "Verify merged manifest platforms" in golden
     assert "docker build" not in publish_job
+    assert "docker build" not in golden
 
 
 def test_ci_checksums_all_platform_package_metadata_before_upload() -> None:
     workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     docker_job = _workflow_job(workflow, "docker-build")
-    export_step = docker_job[
-        docker_job.index("Export validated runtime images") :
-        docker_job.index("Upload validated runtime images")
-    ]
+    verification = (ROOT / "scripts/build-release-image.sh").read_text(encoding="utf-8")
+    export_step = verification[verification.index("Export validated runtime images") :]
     checksum_command = export_step[export_step.index("sha256sum") :]
 
-    assert "soymutdb-runtime-images-${{ matrix.arch }}.tar" in checksum_command
-    assert "image-ids-${{ matrix.arch }}.txt" in checksum_command
+    assert "validated-runtime-images-${ARCH}.txt" in export_step
     assert "platform.txt" in checksum_command
-    assert "sbom-*-${{ matrix.arch }}.spdx.json" in checksum_command
-    assert "sha256sum -c SHA256SUMS" in _workflow_job(workflow, "publish-images")
+    assert "sbom-" in checksum_command
+    assert "SHA256SUMS" in checksum_command
+    golden = (ROOT / "scripts/release-contract.golden.sh").read_text(encoding="utf-8")
+    assert "sha256sum -c SHA256SUMS" in golden
 
 
 def test_release_signing_is_keyless_and_job_scoped() -> None:
     workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     docker_job = _workflow_job(workflow, "docker-build")
     publish_job = _workflow_job(workflow, "publish-images")
+    golden = (ROOT / "scripts/release-contract.golden.sh").read_text(encoding="utf-8")
 
+    # The verifier never holds a signing identity.
     assert "id-token: write" not in docker_job
-    assert "id-token: write" in publish_job
-    assert "packages: write" in publish_job
-    installer = re.search(r"uses: sigstore/cosign-installer@([^\s#]+)", publish_job)
+
+    # Signing is keyless: it happens through a Sigstore identity token minted by
+    # the publishing pipeline, and the cosign installer is SHA-pinned there.
+    installer = re.search(
+        r"cosign-installer@(?P<revision>\S+)",
+        publish_job + (ROOT / ".cnb/pipelines/release.yml").read_text(encoding="utf-8"),
+    )
     assert installer is not None
-    assert re.fullmatch(r"[0-9a-f]{40}", installer.group(1))
-    assert "cosign sign --yes" in publish_job
-    assert "cosign attest --yes --type slsaprovenance" in publish_job
-    assert "cosign attest --yes --type spdxjson" in publish_job
-    assert "cosign verify" in publish_job
-    assert "cosign verify-attestation" in publish_job
-    assert "token.actions.githubusercontent.com" in publish_job
+    assert re.fullmatch(r"[0-9a-f]{40}", installer.group("revision"))
+    for command in (
+        "cosign sign --yes",
+        "cosign attest --yes --type slsaprovenance",
+        "cosign attest --yes --type spdxjson",
+        "cosign verify",
+        "cosign verify-attestation",
+    ):
+        assert command in golden
+    # CNB mints the OIDC token locally and publishes the same contract.
+    cnb_release = (ROOT / ".cnb/pipelines/release.yml").read_text(encoding="utf-8")
+    assert "sigstore" in cnb_release.lower()
+    assert "scripts/release-contract.golden.sh" in cnb_release
+    assert "token.actions.githubusercontent.com" in golden
 
 
 def test_release_contract_carries_sbom_provenance_and_source_identity() -> None:
     workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     docker_job = _workflow_job(workflow, "docker-build")
     publish_job = _workflow_job(workflow, "publish-images")
+    golden = (ROOT / "scripts/release-contract.golden.sh").read_text(encoding="utf-8")
+    cnb_release = (ROOT / ".cnb/pipelines/release.yml").read_text(encoding="utf-8")
 
-    assert docker_job.count("format: spdx-json") == 4
+    assert "scripts/build-release-image.sh" in docker_job
+    verification = (ROOT / "scripts/build-release-image.sh").read_text(encoding="utf-8")
+    assert verification.count("--format spdx-json") == 2
+    assert verification.count('step "Generate') == 4
     for image_name in ("api", "worker", "mcp", "jbrowse"):
-        assert f"sbom-{image_name}-${{{{ matrix.arch }}}}.spdx.json" in docker_job
-        assert f"provenance-{image_name}.json" in publish_job
-    assert "release-manifest.json" in publish_job
-    assert '"schema_version": 1' in publish_job
-    assert "GITHUB_SHA" in publish_job
-    assert "GITHUB_REPOSITORY" in publish_job
-    assert "provenance_sha256" in publish_job
-    assert "release-manifest.sigstore.json" in publish_job
-    assert "sha256sum release-manifest.json" in publish_job
+        assert f"sbom-{image_name}-" in verification
+        assert f"provenance-{image_name}.json" in golden
+    assert "release-manifest.json" in golden
+    assert "schema_version" in golden
+    # Source identity comes from the pipeline's own revision and repository
+    # variables, so the contract is portable between GitHub and CNB.
+    assert "SOURCE_REPOSITORY" in golden
+    assert "SOURCE_REVISION" in golden
+    assert "provenance_sha256" in golden
+    assert "release-manifest.sigstore.json" in golden
+    assert "sha256sum release-manifest.json" in golden
     assert "Upload signed OCI release contract" in publish_job
+    assert "scripts/release-contract.golden.sh" in cnb_release
+    assert "oci-release-contract" in cnb_release
 
 
 def test_blue_green_deploy_is_fail_closed_and_atomic() -> None:

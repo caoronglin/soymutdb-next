@@ -1,0 +1,16 @@
+# =============================================================================
+# SoyMutDB — API + worker test pipeline (CNB)
+# =============================================================================
+# Source of truth: the `API + Worker verification` stage of `.cnb.yml`.
+# SOYMUTDB_RUN_POSTGRES_INTEGRATION is mandatory: privacy, identity and
+# assembly-isolation cases must fail closed instead of skipping green.
+# =============================================================================
+name: SoyMutDB API and worker tests
+env:
+  SOYMUTDB_RUN_POSTGRES_INTEGRATION: '1'
+stages:
+- name: API + Worker verification
+  image: python:3.14
+  services:
+  - postgres:16
+  script: bash scripts/ci-job-steps.sh run api-tests

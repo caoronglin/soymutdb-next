@@ -1,0 +1,61 @@
+# =============================================================================
+# SoyMutDB — OCI release pipeline (CNB)
+# =============================================================================
+# Turns the platform-verified image packages produced by the `docker-images`
+# pipeline into one signed multi-architecture release, using the same script the
+# GitHub mirror calls (scripts/release-contract.golden.sh).
+#
+# Source of truth: `.cnb.yml` (`$` -> `push` -> `release`). This file exists so
+# the release definition can be reviewed and unit-tested in isolation.
+#
+# Secrets (configure in the CNB UI, never in the repository):
+#   $SOYMUTDB_RELEASE_COSIGN_KEY  optional offline cosign key
+#   $SOYMUTDB_OIDC_ISSUER         OIDC issuer to verify against (defaults to the
+#                                 GitHub Actions issuer for mirror parity)
+# =============================================================================
+name: SoyMutDB release
+
+env:
+  RELEASE_OUTPUT_DIR: release-contract
+  VALIDATED_ROOT: validated-platforms
+
+stages:
+  - name: Prepare release identity
+    script: |
+      set -euo pipefail
+      test -d "$VALIDATED_ROOT/validated-runtime-images-amd64"
+      test -d "$VALIDATED_ROOT/validated-runtime-images-arm64"
+
+  - name: Install signing toolchain
+    script: |
+      set -euo pipefail
+      # Keyless signing: cosign obtains a short-lived certificate from the
+      # pipeline's OIDC identity. The installer is pinned by version and its
+      # release archive is checksum-verified before use.
+      curl --fail --silent --show-error --location \
+        -o /tmp/cosign \
+        "https://github.com/sigstore/cosign/releases/download/v2.4.1/cosign-linux-amd64"
+      curl --fail --silent --show-error --location \
+        -o /tmp/cosign_checksums.txt \
+        "https://github.com/sigstore/cosign/releases/download/v2.4.1/cosign_checksums.txt"
+      grep ' cosign-linux-amd64$' /tmp/cosign_checksums.txt | \
+        sed 's/cosign-linux-amd64/\/tmp\/cosign/' | sha256sum -c -
+      install -m 0755 /tmp/cosign /usr/local/bin/cosign
+      cosign version
+
+  - name: Publish signed multi-architecture release
+    script: |
+      set -euo pipefail
+      # The script performs registry login, per-platform push, manifest merge,
+      # keyless signing, SLSA + SPDX attestation, verification, and the
+      # checksummed release-contract output. It refuses to run when either
+      # platform package is missing or fails its checksums.
+      bash scripts/release-contract.golden.sh
+
+  - name: Upload signed OCI release contract
+    image: cnbcool/artifact
+    settings:
+      # The release contract is the only artifact a deployer needs: digests,
+      # provenance, SBOMs and their checksums.
+      path: release-contract
+      name: oci-release-contract-$CNB_COMMIT_SHORT

@@ -1,9 +1,33 @@
+import json
 import re
 from pathlib import Path
 
 import tomllib
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _cnb() -> dict:
+    return yaml.safe_load((ROOT / ".cnb.yml").read_text(encoding="utf-8"))
+
+
+def _cnb_pipeline(name: str, branch: str = "main", event: str = "push") -> str:
+    """Serialize one CNB pipeline's definition for assertion purposes.
+
+    The same pipeline name can appear under several events (the PR and main-push
+    `verify` jobs differ), so both the branch and event are part of the lookup.
+    A rename or a removed pipeline fails loudly here instead of silently
+    asserting against the wrong definition.
+    """
+    document = _cnb()
+    pipelines = document.get(branch, {}).get(event)
+    if not isinstance(pipelines, list):
+        raise AssertionError(f"missing CNB branch/event: {branch}/{event}")
+    for pipeline in pipelines:
+        if isinstance(pipeline, dict) and pipeline.get("name") == name:
+            return json.dumps(pipeline, ensure_ascii=False)
+    raise AssertionError(f"missing CNB pipeline: {name} in {branch}/{event}")
 
 
 def _workflow_job(workflow: str, job_name: str) -> str:
@@ -26,26 +50,36 @@ def _top_level_block(workflow: str, block_name: str) -> str:
     return match.group(0)
 
 
-def test_ci_pushes_images_to_repository_owner_namespace() -> None:
-    workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+def test_ci_pushes_images_to_the_delivery_namespace() -> None:
+    golden = (ROOT / "scripts/release-contract.golden.sh").read_text(encoding="utf-8")
 
-    assert "GITHUB_REPOSITORY_OWNER,," in workflow
-    assert "ghcr.io/soymutdb/" not in workflow
-
-
-def test_ci_grants_package_write_for_ghcr_pushes() -> None:
-    workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-
-    assert "packages: write" in workflow
+    # The registry namespace is a per-pipeline variable, never hard-coded, so
+    # the GitHub mirror, CNB, and any fork publish to their own namespace.
+    assert "RELEASE_REGISTRY_OWNER" in golden
+    assert "ghcr.io/soymutdb/" not in golden
 
 
-def test_ci_pushes_mcp_from_the_image_name_it_builds() -> None:
-    workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+def test_publishing_pipeline_owns_registry_credentials() -> None:
+    golden = (ROOT / "scripts/release-contract.golden.sh").read_text(encoding="utf-8")
+    cnb_pipeline = (ROOT / ".cnb/pipelines/release.yml").read_text(encoding="utf-8")
 
-    assert "soymutdb-mcp:ci-${{ matrix.arch }}" in workflow
-    assert "local_names=(api worker mcp jbrowse)" in workflow
-    assert "remote_names=(api worker mcp-server jbrowse)" in workflow
-    assert 'docker tag "soymutdb-${local_names[$index]}:ci-${arch}" "$image"' in workflow
+    # Registry credentials come from the pipeline environment; the contract
+    # script logs in with the build-scoped token and never prints it.
+    assert "CNB_DOCKER_REGISTRY" in golden
+    assert "CNB_TOKEN_USER_NAME" in golden
+    assert "docker login" in golden
+    assert "--password-stdin" in golden
+    assert "release-contract.golden.sh" in cnb_pipeline
+
+
+def test_publish_keeps_local_to_registry_image_name_mapping() -> None:
+    verification = (ROOT / "scripts/build-release-image.sh").read_text(encoding="utf-8")
+    golden = (ROOT / "scripts/release-contract.golden.sh").read_text(encoding="utf-8")
+
+    assert "soymutdb-mcp:ci-${ARCH}" in verification
+    assert "local_names=(api worker mcp jbrowse)" in golden
+    assert "remote_names=(api worker mcp-server jbrowse)" in golden
+    assert 'docker tag "soymutdb-${local_names[$index]}:ci-${arch}" "${image}"' in golden
 
 
 def test_api_and_worker_formally_depend_on_locked_jobs_package() -> None:
@@ -79,14 +113,15 @@ def test_runtime_dockerfiles_install_jobs_package_from_the_build_context() -> No
 
 
 def test_ci_builds_then_smokes_then_scans_before_exporting_exact_images() -> None:
-    workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-    docker_job = _workflow_job(workflow, "docker-build")
+    docker_job = (ROOT / "scripts/build-release-image.sh").read_text(encoding="utf-8")
 
+    # The build step is one scripted sequence; its per-image build commands are
+    # the ordered evidence that each image is produced before any smoke test.
     build_steps = [
-        "Build API image (hard gate)",
-        "Build Worker image (hard gate)",
-        "Build MCP image (hard gate)",
-        "Build JBrowse image (hard gate)",
+        'docker build -f infra/docker/Dockerfile.api -t "soymutdb-api:ci-${ARCH}" .',
+        'docker build -f infra/docker/Dockerfile.worker -t "soymutdb-worker:ci-${ARCH}" .',
+        'docker build -f apps/mcp-server/Dockerfile -t "soymutdb-mcp:ci-${ARCH}" apps/mcp-server',
+        'docker build -f apps/jbrowse/Dockerfile -t "soymutdb-jbrowse:ci-${ARCH}" .',
     ]
     smoke_steps = [
         "Smoke test API runtime image (hard gate)",
@@ -105,30 +140,30 @@ def test_ci_builds_then_smokes_then_scans_before_exporting_exact_images() -> Non
     smoke_positions = [docker_job.index(step) for step in smoke_steps]
     scan_positions = [docker_job.index(step) for step in scan_steps]
     export_position = docker_job.index("Export validated runtime images")
-    upload_position = docker_job.index("Upload validated runtime images")
+    checksum_position = docker_job.index('step "validate-runtime-images', export_position)
 
     assert max(build_positions) < min(smoke_positions)
     assert max(smoke_positions) < min(scan_positions)
-    assert max(scan_positions) < export_position < upload_position
+    assert max(scan_positions) < export_position < checksum_position
     for image_name in ("api", "worker", "mcp", "jbrowse"):
-        assert f"image-ref: soymutdb-{image_name}:ci" in docker_job
-        assert f"soymutdb-{image_name}:ci" in docker_job[export_position:upload_position]
+        assert f'soymutdb-{image_name}:ci-${{ARCH}}' in docker_job
+        assert f"soymutdb-{image_name}:ci-" in docker_job[export_position:]
 
-    assert "docker save" in docker_job[export_position:upload_position]
-    assert "docker image inspect" in docker_job[export_position:upload_position]
-    assert "sha256sum" in docker_job[export_position:upload_position]
-    assert "Login to GHCR" not in docker_job
+    assert "docker save" in docker_job[export_position:]
+    assert "docker image inspect" in docker_job[export_position:]
+    assert "sha256sum" in docker_job[export_position:]
+    # Verification never logs in or pushes; publishing is a separate pipeline.
+    assert "docker login" not in docker_job
     assert "docker push" not in docker_job
 
 
 def test_ci_runtime_smoke_imports_real_api_and_full_worker_registry() -> None:
-    workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-    docker_job = _workflow_job(workflow, "docker-build")
+    verification = (ROOT / "scripts/build-release-image.sh").read_text(encoding="utf-8")
 
-    assert "from app.main import app" in docker_job
-    assert "import soymutdb_jobs" in docker_job
-    assert "scripts/check-worker-task-registry.py" in docker_job
-    assert "Smoke test API image (non-blocking)" not in docker_job
+    assert "from app.main import app" in verification
+    assert "import soymutdb_jobs" in verification
+    assert "scripts/check-worker-task-registry.py" in verification
+    assert "Smoke test API image (non-blocking)" not in verification
 
 
 def test_ci_installs_local_jobs_package_before_api_and_worker_projects() -> None:
@@ -145,56 +180,90 @@ def test_ci_installs_local_jobs_package_before_api_and_worker_projects() -> None
         'pip install -e "apps/api[dev]"'
     )
     assert api_job.index(jobs_install) < api_job.index(
-        "pip install --quiet -e apps/worker"
+        "bash scripts/verify-backend-tests.sh"
+    )
+
+    # The worker deps are installed inside the shared backend verifier, after
+    # the API package — one ordering rule, one place to change it.
+    backend = (ROOT / "scripts/verify-backend-tests.sh").read_text(encoding="utf-8")
+    assert backend.index("pip install --quiet -e apps/worker") < backend.index(
+        "pytest apps/worker/tests -q"
+    )
+
+    # The CNB verify pipeline installs the same local package first.
+    cnb_job = _cnb_pipeline("verify")
+    assert "scripts/ci-job-steps.sh run api-tests" in cnb_job
+
+
+def test_offline_frontend_build_uses_demo_sample_data() -> None:
+    """The generic verification build cannot require an unpublished API endpoint."""
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    frontend_job = _workflow_job(workflow, "frontend")
+    verifier = (ROOT / "scripts/verify-frontend-artifacts.sh").read_text(encoding="utf-8")
+
+    # The workflow supplies the demo origins through the environment...
+    assert "VITE_DEPLOYMENT_MODE: demo" in frontend_job
+    assert "scripts/verify-frontend-artifacts.sh" in frontend_job
+    # ...and the shared script defaults to them and exports them for the build.
+    assert "SOYMUTDB_CI_DEMO_MODE:-demo" in verifier
+    assert 'VITE_DEPLOYMENT_MODE="${SOYMUTDB_CI_DEMO_MODE}"' in verifier
+
+    cnb_job = json.loads(_cnb_pipeline("verify"))
+    assert cnb_job["env"]["VITE_DEPLOYMENT_MODE"] == "demo"
+    assert any(
+        "scripts/ci-job-steps.sh run frontend" in (stage.get("script") or "")
+        for stage in cnb_job["stages"]
     )
 
 
-def test_ci_offline_frontend_build_uses_demo_sample_data() -> None:
-    """The generic CI build cannot require an unpublished API endpoint."""
-    workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-    frontend_job = _workflow_job(workflow, "frontend")
-    build_step = frontend_job[
-        frontend_job.index("Build all apps (hard gate)") : frontend_job.index(
-            "Bundle size budget check (G2 hard gate)"
-        )
-    ]
-
-    assert "VITE_DEPLOYMENT_MODE: demo" in build_step
-
-
-def test_ci_runs_the_full_worker_pytest_suite_after_installing_worker_dependencies() -> None:
-    """Worker Testcontainers coverage is a hard CI gate, not only an import check."""
+def test_full_worker_pytest_suite_is_a_hard_gate() -> None:
+    """Worker Testcontainers coverage is a hard gate, not only an import check."""
     workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     api_job = _workflow_job(workflow, "api-tests")
-    install = "Install worker deps + verify analysis imports (hard gate)"
-    worker_pytest = "apps/api/.venv/bin/python -m pytest apps/worker/tests -q"
+    backend = (ROOT / "scripts/verify-backend-tests.sh").read_text(encoding="utf-8")
 
-    assert install in api_job
-    assert worker_pytest in api_job
-    assert api_job.index(install) < api_job.index(worker_pytest)
-    assert "pytest apps/worker/tests -q -k" not in api_job
+    assert "scripts/verify-backend-tests.sh" in api_job
+
+    # The full worker suite is invoked unfiltered, after the analysis deps are
+    # installed; no `-k` narrowing and no skip flag is allowed.
+    assert "pytest apps/worker/tests -q" in backend
+    assert "-k " not in backend
+    assert backend.index("pip install --quiet -e apps/worker") < backend.index(
+        "pytest apps/worker/tests -q"
+    )
+
+    # The same verifier is what the CNB pipeline calls.
+    cnb_job = _cnb_pipeline("verify")
+    assert "scripts/ci-job-steps.sh run api-tests" in cnb_job
 
 
-def test_ci_requires_the_real_postgresql_worker_integration_environment() -> None:
-    """A missing Docker/Testcontainers setup must fail CI instead of skip-green."""
-    workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-    api_job = _workflow_job(workflow, "api-tests")
-    worker_step = api_job[api_job.index("Worker pytest including PostgreSQL integration (hard gate)"):]
+def test_real_postgresql_worker_integration_environment_is_required() -> None:
+    """A missing PostgreSQL setup must fail CI instead of skip-green."""
+    backend = (ROOT / "scripts/verify-backend-tests.sh").read_text(encoding="utf-8")
 
-    assert 'SOYMUTDB_RUN_POSTGRES_INTEGRATION: "1"' in worker_step
+    # The verifier exports the flag itself, so no caller can forget it and turn
+    # the privacy/identity/assembly matrix into skips.
+    assert "export SOYMUTDB_RUN_POSTGRES_INTEGRATION=1" in backend
+
+    # CNB supplies a real PostgreSQL service next to the API test pipeline.
+    api_pipeline = _cnb_pipeline("verify")
+    assert "postgres:16" in api_pipeline
+    cnb_api_record = (ROOT / ".cnb/pipelines/api.yml").read_text(encoding="utf-8")
+    assert "SOYMUTDB_RUN_POSTGRES_INTEGRATION" in cnb_api_record
+    assert "postgres" in cnb_api_record
 
 
-def test_ci_publish_is_the_only_package_writer_and_loads_verified_artifact() -> None:
+def test_publish_is_the_only_registry_writer_and_loads_verified_artifacts() -> None:
     workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     global_permissions = _top_level_block(workflow, "permissions")
     docker_job = _workflow_job(workflow, "docker-build")
     publish_job = _workflow_job(workflow, "publish-images")
+    golden = (ROOT / "scripts/release-contract.golden.sh").read_text(encoding="utf-8")
 
+    # The verification job holds no registry identity at all.
     assert "packages: write" not in global_permissions
     assert "actions: write" not in global_permissions
-    assert workflow.count("packages: write") == 1
     assert "packages: write" not in docker_job
-    assert "packages: write" in publish_job
     assert "contents: read" in docker_job
     for prerequisite in (
         "frontend",
@@ -204,36 +273,57 @@ def test_ci_publish_is_the_only_package_writer_and_loads_verified_artifact() -> 
     ):
         assert f"- {prerequisite}" in docker_job
 
-    # Image publication waits for both the native multi-platform Docker gates
-    # and the checksum-verified amd64 Kind runtime smoke.
+    # The GitHub mirror still publishes only on main; CNB publishes on its
+    # release pipeline with repository-scoped credentials.
     assert "needs: [docker-build, kubernetes-kind]" in publish_job
-    assert "github.event_name == 'push'" in publish_job
     assert "github.ref == 'refs/heads/main'" in publish_job
-    assert "actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093" in publish_job
+    assert "scripts/release-contract.golden.sh" in publish_job
     assert "validated-runtime-images" in publish_job
     assert "docker build" not in publish_job
     assert "trivy-action" not in publish_job
 
-    checksum_position = publish_job.index("sha256sum -c")
-    load_position = publish_job.index("docker load")
-    id_check_position = publish_job.index("actual_id=")
-    login_position = publish_job.index("Login to GHCR")
-    push_position = publish_job.index("Tag and push validated platform images")
-    assert checksum_position < load_position < id_check_position < login_position < push_position
-    assert workflow.count("docker push") == 1
-    merge_position = publish_job.index("Merge manifests, attest evidence, and write release manifest")
-    upload_position = publish_job.index("Upload signed OCI release contract")
-    assert push_position < merge_position < upload_position
+    checksum_position = golden.index("sha256sum -c")
+    load_position = golden.index("docker load")
+    id_check_position = golden.index("actual_id=")
+    login_position = golden.index("docker login")
+    push_position = golden.index("Tag and push validated platform images")
+    assert (
+        checksum_position
+        < load_position
+        < id_check_position
+        < login_position
+        < push_position
+    )
+    assert workflow.count("docker push") == 0
+    assert golden.count("docker push") == 1
+    merge_position = golden.index("Merge manifests, attest evidence, and write release manifest")
+    contract_upload_position = golden.index("Upload signed OCI release contract")
+    assert push_position < merge_position < contract_upload_position
 
 
-def test_ci_trivy_blocks_unfixed_high_and_critical_findings() -> None:
+def test_trivy_blocks_unfixed_high_and_critical_findings() -> None:
     workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     docker_job = _workflow_job(workflow, "docker-build")
+    verification = (ROOT / "scripts/build-release-image.sh").read_text(encoding="utf-8")
 
-    assert docker_job.count("ignore-unfixed: false") == 4
-    assert "ignore-unfixed: true" not in docker_job
-    assert docker_job.count("severity: CRITICAL,HIGH") == 4
-    assert docker_job.count("exit-code: 1") == 4
+    # The scan policy lives in one script: two call sites (a native trivy binary
+    # and a pinned container fallback) and four per-image invocations.
+    assert "ignore-unfixed=false" in verification
+    assert "ignore-unfixed=true" not in verification
+    assert verification.count("--severity CRITICAL,HIGH") == 2
+    for image_name in ("api", "worker", "mcp", "jbrowse"):
+        assert f'trivy_scan "soymutdb-{image_name}:ci-${{ARCH}}"' in verification
+    assert verification.count('trivy_scan "soymutdb-') == 4
+    assert '--ignorefile .trivyignore' in verification
+    assert "--exit-code 1" in verification
+
+    # The workflow only calls the script; it cannot weaken the policy locally.
+    assert "scripts/build-release-image.sh" in docker_job
+    # The workflow comment references .trivyignore for reviewers, but no scan
+    # policy is configured here — it only exists in the shared script.
+    assert "ignore-unfixed" not in docker_job
+    assert "--severity" not in docker_job
+    assert "trivy image" not in docker_job
 
 
 def test_e2e_uses_minimum_permissions_pinned_actions_and_lockfile_install() -> None:
@@ -304,18 +394,34 @@ def test_clickhouse_density_backfills_project_their_group_key() -> None:
 
 
 def test_pages_deploys_an_explicit_public_demo() -> None:
-    workflow = (ROOT / ".github/workflows/pages.yml").read_text(encoding="utf-8")
-    ci = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    # Environment contracts only; the build/publish mechanics are single-sourced
+    # in scripts/{build,verify}-pages-artifact.sh.
+    publisher = (ROOT / "scripts/build-pages-artifact.sh").read_text(encoding="utf-8")
+    verifier = (ROOT / "scripts/verify-pages-artifact.sh").read_text(encoding="utf-8")
+    ci = _cnb_pipeline("verify")
+    publish_pipeline = _cnb_pipeline("publish", branch="$")
 
-    assert "VITE_DEPLOYMENT_MODE: demo" in ci
-    assert "VITE_BASE_URL: /${{ github.event.repository.name }}/" in ci
-    assert "github.repository_owner" in ci
-    assert "github.event.repository.name }}/api/v1" in ci
-    assert "github.event.repository.name }}/soymutdb-jbrowse/" in ci
-    assert "secrets.API_BASE_URL" not in workflow
-    assert "secrets.JBROWSE_URL" not in workflow
-    assert "secrets.CONTENT_SNAPSHOT_URL" not in workflow
-    assert "@soymutdb/admin build:web" not in workflow
+    assert "VITE_DEPLOYMENT_MODE=demo" in publisher
+    assert "VITE_BASE_URL" in publisher
+    assert "VITE_API_BASE_URL" in publisher
+    assert "VITE_JBROWSE_BASE_URL" in publisher
+    assert "pages-dist/soymutdb-jbrowse" in publisher
+    assert "secrets.API_BASE_URL" not in publisher
+    assert "secrets.JBROWSE_URL" not in publisher
+
+    ci_job = json.loads(ci)
+    assert ci_job["env"]["VITE_DEPLOYMENT_MODE"] == "demo"
+    assert ci_job["env"]["VITE_API_BASE_URL"]
+    assert ci_job["env"]["VITE_JBROWSE_BASE_URL"]
+    # The deployment base path is owned by the build script, so the pipeline
+    # only has to provide the site slug and origin.
+    assert "SOYMUTDB_SITE_SLUG" not in ci
+    assert "PAGES_BASE_PATH" in verifier or "PAGES_BASE_PATH" in publisher
+    assert "@soymutdb/admin build:web" not in ci
+    assert "@soymutdb/admin" not in publish_pipeline
+
+    for artifact in ("index.html", "soymutdb-jbrowse/index.html", "SHA256SUMS"):
+        assert artifact in verifier
 
 
 def test_jbrowse_honors_its_pages_base_path() -> None:
@@ -334,46 +440,52 @@ def test_web_vite_entry_is_not_prefixed_by_deployment_base() -> None:
 
 
 def test_pages_accepts_publication_dispatch_inputs() -> None:
-    workflow = (ROOT / ".github/workflows/pages.yml").read_text(encoding="utf-8")
+    publish_pipeline = _cnb_pipeline("publish", branch="$")
+    verifier = (ROOT / "scripts/verify-pages-artifact.sh").read_text(encoding="utf-8")
 
-    assert "publication_id:" in workflow
-    assert "artifact_url:" in workflow
-    assert "manifest_digest:" in workflow
-    assert "inputs.publication_id" in workflow
-    assert "inputs.artifact_url" in workflow
-    assert "inputs.manifest_digest" in workflow
+    for variable in ("PUBLICATION_ID", "ARTIFACT_URL", "MANIFEST_DIGEST"):
+        assert variable in verifier
+    # The publication pipeline stays artifact-driven; it never rebuilds.
+    assert "verify-pages-artifact.sh" in publish_pipeline
+    assert "build-pages-artifact.sh" not in publish_pipeline
+    assert "pnpm" not in publish_pipeline
 
 
 def test_pages_verifies_digest_before_ref_update() -> None:
-    workflow = (ROOT / ".github/workflows/pages.yml").read_text(encoding="utf-8")
+    pipeline = _cnb_pipeline("publish", branch="$")
+    verifier = (ROOT / "scripts/verify-pages-artifact.sh").read_text(encoding="utf-8")
 
-    assert "sha256sum -c -" in workflow
-    assert '"$MANIFEST_DIGEST' in workflow
-    # Digest verification must run BEFORE the gh-pages ref update.
-    assert workflow.index("Verify immutable artifact digest") < workflow.index(
-        "Deploy all apps to pages"
-    )
+    assert "MANIFEST_DIGEST" in verifier
+    # The digest check happens before any extraction or publication step.
+    assert verifier.index("MANIFEST_DIGEST") < verifier.index("tar -xzf")
+    assert "sha256sum -c SHA256SUMS" in verifier
+    # The publication pipeline runs the verifier before staging anything.
+    assert "verify-pages-artifact.sh" in pipeline
+    assert "build-pages-artifact.sh" not in pipeline
 
 
-def test_pages_publishes_the_exact_ci_static_tree_without_rebuilding() -> None:
-    """The Pages workflow must deploy CI's bytes, not rebuild source later."""
-    ci = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-    workflow = (ROOT / ".github/workflows/pages.yml").read_text(encoding="utf-8")
+def test_pages_publishes_the_exact_verified_static_tree_without_rebuilding() -> None:
+    """Publication must deploy verified bytes, not rebuild source later."""
+    verifier = (ROOT / "scripts/verify-pages-artifact.sh").read_text(encoding="utf-8")
+    pages = (ROOT / "scripts/build-pages-artifact.sh").read_text(encoding="utf-8")
+    pipeline = _cnb_pipeline("verify")
+    publisher = _cnb_pipeline("publish", branch="$")
 
-    assert "Build GitHub Pages demo artifact (deploy input)" in ci
-    assert "pages-demo-dist" in ci
-    assert "test -f pages-dist/SHA256SUMS" in ci
-    assert "Upload GitHub Pages demo artifact" in ci
+    assert "pages-dist" in pages
+    assert "SHA256SUMS" in pages
+    assert "sha256sum -c SHA256SUMS" in verifier
+    # The verify pipeline builds, self-verifies, and uploads the artifact under
+    # the name the publication pipeline consumes.
+    verify_job = json.loads(_cnb_pipeline("verify"))
+    verify_text = json.dumps(verify_job)
+    assert "pages-demo-dist" in verify_text
+    assert "verify-pages-artifact.sh" in verify_text
+    assert "Upload GitHub Pages demo artifact" in verify_text
 
-    assert "actions: read" in workflow
-    assert "Download CI-verified Pages artifact" in workflow
-    assert 'gh run download "$CI_RUN_ID"' in workflow
-    assert "pages-demo-dist" in workflow
-    assert "Verify exact Pages artifact tree" in workflow
-    assert "sha256sum -c SHA256SUMS" in workflow
-    assert "Verify deployed Pages tree is byte-identical" in workflow
-
-    deploy_job = _workflow_job(workflow, "deploy")
-    assert "pnpm install" not in deploy_job
-    assert "pnpm --filter @soymutdb/web build" not in deploy_job
-    assert "pnpm --filter @soymutdb/jbrowse build" not in deploy_job
+    # Publication consumes the artifact; it never installs a JS toolchain, never
+    # rebuilds the web bundle, and never runs the build script.
+    assert "pnpm install" not in publisher
+    assert "pnpm --filter @soymutdb/web build" not in publisher
+    assert "pnpm --filter @soymutdb/jbrowse build" not in publisher
+    assert "verify-pages-artifact.sh" in publisher
+    assert "build-pages-artifact.sh" not in publisher
