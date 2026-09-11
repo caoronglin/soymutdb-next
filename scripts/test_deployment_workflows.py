@@ -445,8 +445,13 @@ def test_pages_accepts_publication_dispatch_inputs() -> None:
 
     for variable in ("PUBLICATION_ID", "ARTIFACT_URL", "MANIFEST_DIGEST"):
         assert variable in verifier
-    # The publication pipeline stays artifact-driven; it never rebuilds.
-    assert "verify-pages-artifact.sh" in publish_pipeline
+    # The publication pipeline stays artifact-driven; it never rebuilds. It
+    # delegates to scripts/stage-pages-publication.sh, which is the single place
+    # that invokes the verifier (the stage body itself must be a plain
+    # `bash <script>` call: CNB executes it with `sh`).
+    assert "stage-pages-publication.sh" in publish_pipeline
+    stage = (ROOT / "scripts/stage-pages-publication.sh").read_text(encoding="utf-8")
+    assert "verify-pages-artifact.sh" in stage
     assert "build-pages-artifact.sh" not in publish_pipeline
     assert "pnpm" not in publish_pipeline
 
@@ -459,8 +464,12 @@ def test_pages_verifies_digest_before_ref_update() -> None:
     # The digest check happens before any extraction or publication step.
     assert verifier.index("MANIFEST_DIGEST") < verifier.index("tar -xzf")
     assert "sha256sum -c SHA256SUMS" in verifier
-    # The publication pipeline runs the verifier before staging anything.
-    assert "verify-pages-artifact.sh" in pipeline
+    # The publication pipeline runs the verifier before staging anything:
+    # `verify` is the first stage, and staging happens in the same script only
+    # after verify-pages-artifact.sh has succeeded.
+    assert "stage-pages-publication.sh verify" in pipeline
+    stage = (ROOT / "scripts/stage-pages-publication.sh").read_text(encoding="utf-8")
+    assert stage.index("verify-pages-artifact.sh") < stage.index("cp -a")
     assert "build-pages-artifact.sh" not in pipeline
 
 
@@ -487,5 +496,5 @@ def test_pages_publishes_the_exact_verified_static_tree_without_rebuilding() -> 
     assert "pnpm install" not in publisher
     assert "pnpm --filter @soymutdb/web build" not in publisher
     assert "pnpm --filter @soymutdb/jbrowse build" not in publisher
-    assert "verify-pages-artifact.sh" in publisher
+    assert "stage-pages-publication.sh" in publisher
     assert "build-pages-artifact.sh" not in publisher

@@ -49,13 +49,7 @@ main:
       stages:
         - name: Setup workspace with cache
           image: node:24.19.0
-          script: |
-            set -euo pipefail
-            corepack enable
-            corepack prepare pnpm@11.21.0 --activate
-            pnpm config set store-dir /cache/pnpm-store
-            pnpm config set registry https://registry.npmjs.org/
-            pnpm install --frozen-lockfile
+          script: bash scripts/setup-workspace.sh
           volumes:
             - /cache/pnpm-store:/cache/pnpm-store
         - name: Frontend verification
@@ -84,13 +78,7 @@ main:
       stages:
         - name: Setup workspace with cache
           image: node:24.19.0
-          script: |
-            set -euo pipefail
-            corepack enable
-            corepack prepare pnpm@11.21.0 --activate
-            pnpm config set store-dir /cache/pnpm-store
-            pnpm config set registry https://registry.npmjs.org/
-            pnpm install --frozen-lockfile
+          script: bash scripts/setup-workspace.sh
           volumes:
             - /cache/pnpm-store:/cache/pnpm-store
         - name: Frontend verification
@@ -106,10 +94,9 @@ main:
           script: bash scripts/ci-job-steps.sh run dependency-governance
         - name: Build the checksummed Pages artifact
           image: node:24.19.0
-          script: |
-            set -euo pipefail
-            bash scripts/build-pages-artifact.sh
-            bash scripts/verify-pages-artifact.sh pages-dist
+          # Both scripts carry a bash shebang; invoking them directly keeps the
+          # interpreter out of the platform's default `sh`.
+          script: bash scripts/build-pages-artifact.sh && bash scripts/verify-pages-artifact.sh pages-dist
         - name: Upload GitHub Pages demo artifact
           image: cnbcool/artifact
           settings:
@@ -128,8 +115,11 @@ main:
       stages:
         # A real ClickHouse server is required: the legacy fixture migration and
         # its idempotence proof are hard gates, not simulated.
+        # Python 3.14 to match PYTHON_VERSION: the migration script and its
+        # assertions run on the same interpreter as the rest of the delivery
+        # chain, so a 3.12-only drift cannot hide here.
         - name: Migrate the legacy ClickHouse fixture
-          image: python:3.12
+          image: python:3.14
           services:
             - docker
           script: bash scripts/ci-job-steps.sh run clickhouse-migration
@@ -201,17 +191,10 @@ main:
       stages:
         - name: Install Playwright browsers
           image: node:24.19.0
-          script: |
-            set -euo pipefail
-            cd e2e
-            npm ci
-            npx playwright install --with-deps chromium
+          script: bash -c 'cd e2e && npm ci && npx playwright install --with-deps chromium'
         - name: Run online smoke tests
           image: node:24.19.0
-          script: |
-            set -euo pipefail
-            cd e2e
-            CI=1 npx playwright test
+          script: bash -c 'cd e2e && CI=1 npx playwright test'
       failStages:
         - name: Upload smoke failure artifacts
           image: cnbcool/artifact
@@ -253,9 +236,19 @@ $:
       runner:
         cpus: 4
       stages:
-        - name: Verify the CI-built artifact before publication
+        # verify + stage: the stage body stays a single `bash <script>` call so
+        # the platform's default `sh` never interprets it.
+        - name: Verify and stage the CI-built artifact before publication
           image: .cnb/env/Dockerfile.build-tools
-          script: bash scripts/verify-pages-artifact.sh pages-dist
+          script: bash scripts/stage-pages-publication.sh verify
+          env:
+            PAGES_ARTIFACT_DIR: pages-dist
+            PAGES_PUBLISH_DIR: pages-publish
+        - name: Hand the verified tree to the publication adapter
+          image: .cnb/env/Dockerfile.build-tools
+          script: bash scripts/stage-pages-publication.sh publish
+          env:
+            PAGES_PUBLISH_DIR: pages-publish
       endStages:
         - name: Upload verified publication tree
           image: cnbcool/artifact
@@ -283,7 +276,13 @@ $:
           image: .cnb/env/Dockerfile.build-tools
           services:
             - docker
-          script: RELEASE_TAG="$CNB_BRANCH" bash scripts/ci-job-steps.sh run release
+          # RELEASE_TAG is injected through the stage environment rather than
+          # prefixed inline, so the stage body stays a plain `bash <script>`
+          # invocation that cannot pick up the platform's default shell.
+          # On tag_push, CNB_BRANCH holds the tag name.
+          env:
+            RELEASE_TAG: $CNB_BRANCH
+          script: bash scripts/ci-job-steps.sh run release
       endStages:
         - name: Upload signed tagged release contract
           image: cnbcool/artifact
@@ -305,13 +304,7 @@ $:
       stages:
         - name: Setup workspace with cache
           image: node:24.19.0
-          script: |
-            set -euo pipefail
-            corepack enable
-            corepack prepare pnpm@11.21.0 --activate
-            pnpm config set store-dir /cache/pnpm-store
-            pnpm config set registry https://registry.npmjs.org/
-            pnpm install --frozen-lockfile
+          script: bash scripts/setup-workspace.sh
           volumes:
             - /cache/pnpm-store:/cache/pnpm-store
         - name: Frontend verification
@@ -374,9 +367,19 @@ $:
       runner:
         cpus: 4
       stages:
-        - name: Verify the CI-built artifact before publication
+        # verify + stage: the stage body stays a single `bash <script>` call so
+        # the platform's default `sh` never interprets it.
+        - name: Verify and stage the CI-built artifact before publication
           image: .cnb/env/Dockerfile.build-tools
-          script: bash scripts/verify-pages-artifact.sh pages-dist
+          script: bash scripts/stage-pages-publication.sh verify
+          env:
+            PAGES_ARTIFACT_DIR: pages-dist
+            PAGES_PUBLISH_DIR: pages-publish
+        - name: Hand the verified tree to the publication adapter
+          image: .cnb/env/Dockerfile.build-tools
+          script: bash scripts/stage-pages-publication.sh publish
+          env:
+            PAGES_PUBLISH_DIR: pages-publish
       endStages:
         - name: Upload verified publication tree
           image: cnbcool/artifact

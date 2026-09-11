@@ -22,7 +22,9 @@
 #   bash scripts/release-contract.golden.sh
 #
 # Env (all optional unless noted):
-#   RELEASE_TAG            release tag (default: UTC date + short revision)
+#   RELEASE_TAG            release tag. The tag_push CNB pipeline injects
+#                          CNB_BRANCH (the tag name) here; otherwise it defaults
+#                          to the UTC date plus the short revision.
 #   RELEASE_REGISTRY       registry host (default: ${CNB_DOCKER_REGISTRY:-ghcr.io})
 #   RELEASE_REGISTRY_OWNER registry namespace (default: repository owner)
 #   RELEASE_SKIP_SIGNING   1 to skip cosign (contract-only dry run)

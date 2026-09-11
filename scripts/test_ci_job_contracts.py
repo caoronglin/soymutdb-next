@@ -34,6 +34,8 @@ LEGACY_WORKFLOWS = (
 
 SHARED_SCRIPTS = (
     "scripts/ci-job-steps.sh",
+    "scripts/setup-workspace.sh",
+    "scripts/stage-pages-publication.sh",
     "scripts/verify-frontend-artifacts.sh",
     "scripts/verify-backend-tests.sh",
     "scripts/build-static-apps.sh",
@@ -71,6 +73,25 @@ def _pipeline_names(branch: str, event: str) -> set[str]:
 
 def _cnb_text() -> str:
     return CNB_CONFIG.read_text(encoding="utf-8")
+
+
+def _iter_script_bodies(node: object, path: str = ""):
+    """Yield (location, body) for every `script:` value, at any nesting depth."""
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key == "script" and isinstance(value, str):
+                yield path, value
+            else:
+                yield from _iter_script_bodies(value, f"{path}/{key}")
+    elif isinstance(node, list):
+        for index, value in enumerate(node):
+            yield from _iter_script_bodies(value, f"{path}[{index}]")
+
+
+def _cnb_config_files() -> tuple[Path, ...]:
+    return (CNB_CONFIG, *sorted((ROOT / ".cnb").glob("*.yml"))) + tuple(
+        ROOT / name for name in PIPELINE_FILES
+    )
 
 
 def _workflow_text(name: str) -> str:
@@ -230,10 +251,18 @@ class DeliveryArchitectureTests(unittest.TestCase):
 
         cnb = _cnb_text()
         self.assertIn(f"node:{NODE_VERSION}", cnb)
-        self.assertIn(f"pnpm@{PNPM_VERSION}", cnb)
         self.assertIn(f"python:{PYTHON_VERSION}", cnb)
-        for stale in ("node:20", "node:22", "pnpm@10"):
+        for stale in ("node:20", "node:22", "pnpm@10", "python:3.12"):
             self.assertNotIn(stale, cnb, stale)
+
+        # The pnpm version is no longer inlined into every CNB stage: the
+        # workspace bootstrap lives in scripts/setup-workspace.sh, which reads
+        # the same pin. Assert it wherever it actually lives, and assert that
+        # .cnb.yml cannot silently pick a different one.
+        for provider_config in (ROOT / "scripts/setup-workspace.sh",):
+            text = provider_config.read_text(encoding="utf-8")
+            self.assertIn(f'PNPM_VERSION="${{SOYMUTDB_CI_PNPM_VERSION:-{PNPM_VERSION}}}"', text)
+        self.assertNotIn("corepack prepare pnpm@", cnb)
 
         shared = (ROOT / "scripts/ci-job-steps.sh").read_text(encoding="utf-8")
         self.assertIn(f'NODE_VERSION="${{SOYMUTDB_CI_NODE_VERSION:-{NODE_VERSION}}}"', shared)
@@ -298,6 +327,161 @@ class DeliveryArchitectureTests(unittest.TestCase):
         # exported image architecture is natively proven, never emulated.
         self.assertNotIn("tags", amd64.get("runner", {}))
         self.assertEqual(arm64["runner"]["tags"], "cnb:arch:arm64:v8")
+
+    # -------------------------------------------------------------------------
+    # Stage shell
+    # -------------------------------------------------------------------------
+    # Regression guard. A CNB stage body is executed with `sh`; on the platform
+    # base images that is dash, which rejects `set -o pipefail`:
+    #
+    #   sh: 1: set: Illegal option -o pipefail   → exit 2, stage error
+    #
+    # The very first real CNB build of this pipeline died in "Setup workspace
+    # with cache" for exactly that reason. `python3 -m compileall` does not
+    # catch it, `yaml.safe_load` does not catch it, and the CNB validator does
+    # not catch it: the only place it surfaces is a paid, remote build. These
+    # tests make it surface locally instead.
+
+    def test_stage_scripts_never_rely_on_the_platform_shell(self) -> None:
+        """Every CNB stage body must pin its interpreter to bash."""
+        bashisms = (
+            "set -o pipefail",
+            "set -euo pipefail",
+            "set -uo pipefail",
+        )
+        offenders = []
+        for config in _cnb_config_files():
+            document = yaml.safe_load(config.read_text(encoding="utf-8"))
+            for location, body in _iter_script_bodies(document):
+                # A stage body is a single command line handed to `sh`. Either it
+                # is a multiline block (whose first line decides the syntax that
+                # `sh` must parse), or a one-liner that must itself start with an
+                # explicit interpreter.
+                first_line = body.strip().splitlines()[0].strip()
+                if any(bashism in body for bashism in bashisms) and not first_line.startswith(
+                    ("bash", "./")
+                ):
+                    offenders.append(f"{config.name}:{location}: {first_line[:80]}")
+                # Multiline blocks are parsed by `sh` line by line, so any bashism
+                # anywhere in an un-pinned block is fatal regardless of the first
+                # line.
+                if len(body.strip().splitlines()) > 1 and not first_line.startswith(
+                    ("bash", "./")
+                ):
+                    for line in body.splitlines():
+                        stripped = line.strip()
+                        for pattern in (
+                            "[[ ",
+                            "]]",
+                            "source ",
+                            "set -o ",
+                            "pipefail",
+                        ):
+                            if stripped.startswith(pattern) or pattern in stripped:
+                                offenders.append(
+                                    f"{config.name}:{location}: {stripped[:80]}"
+                                )
+                                break
+        self.assertEqual(offenders, [], "stage bodies must pin bash:\n" + "\n".join(offenders))
+
+    def test_sh_does_not_catch_the_original_bug_so_we_parse_instead(self) -> None:
+        """Document why the guard above is a static check, not `sh -n`.
+
+        `sh -n` (syntax-only) accepts `set -euo pipefail`: the option is only
+        rejected at *runtime*, because dash resolves `set -o <name>` when the
+        builtin executes. Relying on `sh -n` would therefore have shipped the
+        exact failure that took down the first real CNB build. This test pins
+        that knowledge so nobody "simplifies" the guard into a no-op.
+        """
+        body = "set -euo pipefail\ncorepack enable\n"
+
+        syntax_only = subprocess.run(
+            ["sh", "-n"], input=body, capture_output=True, text=True
+        )
+        self.assertEqual(
+            syntax_only.returncode,
+            0,
+            "`sh -n` unexpectedly rejects pipefail; the static guard could be simplified",
+        )
+
+        executed = subprocess.run(["sh"], input=body, capture_output=True, text=True)
+        self.assertNotEqual(executed.returncode, 0)
+        self.assertIn("Illegal option", executed.stderr)
+
+    def test_every_cnb_stage_script_target_exists_on_disk(self) -> None:
+        """No stage may reference a script that is not in the repository."""
+        missing = []
+        for config in _cnb_config_files():
+            document = yaml.safe_load(config.read_text(encoding="utf-8"))
+            for location, body in _iter_script_bodies(document):
+                for referenced in re.findall(r"scripts/([\w./-]+\.(?:sh|py))", body):
+                    if not (ROOT / "scripts" / referenced).is_file():
+                        missing.append(f"{config.name}:{location}: scripts/{referenced}")
+        self.assertEqual(missing, [], "stage bodies reference missing scripts:\n" + "\n".join(missing))
+
+    def test_cnb_toolchain_pins_are_actually_in_sync(self) -> None:
+        """Run the repository guard that keeps NODE_VERSION from desyncing.
+
+        `.nvmrc` and `.node-version` are read by different toolchains, so they
+        must both equal NODE_VERSION. They had already drifted apart while this
+        test was written, which is why the assertion lives in code and not in a
+        reviewer's checklist.
+        """
+        check = ROOT / "scripts/check-toolchain-pins.py"
+        self.assertTrue(check.is_file(), "missing scripts/check-toolchain-pins.py")
+        result = subprocess.run(
+            ["python3", str(check)],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_cnb_env_helpers_referenced_by_cnb_yml_exist(self) -> None:
+        """.cnb.yml must not point at files that were never committed.
+
+        `image: .cnb/env/Dockerfile.build-tools` and the release `imports:` URL
+        are both load-bearing: a missing Dockerfile fails the job, and a missing
+        import URL can fail config resolution before any stage starts.
+        """
+        text = _cnb_text()
+        self.assertTrue(
+            (ROOT / ".cnb/env/Dockerfile.build-tools").is_file(),
+            ".cnb.yml builds .cnb/env/Dockerfile.build-tools but it is not committed",
+        )
+        self.assertTrue(
+            (ROOT / ".cnb/env/release.yml").is_file(),
+            ".cnb.yml imports .cnb/env/release.yml but it is not committed",
+        )
+        for referenced in re.findall(r"\.cnb/env/([\w.-]+)", text):
+            self.assertTrue(
+                (ROOT / ".cnb/env" / referenced).is_file(),
+                f".cnb.yml references missing .cnb/env/{referenced}",
+            )
+
+    def test_ci_job_steps_only_advertises_commands_it_implements(self) -> None:
+        """No documented entry point may be left undeclared.
+
+        `emit github|cnb` used to be documented in the usage text and dispatched
+        to scripts/emit-ci-pipeline.py, which was never committed. The command
+        was removed; this test keeps a future usage string honest.
+        """
+        steps = ROOT / "scripts/ci-job-steps.sh"
+        text = steps.read_text(encoding="utf-8")
+        self.assertNotIn("emit-ci-pipeline.py", text)
+        for documented in ("list", "run"):
+            self.assertIn(documented, text, documented)
+
+        # Anything the usage text documents must be a real case label.
+        usage = re.search(r"Commands:\n(.*?)\nJobs:", text, re.S)
+        self.assertIsNotNone(usage, "usage block not found")
+        documented_commands = set(re.findall(r"^\s{2}(\w+)", usage.group(1), re.M))
+        implemented = set(re.findall(r"^\s{4}(\w+[\w-]*)\)", text, re.M))
+        self.assertLessEqual(
+            documented_commands,
+            implemented,
+            f"documented but not implemented: {documented_commands - implemented}",
+        )
 
     def test_smoke_profiles_cover_every_layer_and_never_fake_a_pass(self) -> None:
         smoke = (ROOT / "scripts/smoke.sh").read_text(encoding="utf-8")

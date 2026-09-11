@@ -10,47 +10,33 @@
 #
 # Secrets (configure in the CNB UI, never in the repository):
 #   $SOYMUTDB_RELEASE_COSIGN_KEY  optional offline cosign key
-#   $SOYMUTDB_OIDC_ISSUER         OIDC issuer to verify against (defaults to the
-#                                 GitHub Actions issuer for mirror parity)
-# =============================================================================
-name: SoyMutDB release
+#   $SOYMUTDB_OIDC_ISSUER         OIDC issuer to verify against
+#
+# The release job body lives once, in scripts/release-contract.golden.sh: it
+# resolves the verified per-architecture packages, logs into the registry,
+# merges the manifest, signs keylessly through the pipeline OIDC identity, emits
+# SLSA + SPDX attestations and writes the checksummed release contract. It
+# installs (and checksum-verifies) cosign itself. Re-inlining any part of that
+# sequence here would fork the release definition away from the script both
+# providers run, which scripts/test_ci_job_contracts.py fails on.
+#
+# Signing identity
+#   Signing is keyless: the Sigstore identity is minted from this pipeline's
+#   OIDC token, so no long-lived signing key is stored in the repository. The
+#   resulting attestations carry the CNB pipeline identity as their provenance
+#   subject, which is what makes the release verifiable after the fact. Setting
+#   $SOYMUTDB_RELEASE_COSIGN_KEY switches to an offline cosign key for
+#   environments without OIDC; see .cnb/examples/release-secrets.example.yml.
 
 env:
   RELEASE_OUTPUT_DIR: release-contract
-  VALIDATED_ROOT: validated-platforms
 
 stages:
-  - name: Prepare release identity
-    script: |
-      set -euo pipefail
-      test -d "$VALIDATED_ROOT/validated-runtime-images-amd64"
-      test -d "$VALIDATED_ROOT/validated-runtime-images-arm64"
-
-  - name: Install signing toolchain
-    script: |
-      set -euo pipefail
-      # Keyless signing: cosign obtains a short-lived certificate from the
-      # pipeline's OIDC identity. The installer is pinned by version and its
-      # release archive is checksum-verified before use.
-      curl --fail --silent --show-error --location \
-        -o /tmp/cosign \
-        "https://github.com/sigstore/cosign/releases/download/v2.4.1/cosign-linux-amd64"
-      curl --fail --silent --show-error --location \
-        -o /tmp/cosign_checksums.txt \
-        "https://github.com/sigstore/cosign/releases/download/v2.4.1/cosign_checksums.txt"
-      grep ' cosign-linux-amd64$' /tmp/cosign_checksums.txt | \
-        sed 's/cosign-linux-amd64/\/tmp\/cosign/' | sha256sum -c -
-      install -m 0755 /tmp/cosign /usr/local/bin/cosign
-      cosign version
-
   - name: Publish signed multi-architecture release
-    script: |
-      set -euo pipefail
-      # The script performs registry login, per-platform push, manifest merge,
-      # keyless signing, SLSA + SPDX attestation, verification, and the
-      # checksummed release-contract output. It refuses to run when either
-      # platform package is missing or fails its checksums.
-      bash scripts/release-contract.golden.sh
+    # A CNB stage body is executed with `sh`, which rejects bash-only syntax.
+    # Pinning the interpreter here keeps the stage runnable regardless of the
+    # platform default. See docs/ops/ci-cd.md, "Stage shell".
+    script: bash scripts/release-contract.golden.sh
 
   - name: Upload signed OCI release contract
     image: cnbcool/artifact

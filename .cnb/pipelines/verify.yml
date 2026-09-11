@@ -16,19 +16,7 @@ env:
 stages:
 - name: Setup workspace with cache
   image: node:24.19.0
-  script: 'set -euo pipefail
-
-    corepack enable
-
-    corepack prepare pnpm@11.21.0 --activate
-
-    pnpm config set store-dir /cache/pnpm-store
-
-    pnpm config set registry https://registry.npmjs.org/
-
-    pnpm install --frozen-lockfile
-
-    '
+  script: bash scripts/setup-workspace.sh
   volumes:
   - /cache/pnpm-store:/cache/pnpm-store
 - name: Frontend verification
@@ -44,13 +32,7 @@ stages:
   script: bash scripts/ci-job-steps.sh run dependency-governance
 - name: Build the checksummed Pages artifact
   image: node:24.19.0
-  script: 'set -euo pipefail
-
-    bash scripts/build-pages-artifact.sh
-
-    bash scripts/verify-pages-artifact.sh pages-dist
-
-    '
+  script: bash scripts/build-pages-artifact.sh && bash scripts/verify-pages-artifact.sh pages-dist
 - name: Upload GitHub Pages demo artifact
   image: cnbcool/artifact
   settings:

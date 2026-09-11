@@ -55,8 +55,51 @@
 3. **专用构建环境镜像** `.cnb/env/Dockerfile.build-tools`：docker CLI + bash/curl/jq/
    python3 预装，消除每次 `apk add` 的时间与不确定性。
 4. **手动触发按钮** `.cnb/web_trigger.yml`：验证 / 镜像构建 / 发布 / 站点发布。
-5. **契约测试** `scripts/test_ci_job_contracts.py`（18 用例）：工具链固定一致性、
-   PR 不得持有发布凭据、镜像校验与发布分离、逻辑不得被内联回 YAML。
+5. **契约测试** `scripts/test_ci_job_contracts.py`：工具链固定一致性、PR 不得持有
+   发布凭据、镜像校验与发布分离、逻辑不得被内联回 YAML，以及 stage 解释器固定。
+6. **工作区引导脚本** `scripts/setup-workspace.sh`：corepack + pnpm install 单点声明，
+   替代 3 份重复的内联 stage 体。
+7. **静态发布暂存脚本** `scripts/stage-pages-publication.sh`：校验 + 字节级暂存 +
+   adapter 发布，替代 `pages-publish.yml` 里的内联 bash。
+8. **工具链守门** `scripts/check-toolchain-pins.py`：可直接运行（也接 pre-commit），
+   校验 `.nvmrc` / `.node-version` / `package.json` / 脚本默认值互相一致。
+
+## 4.1 首次真实 CNB 构建的修复（平台实测）
+
+第一次真实 CNB 构建在 `Setup workspace with cache` 直接失败：
+
+```
+sh: 1: set: Illegal option -o pipefail
+任务执行失败，返回码：2, signal: -1
+```
+
+根因是 CNB 用 `sh`（Debian 系为 dash）执行 stage 脚本，而 dash 在**运行期**拒绝
+`set -o pipefail`。这一节记录的是修复，而不是"改成 `set -e` 绕过"：
+
+| 问题 | 修复 |
+| --- | --- |
+| stage 体内联 `set -euo pipefail` | 抽成 `scripts/setup-workspace.sh`，stage 体改为 `bash scripts/setup-workspace.sh` |
+| 其余内联多行 stage 体 | 一律收敛为 `bash <script>` / `bash -c '...'` 单行调用 |
+| `RELEASE_TAG="$CNB_BRANCH" bash ...` 前缀写法 | 改为 stage `env:` 注入，stage 体保持纯 `bash` 调用 |
+| `verify-pages-artifact.sh` 只在 stage 里出现 | 抽成 `scripts/stage-pages-publication.sh verify\|publish` |
+| 契约测试未覆盖 stage 解释器 | 新增静态检查 + 回归测试（见下） |
+| `scripts/ci-job-steps.sh emit` 调用未提交的 `emit-ci-pipeline.py` | 删除该命令与相关文档，契约测试锁定"文档命令均已实现" |
+| `.cnb/env/Dockerfile.build-tools`、`.cnb/env/release.yml` 被引用但未提交 | 补齐两个文件，契约测试锁定 `.cnb/env/` 引用必须存在 |
+| `.nvmrc` 与 `.node-version` 已漂移 | 同步为 24.19.0，并新增 `scripts/check-toolchain-pins.py` |
+| `.cnb.yml` 里 ClickHouse 用 `python:3.12`，其余链路 3.14 | 统一为 3.14，契约测试把 `python:3.12` 列为过期 tag |
+
+关键点：**`sh -n` 抓不到这个 bug**（`set -o pipefail` 只在运行期被拒绝），所以守门
+必须是静态检查，而不是"本地跑一遍 stage 体"。契约测试里专门有一个用例把这个事实
+固定下来，防止有人把检查简化成空操作。
+
+新增/加固的契约用例（`scripts/test_ci_job_contracts.py`，24 passed）：
+
+* `test_stage_scripts_never_rely_on_the_platform_shell`：逐 stage 静态检查解释器
+* `test_sh_does_not_catch_the_original_bug_so_we_parse_instead`：固定上述事实
+* `test_every_cnb_stage_script_target_exists_on_disk`：stage 不得引用不存在的脚本
+* `test_cnb_env_helpers_referenced_by_cnb_yml_exist`：`.cnb/env/*` 引用必须存在
+* `test_ci_job_steps_only_advertises_commands_it_implements`：文档命令必须已实现
+* `test_cnb_toolchain_pins_are_actually_in_sync`：直接跑工具链守门
 
 ## 5. 验证证据
 

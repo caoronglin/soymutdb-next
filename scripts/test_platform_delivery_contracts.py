@@ -93,8 +93,18 @@ def test_node_and_pnpm_toolchain_is_exact_in_jobs_that_build_assets() -> None:
     )
     assert "pnpm install" not in deploy_job
     assert "pnpm --filter" not in deploy_job
-    assert "verify-pages-artifact.sh" in deploy_job
-    for script in ("scripts/build-pages-artifact.sh", "scripts/verify-pages-artifact.sh"):
+    # The publisher delegates to scripts/stage-pages-publication.sh, which is the
+    # single place that runs the verifier. Keeping the verifier call inside a
+    # script (rather than in the stage body) is also what makes the stage
+    # shell-independent: CNB executes a stage body with `sh`.
+    assert "stage-pages-publication.sh" in deploy_job
+    stage = (ROOT / "scripts/stage-pages-publication.sh").read_text(encoding="utf-8")
+    assert "verify-pages-artifact.sh" in stage
+    for script in (
+        "scripts/build-pages-artifact.sh",
+        "scripts/verify-pages-artifact.sh",
+        "scripts/stage-pages-publication.sh",
+    ):
         assert (ROOT / script).is_file(), script
 
     ci_text = _plain(next(p for p in pages["main"]["push"] if p["name"] == "verify"))
@@ -454,10 +464,33 @@ def test_release_signing_is_keyless_and_job_scoped() -> None:
     # the publishing pipeline, and the cosign installer is SHA-pinned there.
     installer = re.search(
         r"cosign-installer@(?P<revision>\S+)",
-        publish_job + (ROOT / ".cnb/pipelines/release.yml").read_text(encoding="utf-8"),
+        publish_job,
     )
-    assert installer is not None
+    assert installer is not None, "the GitHub publish job must pin cosign-installer"
     assert re.fullmatch(r"[0-9a-f]{40}", installer.group("revision"))
+
+    # The CNB release pipeline does not inline a cosign installer: it delegates
+    # to the golden script, which installs cosign itself and verifies the
+    # download against the published checksums before executing it. That is
+    # strictly stronger than trusting a floating action tag, but only if the
+    # checksum verification actually happens — so assert it.
+    release_pipeline = yaml.safe_load(
+        (ROOT / ".cnb/pipelines/release.yml").read_text(encoding="utf-8")
+    )
+    release_scripts = [
+        stage["script"]
+        for stage in release_pipeline["stages"]
+        if "script" in stage
+    ]
+    joined = "\n".join(release_scripts)
+    # Assert on executable stage bodies, not comments: a `cosign` mention in the
+    # explanatory header is fine, an inlined installer is not.
+    assert "cosign" not in joined, (
+        "the CNB release pipeline must not inline cosign; "
+        "scripts/release-contract.golden.sh owns the signing toolchain"
+    )
+    assert "release-contract.golden.sh" in joined
+    assert "sha256sum -c" in golden or "cosign_checksums" in golden
     for command in (
         "cosign sign --yes",
         "cosign attest --yes --type slsaprovenance",

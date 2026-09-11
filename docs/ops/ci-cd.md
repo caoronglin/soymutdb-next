@@ -22,7 +22,8 @@
 .cnb/pipelines/*.yml             各流水线的可评审记录（verify/api/docker-images/…）
 .cnb/web_trigger.yml             手动按钮
 .cnb/env/                        构建环境镜像 + 凭据引用
-scripts/ci-job-steps.sh          任务体：run <job> / list / emit
+scripts/setup-workspace.sh       工作区引导（corepack + pnpm install），每个 stage 复用
+scripts/ci-job-steps.sh          任务体：list / run <job>
 scripts/verify-frontend-artifacts.sh
 scripts/verify-backend-tests.sh
 scripts/build-static-apps.sh
@@ -30,10 +31,33 @@ scripts/build-release-image.sh   构建 → 冒烟 → 扫描 → SBOM → 导�
 scripts/release-contract.golden.sh 合并 → 签名 → attestation → 发布
 scripts/build-pages-artifact.sh  静态站点构建
 scripts/verify-pages-artifact.sh 发布前字节级校验
+scripts/stage-pages-publication.sh 校验 + 暂存待发布静态树
 scripts/mcp-transport-smoke.sh   MCP 鉴权传输冒烟
 scripts/assert-clickhouse-migration.py
+scripts/check-toolchain-pins.py  工具链固定版本一致性守门
 scripts/smoke.sh                 统一冒烟入口（5 个 layer）
 ```
+
+### Stage shell：CNB 用 `sh` 执行 stage 脚本
+
+CNB stage 的 `script` 由 `sh` 执行（Debian 系为 dash）。dash **在运行期**拒绝
+`set -o pipefail`：
+
+```
+sh: 1: set: Illegal option -o pipefail     # 退出码 2，stage 直接失败
+```
+
+注意 `sh -n`（仅语法检查）**不会**报错——所以这条路径靠"本地先跑一遍"是发现不了
+的。规则只有两条：
+
+1. **配置里不写 shell 逻辑**。stage 体一律是 `bash scripts/<name>.sh [args]`
+   的单行调用，解释器由脚本 shebang 决定，与平台默认 shell 无关。
+2. **需要逻辑就加脚本**。`scripts/setup-workspace.sh` 就是这么来的：同一段
+   引导逻辑要在 3 个 stage 里重复，抽成脚本后既消除了重复，也让 shell 变得确定。
+
+`scripts/test_ci_job_contracts.py` 会逐个 stage 静态检查：任何未以 `bash`/`./`
+开头的多行脚本体、或任何包含 bashism 的未固定解释器的脚本体都会直接失败。
+回归测试同时固定了"`sh -n` 抓不到这个问题"这一事实，防止有人把守门简化成空操作。
 
 ## 3. 流水线拓扑
 
@@ -103,13 +127,25 @@ bash scripts/smoke.sh --list
 
 | 组件 | 版本 | 位置 |
 | --- | --- | --- |
-| Node | 24.19.0 | `.nvmrc` / `.node-version` / `.cnb.yml` / workflow |
-| pnpm | 11.21.0 | `package.json` / `.cnb.yml` / workflow |
-| Python | 3.14 | `pyproject.toml` / `.cnb.yml` / workflow |
+| Node | 24.19.0 | `.nvmrc` / `.node-version` / `package.json` / 容器镜像 |
+| pnpm | 11.21.0 | `package.json` / `setup-workspace.sh` |
+| Python | 3.14 | `pyproject.toml` / `api.yml` / 镜像 tag |
 | uv | 0.11.33 | Dockerfile / 治理流水线 |
 | Trivy | 0.61.0（容器回退） | `build-release-image.sh` |
 
-任何一处不一致都会被 `scripts/test_ci_job_contracts.py` 拒绝。
+版本不再逐条写进每个 stage：pnpm 由 `scripts/setup-workspace.sh` 单点声明。一致性
+由 `scripts/check-toolchain-pins.py` 强制，并作为 contracts 冒烟层的第一个检查项执行：
+
+```bash
+python3 scripts/check-toolchain-pins.py          # 不一致则退出码 1
+python3 scripts/check-toolchain-pins.py --json   # 机器可读
+```
+
+它同时校验 `.nvmrc` 与 `.node-version` 互相一致——这两个文件分别由 nvm 与
+asdf/volta/mise 读取，此前已经漂移过，没有任何东西会发现。`Node 24.19.0 /
+pnpm 11.21.0` 这些写入 `.cnb.yml` 或流水线文件的字面量，另由
+`scripts/test_ci_job_contracts.py` 锁定（例如禁止再出现 `node:22`、
+`python:3.12`）。
 
 ## 7. 凭据边界
 

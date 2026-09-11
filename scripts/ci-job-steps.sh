@@ -15,19 +15,23 @@
 #   * Everything is driven by environment variables so the same function runs on
 #     a GitHub runner, a CNB docker runner, or a developer machine.
 #   * Steps that the CI provider must expose as separate, retryable units stay
-#     provider-native:
-#       - GitHub renders ordered `steps:` and uploads/downloads via actions;
-#         `emit github` prints that step sequence.
-#       - CNB renders stage `script` blocks; `emit cnb` prints that sequence.
+#     provider-native: GitHub renders ordered `steps:` with upload/download
+#     actions, CNB renders stage `script` blocks. This library owns the job
+#     BODIES; the provider configs own the sequencing.
 #   * No secrets are read or printed here. Credentials arrive through the
 #     environment or through the provider's injected CNB_* variables.
 #
 # Usage
 #   bash scripts/ci-job-steps.sh list
-#   bash scripts/ci-job-steps.sh emit github <job>
-#   bash scripts/ci-job-steps.sh emit cnb <job>
 #   bash scripts/ci-job-steps.sh run <job>
 #     run is the real implementation: `run <job>` forwards to `<job>_run`.
+#
+#   `list` / `run` are the complete interface. An earlier revision also
+#   advertised `emit github|cnb`, which delegated to a generator script that was
+#   never committed; the command was removed rather than left as a declaration
+#   that could not run. The pipeline definitions are maintained directly in
+#   .cnb.yml and the GitHub workflows, and scripts/test_ci_job_contracts.py
+#   asserts that both only delegate here.
 #
 # Verification
 #   scripts/test_ci_job_contracts.py asserts the documented behaviours of the
@@ -217,8 +221,6 @@ Usage: bash scripts/ci-job-steps.sh <command> [job]
 Commands:
   list                     Print the canonical job names, one per line.
   run <job>                Execute a job locally / in CI.
-  emit github <job>        Print the GitHub Actions step sequence for the job.
-  emit cnb <job>           Print the CNB stage sequence for the job.
 
 Jobs: see `list`.
 USAGE
@@ -238,9 +240,6 @@ main() {
       }
       log "run ${job}"
       "${function_name}"
-      ;;
-    emit)
-      bash "${REPO_ROOT}/scripts/emit-ci-pipeline.py" "${2:-github}" "${3:-}"
       ;;
     -h|--help|"") usage ;;
     *) echo "unknown command: ${command}" >&2; usage >&2; exit 2 ;;

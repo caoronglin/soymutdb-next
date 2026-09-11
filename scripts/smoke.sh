@@ -132,6 +132,12 @@ smoke_contracts() {
   fi
 
   local rc=0
+  # Toolchain pins are checked by a standalone guard rather than a pytest case:
+  # it must also be runnable from pre-commit and from a developer machine
+  # without the test dependencies. It is part of this layer because a pin
+  # mismatch produces a build that differs between two machines on the same
+  # commit, which is exactly what a contract layer exists to catch.
+  "${PYTHON_BIN}" scripts/check-toolchain-pins.py || rc=$?
   "${PYTHON_BIN}" -m pytest "${tests[@]}" -q || rc=$?
   echo
   echo "-- environment-bound contract suites (reported, not gating here) --"
