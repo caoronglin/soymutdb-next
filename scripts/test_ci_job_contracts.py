@@ -490,6 +490,44 @@ class DeliveryArchitectureTests(unittest.TestCase):
                             "pnpm job without a persistent store volume",
                         )
 
+    def test_js_unit_tests_do_not_inherit_the_build_environment(self) -> None:
+        """`turbo run test` must not see the demo build's VITE_* variables.
+
+        On a real CNB build the api-client suite failed with
+
+            AssertionError: expected 'https://api.soymutdb.test/genes/Glyma...'
+                                 to be '/api/v1/genes/Glyma.01G000100'
+
+        `apiBaseUrl` resolves from `import.meta.env.VITE_API_BASE_URL` and only
+        falls back to the relative base when it is unset — and the suite asserts
+        the relative base, because it is testing path construction. CI exports
+        VITE_API_BASE_URL for the demo build, and turbo.json lists it under
+        `globalEnv`, so the build-time value leaked into the unit tests.
+
+        The fix is to isolate the test run, not to weaken the URL assertions: a
+        test whose result depends on an ambient variable is not a test of this
+        package. `turbo run test` sets NODE_ENV=test, and vitest resolves
+        `import.meta.env` from process.env, so the package config must clear the
+        build variables before the config is evaluated.
+        """
+        config = (ROOT / "packages/api-client/vitest.config.ts").read_text(encoding="utf-8")
+        for variable in ("VITE_API_BASE_URL", "VITE_JBROWSE_BASE_URL"):
+            self.assertIn(
+                f"delete process.env.{variable}",
+                config,
+                f"packages/api-client/vitest.config.ts must clear {variable} before "
+                "vitest resolves import.meta.env",
+            )
+
+        # The variable must still be a tracked turbo input for build tasks, or
+        # cross-environment builds would share cache entries.
+        turbo = json.loads((ROOT / "turbo.json").read_text(encoding="utf-8"))
+        self.assertIn("VITE_API_BASE_URL", turbo.get("globalEnv", []))
+
+        # And it must still be exported for the gates that legitimately need it.
+        gate = (ROOT / "scripts/verify-frontend-artifacts.sh").read_text(encoding="utf-8")
+        self.assertIn("SOYMUTDB_CI_DEMO_API_URL", gate)
+
     def test_package_script_invocations_do_not_double_up_the_separator(self) -> None:
         """`pnpm run <script> -- --flag` forwards a literal "--" to the script.
 
