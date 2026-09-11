@@ -25,13 +25,9 @@ vi.mock("@tanstack/react-router", () => ({
 vi.mock("@tanstack/react-query", () => ({
   useQuery: () => ({ isPending: false, isError: false, data: { featured: [] } }),
 }));
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({
-    t: (_key: string, options?: { defaultValue?: string }) =>
-      options?.defaultValue ?? _key,
-    i18n: { language: "en" },
-  }),
-}));
+// The shared double keeps a stable `t` identity: a per-render `t` makes any
+// component with `t` in an effect dependency loop forever. See src/test/mocks.ts.
+vi.mock("react-i18next", async () => (await import("../../../test/mocks")).mockTranslation);
 vi.mock("@/lib/site-content", () => ({
   useSiteContent: () => ({ get: (_key: string, fallback: string) => fallback }),
 }));

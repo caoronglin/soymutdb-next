@@ -3,9 +3,10 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { ComponentDescriptor, PageComponentNode } from "@soymutdb/shared";
 
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (_key: string, options?: { defaultValue?: string }) => options?.defaultValue ?? _key }),
-}));
+// The shared double keeps a stable `t` identity: an inline
+// `() => ({ t: ... })` returns a new function per render and makes any
+// component with `t` in an effect dependency loop forever. See test/mocks.ts.
+vi.mock("react-i18next", async () => (await import("../../test/mocks")).mockTranslation);
 
 import { ComponentTree } from "./component-tree";
 

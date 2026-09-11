@@ -490,6 +490,54 @@ class DeliveryArchitectureTests(unittest.TestCase):
                             "pnpm job without a persistent store volume",
                         )
 
+    def test_i18n_test_mocks_do_not_return_a_fresh_t_per_render(self) -> None:
+        """An inline `useTranslation` mock makes effects loop forever.
+
+        Real CNB failure, after the env leak was fixed:
+
+            src/routes/news/trash.test.tsx > purges only after exact slug
+            AssertionError: expected "vi.fn()" to be called 2 times, but got 224 times
+            src/routes/news/trash.test.tsx > requires exact slug...
+            Error: Unable to perform pointer interaction as the element has
+                   `pointer-events: none`
+
+        The page does `useCallback(load, [message, page, pageSize, t])` and
+        `useEffect(() => { void load(); }, [load])`. The test mocked
+        `useTranslation: () => ({ t: (key) => key })`, which returns a NEW `t`
+        every render, so `load` changed every render, so the fetch effect re-ran
+        every render. 224 was the click landing while the tree was still
+        re-rendering. i18next memoises `t`; the mock must too.
+        """
+        # A per-render `t` is one whose VALUE is an arrow function declared inside
+        # the `useTranslation` return. A reference to a module-scope function is
+        # stable and fine; so is the shared double.
+        offenders = []
+        pattern = re.compile(
+            r"useTranslation:\s*\(\)\s*=>\s*\(\{[^}]*?t:\s*(?P<value>\([^)]*\)\s*=>|[A-Za-z_$][\w$]*\s*=>)",
+            re.S,
+        )
+        for source in sorted(ROOT.glob("apps/*/src/**/*.test.ts*")):
+            text = source.read_text(encoding="utf-8")
+            if "mockTranslation" in text:
+                continue
+            for match in pattern.finditer(text):
+                offenders.append(str(source.relative_to(ROOT)))
+                break
+        self.assertEqual(
+            offenders,
+            [],
+            "these test files mock useTranslation with a per-render `t`; import the "
+            "shared double from src/test/mocks.ts instead:\n" + "\n".join(offenders),
+        )
+
+        # The shared doubles must exist and expose a module-level `t`.
+        for app in ("apps/admin", "apps/web"):
+            mock = ROOT / app / "src/test/mocks.ts"
+            self.assertTrue(mock.is_file(), f"missing shared i18n mock for {app}")
+            text = mock.read_text(encoding="utf-8")
+            self.assertIn("export const stableT", text)
+            self.assertIn("mockTranslation", text)
+
     def test_js_unit_tests_do_not_inherit_the_build_environment(self) -> None:
         """`turbo run test` must not see the demo build's VITE_* variables.
 
