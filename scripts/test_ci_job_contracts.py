@@ -940,63 +940,161 @@ class DeliveryArchitectureTests(unittest.TestCase):
             r"(?m)^\s*ensure_api_venv\s*$",
         )
 
-        # 4. The stage image must provide Python, or step 3 fails at run time in
-        #    a way the log only reveals as a missing venv binary.
-        frontend_images = set()
+        # 4. The frontend stage's environment must carry BOTH toolchains, and it
+        #    must be declared where CNB can actually consume a Dockerfile.
+        #
+        #    This is the regression that made the first CNB build of this PR fail
+        #    before a single gate ran:
+        #
+        #        docker pull .cnb/env/Dockerfile.frontend
+        #        invalid reference format: repository name must be lowercase
+        #
+        #    `image:` is a registry reference. The platform's runner passes it
+        #    straight to `docker pull`, so a repository path is not a valid value
+        #    there, whatever it points at. A Dockerfile may only appear in
+        #    `docker.build`, and `build` exists at the PIPELINE level only
+        #    ("任务级仅支持 image 配置，不支持 dockerfile"). Assert both halves, or
+        #    the config can pass every other check while still failing on the
+        #    runner.
+        frontend_dockerfiles = set()
         for config in _cnb_config_files():
             document = yaml.safe_load(config.read_text(encoding="utf-8"))
             for pipeline in _iter_pipelines(document):
-                for stage in pipeline.get("stages", []):
-                    if "run frontend" in str(stage.get("script", "")):
-                        frontend_images.add(str(stage.get("image", "")))
+                frontend_stages = [
+                    stage
+                    for stage in pipeline.get("stages", [])
+                    if "run frontend" in str(stage.get("script", ""))
+                ]
+                if not frontend_stages:
+                    continue
 
-        self.assertTrue(frontend_images, "no CNB stage runs the frontend job")
-        for image in frontend_images:
-            if image.startswith(".cnb/env/"):
-                dockerfile = ROOT / image
+                # 4a. Never put a path in `image:`; the runner would `docker
+                #     pull` it. This is the exact failure being guarded.
+                for stage in frontend_stages:
+                    image = str(stage.get("image", ""))
+                    self.assertNotRegex(
+                        image,
+                        r"^[./]|Dockerfile",
+                        f"{config.name}: the frontend stage sets image={image!r}; "
+                        "`image:` is handed to `docker pull`, so it must be a "
+                        "registry reference, not a Dockerfile path (use docker.build)",
+                    )
+
+                # 4b. The environment therefore comes from the pipeline-level
+                #     `docker.build`, which must name a committed Dockerfile that
+                #     carries both pinned toolchains.
+                build = (pipeline.get("docker") or {}).get("build")
+                self.assertIsNotNone(
+                    build,
+                    f"{config.name}: the frontend stage needs a dual-toolchain "
+                    "image, which only a pipeline-level `docker.build` can supply",
+                )
+                dockerfile = build if isinstance(build, str) else build.get("dockerfile")
                 self.assertTrue(
-                    dockerfile.is_file(),
-                    f"{image} runs the frontend gate but is not committed",
+                    dockerfile,
+                    f"{config.name}: docker.build names no Dockerfile",
                 )
-                # Present is not enough. `.gitignore` once had an unanchored
-                # `env/` pattern that matched `.cnb/env/` at any depth, so these
-                # files existed in the working tree but never in a checkout and
-                # the schema-documenting test above still passed. Ask git.
-                ignored = subprocess.run(
-                    ["git", "check-ignore", "--quiet", image],
-                    cwd=ROOT,
-                    capture_output=True,
-                    text=True,
-                )
-                self.assertNotEqual(
-                    ignored.returncode,
-                    0,
-                    f"{image} is ignored by .gitignore; a CNB checkout would not have it",
-                )
-                docker_text = dockerfile.read_text(encoding="utf-8")
-                self.assertRegex(
-                    docker_text,
-                    r"(?m)^FROM python:3\.14",
-                    f"{image} must carry Python for the OpenAPI contract gate",
-                )
-                self.assertRegex(
-                    docker_text,
-                    r"(?m)^FROM node:24\.19\.0",
-                    f"{image} must carry the pinned Node toolchain",
-                )
-            else:
-                # A plain upstream image cannot satisfy both toolchains; reject
-                # it instead of letting the contract gate fail on a missing venv.
-                self.assertNotRegex(
-                    image,
-                    r"^node:",
-                    f"{image} has no Python; the frontend contract gate would fail",
-                )
-                self.assertRegex(
-                    image,
-                    r"^python:",
-                    f"{image} must provide Python for the OpenAPI contract gate",
-                )
+                frontend_dockerfiles.add(str(dockerfile))
+
+        self.assertTrue(
+            frontend_dockerfiles, "no CNB pipeline declares the frontend environment"
+        )
+        for dockerfile_path in frontend_dockerfiles:
+            path = ROOT / dockerfile_path
+            self.assertTrue(
+                path.is_file(),
+                f"{dockerfile_path} runs the frontend gate but is not committed",
+            )
+            # Present is not enough. `.gitignore` once had an unanchored `env/`
+            # pattern that matched `.cnb/env/` at any depth, so these files
+            # existed in the working tree but never in a checkout and the
+            # schema-documenting test above still passed. Ask git.
+            ignored = subprocess.run(
+                ["git", "check-ignore", "--quiet", dockerfile_path],
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(
+                ignored.returncode,
+                0,
+                f"{dockerfile_path} is ignored by .gitignore; a CNB checkout "
+                "would not have it",
+            )
+            docker_text = path.read_text(encoding="utf-8")
+            self.assertRegex(
+                docker_text,
+                r"(?m)^FROM python:3\.14",
+                f"{dockerfile_path} must carry Python for the OpenAPI contract gate",
+            )
+            self.assertRegex(
+                docker_text,
+                r"(?m)^FROM node:24\.19\.0",
+                f"{dockerfile_path} must carry the pinned Node toolchain",
+            )
+
+    def test_no_stage_image_is_a_dockerfile_path(self) -> None:
+        """A Dockerfile belongs in `docker.build`, never in `image:`.
+
+        Regression for the failure that took down the first CNB build of the PR
+        that added the frontend environment, and for the same breakage already
+        present on main in the release/image pipelines:
+
+            Runner[docker] $ docker pull .cnb/env/Dockerfile.frontend
+            invalid reference format: repository name (env/Dockerfile.frontend)
+            must be lowercase
+
+            Runner[docker] $ docker pull .cnb/env/Dockerfile.build-tools
+            invalid reference format: repository name (env/Dockerfile.build-tools)
+            must be lowercase
+
+        `image:` is a registry reference. The runner hands it to `docker pull`
+        verbatim, so any value that names a file in the repository fails before
+        a single stage script runs, on every provider and every branch. Only
+        `docker.build` accepts a Dockerfile, and `build` exists at the pipeline
+        level alone ("任务级仅支持 image 配置，不支持 dockerfile").
+
+        The two earlier tests asserted that the referenced file exists, is
+        tracked and carries the right toolchains. All of that held while the
+        build still failed, because none of them asked whether the platform can
+        consume a path in that position. This one does, for every `image:` in
+        every pipeline and every stage, not just the frontend one.
+        """
+        offenders = []
+        for config in _cnb_config_files():
+            document = yaml.safe_load(config.read_text(encoding="utf-8"))
+            for pipeline in _iter_pipelines(document):
+                docker = pipeline.get("docker") or {}
+                images = [
+                    str(docker.get("image", "")),
+                    *[
+                        str(stage.get("image", ""))
+                        for stage in pipeline.get("stages", [])
+                        if isinstance(stage, dict)
+                    ],
+                ]
+                for image in images:
+                    if not image:
+                        continue
+                    # A registry reference is `<name>[:tag]`; it never starts
+                    # with a path component and never names a Dockerfile.
+                    # Anything else is a file path the runner would try to pull.
+                    looks_like_path = (
+                        image.startswith((".", "/"))
+                        or "Dockerfile" in image
+                    )
+                    if looks_like_path:
+                        offenders.append(
+                            f"{config.name}: image={image!r} is a repository path; "
+                            "`image:` is passed to `docker pull` — use "
+                            "`docker.build.dockerfile` instead"
+                        )
+        self.assertEqual(
+            offenders,
+            [],
+            "stage/pipeline images must be registry references, not Dockerfiles:\n"
+            + "\n".join(offenders),
+        )
 
     def test_every_cnb_stage_script_target_exists_on_disk(self) -> None:
         """No stage may reference a script that is not in the repository."""

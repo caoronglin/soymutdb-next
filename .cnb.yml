@@ -53,19 +53,31 @@ main:
         VITE_DEPLOYMENT_MODE: demo
         VITE_API_BASE_URL: https://api.soymutdb.test
         VITE_JBROWSE_BASE_URL: https://jbrowse.soymutdb.test
+      # Default environment for every stage below. `docker.build` is the ONLY
+      # place CNB accepts a Dockerfile: a stage-level `image:` is a registry
+      # reference handed to `docker pull`, so a repository path in `image:`
+      # fails the stage with `invalid reference format` before any script runs.
+      # Stages that need another environment (API on python:3.14, governance on
+      # node:24.19.0) still declare their own `image:` and override this.
+      docker:
+        build:
+          dockerfile: .cnb/env/Dockerfile.frontend
+          # Rebuild the image only when the Dockerfile changes; the stage bodies
+          # bootstrap their own toolchains via scripts/, so this is the only
+          # input that can move the environment the frontend gate runs in.
+          by:
+            - .cnb/env/Dockerfile.frontend
       stages:
         # No "setup workspace" stage: every CNB stage gets a fresh container, so
         # a bootstrap stage would not prepare the stages after it. Each job body
         # bootstraps itself via scripts/setup-workspace.sh. The volumes below are
         # the only state that crosses a container boundary.
         # The frontend gate closes with the OpenAPI client contract, which
-        # exports the backend schema and therefore needs Python 3.14. The image
-        # must carry both toolchains: node:24.19.0 has no Python at all, and the
-        # GitHub mirror only avoids this because actions/setup-python provides
-        # one. This repo hashes to a single pinned tag that is not floating, so
-        # the toolchain cannot move without a reviewed change.
+        # exports the backend schema and therefore needs Python 3.14, and it
+        # also runs `python3 scripts/check_*.py`. The image must carry both
+        # toolchains: node:24.19.0 has no Python at all, and the GitHub mirror
+        # only avoids this because actions/setup-python provides one.
         - name: Frontend verification
-          image: .cnb/env/Dockerfile.frontend
           volumes:
             - /cache/pnpm-store:/cache/pnpm-store
             - .turbo:/workspace/.turbo
@@ -92,19 +104,31 @@ main:
         VITE_DEPLOYMENT_MODE: demo
         VITE_API_BASE_URL: https://api.soymutdb.test
         VITE_JBROWSE_BASE_URL: https://jbrowse.soymutdb.test
+      # Default environment for every stage below. `docker.build` is the ONLY
+      # place CNB accepts a Dockerfile: a stage-level `image:` is a registry
+      # reference handed to `docker pull`, so a repository path in `image:`
+      # fails the stage with `invalid reference format` before any script runs.
+      # Stages that need another environment (API on python:3.14) still declare
+      # their own `image:` and override this.
+      docker:
+        build:
+          dockerfile: .cnb/env/Dockerfile.frontend
+          # Rebuild the image only when the Dockerfile changes; the stage bodies
+          # bootstrap their own toolchains via scripts/, so this is the only
+          # input that can move the environment the frontend gate runs in.
+          by:
+            - .cnb/env/Dockerfile.frontend
       stages:
         # No "setup workspace" stage: every CNB stage gets a fresh container, so
         # a bootstrap stage would not prepare the stages after it. Each job body
         # bootstraps itself via scripts/setup-workspace.sh. The volumes below are
         # the only state that crosses a container boundary.
         # The frontend gate closes with the OpenAPI client contract, which
-        # exports the backend schema and therefore needs Python 3.14. The image
-        # must carry both toolchains: node:24.19.0 has no Python at all, and the
-        # GitHub mirror only avoids this because actions/setup-python provides
-        # one. This repo hashes to a single pinned tag that is not floating, so
-        # the toolchain cannot move without a reviewed change.
+        # exports the backend schema and therefore needs Python 3.14, and it
+        # also runs `python3 scripts/check_*.py`. The image must carry both
+        # toolchains: node:24.19.0 has no Python at all, and the GitHub mirror
+        # only avoids this because actions/setup-python provides one.
         - name: Frontend verification
-          image: .cnb/env/Dockerfile.frontend
           volumes:
             - /cache/pnpm-store:/cache/pnpm-store
             - .turbo:/workspace/.turbo
@@ -157,12 +181,22 @@ main:
     - name: mcp-e2e
       runner:
         cpus: 8
+      # CNB accepts a Dockerfile only in `docker.build`, and `docker.build`
+      # is pipeline-scoped: the platform's runner passes a stage-level
+      # `image:` straight to `docker pull`, so a repository path in it fails
+      # the stage with `invalid reference format` before any script runs.
+      # Every stage of this pipeline needs the same tools image, so it is
+      # declared once here and each stage drops its own `image:`.
+      docker:
+        build:
+          dockerfile: .cnb/env/Dockerfile.build-tools
+          by:
+          - .cnb/env/Dockerfile.build-tools
       stages:
         # Authenticated transport through the production nginx semantics. The
         # build-tools image has curl/bash preinstalled, so no per-run package
         # install lands on the critical path.
         - name: MCP transport smoke through nginx
-          image: .cnb/env/Dockerfile.build-tools
           services:
             - docker
           script: bash scripts/ci-job-steps.sh run mcp-e2e
@@ -176,9 +210,19 @@ main:
       env:
         SOYMUTDB_CI_ARCH: amd64
         SOYMUTDB_CI_OUTPUT_DIR: validate-runtime-images-amd64
+      # CNB accepts a Dockerfile only in `docker.build`, and `docker.build`
+      # is pipeline-scoped: the platform's runner passes a stage-level
+      # `image:` straight to `docker pull`, so a repository path in it fails
+      # the stage with `invalid reference format` before any script runs.
+      # Every stage of this pipeline needs the same tools image, so it is
+      # declared once here and each stage drops its own `image:`.
+      docker:
+        build:
+          dockerfile: .cnb/env/Dockerfile.build-tools
+          by:
+          - .cnb/env/Dockerfile.build-tools
       stages:
         - name: Verify images for linux/amd64
-          image: .cnb/env/Dockerfile.build-tools
           services:
             - docker
           script: bash scripts/ci-job-steps.sh run image-build
@@ -196,9 +240,19 @@ main:
       env:
         SOYMUTDB_CI_ARCH: arm64
         SOYMUTDB_CI_OUTPUT_DIR: validate-runtime-images-arm64
+      # CNB accepts a Dockerfile only in `docker.build`, and `docker.build`
+      # is pipeline-scoped: the platform's runner passes a stage-level
+      # `image:` straight to `docker pull`, so a repository path in it fails
+      # the stage with `invalid reference format` before any script runs.
+      # Every stage of this pipeline needs the same tools image, so it is
+      # declared once here and each stage drops its own `image:`.
+      docker:
+        build:
+          dockerfile: .cnb/env/Dockerfile.build-tools
+          by:
+          - .cnb/env/Dockerfile.build-tools
       stages:
         - name: Verify images for linux/arm64
-          image: .cnb/env/Dockerfile.build-tools
           services:
             - docker
           script: bash scripts/ci-job-steps.sh run image-build
@@ -248,9 +302,19 @@ $:
       imports:
         # Registry credentials and the OIDC issuer live in the CNB secret store.
         - https://cnb.cool/crl-code/mutlidb/-/blob/main/.cnb/env/release.yml
+      # CNB accepts a Dockerfile only in `docker.build`, and `docker.build`
+      # is pipeline-scoped: the platform's runner passes a stage-level
+      # `image:` straight to `docker pull`, so a repository path in it fails
+      # the stage with `invalid reference format` before any script runs.
+      # Every stage of this pipeline needs the same tools image, so it is
+      # declared once here and each stage drops its own `image:`.
+      docker:
+        build:
+          dockerfile: .cnb/env/Dockerfile.build-tools
+          by:
+          - .cnb/env/Dockerfile.build-tools
       stages:
         - name: Publish signed multi-architecture release
-          image: .cnb/env/Dockerfile.build-tools
           services:
             - docker
           script: bash scripts/ci-job-steps.sh run release
@@ -265,17 +329,26 @@ $:
     - name: publish
       runner:
         cpus: 4
+      # CNB accepts a Dockerfile only in `docker.build`, and `docker.build`
+      # is pipeline-scoped: the platform's runner passes a stage-level
+      # `image:` straight to `docker pull`, so a repository path in it fails
+      # the stage with `invalid reference format` before any script runs.
+      # Every stage of this pipeline needs the same tools image, so it is
+      # declared once here and each stage drops its own `image:`.
+      docker:
+        build:
+          dockerfile: .cnb/env/Dockerfile.build-tools
+          by:
+          - .cnb/env/Dockerfile.build-tools
       stages:
         # verify + stage: the stage body stays a single `bash <script>` call so
         # the platform's default `sh` never interprets it.
         - name: Verify and stage the CI-built artifact before publication
-          image: .cnb/env/Dockerfile.build-tools
           script: bash scripts/stage-pages-publication.sh verify
           env:
             PAGES_ARTIFACT_DIR: pages-dist
             PAGES_PUBLISH_DIR: pages-publish
         - name: Hand the verified tree to the publication adapter
-          image: .cnb/env/Dockerfile.build-tools
           script: bash scripts/stage-pages-publication.sh publish
           env:
             PAGES_PUBLISH_DIR: pages-publish
@@ -296,14 +369,23 @@ $:
       env:
         SOYMUTDB_CI_ARCH: amd64
         SOYMUTDB_CI_OUTPUT_DIR: validate-runtime-images-amd64
+      # CNB accepts a Dockerfile only in `docker.build`, and `docker.build`
+      # is pipeline-scoped: the platform's runner passes a stage-level
+      # `image:` straight to `docker pull`, so a repository path in it fails
+      # the stage with `invalid reference format` before any script runs.
+      # Every stage of this pipeline needs the same tools image, so it is
+      # declared once here and each stage drops its own `image:`.
+      docker:
+        build:
+          dockerfile: .cnb/env/Dockerfile.build-tools
+          by:
+          - .cnb/env/Dockerfile.build-tools
       stages:
         - name: Verify images for this tag
-          image: .cnb/env/Dockerfile.build-tools
           services:
             - docker
           script: bash scripts/ci-job-steps.sh run image-build
         - name: Publish the signed tagged release
-          image: .cnb/env/Dockerfile.build-tools
           services:
             - docker
           # RELEASE_TAG is injected through the stage environment rather than
@@ -383,19 +465,31 @@ $:
         VITE_DEPLOYMENT_MODE: demo
         VITE_API_BASE_URL: https://api.soymutdb.test
         VITE_JBROWSE_BASE_URL: https://jbrowse.soymutdb.test
+      # Default environment for every stage below. `docker.build` is the ONLY
+      # place CNB accepts a Dockerfile: a stage-level `image:` is a registry
+      # reference handed to `docker pull`, so a repository path in `image:`
+      # fails the stage with `invalid reference format` before any script runs.
+      # Stages that need another environment (API on python:3.14) still declare
+      # their own `image:` and override this.
+      docker:
+        build:
+          dockerfile: .cnb/env/Dockerfile.frontend
+          # Rebuild the image only when the Dockerfile changes; the stage bodies
+          # bootstrap their own toolchains via scripts/, so this is the only
+          # input that can move the environment the frontend gate runs in.
+          by:
+            - .cnb/env/Dockerfile.frontend
       stages:
         # No "setup workspace" stage: every CNB stage gets a fresh container, so
         # a bootstrap stage would not prepare the stages after it. Each job body
         # bootstraps itself via scripts/setup-workspace.sh. The volumes below are
         # the only state that crosses a container boundary.
         # The frontend gate closes with the OpenAPI client contract, which
-        # exports the backend schema and therefore needs Python 3.14. The image
-        # must carry both toolchains: node:24.19.0 has no Python at all, and the
-        # GitHub mirror only avoids this because actions/setup-python provides
-        # one. This repo hashes to a single pinned tag that is not floating, so
-        # the toolchain cannot move without a reviewed change.
+        # exports the backend schema and therefore needs Python 3.14, and it
+        # also runs `python3 scripts/check_*.py`. The image must carry both
+        # toolchains: node:24.19.0 has no Python at all, and the GitHub mirror
+        # only avoids this because actions/setup-python provides one.
         - name: Frontend verification
-          image: .cnb/env/Dockerfile.frontend
           volumes:
             - /cache/pnpm-store:/cache/pnpm-store
             - .turbo:/workspace/.turbo
@@ -489,9 +583,19 @@ $:
       env:
         SOYMUTDB_CI_ARCH: amd64
         SOYMUTDB_CI_OUTPUT_DIR: validate-runtime-images-amd64
+      # CNB accepts a Dockerfile only in `docker.build`, and `docker.build`
+      # is pipeline-scoped: the platform's runner passes a stage-level
+      # `image:` straight to `docker pull`, so a repository path in it fails
+      # the stage with `invalid reference format` before any script runs.
+      # Every stage of this pipeline needs the same tools image, so it is
+      # declared once here and each stage drops its own `image:`.
+      docker:
+        build:
+          dockerfile: .cnb/env/Dockerfile.build-tools
+          by:
+          - .cnb/env/Dockerfile.build-tools
       stages:
         - name: Verify images (amd64)
-          image: .cnb/env/Dockerfile.build-tools
           services:
             - docker
           script: bash scripts/ci-job-steps.sh run image-build
@@ -502,9 +606,19 @@ $:
       env:
         SOYMUTDB_CI_ARCH: arm64
         SOYMUTDB_CI_OUTPUT_DIR: validate-runtime-images-arm64
+      # CNB accepts a Dockerfile only in `docker.build`, and `docker.build`
+      # is pipeline-scoped: the platform's runner passes a stage-level
+      # `image:` straight to `docker pull`, so a repository path in it fails
+      # the stage with `invalid reference format` before any script runs.
+      # Every stage of this pipeline needs the same tools image, so it is
+      # declared once here and each stage drops its own `image:`.
+      docker:
+        build:
+          dockerfile: .cnb/env/Dockerfile.build-tools
+          by:
+          - .cnb/env/Dockerfile.build-tools
       stages:
         - name: Verify images (arm64)
-          image: .cnb/env/Dockerfile.build-tools
           services:
             - docker
           script: bash scripts/ci-job-steps.sh run image-build
@@ -515,9 +629,19 @@ $:
         cpus: 8
       imports:
         - https://cnb.cool/crl-code/mutlidb/-/blob/main/.cnb/env/release.yml
+      # CNB accepts a Dockerfile only in `docker.build`, and `docker.build`
+      # is pipeline-scoped: the platform's runner passes a stage-level
+      # `image:` straight to `docker pull`, so a repository path in it fails
+      # the stage with `invalid reference format` before any script runs.
+      # Every stage of this pipeline needs the same tools image, so it is
+      # declared once here and each stage drops its own `image:`.
+      docker:
+        build:
+          dockerfile: .cnb/env/Dockerfile.build-tools
+          by:
+          - .cnb/env/Dockerfile.build-tools
       stages:
         - name: Publish the signed release
-          image: .cnb/env/Dockerfile.build-tools
           services:
             - docker
           script: bash scripts/ci-job-steps.sh run release
@@ -532,17 +656,26 @@ $:
     - name: publish-manual
       runner:
         cpus: 4
+      # CNB accepts a Dockerfile only in `docker.build`, and `docker.build`
+      # is pipeline-scoped: the platform's runner passes a stage-level
+      # `image:` straight to `docker pull`, so a repository path in it fails
+      # the stage with `invalid reference format` before any script runs.
+      # Every stage of this pipeline needs the same tools image, so it is
+      # declared once here and each stage drops its own `image:`.
+      docker:
+        build:
+          dockerfile: .cnb/env/Dockerfile.build-tools
+          by:
+          - .cnb/env/Dockerfile.build-tools
       stages:
         # verify + stage: the stage body stays a single `bash <script>` call so
         # the platform's default `sh` never interprets it.
         - name: Verify and stage the CI-built artifact before publication
-          image: .cnb/env/Dockerfile.build-tools
           script: bash scripts/stage-pages-publication.sh verify
           env:
             PAGES_ARTIFACT_DIR: pages-dist
             PAGES_PUBLISH_DIR: pages-publish
         - name: Hand the verified tree to the publication adapter
-          image: .cnb/env/Dockerfile.build-tools
           script: bash scripts/stage-pages-publication.sh publish
           env:
             PAGES_PUBLISH_DIR: pages-publish

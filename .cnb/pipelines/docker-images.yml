@@ -8,6 +8,16 @@
 name: SoyMutDB release images
 env:
   SOYMUTDB_CI_EXPORT: '1'
+# CNB accepts a Dockerfile only in `docker.build`, and `docker.build` is
+# pipeline-scoped. A stage-level `image:` is a registry reference the runner
+# passes straight to `docker pull`, so a repository path there fails every stage
+# with `invalid reference format` before any script runs. Both stages here need
+# the same tools image, so it is declared once.
+docker:
+  build:
+    dockerfile: .cnb/env/Dockerfile.build-tools
+    by:
+    - .cnb/env/Dockerfile.build-tools
 stages:
 - name: docker-images (amd64)
   runner:
@@ -17,7 +27,6 @@ stages:
     SOYMUTDB_CI_OUTPUT_DIR: validate-runtime-images-amd64
   stages:
   - name: Verify images for linux/amd64
-    image: .cnb/env/Dockerfile.build-tools
     services:
     - docker
     script: bash scripts/ci-job-steps.sh run image-build
@@ -30,7 +39,6 @@ stages:
     SOYMUTDB_CI_OUTPUT_DIR: validate-runtime-images-arm64
   stages:
   - name: Verify images for linux/arm64
-    image: .cnb/env/Dockerfile.build-tools
     services:
     - docker
     script: bash scripts/ci-job-steps.sh run image-build

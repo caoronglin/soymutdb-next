@@ -13,6 +13,16 @@ env:
   VITE_DEPLOYMENT_MODE: demo
   VITE_API_BASE_URL: https://api.soymutdb.test
   VITE_JBROWSE_BASE_URL: https://jbrowse.soymutdb.test
+# Default environment for every stage below. CNB accepts a Dockerfile only in
+# `docker.build`: a stage-level `image:` is a registry reference passed to
+# `docker pull`, so a repository path in it fails the stage with
+# `invalid reference format`. Stages that need another environment still declare
+# their own `image:` and override this.
+docker:
+  build:
+    dockerfile: .cnb/env/Dockerfile.frontend
+    by:
+    - .cnb/env/Dockerfile.frontend
 stages:
 - name: Setup workspace with cache
   image: node:24.19.0
@@ -20,7 +30,6 @@ stages:
   volumes:
   - /cache/pnpm-store:/cache/pnpm-store
 - name: Frontend verification
-  image: .cnb/env/Dockerfile.frontend
   script: bash scripts/ci-job-steps.sh run frontend
 - name: API + Worker verification
   image: python:3.14
