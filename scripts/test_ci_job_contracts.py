@@ -934,6 +934,25 @@ class DeliveryArchitectureTests(unittest.TestCase):
         self.assertIn("packages/jobs-py", venv_body)
         self.assertIn("apps/api", venv_body)
 
+        # The interpreter must be the PINNED one. The image supplies it, but
+        # `command -v python3` succeeding is a weaker claim than "python3 is
+        # 3.14": a rebuilt image could put 3.11 on PATH, the venv would be
+        # created, and the contract gate would validate against a backend the
+        # repository never declared. Assert the version check is real.
+        self.assertIn("interpreter_matches_pin", bodies)
+        check_body = bodies["interpreter_matches_pin"]
+        self.assertIn("PYTHON_VERSION", check_body)
+        self.assertIn(
+            "version_info",
+            check_body,
+            "the interpreter must be compared against the pin, not merely found",
+        )
+        self.assertRegex(
+            venv_body,
+            r"(?m)^\s*if ! interpreter_matches_pin",
+            "ensure_api_venv must reject an interpreter that misses the pin",
+        )
+
         # frontend_run must actually call it, in the same container as the gate.
         self.assertRegex(
             bodies["frontend_run"],

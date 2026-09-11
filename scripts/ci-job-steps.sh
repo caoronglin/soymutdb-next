@@ -128,6 +128,19 @@ frontend_install() {
 # checked on every provider.
 SOYMUTDB_CI_VENV_PYTHON="${SOYMUTDB_CI_VENV_PYTHON:-python3}"
 
+# Accept the interpreter only when it is the PINNED major.minor. The image
+# provides it today, but `command -v python3` succeeding is not the same claim:
+# a rebuilt or re-tagged image could put 3.11 on PATH, the venv would be
+# created, and the contract gate would run against a backend the repository
+# never declared — the failure mode this whole gate exists to catch.
+interpreter_matches_pin() {
+  local interpreter="$1"
+  "${interpreter}" -c "import sys; sys.exit(
+    0 if sys.version_info[:2] == tuple(int(p) for p in '${PYTHON_VERSION}'.split('.')[:2])
+    else 1
+  )"
+}
+
 ensure_api_venv() {
   local venv="${REPO_ROOT}/apps/api/.venv"
   # Idempotent: the backend job may have already created it, and a warm stage
@@ -143,7 +156,13 @@ ensure_api_venv() {
     return 1
   fi
 
-  log "creating API virtualenv for the OpenAPI contract gate"
+  if ! interpreter_matches_pin "${SOYMUTDB_CI_VENV_PYTHON}"; then
+    log "cannot prepare ${venv}: ${SOYMUTDB_CI_VENV_PYTHON} is $("${SOYMUTDB_CI_VENV_PYTHON}" -V 2>&1), not ${PYTHON_VERSION}"
+    log "the OpenAPI export must run on the pinned interpreter"
+    return 1
+  fi
+
+  log "creating API virtualenv for the OpenAPI contract gate ($("${SOYMUTDB_CI_VENV_PYTHON}" -V 2>&1))"
   "${SOYMUTDB_CI_VENV_PYTHON}" -m venv "${venv}"
   "${venv}/bin/pip" install --upgrade pip
   # Mirror api_install: the contract exports app.main's OpenAPI document, so the
