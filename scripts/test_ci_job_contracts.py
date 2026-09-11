@@ -607,6 +607,146 @@ class DeliveryArchitectureTests(unittest.TestCase):
                             "pnpm job without a persistent store volume",
                         )
 
+    def test_dependency_governance_stage_can_reach_its_python_tooling(self) -> None:
+        """The governance gate is Python-backed and needs PyYAML plus uv.
+
+        Regression for a real CNB build, surfaced only once the worker gate in
+        front of it stopped failing first:
+
+            ==> Dependency governance
+            $ python3 scripts/dependency_governance.py graphs --output ...
+            Traceback (most recent call last):
+              File "/workspace/scripts/dependency_governance.py", line 23, in <module>
+                import yaml
+            ModuleNotFoundError: No module named 'yaml'
+
+        The GitHub mirror escapes this because its job explicitly runs
+        `python -m pip install --quiet PyYAML==<pin> uv==<pin>` after
+        `actions/setup-python`. The CNB stage ran the same job body on
+        `node:24.19.0`, which carries no Python at all, and `PyYAML` is not
+        declared by any pyproject -- it was only ever present by accident on the
+        mirror. Every assertion below is load-bearing; dropping one re-opens the
+        failure with the same message.
+
+        Note the gate is `if: always()` on GitHub and a hard CNB stage for the
+        same reason: an unavailable analyzer must fail closed, never skip green.
+        """
+        steps = (ROOT / "scripts/ci-job-steps.sh").read_text(encoding="utf-8")
+
+        def function_bodies(text: str) -> dict[str, str]:
+            bodies: dict[str, str] = {}
+            for match in re.finditer(r"^(\w+)\(\) \{\n", text, re.M):
+                start = match.end()
+                end = text.index("\n}\n", start)
+                bodies[match.group(1)] = text[start:end]
+            return bodies
+
+        bodies = function_bodies(steps)
+
+        # 1. The Python tooling must be provisioned by the job body, so the gate
+        #    is self-sufficient on either provider instead of depending on an
+        #    image that happens to ship it.
+        self.assertIn("ensure_governance_tooling", bodies)
+
+        tooling_body = bodies["ensure_governance_tooling"]
+        # The graph generator imports PyYAML; no pyproject declares it, so the
+        # job must install it explicitly or the gate cannot run at all.
+        self.assertIn("PyYAML", tooling_body)
+        # The analyzers shell out to `uv`/`uvx` (deptry, pip-audit, ...), so an
+        # interpreter alone is not enough.
+        self.assertIn("uv", tooling_body)
+        # Both pins must come from the shared version variables, never an
+        # inline literal that can drift from the GitHub step and the Dockerfiles.
+        self.assertIn("GOVERNANCE_PYYAML_VERSION", tooling_body)
+        self.assertIn("UV_VERSION", tooling_body)
+        # Pinned through the shared variables (asserted against the GitHub
+        # step's literal pins in block 4), never through an inline literal that
+        # could drift between the two providers.
+        self.assertNotRegex(
+            tooling_body,
+            r'"(?:PyYAML|uv)==\d',
+            "the PyYAML/uv installs must use the shared version variables, "
+            "not an inline literal that the GitHub step can drift from",
+        )
+        # Fail closed rather than silently skipping the gate on a bad image.
+        self.assertIn(
+            "interpreter_matches_pin",
+            tooling_body,
+            "the governance gate must reject an interpreter that misses the pin",
+        )
+        self.assertRegex(
+            tooling_body,
+            r"(?m)^\s*command -v python3",
+            "a missing python3 must be a hard error, not a skipped analyzer",
+        )
+
+        # 2. The gate must actually run it, after the pnpm bootstrap, or the
+        #    install is dead code.
+        step_body = bodies["dependency_governance_step"]
+        self.assertIn("ensure_workspace", step_body)
+        self.assertIn("ensure_governance_tooling", step_body)
+        self.assertLess(
+            step_body.index("ensure_workspace"),
+            step_body.index("ensure_governance_tooling"),
+            "the tooling install must not precede the workspace bootstrap",
+        )
+
+        # 3. The stage environment must supply the interpreter. The job body can
+        #    install PyYAML/uv, but it cannot conjure a Python 3.14 interpreter,
+        #    and `node:24.19.0` -- the image this stage used to pin -- has none.
+        for config in _cnb_config_files():
+            document = yaml.safe_load(config.read_text(encoding="utf-8"))
+            for pipeline in _iter_pipelines(document):
+                governance_stages = [
+                    stage
+                    for stage in pipeline.get("stages", [])
+                    if "run dependency-governance" in str(stage.get("script", ""))
+                ]
+                if not governance_stages:
+                    continue
+
+                build = (pipeline.get("docker") or {}).get("build")
+                inherited = build if isinstance(build, dict) else {}
+                for stage in governance_stages:
+                    image = str(stage.get("image", ""))
+                    # A stage `image:` overrides the pipeline environment, so it
+                    # must itself be a toolchain that carries Python. The image
+                    # this regression is about is exactly the one that must never
+                    # come back.
+                    self.assertNotIn(
+                        "node:",
+                        image,
+                        f"{config.name}/{stage.get('name')}: image={image!r} has "
+                        "no Python, but the governance gate runs a Python script",
+                    )
+                    if not image:
+                        self.assertTrue(
+                            inherited.get("dockerfile"),
+                            f"{config.name}/{stage.get('name')}: the stage drops its "
+                            "`image:` without a pipeline-level docker.build to "
+                            "inherit a dual-toolchain environment from",
+                        )
+
+        # 4. The PyYAML pin must agree with the GitHub step that has always
+        #    worked, so the two providers cannot install different versions.
+        workflow = _workflow_text("ci.yml")
+        self.assertIn("PyYAML==", workflow)
+        pyyaml_pin = re.search(r"PyYAML==(\d+\.\d+\.\d+)", workflow)
+        self.assertIsNotNone(pyyaml_pin, "the GitHub governance step must pin PyYAML")
+        self.assertIn(
+            f"${{SOYMUTDB_CI_PYYAML_VERSION:-{pyyaml_pin.group(1)}}}",
+            steps,
+            "the shared PyYAML pin must match the version the GitHub step installs",
+        )
+
+        uv_pin = re.search(r"uv==(\d+\.\d+\.\d+)", workflow)
+        self.assertIsNotNone(uv_pin, "the GitHub governance step must pin uv")
+        self.assertIn(
+            f"${{SOYMUTDB_CI_UV_VERSION:-{uv_pin.group(1)}}}",
+            steps,
+            "the shared uv pin must match the version the GitHub step installs",
+        )
+
     def test_i18n_test_mock_interpolates_like_the_real_library(self) -> None:
         """The shared double must substitute {{name}}, not return it literally.
 

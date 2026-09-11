@@ -234,10 +234,62 @@ api_tests_run() {
 # -----------------------------------------------------------------------------
 # dependency-governance — graphs + fail-closed audits
 # -----------------------------------------------------------------------------
+# The graph generator and every Python analyzer need a Python interpreter, and
+# the generators also need PyYAML. On GitHub `actions/setup-python` plus an
+# explicit `pip install PyYAML==<pin> uv==<pin>` step provides both; the CNB
+# stage used to run the same job body on `node:24.19.0`, which ships no Python
+# at all, so the gate died with:
+#
+#   File "/workspace/scripts/dependency_governance.py", line 23, in <module>
+#     import yaml
+#   ModuleNotFoundError: No module named 'yaml'
+#
+# `PyYAML` is an undeclared dependency -- no pyproject lists it, so it was only
+# ever present by accident on the mirror. Install it here from the pinned
+# version, together with `uv` (the analyzer commands shell out to `uv`/`uvx`),
+# so the job body is self-sufficient on either provider and no analyzer is
+# skipped. The version is asserted against the GitHub step by
+# scripts/test_ci_job_contracts.py.
+GOVERNANCE_PYYAML_VERSION="${SOYMUTDB_CI_PYYAML_VERSION:-6.0.3}"
+
+ensure_governance_tooling() {
+  command -v python3 >/dev/null 2>&1 || {
+    log "the dependency-governance stage image must provide python3"
+    log "it runs scripts/dependency_governance.py and every Python analyzer"
+    return 1
+  }
+
+  # Fail closed on an interpreter the repository never declared: the analyzers
+  # resolve dependencies against the pinned Python, so running them under a
+  # stray 3.11 would report findings for a toolchain nothing ships.
+  if ! interpreter_matches_pin python3; then
+    log "cannot run dependency governance: python3 is $(python3 -V 2>&1), not ${PYTHON_VERSION}"
+    return 1
+  fi
+
+  # Idempotent, like ensure_api_venv: a warm container must not reinstall.
+  if python3 -c "import yaml" >/dev/null 2>&1; then
+    log "PyYAML already available for dependency governance"
+  else
+    log "installing PyYAML==${GOVERNANCE_PYYAML_VERSION} for dependency governance"
+    python3 -m pip install --quiet --disable-pip-version-check \
+      "PyYAML==${GOVERNANCE_PYYAML_VERSION}" || return 1
+  fi
+
+  if command -v uv >/dev/null 2>&1; then
+    log "uv already available for dependency governance"
+  else
+    log "installing uv==${UV_VERSION} for dependency governance"
+    python3 -m pip install --quiet --disable-pip-version-check \
+      "uv==${UV_VERSION}" || return 1
+  fi
+}
+
 dependency_governance_step() {
   # `pnpm deps:*` needs an installed workspace, and this is a different container
   # from the frontend job: bootstrap instead of assuming.
   ensure_workspace
+  ensure_governance_tooling
 
   local rc=0
   pnpm deps:graphs || rc=$?

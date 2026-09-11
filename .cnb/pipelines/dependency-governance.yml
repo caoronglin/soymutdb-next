@@ -5,7 +5,28 @@
 # Fails closed on any unavailable analyzer instead of skipping it.
 # =============================================================================
 name: SoyMutDB dependency governance
+# The governance gate runs BOTH toolchains: `pnpm deps:graphs` drives pnpm,
+# and scripts/dependency_governance.py plus every Python analyzer need an
+# interpreter. The pipeline-level `docker.build` is the only place CNB accepts
+# a Dockerfile, and `.cnb/env/Dockerfile.frontend` is the committed image that
+# carries Node AND Python 3.14.
+#
+# This stage used to pin `image: node:24.19.0`, which has no Python at all, so
+# the gate died with:
+#
+#   File "/workspace/scripts/dependency_governance.py", line 23, in <module>
+#     import yaml
+#   ModuleNotFoundError: No module named 'yaml'
+#
+# The job body installs the pinned PyYAML/uv the analyzers need, but it cannot
+# conjure an interpreter; the environment must supply one.
+docker:
+  volumes:
+    - /cache/pnpm-store
+  build:
+    dockerfile: .cnb/env/Dockerfile.frontend
+    by:
+    - .cnb/env/Dockerfile.frontend
 stages:
 - name: Dependency governance
-  image: node:24.19.0
   script: bash scripts/ci-job-steps.sh run dependency-governance

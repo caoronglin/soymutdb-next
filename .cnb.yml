@@ -114,8 +114,14 @@ main:
         - name: API + Worker verification
           image: python:3.14
           script: bash scripts/ci-job-steps.sh run api-tests
+        # No stage `image:`: the job needs Node AND Python 3.14 (the graph
+        # generator imports PyYAML, the analyzers shell out to uv), and the
+        # pipeline-level `docker.build` above is the only image that carries
+        # both toolchains. `node:24.19.0` has no Python at all, so the gate
+        # died with `ModuleNotFoundError: No module named 'yaml'` while the
+        # GitHub mirror escaped it through `actions/setup-python`. The job body
+        # installs PyYAML/uv itself, but it cannot conjure an interpreter.
         - name: Dependency governance
-          image: node:24.19.0
           script: bash scripts/ci-job-steps.sh run dependency-governance
 
   # ---------------------------------------------------------------------------
@@ -169,8 +175,14 @@ main:
         - name: API + Worker verification
           image: python:3.14
           script: bash scripts/ci-job-steps.sh run api-tests
+        # No stage `image:`: the job needs Node AND Python 3.14 (the graph
+        # generator imports PyYAML, the analyzers shell out to uv), and the
+        # pipeline-level `docker.build` above is the only image that carries
+        # both toolchains. `node:24.19.0` has no Python at all, so the gate
+        # died with `ModuleNotFoundError: No module named 'yaml'` while the
+        # GitHub mirror escaped it through `actions/setup-python`. The job body
+        # installs PyYAML/uv itself, but it cannot conjure an interpreter.
         - name: Dependency governance
-          image: node:24.19.0
           script: bash scripts/ci-job-steps.sh run dependency-governance
         - name: Build the checksummed Pages artifact
           image: node:24.19.0
