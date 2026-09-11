@@ -1,0 +1,64 @@
+# =============================================================================
+# SoyMutDB — acceptance pipeline (CNB)
+# =============================================================================
+# Source of truth: `.cnb.yml` (`$` -> `web_trigger_acceptance`). Recorded here so
+# the layer order is reviewable in isolation.
+#
+# Manual entry point for "验收" by a reviewer or an Issue-driven NPC task. It
+# runs on any branch (the web trigger is declared in .cnb/web_trigger.yml) so a
+# PR can be accepted before it is merged.
+#
+# Layers, in order, and why each one is here rather than in the `verify`
+# pipeline:
+#
+#   contracts  fast, dependency-free delivery contracts — the gate that most
+#              regressions trip. Runs first so a broken contract fails in ~1
+#              minute instead of after a full build.
+#   backend    API + worker pytest with SOYMUTDB_RUN_POSTGRES_INTEGRATION=1.
+#              This duplicates `verify`'s api-tests stage ON PURPOSE: acceptance
+#              must be a self-contained statement about a revision, not "trust
+#              that the push pipeline was green". verify-backend-tests.sh fails
+#              closed when PostgreSQL is unavailable, so a missing service is
+#              reported BLOCKED and never counted as a pass.
+#   static     built static tree health + byte-level checksums.
+#
+# Every stage body is a single `bash <script>` call: CNB executes a stage script
+# with `sh`, which rejects the bash syntax an inline body would use.
+#
+# Evidence: scripts/acceptance.sh writes artifacts/acceptance/acceptance-manifest.txt
+# (commit, profile, per-layer verdicts, toolchain, artifact digest) and the
+# endStages upload it, so an acceptance run leaves a reviewable record even when
+# it fails.
+# =============================================================================
+name: SoyMutDB acceptance
+
+env:
+  # The acceptance layers must be able to tell the truth about a data-backed
+  # checkout; see the api.yml pipeline for the same flag.
+  SOYMUTDB_RUN_POSTGRES_INTEGRATION: '1'
+  SOYMUTDB_ACCEPTANCE_DIR: artifacts/acceptance
+
+stages:
+  - name: Delivery contracts
+    image: python:3.14
+    script: bash scripts/acceptance.sh --profile contracts
+
+  - name: API + Worker acceptance
+    image: python:3.14
+    services:
+      - postgres:16
+    script: bash scripts/acceptance.sh --profile backend
+
+  - name: Static artifact acceptance
+    image: node:24.19.0
+    volumes:
+      - /cache/pnpm-store:/cache/pnpm-store
+      - .turbo:/workspace/.turbo
+    script: bash scripts/acceptance.sh --profile static
+
+endStages:
+  - name: Upload acceptance evidence
+    image: cnbcool/artifact
+    settings:
+      path: artifacts/acceptance
+      name: acceptance-evidence-$CNB_COMMIT_SHORT

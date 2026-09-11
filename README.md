@@ -59,12 +59,32 @@ pnpm ci:release                               # 签名并发布 OCI release
 
 bash scripts/smoke.sh                         # 统一冒烟：contracts/static/runtime/e2e/images
 bash scripts/smoke.sh --list                  # 查看可用 layer
+
+bash scripts/acceptance.sh --profile full     # 平台验收：contracts + backend + static + runtime
+```
+
+### 在 CNB 上启动与验收
+
+| 想做的事 | 入口 |
+| --- | --- |
+| 起一个可运行的开发环境 | 分支页「启动 SoyMutDB 开发环境」按钮（`vscode` 事件）；进入后直接是门户预览页 |
+| 手动要预览环境 | 「启动门户预览环境」按钮（`web_trigger_workspace-preview`） |
+| 判断某个修订能不能收 | 「运行验收」按钮（`web_trigger_acceptance`）或 `pnpm accept` |
+
+```bash
+pnpm dev:cloud                                # 本地起云开发环境（等于 CNB 上的启动按钮）
+pnpm accept --profile contracts               # 验收：交付契约（默认，无外部依赖）
+pnpm accept --profile backend                 # 验收：API + Worker（需 PostgreSQL）
+pnpm accept --profile static                  # 验收：静态制品 + 字节校验
 ```
 
 * 完整架构、流水线拓扑、镜像打包发布流程与冒烟分层：`docs/ops/ci-cd.md`
+* 启动与验收入口、验收清单（evidence）与两种"分层姿态"的区别：`docs/ops/cnb-startup-acceptance.md`
 * 迁移对照、保留项、验证证据与前置缺陷：`docs/dev/pipeline-migration.md`
 
 > 冒烟约定：前置条件缺失时输出 `SKIPPED: <原因>` 并计入 summary，**不会冒充通过**。
+> 验收约定：必需层的前置条件缺失输出 `BLOCKED: <原因>` 并**判定失败**——在平台上
+> 前置条件是流水线定义的属性，缺了应修流水线，而不是把这一层放行。
 
 ## Quick start
 
@@ -141,6 +161,7 @@ bash deploy/scripts/verify-restore.sh <backup> # 恢复演练校验
 
 - [科研用户指南](docs/user/README.md)
 - [运维与 Admin 手册](docs/ops/README.md)
+- [CNB 启动与验收](docs/ops/cnb-startup-acceptance.md)
 - [开发者架构与部署](docs/dev/README.md)
 - [历史部署设计（仅参考）](docs/design/deployment-architecture.md)
 
@@ -261,6 +282,9 @@ pnpm dev:admin  # admin 开发服务器
 pnpm build:web  # web → dist/
 pnpm build:admin # admin web bundle
 pnpm build:ssg  # SSG 页面 + samples
+pnpm smoke      # 统一冒烟（contracts/static/runtime/e2e/images）
+pnpm accept     # 平台验收（contracts/backend/static/runtime/…）
+pnpm dev:cloud  # 云原生开发环境启动（与 CNB 启动按钮同一脚本）
 ```
 
 ## License

@@ -2,8 +2,8 @@
 # SoyMutDB — CNB web triggers
 # =============================================================================
 # Manual entry points for the delivery pipelines. These let an Issue-driven task
-# (or a reviewer) start verification, image builds, or publication on a branch
-# without pushing a commit.
+# (or a reviewer) start verification, acceptance, image builds, or publication
+# on a branch without pushing a commit.
 #
 # Each button raises `web_trigger_<name>`; the matching pipeline lives in
 # `.cnb.yml` under the `$` fallback branch.
@@ -14,6 +14,23 @@ branch:
       - name: 运行完整验证
         description: 在所选分支上运行前端、API/Worker 与依赖治理全套门禁
         event: web_trigger_verify
+        permissions:
+          roles: [master, developer]
+
+      - name: 运行验收
+        description: 在所选修订上运行验收分层（交付契约 → API/Worker → 静态制品），输出验收清单与摘要
+        event: web_trigger_acceptance
+        permissions:
+          roles: [master, developer]
+
+      # A cloud-development environment started from THIS event. It exists
+      # because the default 云原生开发 button is per-branch and always opens the
+      # environment prepared by `$` -> `vscode`; a reviewer who wants the portal
+      # preview specifically, or who is looking at a revision the button is not
+      # offered for, needs an explicit entry point. Same script, same port.
+      - name: 启动门户预览环境
+        description: 启动云原生开发环境并把 SoyMutDB 门户跑在 8686 端口，进入后直接是预览页
+        event: web_trigger_workspace-preview
         permissions:
           roles: [master, developer]
 
@@ -40,5 +57,31 @@ branch:
       - name: 运行完整验证
         description: 在特性分支上运行全套验证门禁
         event: web_trigger_verify
+        permissions:
+          roles: [master, developer]
+
+      # Acceptance is deliberately offered on feature branches: the point of a
+      # pre-merge acceptance run is to accept a revision that is not on main yet.
+      - name: 运行验收
+        description: 在特性分支上运行验收分层，合并前拿到可复核的验收清单
+        event: web_trigger_acceptance
+        permissions:
+          roles: [master, developer]
+
+  # Any other branch (including the auto/* branches this repository's NPC tasks
+  # push to) gets the two read-only, credential-free entry points. Without this
+  # block a reviewer cannot validate an NPC-produced branch from the UI at all,
+  # because the button list is matched per branch pattern.
+  - reg: ^(?!main$|feature/).*$
+    buttons:
+      - name: 运行完整验证
+        description: 在所选分支上运行前端、API/Worker 与依赖治理全套门禁
+        event: web_trigger_verify
+        permissions:
+          roles: [master, developer]
+
+      - name: 运行验收
+        description: 在所选分支上运行验收分层，输出验收清单与摘要
+        event: web_trigger_acceptance
         permissions:
           roles: [master, developer]

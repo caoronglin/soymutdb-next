@@ -46,6 +46,8 @@ SHARED_SCRIPTS = (
     "scripts/mcp-transport-smoke.sh",
     "scripts/assert-clickhouse-migration.py",
     "scripts/smoke.sh",
+    "scripts/start-cloud-dev.sh",
+    "scripts/acceptance.sh",
 )
 
 PIPELINE_FILES = (
@@ -55,6 +57,7 @@ PIPELINE_FILES = (
     ".cnb/pipelines/docker-images.yml",
     ".cnb/pipelines/release.yml",
     ".cnb/pipelines/pages-publish.yml",
+    ".cnb/pipelines/acceptance.yml",
 )
 
 
@@ -223,6 +226,8 @@ class DeliveryArchitectureTests(unittest.TestCase):
         self.assertLessEqual(
             {
                 "web_trigger_verify",
+                "web_trigger_acceptance",
+                "web_trigger_workspace-preview",
                 "web_trigger_docker-images",
                 "web_trigger_release",
                 "web_trigger_publish",
@@ -235,6 +240,8 @@ class DeliveryArchitectureTests(unittest.TestCase):
         fallback = document.get("$", {})
         for event in (
             "web_trigger_verify",
+            "web_trigger_acceptance",
+            "web_trigger_workspace-preview",
             "web_trigger_docker-images",
             "web_trigger_release",
             "web_trigger_publish",
@@ -967,17 +974,27 @@ class DeliveryArchitectureTests(unittest.TestCase):
             self.assertIn("scripts/ci-job-steps.sh", scripts[name])
 
     def test_shared_scripts_are_executable_and_strict(self) -> None:
-        # scripts/smoke.sh is the single documented exception: it must survive a
-        # failing layer to report the full summary, so it uses `set -uo pipefail`
-        # without `-e` and decides its exit status explicitly.
-        non_exiting = {"scripts/smoke.sh"}
+        # Two documented exceptions, both multi-layer reporters. They must run
+        # every layer even after one fails, or the summary would hide the rest
+        # of the evidence — so they use `set -uo pipefail` without `-e` and
+        # decide their exit status explicitly.
+        #
+        #   scripts/smoke.sh       prints SMOKE PASS / SMOKE FAIL
+        #   scripts/acceptance.sh  prints ACCEPTANCE PASS / ACCEPTANCE FAIL
+        non_exiting = {
+            "scripts/smoke.sh": "SMOKE FAIL",
+            "scripts/acceptance.sh": "ACCEPTANCE FAIL",
+        }
         for script in SHARED_SCRIPTS:
             if script.endswith(".py"):
                 continue
             text = (ROOT / script).read_text(encoding="utf-8")
             if script in non_exiting:
                 self.assertIn("set -uo pipefail", text, script)
-                self.assertIn("SMOKE FAIL", text, script)
+                # `set -e` would abort on the first failed layer; the presence of
+                # an explicit verdict is what replaces it, so assert both.
+                self.assertNotIn("set -euo pipefail", text, script)
+                self.assertIn(non_exiting[script], text, script)
                 self.assertIn("exit 1", text, script)
             else:
                 self.assertIn("set -euo pipefail", text, script)
@@ -1025,6 +1042,210 @@ class DeliveryArchitectureTests(unittest.TestCase):
                         f"{test_file.relative_to(ROOT)}: {specifier}"
                     )
         self.assertEqual([], unresolved, "test imports that do not resolve:")
+
+    # -------------------------------------------------------------------------
+    # Startup and acceptance
+    # -------------------------------------------------------------------------
+    # "Can I start it?" and "can I accept it?" used to be answerable only by a
+    # developer with a local Docker daemon. They are now platform entry points:
+    # $ -> vscode starts a development environment, and the web-trigger
+    # acceptance pipeline states a verdict about a revision. Both are contracts
+    # in their own right, so they are asserted here rather than left to review.
+
+    def test_cloud_development_entry_point_prepares_the_environment(self) -> None:
+        """The cloud dev button must run the shared bootstrap, not inline YAML."""
+        document = _cnb()
+        pipelines = document["$"]["vscode"]
+        self.assertEqual(len(pipelines), 1)
+        pipeline = pipelines[0]
+
+        # `services: vscode` is what makes this the platform's development entry
+        # point; without it the button falls back to the default environment and
+        # the SoyMutDB bootstrap never runs.
+        services = pipeline["services"]
+        self.assertIn("docker", services)
+        vscode_service = next(s for s in services if isinstance(s, dict) and s.get("name") == "vscode")
+        options = vscode_service["options"]
+        self.assertIs(options["onlyPreview"], True)
+        self.assertIn("scripts/start-cloud-dev.sh", options["launch"])
+
+        # The launch command must be reachable after a fresh checkout. `./` and
+        # `bash` forms both pin the interpreter; a bare path relies on the exec
+        # bit surviving the checkout.
+        first_token = options["launch"].split()[0]
+        self.assertIn(first_token, ("bash", "./"))
+
+        # 8686 is fixed by only-preview mode. Passing it through the environment
+        # keeps the launch command a plain script invocation and keeps the port
+        # in one place.
+        self.assertEqual(pipeline["env"]["SOYMUTDB_DEV_WEB_PORT"], "8686")
+        self.assertIn("8686", options["launch"] + pipeline["env"]["SOYMUTDB_DEV_WEB_PORT"])
+
+        # Every stage body is a single bash invocation (see the stage-shell
+        # tests); the preparation stage runs the same script in full mode.
+        self.assertEqual(
+            [stage["script"] for stage in pipeline["stages"]],
+            ["bash scripts/start-cloud-dev.sh full"],
+        )
+
+        # The store must be mounted, or every environment creation re-downloads
+        # the whole dependency tree into a container layer.
+        volumes = " ".join(str(v) for v in pipeline["docker"]["volumes"])
+        self.assertIn("pnpm-store", volumes)
+
+    def test_cloud_development_buttons_share_one_bootstrap(self) -> None:
+        """The manual preview pipeline must not fork the environment prep.
+
+        A second entry point that reimplements the launch would be the classic
+        way the two drift: the branch button and the manual button would start
+        subtly different environments. Both must call the same script with the
+        same mode and port.
+        """
+        document = _cnb()
+        vscode_pipeline = document["$"]["vscode"][0]
+        manual_pipeline = document["$"]["web_trigger_workspace-preview"][0]
+
+        def launch_and_port(pipeline: dict) -> tuple[str, str]:
+            service = next(
+                s for s in pipeline["services"] if isinstance(s, dict) and s.get("name") == "vscode"
+            )
+            return service["options"]["launch"], pipeline["env"]["SOYMUTDB_DEV_WEB_PORT"]
+
+        self.assertEqual(launch_and_port(vscode_pipeline), launch_and_port(manual_pipeline))
+        self.assertEqual(
+            [stage["script"] for stage in manual_pipeline["stages"]],
+            [stage["script"] for stage in vscode_pipeline["stages"]],
+        )
+
+    def test_start_cloud_dev_binds_services_to_all_interfaces(self) -> None:
+        """A service on localhost is unreachable from CNB's preview proxy.
+
+        This is the single most likely "the environment started but the preview
+        is blank" bug, and it is invisible locally (a local browser CAN reach
+        loopback). Pin the 0.0.0.0 binding and the readiness wait that turns a
+        crash-on-start into a reported failure.
+        """
+        script = (ROOT / "scripts/start-cloud-dev.sh").read_text(encoding="utf-8")
+        self.assertIn("set -euo pipefail", script)
+        self.assertIn("VITE_HOST", script)
+        self.assertIn("0.0.0.0", script)
+        # The preview must not be reported as started before it can be reached.
+        self.assertIn("/dev/tcp/127.0.0.1/", script)
+        # Missing prerequisites must be actionable, not a stack trace.
+        self.assertIn("SOYMUTDB_DATABASE_URL", script)
+        # It must not carry credentials or secrets of its own.
+        self.assertNotIn("CNB_TOKEN", script)
+
+    def test_acceptance_pipeline_reports_per_layer_and_uploads_evidence(self) -> None:
+        document = _cnb()
+        pipeline = document["$"]["web_trigger_acceptance"][0]
+
+        scripts = [stage.get("script", "") for stage in pipeline["stages"]]
+        self.assertEqual(
+            scripts,
+            [
+                "bash scripts/acceptance.sh --profile contracts",
+                "bash scripts/acceptance.sh --profile backend",
+                "bash scripts/acceptance.sh --profile static",
+            ],
+        )
+
+        # PostgreSQL integration is mandatory for the backend layer: the
+        # privacy/identity/assembly matrix must fail closed, not skip green.
+        self.assertEqual(pipeline["env"]["SOYMUTDB_RUN_POSTGRES_INTEGRATION"], "1")
+        backend_stage = pipeline["stages"][1]
+        self.assertIn("postgres:16", backend_stage["services"])
+        self.assertIn("pnpm-store", " ".join(str(v) for v in pipeline["stages"][2]["volumes"]))
+
+        # Evidence is uploaded even when a layer fails, so a failed acceptance
+        # still leaves the per-layer verdicts for review.
+        self.assertTrue(pipeline["endStages"], "acceptance must upload evidence")
+        self.assertIn("artifacts/acceptance", _flatten(pipeline["endStages"]))
+
+        # Acceptance must never publish or hold release credentials: it runs on
+        # feature branches and on Issue-driven NPC tasks.
+        text = _flatten(pipeline)
+        for forbidden in ("docker login", "docker push", "cosign"):
+            self.assertNotIn(forbidden, text, forbidden)
+
+    def test_acceptance_entry_point_never_reports_a_missing_prerequisite_as_a_pass(self) -> None:
+        """The acceptance/smoke difference is deliberate and must stay visible.
+
+        scripts/smoke.sh reports `SKIPPED` for a missing prerequisite because it
+        is a developer tool: it runs what is possible locally. Acceptance must
+        do the opposite for a required layer — on the platform the prerequisite
+        is a property of the pipeline definition, so its absence is a failure to
+        fix there, not a layer to be waved through. This test pins both halves so
+        neither entry point silently adopts the other's posture.
+        """
+        acceptance = (ROOT / "scripts/acceptance.sh").read_text(encoding="utf-8")
+        self.assertIn("block_layer", acceptance)
+        self.assertIn("BLOCKED", acceptance)
+        self.assertIn("ACCEPTANCE PASS", acceptance)
+        self.assertIn("ACCEPTANCE FAIL", acceptance)
+        # A blocked layer must fail the profile.
+        exit_guard = acceptance.index("ACCEPTANCE FAIL")
+        self.assertIn("#BLOCKED[@]}", acceptance[:exit_guard][-400:])
+
+        smoke = (ROOT / "scripts/smoke.sh").read_text(encoding="utf-8")
+        self.assertIn("skip_layer", smoke)
+        self.assertIn("SKIPPED", smoke)
+
+        # The acceptance profiles must cover the layers the pipeline uses, and
+        # the list must match the dispatched cases.
+        catalog = subprocess.run(
+            ["bash", "scripts/acceptance.sh", "--list"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        profiles = set(catalog.stdout.split())
+        self.assertLessEqual({"contracts", "static", "runtime", "e2e", "images", "backend", "full"}, profiles)
+
+        # `profile` names in the usage/`--list` must be dispatchable, exactly as
+        # for scripts/ci-job-steps.sh: a documented profile that no `case` arm
+        # handles would silently accept nothing.
+        dispatch = set(re.findall(r"^\s+(\w+)\)$", acceptance, re.M))
+        self.assertLessEqual({"contracts", "static", "runtime", "e2e", "images", "backend"}, dispatch)
+
+    def test_startup_and_acceptance_are_documented_and_reachable_from_the_package(self) -> None:
+        """A platform entry point nobody can find is not an entry point."""
+        package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
+        scripts = package["scripts"]
+        self.assertEqual(scripts["accept"], "bash scripts/acceptance.sh")
+        self.assertEqual(scripts["dev:cloud"], "bash scripts/start-cloud-dev.sh")
+
+        doc = ROOT / "docs/ops/cnb-startup-acceptance.md"
+        self.assertTrue(doc.is_file(), "missing docs/ops/cnb-startup-acceptance.md")
+        text = doc.read_text(encoding="utf-8")
+        for marker in (
+            "start-cloud-dev.sh",
+            "acceptance.sh",
+            ".cnb/settings.yml",
+            "web_trigger_acceptance",
+            "8686",
+        ):
+            self.assertIn(marker, text, marker)
+
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertIn("cnb-startup-acceptance.md", readme)
+
+        # The settings file that customises the launch button must be committed,
+        # not merely present: `.gitignore` once swallowed .cnb/env/ the same way.
+        settings = ".cnb/settings.yml"
+        self.assertTrue((ROOT / settings).is_file(), settings)
+        ignored = subprocess.run(
+            ["git", "check-ignore", "--quiet", settings], cwd=ROOT, capture_output=True
+        )
+        self.assertNotEqual(ignored.returncode, 0, f"{settings} is ignored by .gitignore")
+        tracked = subprocess.run(
+            ["git", "ls-files", "--cached", "--error-unmatch", settings],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(tracked.returncode, 0, f"{settings} is present but not tracked by git")
 
     def test_release_contract_is_provider_agnostic(self) -> None:
         golden = (ROOT / "scripts/release-contract.golden.sh").read_text(encoding="utf-8")
