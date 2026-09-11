@@ -1140,10 +1140,28 @@ class DeliveryArchitectureTests(unittest.TestCase):
                 r"(?m)^FROM python:3\.14",
                 f"{dockerfile_path} must carry Python for the OpenAPI contract gate",
             )
+            # Node is installed from the official release tarball, not from a
+            # `FROM node:` base: python:3.14 and node:24.19.0 sit on different
+            # Debian generations, and `COPY --from` cannot carry the C library
+            # the copied interpreter needs, so the reverse composition dies with
+            # `GLIBC_2.38 not found`. Assert the version arrives pinned AND that
+            # the download is verified, or the toolchain can be swapped under a
+            # reviewed pin.
             self.assertRegex(
                 docker_text,
-                r"(?m)^FROM node:24\.19\.0",
-                f"{dockerfile_path} must carry the pinned Node toolchain",
+                r"(?m)^ARG NODE_VERSION=24\.19\.0$",
+                f"{dockerfile_path} must pin Node to the repository version",
+            )
+            self.assertIn(
+                "sha256sum --check",
+                docker_text,
+                f"{dockerfile_path} must verify the Node tarball checksum",
+            )
+            self.assertNotRegex(
+                docker_text,
+                r"(?m)^FROM node:",
+                f"{dockerfile_path} cannot be built on a node: base and also "
+                "provide Python 3.14 from python: via COPY --from",
             )
 
     def test_no_stage_image_is_a_dockerfile_path(self) -> None:
