@@ -55,6 +55,26 @@ PYTHON_VERSION="${SOYMUTDB_CI_PYTHON_VERSION:-3.14}"
 UV_VERSION="${SOYMUTDB_CI_UV_VERSION:-0.11.33}"
 export NODE_VERSION PNPM_VERSION PYTHON_VERSION UV_VERSION
 
+# --- container lifecycle ------------------------------------------------------
+# Every CNB stage runs in its own fresh container, so nothing a previous stage
+# did to the filesystem survives into this one. `corepack enable` in a "setup"
+# stage does NOT make pnpm available here, and node_modules is not carried over
+# either. The observable failure is:
+#
+#   scripts/ci-job-steps.sh: line 89: pnpm: command not found        (exit 127)
+#
+# So each job body that needs the JS toolchain bootstraps it itself, through
+# scripts/setup-workspace.sh. That is idempotent and store-linked, so the cost is
+# a link pass rather than a download pass. Only declared stage `volumes`
+# (the pnpm store, the turbo cache) cross the container boundary.
+ensure_workspace() {
+  bash "${REPO_ROOT}/scripts/setup-workspace.sh"
+}
+
+ensure_pnpm() {
+  bash "${REPO_ROOT}/scripts/setup-workspace.sh" --enable-only
+}
+
 # Demo build origins. The offline verification build must never need a live API.
 export SOYMUTDB_CI_DEMO_MODE="${SOYMUTDB_CI_DEMO_MODE:-demo}"
 export SOYMUTDB_CI_DEMO_API_URL="${SOYMUTDB_CI_DEMO_API_URL:-https://api.soymutdb.test}"
@@ -84,10 +104,10 @@ list_jobs() {
 # frontend — install, build, budgets, unit tests, lint, typecheck, contracts
 # -----------------------------------------------------------------------------
 frontend_install() {
-  # The repo .npmrc pins a mirror; CI must use the registry the lockfile was
-  # resolved against.
-  pnpm config set registry https://registry.npmjs.org/
-  pnpm install --frozen-lockfile
+  # This container has no node_modules and no pnpm shim yet: a previous stage's
+  # `corepack enable` died with its container. Bootstrap here rather than
+  # assuming state, and let setup-workspace.sh own the registry/store config.
+  ensure_workspace
 }
 
 frontend_build_demo() {
@@ -121,6 +141,10 @@ api_run() {
 # dependency-governance — graphs + fail-closed audits
 # -----------------------------------------------------------------------------
 dependency_governance_step() {
+  # `pnpm deps:*` needs an installed workspace, and this is a different container
+  # from the frontend job: bootstrap instead of assuming.
+  ensure_workspace
+
   local rc=0
   pnpm deps:graphs || rc=$?
   # Always attempt the full audit set so a failed graph does not hide Knip,

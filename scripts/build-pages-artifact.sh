@@ -24,6 +24,11 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${REPO_ROOT}"
 
+# This script runs `pnpm --filter ... build`, and CI gives it a fresh container
+# with no node_modules and no pnpm shim. Bootstrap here rather than depending on
+# a sibling stage: see scripts/ci-job-steps.sh, "container lifecycle".
+bash "${REPO_ROOT}/scripts/setup-workspace.sh"
+
 SOYMUTDB_SITE_SLUG="${SOYMUTDB_SITE_SLUG:-soymutdb}"
 PAGES_BASE_PATH="${PAGES_BASE_PATH:-/${SOYMUTDB_SITE_SLUG}/}"
 PAGES_OUTPUT_DIR="${PAGES_OUTPUT_DIR:-pages-dist}"

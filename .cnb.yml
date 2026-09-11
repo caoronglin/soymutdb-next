@@ -47,13 +47,15 @@ main:
         VITE_API_BASE_URL: https://api.soymutdb.test
         VITE_JBROWSE_BASE_URL: https://jbrowse.soymutdb.test
       stages:
-        - name: Setup workspace with cache
-          image: node:24.19.0
-          script: bash scripts/setup-workspace.sh
-          volumes:
-            - /cache/pnpm-store:/cache/pnpm-store
+        # No "setup workspace" stage: every CNB stage gets a fresh container, so
+        # a bootstrap stage would not prepare the stages after it. Each job body
+        # bootstraps itself via scripts/setup-workspace.sh. The volumes below are
+        # the only state that crosses a container boundary.
         - name: Frontend verification
           image: node:24.19.0
+          volumes:
+            - /cache/pnpm-store:/cache/pnpm-store
+            - .turbo:/workspace/.turbo
           script: bash scripts/ci-job-steps.sh run frontend
         - name: API + Worker verification
           image: python:3.14
@@ -62,6 +64,8 @@ main:
           script: bash scripts/ci-job-steps.sh run api-tests
         - name: Dependency governance
           image: node:24.19.0
+          volumes:
+            - /cache/pnpm-store:/cache/pnpm-store
           script: bash scripts/ci-job-steps.sh run dependency-governance
 
   # ---------------------------------------------------------------------------
@@ -76,13 +80,15 @@ main:
         VITE_API_BASE_URL: https://api.soymutdb.test
         VITE_JBROWSE_BASE_URL: https://jbrowse.soymutdb.test
       stages:
-        - name: Setup workspace with cache
-          image: node:24.19.0
-          script: bash scripts/setup-workspace.sh
-          volumes:
-            - /cache/pnpm-store:/cache/pnpm-store
+        # No "setup workspace" stage: every CNB stage gets a fresh container, so
+        # a bootstrap stage would not prepare the stages after it. Each job body
+        # bootstraps itself via scripts/setup-workspace.sh. The volumes below are
+        # the only state that crosses a container boundary.
         - name: Frontend verification
           image: node:24.19.0
+          volumes:
+            - /cache/pnpm-store:/cache/pnpm-store
+            - .turbo:/workspace/.turbo
           script: bash scripts/ci-job-steps.sh run frontend
         - name: API + Worker verification
           image: python:3.14
@@ -91,11 +97,16 @@ main:
           script: bash scripts/ci-job-steps.sh run api-tests
         - name: Dependency governance
           image: node:24.19.0
+          volumes:
+            - /cache/pnpm-store:/cache/pnpm-store
           script: bash scripts/ci-job-steps.sh run dependency-governance
         - name: Build the checksummed Pages artifact
           image: node:24.19.0
-          # Both scripts carry a bash shebang; invoking them directly keeps the
-          # interpreter out of the platform's default `sh`.
+          volumes:
+            - /cache/pnpm-store:/cache/pnpm-store
+            - .turbo:/workspace/.turbo
+          # Both scripts carry a bash shebang and bootstrap their own container
+          # (build-pages-artifact.sh runs `pnpm --filter ... build`).
           script: bash scripts/build-pages-artifact.sh && bash scripts/verify-pages-artifact.sh pages-dist
         - name: Upload GitHub Pages demo artifact
           image: cnbcool/artifact
@@ -302,13 +313,15 @@ $:
         VITE_API_BASE_URL: https://api.soymutdb.test
         VITE_JBROWSE_BASE_URL: https://jbrowse.soymutdb.test
       stages:
-        - name: Setup workspace with cache
-          image: node:24.19.0
-          script: bash scripts/setup-workspace.sh
-          volumes:
-            - /cache/pnpm-store:/cache/pnpm-store
+        # No "setup workspace" stage: every CNB stage gets a fresh container, so
+        # a bootstrap stage would not prepare the stages after it. Each job body
+        # bootstraps itself via scripts/setup-workspace.sh. The volumes below are
+        # the only state that crosses a container boundary.
         - name: Frontend verification
           image: node:24.19.0
+          volumes:
+            - /cache/pnpm-store:/cache/pnpm-store
+            - .turbo:/workspace/.turbo
           script: bash scripts/ci-job-steps.sh run frontend
         - name: API + Worker verification
           image: python:3.14

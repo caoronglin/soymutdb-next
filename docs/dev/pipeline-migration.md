@@ -58,7 +58,7 @@
 5. **契约测试** `scripts/test_ci_job_contracts.py`：工具链固定一致性、PR 不得持有
    发布凭据、镜像校验与发布分离、逻辑不得被内联回 YAML，以及 stage 解释器固定。
 6. **工作区引导脚本** `scripts/setup-workspace.sh`：corepack + pnpm install 单点声明，
-   替代 3 份重复的内联 stage 体。
+   每个 stage 自调（CNB stage 之间不共享容器文件系统）。
 7. **静态发布暂存脚本** `scripts/stage-pages-publication.sh`：校验 + 字节级暂存 +
    adapter 发布，替代 `pages-publish.yml` 里的内联 bash。
 8. **工具链守门** `scripts/check-toolchain-pins.py`：可直接运行（也接 pre-commit），
@@ -92,7 +92,29 @@ sh: 1: set: Illegal option -o pipefail
 必须是静态检查，而不是"本地跑一遍 stage 体"。契约测试里专门有一个用例把这个事实
 固定下来，防止有人把检查简化成空操作。
 
-新增/加固的契约用例（`scripts/test_ci_job_contracts.py`，24 passed）：
+修好 shell 之后，第二次构建又暴露出一个被前一个问题掩盖的缺陷：
+
+```
+Setup workspace with cache   → ✅ success (52.5s)
+Frontend verification        → ❌ error, exit 127
+  scripts/ci-job-steps.sh: line 89: pnpm: command not found
+```
+
+**每个 stage 都是全新容器**，`corepack enable` 写的 shim 随容器一起消失，
+checkout 也不带 `node_modules`。修复：
+
+| 问题 | 修复 |
+| --- | --- |
+| 用 "Setup workspace with cache" stage 预置后续 stage | 删除该 stage；每个 job 自己引导 |
+| `frontend_install` / `dependency_governance_step` 直接调 `pnpm` | 先调 `scripts/setup-workspace.sh`（`corepack enable` + `command -v pnpm` 校验 + install） |
+| pnpm/turbo 缓存无显式挂载 | `volumes: /cache/pnpm-store`、`.turbo`，让"每容器装一次"变成链接而非下载 |
+| 契约测试未覆盖容器生命周期 | 新增 `test_no_stage_depends_on_another_stages_container_state`（沿调用链检查 + 禁止 "Setup workspace" stage 名 + 强制 store volume） |
+
+`setup-workspace.sh` 在 `corepack enable` 之后立即 `command -v pnpm` 校验：引导
+失败要在本 stage 报错，而不是留到三个 stage 之后变成一个看起来像脚本 bug 的
+`command not found`。
+
+新增/加固的契约用例：
 
 * `test_stage_scripts_never_rely_on_the_platform_shell`：逐 stage 静态检查解释器
 * `test_sh_does_not_catch_the_original_bug_so_we_parse_instead`：固定上述事实
@@ -100,6 +122,10 @@ sh: 1: set: Illegal option -o pipefail
 * `test_cnb_env_helpers_referenced_by_cnb_yml_exist`：`.cnb/env/*` 引用必须存在
 * `test_ci_job_steps_only_advertises_commands_it_implements`：文档命令必须已实现
 * `test_cnb_toolchain_pins_are_actually_in_sync`：直接跑工具链守门
+* `test_no_stage_depends_on_another_stages_container_state`：容器生命周期
+  （CNB stage 之间不共享容器文件系统）
+
+`scripts/test_ci_job_contracts.py` 现为 26 passed。
 
 ## 5. 验证证据
 
@@ -108,7 +134,7 @@ sh: 1: set: Illegal option -o pipefail
 python3 -m pytest scripts/test_ci_job_contracts.py -q          # 18 passed
 
 # 全部无依赖契约
-bash scripts/smoke.sh --profile contracts                       # 134 passed, SMOKE PASS
+bash scripts/smoke.sh --profile contracts                       # 142 passed, SMOKE PASS
 
 # CNB 配置合法性（YAML + 语义 + Schema 三项）
 node <cnb-pipeline-skill>/validator/validate.js .cnb.yml        # 三项均通过

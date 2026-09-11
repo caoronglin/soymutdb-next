@@ -22,7 +22,7 @@
 .cnb/pipelines/*.yml             各流水线的可评审记录（verify/api/docker-images/…）
 .cnb/web_trigger.yml             手动按钮
 .cnb/env/                        构建环境镜像 + 凭据引用
-scripts/setup-workspace.sh       工作区引导（corepack + pnpm install），每个 stage 复用
+scripts/setup-workspace.sh       单容器引导（corepack + pnpm install），每个 stage 自调
 scripts/ci-job-steps.sh          任务体：list / run <job>
 scripts/verify-frontend-artifacts.sh
 scripts/verify-backend-tests.sh
@@ -58,6 +58,32 @@ sh: 1: set: Illegal option -o pipefail     # 退出码 2，stage 直接失败
 `scripts/test_ci_job_contracts.py` 会逐个 stage 静态检查：任何未以 `bash`/`./`
 开头的多行脚本体、或任何包含 bashism 的未固定解释器的脚本体都会直接失败。
 回归测试同时固定了"`sh -n` 抓不到这个问题"这一事实，防止有人把守门简化成空操作。
+
+### 每个 stage 都是全新容器
+
+修好 shell 之后，第一次真实构建暴露出第二个此前被掩盖的问题：
+
+```
+Setup workspace with cache   → ✅ success (52.5s)     ← shell 问题已修复
+Frontend verification        → ❌ error, exit 127
+  scripts/ci-job-steps.sh: line 89: pnpm: command not found
+```
+
+CNB 的每个 stage 跑在**自己的新容器**里。`corepack enable` 只是往那个容器的文件
+系统写 shim，容器一退出就没了；checkout 也不带 `node_modules`。所以：
+
+* **不存在"准备后续 stage"的 setup stage**。名字里带 `Setup workspace` 的 stage
+  只会误导人，已删除。
+* **每个需要 JS 工具链的 job 自己引导**。`scripts/ci-job-steps.sh` 里
+  `frontend_install` / `dependency_governance_step` 都调用
+  `scripts/setup-workspace.sh`；后者先 `corepack enable` + 校验 `command -v pnpm`
+  （失败立刻报错，而不是留到三个 stage 之后变成 `command not found`），再
+  `pnpm install --frozen-lockfile`。
+* **只有 `volumes` 跨容器传递**。pnpm store（`/cache/pnpm-store`）与 turbo cache
+  （`.turbo`）是显式挂载的，因此"每个容器装一次"实际是做链接而非重新下载。
+* 契约测试 `test_no_stage_depends_on_another_stages_container_state` 沿调用链
+  检查每个 `pnpm` job 是否真的到达引导脚本，并禁止再出现 "Setup workspace" 这类
+  stage 名，同时要求 pnpm job 必须挂 store volume。
 
 ## 3. 流水线拓扑
 

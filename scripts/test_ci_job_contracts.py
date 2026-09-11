@@ -408,6 +408,210 @@ class DeliveryArchitectureTests(unittest.TestCase):
         self.assertNotEqual(executed.returncode, 0)
         self.assertIn("Illegal option", executed.stderr)
 
+    def test_no_stage_depends_on_another_stages_container_state(self) -> None:
+        """CNB gives every stage a fresh container.
+
+        Regression guard for the second failure the first real build produced,
+        after the `sh`/pipefail one was fixed:
+
+            Setup workspace with cache   → success (52.5s)
+            Frontend verification        → error, exit 127
+              scripts/ci-job-steps.sh: line 89: pnpm: command not found
+
+        `corepack enable` had run in the setup stage, but it writes a shim into
+        that stage's container, which is destroyed when the stage exits. The
+        checkout carries no node_modules either. So:
+          * no stage may rely on a "setup" stage having prepared it;
+          * every job body that needs the JS toolchain must bootstrap itself;
+          * only declared `volumes` cross the container boundary.
+        """
+        steps = (ROOT / "scripts/ci-job-steps.sh").read_text(encoding="utf-8")
+
+        # The shared bootstrap must exist and be used by the jobs that need it.
+        self.assertTrue((ROOT / "scripts/setup-workspace.sh").is_file())
+        self.assertIn("ensure_workspace()", steps)
+        self.assertIn("setup-workspace.sh", steps)
+
+        # Extract every shell function body, then follow the call chain: a job
+        # may delegate its bootstrap to a helper (frontend_run -> frontend_install).
+        def function_bodies(text: str) -> dict[str, str]:
+            bodies: dict[str, str] = {}
+            for match in re.finditer(r"^(\w+)\(\) \{\n", text, re.M):
+                start = match.end()
+                end = text.index("\n}\n", start)
+                bodies[match.group(1)] = text[start:end]
+            return bodies
+
+        bodies = function_bodies(steps)
+
+        def reaches_bootstrap(name: str, seen: frozenset[str] = frozenset()) -> bool:
+            if name in seen or name not in bodies:
+                return False
+            body = bodies[name]
+            if "setup-workspace.sh" in body:
+                return True
+            for callee in re.findall(r"^\s*(\w+)\s*$", body, re.M):
+                if reaches_bootstrap(callee, seen | {name}):
+                    return True
+            return False
+
+        # Every job that shells out to pnpm must reach the bootstrap, however the
+        # call chain is structured.
+        for job in ("frontend", "dependency-governance"):
+            entry = f"{job.replace('-', '_')}_run"
+            self.assertTrue(
+                reaches_bootstrap(entry),
+                f"{entry} calls pnpm but never reaches scripts/setup-workspace.sh; "
+                "it would fail with `pnpm: command not found` in its own container",
+            )
+
+        # A stage named like a setup step must not masquerade as preparation for
+        # later stages. If one comes back, it must at least be honest about it.
+        document = yaml.safe_load(CNB_CONFIG.read_text(encoding="utf-8"))
+        for branch, event in (("main", "pull_request"), ("main", "push"), ("$", "web_trigger_verify")):
+            for pipeline in _cnb_pipelines(branch, event):
+                stage_names = [stage.get("name", "") for stage in pipeline.get("stages", [])]
+                for name in stage_names:
+                    self.assertNotIn(
+                        "Setup workspace",
+                        name,
+                        f"{branch}/{event}/{pipeline['name']}: {name!r} implies it "
+                        "prepares later stages, which is impossible across containers",
+                    )
+                # Every stage that runs a pnpm-dependent job body must mount the
+                # store, or the install silently de-caches into a dead layer.
+                for stage in pipeline.get("stages", []):
+                    script = stage.get("script", "")
+                    if "run frontend" in script or "run dependency-governance" in script:
+                        volumes = stage.get("volumes") or []
+                        self.assertTrue(
+                            any("pnpm-store" in str(v) for v in volumes),
+                            f"{branch}/{event}/{pipeline['name']}/{stage['name']}: "
+                            "pnpm job without a persistent store volume",
+                        )
+
+    def test_scripts_that_run_pnpm_bootstrap_their_own_container(self) -> None:
+        """Generalised form of the container-lifecycle rule.
+
+        The first real build failed at `Frontend verification` with
+        `pnpm: command not found` because it inherited nothing from the stage
+        before it. Checking only the two job bodies I happened to fix would leave
+        the next script with the same bug, so instead: any shared script that
+        shells out to pnpm must reach scripts/setup-workspace.sh.
+        """
+        steps = (ROOT / "scripts/ci-job-steps.sh").read_text(encoding="utf-8")
+
+        # A script may legitimately call pnpm without bootstrapping IF it is only
+        # ever reached through an entry point that already bootstrapped in the
+        # same container (frontend_run -> frontend_install -> verify-*.sh). The
+        # rule is therefore about entry points: whatever a CNB stage invokes
+        # directly must reach the bootstrap itself.
+        entry_scripts = set()
+        for config in _cnb_config_files():
+            document = yaml.safe_load(config.read_text(encoding="utf-8"))
+            for _location, body in _iter_script_bodies(document):
+                for referenced in re.findall(r"scripts/([\w./-]+\.sh)", body):
+                    entry_scripts.add(f"scripts/{referenced}")
+                # `bash scripts/ci-job-steps.sh run <job>` is the other entry
+                # style; the job body is checked separately below.
+                for job in re.findall(r"ci-job-steps\.sh run ([\w-]+)", body):
+                    function = f"{job.replace('-', '_')}_run"
+                    entry_scripts.add(function)
+
+        offenders = []
+        for script in sorted(entry_scripts):
+            if script in {"scripts/setup-workspace.sh", "scripts/smoke.sh"}:
+                continue
+            path = ROOT / script
+            if not path.is_file():
+                continue
+            text = path.read_text(encoding="utf-8")
+            lines = [
+                line
+                for line in text.splitlines()
+                if line.strip() and not line.lstrip().startswith("#")
+            ]
+            if not any(re.search(r"(^|[^\w-])pnpm\s", line) for line in lines):
+                continue
+            # setup-workspace.sh is the bootstrap itself; a script that names it
+            # is delegating correctly.
+            if "setup-workspace.sh" in text:
+                continue
+            offenders.append(script)
+        self.assertEqual(
+            offenders,
+            [],
+            "scheduled entry points run pnpm but never bootstrap pnpm:\n"
+            + "\n".join(offenders),
+        )
+
+        # Same rule for the ci-job-steps entry points, following the call chain.
+        def function_bodies(text: str) -> dict[str, str]:
+            bodies: dict[str, str] = {}
+            for match in re.finditer(r"^(\w+)\(\) \{\n", text, re.M):
+                start = match.end()
+                end = text.index("\n}\n", start)
+                bodies[match.group(1)] = text[start:end]
+            return bodies
+
+        bodies = function_bodies(steps)
+
+        def reaches_bootstrap(name: str, seen: frozenset[str] = frozenset()) -> bool:
+            if name in seen or name not in bodies:
+                return False
+            body = bodies[name]
+            if "setup-workspace.sh" in body:
+                return True
+            return any(
+                reaches_bootstrap(callee, seen | {name})
+                for callee in re.findall(r"^\s*(\w+)\s*$", body, re.M)
+            )
+
+        for name, body in bodies.items():
+            if not name.endswith("_run"):
+                continue
+            if not any(
+                re.search(r"(^|[^\w-])pnpm\s", line)
+                for line in body.splitlines()
+                if not line.lstrip().startswith("#")
+            ):
+                # The body may delegate to a helper that uses pnpm; check those
+                # by resolving the whole chain for pnpm usage.
+                chain_uses_pnpm = any(
+                    re.search(r"(^|[^\w-])pnpm\s", bodies.get(callee, ""))
+                    for callee in re.findall(r"^\s*(\w+)\s*$", body, re.M)
+                )
+                if not chain_uses_pnpm:
+                    continue
+            self.assertTrue(
+                reaches_bootstrap(name),
+                f"{name} needs pnpm but never reaches scripts/setup-workspace.sh; "
+                "it would fail with `pnpm: command not found` in its own container",
+            )
+
+        # And the stage that runs them must mount the store, or the install
+        # caches into a container layer that is thrown away.
+        document = yaml.safe_load(CNB_CONFIG.read_text(encoding="utf-8"))
+        for branch, event, pipeline_name in (
+            ("main", "pull_request", "verify"),
+            ("main", "push", "verify"),
+            ("$", "web_trigger_verify", "verify-manual"),
+        ):
+            pipelines = _cnb_pipelines(branch, event)
+            pipeline = next(p for p in pipelines if p["name"] == pipeline_name)
+            for stage in pipeline["stages"]:
+                volumes = " ".join(str(v) for v in (stage.get("volumes") or []))
+                uses_pnpm = bool(
+                    re.search(r"(^|[^\w-])pnpm\s", _flatten(stage).replace("run ", " "))
+                ) or "build-pages-artifact" in _flatten(stage)
+                if uses_pnpm:
+                    self.assertIn(
+                        "pnpm-store",
+                        volumes,
+                        f"{branch}/{event}/{pipeline_name}/{stage['name']}: "
+                        "pnpm stage without a persistent store volume",
+                    )
+
     def test_every_cnb_stage_script_target_exists_on_disk(self) -> None:
         """No stage may reference a script that is not in the repository."""
         missing = []
