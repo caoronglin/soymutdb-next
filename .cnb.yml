@@ -20,9 +20,16 @@
 #
 # Structure
 #   main  → pull_request / push / nightly: the full verification suite
-#   $     → release and publication: main pushes, tags and manual triggers.
-#           `tag_push` and `issue.*` are repository-level events and may only be
-#           declared under the `$` fallback branch.
+#   $     → release, publication, cloud development and manual triggers: main
+#           pushes, tags, the develop button and the web-trigger buttons.
+#           `tag_push`, `vscode` and `issue.*` are repository-level events and may
+#           only be declared under the `$` fallback branch.
+#
+# Two entry points answer "can I run this, and can I accept it?":
+#   $ -> vscode              启动云原生开发环境（按钮见 .cnb/settings.yml）
+#   $ -> web_trigger_acceptance, $ -> web_trigger_verify → 一键验收
+# Both delegate to scripts/{start-cloud-dev,acceptance}.sh; see
+# docs/ops/cnb-startup-acceptance.md.
 #
 # Version pins (Node 24.19.0 / pnpm 11.21.0 / Python 3.14 / uv 0.11.33) mirror
 # package.json, .nvmrc and the Dockerfiles; the contract test fails when any of
@@ -302,6 +309,58 @@ $:
             name: oci-release-contract-$CNB_BRANCH
 
   # ---------------------------------------------------------------------------
+  # Cloud development — the 「启动 SoyMutDB 开发环境」button
+  # ---------------------------------------------------------------------------
+  # This is the "CNB 启动" entry point. Clicking 云原生开发 on any branch page runs
+  # this pipeline, which prepares the workspace and launches the public portal on
+  # 0.0.0.0:8686 so the branch is runnable immediately.
+  #
+  # Why `services: vscode` is declared here even though the button works without
+  # it: declaring the service is what makes the pipeline the platform's
+  # development entry point, and it is the only supported place for
+  # `onlyPreview`. `onlyPreview: true` makes the button open the portal preview
+  # directly instead of an IDE — for a reviewer verifying a branch, the preview
+  # page IS the acceptance artifact. Contributors who want the WebIDE reach it
+  # through the same environment (头像 → 我的云原生开发), so no second pipeline is
+  # needed and the environment preparation cannot drift between the two modes.
+  #
+  # 8686 is fixed by CNB's only-preview mode, not a SoyMutDB preference, so it is
+  # passed through the stage environment instead of being inlined in the launch
+  # command. `daemon: false` keeps the launch log visible; the launcher
+  # backgrounds Vite itself and returns once the port answers, which is exactly
+  # the "start, confirm, detach" contract that mode expects.
+  #
+  # The stage body remains a single `bash <script>` call, so the platform's `sh`
+  # never parses bash syntax (docs/ops/ci-cd.md, "Stage shell").
+  vscode:
+    - name: soy-mut-db-development
+      runner:
+        cpus: 4
+      docker:
+        image: cnbcool/default-dev-env
+        volumes:
+          # Deps are linked from the store instead of re-downloaded when the
+          # environment container is cycled, exactly as in the delivery stages.
+          - /cache/pnpm-store:/cache/pnpm-store
+          # Turbo's cache survives 代码备份/漫游, so an in-progress edit is not
+          # lost when the environment is recycled.
+          - .turbo:/workspace/.turbo
+      services:
+        - docker
+        - name: vscode
+          options:
+            onlyPreview: true
+            launch: bash scripts/start-cloud-dev.sh preview
+            keepAliveTimeout: 30m
+      env:
+        SOYMUTDB_DEV_MODE: preview
+        # Fixed by CNB's only-preview mode.
+        SOYMUTDB_DEV_WEB_PORT: "8686"
+      stages:
+        - name: Prepare the development environment
+          script: bash scripts/start-cloud-dev.sh full
+
+  # ---------------------------------------------------------------------------
   # Web triggers — manual entry points declared in .cnb/web_trigger.yml
   # ---------------------------------------------------------------------------
   web_trigger_verify:
@@ -328,6 +387,82 @@ $:
           services:
             - postgres:16
           script: bash scripts/ci-job-steps.sh run api-tests
+
+  # ---------------------------------------------------------------------------
+  # Cloud development — manual entry point
+  # ---------------------------------------------------------------------------
+  # A cloud-development environment raised from the page, for the same reason the
+  # acceptance buttons are duplicated onto feature branches: the default 云原生开发
+  # button is not offered on every branch pattern. It starts the SAME script as
+  # the `vscode` event, with the same mode and port, so the environment a reviewer
+  # gets here cannot drift from the one a contributor gets from the branch page
+  # (asserted by test_cloud_development_buttons_share_one_bootstrap).
+  web_trigger_workspace-preview:
+    - name: workspace-preview
+      runner:
+        cpus: 4
+      docker:
+        image: cnbcool/default-dev-env
+        volumes:
+          - /cache/pnpm-store:/cache/pnpm-store
+      services:
+        - docker
+        - name: vscode
+          options:
+            onlyPreview: true
+            launch: bash scripts/start-cloud-dev.sh preview
+            keepAliveTimeout: 30m
+      env:
+        SOYMUTDB_DEV_MODE: preview
+        SOYMUTDB_DEV_WEB_PORT: "8686"
+      stages:
+        - name: Prepare the development environment
+          script: bash scripts/start-cloud-dev.sh full
+
+  # ---------------------------------------------------------------------------
+  # Acceptance — 「运行验收」on any branch
+  # ---------------------------------------------------------------------------
+  # A self-contained verdict about one revision: contracts → API/Worker →
+  # static artifact. It re-runs the backend suite rather than trusting that the
+  # push event's pipeline was green, because acceptance is a statement about the
+  # revision being accepted.
+  #
+  # Evidence (artifacts/acceptance/acceptance-manifest.txt) is uploaded in
+  # endStages, so a failed acceptance still leaves the per-layer verdicts behind
+  # for review. Layers are individual stages so the platform UI shows which one
+  # failed.
+  #
+  # Every stage body is a single `bash <script>` call, and no layer holds
+  # credentials: acceptance runs on feature branches and on Issue-driven NPC
+  # tasks, where CNB_TOKEN is deliberately restricted.
+  web_trigger_acceptance:
+    - name: acceptance-manual
+      runner:
+        cpus: 8
+      env:
+        SOYMUTDB_RUN_POSTGRES_INTEGRATION: "1"
+        SOYMUTDB_ACCEPTANCE_DIR: artifacts/acceptance
+      stages:
+        - name: Delivery contracts
+          image: python:3.14
+          script: bash scripts/acceptance.sh --profile contracts
+        - name: API + Worker acceptance
+          image: python:3.14
+          services:
+            - postgres:16
+          script: bash scripts/acceptance.sh --profile backend
+        - name: Static artifact acceptance
+          image: node:24.19.0
+          volumes:
+            - /cache/pnpm-store:/cache/pnpm-store
+            - .turbo:/workspace/.turbo
+          script: bash scripts/acceptance.sh --profile static
+      endStages:
+        - name: Upload acceptance evidence
+          image: cnbcool/artifact
+          settings:
+            path: artifacts/acceptance
+            name: acceptance-evidence-$CNB_COMMIT_SHORT
 
   web_trigger_docker-images:
     - name: images-manual-amd64

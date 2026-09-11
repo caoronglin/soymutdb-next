@@ -1,0 +1,27 @@
+# =============================================================================
+# SoyMutDB — CNB repository UI configuration
+# =============================================================================
+# Currently only the cloud-development entry point is customised; everything
+# else keeps the platform default.
+#
+# The development button is the human-facing half of "CNB 启动": pressing it
+# runs the `$` -> `vscode` pipeline in .cnb.yml, which delegates to
+# scripts/start-cloud-dev.sh. See docs/ops/cnb-startup-acceptance.md.
+#
+# Keep this file free of anything secret: it is committed and readable by
+# anyone who can read the repository.
+# =============================================================================
+workspace:
+  launch:
+    button:
+      # Label the button after what it produces, not after the platform
+      # feature, so a new contributor knows this starts a runnable SoyMutDB
+      # environment rather than an empty IDE.
+      name: 启动 SoyMutDB 开发环境
+      description: >-
+        拉起依赖并准备开发环境；启动后在终端运行 pnpm dev:web / uvicorn，
+        或用「预览 SoyMutDB 门户」按钮直接打开门户预览。
+    # 4 cores / 8 GB is enough for pnpm install + Vite + uvicorn. The platform
+    # default (8 cores / 16 GB) is sized for the delivery pipelines, which build
+    # and scan container images.
+    cpus: 4

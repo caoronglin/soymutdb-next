@@ -18,6 +18,8 @@
     "check:admin-content-architecture": "python3 scripts/check_admin_content_architecture.py",
     "test": "turbo run test",
     "smoke": "bash scripts/smoke.sh",
+    "accept": "bash scripts/acceptance.sh",
+    "dev:cloud": "bash scripts/start-cloud-dev.sh",
     "smoke:artifact": "bash scripts/verify-frontend-artifacts.sh --artifact-only",
     "dev:web": "pnpm --filter @soymutdb/web dev",
     "dev:admin": "pnpm --filter @soymutdb/admin dev",

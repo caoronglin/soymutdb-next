@@ -10,3 +10,10 @@ ready 检查 → 原子发布或回滚；就绪后可选将静态门户不可变
 
 发布/回滚必须填写理由并留审计；生产镜像使用显式 tag。`gwas` 是 GWAS bucket，`analyses` 是分析对象
 bucket，`analyses` 队列由 `worker-analyses` 消费，三者不可混用。
+
+## CNB 启动与验收
+
+在 CNB 上「起得来」与「收不收」是两条独立入口：分支页的云原生开发按钮启动可运行环境
+（进入即门户预览），`web_trigger_acceptance` / `pnpm accept` 给出分层验收判定与验收清单。
+配置、端口约定、验收清单字段与两种分层姿态的区别见
+[`cnb-startup-acceptance.md`](cnb-startup-acceptance.md)。

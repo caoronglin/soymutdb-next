@@ -208,6 +208,35 @@ en 路径读文件"。
 而只有后一个决定 CI 能不能跑。凡是 `.cnb.yml` 按路径引用的文件，都必须用 git 的
 视角校验。
 
+## 4.4 CNB 启动与验收（本轮新增）
+
+前几轮把「怎么构建、怎么发布」搬到了 CNB，但**「怎么跑起来」和「怎么判定一个修订
+能不能收」仍然只能在本地回答**。本轮补上这两条入口：
+
+| 能力 | 入口 | 实现 |
+| --- | --- | --- |
+| 启动开发环境 | 分支页「云原生开发」按钮（`vscode`） | `scripts/start-cloud-dev.sh` |
+| 门户预览 | 同上的 `onlyPreview`（业务端口 8686） | 同上，`preview` 模式 |
+| 手动预览入口 | `web_trigger_workspace-preview` | 同上（同一脚本、同一端口） |
+| 验收 | `web_trigger_acceptance` / `pnpm accept` | `scripts/acceptance.sh` |
+| 验收清单 | `artifacts/acceptance/acceptance-manifest.txt` | `acceptance.sh` 内计算并上传 |
+
+对应文件：`.cnb/settings.yml`（启动按钮）、`.cnb/pipelines/acceptance.yml`（流水线
+可评审记录）、`docs/ops/cnb-startup-acceptance.md`（使用与边界）。
+
+三点值得记录：
+
+1. **云开发也遵守同一条 stage 规则**。`.cnb.yml` 的 `vscode` 流水线里，所有 stage 体
+   仍是 `bash <script>` 单行调用；`onlyPreview` 的 `launch` 也是
+   `bash scripts/start-cloud-dev.sh preview`。没有为了"这是开发环境"就放行内联 bash。
+2. **启动绑定 `0.0.0.0` 是被显式编码的契约，不是习惯**。绑 loopback 的服务在 CNB
+   端口预览里不可达，而本地开发**发现不了**（本地浏览器能访问 loopback）。所以
+   `VITE_HOST`/`HOST` 由脚本默认，并且脚本会**等到端口可连接才返回**——空白的预览页
+   比失败的构建更难排查。
+3. **验收不是冒烟的别名**。`acceptance.sh` 对缺失前置条件输出 `BLOCKED` 并判定失败，
+   `smoke.sh` 输出 `SKIPPED` 并不计入成败。这个差异是刻意的（平台上前置条件是流水线
+   定义的属性），两种姿态各由一条契约测试锁定，防止任一方被改成另一方。
+
 ## 5. 验证证据
 
 ```bash
@@ -247,11 +276,39 @@ SOYMUTDB_DATABASE_URL=... bash scripts/smoke.sh --profile runtime
 PYTHONPATH=. apps/api/.venv/bin/python -m pytest apps/api/tests -q
 #   改动前：33 failed / 1445 passed
 #   改动后：33 failed / 1445 passed   ← 完全一致
+
+# 启动与验收（本轮）
+bash scripts/acceptance.sh --profile contracts
+#   contracts 层 PASS → ACCEPTANCE PASS，清单写入 artifacts/acceptance/
+#   （本机 3 failed / 7 passed 来自 test_worker_image_boundary.py 与
+#     test_cloudflare_tunnel_contract.py，与 §6 的已知前置缺陷一致，改动前后相同）
+bash scripts/start-cloud-dev.sh full            # 环境准备路径
+SOYMUTDB_DEV_INSTALL=0 bash scripts/start-cloud-dev.sh preview
+#   → 端口就绪检测生效；本机 pnpm 依赖 libatomic（非本项目缺陷），
+#     用等价占位服务验证了「启动 → 确认端口 → 后台驻留 → 退出」契约
+
+# 交付契约（含本轮新增的启动/验收用例）
+python3 -m pytest scripts/test_ci_job_contracts.py -q          # 38 passed
+python3 -m pytest scripts/test_ci_job_contracts.py \
+  scripts/test_platform_delivery_contracts.py scripts/test_deployment_workflows.py \
+  scripts/test_supply_chain_contracts.py scripts/test_kubernetes_delivery_contracts.py \
+  scripts/test_dependency_governance_contracts.py scripts/test_site_artifact_isolation.py \
+  scripts/test_production_compose_contract.py scripts/test_development_compose_contract.py \
+  scripts/test_backup_restore_contracts.py -q                  # 154 passed
+python3 scripts/check-toolchain-pins.py                        # toolchain pins OK
+
+# CNB 配置合法性（.cnb.yml 与 .cnb/web_trigger.yml 两项，各三项校验）
+node <cnb-pipeline-skill>/validator/validate.js .cnb.yml
+node <cnb-pipeline-skill>/validator/validate.js .cnb/web_trigger.yml
+#   45 stage bodies parsed under `sh -n`, 0 bad
 ```
 
 未执行 / 未验证：
 
 * CNB 真实构建（需平台触发）
+* CNB 云原生开发环境的真实启动与 8686 端口预览（需平台触发）
+* 验收流水线的 backend / static 两层（本机无 apps/api/.venv、无一次性 PostgreSQL）
+* `.cnb/settings.yml` 按钮文案在分支页的实际呈现
 * Docker 镜像构建/扫描/SBOM（本机无 Docker daemon）
 * Playwright E2E（未安装浏览器）
 * ClickHouse 迁移（本机无 ClickHouse）
@@ -277,16 +334,19 @@ PYTHONPATH=. apps/api/.venv/bin/python -m pytest apps/api/tests -q
 
 | 判定 | 是否授予 | 依据 |
 | --- | --- | --- |
-| DEV_READY | ✅ | 契约 + 静态 + 运行时冒烟均在本地真实通过 |
-| STAGING_READY | ❌ | 未在 CNB 上跑通一次真实构建；镜像未构建/扫描 |
+| DEV_READY | ✅ | 契约 + 静态 + 运行时冒烟均在本地真实通过；启动/验收入口的脚本逻辑本机执行通过 |
+| STAGING_READY | ❌ | 未在 CNB 上跑通一次真实构建；未真实启动过云开发环境；镜像未构建/扫描 |
 | PRODUCTION_READY | ❌ | 同上，且需要真实 release API 与 ClickHouse 投影 |
 
 ## 8. 下一条可复现命令
 
 ```bash
-# CNB 平台：提交后在 CNB 上运行 verify 流水线
+# CNB 平台：
+#   1) 分支页点「启动 SoyMutDB 开发环境」→ 环境就绪后即为门户预览
+#   2) 点「运行验收」→ contracts → backend → static，产物在 acceptance-evidence-*
 # 本地：
-bash scripts/smoke.sh
+bash scripts/smoke.sh                       # 统一冒烟（能跑的都跑）
+bash scripts/acceptance.sh --profile full   # 平台验收（缺前置条件判失败）
 ```
 
 ## 9. 回滚方法
@@ -295,3 +355,7 @@ bash scripts/smoke.sh
 git revert <commit>        # 恢复 GitHub-only 链路
 # .github/workflows/ 未被删除，任何 job 都仍可直接运行
 ```
+
+回滚本轮（启动与验收）额外说明：`vscode` / `web_trigger_*` 是**新增**事件，revert 后
+分支页回到平台默认启动行为（仍可用，只是没有 SoyMutDB 的引导与预览）；验收入口消失，
+但 `scripts/smoke.sh` 与 `verify` 流水线不受影响——本轮没有修改任何既有门禁。

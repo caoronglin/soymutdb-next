@@ -36,6 +36,8 @@ scripts/mcp-transport-smoke.sh   MCP 鉴权传输冒烟
 scripts/assert-clickhouse-migration.py
 scripts/check-toolchain-pins.py  工具链固定版本一致性守门
 scripts/smoke.sh                 统一冒烟入口（5 个 layer）
+scripts/start-cloud-dev.sh       云原生开发环境启动（依赖引导 / 门户预览 / API 预览）
+scripts/acceptance.sh            平台验收入口（分层判定 + 验收清单）
 ```
 
 ### Stage shell：CNB 用 `sh` 执行 stage 脚本
@@ -111,6 +113,9 @@ CNB 的每个 stage 跑在**自己的新容器**里。`corepack enable` 只是�
 
 | 触发 | 流水线 | 作用 |
 | --- | --- | --- |
+| `vscode`（分支页「云原生开发」按钮） | `soy-mut-db-development` | 启动开发环境 + 门户预览（`start-cloud-dev.sh`） |
+| `web_trigger_workspace-preview` | `workspace-preview` | 同上（手动入口） |
+| `web_trigger_acceptance` | `acceptance-manual` | contracts → backend → static，上传验收清单 |
 | PR | `verify` | 前端 / API+Worker / 依赖治理（无凭据） |
 | main push | `verify` | 同上 + 构建并自校验 Pages 制品 |
 | main push | `clickhouse-migration` | 真实 ClickHouse 遗留迁移 + 幂等复跑 |
@@ -170,6 +175,20 @@ bash scripts/smoke.sh --list
 
 **关键约定**：前置条件缺失时输出 `SKIPPED: <原因>` 并计入 summary，**绝不冒充通过**。
 只有真正执行过的 layer 才会决定退出码。
+
+### 5.1 冒烟与验收是两种姿态
+
+`scripts/smoke.sh` 是开发者工具，`scripts/acceptance.sh` 是平台验收入口。两者都分层，
+但对"缺前置条件"的处理**刻意相反**：
+
+| | `smoke.sh` | `acceptance.sh` |
+| --- | --- | --- |
+| 前置条件缺失 | `SKIPPED`，不计入成败 | `BLOCKED`，**计入失败** |
+| 理由 | 本地能跑多少算多少 | 平台上前置条件是流水线定义的属性，缺了应修流水线 |
+
+验收还会写 `artifacts/acceptance/acceptance-manifest.txt`（commit / profile / 逐层
+判定 / 工具链 / 制品 digest），并在 `endStages` 上传，所以失败的验收同样留下记录。
+细节见 [`cnb-startup-acceptance.md`](cnb-startup-acceptance.md)。
 
 ## 6. 工具链固定
 
