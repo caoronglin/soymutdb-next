@@ -94,9 +94,11 @@ CNB 的每个 stage 跑在**自己的新容器**里。`corepack enable` 只是�
   检查每个 `pnpm` job 是否真的到达引导脚本，并禁止再出现 "Setup workspace" 这类
   stage 名，同时要求 pnpm job 必须挂 store volume。
 
-### `services:` 只实现了 docker 和 vscode——写数据库名等于没写
+### `services:` 是 **Pipeline 级**键——写在 stage 里等于没写
 
-`api-tests` stage 曾经这样声明数据库：
+`api-tests` 门禁先后踩了两个坑，都是 `services:` 的**位置/取值**问题。
+
+**第一个坑：写数据库名没用。** 早期声明：
 
 ```yaml
 - name: API + Worker verification
@@ -106,8 +108,7 @@ CNB 的每个 stage 跑在**自己的新容器**里。`corepack enable` 只是�
   script: bash scripts/ci-job-steps.sh run api-tests
 ```
 
-CNB 接受了这个声明，**然后什么都没起**。在真实构建机上探测
-（探针构建 `cnb-j0g-1k285hm3b`，`services: [postgres:16]`）：
+CNB 接受该声明，**然后什么都没起**（探针构建 `cnb-j0g-1k285hm3b`）：
 
 ```
 CLOSED postgres 5432 [Errno -2] Name or service not known
@@ -117,27 +118,51 @@ getent hosts postgres → （空）
 ```
 
 `services` 目前**只实现 `docker`（dind）和 `vscode`**，其他名字既不会报错也不会生效。
-于是 `apps/api/tests/conftest.py` 的 testcontainers 回退路径接管，而容器里没有
-docker socket，116 个用例全部报同一个错：
+
+**第二个坑：即使改成了 `docker`，写在 stage 里仍然不生效。**
+`services` 在 CNB 语法里是 **Pipeline 级**配置项
+（[grammar.md#pipeline-services](https://docs.cnb.cool/zh/build/grammar.md#pipeline-services)），
+与 `stages`、`docker`、`env` 同级；**Stage / Job 的配置项里没有 `services`**
+（见 grammar.md 的 Stage 配置项概览表）。写在 stage 里会被静默丢弃，于是 dind
+daemon 和 docker CLI 都不会注入，门禁在解析数据库时直接失败：
 
 ```
-docker.errors.DockerException: Error while fetching server API version:
-('Connection aborted.', FileNotFoundError(2, 'No such file or directory'))
+[postgres-service] docker CLI is unavailable: this stage must declare `services: [docker]`
 ```
 
-116 个 ERROR 看起来像 116 个产品缺陷，实际是**一个缺失的前置条件**。
+（真实构建 `cnb-m06-1k28813m9`。）
 
-正确做法是声明平台真正实现的服务 `docker`，由门禁自己起数据库：
+正确写法是把它提升到 **Pipeline 级**，与 `stages:` 平级：
 
 ```yaml
-- name: API + Worker verification
-  image: python:3.14
-  services:
-    - docker           # 真实 dind daemon + docker CLI
-  script: bash scripts/ci-job-steps.sh run api-tests
+- name: verify
+  runner:
+    cpus: 16
+  docker:
+    volumes:
+      - /cache/pnpm-store
+  services:          # ← Pipeline 级：与 stages / docker / env 同级
+    - docker         # 真实 dind daemon + docker CLI
+  env:
+    SOYMUTDB_RUN_POSTGRES_INTEGRATION: "1"
+  stages:
+    - name: Frontend verification
+      script: bash scripts/ci-job-steps.sh run frontend
+    - name: API + Worker verification
+      image: python:3.14
+      script: bash scripts/ci-job-steps.sh run api-tests
 ```
 
-`scripts/with-postgres-service.sh` 负责这件事：
+对「stage 本身就是一个嵌套 pipeline」的写法（`stages:` 内部再出现 `stages:`，
+例如 `.cnb/pipelines/docker-images.yml` 的按架构构建），`services` 要放在**内层
+那个 pipeline** 上，同样与内层 `stages:` 平级。
+
+代价与取舍：`services` 是 Pipeline 级，无法只对单个 stage 生效，所以声明后
+**同一 pipeline 的所有 stage** 都会拿到 dind daemon。这对本项目无害：真正需要
+dind 的门禁各自在脚本里显式调用 `docker`，其余 stage 忽略即可；比"门禁静默拿不到
+docker"要好得多。
+
+`scripts/with-postgres-service.sh` 负责在拿到 dind 之后起数据库：
 
 1. 已经有 `SOYMUTDB_TEST_DATABASE_URL`（开发者本机 / GitHub runner）→ **原样沿用**，
    完全不动 testcontainers 路径；
@@ -162,9 +187,10 @@ while IFS='=' read -r key value; do export "${key}=${value}"; done <<< "${PG_ENV
 `source` 在 dash 里不存在（实测报 `sh: 4: source: not found`，退出码 127）。
 
 契约测试 `test_postgres_backed_stages_declare_a_real_service_and_resolve_a_database`
-锁定四件事：跑数据库门禁的 stage 必须声明 `services: [docker]`、不得出现
-`postgres`/`mysql`/`redis` 之类的伪服务名、resolver 必须保留"外部 URL 优先"和
-驱动级就绪探针、门禁脚本不得再出现 `source`。
+锁定这些事实：跑数据库门禁的 **pipeline** 必须声明 `services: [docker]`、不得出现
+`postgres`/`mysql`/`redis` 之类的伪服务名、**任何 stage 都不得再出现 `services:`
+键**（它是 pipeline 级，写在 stage 里会被静默丢弃）、resolver 必须保留"外部 URL
+优先"和驱动级就绪探针、门禁脚本不得再出现 `source`。
 
 ### `.cnb/env/Dockerfile.*` 只能出现在 `docker.build`，不能是 `image:`
 

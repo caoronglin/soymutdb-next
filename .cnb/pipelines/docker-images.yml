@@ -25,10 +25,10 @@ stages:
   env:
     SOYMUTDB_CI_ARCH: amd64
     SOYMUTDB_CI_OUTPUT_DIR: validate-runtime-images-amd64
+  services:
+  - docker
   stages:
   - name: Verify images for linux/amd64
-    services:
-    - docker
     script: bash scripts/ci-job-steps.sh run image-build
 - name: docker-images (arm64)
   runner:
@@ -37,8 +37,8 @@ stages:
   env:
     SOYMUTDB_CI_ARCH: arm64
     SOYMUTDB_CI_OUTPUT_DIR: validate-runtime-images-arm64
+  services:
+  - docker
   stages:
   - name: Verify images for linux/arm64
-    services:
-    - docker
     script: bash scripts/ci-job-steps.sh run image-build

@@ -1714,14 +1714,16 @@ class DeliveryArchitectureTests(unittest.TestCase):
         # PostgreSQL integration is mandatory for the backend layer: the
         # privacy/identity/assembly matrix must fail closed, not skip green.
         self.assertEqual(pipeline["env"]["SOYMUTDB_RUN_POSTGRES_INTEGRATION"], "1")
-        backend_stage = pipeline["stages"][1]
-        # NOT `postgres`: that service name is accepted by CNB and starts
-        # nothing (no DNS entry, nothing on 5432, no docker socket), which sent
-        # the whole suite to Testcontainers and produced 116 docker stack
-        # traces. `docker` is a real service; the gate uses its dind daemon to
-        # run its own disposable PostgreSQL. See the test below.
-        self.assertIn("docker", backend_stage["services"])
-        self.assertNotIn("postgres:16", backend_stage["services"])
+        # `services` is a PIPELINE-level key, not a stage key: a stage-level
+        # `services:` is silently dropped and the dind daemon never starts.
+        self.assertIn("docker", pipeline["services"])
+        self.assertNotIn("postgres:16", pipeline["services"])
+        for stage in pipeline["stages"]:
+            self.assertNotIn(
+                "services",
+                stage,
+                "`services` is a pipeline key; on a stage it is ignored",
+            )
         self.assertIn(
             "pnpm-store",
             " ".join(str(v) for v in pipeline["docker"]["volumes"]),
@@ -1776,28 +1778,76 @@ class DeliveryArchitectureTests(unittest.TestCase):
                     body = _flatten(stage)
                     if "api-tests" not in body and "--profile backend" not in body:
                         continue
-                    database_stages.append((config.name, stage))
+                    database_stages.append((config.name, pipeline))
 
+                    # `services` is a PIPELINE-level key (docs.cnb.cool
+                    # grammar.md#pipeline-services: siblings of `stages`,
+                    # `docker`, `env`). Declaring it inside a Stage is silently
+                    # ignored: the stage then has no dind daemon and no docker
+                    # CLI, which is exactly the observed failure
+                    #   [postgres-service] docker CLI is unavailable:
+                    #   this stage must declare `services: [docker]`
+                    # on the real build cnb-m06-1k28813m9. Assert on the
+                    # pipeline, never on the stage.
+                    services = pipeline.get("services") or []
+                    names = {
+                        entry if isinstance(entry, str) else entry.get("name")
+                        for entry in services
+                    }
                     self.assertNotIn(
                         forbidden,
-                        set(stage.get("services") or []),
-                        f"{config.name}/{stage.get('name')}: "
-                        "`services:` only implements docker and vscode; a "
-                        "database name here is accepted and starts nothing",
+                        names,
+                        f"{config.name}: `services:` only implements docker and "
+                        "vscode; a database name here is accepted and starts "
+                        "nothing",
                     )
                     self.assertIn(
                         "docker",
-                        stage.get("services") or [],
-                        f"{config.name}/{stage.get('name')}: the PostgreSQL gate "
-                        "needs `services: [docker]` so it can start a database "
-                        "through the dind daemon",
+                        names,
+                        f"{config.name}: the PostgreSQL gate needs the pipeline "
+                        "to declare `services: [docker]` so it can start a "
+                        "database through the dind daemon",
                     )
+                    # And it must NOT be misplaced on the stage: a stage-level
+                    # `services` is not in the Stage schema and is dropped.
+                    for stage in pipeline.get("stages", []) or []:
+                        if not isinstance(stage, dict) or "stages" in stage:
+                            continue
+                        self.assertNotIn(
+                            "services",
+                            stage,
+                            f"{config.name}/{stage.get('name')}: `services` "
+                            "is a pipeline key; on a stage it is silently "
+                            "ignored and the dind daemon never starts",
+                        )
 
         self.assertTrue(
             database_stages,
             "no pipeline stage runs the PostgreSQL-backed gate; the privacy, "
             "identity and assembly matrix would never execute",
         )
+        # The same misplaced-key hazard applies to every pipeline in the
+        # repository, not just the database gate: `services` on a Stage is
+        # always a no-op, so forbid it everywhere and keep the fix from
+        # regressing one file at a time.
+        for config in _cnb_config_files():
+            document = yaml.safe_load(config.read_text(encoding="utf-8"))
+            for pipeline in _iter_pipelines(document):
+                for stage in pipeline.get("stages", []) or []:
+                    if not isinstance(stage, dict):
+                        continue
+                    # A stage MAY be a whole nested pipeline (`stages:` inside
+                    # the stage). That inner object is a pipeline, so its own
+                    # `services:` is legal pipeline configuration -- `.cnb.yml`
+                    # uses this shape for the per-architecture image builds.
+                    if "stages" in stage:
+                        continue
+                    if "services" in stage:
+                        self.fail(
+                            f"{config.name}/{stage.get('name')}: `services` is "
+                            "a pipeline-level key; declaring it on a stage is "
+                            "silently ignored"
+                        )
 
         # The resolver itself must stay fail-closed and driver-accurate.
         resolver = (ROOT / "scripts/with-postgres-service.sh").read_text(encoding="utf-8")

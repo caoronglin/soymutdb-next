@@ -86,6 +86,14 @@ main:
           # input that can move the environment the frontend gate runs in.
           by:
             - .cnb/env/Dockerfile.frontend
+      # `services` is a PIPELINE-level key (grammar.md#pipeline-services):
+      # a sibling of `stages`, `docker` and `env`. `postgres:16` is accepted
+      # but starts NOTHING; on a Stage the whole key is silently dropped and
+      # the gate dies with "docker CLI is unavailable". `docker` is the real
+      # service -- the API/worker gate starts its own disposable PostgreSQL
+      # through the dind daemon (scripts/with-postgres-service.sh).
+      services:
+        - docker
       stages:
         # No "setup workspace" stage: every CNB stage gets a fresh container, so
         # a bootstrap stage would not prepare the stages after it. Each job body
@@ -105,13 +113,6 @@ main:
           script: bash scripts/ci-job-steps.sh run frontend
         - name: API + Worker verification
           image: python:3.14
-          # NOT `postgres:16`: that service is accepted but starts NOTHING on
-          # CNB (no DNS entry, nothing on 5432, no docker socket), which sent
-          # the suite to Testcontainers and produced 116 docker stack traces.
-          # `docker` is a real service; the gate starts its own disposable
-          # PostgreSQL through the dind daemon (scripts/with-postgres-service.sh).
-          services:
-            - docker
           script: bash scripts/ci-job-steps.sh run api-tests
         - name: Dependency governance
           image: node:24.19.0
@@ -140,6 +141,14 @@ main:
           # input that can move the environment the frontend gate runs in.
           by:
             - .cnb/env/Dockerfile.frontend
+      # `services` is a PIPELINE-level key (grammar.md#pipeline-services):
+      # a sibling of `stages`, `docker` and `env`. `postgres:16` is accepted
+      # but starts NOTHING; on a Stage the whole key is silently dropped and
+      # the gate dies with "docker CLI is unavailable". `docker` is the real
+      # service -- the API/worker gate starts its own disposable PostgreSQL
+      # through the dind daemon (scripts/with-postgres-service.sh).
+      services:
+        - docker
       stages:
         # No "setup workspace" stage: every CNB stage gets a fresh container, so
         # a bootstrap stage would not prepare the stages after it. Each job body
@@ -159,13 +168,6 @@ main:
           script: bash scripts/ci-job-steps.sh run frontend
         - name: API + Worker verification
           image: python:3.14
-          # NOT `postgres:16`: that service is accepted but starts NOTHING on
-          # CNB (no DNS entry, nothing on 5432, no docker socket), which sent
-          # the suite to Testcontainers and produced 116 docker stack traces.
-          # `docker` is a real service; the gate starts its own disposable
-          # PostgreSQL through the dind daemon (scripts/with-postgres-service.sh).
-          services:
-            - docker
           script: bash scripts/ci-job-steps.sh run api-tests
         - name: Dependency governance
           image: node:24.19.0
@@ -190,6 +192,8 @@ main:
     - name: clickhouse-migration
       runner:
         cpus: 8
+      services:
+        - docker
       stages:
         # A real ClickHouse server is required: the legacy fixture migration and
         # its idempotence proof are hard gates, not simulated.
@@ -198,8 +202,6 @@ main:
         # chain, so a 3.12-only drift cannot hide here.
         - name: Migrate the legacy ClickHouse fixture
           image: python:3.14
-          services:
-            - docker
           script: bash scripts/ci-job-steps.sh run clickhouse-migration
 
     - name: mcp-e2e
@@ -216,13 +218,13 @@ main:
           dockerfile: .cnb/env/Dockerfile.build-tools
           by:
           - .cnb/env/Dockerfile.build-tools
+      services:
+        - docker
       stages:
         # Authenticated transport through the production nginx semantics. The
         # build-tools image has curl/bash preinstalled, so no per-run package
         # install lands on the critical path.
         - name: MCP transport smoke through nginx
-          services:
-            - docker
           script: bash scripts/ci-job-steps.sh run mcp-e2e
 
     # Two native-architecture image pipelines. Separate pipelines rather than a
@@ -245,10 +247,10 @@ main:
           dockerfile: .cnb/env/Dockerfile.build-tools
           by:
           - .cnb/env/Dockerfile.build-tools
+      services:
+        - docker
       stages:
         - name: Verify images for linux/amd64
-          services:
-            - docker
           script: bash scripts/ci-job-steps.sh run image-build
       endStages:
         - name: Upload validated runtime images (amd64)
@@ -275,10 +277,10 @@ main:
           dockerfile: .cnb/env/Dockerfile.build-tools
           by:
           - .cnb/env/Dockerfile.build-tools
+      services:
+        - docker
       stages:
         - name: Verify images for linux/arm64
-          services:
-            - docker
           script: bash scripts/ci-job-steps.sh run image-build
       endStages:
         - name: Upload validated runtime images (arm64)
@@ -337,10 +339,10 @@ $:
           dockerfile: .cnb/env/Dockerfile.build-tools
           by:
           - .cnb/env/Dockerfile.build-tools
+      services:
+        - docker
       stages:
         - name: Publish signed multi-architecture release
-          services:
-            - docker
           script: bash scripts/ci-job-steps.sh run release
       endStages:
         - name: Upload signed OCI release contract
@@ -404,14 +406,12 @@ $:
           dockerfile: .cnb/env/Dockerfile.build-tools
           by:
           - .cnb/env/Dockerfile.build-tools
+      services:
+        - docker
       stages:
         - name: Verify images for this tag
-          services:
-            - docker
           script: bash scripts/ci-job-steps.sh run image-build
         - name: Publish the signed tagged release
-          services:
-            - docker
           # RELEASE_TAG is injected through the stage environment rather than
           # prefixed inline, so the stage body stays a plain `bash <script>`
           # invocation that cannot pick up the platform's default shell.
@@ -502,6 +502,14 @@ $:
           # input that can move the environment the frontend gate runs in.
           by:
             - .cnb/env/Dockerfile.frontend
+      # `services` is a PIPELINE-level key (grammar.md#pipeline-services):
+      # a sibling of `stages`, `docker` and `env`. `postgres:16` is accepted
+      # but starts NOTHING; on a Stage the whole key is silently dropped and
+      # the gate dies with "docker CLI is unavailable". `docker` is the real
+      # service -- the API/worker gate starts its own disposable PostgreSQL
+      # through the dind daemon (scripts/with-postgres-service.sh).
+      services:
+        - docker
       stages:
         # No "setup workspace" stage: every CNB stage gets a fresh container, so
         # a bootstrap stage would not prepare the stages after it. Each job body
@@ -521,13 +529,6 @@ $:
           script: bash scripts/ci-job-steps.sh run frontend
         - name: API + Worker verification
           image: python:3.14
-          # NOT `postgres:16`: that service is accepted but starts NOTHING on
-          # CNB (no DNS entry, nothing on 5432, no docker socket), which sent
-          # the suite to Testcontainers and produced 116 docker stack traces.
-          # `docker` is a real service; the gate starts its own disposable
-          # PostgreSQL through the dind daemon (scripts/with-postgres-service.sh).
-          services:
-            - docker
           script: bash scripts/ci-job-steps.sh run api-tests
 
   # ---------------------------------------------------------------------------
@@ -588,15 +589,15 @@ $:
       env:
         SOYMUTDB_RUN_POSTGRES_INTEGRATION: "1"
         SOYMUTDB_ACCEPTANCE_DIR: artifacts/acceptance
+      # Pipeline-level `services` (see the pull_request pipeline note).
+      services:
+        - docker
       stages:
         - name: Delivery contracts
           image: python:3.14
           script: bash scripts/acceptance.sh --profile contracts
         - name: API + Worker acceptance
           image: python:3.14
-          # See the verify pipeline: `postgres:16` is a no-op service on CNB.
-          services:
-            - docker
           script: bash scripts/acceptance.sh --profile backend
         - name: Static artifact acceptance
           image: node:24.19.0
@@ -626,10 +627,10 @@ $:
           dockerfile: .cnb/env/Dockerfile.build-tools
           by:
           - .cnb/env/Dockerfile.build-tools
+      services:
+        - docker
       stages:
         - name: Verify images (amd64)
-          services:
-            - docker
           script: bash scripts/ci-job-steps.sh run image-build
     - name: images-manual-arm64
       runner:
@@ -649,10 +650,10 @@ $:
           dockerfile: .cnb/env/Dockerfile.build-tools
           by:
           - .cnb/env/Dockerfile.build-tools
+      services:
+        - docker
       stages:
         - name: Verify images (arm64)
-          services:
-            - docker
           script: bash scripts/ci-job-steps.sh run image-build
 
   web_trigger_release:
@@ -672,10 +673,10 @@ $:
           dockerfile: .cnb/env/Dockerfile.build-tools
           by:
           - .cnb/env/Dockerfile.build-tools
+      services:
+        - docker
       stages:
         - name: Publish the signed release
-          services:
-            - docker
           script: bash scripts/ci-job-steps.sh run release
       endStages:
         - name: Upload signed release contract

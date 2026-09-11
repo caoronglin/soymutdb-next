@@ -8,9 +8,9 @@
 name: SoyMutDB API and worker tests
 env:
   SOYMUTDB_RUN_POSTGRES_INTEGRATION: '1'
+services:
+- docker
 stages:
 - name: API + Worker verification
   image: python:3.14
-  services:
-  - docker
   script: bash scripts/ci-job-steps.sh run api-tests
