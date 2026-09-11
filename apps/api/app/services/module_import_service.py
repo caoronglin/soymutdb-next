@@ -2,8 +2,8 @@
 
 The service is release-scoped and idempotent by checksum.  A failed staging
 import leaves no rows behind; a successful import stores validation evidence,
-marks the dataset ``ready``, and enqueues a typed ``static_publish_requested``
-event.
+marks the dataset ``ready``. Publication remains an explicit, target-scoped
+workflow handled by ``publication_service.request_publication``.
 """
 
 from __future__ import annotations
@@ -14,10 +14,8 @@ from typing import Any
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..core.task_contract import STATIC_PUBLISH_TASK
 from ..models.data_publishing import DataSet, ImportStatus
 from ..models.module_data import ModuleDataRow
-from .outbox_service import enqueue_task_event
 
 
 class ModuleImportError(ValueError):
@@ -65,9 +63,9 @@ async def import_rows(
 ) -> DataSet:
     """Validate, stage, and commit module rows for a release.
 
-    The caller owns the transaction.  On success the dataset is ``ready`` and
-    a ``static_publish_requested`` outbox event is enqueued in the same
-    transaction.
+    The caller owns the transaction. On success the dataset is ``ready``.
+    Static publication is intentionally not requested here because a
+    publication target must be selected explicitly.
     """
     if not checksum:
         raise ModuleImportError("checksum is required")
@@ -134,19 +132,6 @@ async def import_rows(
         "row_count": len(rows),
     }
 
-    await enqueue_task_event(
-        db,
-        event_type="static_publish_requested",
-        aggregate_type="dataset",
-        aggregate_id=str(dataset.id),
-        task_name=STATIC_PUBLISH_TASK,
-        kwargs={
-            "release_id": str(release_id),
-            "dataset_id": str(dataset.id),
-            "module_key": module_key,
-            "checksum": checksum,
-        },
-    )
     await db.flush()
     return dataset
 

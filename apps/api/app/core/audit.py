@@ -6,10 +6,10 @@ All functions are async and accept a :class:`sqlalchemy.ext.asyncio.AsyncSession
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import and_, delete, not_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models.auth import AuditLog
@@ -38,7 +38,7 @@ async def log_action(
         old_value=old_value,
         new_value=new_value,
         ip_address=ip_address,
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
     )
     db.add(entry)
     await db.flush()
@@ -50,8 +50,15 @@ async def cleanup_old_audit_logs(db: AsyncSession, days: int = 180) -> int:
 
     Returns the number of rows deleted.
     """
-    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-    stmt = delete(AuditLog).where(AuditLog.timestamp < cutoff)
+    cutoff = datetime.now(UTC) - timedelta(days=days)
+    protected_news_lifecycle = and_(
+        AuditLog.resource_type == "news_article",
+        AuditLog.action.in_(["news_deleted", "news_restored", "news_purged"]),
+    )
+    stmt = delete(AuditLog).where(
+        AuditLog.timestamp < cutoff,
+        not_(protected_news_lifecycle),
+    )
     result = await db.execute(stmt)
     await db.commit()
     # SQLAlchemy CursorResult always has rowcount.

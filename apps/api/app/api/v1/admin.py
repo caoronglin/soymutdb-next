@@ -12,10 +12,11 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import and_, func, select
+from sqlalchemy import String, and_, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.audit import compute_online_duration
+from ...core.audit_policy import declares_audit
 from ...core.config import get_settings
 from ...core.database import get_db, get_session_factory
 from ...core.exceptions import ConflictError, NotFoundError, ValidationError
@@ -32,7 +33,11 @@ from ...schemas.analytics import (
     ImportThroughputPoint,
     QueryLatencyPoint,
 )
-from ...schemas.data_publishing import ReleaseActionRequest, ReleaseCreateRequest, ReleaseReadyRequest
+from ...schemas.data_publishing import (
+    ReleaseActionRequest,
+    ReleaseCreateRequest,
+    ReleaseReadyRequest,
+)
 from ...services.clickhouse_service import ClickHouseService
 from ...services.release_service import (
     ReleaseNotReady,
@@ -96,6 +101,7 @@ def _release_failure(exc: ReleaseNotReady) -> ValidationError:
 
 
 @router.post("/releases", status_code=status.HTTP_201_CREATED)
+@declares_audit("release_created", roles={"administrator"})
 async def create_release(
     body: ReleaseCreateRequest,
     db: AsyncSession = Depends(get_db),
@@ -112,12 +118,22 @@ async def create_release(
     await db.flush()
     for dataset in datasets:
         db.add(ReleaseDataSet(release_id=release.id, data_set_id=dataset.id))
+    db.add(
+        AuditLog(
+            user_id=current_user.id,
+            action="release_created",
+            resource_type="release",
+            resource_id=str(release.id),
+            new_value={"version": release.version, "assembly": release.assembly},
+        )
+    )
     await db.commit()
     await db.refresh(release)
     return _release_to_dict(release, datasets, await db.scalar(select(ActiveRelease.release_id).where(ActiveRelease.id == 1)))
 
 
 @router.post("/releases/{release_id}/validate")
+@declares_audit("release_validated", roles={"administrator"})
 async def validate_admin_release(
     release_id: int,
     db: AsyncSession = Depends(get_db),
@@ -135,6 +151,7 @@ async def validate_admin_release(
 
 
 @router.post("/releases/{release_id}/ready")
+@declares_audit("release_ready", roles={"administrator"})
 async def ready_admin_release(
     release_id: int,
     body: ReleaseReadyRequest,
@@ -153,6 +170,7 @@ async def ready_admin_release(
 
 
 @router.post("/releases/{release_id}/publish")
+@declares_audit("release_published", roles={"administrator"})
 async def publish_admin_release(
     release_id: int,
     body: ReleaseActionRequest,
@@ -171,6 +189,7 @@ async def publish_admin_release(
 
 
 @router.post("/releases/{release_id}/rollback")
+@declares_audit("release_rolled_back", roles={"administrator"})
 async def rollback_admin_release(
     release_id: int,
     body: ReleaseActionRequest,
@@ -215,6 +234,8 @@ def _build_conditions(
             AuditLog.action.ilike(pattern)
             | AuditLog.resource_type.ilike(pattern)
             | AuditLog.resource_id.ilike(pattern)
+            | cast(AuditLog.ip_address, String).ilike(pattern)
+            | AuditLog.user.has(User.username.ilike(pattern))
         )
     if action:
         conditions.append(AuditLog.action == action)
@@ -285,7 +306,7 @@ async def list_audit_logs(
     # Paginated rows, newest first.  The ``user`` relationship is eagerly
     # loaded (lazy="joined") so no explicit join is required.
     offset = (page - 1) * page_size
-    stmt = select(AuditLog).order_by(AuditLog.timestamp.desc())
+    stmt = select(AuditLog).order_by(AuditLog.timestamp.desc(), AuditLog.id.desc())
     if where_clause is not None:
         stmt = stmt.where(where_clause)
     stmt = stmt.offset(offset).limit(page_size)
@@ -427,7 +448,6 @@ async def export_audit_logs(
     _require_admin(current_user)
 
     conditions = _build_conditions(search, action, user_id, ip_address, start_date, end_date)
-    where_clause = and_(*conditions) if conditions else None
 
     columns = [
         "timestamp",
@@ -448,14 +468,26 @@ async def export_audit_logs(
         buffer.truncate(0)
 
         batch_size = 500
-        offset = 0
+        last_timestamp: datetime | None = None
+        last_id: int | None = None
         factory = get_session_factory()
         async with factory() as session:
             while True:
-                stmt = select(AuditLog).order_by(AuditLog.timestamp.desc())
-                if where_clause is not None:
-                    stmt = stmt.where(where_clause)
-                stmt = stmt.offset(offset).limit(batch_size)
+                stmt = select(AuditLog).order_by(
+                    AuditLog.timestamp.desc(), AuditLog.id.desc()
+                )
+                cursor_conditions = list(conditions)
+                if last_timestamp is not None and last_id is not None:
+                    cursor_conditions.append(
+                        (AuditLog.timestamp < last_timestamp)
+                        | (
+                            (AuditLog.timestamp == last_timestamp)
+                            & (AuditLog.id < last_id)
+                        )
+                    )
+                if cursor_conditions:
+                    stmt = stmt.where(and_(*cursor_conditions))
+                stmt = stmt.limit(batch_size)
                 result = await session.execute(stmt)
                 logs = result.scalars().all()
                 if not logs:
@@ -477,7 +509,14 @@ async def export_audit_logs(
                 yield buffer.getvalue()
                 buffer.seek(0)
                 buffer.truncate(0)
-                offset += batch_size
+
+                last_log = logs[-1]
+                if last_log.timestamp is None:
+                    break
+                last_timestamp = last_log.timestamp
+                last_id = last_log.id
+                if len(logs) < batch_size:
+                    break
 
     headers = {"Content-Disposition": "attachment; filename=audit-logs.csv"}
     return StreamingResponse(generate(), media_type="text/csv", headers=headers)
@@ -497,11 +536,18 @@ async def export_audit_logs_excel(
     ip_address: str | None = Query(default=None),
     start_date: datetime | None = Query(default=None),
     end_date: datetime | None = Query(default=None),
+    limit: int = Query(
+        default=10_000,
+        ge=1,
+        le=50_000,
+        description="Maximum XLSX rows. Use the streaming CSV export for larger result sets.",
+    ),
 ) -> StreamingResponse:
-    """Export audit logs as an Excel (.xlsx) file (administrator-only).
+    """Export a bounded audit-log slice as an Excel (.xlsx) file.
 
-    Uses ``openpyxl`` for generation.  All results matching the filters are
-    included (no pagination).
+    XLSX generation is intentionally capped because ``openpyxl`` constructs a
+    workbook in process memory. Use the streaming CSV endpoint for complete,
+    high-volume exports.
     """
     _require_admin(current_user)
     import openpyxl  # noqa: PLC0415 — lazy import
@@ -512,12 +558,18 @@ async def export_audit_logs_excel(
         conditions = _build_conditions(search, action, user_id, ip_address, start_date, end_date)
         where_clause = and_(*conditions) if conditions else None
 
-        stmt = select(AuditLog).order_by(AuditLog.timestamp.desc())
+        stmt = select(AuditLog).order_by(AuditLog.timestamp.desc(), AuditLog.id.desc())
         if where_clause is not None:
             stmt = stmt.where(where_clause)
 
-        result = await session.execute(stmt)
+        # Fetch one extra row to reject broad exports predictably instead of
+        # allowing a request to consume unbounded database and process memory.
+        result = await session.execute(stmt.limit(limit + 1))
         logs = result.scalars().all()
+        if len(logs) > limit:
+            raise ValidationError(
+                "XLSX export exceeds the requested limit; narrow filters or use the streaming CSV export."
+            )
 
         wb = openpyxl.Workbook()
         ws = wb.active
@@ -560,109 +612,13 @@ async def export_audit_logs_excel(
 
 
 # ---------------------------------------------------------------------------
-# CDN config
+# CDN config (legacy compatibility redirect)
 # ---------------------------------------------------------------------------
 
-
-@router.get("/cdn-config")
-async def get_cdn_config(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
-    """Return current CDN configuration (administrator-only).
-
-    Returns ``enabled`` (bool) and ``urls`` (list of str).
-    """
-    _require_admin(current_user)
-
-    enabled_setting = await db.execute(
-        select(SystemSetting).where(SystemSetting.key == "cdn_enabled")
-    )
-    enabled_row = enabled_setting.scalar_one_or_none()
-
-    urls_setting = await db.execute(
-        select(SystemSetting).where(SystemSetting.key == "cdn_urls")
-    )
-    urls_row = urls_setting.scalar_one_or_none()
-
-    return {
-        "enabled": (enabled_row.value.lower() == "true") if enabled_row else settings.cdn_enabled,
-        "urls": json.loads(urls_row.value) if urls_row else settings.cdn_urls,
-    }
-
-
-@router.put("/cdn-config")
-async def update_cdn_config(
-    payload: dict[str, Any],
-    request: Request,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
-    """Update CDN configuration (administrator-only).
-
-    Accepts ``enabled`` (bool) and ``urls`` (list of str).
-    """
-    _require_admin(current_user)
-
-    client_ip = request.client.host if request.client else None
-    now = datetime.now(timezone.utc)
-
-    enabled = payload.get("enabled", settings.cdn_enabled)
-    urls = payload.get("urls", settings.cdn_urls)
-
-    # Upsert cdn_enabled.
-    enabled_row = await db.execute(
-        select(SystemSetting).where(SystemSetting.key == "cdn_enabled")
-    )
-    enabled_row = enabled_row.scalar_one_or_none()
-    if enabled_row:
-        enabled_row.value = str(enabled).lower()
-        enabled_row.updated_at = now
-        enabled_row.updated_by = str(current_user.id)
-    else:
-        db.add(
-            SystemSetting(
-                key="cdn_enabled",
-                value=str(enabled).lower(),
-                updated_at=now,
-                updated_by=str(current_user.id),
-            )
-        )
-
-    # Upsert cdn_urls.
-    urls_row = await db.execute(
-        select(SystemSetting).where(SystemSetting.key == "cdn_urls")
-    )
-    urls_row = urls_row.scalar_one_or_none()
-    if urls_row:
-        urls_row.value = json.dumps(urls)
-        urls_row.updated_at = now
-        urls_row.updated_by = str(current_user.id)
-    else:
-        db.add(
-            SystemSetting(
-                key="cdn_urls",
-                value=json.dumps(urls),
-                updated_at=now,
-                updated_by=str(current_user.id),
-            )
-        )
-
-    # Record audit log.
-    db.add(
-        AuditLog(
-            user_id=current_user.id,
-            action="cdn_config_update",
-            resource_type="system_settings",
-            new_value={"cdn_enabled": enabled, "cdn_urls": urls},
-            ip_address=client_ip,
-        )
-    )
-
-    await db.commit()
-
-    return {"enabled": enabled, "urls": urls}
-
+# CDN settings now use /admin/settings/cdn so they participate in the same
+# typed optimistic-lock, revision-history, rollback, and audit contract as the
+# other settings domains. The former /cdn-config endpoints deliberately do
+# not keep a parallel storage model.
 
 # ---------------------------------------------------------------------------
 # Timeout config (centralized)

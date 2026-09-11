@@ -35,29 +35,48 @@ export function CommandPalette() {
   const navigate = useNavigate();
   const inputRef = React.useRef<HTMLInputElement>(null);
 
+  const resetPalette = React.useCallback(() => {
+    setQuery("");
+    setActiveIndex(0);
+  }, []);
+
+  const closePalette = React.useCallback(() => {
+    resetPalette();
+    setOpen(false);
+  }, [resetPalette]);
+
+  const openPalette = React.useCallback(() => {
+    resetPalette();
+    setOpen(true);
+  }, [resetPalette]);
+
+  const togglePalette = React.useCallback(() => {
+    if (open) closePalette();
+    else openPalette();
+  }, [closePalette, open, openPalette]);
+
   // Keyboard shortcut: Cmd+K / Ctrl+K
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
-        setOpen((v) => !v);
+        togglePalette();
       }
       if (e.key === "Escape" && open) {
         e.preventDefault();
-        setOpen(false);
+        closePalette();
       }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [open]);
+  }, [closePalette, open, togglePalette]);
 
-  // Focus input when opened
+  // Focus input when opened. Resetting the palette happens in the open/close
+  // actions above, avoiding an extra render caused by an effect-side state sync.
   React.useEffect(() => {
-    if (open) {
-      setQuery("");
-      setActiveIndex(0);
-      requestAnimationFrame(() => inputRef.current?.focus());
-    }
+    if (!open) return;
+    const frame = requestAnimationFrame(() => inputRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
   }, [open]);
 
   // Filter actions by query
@@ -73,20 +92,22 @@ export function CommandPalette() {
 
   const handleSelect = React.useCallback(
     (action: QuickAction) => {
-      setOpen(false);
+      closePalette();
       if (action.to) {
         navigate({ to: action.to as never });
       } else if (action.searchQuery && query.trim()) {
         navigate({ to: "/search", search: { q: query.trim() } } as never);
       }
     },
-    [navigate, query],
+    [closePalette, navigate, query],
   );
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setActiveIndex((i) => Math.min(i + 1, filtered.length));
+      const actionOffset = query.trim() ? 1 : 0;
+      const maxIndex = Math.max(0, filtered.length + actionOffset - 1);
+      setActiveIndex((i) => Math.min(i + 1, maxIndex));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setActiveIndex((i) => Math.max(i - 1, 0));
@@ -94,7 +115,7 @@ export function CommandPalette() {
       e.preventDefault();
       if (activeIndex === 0 && query.trim()) {
         // Submit search
-        setOpen(false);
+        closePalette();
         navigate({ to: "/search", search: { q: query.trim() } } as never);
       } else if (filtered[activeIndex - (query.trim() ? 1 : 0)]) {
         const idx = activeIndex - (query.trim() ? 1 : 0);
@@ -108,7 +129,7 @@ export function CommandPalette() {
   return (
     <div
       className="search-modal-backdrop flex items-start justify-center px-4 pt-[12vh]"
-      onClick={() => setOpen(false)}
+      onClick={closePalette}
       role="dialog"
       aria-modal="true"
       aria-label="Quick search"
@@ -136,7 +157,7 @@ export function CommandPalette() {
           <kbd>ESC</kbd>
           <button
             type="button"
-            onClick={() => setOpen(false)}
+            onClick={closePalette}
             className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
             aria-label="Close"
           >
@@ -151,7 +172,7 @@ export function CommandPalette() {
             <button
               type="button"
               onClick={() => {
-                setOpen(false);
+                closePalette();
                 navigate({ to: "/search", search: { q: query.trim() } } as never);
               }}
               className={cn(

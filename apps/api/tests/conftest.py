@@ -62,19 +62,33 @@ async def _seed_test_roles(connection: AsyncConnection) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Session-scoped PostgreSQL container
+# Session-scoped PostgreSQL database
 # ---------------------------------------------------------------------------
 
 
 @pytest.fixture(scope="session")
 def postgres_container():
-    """Start a PostgreSQL container for the test session.
+    """Provide an isolated PostgreSQL URL for the test session.
 
-    Uses testcontainers-postgres which provides a real PostgreSQL instance
-    (required because models use JSONB, UUID, and pgcrypto).
+    ``SOYMUTDB_TEST_DATABASE_URL`` opts into an explicitly provisioned local
+    PostgreSQL database (for example, a Mamba-hosted instance). Otherwise the
+    default remains a disposable testcontainers PostgreSQL instance. Both
+    paths use the same per-session schema setup and teardown in ``test_engine``.
     """
+    external_url = os.environ.get("SOYMUTDB_TEST_DATABASE_URL")
+    if external_url:
+        if not external_url.startswith("postgresql+asyncpg://"):
+            raise pytest.UsageError(
+                "SOYMUTDB_TEST_DATABASE_URL must use the postgresql+asyncpg:// scheme"
+            )
+        yield external_url
+        return
+
     if not HAS_TESTCONTAINERS:
-        pytest.skip("testcontainers-postgres not installed")
+        pytest.skip(
+            "testcontainers-postgres not installed; set SOYMUTDB_TEST_DATABASE_URL "
+            "to use an explicit PostgreSQL test database"
+        )
 
     with PostgresContainer("postgres:16-alpine") as pg:
         # Build asyncpg URL from the container's JDBC-style URL
@@ -122,18 +136,26 @@ async def test_engine(postgres_container: str):
 
 
 @pytest_asyncio.fixture
-async def db_session(test_engine) -> AsyncGenerator[AsyncSession, None]:
-    """Create a test database session with rollback isolation."""
+async def db_connection(test_engine) -> AsyncGenerator[AsyncConnection, None]:
+    """Function-scoped connection holding one outer transaction per test."""
+    async with test_engine.connect() as connection:
+        outer_transaction = await connection.begin()
+        yield connection
+        await outer_transaction.rollback()
+
+
+@pytest_asyncio.fixture
+async def db_session(db_connection) -> AsyncGenerator[AsyncSession, None]:
+    """Create a test session whose commits stay inside an outer transaction."""
     session_factory = async_sessionmaker(
-        bind=test_engine,
+        bind=db_connection,
         class_=AsyncSession,
         expire_on_commit=False,
+        join_transaction_mode="create_savepoint",
     )
 
     async with session_factory() as session:
         yield session
-        # Clean up after each test
-        await session.rollback()
 
 
 # ---------------------------------------------------------------------------
@@ -142,12 +164,13 @@ async def db_session(test_engine) -> AsyncGenerator[AsyncSession, None]:
 
 
 @pytest_asyncio.fixture
-async def app(test_engine):
+async def app(db_connection):
     """Create a test FastAPI app with overridden dependencies.
 
-    Each request gets its own AsyncSession (never share one connection
-    across concurrent in-test requests — asyncpg raises "another operation
-    is in progress" on a shared connection).
+    Request sessions join the same outer transaction as ``db_session``
+    (savepoint mode), so fixtures can seed data the API can see. Requests
+    must be awaited sequentially — asyncpg rejects concurrent operations
+    on one connection.
     """
     from fastapi import FastAPI
 
@@ -173,11 +196,13 @@ async def app(test_engine):
     )
     application.add_exception_handler(Exception, unhandled_exception_handler)
 
-    # Override the database dependency: fresh session per request
+    # Override the database dependency: per-request savepoint session on the
+    # shared outer transaction so in-test commits are visible to the API.
     session_factory = async_sessionmaker(
-        bind=test_engine,
+        bind=db_connection,
         class_=AsyncSession,
         expire_on_commit=False,
+        join_transaction_mode="create_savepoint",
     )
 
     async def override_get_db() -> AsyncGenerator[AsyncSession, None]:

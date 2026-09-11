@@ -15,6 +15,7 @@ import * as React from "react";
 import { DeploymentUnitOutlined, CaretRightOutlined, DownloadOutlined, LoadingOutlined, RedoOutlined } from "@ant-design/icons";
 import { Breadcrumb, Button, Card, Empty, Input, Result, Select, Tabs, Tag, Typography } from "@/lib/antd";
 import { useToast } from "../../lib/toast";
+import { queryKeys } from "../../lib/query-keys";
 import { seqFetchGenes, seqFetchRegion, getAssemblies, type SeqFetchResponse } from "./api";
 
 export const Route = createFileRoute("/tools/seqfetch")({
@@ -55,7 +56,7 @@ function SeqFetchInner() {
   const [result, setResult] = React.useState<SeqFetchResponse | null>(null);
 
   const assembliesQuery = useQuery({
-    queryKey: ["assemblies"],
+    queryKey: queryKeys.assemblies.all(),
     queryFn: getAssemblies,
     staleTime: 30 * 60 * 1000,
   });

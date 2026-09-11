@@ -23,6 +23,11 @@ import structlog
 
 from ..core.config import get_settings
 from ..core.database import get_session_factory
+from ..core.metrics import (
+    OUTBOX_DISPATCH_TOTAL,
+    OUTBOX_EVENTS,
+    OUTBOX_OLDEST_UNSENT_AGE_SECONDS,
+)
 from ..core.task_contract import QUEUE_DEFAULT, TASK_QUEUE_MAP
 from ..core.task_dispatch import dispatch_task
 from ..services import outbox_service
@@ -31,6 +36,7 @@ logger = structlog.get_logger(__name__)
 settings = get_settings()
 
 SendFn = Callable[..., Any]
+_OUTBOX_METRICS_REFRESH_SECONDS = 15.0
 
 
 def _safe_send_error(exc: Exception) -> str:
@@ -141,6 +147,8 @@ async def poll_outbox_once(*, send: SendFn = dispatch_task) -> int:
                         lease_owner=lease_owner,
                         error="missing task_name",
                     )
+                    outcome = "malformed" if changed else "lease_lost"
+                    OUTBOX_DISPATCH_TOTAL.labels(outcome=outcome).inc()
                     if not changed:
                         logger.warning("outbox.lease_lost", event_id=event_id)
                     processed += 1
@@ -165,6 +173,8 @@ async def poll_outbox_once(*, send: SendFn = dispatch_task) -> int:
                         lease_owner=lease_owner,
                         error="invalid kwargs",
                     )
+                    outcome = "malformed" if changed else "lease_lost"
+                    OUTBOX_DISPATCH_TOTAL.labels(outcome=outcome).inc()
                     if not changed:
                         logger.warning("outbox.lease_lost", event_id=event_id)
                     processed += 1
@@ -197,6 +207,7 @@ async def poll_outbox_once(*, send: SendFn = dispatch_task) -> int:
                         lease_owner=lease_owner,
                         error=_safe_send_error(exc),
                     )
+                    outcome = "failed"
                 else:
                     changed = await outbox_service.mark_sent(
                         session,
@@ -204,8 +215,11 @@ async def poll_outbox_once(*, send: SendFn = dispatch_task) -> int:
                         lease_owner=lease_owner,
                         message_id=event_id,
                     )
+                    outcome = "sent"
                 if not changed:
+                    outcome = "lease_lost"
                     logger.warning("outbox.lease_lost", event_id=event_id)
+                OUTBOX_DISPATCH_TOTAL.labels(outcome=outcome).inc()
                 processed += 1
                 active_event_ids.discard(event.event_id)
         except asyncio.CancelledError:
@@ -225,6 +239,16 @@ async def poll_outbox_once(*, send: SendFn = dispatch_task) -> int:
     return processed
 
 
+async def refresh_outbox_metrics() -> None:
+    """Refresh low-cardinality backlog gauges from one read-only snapshot."""
+    factory = get_session_factory()
+    async with factory() as session:
+        counts, oldest_age = await outbox_service.get_metrics_snapshot(session)
+    for status in ("pending", "processing", "sent", "failed"):
+        OUTBOX_EVENTS.labels(status=status).set(counts.get(status, 0))
+    OUTBOX_OLDEST_UNSENT_AGE_SECONDS.set(oldest_age)
+
+
 async def cleanup_outbox() -> int:
     """Delete ``sent`` events older than the retention window."""
     factory = get_session_factory()
@@ -236,6 +260,7 @@ async def run_outbox_dispatcher(stop_event: asyncio.Event | None = None) -> None
     """Run the poll loop until *stop_event* is set (or the task is cancelled)."""
     logger.info("outbox.dispatcher_started", interval=settings.outbox_poll_interval_seconds)
     last_cleanup = 0.0
+    last_metrics_refresh = 0.0
     while True:
         try:
             await poll_outbox_once()
@@ -248,6 +273,15 @@ async def run_outbox_dispatcher(stop_event: asyncio.Event | None = None) -> None
             )
 
         now = time.monotonic()
+        if now - last_metrics_refresh >= _OUTBOX_METRICS_REFRESH_SECONDS:
+            try:
+                await refresh_outbox_metrics()
+            except Exception as exc:
+                logger.warning(
+                    "outbox.metrics_refresh_error", error_type=type(exc).__name__
+                )
+            last_metrics_refresh = now
+
         if now - last_cleanup >= settings.outbox_cleanup_interval_seconds:
             try:
                 deleted = await cleanup_outbox()
@@ -273,4 +307,10 @@ async def start_dispatcher() -> asyncio.Task[None] | None:
     return asyncio.create_task(run_outbox_dispatcher())
 
 
-__all__ = ["cleanup_outbox", "poll_outbox_once", "run_outbox_dispatcher", "start_dispatcher"]
+__all__ = [
+    "cleanup_outbox",
+    "poll_outbox_once",
+    "refresh_outbox_metrics",
+    "run_outbox_dispatcher",
+    "start_dispatcher",
+]

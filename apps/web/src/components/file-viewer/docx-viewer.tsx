@@ -7,6 +7,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Skeleton } from "@/lib/antd";
+import DOMPurify from "dompurify";
 
 interface DocxViewerProps {
   url: string;
@@ -22,17 +23,43 @@ type DocxState =
 
 const DEFAULT_MAX_SIZE = 10 * 1024 * 1024; // 10 MB
 
+// Mammoth emits a document fragment, so accept only semantic formatting it
+// normally produces. Safe links and inline images are retained; all styling,
+// event attributes, embedded content, and active elements are excluded.
+const DOCX_SANITIZE_CONFIG = {
+  ALLOWED_TAGS: [
+    "a", "b", "blockquote", "br", "code", "del", "div", "em",
+    "h1", "h2", "h3", "h4", "h5", "h6", "hr", "i", "img",
+    "li", "ol", "p", "pre", "span", "strong", "sub", "sup",
+    "table", "tbody", "td", "th", "thead", "tr", "u", "ul",
+  ],
+  ALLOWED_ATTR: ["alt", "colspan", "href", "rowspan", "src", "target", "title"],
+  ALLOW_DATA_ATTR: false,
+  ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|[^a-z]|[a-z+.-]+(?:[^a-z+.-:]|$))/i,
+};
+
+function sanitizeDocxHtml(rawHtml: string): string {
+  const sanitized = DOMPurify.sanitize(rawHtml, DOCX_SANITIZE_CONFIG);
+  const template = document.createElement("template");
+  template.innerHTML = sanitized;
+  template.content.querySelectorAll('a[target="_blank"]').forEach((link) => {
+    link.setAttribute("rel", "noopener noreferrer");
+  });
+  return template.innerHTML;
+}
+
 export function DocxViewer({ url, maxSize = DEFAULT_MAX_SIZE }: DocxViewerProps) {
   const { t } = useTranslation();
   const [state, setState] = useState<DocxState>({ status: "loading" });
 
   useEffect(() => {
     let disposed = false;
+    const controller = new AbortController();
     setState({ status: "loading" });
 
     (async () => {
       try {
-        const res = await fetch(url);
+        const res = await fetch(url, { signal: controller.signal });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
         const length = Number(res.headers.get("content-length") ?? 0);
@@ -54,7 +81,10 @@ export function DocxViewer({ url, maxSize = DEFAULT_MAX_SIZE }: DocxViewerProps)
         }).convertToHtml;
         const result = await mammoth({ arrayBuffer });
         if (disposed) return;
-        setState({ status: "ready", html: result.value });
+        setState({
+          status: "ready",
+          html: sanitizeDocxHtml(result.value),
+        });
       } catch (err) {
         if (disposed) return;
         setState({
@@ -66,6 +96,7 @@ export function DocxViewer({ url, maxSize = DEFAULT_MAX_SIZE }: DocxViewerProps)
 
     return () => {
       disposed = true;
+      controller.abort();
     };
   }, [url, maxSize]);
 
@@ -100,7 +131,7 @@ export function DocxViewer({ url, maxSize = DEFAULT_MAX_SIZE }: DocxViewerProps)
   return (
     <div
       className="rl-md-viewer rl-docx-viewer"
-      // mammoth output is sanitized the same way as markdown before render
+      // Mammoth output is sanitized before it reaches this injection sink.
       dangerouslySetInnerHTML={{ __html: state.html }}
     />
   );

@@ -103,7 +103,10 @@ function resolveVars(obj: unknown, palette: ChartPalette): unknown {
 export function useECharts(option: EChartsOption, deps: React.DependencyList = []): UseEChartsResult {
   const ref = React.useRef<HTMLDivElement | null>(null);
   const chartRef = React.useRef<import("echarts").EChartsType | null>(null);
+  const initialisedRef = React.useRef(false);
   const [loading, setLoading] = React.useState(true);
+  // The option effect needs a signal when lazy ECharts initialization finishes.
+  const [chartReady, setChartReady] = React.useState(0);
   const { theme } = useTheme();
   const { reduced, intensity, durationSlow } = useAnimation();
   const palette = React.useMemo(() => {
@@ -112,32 +115,47 @@ export function useECharts(option: EChartsOption, deps: React.DependencyList = [
     return buildPalette();
   }, [theme]);
 
-  // Initialise the chart instance once the module loads.
+  // Initialise the chart instance once the lazy module loads. The cleanup is
+  // owned by this effect (not an ignored async-IIFE return value), so observers
+  // and chart canvases cannot survive a route/theme change.
   React.useEffect(() => {
     let disposed = false;
+    let chart: import("echarts").EChartsType | null = null;
+    let observer: ResizeObserver | null = null;
+    let fallbackResize: (() => void) | null = null;
+    initialisedRef.current = false;
+
     void (async () => {
       const echarts = await import("echarts");
       if (disposed || !ref.current) return;
-      const chart = echarts.init(ref.current, theme === "dark" ? "dark" : undefined, { renderer: "canvas" });
+      chart = echarts.init(ref.current, theme === "dark" ? "dark" : undefined, {
+        renderer: "canvas",
+      });
       chartRef.current = chart;
+      const resize = () => chart?.resize();
+      if (typeof ResizeObserver !== "undefined") {
+        observer = new ResizeObserver(resize);
+        observer.observe(ref.current);
+      } else {
+        fallbackResize = resize;
+        window.addEventListener("resize", fallbackResize);
+      }
+      chart.resize();
       setLoading(false);
-      const resize = () => chart.resize();
-      window.addEventListener("resize", resize);
-      return () => {
-        window.removeEventListener("resize", resize);
-        chart.dispose();
-      };
+      setChartReady((version) => version + 1);
     })();
+
     return () => {
       disposed = true;
-      chartRef.current?.dispose();
-      chartRef.current = null;
+      observer?.disconnect();
+      if (fallbackResize) window.removeEventListener("resize", fallbackResize);
+      chart?.dispose();
+      if (chartRef.current === chart) chartRef.current = null;
+      initialisedRef.current = false;
     };
   }, [theme]);
 
   // Apply option when it changes — resolve CSS vars first.
-  // Track whether the chart has been initialised to decide merge vs. replace.
-  const initialisedRef = React.useRef(false);
   React.useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;
@@ -164,7 +182,7 @@ export function useECharts(option: EChartsOption, deps: React.DependencyList = [
     chart.setOption(merged, { notMerge });
     initialisedRef.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [option, palette, reduced, intensity, durationSlow, ...deps]);
+  }, [chartReady, option, palette, reduced, intensity, durationSlow, ...deps]);
 
   return { ref, palette, loading };
 }

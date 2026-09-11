@@ -18,6 +18,16 @@ type MdState =
   | { status: "error"; message: string }
   | { status: "ready"; html: string };
 
+function sanitizeMarkdownHtml(rawHtml: string): string {
+  const sanitized = DOMPurify.sanitize(rawHtml, { ADD_ATTR: ["target"] });
+  const template = document.createElement("template");
+  template.innerHTML = sanitized;
+  template.content.querySelectorAll('a[target="_blank"]').forEach((link) => {
+    link.setAttribute("rel", "noopener noreferrer");
+  });
+  return template.innerHTML;
+}
+
 export function MarkdownViewer({ content }: MarkdownViewerProps) {
   const { t } = useTranslation();
   const [state, setState] = useState<MdState>({ status: "loading" });
@@ -33,9 +43,7 @@ export function MarkdownViewer({ content }: MarkdownViewerProps) {
         const rawHtml = await marked.parse(content);
         if (disposed) return;
         // Sanitize before injecting — markdown may embed raw HTML.
-        const html = DOMPurify.sanitize(rawHtml as string, {
-          ADD_ATTR: ["target"],
-        });
+        const html = sanitizeMarkdownHtml(rawHtml as string);
         setState({ status: "ready", html });
       } catch (err) {
         if (disposed) return;

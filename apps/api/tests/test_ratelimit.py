@@ -14,7 +14,7 @@ from app.core.exceptions import (
     ServiceUnavailableError,
     soy_mut_db_exception_handler,
 )
-from app.core.ratelimit import LoginRateLimiter
+from app.core.ratelimit import ExternalArticlePreviewRateLimiter, LoginRateLimiter
 
 
 @dataclass
@@ -27,11 +27,11 @@ class FakeRedis:
         self.values = {}
         self.keys: list[str] = []
 
-    async def eval(self, _script: str, _numkeys: int, key: str, _window: int) -> list[int]:
+    async def eval(self, _script: str, _numkeys: int, key: str, window: int) -> list[int]:
         self.keys.append(key)
         count = self.values.get(key, 0) + 1
         self.values[key] = count
-        return [count, 60]
+        return [count, window]
 
 
 class FailingRedis:
@@ -39,7 +39,9 @@ class FailingRedis:
         raise ConnectionError("redis is unavailable")
 
 
-def _settings(*, app_env: str, maximum: int = 2) -> Settings:
+def _settings(
+    *, app_env: str, maximum: int = 2, preview_maximum: int = 2, preview_window: int = 300
+) -> Settings:
     return Settings(
         app_env=app_env,
         database_url="postgresql+asyncpg://user:password@example.com/database",
@@ -48,9 +50,12 @@ def _settings(*, app_env: str, maximum: int = 2) -> Settings:
         s3_access_key="test-access-key",
         s3_secret_key="test-secret-key",
         jwt_secret="test-jwt-secret-that-is-longer-than-32-characters",
+        analytics_ip_salt="test-analytics-ip-salt-that-is-longer-than-32-characters",
         cors_origins=["https://example.com"],
         login_rate_limit_window=60,
         login_rate_limit_max=maximum,
+        external_article_preview_rate_limit_window=preview_window,
+        external_article_preview_rate_limit_max=preview_maximum,
     )
 
 
@@ -103,6 +108,29 @@ async def test_rate_limit_key_normalizes_username_and_distinguishes_ip() -> None
     assert redis.keys[0] == redis.keys[1]
     assert redis.keys[1] != redis.keys[2]
     assert redis.keys[0] != redis.keys[3]
+
+
+@pytest.mark.asyncio
+async def test_external_preview_limit_is_scoped_to_editor_and_ip() -> None:
+    redis = FakeRedis()
+    limiter = ExternalArticlePreviewRateLimiter(
+        redis_getter=lambda: redis,
+        settings_getter=lambda: _settings(app_env="prod", preview_maximum=2),
+        clock=lambda: 120.5,
+    )
+
+    await limiter.enforce(user_id="editor-1", client_ip="192.0.2.10")
+    await limiter.enforce(user_id="editor-1", client_ip="192.0.2.10")
+
+    with pytest.raises(RateLimitExceededError) as raised:
+        await limiter.enforce(user_id="editor-1", client_ip="192.0.2.10")
+
+    # Fixed windows align to the epoch, so this is the remaining 180 seconds
+    # of the configured 300-second window at the injected clock value.
+    assert raised.value.retry_after == 180
+    assert redis.keys[0].startswith(
+        "soymutdb:external-article-preview:ratelimit:user:editor-1:ip:192.0.2.10:"
+    )
 
 
 @pytest.mark.asyncio

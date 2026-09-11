@@ -1,6 +1,11 @@
 import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { App as AntdApp } from "../lib/antd";
-import { uploadPresign, type UploadPresignResponse } from "@soymutdb/api-client";
+import {
+  completeUpload,
+  uploadPresign,
+  type MediaAsset,
+  type UploadPresignResponse,
+} from "@soymutdb/api-client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import FileUpload from "./file-upload";
 
@@ -9,10 +14,35 @@ vi.mock("react-i18next", () => ({
 }));
 
 vi.mock("@soymutdb/api-client", () => ({
+  completeUpload: vi.fn(),
   uploadPresign: vi.fn(),
 }));
 
 const uploadPresignMock = vi.mocked(uploadPresign);
+const completeUploadMock = vi.mocked(completeUpload);
+const completedAsset = {
+  id: "asset-id",
+  object_key: "uploads/news/signed-cover.png",
+  public_url: "https://cdn.example.test/uploads/news/signed-cover.png",
+  original_filename: "cover.png",
+  purpose: "news",
+  content_type: "image/png",
+  size_bytes: 4,
+  checksum_sha256: "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+  width: 1,
+  height: 1,
+  alt_text: null,
+  caption: null,
+  credit: null,
+  is_decorative: false,
+  status: "ready",
+  uploaded_by: "user-id",
+  verified_at: "2026-08-28T00:00:00Z",
+  archived_at: null,
+  created_at: "2026-08-28T00:00:00Z",
+  updated_at: "2026-08-28T00:00:00Z",
+  usage_count: 0,
+} as MediaAsset;
 const messageError = vi.fn();
 
 class MockXMLHttpRequest {
@@ -69,6 +99,8 @@ function chooseFile(container: HTMLElement, file: File) {
 
 beforeEach(() => {
   uploadPresignMock.mockReset();
+  completeUploadMock.mockReset();
+  completeUploadMock.mockResolvedValue(completedAsset);
   messageError.mockReset();
   MockXMLHttpRequest.instances = [];
   vi.stubGlobal(
@@ -164,6 +196,14 @@ describe("FileUpload multipart POST", () => {
     });
 
     await waitFor(() => {
+      expect(completeUploadMock).toHaveBeenCalledWith({
+        object_key: "uploads/news/signed-cover.png",
+        filename: "cover.png",
+        purpose: "news",
+        size: 4,
+        content_type: "image/png",
+        checksum_sha256: checksumSha256,
+      });
       expect(onChange).toHaveBeenCalledWith(
         "https://cdn.example.test/uploads/news/signed-cover.png",
       );
@@ -186,7 +226,7 @@ describe("FileUpload multipart POST", () => {
 
     await waitFor(() => {
       expect(messageError).toHaveBeenCalledWith(
-        expect.stringContaining("POST"),
+        expect.stringContaining("presignMustUsePost"),
       );
     });
     expect(MockXMLHttpRequest.instances).toHaveLength(0);
@@ -202,7 +242,7 @@ describe("FileUpload multipart POST", () => {
 
     await waitFor(() => {
       expect(messageError).toHaveBeenCalledWith(
-        expect.stringContaining("MIME"),
+        expect.stringContaining("fileMimeRequired"),
       );
     });
     expect(arrayBuffer).not.toHaveBeenCalled();

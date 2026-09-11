@@ -15,7 +15,7 @@ from structlog.contextvars import bind_contextvars, clear_contextvars
 
 from .config import get_settings
 from .database import get_redis
-from .metrics import REQUEST_COUNT, REQUEST_LATENCY
+from .metrics import REQUEST_COUNT, REQUEST_LATENCY, update_db_pool_metrics
 
 logger = get_logger(__name__)
 settings = get_settings()
@@ -74,6 +74,7 @@ class MetricsMiddleware(BaseHTTPMiddleware):
                 time.perf_counter() - start
             )
             REQUEST_COUNT.labels(method=method, endpoint=endpoint, status=status).inc()
+            update_db_pool_metrics()
 
 
 class RequestIdMiddleware(BaseHTTPMiddleware):

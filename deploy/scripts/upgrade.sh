@@ -125,6 +125,9 @@ fi
 if [[ -z "${SOYMUTDB_CORS_ORIGINS:-}" ]]; then
     fail "SOYMUTDB_CORS_ORIGINS is required (comma-separated origins, no wildcard)"
 fi
+if [[ -z "${SOYMUTDB_ANALYTICS_IP_SALT:-}" || "${#SOYMUTDB_ANALYTICS_IP_SALT}" -lt 32 || "${SOYMUTDB_ANALYTICS_IP_SALT}" == "soymutdb-analytics-dev" || "${SOYMUTDB_ANALYTICS_IP_SALT}" == change-me-* ]]; then
+    fail "SOYMUTDB_ANALYTICS_IP_SALT must be a non-default secret of at least 32 characters"
+fi
 if [[ -z "${SOYMUTDB_ADMIN_EMAIL:-}" || "${SOYMUTDB_ADMIN_EMAIL}" == "admin@soymutdb.local" || "${SOYMUTDB_ADMIN_EMAIL}" != *@* ]]; then
     fail "SOYMUTDB_ADMIN_EMAIL must be a valid non-default admin address"
 fi

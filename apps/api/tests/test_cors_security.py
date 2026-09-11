@@ -16,6 +16,7 @@ def _prod_settings(**overrides: object) -> Settings:
         "s3_endpoint": "https://minio.example.com",
         "s3_access_key": "production-access-key",
         "s3_secret_key": "production-secret-key",
+        "analytics_ip_salt": "production-analytics-ip-salt-at-least-32-characters",
         "cors_origins": ["https://app.example.com"],
     }
     values.update(overrides)

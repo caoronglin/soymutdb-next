@@ -1,15 +1,15 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { initI18n, detectLanguage } from "@soymutdb/i18n";
+import { initI18n } from "@soymutdb/i18n";
 import { clearLegacyTokens } from "@soymutdb/api-client";
 import { AuthProvider } from "./lib/auth-context";
 import { DesignSystemProvider } from "./lib/design-system-provider";
 import App from "./App";
 import "./index.css";
 
-// Initialise i18next before rendering.
-initI18n(detectLanguage());
+// Initialise i18next before rendering. Admin defaults to Chinese.
+initI18n("zh");
 
 // One-time migration: drop legacy persisted access/refresh tokens from
 // localStorage/sessionStorage (sessions now live in memory + HttpOnly cookie).

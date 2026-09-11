@@ -2,7 +2,15 @@ import * as React from "react";
 import { App as AntdApp, ConfigProvider } from "./antd";
 import type { Locale } from "antd/es/locale";
 import i18n from "@soymutdb/i18n";
-import { createAntdTheme, isAdminDark, loadAntdLocale } from "./antd-theme";
+import {
+  ADMIN_PRIMARY_COLOR_EVENT,
+  ADMIN_PRIMARY_COLOR_STORAGE_KEY,
+  createAntdTheme,
+  isAdminDark,
+  isValidAdminPrimaryColor,
+  loadAntdLocale,
+  readAdminPrimaryColor,
+} from "./antd-theme";
 import {
   parseMotionPreference,
   resolveMotionDecision,
@@ -45,6 +53,7 @@ function readMotionSignals(reducedQuery?: MediaQueryList): MotionSignals {
 export function DesignSystemProvider({ children }: { children: React.ReactNode }) {
   const [preference] = React.useState(() => readMotionPreference());
   const [locale, setLocale] = React.useState<Locale | null>(null);
+  const [primaryColor, setPrimaryColor] = React.useState(readAdminPrimaryColor);
   const [environment, setEnvironment] = React.useState<{
     dark: boolean;
     signals: MotionSignals;
@@ -57,6 +66,26 @@ export function DesignSystemProvider({ children }: { children: React.ReactNode }
       ceiling: signals.saveData || signals.lowResource ? "minimal" : "standard",
     };
   });
+
+  React.useEffect(() => {
+    const applyColor = (value: unknown) => {
+      if (typeof value === "string" && isValidAdminPrimaryColor(value)) {
+        setPrimaryColor(value.toLowerCase());
+      }
+    };
+    const handleColorChange = (event: Event) => {
+      applyColor((event as CustomEvent<unknown>).detail);
+    };
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === ADMIN_PRIMARY_COLOR_STORAGE_KEY) applyColor(event.newValue);
+    };
+    window.addEventListener(ADMIN_PRIMARY_COLOR_EVENT, handleColorChange);
+    window.addEventListener("storage", handleStorage);
+    return () => {
+      window.removeEventListener(ADMIN_PRIMARY_COLOR_EVENT, handleColorChange);
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, []);
 
   React.useEffect(() => {
     let active = true;
@@ -109,8 +138,8 @@ export function DesignSystemProvider({ children }: { children: React.ReactNode }
     environment.ceiling,
   ).effective;
   const theme = React.useMemo(
-    () => createAntdTheme({ dark: environment.dark, motion }),
-    [environment.dark, motion],
+    () => createAntdTheme({ dark: environment.dark, motion, primaryColor }),
+    [environment.dark, motion, primaryColor],
   );
 
   return (

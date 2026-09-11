@@ -10,13 +10,15 @@ import hashlib
 import json
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.task_contract import RELEASE_POINTER_CHANGED_TASK
 from ..models.auth import AuditLog
 from ..models.content import Release, ReleaseStatus
 from ..models.data_publishing import ActiveRelease, DataSet, ImportStatus, ReleaseDataSet
+from ..models.variant import MutantLine
+from .cache import delete_prefix
 from .outbox_service import enqueue_task_event
 
 
@@ -88,6 +90,22 @@ async def publish_release(db: AsyncSession, *, release_id: int, actor_id, reason
             raise ReleaseNotReady("active release transition is invalid")
         if target.status != ReleaseStatus.READY.value or not await release_is_ready(db, release_id):
             raise ReleaseNotReady("release must be ready before publishing")
+        missing_public_ids = (
+            await db.execute(
+                select(func.count())
+                .select_from(MutantLine)
+                .where(
+                    MutantLine.release_id == release_id,
+                    MutantLine.is_deleted.is_(False),
+                    MutantLine.public_id.is_(None),
+                )
+            )
+        ).scalar_one()
+        if missing_public_ids:
+            raise ReleaseNotReady(
+                f"{missing_public_ids} mutant line(s) in release {release_id} "
+                "have no public_id; publication requires one"
+            )
         previous_id = pointer.release_id
         now = datetime.now(UTC)
         pointer.release_id = target.id
@@ -106,7 +124,10 @@ async def publish_release(db: AsyncSession, *, release_id: int, actor_id, reason
             kwargs={"previous_release_id": previous_id, "release_id": target.id, "request_id": request_id},
         )
         await db.flush()
-        return target
+
+    # Redis is outside the database transaction: only invalidate after commit.
+    await delete_prefix("release-context")
+    return target
 
 
 async def rollback_release(db: AsyncSession, *, release_id: int, actor_id, reason: str, request_id: str | None = None) -> tuple[Release, Release]:
@@ -134,7 +155,10 @@ async def rollback_release(db: AsyncSession, *, release_id: int, actor_id, reaso
             kwargs={"previous_release_id": release_id, "release_id": previous.id, "request_id": request_id},
         )
         await db.flush()
-        return previous, current
+
+    # Redis is outside the database transaction: only invalidate after commit.
+    await delete_prefix("release-context")
+    return previous, current
 
 
 __all__ = ["ReleaseNotReady", "mark_release_ready", "publish_release", "rollback_release", "validate_release"]

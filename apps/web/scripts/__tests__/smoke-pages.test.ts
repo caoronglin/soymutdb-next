@@ -25,7 +25,7 @@ function makeDist(): string {
 
 function validSnapshot(): string {
   return JSON.stringify({
-    schema_version: 1,
+    schema_version: 2,
     generated_at: "2026-08-09T12:00:00.000Z",
     news: { source_total: 1, included_total: 1, truncated: false, items: [] },
     news_detail: { "test-news": { slug: "test-news", title_en: "T" } },
@@ -75,13 +75,13 @@ describe("smoke-pages regression: content snapshot", () => {
 
   it("blocks a snapshot with a wrong schema_version", () => {
     const snap = JSON.parse(validSnapshot()) as Record<string, unknown>;
-    snap.schema_version = 2;
+    snap.schema_version = 1;
     writeFileSync(join(dist, "data", "content.json"), JSON.stringify(snap));
     const results = runChecks({ distDir: dist, snapshotUrl: URL });
 
     const check = result(results, "dist/data/content.json");
     expect(check.ok).toBe(false);
-    expect(check.detail).toContain("invalid schema (version=2)");
+    expect(check.detail).toContain("invalid schema (version=1)");
   });
 
   it("blocks a snapshot missing generated_at", () => {

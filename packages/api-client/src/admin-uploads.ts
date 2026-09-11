@@ -16,6 +16,7 @@
  */
 
 import { http } from "./auth";
+import type { MediaAsset } from "./admin-media";
 
 /** Presign request — mirrors backend `UploadPresignRequest`. */
 export interface UploadPresignRequest {
@@ -37,6 +38,25 @@ export interface UploadPresignResponse {
   /** Public-facing URL suitable for persisting (e.g. `cover_url`). */
   public_url: string;
   expires_in: number;
+}
+
+/** Completion request sent only after the signed POST succeeds. */
+export interface MediaAssetCompleteRequest {
+  object_key: string;
+  filename: string;
+  purpose: string;
+  size: number;
+  content_type: string;
+  checksum_sha256: string;
+}
+
+/** Verify an object server-side and register it in the media library. */
+export function completeUpload(
+  body: MediaAssetCompleteRequest,
+): Promise<MediaAsset> {
+  return http.post<MediaAsset>("/admin/uploads/complete", {
+    json: body,
+  });
 }
 
 /**

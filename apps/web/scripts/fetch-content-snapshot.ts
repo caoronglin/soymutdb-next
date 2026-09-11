@@ -2,8 +2,8 @@
 /**
  * Content Snapshot Fetcher (E2-3)
  *
- * Fetches the public content snapshot (news + about) for static content
- * pages.  Contract: docs/design/static-content-richtext-2026-08.md §4.1.
+ * Fetches the public content snapshot (news + about + publications) for static
+ * content pages. Contract: docs/design/static-content-richtext-2026-08.md §4.1.
  *
  * Resolution order:
  *   1. $CONTENT_SNAPSHOT_URL  -> fetch -> validate -> dist/data/content.json
@@ -13,15 +13,19 @@
  *        - local: warn + skip (content pages fall back to SPA/API)
  */
 
-import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 
-const DIST_DIR = join(process.cwd(), "dist");
+const DIST_DIR = resolve(process.cwd(), process.env.SOYMUTDB_DIST_DIR ?? "dist");
 const DATA_DIR = join(DIST_DIR, "data");
 const SNAPSHOT_OUT = join(DATA_DIR, "content.json");
 const FIXTURE_DIR = join(process.cwd(), "content-snapshot");
 const FIXTURE_FILE = join(FIXTURE_DIR, "content.json");
 
+const SITE_VARIANT = (process.env.VITE_SITE_VARIANT ?? process.env.SOYMUTDB_SITE_VARIANT ?? "external").trim().toLowerCase();
+if (SITE_VARIANT !== "external" && SITE_VARIANT !== "internal") {
+  throw new Error(`Invalid site variant "${SITE_VARIANT}". Use external or internal.`);
+}
 const SNAPSHOT_URL = process.env.CONTENT_SNAPSHOT_URL ?? "";
 const IS_PRODUCTION_BUILD =
   process.env.CI === "true" || process.env.NODE_ENV === "production";
@@ -37,6 +41,8 @@ interface Snapshot {
   };
   news_detail: Record<string, unknown>;
   about: Record<string, string | null>;
+  publications?: unknown[];
+  static_pages: unknown[];
 }
 
 function validateSnapshot(raw: unknown): Snapshot {
@@ -44,7 +50,7 @@ function validateSnapshot(raw: unknown): Snapshot {
     throw new Error("snapshot is not an object");
   }
   const s = raw as Record<string, unknown>;
-  if (s.schema_version !== 1) {
+  if (s.schema_version !== 2) {
     throw new Error(`unsupported schema_version: ${s.schema_version}`);
   }
   if (typeof s.generated_at !== "string" || !s.generated_at) {
@@ -62,6 +68,12 @@ function validateSnapshot(raw: unknown): Snapshot {
   }
   if (typeof s.news_detail !== "object" || s.news_detail === null) {
     throw new Error("snapshot missing news_detail");
+  }
+  if ("publications" in s && !Array.isArray(s.publications)) {
+    throw new Error("snapshot publications must be an array");
+  }
+  if (!Array.isArray(s.static_pages)) {
+    throw new Error("snapshot static_pages must be an array");
   }
   return s as unknown as Snapshot;
 }
@@ -87,6 +99,14 @@ async function fetchRemote(): Promise<Snapshot> {
 }
 
 async function main(): Promise<void> {
+  if (SITE_VARIANT === "internal") {
+    // Public snapshots may contain the external site. Never embed one into the
+    // internal artifact; internal content is fetched through authenticated APIs.
+    if (existsSync(SNAPSHOT_OUT)) unlinkSync(SNAPSHOT_OUT);
+    console.log("[content-snapshot] internal artifact: skipped public snapshot embedding");
+    return;
+  }
+
   if (SNAPSHOT_URL) {
     try {
       writeSnapshot(await fetchRemote());

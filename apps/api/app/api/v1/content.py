@@ -25,6 +25,7 @@ from ...schemas.content import (
 )
 from ...services.cache import get_or_set
 from ...services.content_snapshot_service import ContentSnapshotService
+from ...services.news_service import public_news_visibility_conditions
 from ...utils.s3 import generate_presigned_url
 
 router = APIRouter(prefix="/content", tags=["content"])
@@ -74,10 +75,14 @@ async def content_snapshot(
     etag = '"' + hashlib.sha256(
         payload["generated_at"].encode("utf-8")
     ).hexdigest()[:16] + '"'
+    # The snapshot is mutable, so shared caches must revalidate before reuse.
+    # The ETag keeps that revalidation inexpensive when the 60-second origin
+    # cache has not changed.
+    response.headers["Cache-Control"] = "public, max-age=0, must-revalidate"
+    response.headers["ETag"] = etag
     if request.headers.get("if-none-match") == etag:
         response.status_code = 304
         return {}
-    response.headers["ETag"] = etag
     return payload
 
 
@@ -108,7 +113,7 @@ async def list_news(
     """List published news articles."""
     result = await db.execute(
         select(NewsArticle)
-        .where(NewsArticle.is_published.is_(True))
+        .where(*public_news_visibility_conditions())
         .order_by(NewsArticle.published_at.desc())
         .limit(limit)
     )
@@ -122,7 +127,7 @@ async def get_news(
 ) -> NewsResponse:
     result = await db.execute(
         select(NewsArticle).where(
-            NewsArticle.slug == slug, NewsArticle.is_published.is_(True)
+            NewsArticle.slug == slug, *public_news_visibility_conditions()
         )
     )
     article = result.scalar_one_or_none()

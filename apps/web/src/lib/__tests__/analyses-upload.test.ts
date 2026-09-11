@@ -86,14 +86,31 @@ describe("calculateFileSha256", () => {
     expect(arrayBuffer).not.toHaveBeenCalled();
   });
 
-  it("surfaces Web Crypto digest failures", async () => {
-    vi.spyOn(globalThis.crypto.subtle, "digest").mockRejectedValueOnce(
-      new Error("digest unavailable"),
-    );
+  it("hashes large files as bounded slices without calling File.arrayBuffer", async () => {
+    const chunkSize = 4 * 1024 * 1024;
+    const file = new File([new Uint8Array(chunkSize * 2 + 19).fill(0x61)], "reads.fastq");
+    const fileArrayBuffer = vi.spyOn(file, "arrayBuffer");
+    const slice = vi.spyOn(file, "slice");
 
-    await expect(
-      calculateFileSha256(new File(["abc"], "reads.fastq")),
-    ).rejects.toThrow(/calculate SHA-256.*reads\.fastq/i);
+    const checksum = await calculateFileSha256(file);
+
+    expect(checksum).toBe("0dd6142b70432bcc10f5d543a2432525e53304021a927d66d33ca47c57755175");
+    expect(fileArrayBuffer).not.toHaveBeenCalled();
+    expect(slice).toHaveBeenCalledTimes(3);
+    for (const [start, end] of slice.mock.calls) {
+      expect((end ?? file.size) - (start ?? 0)).toBeLessThanOrEqual(chunkSize);
+    }
+  });
+
+  it("surfaces chunk-read failures", async () => {
+    const file = new File(["abc"], "reads.fastq");
+    vi.spyOn(file, "slice").mockReturnValue({
+      arrayBuffer: vi.fn().mockRejectedValue(new Error("read unavailable")),
+    } as unknown as Blob);
+
+    await expect(calculateFileSha256(file)).rejects.toThrow(
+      /calculate SHA-256.*reads\.fastq/i,
+    );
   });
 });
 

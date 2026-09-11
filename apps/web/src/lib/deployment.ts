@@ -78,12 +78,21 @@ export function buildJbrowseLocusUrl(
   return { href: `${normalizeBasePath(base)}browser?${query.toString()}` };
 }
 
-export function requireDeploymentOrigin(value: string | undefined, label: string): string {
+export function requireDeploymentOrigin(
+  value: string | undefined,
+  label: string,
+  options: { allowInsecureHttp?: boolean } = {},
+): string {
   const candidate = value?.trim();
   if (!candidate) throw new Error(`${label} origin is required for production deployment`);
   let url: URL;
   try { url = new URL(candidate); } catch { throw new Error(`${label} origin must be an absolute URL: ${candidate}`); }
-  if (url.protocol !== "https:" && url.hostname !== "localhost" && url.hostname !== "127.0.0.1") {
+  if (
+    !options.allowInsecureHttp &&
+    url.protocol !== "https:" &&
+    url.hostname !== "localhost" &&
+    url.hostname !== "127.0.0.1"
+  ) {
     throw new Error(`${label} origin must use https: ${candidate}`);
   }
   if (url.hostname.endsWith("example.com")) throw new Error(`${label} origin uses a placeholder origin: ${candidate}`);

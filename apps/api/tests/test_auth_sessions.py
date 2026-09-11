@@ -661,6 +661,7 @@ class TestRefreshCookieConfig:
             s3_access_key="test-access-key",
             s3_secret_key="test-secret-key",
             jwt_secret="prod-jwt-secret-that-is-longer-than-32-characters",
+            analytics_ip_salt="production-analytics-ip-salt-at-least-32-characters",
             cors_origins=["https://app.example.com"],
         )
         assert settings.refresh_cookie_secure_effective is True

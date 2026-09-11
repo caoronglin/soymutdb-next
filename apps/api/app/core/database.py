@@ -35,7 +35,7 @@ def get_engine() -> AsyncEngine:
     global _engine
     if _engine is None:
         # Statement timeout (asyncpg server_settings) so a slow query cannot
-        # pin a pooled connection forever; pool budget unchanged (5+5 API).
+        # pin a pooled connection forever. Pool sizes are per API process.
         connect_args: dict[str, Any] = {}
         if settings.db_statement_timeout > 0:
             connect_args["server_settings"] = {
@@ -53,6 +53,24 @@ def get_engine() -> AsyncEngine:
             connect_args=connect_args,
         )
     return _engine
+
+
+def get_db_pool_status() -> dict[str, int] | None:
+    """Return a non-I/O snapshot when the async engine already exists."""
+    if _engine is None:
+        return None
+    pool = _engine.sync_engine.pool
+    required = ("size", "checkedin", "checkedout", "overflow")
+    if not all(callable(getattr(pool, name, None)) for name in required):
+        return None
+    return {
+        "capacity": settings.db_pool_size + settings.db_max_overflow,
+        "size": int(pool.size()),
+        "checked_in": int(pool.checkedin()),
+        "checked_out": int(pool.checkedout()),
+        # QueuePool reports negative overflow until its base pool is populated.
+        "overflow": max(0, int(pool.overflow())),
+    }
 
 
 def get_session_factory() -> async_sessionmaker[AsyncSession]:

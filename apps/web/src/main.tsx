@@ -15,8 +15,8 @@ import { createRoot } from "react-dom/client";
 import { RouterProvider, createRouter } from "@tanstack/react-router";
 import { QueryClientProvider } from "@tanstack/react-query";
 
-// Fonts — HarmonyOS Sans SC (local, covers Latin + CJK), JetBrains Mono (code).
-// Fraunces/Inter replaced by HarmonyOS Sans SC (2026-08 redesign).
+// Fonts — the UI uses the system CJK stack declared in index.css; only
+// JetBrains Mono is bundled for code blocks.
 import "@fontsource/jetbrains-mono/latin-400.css";
 import "@fontsource/jetbrains-mono/latin-500.css";
 
@@ -26,12 +26,22 @@ import { routeTree } from "./routeTree.gen";
 import { createQueryClient } from "./lib/query-client";
 import { ThemeProvider } from "./lib/theme-provider";
 import { AnimationProvider } from "./lib/animation-context";
-import { DesignSystemProvider } from "./lib/design-system-provider";
+// Ant Design is a progressive enhancement around the application shell. Loading
+// it after the router commits keeps the static SSG fallback and initial route
+// runtime independent from the large component library.
+const DesignSystemProvider = React.lazy(() =>
+    import("./lib/design-system-provider").then(({ DesignSystemProvider }) => ({ default: DesignSystemProvider })),
+);
 import { initI18nOnce } from "./lib/i18n";
 import { initWidgetLoader } from "./lib/widget-loader";
 import { registry, SERVICES } from "./lib/di";
 import { bus } from "./lib/event-bus";
-import { clearLegacyTokens, restoreSession, onAuthLogout } from "@soymutdb/api-client";
+import {
+    clearLegacyTokens,
+    restoreSession,
+    onAuthLogout,
+    setReleaseId,
+} from "@soymutdb/api-client";
 import { resolveAppUrl } from "./lib/deployment";
 import { prepareSsgHandoff } from "../scripts/ssg-runtime";
 import {
@@ -43,6 +53,9 @@ import {
 // One-time migration: drop legacy persisted access/refresh tokens from
 // localStorage/sessionStorage (sessions now live in memory + HttpOnly cookie).
 clearLegacyTokens();
+
+// Pin every API request to the same release used to build this static artifact.
+setReleaseId(import.meta.env.VITE_SOYMUTDB_RELEASE_ID);
 
 // Try to restore a session from the HttpOnly refresh cookie. Failure is
 // silent — the public site degrades to anonymous state.
@@ -84,7 +97,7 @@ const router = createRouter({
     // vite.config.ts 的 base 注入，开发环境为 "/"）。
     basepath: import.meta.env.BASE_URL.replace(/\/$/, "") || "/",
     defaultPreload: "intent",
-    defaultPreloadStaleTime: 0,
+    defaultPreloadStaleTime: 30_000,
     scrollRestoration: true,
     context: { queryClient },
 });
@@ -157,16 +170,33 @@ createRoot(rootEl).render(
             <QueryClientProvider client={queryClient}>
                 <ThemeProvider>
                     <AnimationProvider>
-                        <DesignSystemProvider>
-                            <RouterProvider router={router} />
-                            {null /* devtools hidden */}
-                        </DesignSystemProvider>
+                        <React.Suspense fallback={<RouterProvider router={router} />}>
+                            <DesignSystemProvider>
+                                <RouterProvider router={router} />
+                                {null /* devtools hidden */}
+                            </DesignSystemProvider>
+                        </React.Suspense>
                     </AnimationProvider>
                 </ThemeProvider>
             </QueryClientProvider>
         </SsgHandoff>
     </React.StrictMode>,
 );
+
+// RUM is a progressive enhancement. Keep the Web Vitals collector out of the
+// initial module graph and only sample production traffic after the app commits.
+if (import.meta.env.PROD && typeof window !== "undefined") {
+    void import("./lib/perf")
+        .then(({ initPerfMonitoring }) => {
+            initPerfMonitoring({
+                endpoint: resolveAppUrl(import.meta.env.BASE_URL, "/track.gif"),
+                sampleRate: 0.25,
+            });
+        })
+        .catch(() => {
+            // Performance telemetry must never affect application startup.
+        });
+}
 
 // ---------------------------------------------------------------------------
 // Service Worker 注册 — 静态资源缓存（D3，追加段：不改动上方现有逻辑）

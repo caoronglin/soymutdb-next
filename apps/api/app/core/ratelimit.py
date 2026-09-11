@@ -1,6 +1,6 @@
-"""Redis-backed login rate limiting.
+"""Redis-backed, fixed-window limits for sensitive request paths.
 
-The login limiter uses an atomic Redis Lua script and aligned fixed windows.
+The limiters use an atomic Redis Lua script and aligned fixed windows.
 The script increments the counter and sets the window expiry in one Redis
 operation, so concurrent API workers share the same limit. Development
 environments use a process-local fallback during a Redis outage; non-dev
@@ -68,6 +68,7 @@ class LoginRateLimiter:
         client_ip: str | None,
         window: int,
         now: float,
+        namespace: str = "login",
     ) -> tuple[str, int]:
         normalized_username = self._normalize_username(username)
         normalized_ip = self._normalize_ip(client_ip)
@@ -79,7 +80,7 @@ class LoginRateLimiter:
         window_number = int(now // window)
         window_remaining = max(1, window - int(now % window))
         return (
-            f"soymutdb:login:ratelimit:{identity}:ip:{normalized_ip}:window:{window_number}",
+            f"soymutdb:{namespace}:ratelimit:{identity}:ip:{normalized_ip}:window:{window_number}",
             window_remaining,
         )
 
@@ -110,17 +111,28 @@ class LoginRateLimiter:
         retry_after = max(1, window - int(now % window))
         return count, retry_after
 
-    async def enforce(self, *, username: str | None, client_ip: str | None) -> None:
-        """Consume one login attempt or raise a controlled API exception."""
+    async def _enforce(
+        self,
+        *,
+        identity: str | None,
+        client_ip: str | None,
+        window: int,
+        maximum: int,
+        namespace: str,
+        unavailable_message: str,
+        exceeded_message: str,
+    ) -> None:
+        """Consume one shared fixed-window budget or raise a controlled error."""
         settings = self._settings_getter()
-        window = max(1, int(settings.login_rate_limit_window))
-        maximum = max(1, int(settings.login_rate_limit_max))
+        window = max(1, int(window))
+        maximum = max(1, int(maximum))
         now = self._clock()
         key, window_remaining = self._key(
-            username=username,
+            username=identity,
             client_ip=client_ip,
             window=window,
             now=now,
+            namespace=namespace,
         )
 
         try:
@@ -131,7 +143,7 @@ class LoginRateLimiter:
         except Exception as exc:
             if settings.app_env == "dev":
                 logger.warning(
-                    "login_rate_limit_redis_unavailable_dev_fallback: %s", exc
+                    "%s_rate_limit_redis_unavailable_dev_fallback: %s", namespace, exc
                 )
                 count, retry_after = await self._fallback_increment(
                     key,
@@ -140,23 +152,59 @@ class LoginRateLimiter:
                 )
             else:
                 logger.error(
-                    "login_rate_limit_redis_unavailable_fail_closed app_env=%s: %s",
+                    "%s_rate_limit_redis_unavailable_fail_closed app_env=%s: %s",
+                    namespace,
                     settings.app_env,
                     exc,
                 )
-                raise ServiceUnavailableError(
-                    "Login rate limiter is unavailable; please try again later"
-                ) from exc
+                raise ServiceUnavailableError(unavailable_message) from exc
 
         if count > maximum:
             raise RateLimitExceededError(
-                "Too many login attempts. Please retry later.",
+                exceeded_message,
                 retry_after=retry_after,
                 details={"retry_after": retry_after},
             )
 
+    async def enforce(self, *, username: str | None, client_ip: str | None) -> None:
+        """Consume one login attempt or raise a controlled API exception."""
+        settings = self._settings_getter()
+        await self._enforce(
+            identity=username,
+            client_ip=client_ip,
+            window=settings.login_rate_limit_window,
+            maximum=settings.login_rate_limit_max,
+            namespace="login",
+            unavailable_message="Login rate limiter is unavailable; please try again later",
+            exceeded_message="Too many login attempts. Please retry later.",
+        )
+
+
+class ExternalArticlePreviewRateLimiter(LoginRateLimiter):
+    """Limit expensive external fetch previews per authenticated editor and IP."""
+
+    async def enforce(self, *, user_id: str, client_ip: str | None) -> None:  # type: ignore[override]
+        settings = self._settings_getter()
+        await self._enforce(
+            identity=user_id,
+            client_ip=client_ip,
+            window=settings.external_article_preview_rate_limit_window,
+            maximum=settings.external_article_preview_rate_limit_max,
+            namespace="external-article-preview",
+            unavailable_message=(
+                "External article preview rate limiter is unavailable; please try again later"
+            ),
+            exceeded_message="Too many external article previews. Please retry later.",
+        )
+
 
 login_rate_limiter = LoginRateLimiter()
+external_article_preview_rate_limiter = ExternalArticlePreviewRateLimiter()
 
 
-__all__ = ["LoginRateLimiter", "login_rate_limiter"]
+__all__ = [
+    "ExternalArticlePreviewRateLimiter",
+    "LoginRateLimiter",
+    "external_article_preview_rate_limiter",
+    "login_rate_limiter",
+]

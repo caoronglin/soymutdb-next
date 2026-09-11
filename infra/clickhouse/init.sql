@@ -164,7 +164,7 @@ CREATE TABLE IF NOT EXISTS chromosome_summary (
     release_key  String,
     chromosome   LowCardinality(String),
     variant_type LowCardinality(String),
-    cnt          UInt64,
+    cnt          SimpleAggregateFunction(sum, UInt64),
     min_pos      SimpleAggregateFunction(min, UInt64),
     max_pos      SimpleAggregateFunction(max, UInt64)
 ) ENGINE = AggregatingMergeTree()
@@ -348,4 +348,23 @@ CREATE TABLE IF NOT EXISTS analytics_events (
 PARTITION BY toYYYYMM(timestamp)
 ORDER BY (timestamp, event_type, session_id)
 TTL timestamp + INTERVAL 2 YEAR
+SETTINGS index_granularity = 8192;
+
+-- ----------------------------------------------------------
+-- 7. Web Vitals (sampled frontend performance telemetry)
+-- ----------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS web_vitals (
+    timestamp      DateTime64(3, 'UTC'),
+    session_id     String,
+    metric_name    LowCardinality(String),
+    value          Float64,
+    rating         LowCardinality(String),
+    path           String DEFAULT '',
+    user_agent     String DEFAULT '',
+    ip_hash        String DEFAULT ''
+) ENGINE = MergeTree()
+PARTITION BY toYYYYMM(timestamp)
+ORDER BY (metric_name, toDate(timestamp), session_id)
+TTL timestamp + INTERVAL 90 DAY
 SETTINGS index_granularity = 8192;

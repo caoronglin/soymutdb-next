@@ -12,8 +12,8 @@
 # Security headers — applied to every response (browsers ignore CSP on
 # non-HTML responses, so applying it to assets is harmless).
 # HSTS: Cloudflare Pages always serves HTTPS; max-age without
-# includeSubDomains so the header never forces HTTPS on sibling subdomains
-# (e.g. api.example.com, staging) that are not Cloudflare-fronted.
+# includeSubDomains so the header never forces HTTPS on sibling staging
+# subdomains that are not Cloudflare-fronted.
 # frame-ancestors 'none': the admin console must never be embeddable
 # (matches the nginx X-Frame-Options DENY used by the self-managed deploy).
 # ---------------------------------------------------------------------------
@@ -22,7 +22,7 @@
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()
   Strict-Transport-Security: max-age=31536000
-  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://api.example.com; base-uri 'self'; form-action 'self'; object-src 'none'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'; base-uri 'self'; form-action 'self'; object-src 'none'; frame-ancestors 'none'
 
 # ---------------------------------------------------------------------------
 # Hashed build assets (Vite emits everything under /assets/ with a content
@@ -40,8 +40,6 @@
 /*.html
   Cache-Control: public, max-age=0, must-revalidate
 
-# ---------------------------------------------------------------------------
-# Placeholder domains to replace before going live (see deploy/cloudflare.md):
-#   https://api.example.com -> production API origin
-# Preview deployments: replace with the STAGING API origin.
-# ---------------------------------------------------------------------------
+# The build config replaces the connect-src value with the origin from
+# VITE_API_BASE_URL. Keeping this source policy same-origin-only prevents a
+# placeholder API origin from ever being published when the env is missing.

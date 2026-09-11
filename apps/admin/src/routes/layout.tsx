@@ -1,6 +1,7 @@
 import { ArrowLeftOutlined, EyeOutlined, HolderOutlined, LayoutOutlined, LoadingOutlined, PlusOutlined, SaveOutlined, DeleteOutlined } from "@ant-design/icons";
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { Link } from "@tanstack/react-router";
 import {
   DndContext,
@@ -46,6 +47,7 @@ interface SortableWidgetItemProps {
 }
 
 function SortableWidgetItem({ item, widget, onRemove }: SortableWidgetItemProps) {
+  const { t } = useTranslation();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: item.name });
 
@@ -67,14 +69,14 @@ function SortableWidgetItem({ item, widget, onRemove }: SortableWidgetItemProps)
         {...attributes}
         {...listeners}
         className="cursor-grab touch-none rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground active:cursor-grabbing"
-        aria-label="Drag to reorder"
+        aria-label={t("admin.builder.dragToReorderAria", { defaultValue: "Drag to reorder" })}
       >
         <HolderOutlined className="size-4" />
       </button>
       <div className="min-w-0 flex-1">
         <p className="font-mono text-sm font-medium">{item.name}</p>
         <p className="truncate text-xs text-muted-foreground">
-          {widget?.display_name ?? "Unknown widget"}
+          {widget?.display_name ?? t("admin.builder.unknownWidget", { defaultValue: "Unknown widget" })}
         </p>
       </div>
       {widget ? (
@@ -87,8 +89,8 @@ function SortableWidgetItem({ item, widget, onRemove }: SortableWidgetItemProps)
         size="small"
         className="size-8 p-0 text-destructive hover:text-destructive"
         onClick={() => onRemove(item.name)}
-        title="Remove from layout"
-        aria-label={`Remove ${item.name} from layout`}
+        title={t("admin.builder.removeFromLayoutTitle", { defaultValue: "Remove from layout" })}
+        aria-label={t("admin.builder.removeFromLayoutAria", { defaultValue: "Remove {{name}} from layout", name: item.name })}
       >
         <DeleteOutlined className="size-3.5" />
       </Button>
@@ -101,6 +103,7 @@ function SortableWidgetItem({ item, widget, onRemove }: SortableWidgetItemProps)
 // ---------------------------------------------------------------------------
 
 export default function LayoutEditorPage() {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [pageName, setPageName] = useState<PageName>("index");
   const [widgets, setWidgets] = useState<LayoutWidget[]>([]);
@@ -184,14 +187,14 @@ export default function LayoutEditorPage() {
           <Link to="/widgets">
             <Button type="text" size="small">
               <ArrowLeftOutlined className="size-4" />
-              Widgets
+              {t("admin.shell.widgets", { defaultValue: "Widgets" })}
             </Button>
           </Link>
           <div>
-            <h2 className="font-serif text-2xl font-semibold">Layout Editor</h2>
+            <h2 className="font-serif text-2xl font-semibold">{t("admin.builder.layoutTitle", { defaultValue: "Layout Editor" })}</h2>
             <p className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
               <LayoutOutlined className="size-3.5" />
-              Arrange widgets on pages via drag-and-drop.
+              {t("admin.builder.layoutSubtitle", { defaultValue: "Arrange widgets on pages via drag-and-drop." })}
             </p>
           </div>
         </div>
@@ -199,28 +202,28 @@ export default function LayoutEditorPage() {
           <Link to="/widget-preview">
             <Button type="default" size="small">
               <EyeOutlined className="size-4" />
-              Preview
+              {t("admin.builder.preview", { defaultValue: "Preview" })}
             </Button>
           </Link>
           <Button
             size="small"
             onClick={() => saveMutation.mutate()}
             disabled={!hasCurrentBaseline || layoutLoading || saveMutation.isPending}
-          aria-label="Save Layout"
+          aria-label={t("admin.builder.saveLayoutAria", { defaultValue: "Save Layout" })}
           >
             {saveMutation.isPending ? (
               <LoadingOutlined className="size-4 animate-spin" />
             ) : (
               <SaveOutlined className="size-4" />
             )}
-            {saveMutation.isPending ? "Saving…" : "Save Layout"}
+            {saveMutation.isPending ? t("admin.builder.saving", { defaultValue: "Saving…" }) : t("admin.builder.saveLayout", { defaultValue: "Save Layout" })}
           </Button>
         </div>
       </div>
 
       {saveMutation.isSuccess ? (
         <div className="rounded-lg border border-success/30 bg-success/10 px-4 py-2 text-sm text-success">
-          Layout saved successfully.
+          {t("admin.builder.saveSuccess", { defaultValue: "Layout saved successfully." })}
         </div>
       ) : null}
 
@@ -230,9 +233,9 @@ export default function LayoutEditorPage() {
           <Card>
             <div className="flex flex-row items-center justify-between gap-4">
               <div>
-                <Typography.Title level={5}>Page Layout</Typography.Title>
+                <Typography.Title level={5}>{t("admin.builder.pageLayout", { defaultValue: "Page Layout" })}</Typography.Title>
                 <Typography.Text type="secondary">
-                  Drag widgets to reorder. Use the add button to insert more.
+                  {t("admin.builder.pageLayoutHint", { defaultValue: "Drag widgets to reorder. Use the add button to insert more." })}
                 </Typography.Text>
               </div>
               <div className="w-48">
@@ -263,9 +266,9 @@ export default function LayoutEditorPage() {
                   role="alert"
                   className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive"
                 >
-                  <p className="font-medium">Unable to load the current layout.</p>
+                  <p className="font-medium">{t("admin.builder.unableToLoadLayout", { defaultValue: "Unable to load the current layout." })}</p>
                   <p className="mt-1 text-muted-foreground">
-                    Saving is disabled until a configuration baseline is available.
+                    {t("admin.builder.saveDisabledHint", { defaultValue: "Saving is disabled until a configuration baseline is available." })}
                   </p>
                 </div>
               ) : (
@@ -282,7 +285,7 @@ export default function LayoutEditorPage() {
                       {widgets.length === 0 ? (
                         <div className="rounded-lg border border-dashed border-border p-8 text-center">
                           <p className="text-sm text-muted-foreground">
-                            No widgets on this page. Add one below.
+                            {t("admin.builder.noWidgets", { defaultValue: "No widgets on this page. Add one below." })}
                           </p>
                         </div>
                       ) : (
@@ -305,12 +308,12 @@ export default function LayoutEditorPage() {
                   <Card className="border-dashed">
                     <div className="space-y-2 p-3">
                       <p className="text-xs font-medium text-muted-foreground">
-                        Select a widget to add:
+                        {t("admin.builder.selectWidgetToAdd", { defaultValue: "Select a widget to add:" })}
                       </p>
                       <div className="max-h-64 space-y-1 overflow-y-auto">
                         {availableWidgets.length === 0 ? (
                           <p className="py-4 text-center text-sm text-muted-foreground">
-                            All active widgets are already on this page.
+                            {t("admin.builder.allActiveAlready", { defaultValue: "All active widgets are already on this page." })}
                           </p>
                         ) : (
                           availableWidgets.map((w) => (
@@ -338,7 +341,7 @@ export default function LayoutEditorPage() {
                         size="small"
                         onClick={() => setShowAdd(false)}
                       >
-                        Cancel
+                        {t("admin.builder.cancel", { defaultValue: "Cancel" })}
                       </Button>
                     </div>
                   </Card>
@@ -350,7 +353,7 @@ export default function LayoutEditorPage() {
                     onClick={() => setShowAdd(true)}
                   >
                     <PlusOutlined className="size-4" />
-                    Add Widget
+                    {t("admin.builder.addWidget", { defaultValue: "Add Widget" })}
                   </Button>
                 )}
               </div>
@@ -362,21 +365,20 @@ export default function LayoutEditorPage() {
         <div>
           <Card>
             <div>
-              <Typography.Title level={5}>About</Typography.Title>
+              <Typography.Title level={5}>{t("admin.builder.aboutTitle", { defaultValue: "About" })}</Typography.Title>
             </div>
             <div className="space-y-3 text-sm text-muted-foreground">
               <p>
-                Widgets are rendered in the order listed. Drag the handle to
-                reorder; use the trash icon to remove a widget from the layout
-                (widget definition is not deleted).
+                {t("admin.builder.aboutHelp1", { defaultValue: "Widgets are rendered in the order listed. Drag the handle to reorder; use the trash icon to remove a widget from the layout (widget definition is not deleted)." })}
               </p>
               <p>
-                Changes are saved when you click <strong>Save Layout</strong>.
-                Unsaved changes are lost if you navigate away.
+                {t("admin.builder.aboutSavePrefix", { defaultValue: "Changes are saved when you click" })}{" "}
+                <strong>{t("admin.builder.saveLayout", { defaultValue: "Save Layout" })}</strong>
+                {t("admin.builder.aboutSaveSuffix", { defaultValue: ". Unsaved changes are lost if you navigate away." })}
               </p>
               <div className="rounded-md bg-muted p-3">
-                <p className="text-xs font-medium text-foreground">Page: /{pageName === "index" ? "" : pageName}</p>
-                <p className="mt-1 text-xs">{widgets.length} widget(s) placed</p>
+                <p className="text-xs font-medium text-foreground">{t("admin.builder.pageLabel", { defaultValue: "Page: /{{page}}", page: pageName === "index" ? "" : pageName })}</p>
+                <p className="mt-1 text-xs">{t("admin.builder.widgetCount", { defaultValue: "{{count}} widget(s) placed", count: widgets.length })}</p>
               </div>
             </div>
           </Card>

@@ -1,35 +1,75 @@
 # =====================================================================
-# SoyMutDB - Docker Compose (Development)
+# SoyMutDB - Docker Compose (Development overlay)
 # =====================================================================
-# Adds hot-reload, source mounts, and debug ports for local development.
-# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+# This file is an overlay, not a standalone topology. Run it with the
+# production base file so it inherits the data services and service names:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml \
+#     --profile core up --build
+#
+# The production base requires release image references and credentials. This
+# overlay supplies local build definitions and development-safe defaults, so no
+# production image references are needed for local development.
 # =====================================================================
+
+x-dev-app-env: &dev-app-env
+  SOYMUTDB_APP_ENV: dev
+  SOYMUTDB_DEBUG: "true"
+  SOYMUTDB_DATABASE_URL: postgresql+asyncpg://soymutdb:soymutdb_dev_password@postgres:5432/soymutdb
+  SOYMUTDB_CLICKHOUSE_HOST: clickhouse
+  SOYMUTDB_CLICKHOUSE_PORT: "8123"
+  SOYMUTDB_CLICKHOUSE_USER: soymutdb
+  SOYMUTDB_CLICKHOUSE_PASSWORD: soymutdb_dev_password
+  SOYMUTDB_CLICKHOUSE_DATABASE: soymutdb
+  SOYMUTDB_REDIS_URL: redis://:soymutdb_dev_password@redis:6379/0
+  SOYMUTDB_CELERY_BROKER_URL: redis://:soymutdb_dev_password@redis-celery:6379/0
+  SOYMUTDB_CELERY_RESULT_BACKEND: redis://:soymutdb_dev_password@redis-celery:6379/1
+  SOYMUTDB_S3_ENDPOINT: http://minio:9000
+  SOYMUTDB_S3_ACCESS_KEY: minioadmin
+  SOYMUTDB_S3_SECRET_KEY: minioadmin
+  SOYMUTDB_S3_GWAS_BUCKET: gwas
+  SOYMUTDB_S3_ANALYSES_BUCKET: analyses
+  SOYMUTDB_JWT_SECRET: dev_jwt_secret_change_in_production
+  SOYMUTDB_ANALYTICS_IP_SALT: dev_analytics_ip_salt_change_in_production
+
 services:
+  postgres:
+    environment:
+      POSTGRES_PASSWORD: soymutdb_dev_password
+
+  clickhouse:
+    environment:
+      CLICKHOUSE_PASSWORD: soymutdb_dev_password
+
+  redis:
+    command: >
+      redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+      --requirepass soymutdb_dev_password
+
+  redis-celery:
+    command: >
+      redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy noeviction
+      --requirepass soymutdb_dev_password
+
+  minio:
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+
   api:
+    image: null
     build:
       context: .
       dockerfile: infra/docker/Dockerfile.api
       target: runtime
     environment:
-      SOYMUTDB_APP_ENV: dev
-      SOYMUTDB_DEBUG: "true"
-      SOYMUTDB_DATABASE_URL: postgresql+asyncpg://soymutdb:soymutdb_dev_password@postgres:5432/soymutdb
-      SOYMUTDB_CLICKHOUSE_HOST: clickhouse
-      SOYMUTDB_REDIS_URL: redis://:soymutdb_dev_password@redis:6379/0
-      SOYMUTDB_CELERY_BROKER_URL: redis://:soymutdb_dev_password@redis:6379/1
-      SOYMUTDB_CELERY_RESULT_BACKEND: redis://:soymutdb_dev_password@redis:6379/2
-      SOYMUTDB_S3_ENDPOINT: http://minio:9000
-      SOYMUTDB_S3_ACCESS_KEY: minioadmin
-      SOYMUTDB_S3_SECRET_KEY: minioadmin
-      SOYMUTDB_S3_GWAS_BUCKET: gwas
-      SOYMUTDB_S3_ANALYSES_BUCKET: analyses
-      SOYMUTDB_JWT_SECRET: dev_jwt_secret_change_in_production
+      <<: *dev-app-env
     volumes:
       - ./apps/api/app:/app/apps/api/app:ro
       - ./apps/api/migrations:/app/apps/api/migrations:ro
       - ./apps/api/alembic.ini:/app/apps/api/alembic.ini:ro
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health/live"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health/live', timeout=5)"]
     command: >
       uvicorn app.main:app
       --host 0.0.0.0
@@ -37,82 +77,124 @@ services:
       --reload
       --reload-dir /app/apps/api/app
 
-  worker:
+  worker-default:
+    image: null
     build:
       context: .
       dockerfile: infra/docker/Dockerfile.worker
       target: runtime
     environment:
-      SOYMUTDB_APP_ENV: dev
-      SOYMUTDB_CELERY_BROKER_URL: redis://:soymutdb_dev_password@redis:6379/1
-      SOYMUTDB_CELERY_RESULT_BACKEND: redis://:soymutdb_dev_password@redis:6379/2
-      SOYMUTDB_DATABASE_URL: postgresql+psycopg2://soymutdb:soymutdb_dev_password@postgres:5432/soymutdb
-      SOYMUTDB_CLICKHOUSE_URL: http://soymutdb:soymutdb_dev_password@clickhouse:8123/soymutdb
-      SOYMUTDB_API_APP_PATH: /app/apps/api/app
+      <<: *dev-app-env
+      SOYMUTDB_DATABASE_URL: postgresql+psycopg://soymutdb:soymutdb_dev_password@postgres:5432/soymutdb
     volumes:
       - ./apps/worker/src:/app/apps/worker/src:ro
       - ./apps/api/app:/app/apps/api/app:ro
     command: >
       celery -A soymutdb_worker.main:celery_app worker
-      --loglevel=debug
-      --queues=ingest,export,stats,cleanup,blast,analyses,default
-      --concurrency=2
-      --pool=solo
+      --loglevel=debug --queues=ingest,export,stats,cleanup,default
+      --concurrency=2 --pool=solo --hostname=worker-default@%h
+
+  worker-blast:
+    image: null
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.worker
+      target: runtime
+    environment:
+      <<: *dev-app-env
+      SOYMUTDB_DATABASE_URL: postgresql+psycopg://soymutdb:soymutdb_dev_password@postgres:5432/soymutdb
+    volumes:
+      - ./apps/worker/src:/app/apps/worker/src:ro
+      - ./apps/api/app:/app/apps/api/app:ro
+    command: >
+      celery -A soymutdb_worker.main:celery_app worker
+      --loglevel=debug --queues=blast --concurrency=2 --pool=solo
+      --hostname=worker-blast@%h
+
+  worker-ingest:
+    image: null
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.worker
+      target: runtime
+    environment:
+      <<: *dev-app-env
+      SOYMUTDB_DATABASE_URL: postgresql+psycopg://soymutdb:soymutdb_dev_password@postgres:5432/soymutdb
+    volumes:
+      - ./apps/worker/src:/app/apps/worker/src:ro
+      - ./apps/api/app:/app/apps/api/app:ro
+    command: >
+      celery -A soymutdb_worker.main:celery_app worker
+      --loglevel=debug --queues=ingest,export,stats,cleanup,default
+      --concurrency=2 --pool=solo --hostname=worker-ingest@%h
 
   worker-analyses:
+    image: null
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.worker
+      target: runtime
     environment:
-      SOYMUTDB_APP_ENV: dev
-      SOYMUTDB_CELERY_BROKER_URL: redis://:soymutdb_dev_password@redis:6379/1
-      SOYMUTDB_CELERY_RESULT_BACKEND: redis://:soymutdb_dev_password@redis:6379/2
-      SOYMUTDB_DATABASE_URL: postgresql+psycopg2://soymutdb:soymutdb_dev_password@postgres:5432/soymutdb
-      SOYMUTDB_CLICKHOUSE_URL: http://soymutdb:soymutdb_dev_password@clickhouse:8123/soymutdb
-      SOYMUTDB_S3_ENDPOINT: http://minio:9000
-      SOYMUTDB_S3_ACCESS_KEY: minioadmin
-      SOYMUTDB_S3_SECRET_KEY: minioadmin
-      SOYMUTDB_S3_GWAS_BUCKET: gwas
-      SOYMUTDB_S3_ANALYSES_BUCKET: analyses
+      <<: *dev-app-env
+      SOYMUTDB_DATABASE_URL: postgresql+psycopg://soymutdb:soymutdb_dev_password@postgres:5432/soymutdb
     volumes:
       - ./apps/worker/src:/app/apps/worker/src:ro
       - ./apps/api/app:/app/apps/api/app:ro
     command: >
       celery -A soymutdb_worker.main:celery_app worker
       --loglevel=debug --queues=analyses --concurrency=2 --pool=solo
+      --hostname=worker-analyses@%h
 
   beat:
+    image: null
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.worker
+      target: runtime
     environment:
-      SOYMUTDB_APP_ENV: dev
-      SOYMUTDB_CELERY_BROKER_URL: redis://:soymutdb_dev_password@redis:6379/1
-      SOYMUTDB_CELERY_RESULT_BACKEND: redis://:soymutdb_dev_password@redis:6379/2
+      <<: *dev-app-env
     volumes:
       - ./apps/worker/src:/app/apps/worker/src:ro
       - ./apps/api/app:/app/apps/api/app:ro
 
   web:
-    build:
-      target: runtime
+    image: node:24.19.0-alpine
+    working_dir: /app
+    init: true
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
     volumes:
-      - ./apps/web/src:/app/apps/web/src
-      - ./apps/web/index.html:/app/apps/web/index.html
-      - ./apps/web/vite.config.ts:/app/apps/web/vite.config.ts
-      - ./packages:/app/packages
+      - ./:/app
+      - web-node-modules:/app/node_modules
+      - web-pnpm-store:/pnpm/store
     command: >
-      pnpm --filter @soymutdb/web dev --host 0.0.0.0 --port 5173
+      sh -c "corepack enable && pnpm install --frozen-lockfile &&
+      pnpm --filter @soymutdb/web dev --host 0.0.0.0 --port 5173"
     ports:
       - "5173:5173"
 
   admin:
-    build:
-      target: runtime
+    image: node:24.19.0-alpine
+    working_dir: /app
+    init: true
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
     volumes:
-      - ./apps/admin/src:/app/apps/admin/src
-      - ./apps/admin/index.html:/app/apps/admin/index.html
-      - ./apps/admin/vite.config.ts:/app/apps/admin/vite.config.ts
-      - ./packages:/app/packages
+      - ./:/app
+      - admin-node-modules:/app/node_modules
+      - admin-pnpm-store:/pnpm/store
     command: >
-      pnpm --filter @soymutdb/admin dev --host 0.0.0.0 --port 5174
+      sh -c "corepack enable && pnpm install --frozen-lockfile &&
+      pnpm --filter @soymutdb/admin dev --host 0.0.0.0 --port 5174"
     ports:
       - "5174:5174"
 
   nginx:
     ports:
       - "8080:80"
+
+volumes:
+  web-node-modules:
+  web-pnpm-store:
+  admin-node-modules:
+  admin-pnpm-store:

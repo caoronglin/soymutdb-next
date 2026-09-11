@@ -9,7 +9,7 @@
  *   DELETE /api/v1/admin/publications/{id}               -> 204
  */
 
-import { http } from "./client";
+import { http } from "./auth";
 import type { Publication } from "./publications";
 
 export interface PublicationListResponse {

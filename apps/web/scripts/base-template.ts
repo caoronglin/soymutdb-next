@@ -16,7 +16,7 @@
  */
 
 import { readdirSync, existsSync } from "node:fs";
-import { join, posix } from "node:path";
+import { join, posix, resolve } from "node:path";
 import {
     buildCsp,
     isMinimalDeploymentMode,
@@ -36,7 +36,11 @@ export interface DiscoveredAssets {
     fontPreloads: string[];    // .woff2 preloads
 }
 
-const DIST_DIR = join(process.cwd(), "dist");
+const SITE_VARIANT = (process.env.VITE_SITE_VARIANT ?? process.env.SOYMUTDB_SITE_VARIANT ?? "external").trim().toLowerCase();
+if (SITE_VARIANT !== "external" && SITE_VARIANT !== "internal") {
+    throw new Error(`Invalid site variant "${SITE_VARIANT}". Use external or internal.`);
+}
+const DIST_DIR = resolve(process.cwd(), process.env.SOYMUTDB_DIST_DIR ?? "dist");
 const ASSETS_DIR = join(DIST_DIR, "assets");
 
 /**
@@ -380,7 +384,7 @@ export function renderBaseTemplate(opts: BaseTemplateOptions): string {
     const trackingHtml = renderTrackingPixel(pagePath);
 
     return `<!doctype html>
-<html lang="${escapeHtmlAttribute(lang)}" data-theme="light">
+<html lang="${escapeHtmlAttribute(lang)}" data-theme="light" data-site-variant="${SITE_VARIANT}">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="${resolveAssetUrl(BASE_PATH, "favicon.svg")}" />

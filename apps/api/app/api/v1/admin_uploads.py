@@ -6,27 +6,33 @@ the admin file-upload component (``apps/admin/src/components/file-upload.tsx``):
 1. Client POSTs the file name, size, MIME type, and SHA-256 (content editor).
 2. API returns a constrained multipart POST action and every signed field.
 3. Client POSTs those fields followed by the file to S3/MinIO.
-4. Client persists ``public_url`` (e.g. as ``news_articles.cover_url``).
+4. Client calls ``/complete`` and receives the verified asset id plus ``public_url``;
+   callers persist both when appropriate.
 
 Objects land in the PUBLIC bucket under ``uploads/{purpose}/{uuid}-<file>``
-(see ``app.services.presign``).  Nothing is persisted server-side; the flow
-is stateless like the analyses upload endpoint.
+(see ``app.services.presign``).  The separate ``/complete`` endpoint verifies
+the stored bytes before creating a reusable media-asset row.
 """
 
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from ...core.database import get_db
 from ...core.config import get_settings
 from ...core.security import RoleName
+from ...models.auth import User
+from ...schemas.media import MediaAssetCompleteRequest, MediaAssetResponse
 from ...schemas.uploads import UploadPresignRequest, UploadPresignResponse
+from ...services.media_service import complete_media_asset
 from ...services.presign import (
     UPLOAD_EXPIRES_IN,
     build_uploads_key,
     generate_public_url,
     generate_upload_post,
 )
-from .deps import require_role
+from .deps import get_current_user, require_role
 
 router = APIRouter(prefix="/admin/uploads", tags=["admin-uploads"])
 
@@ -69,4 +75,26 @@ async def create_upload_presign(
         object_key=object_key,
         public_url=generate_public_url(object_key),
         expires_in=UPLOAD_EXPIRES_IN,
+    )
+
+
+@router.post(
+    "/complete",
+    response_model=MediaAssetResponse,
+    dependencies=_CONTENT_EDITORS,
+)
+async def complete_upload(
+    request: MediaAssetCompleteRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> MediaAssetResponse:
+    """Verify the object bytes and register a reusable media asset.
+
+    The endpoint is intentionally separate from presign: an object is not
+    selectable in the CMS until the server has checked its bytes, digest, MIME
+    type and dimensions. Repeating the request is idempotent for the same key.
+    """
+
+    return MediaAssetResponse.model_validate(
+        await complete_media_asset(db, request, current_user.id)
     )

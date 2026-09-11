@@ -27,6 +27,7 @@ from ..models.page_builder import (
     PageDefinition,
     PageDefinitionStatus,
     PageDefinitionVersion,
+    PageTemplate,
 )
 from ..page_builder.registry import validate_definition
 
@@ -57,8 +58,7 @@ SEED_PAGES: list[tuple[str, str, dict]] = [
                         "props": {
                             "title": "Site Navigation",
                             "items": [
-                                {"label": i["label"], "route": i["route"]}
-                                for i in NAV_ITEMS
+                                {"label": i["label"], "route": i["route"]} for i in NAV_ITEMS
                             ],
                         },
                     },
@@ -89,9 +89,21 @@ SEED_PAGES: list[tuple[str, str, dict]] = [
                         "props": {
                             "heading": "资源导览",
                             "cards": [
-                                {"title": "数据下载", "description": "下载参考基因组、变异与注释数据", "href": "/downloads"},
-                                {"title": "使用指南", "description": "快速上手与检索帮助", "href": "/guide"},
-                                {"title": "文献 / 出版物", "description": "SoyMutDB 相关文献", "href": "/publications"},
+                                {
+                                    "title": "数据下载",
+                                    "description": "下载参考基因组、变异与注释数据",
+                                    "href": "/downloads",
+                                },
+                                {
+                                    "title": "使用指南",
+                                    "description": "快速上手与检索帮助",
+                                    "href": "/guide",
+                                },
+                                {
+                                    "title": "文献 / 出版物",
+                                    "description": "SoyMutDB 相关文献",
+                                    "href": "/publications",
+                                },
                             ],
                         },
                     },
@@ -255,6 +267,34 @@ SEED_PAGES: list[tuple[str, str, dict]] = [
     ),
 ]
 
+BUILTIN_TEMPLATES = [
+    {
+        "key": "blank",
+        "label": "Blank page",
+        "description": "A responsive starting point.",
+        "category": "general",
+        "sort_order": 0,
+        "definition": {"root": {"type": "columns", "props": {"columns": 1}, "children": []}},
+    },
+    {
+        "key": "research",
+        "label": "Research overview",
+        "description": "Research context with published news.",
+        "category": "research",
+        "sort_order": 10,
+        "definition": {
+            "root": {
+                "type": "columns",
+                "props": {"columns": 1},
+                "children": [
+                    {"type": "rich_text", "props": {"content": "<h1>Research overview</h1>"}},
+                    {"type": "news_list", "props": {"limit": 4}},
+                ],
+            }
+        },
+    },
+]
+
 
 async def seed() -> dict[str, int]:
     """Seed pages and navigation.  Returns ``{"created": N, "skipped": M}``."""
@@ -263,10 +303,25 @@ async def seed() -> dict[str, int]:
     skipped = 0
 
     async with factory() as db:
+        for spec in BUILTIN_TEMPLATES:
+            template = await db.scalar(select(PageTemplate).where(PageTemplate.key == spec["key"]))
+            cleaned = validate_definition(spec["definition"])
+            if template is None:
+                db.add(
+                    PageTemplate(
+                        **{key: value for key, value in spec.items() if key != "definition"},
+                        definition=cleaned,
+                        builtin=True,
+                    )
+                )
+                created += 1
+            elif template.builtin:
+                for field, value in {**spec, "definition": cleaned}.items():
+                    setattr(template, field, value)
+                skipped += 1
+
         for route, title_key, definition in SEED_PAGES:
-            existing = await db.scalar(
-                select(PageDefinition).where(PageDefinition.route == route)
-            )
+            existing = await db.scalar(select(PageDefinition).where(PageDefinition.route == route))
             if existing is not None:
                 skipped += 1
                 continue
@@ -303,9 +358,7 @@ async def _main() -> None:
 
 def main() -> None:
     """Console-script entry point."""
-    logging.basicConfig(
-        level=logging.INFO, format="%(levelname)s %(name)s: %(message)s"
-    )
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     asyncio.run(_main())
 
 

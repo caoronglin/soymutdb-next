@@ -22,6 +22,7 @@ from ...schemas.content import (
     PublicationResponse,
     PublicationUpdate,
 )
+from ...services.content_snapshot_cache import invalidate_mutable_content_snapshot
 from .deps import get_current_user, get_user_roles
 
 router = APIRouter(prefix="/admin/publications", tags=["admin-publications"])
@@ -123,6 +124,7 @@ async def create_publication(
     )
     db.add(pub)
     await db.commit()
+    await invalidate_mutable_content_snapshot()
     await db.refresh(pub)
     return _to_response(pub)
 
@@ -140,6 +142,7 @@ async def update_publication(
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(pub, field, value)
     await db.commit()
+    await invalidate_mutable_content_snapshot()
     await db.refresh(pub)
     return _to_response(pub)
 
@@ -155,4 +158,5 @@ async def delete_publication(
     pub = await _get(db, publication_id)
     await db.delete(pub)
     await db.commit()
+    await invalidate_mutable_content_snapshot()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

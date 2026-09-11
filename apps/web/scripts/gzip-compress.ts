@@ -13,14 +13,14 @@
  */
 
 import { readdirSync, statSync, readFileSync, writeFileSync, existsSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { gzipSync } from "node:zlib";
 
 /* ------------------------------------------------------------------ */
 /*  Configuration                                                     */
 /* ------------------------------------------------------------------ */
 
-const DIST_DIR = join(process.cwd(), "dist");
+const DIST_DIR = resolve(process.cwd(), process.env.SOYMUTDB_DIST_DIR ?? "dist");
 const COMPRESS_EXTENSIONS = new Set([
     ".html",
     ".css",

@@ -2,6 +2,7 @@ import { UpOutlined, DownOutlined, SwapOutlined } from "@ant-design/icons";
 import { type ReactNode, useMemo, useState, useCallback } from "react";
 import { cn } from "../lib/cn";
 import { Empty, Pagination, Skeleton } from "@/lib/antd";
+import { useTranslation } from "react-i18next";
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -65,11 +66,14 @@ export function DataTable<T>({
   pageSize,
   total,
   onPageChange,
-  emptyTitle = "No data",
-  emptyDescription = "There are no records to display.",
+  emptyTitle,
+  emptyDescription,
   onRowClick,
   className,
 }: DataTableProps<T>) {
+  const { t } = useTranslation();
+  const resolvedEmptyTitle = emptyTitle ?? t("admin.ops.emptyTitle", { defaultValue: "No data" });
+  const resolvedEmptyDescription = emptyDescription ?? t("admin.ops.emptyDescription", { defaultValue: "There are no records to display." });
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
@@ -121,7 +125,7 @@ export function DataTable<T>({
                       type="button"
                       onClick={() => handleSort(col)}
                       className="inline-flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                      aria-label={`Sort by ${col.header}`}
+                      aria-label={t("admin.ops.sortBy", { column: col.header, defaultValue: "Sort by {{column}}" })}
                     >
                       {col.header}
                       {sortKey === col.key ? (
@@ -157,7 +161,7 @@ export function DataTable<T>({
             ) : sortedData.length === 0 ? (
               <tr>
                 <td colSpan={columns.length} className="p-0">
-                  <Empty description={emptyDescription ? `${emptyTitle}: ${emptyDescription}` : emptyTitle} />
+                  <Empty description={resolvedEmptyDescription ? `${resolvedEmptyTitle}: ${resolvedEmptyDescription}` : resolvedEmptyTitle} />
                 </td>
               </tr>
             ) : (

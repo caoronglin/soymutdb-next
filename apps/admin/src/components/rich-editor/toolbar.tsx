@@ -35,6 +35,7 @@ import {
   DeleteOutlined,
 } from "@ant-design/icons";
 import FileUpload from "../file-upload";
+import { MediaPicker } from "../media-picker";
 import { docxToHtml } from "./docx-import";
 
 interface ToolbarProps {
@@ -53,15 +54,32 @@ export function Toolbar({ editor, onDocxImported, onMarkdownPasted, onSourceMode
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [linkModalOpen, setLinkModalOpen] = useState(false);
   const [imageUrl, setImageUrl] = useState("");
+  const [imageAlt, setImageAlt] = useState("");
+  const [imageAssetId, setImageAssetId] = useState<string | null>(null);
   const [linkUrl, setLinkUrl] = useState(() =>
     editor.isActive("link") ? (editor.getAttributes("link").href as string) ?? "" : "",
   );
 
+  const resetImageDraft = () => {
+    setImageUrl("");
+    setImageAlt("");
+    setImageAssetId(null);
+  };
+
   const handleImageInsert = () => {
     const url = imageUrl.trim();
     if (!url) return;
-    editor.chain().focus().setImage({ src: url }).run();
-    setImageUrl("");
+    editor
+      .chain()
+      .focus()
+      .setImage({ src: url, alt: imageAlt.trim() || undefined })
+      .run();
+    resetImageDraft();
+    setImageModalOpen(false);
+  };
+
+  const handleImageCancel = () => {
+    resetImageDraft();
     setImageModalOpen(false);
   };
 
@@ -218,24 +236,49 @@ export function Toolbar({ editor, onDocxImported, onMarkdownPasted, onSourceMode
         title={t("admin.editor.image")}
         open={imageModalOpen}
         onOk={handleImageInsert}
-        onCancel={() => setImageModalOpen(false)}
+        onCancel={handleImageCancel}
         okButtonProps={{ disabled: !imageUrl.trim() }}
-        width={480}
+        width={520}
       >
+        <MediaPicker
+          value={imageAssetId}
+          previewUrl={imageUrl}
+          previewAlt={imageAlt}
+          purpose="editor"
+          onChange={(asset) => {
+            setImageAssetId(asset?.id ?? null);
+            setImageUrl(asset?.public_url ?? "");
+            setImageAlt(asset?.alt_text ?? "");
+          }}
+        />
         <Input
           placeholder={t("admin.editor.imagePlaceholder")}
           value={imageUrl}
-          onChange={(e) => setImageUrl(e.target.value)}
+          onChange={(e) => {
+            setImageAssetId(null);
+            setImageUrl(e.target.value);
+          }}
           onPressEnter={handleImageInsert}
+          style={{ marginBottom: 8, marginTop: 12 }}
+        />
+        <Input
+          placeholder={t("admin.editor.imageAltPlaceholder")}
+          value={imageAlt}
+          onChange={(e) => setImageAlt(e.target.value)}
           style={{ marginBottom: 8 }}
         />
         <FileUpload
-          purpose="news"
+          purpose="editor"
           maxSizeMB={10}
-          accept="image/*"
+          accept="image/jpeg,image/png,image/webp"
           maxCount={1}
           buttonText={t("admin.editor.imageUpload")}
           value={imageUrl}
+          onUploaded={(asset) => {
+            setImageAssetId(asset.id);
+            setImageUrl(asset.public_url);
+            setImageAlt(asset.alt_text ?? "");
+          }}
           onChange={(url) => {
             if (typeof url === "string") setImageUrl(url);
           }}

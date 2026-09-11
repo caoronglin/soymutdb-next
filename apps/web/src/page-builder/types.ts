@@ -38,33 +38,14 @@ export {
 
 import {
   normalizePageDefinition,
+  PAGE_COMPONENT_TYPES as COMPONENT_TYPE_KEYS,
   type PageDefinition,
 } from "@soymutdb/shared";
 
-/** Renderer keys owned by the server registry, in registry order. */
-export const COMPONENT_TYPE_KEYS = [
-  "navigation",
-  "news_list",
-  "media_carousel",
-  "resource_cards",
-  "rich_text",
-  "tool_entries",
-  "assembly_select",
-  "gene_search_form",
-  "location_search_form",
-  "data_table",
-  "button",
-  "link",
-  "notice",
-  "divider",
-  "tabs",
-  "columns",
-  "jbrowse_launcher",
-  "blast_launcher",
-  "ontology_relationship_graph",
-] as const;
+export { COMPONENT_TYPE_KEYS };
 
-export type ComponentTypeKey = (typeof COMPONENT_TYPE_KEYS)[number];
+/** Renderer keys are re-exported from the shared server-aligned contract. */
+export type ComponentTypeKey = import("@soymutdb/shared").PageComponentType;
 
 /** True when a string is an allowlisted component renderer key. */
 export function isComponentTypeKey(value: unknown): value is ComponentTypeKey {

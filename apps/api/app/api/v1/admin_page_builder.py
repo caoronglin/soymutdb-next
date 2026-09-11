@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.database import get_db
@@ -12,9 +13,10 @@ from ...core.exceptions import AuthorizationError
 from ...core.plugins import get_plugin_registry
 from ...core.security import RoleName, has_role
 from ...models.auth import User
-from ...models.page_builder import PageDefinitionVersion
+from ...models.page_builder import PageDefinitionVersion, PageTemplate
 from ...page_builder import COMPONENT_REGISTRY
 from ...page_builder import service as page_service
+from ...page_builder.registry import _LAYOUT_CONTAINERS, validate_definition
 from ...page_builder.schemas import (
     ComponentDescriptor,
     PageDefinitionCreate,
@@ -24,6 +26,11 @@ from ...page_builder.schemas import (
     PageDefinitionSummary,
     PageDefinitionUpdate,
     PageDefinitionVersionResponse,
+    PageTemplateCreate,
+    PageTemplateListResponse,
+    PageTemplateResponse,
+    PageTemplateUpdate,
+    PageTemplateValidationResponse,
     PreviewRequest,
     PreviewResponse,
     PublishRequest,
@@ -83,10 +90,119 @@ async def get_registry(
             label=entry.label,
             config_schema=entry.config_schema,
             allowed_children=sorted(entry.allowed_children),
+            is_layout_container=entry.renderer_key in _LAYOUT_CONTAINERS,
         )
         for entry in COMPONENT_REGISTRY.values()
     ]
     return RegistryResponse(components=components)
+
+
+def _template_response(template: PageTemplate) -> PageTemplateResponse:
+    return PageTemplateResponse(
+        id=template.id,
+        key=template.key,
+        label=template.label,
+        description=template.description,
+        category=template.category,
+        definition=template.definition,
+        preview_image_id=template.preview_image_id,
+        builtin=template.builtin,
+        sort_order=template.sort_order,
+        created_at=template.created_at,
+        updated_at=template.updated_at,
+    )
+
+
+async def _get_template(db: AsyncSession, key: str) -> PageTemplate:
+    template = await db.scalar(select(PageTemplate).where(PageTemplate.key == key))
+    if template is None:
+        raise HTTPException(status_code=404, detail="Template not found")
+    return template
+
+
+@router.get("/templates", response_model=PageTemplateListResponse)
+async def list_templates(
+    db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)
+) -> PageTemplateListResponse:
+    _require_admin(current_user)
+    items = (
+        await db.scalars(
+            select(PageTemplate).order_by(
+                PageTemplate.category, PageTemplate.sort_order, PageTemplate.key
+            )
+        )
+    ).all()
+    return PageTemplateListResponse(
+        items=[_template_response(item) for item in items], total=len(items)
+    )
+
+
+@router.get("/templates/{key}", response_model=PageTemplateResponse)
+async def get_template(
+    key: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)
+) -> PageTemplateResponse:
+    _require_admin(current_user)
+    return _template_response(await _get_template(db, key))
+
+
+@router.post("/templates", response_model=PageTemplateResponse, status_code=status.HTTP_201_CREATED)
+async def create_template(
+    payload: PageTemplateCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> PageTemplateResponse:
+    _require_admin(current_user)
+    if await db.scalar(select(PageTemplate.id).where(PageTemplate.key == payload.key)):
+        raise HTTPException(status_code=409, detail="Template key already exists")
+    template = PageTemplate(
+        **payload.model_dump(exclude={"definition"}),
+        definition=validate_definition(payload.definition),
+    )
+    db.add(template)
+    await db.flush()
+    return _template_response(template)
+
+
+@router.put("/templates/{key}", response_model=PageTemplateResponse)
+async def update_template(
+    key: str,
+    payload: PageTemplateUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> PageTemplateResponse:
+    _require_admin(current_user)
+    template = await _get_template(db, key)
+    if template.builtin:
+        raise HTTPException(status_code=403, detail="Builtin templates are read-only")
+    values = payload.model_dump(exclude_unset=True)
+    if "definition" in values and values["definition"] is not None:
+        values["definition"] = validate_definition(values["definition"])
+    for field, value in values.items():
+        setattr(template, field, value)
+    await db.flush()
+    await db.refresh(template)
+    return _template_response(template)
+
+
+@router.delete("/templates/{key}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_template(
+    key: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)
+) -> None:
+    _require_admin(current_user)
+    template = await _get_template(db, key)
+    if template.builtin:
+        raise HTTPException(status_code=403, detail="Builtin templates cannot be deleted")
+    await db.delete(template)
+
+
+@router.post("/templates/{key}/validate", response_model=PageTemplateValidationResponse)
+async def validate_template(
+    key: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)
+) -> PageTemplateValidationResponse:
+    _require_admin(current_user)
+    template = await _get_template(db, key)
+    cleaned = validate_definition(template.definition)
+    return PageTemplateValidationResponse(definition=cleaned)
 
 
 @router.get("/pages", response_model=PageDefinitionListResponse)
@@ -99,17 +215,10 @@ async def list_pages(
 ) -> PageDefinitionListResponse:
     _require_admin(current_user)
 
-    pages, total = await page_service.list_pages(
-        db, page=page, page_size=page_size, route=route
-    )
-    items: list[PageDefinitionSummary] = []
-    for p in pages:
-        versions = await page_service.get_versions(db, p.id)
-        latest = versions[0] if versions else None
-        items.append(_summary(p, latest))
-    return PageDefinitionListResponse(
-        items=items, total=total, page=page, page_size=page_size
-    )
+    pages, total = await page_service.list_pages(db, page=page, page_size=page_size, route=route)
+    latest_by_page = await page_service.get_latest_versions(db, [p.id for p in pages])
+    items = [_summary(p, latest_by_page.get(p.id)) for p in pages]
+    return PageDefinitionListResponse(items=items, total=total, page=page, page_size=page_size)
 
 
 @router.post(

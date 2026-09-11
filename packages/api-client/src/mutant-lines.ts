@@ -1,95 +1,73 @@
 import { http } from "./auth";
 
-export interface MutantLineSummary {
-  id: string;
-  line_id: string;
-  line_name: string;
-  mutagen: string;
-  ecotype?: string;
-  generation?: string;
-  description?: string;
-  variant_count?: number;
-  phenotype_count?: number;
-  available_seeds?: number;
+/** Canonical public identifier for a mutant line (e.g. SM7K3ZQ9P2A). */
+export type MutantLineId = string;
+
+export function isMutantLineId(value: string): value is MutantLineId {
+  // Canonical ids contain no surrounding whitespace: the guard validates the
+  // raw value (URL/path params) so callers never send non-canonical forms.
+  // Case is accepted freely; the server uppercases via Crockford mapping.
+  return value.length >= 3 && value.length <= 32 && /^[A-Za-z0-9_-]+$/.test(value);
+}
+
+/**
+ * Compact mutant-line representation returned by GET /mutants.
+ */
+export interface MutantLineResponse {
+  public_id: string;
+  name: string;
+  mutagen: string | null;
+  cultivar: string | null;
+  variant_count: number;
+}
+
+/**
+ * Detailed mutant-line representation returned by GET /mutants/{public_id}.
+ */
+export interface MutantLineDetail extends MutantLineResponse {
+  species: string;
+  description: string | null;
+  generation: string | null;
+  phenotype_summary: string | null;
+  is_public: boolean;
   created_at: string;
+  updated_at: string;
 }
 
-export interface MutantLineDetail extends MutantLineSummary {
-  genetic_background?: string;
-  parent_line?: string;
-  is_active: boolean;
-  extra?: Record<string, unknown>;
-}
-
-export interface Phenotype {
+/**
+ * Phenotype observation returned by GET /mutants/{public_id}/phenotypes.
+ */
+export interface PhenotypeResponse {
   id: string;
-  trait: string;
-  value?: string;
-  description?: string;
-  condition?: string;
+  mutant_line_public_id: string;
+  trait_category: string;
+  trait_name: string;
+  trait_value: string | null;
+  unit: string | null;
+  description: string | null;
 }
 
-export interface SeedInventory {
-  id: string;
-  line_id: string;
-  generation: string;
-  quantity_available: number;
-  storage_location?: string;
-  harvest_date?: string;
-}
-
-export interface MutantLineSearchParams {
-  q?: string;
+/** Query parameters accepted by GET /mutants. */
+export interface ListMutantLinesParams {
   mutagen?: string;
-  ecotype?: string;
-  generation?: string;
-  has_phenotypes?: boolean;
-  has_seeds?: boolean;
-  page?: number;
-  page_size?: number;
-  sort_by?: string;
-  sort_dir?: "asc" | "desc";
+  limit?: number;
 }
 
-export interface MutantLineSearchResponse {
-  items: MutantLineSummary[];
-  page: number;
-  page_size: number;
-  total: number;
-  total_pages: number;
+/** List public mutant lines. */
+export function listMutantLines(
+  params: ListMutantLinesParams = {},
+): Promise<MutantLineResponse[]> {
+  return http.get<MutantLineResponse[]>("/mutants", { params });
 }
 
-export function searchMutantLines(
-  params: MutantLineSearchParams,
-): Promise<MutantLineSearchResponse> {
-  return http.get<MutantLineSearchResponse>("/mutant-lines", { params });
+/** Get a public mutant line by its public identifier. */
+export function getMutantLine(publicId: string): Promise<MutantLineDetail> {
+  return http.get<MutantLineDetail>(`/mutants/${publicId}`);
 }
 
-export function getMutantLine(lineId: string): Promise<MutantLineDetail> {
-  return http.get<MutantLineDetail>(`/mutant-lines/${lineId}`);
+/** List phenotype observations for a public mutant line. */
+export function getMutantLinePhenotypes(
+  publicId: string,
+): Promise<PhenotypeResponse[]> {
+  return http.get<PhenotypeResponse[]>(`/mutants/${publicId}/phenotypes`);
 }
-
-export function getMutantLinePhenotypes(lineId: string): Promise<Phenotype[]> {
-  return http.get<Phenotype[]>(`/mutant-lines/${lineId}/phenotypes`);
-}
-
-export function getMutantLineSeeds(lineId: string): Promise<SeedInventory[]> {
-  return http.get<SeedInventory[]>(`/mutant-lines/${lineId}/seeds`);
-}
-
-export interface MutantLineVariantParams {
-  page?: number;
-  page_size?: number;
-  variant_type?: string[];
-  impact?: string[];
-}
-
-export function getMutantLineVariants(
-  lineId: string,
-  params: MutantLineVariantParams = {},
-): Promise<unknown> {
-  return http.get<unknown>(`/mutant-lines/${lineId}/variants`, { params });
-}
-
-export const MUTAGENS = ["EMS", "T-DNA", "CRISPR", "Fast_Neutron", "Gamma_Ray"] as const;
-export const GENERATIONS = ["M0", "M1", "M2", "M3", "M4", "M5", "T0", "T1", "T2", "T3"] as const;

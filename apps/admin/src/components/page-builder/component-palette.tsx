@@ -4,6 +4,7 @@
  */
 
 import { PlusOutlined } from "@ant-design/icons";
+import { useTranslation } from "react-i18next";
 import { Card, Typography } from "@/lib/antd";
 import type { ComponentDescriptor, PageComponentType } from "@soymutdb/shared";
 
@@ -13,15 +14,16 @@ interface ComponentPaletteProps {
 }
 
 export function ComponentPalette({ components, onAdd }: ComponentPaletteProps) {
+  const { t } = useTranslation();
   return (
-    <Card title="Component Palette">
+    <Card title={t("admin.builder.componentPaletteTitle", { defaultValue: "Component Palette" })}>
       <Typography.Text type="secondary" className="mb-3 block">
-        {components.length} server-approved component types
+        {t("admin.builder.componentCount", { defaultValue: "{{count}} server-approved component types", count: components.length })}
       </Typography.Text>
       <div className="space-y-1.5">
         {components.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            Registry unavailable — check your connection.
+            {t("admin.builder.registryUnavailable", { defaultValue: "Registry unavailable — check your connection." })}
           </p>
         ) : (
           components.map((c) => (
@@ -30,7 +32,7 @@ export function ComponentPalette({ components, onAdd }: ComponentPaletteProps) {
               type="button"
               onClick={() => onAdd(c.renderer_key as PageComponentType)}
               className="flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-accent"
-              aria-label={`Add ${c.label}`}
+              aria-label={t("admin.builder.addComponent", { defaultValue: "Add {{label}}", label: c.label })}
             >
               <span className="font-mono text-xs">{c.renderer_key}</span>
               <span className="ml-2 flex items-center gap-2 text-muted-foreground">

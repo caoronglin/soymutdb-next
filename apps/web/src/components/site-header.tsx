@@ -19,6 +19,7 @@ import * as React from "react";
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { useSiteContent } from "../lib/site-content";
+import { IS_INTERNAL_SITE } from "../lib/site-variant";
 import {
   SearchOutlined,
   MenuOutlined,
@@ -75,6 +76,7 @@ const NAV_GROUPS: ReadonlyArray<NavGroupDef> = [
     children: [
       { kind: "link", to: "/genes", labelKey: "nav.genes" },
       { kind: "link", to: "/variants", labelKey: "nav.variants" },
+      { kind: "link", to: "/mutants", labelKey: "nav.mutantLines" },
       { kind: "link", to: "/browser", labelKey: "nav.browser" },
       { kind: "link", to: "/sra", labelKey: "nav.sra" },
       { kind: "link", to: "/compare", labelKey: "nav.compare" },
@@ -88,9 +90,9 @@ const NAV_GROUPS: ReadonlyArray<NavGroupDef> = [
       { kind: "link", to: "/blast", labelKey: "nav.blast" },
       { kind: "link", to: "/analyses", labelKey: "nav.analyses" },
       { kind: "separator" },
-      { kind: "link", to: "/tools/seqfetch", labelKey: "home.tools.seqfetch" },
-      { kind: "link", to: "/tools/enrichment", labelKey: "home.tools.enrichment" },
-      { kind: "link", to: "/tools/exppattern", labelKey: "home.tools.exppattern" },
+      { kind: "link", to: "/tools/seqfetch", labelKey: "tools.seqfetch.title" },
+      { kind: "link", to: "/tools/enrichment", labelKey: "tools.enrichment.title" },
+      { kind: "link", to: "/tools/exppattern", labelKey: "tools.exppattern.title" },
       { kind: "separator" },
       { kind: "link", to: "/tools", labelKey: "nav.allTools" },
     ],
@@ -241,6 +243,14 @@ export function SiteHeader() {
           <span className="font-display text-lg font-semibold tracking-tight">
             Soy<span className="text-gradient">Mut</span>DB
           </span>
+          {IS_INTERNAL_SITE ? (
+            <span
+              className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-700 dark:text-amber-300"
+              title="Private internal site artifact"
+            >
+              Internal
+            </span>
+          ) : null}
         </Link>
 
         {/* Desktop grouped nav — two-level dropdown menu */}

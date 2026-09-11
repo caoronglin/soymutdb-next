@@ -54,6 +54,10 @@ class _FakeDb:
         text = str(stmt)
         if "active_release" in text:
             return _Result([self.pointer])
+        if "mutant_lines" in text:
+            # The publish-time public_id completeness guard counts mutant
+            # lines; fakes model a fully identified release.
+            return _Result([0])
         if "release_data_sets" in text:
             return _Result(
                 [self.datasets[data_id] for rel_id, data_id in self.links if rel_id == 2]

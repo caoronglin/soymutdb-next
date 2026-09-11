@@ -9,6 +9,7 @@ const __dirname = fileURLToPath(new URL(".", import.meta.url));
 // Tailwind v4 is wired via postcss.config.mjs (not as a Vite plugin).
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, __dirname, "");
+    const apiProxyTarget = env.VITE_API_BASE_URL?.trim() || "http://localhost:8000";
 
     return {
         base: env.VITE_BASE_URL?.trim() || "/",
@@ -23,11 +24,11 @@ export default defineConfig(({ mode }) => {
             host: "0.0.0.0",
             proxy: {
                 "/api": {
-                    target: "http://localhost:8000",
+                    target: apiProxyTarget,
                     changeOrigin: true,
                 },
                 "/jbrowse-data": {
-                    target: "http://localhost:8000",
+                    target: apiProxyTarget,
                     changeOrigin: true,
                 },
             },

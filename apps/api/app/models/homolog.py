@@ -32,8 +32,9 @@ class GeneHomolog(Base, TimestampMixin):
     __tablename__ = "gene_homologs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    gene_id: Mapped[str] = mapped_column(
-        ForeignKey("genes.id", ondelete="CASCADE"), nullable=False
+    gene_id: Mapped[int] = mapped_column(
+        ForeignKey("genes.gene_pk", ondelete="CASCADE"), nullable=False,
+        comment="FK to genes.gene_pk (surrogate)",
     )
     homolog_species: Mapped[str] = mapped_column(String(128), nullable=False)
     homolog_gene_id: Mapped[str] = mapped_column(String(64), nullable=False)

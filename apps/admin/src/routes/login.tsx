@@ -1,6 +1,7 @@
 import { LoginOutlined, LockOutlined, SafetyCertificateOutlined, ExclamationCircleOutlined, ArrowRightOutlined } from "@ant-design/icons";
 import * as React from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { useTranslation } from "react-i18next";
 import { cn } from "../lib/cn";
 import { Typography, Card, Button, Input } from "@/lib/antd";
 import { ApiError } from "@soymutdb/api-client";
@@ -14,12 +15,14 @@ interface StrengthInfo {
   textClass: string;
 }
 
+type StrengthTranslate = (key: string, defaultValue: string) => string;
+
 /** Score the entered password in real time (0–4). */
-function evaluateStrength(pw: string): StrengthInfo {
+function evaluateStrength(pw: string, t: StrengthTranslate): StrengthInfo {
   if (!pw) {
     return {
       score: 0,
-      label: "Enter a password",
+      label: t("admin.login.enterPassword", "Enter a password"),
       barClass: "bg-muted",
       textClass: "text-muted-foreground",
     };
@@ -32,11 +35,11 @@ function evaluateStrength(pw: string): StrengthInfo {
   if (/[^A-Za-z0-9]/.test(pw)) raw++;
   const score = Math.min(raw, 4) as StrengthInfo["score"];
   const map: Record<number, Omit<StrengthInfo, "score">> = {
-    0: { label: "Too short", barClass: "bg-destructive", textClass: "text-destructive" },
-    1: { label: "Weak", barClass: "bg-destructive", textClass: "text-destructive" },
-    2: { label: "Fair", barClass: "bg-amber-500", textClass: "text-amber-600" },
-    3: { label: "Good", barClass: "bg-lime-500", textClass: "text-lime-600" },
-    4: { label: "Strong", barClass: "bg-primary", textClass: "text-primary" },
+    0: { label: t("admin.login.tooShort", "Too short"), barClass: "bg-destructive", textClass: "text-destructive" },
+    1: { label: t("admin.login.weak", "Weak"), barClass: "bg-destructive", textClass: "text-destructive" },
+    2: { label: t("admin.login.fair", "Fair"), barClass: "bg-amber-500", textClass: "text-amber-600" },
+    3: { label: t("admin.login.good", "Good"), barClass: "bg-lime-500", textClass: "text-lime-600" },
+    4: { label: t("admin.login.strong", "Strong"), barClass: "bg-primary", textClass: "text-primary" },
   };
   return { score, ...map[score] };
 }
@@ -46,6 +49,7 @@ function evaluateStrength(pw: string): StrengthInfo {
  * the auth context and redirects to the dashboard on success.
  */
 export default function LoginPage() {
+  const { t } = useTranslation();
   const { login, isAuthenticated } = useAuth();
   const navigate = useNavigate();
 
@@ -54,7 +58,7 @@ export default function LoginPage() {
   const [error, setError] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
 
-  const strength = evaluateStrength(password);
+  const strength = evaluateStrength(password, (key, defaultValue) => t(key, { defaultValue }));
 
   // If a session already exists, bounce to the dashboard.
   React.useEffect(() => {
@@ -73,11 +77,11 @@ export default function LoginPage() {
       await navigate({ to: "/" });
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
-        setError("Invalid username or password.");
+        setError(t("admin.login.invalidCredentials", { defaultValue: "Invalid username or password." }));
       } else if (err instanceof Error && err.message) {
         setError(err.message);
       } else {
-        setError("Login failed. Please try again.");
+        setError(t("admin.login.failed", { defaultValue: "Login failed. Please try again." }));
       }
     } finally {
       setSubmitting(false);
@@ -92,9 +96,9 @@ export default function LoginPage() {
           <div className="flex size-12 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
             <SafetyCertificateOutlined className="size-6" />
           </div>
-          <h1 className="font-serif text-2xl font-semibold">SoyMutDB Admin</h1>
+          <h1 className="font-serif text-2xl font-semibold">{t("admin.login.brandTitle", { defaultValue: "SoyMutDB Admin" })}</h1>
           <p className="text-sm text-muted-foreground">
-            Sign in to the management console
+            {t("admin.login.signInSubtitle", { defaultValue: "Sign in to the management console" })}
           </p>
         </div>
 
@@ -102,10 +106,10 @@ export default function LoginPage() {
           <div>
             <Typography.Title level={5} className="flex items-center gap-2">
               <LoginOutlined className="size-4" />
-              Sign in
+              {t("admin.login.signIn", { defaultValue: "Sign in" })}
             </Typography.Title>
             <Typography.Text type="secondary">
-              Enter your administrator credentials to continue.
+              {t("admin.login.enterCredentials", { defaultValue: "Enter your administrator credentials to continue." })}
             </Typography.Text>
           </div>
           <form onSubmit={handleSubmit} noValidate>
@@ -121,7 +125,7 @@ export default function LoginPage() {
               ) : null}
 
               <div className="space-y-1.5">
-                <label htmlFor="username">Username</label>
+                <label htmlFor="username">{t("admin.login.username", { defaultValue: "Username" })}</label>
                 <Input
                   id="username"
                   name="username"
@@ -136,7 +140,7 @@ export default function LoginPage() {
               </div>
 
               <div className="space-y-1.5">
-                <label htmlFor="password">Password</label>
+                <label htmlFor="password">{t("admin.login.password", { defaultValue: "Password" })}</label>
                 <div className="relative">
                   <LockOutlined
                     className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
@@ -178,10 +182,10 @@ export default function LoginPage() {
             <div>
               <Button htmlType="submit" className="w-full" disabled={submitting}>
                 {submitting ? (
-                  "Signing in…"
+                  t("admin.login.signingIn", { defaultValue: "Signing in…" })
                 ) : (
                   <>
-                    Sign in
+                    {t("admin.login.signIn", { defaultValue: "Sign in" })}
                     <ArrowRightOutlined className="size-4" />
                   </>
                 )}
@@ -191,7 +195,7 @@ export default function LoginPage() {
         </Card>
 
         <p className="mt-6 text-center text-xs text-muted-foreground">
-          Authorized personnel only.
+          {t("admin.login.authorizedOnly", { defaultValue: "Authorized personnel only." })}
         </p>
       </div>
     </div>

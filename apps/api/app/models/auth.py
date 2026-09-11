@@ -149,7 +149,9 @@ class User(Base, TimestampMixin, SoftDeleteMixin):
         back_populates="user", lazy="noload"
     )
     articles: Mapped[list[NewsArticle]] = relationship(
-        back_populates="author", lazy="noload"
+        back_populates="author",
+        foreign_keys="NewsArticle.author_id",
+        lazy="noload",
     )
 
     __table_args__ = (

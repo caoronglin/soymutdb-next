@@ -89,10 +89,10 @@ function DownloadsComponent() {
   const handleDownload = async (file: DownloadFile) => {
     try {
       const { url } = await getDownloadUrl(file.id);
-      window.open(url, "_blank");
+      window.open(url, "_blank", "noopener,noreferrer");
     } catch {
       // Fallback: open file_url directly
-      window.open(file.file_url, "_blank");
+      window.open(file.file_url, "_blank", "noopener,noreferrer");
     }
   };
 

@@ -10,6 +10,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from app.core.site_variant import SiteVariant
+
 SEARCH_PREFIX = "/api/v1/search"
 
 
@@ -100,6 +102,30 @@ class TestGlobalSearch:
         ):
             response = await client.get(f"{SEARCH_PREFIX}?query=test&limit=5")
         assert response.status_code == 200
+
+    async def test_search_forwards_optional_assembly_context(self, client):
+        """The public JSON route preserves an explicit assembly selection."""
+        mock_response = {
+            "query": "Glyma",
+            "results": [],
+            "by_type": {"gene": 0},
+            "cursor": None,
+            "next_cursor": None,
+            "has_more": False,
+            "total_count": 0,
+        }
+        search = AsyncMock(return_value=mock_response)
+        with patch(
+            "app.services.search_service.SearchService.global_search",
+            search,
+        ):
+            response = await client.get(
+                f"{SEARCH_PREFIX}?query=Glyma&types=gene&assembly_id=11"
+            )
+
+        assert response.status_code == 200
+        assert search.await_args.kwargs["assembly_id"] == 11
+        assert search.await_args.kwargs["site_variant"] == SiteVariant.EXTERNAL
 
     async def test_search_limit_max_50(self, client):
         """Search limit is capped at 50."""

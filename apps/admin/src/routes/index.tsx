@@ -1,5 +1,6 @@
 import { TeamOutlined, BranchesOutlined, AimOutlined, ClockCircleOutlined, DeploymentUnitOutlined, ExperimentOutlined, ArrowRightOutlined } from "@ant-design/icons";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { Link } from "@tanstack/react-router";
 import { http } from "@soymutdb/api-client";
 import { fetchHomepageStats } from "@soymutdb/api-client";
@@ -38,6 +39,7 @@ interface DashboardSeriesResponse {
 }
 
 export default function DashboardPage() {
+  const { t } = useTranslation();
   const homepageStatsQuery = useQuery({
     queryKey: ["homepage-stats"],
     queryFn: fetchHomepageStats,
@@ -61,17 +63,17 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div><Typography.Title level={2}>System Overview</Typography.Title><Typography.Text type="secondary">Real-time metrics for the SoyMutDB platform.</Typography.Text></div>
+      <div><Typography.Title level={2}>{t("admin.dashboard.systemOverview", { defaultValue: "System Overview" })}</Typography.Title><Typography.Text type="secondary">{t("admin.dashboard.metricsSubtitle", { defaultValue: "Real-time metrics for the SoyMutDB platform." })}</Typography.Text></div>
 
       <section className="rounded-xl border border-primary/20 bg-primary/5 p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-xs font-medium uppercase tracking-wider text-primary">Next actions</p>
-            <h2 className="mt-1 text-lg font-semibold">Keep the data pipeline moving</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Start from the real operational workflows instead of decorative management pages.</p>
+            <p className="text-xs font-medium uppercase tracking-wider text-primary">{t("admin.dashboard.nextActions", { defaultValue: "Next actions" })}</p>
+            <h2 className="mt-1 text-lg font-semibold">{t("admin.dashboard.pipelineHeadline", { defaultValue: "Keep the data pipeline moving" })}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{t("admin.dashboard.pipelineDesc", { defaultValue: "Start from the real operational workflows instead of decorative management pages." })}</p>
           </div>
           <Link to="/resource-catalog" className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
-            Open resource catalog <ArrowRightOutlined className="size-4" aria-hidden />
+            {t("admin.dashboard.openResourceCatalog", { defaultValue: "Open resource catalog" })} <ArrowRightOutlined className="size-4" aria-hidden />
           </Link>
         </div>
       </section>
@@ -80,16 +82,16 @@ export default function DashboardPage() {
         <Alert
           type="error"
           showIcon
-          message="Dashboard metrics unavailable"
-          description="The API did not return a current metric snapshot; no placeholder values are shown."
-          action={<button type="button" className="underline" onClick={() => { void homepageStatsQuery.refetch(); void dashboardStatsQuery.refetch(); }}>Retry</button>}
+          message={t("admin.dashboard.metricsUnavailable", { defaultValue: "Dashboard metrics unavailable" })}
+          description={t("admin.dashboard.metricsUnavailableDesc", { defaultValue: "The API did not return a current metric snapshot; no placeholder values are shown." })}
+          action={<button type="button" className="underline" onClick={() => { void homepageStatsQuery.refetch(); void dashboardStatsQuery.refetch(); }}>{t("admin.dashboard.retry", { defaultValue: "Retry" })}</button>}
         />
       ) : null}
 
       {/* Stat cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          label="Total TeamOutlined"
+          label={t("admin.dashboard.totalTeam", { defaultValue: "Total Team" })}
           value={dashboardStatsQuery.isPending ? "…" : dashboardStatsQuery.isError ? "—" : formatNumber(dashboardStats?.totalUsers ?? 0)}
           icon={<TeamOutlined className="size-5" />}
           trend={dashboardStats?.usersChange !== undefined
@@ -97,7 +99,7 @@ export default function DashboardPage() {
             : undefined}
         />
         <StatCard
-          label="Active Releases"
+          label={t("admin.activeReleases", { defaultValue: "Active Releases" })}
           value={homepageStatsQuery.isPending || dashboardStatsQuery.isPending ? "…" : homepageStatsQuery.isError || dashboardStatsQuery.isError ? "—" : formatNumber(homepageStats?.release_count ?? dashboardStats?.activeReleases ?? 0)}
           icon={<BranchesOutlined className="size-5" />}
           trend={dashboardStats?.releasesChange !== undefined
@@ -105,7 +107,7 @@ export default function DashboardPage() {
             : undefined}
         />
         <StatCard
-          label="Total Variants"
+          label={t("admin.totalVariants", { defaultValue: "Total Variants" })}
           value={homepageStatsQuery.isPending || dashboardStatsQuery.isPending ? "…" : homepageStatsQuery.isError || dashboardStatsQuery.isError ? "—" : formatNumber(homepageStats?.total_variants ?? dashboardStats?.totalVariants ?? 0)}
           icon={<AimOutlined className="size-5" />}
           trend={dashboardStats?.variantsChange !== undefined
@@ -113,7 +115,7 @@ export default function DashboardPage() {
             : undefined}
         />
         <StatCard
-          label="Query P95"
+          label={t("admin.dashboard.queryP95", { defaultValue: "Query P95" })}
           value={dashboardStatsQuery.isPending ? "…" : dashboardStatsQuery.isError ? "—" : `${dashboardStats?.queryP95Ms ?? 0} ms`}
           icon={<ClockCircleOutlined className="size-5" />}
           trend={dashboardStats?.queryP95Change !== undefined
@@ -123,7 +125,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Charts */}
-      {seriesError ? <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">Dashboard trend data unavailable. <button type="button" className="underline" onClick={() => void refetchSeries()}>Retry</button></div> : null}
+      {seriesError ? <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">{t("admin.dashboard.trendUnavailable", { defaultValue: "Dashboard trend data unavailable." })} <button type="button" className="underline" onClick={() => void refetchSeries()}>{t("admin.dashboard.retry", { defaultValue: "Retry" })}</button></div> : null}
       <div className="grid gap-4 lg:grid-cols-2">
         <Suspense fallback={<ChartLoading />}><ImportThroughputChart data={seriesLoading ? [] : importData} /></Suspense>
         <Suspense fallback={<ChartLoading />}><QueryLatencyChart data={seriesLoading ? [] : latencyData} /></Suspense>
@@ -134,17 +136,17 @@ export default function DashboardPage() {
       {/* Quick stats footer */}
       <div className="grid gap-4 sm:grid-cols-3">
         <StatCard
-          label="Genes"
+          label={t("admin.dashboard.genes", { defaultValue: "Genes" })}
           value={homepageStatsQuery.isPending ? "…" : homepageStatsQuery.isError ? "—" : (homepageStats?.gene_count ?? 0).toLocaleString()}
           icon={<DeploymentUnitOutlined className="size-5" />}
         />
         <StatCard
-          label="Mutant Lines"
+          label={t("admin.dashboard.mutantLines", { defaultValue: "Mutant Lines" })}
           value={homepageStatsQuery.isPending ? "…" : homepageStatsQuery.isError ? "—" : (homepageStats?.mutant_line_count ?? 0).toLocaleString()}
           icon={<ExperimentOutlined className="size-5" />}
         />
         <StatCard
-          label="Seed Accessions"
+          label={t("admin.dashboard.seedAccessions", { defaultValue: "Seed Accessions" })}
           value={homepageStatsQuery.isPending ? "…" : homepageStatsQuery.isError ? "—" : (homepageStats?.seed_accessions ?? 0).toLocaleString()}
           icon={<ExperimentOutlined className="size-5" />}
         />

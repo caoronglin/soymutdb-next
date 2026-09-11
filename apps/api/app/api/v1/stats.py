@@ -92,7 +92,7 @@ async def _load_dashboard_stats(db: AsyncSession) -> dict:
     # subqueries avoid five sequential pool checkouts on every cache refresh.
     count_result = await db.execute(
         select(
-            select(func.count(Gene.id)).scalar_subquery(),
+            select(func.count(Gene.gene_pk)).scalar_subquery(),
             select(func.count(MutantLine.id)).scalar_subquery(),
             select(func.count(Phenotype.id)).scalar_subquery(),
             select(func.count(Assembly.id)).scalar_subquery(),
@@ -180,7 +180,7 @@ async def homepage_stats(
 
 async def _load_homepage_stats(db: AsyncSession) -> dict:
     """Compute homepage aggregates (loader for the Redis cache)."""
-    gene_count = await db.scalar(select(func.count(Gene.id))) or 0
+    gene_count = await db.scalar(select(func.count(Gene.gene_pk))) or 0
     mutant_line_count = (
         await db.scalar(
             select(func.count(MutantLine.id)).where(MutantLine.is_deleted.is_(False))

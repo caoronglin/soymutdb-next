@@ -11,6 +11,7 @@ import { GlobalOutlined } from "@ant-design/icons";
 import { getAssemblies } from "@soymutdb/api-client";
 import { FadeUp } from "../../components/route-motion";
 import { buildJbrowseLocusUrl } from "../../lib/deployment";
+import { queryKeys } from "../../lib/query-keys";
 
 export const Route = createFileRoute("/search/gbrowse")({
   component: GbrowseComponent,
@@ -23,7 +24,7 @@ function GbrowseComponent() {
   const [assemblyId, setAssemblyId] = React.useState<string | undefined>(undefined);
 
   const assembliesQuery = useQuery({
-    queryKey: ["assemblies"],
+    queryKey: queryKeys.assemblies.all(),
     queryFn: getAssemblies,
     staleTime: 30 * 60 * 1000,
   });

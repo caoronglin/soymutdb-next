@@ -201,7 +201,7 @@ async def test_published_versions_are_immutable(db_session):
         edited_by=_editor(),
     )
     assert published.status == PageDefinitionStatus.REQUESTED
-    assert event.event_type == "static_publish_requested"
+    assert event.event_type == "page_definition_publish_requested"
 
     # Simulate the publication pipeline marking it published.
     await page_service.publish_version(db_session, published)
@@ -297,6 +297,7 @@ async def test_preview_validates_without_persisting(db_session):
 
 @pytest.mark.asyncio
 async def test_publish_request_emits_outbox_event(db_session):
+    editor = _editor()
     page, v1 = await page_service.create_page(
         db_session,
         route="/publish-me",
@@ -309,11 +310,20 @@ async def test_publish_request_emits_outbox_event(db_session):
         page_id=page.id,
         version_id=v1.id,
         reason="go live",
-        edited_by=_editor(),
+        edited_by=editor,
     )
-    assert event.event_type == "static_publish_requested"
-    assert event.payload["route"] == "/publish-me"
-    assert event.payload["version"] == 1
+    assert event.event_type == "page_definition_publish_requested"
+    assert event.payload["task_name"].endswith("page_builder_publish.publish_definition")
+    assert event.payload["kwargs"] == {
+        "page_id": str(page.id),
+        "version_id": str(v1.id),
+    }
+    assert event.payload["metadata"] == {
+        "requested_by": str(editor),
+        "reason": "go live",
+        "route": "/publish-me",
+        "version": 1,
+    }
     assert version.status == PageDefinitionStatus.REQUESTED
 
 

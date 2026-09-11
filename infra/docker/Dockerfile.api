@@ -33,7 +33,8 @@ FROM python:3.14.6-slim AS runtime
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH="/opt/venv/bin:$PATH" \
-    SOYMUTDB_APP_ENV=prod
+    SOYMUTDB_APP_ENV=prod \
+    PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus-multiproc
 
 RUN apt-get update \
     && apt-get upgrade -y \
@@ -54,4 +55,6 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health/live', timeout=5)"
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4", "--proxy-headers", "--forwarded-allow-ips=*"]
+# Remove stale mmap files before Uvicorn spawns workers, then use exec so
+# SIGTERM reaches the supervisor and drains children within the grace budget.
+CMD ["sh", "-c", "mkdir -p /tmp/prometheus-multiproc && rm -f /tmp/prometheus-multiproc/*.db && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${SOYMUTDB_API_WORKERS:-2} --timeout-graceful-shutdown ${SOYMUTDB_API_GRACEFUL_SHUTDOWN_SECONDS:-30} --proxy-headers --forwarded-allow-ips=${SOYMUTDB_FORWARDED_ALLOW_IPS:-*}"]

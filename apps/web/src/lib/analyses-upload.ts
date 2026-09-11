@@ -14,6 +14,7 @@ import * as React from "react";
 import { requestUpload, submitAnalysis, type AnalysisType } from "@soymutdb/api-client";
 import { useToast } from "./toast";
 import { recordRecentJob } from "./analyses-local";
+import { IncrementalSha256, SHA256_CHUNK_BYTES } from "./incremental-sha256";
 
 export type UploadPhase = "idle" | "uploading" | "submitting" | "done";
 
@@ -34,29 +35,26 @@ function clampRatio(ratio: number): number {
 }
 
 /**
- * Web Crypto only exposes a whole-buffer digest. The server rejects files
- * above 500 MiB, and uploadFiles hashes accepted files sequentially, limiting
- * this allocation to one accepted file at a time.
+ * Hash a File in bounded chunks so a browser never materializes the whole
+ * server-accepted upload in JavaScript memory. The resulting lowercase hex
+ * digest remains the value bound into the signed POST policy and checked by
+ * object storage + the API at submission.
  */
 export async function calculateFileSha256(file: File): Promise<string> {
   if (file.size > MAX_ANALYSIS_FILE_BYTES) {
     throw new Error(`File "${file.name}" exceeds the 500 MiB upload limit.`);
   }
 
-  const subtle = globalThis.crypto?.subtle;
-  if (!subtle) {
-    throw new Error("Web Crypto is unavailable; cannot calculate SHA-256.");
-  }
-
   try {
-    const bytes = await file.arrayBuffer();
-    const digest = await subtle.digest("SHA-256", bytes);
-    const checksum = Array.from(new Uint8Array(digest), (byte) =>
-      byte.toString(16).padStart(2, "0"),
-    ).join("");
+    const hasher = new IncrementalSha256();
+    for (let offset = 0; offset < file.size; offset += SHA256_CHUNK_BYTES) {
+      const chunk = file.slice(offset, Math.min(offset + SHA256_CHUNK_BYTES, file.size));
+      hasher.update(new Uint8Array(await chunk.arrayBuffer()));
+    }
+    const checksum = hasher.digestHex();
 
     if (!SHA256_HEX_PATTERN.test(checksum)) {
-      throw new Error("Web Crypto returned an invalid SHA-256 digest");
+      throw new Error("Incremental SHA-256 returned an invalid digest");
     }
     return checksum;
   } catch (error) {
@@ -169,8 +167,8 @@ export function useAnalysisUpload(opts: {
       let uploadedFiles = 0;
 
       try {
-        // SubtleCrypto is not streaming, so hash sequentially to keep peak
-        // memory bounded to one server-accepted file buffer.
+        // Hash sequentially so peak JavaScript memory remains bounded to one
+        // fixed-size file slice while preserving the upload integrity contract.
         const checksums: string[] = [];
         for (const file of files) {
           checksums.push(await calculateFileSha256(file));

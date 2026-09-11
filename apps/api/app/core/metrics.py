@@ -2,7 +2,16 @@
 
 from __future__ import annotations
 
-from prometheus_client import Counter, Histogram, make_asgi_app
+import os
+
+from prometheus_client import (
+    CollectorRegistry,
+    Counter,
+    Gauge,
+    Histogram,
+    make_asgi_app,
+    multiprocess,
+)
 
 # --------------------------------------------------------------------------- #
 # Metrics
@@ -44,7 +53,58 @@ EXPORT_JOBS_TOTAL = Counter(
     ["format", "status"],
 )
 
+CACHE_LOOKUPS_TOTAL = Counter(
+    "soymutdb_cache_lookups_total",
+    "Redis cache lookups by stable cache name and outcome",
+    ["cache", "outcome"],
+)
+CACHE_WRITE_FAILURES_TOTAL = Counter(
+    "soymutdb_cache_write_failures_total",
+    "Redis cache write failures",
+    ["cache"],
+)
+DB_POOL_CONNECTIONS = Gauge(
+    "soymutdb_db_pool_connections",
+    "Per-API-process SQLAlchemy connection pool state",
+    ["state"],
+)
+OUTBOX_EVENTS = Gauge(
+    "soymutdb_outbox_events",
+    "Transactional outbox rows by lifecycle status",
+    ["status"],
+    multiprocess_mode="mostrecent",
+)
+OUTBOX_OLDEST_UNSENT_AGE_SECONDS = Gauge(
+    "soymutdb_outbox_oldest_unsent_age_seconds",
+    "Age in seconds of the oldest non-sent outbox row",
+    multiprocess_mode="mostrecent",
+)
+OUTBOX_DELIVERY_EXHAUSTED_TOTAL = Counter(
+    "soymutdb_outbox_delivery_exhausted_total",
+    "Terminal outbox deliveries that exhausted their retry budget",
+)
+OUTBOX_DISPATCH_TOTAL = Counter(
+    "soymutdb_outbox_dispatch_total",
+    "Transactional outbox delivery attempts by outcome",
+    ["outcome"],
+)
+
+
+def update_db_pool_metrics() -> None:
+    """Snapshot an already-initialized SQLAlchemy pool without opening it."""
+    from .database import get_db_pool_status
+
+    status = get_db_pool_status()
+    if status is None:
+        return
+    for state, value in status.items():
+        DB_POOL_CONNECTIONS.labels(state=state).set(value)
+
 
 def get_metrics_app() -> object:
-    """Return the Prometheus ASGI metrics app mounted at ``/metrics``."""
+    """Return an ASGI exporter, aggregating every Uvicorn worker."""
+    if os.environ.get("PROMETHEUS_MULTIPROC_DIR"):
+        registry = CollectorRegistry()
+        multiprocess.MultiProcessCollector(registry)
+        return make_asgi_app(registry=registry)
     return make_asgi_app()

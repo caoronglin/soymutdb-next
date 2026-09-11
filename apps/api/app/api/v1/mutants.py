@@ -1,17 +1,33 @@
-"""Mutant line endpoints."""
+"""Mutant line endpoints.
+
+External/public contract: the canonical identity is ``public_id``. The
+private persistence key is never accepted as a locator and never appears
+in responses. Records that are non-public, deleted, or missing a
+``public_id`` are treated uniformly as not found (no existence oracle).
+"""
 
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.database import get_db
 from ...core.exceptions import NotFoundError
-from ...models.variant import MutantLine, Phenotype
+from ...core.public_ids import normalize_public_id
+from ...models.variant import MutantLine, Phenotype, VariantSummary
 from ...schemas.variant import MutantLineDetail, MutantLineResponse, PhenotypeResponse
 
 router = APIRouter(prefix="/mutants", tags=["mutants"])
+
+
+def _visible_public_conditions():
+    """Filters shared by every public mutant entry point."""
+    return (
+        MutantLine.is_deleted.is_(False),
+        MutantLine.is_public.is_(True),
+        MutantLine.public_id.is_not(None),
+    )
 
 
 @router.get("", response_model=list[MutantLineResponse])
@@ -20,44 +36,72 @@ async def list_mutant_lines(
     mutagen: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
 ) -> list[MutantLineResponse]:
-    """List mutant lines."""
-    stmt = select(MutantLine).where(MutantLine.is_deleted.is_(False)).limit(limit)
+    """List public mutant lines."""
+    variant_count = func.count(VariantSummary.id).label("variant_count")
+    stmt = (
+        select(MutantLine, variant_count)
+        .outerjoin(VariantSummary, VariantSummary.mutant_line_id == MutantLine.id)
+        .where(*_visible_public_conditions())
+        .group_by(MutantLine.id)
+        .order_by(func.lower(MutantLine.public_id), MutantLine.id)
+        .limit(limit)
+    )
     if mutagen is not None:
         stmt = stmt.where(MutantLine.mutagen == mutagen)
     result = await db.execute(stmt)
-    return [_to_response(ml) for ml in result.scalars().all()]
+    return [_to_response(ml, count) for ml, count in result.all()]
 
 
-@router.get("/{mutant_line_id}", response_model=MutantLineDetail)
+@router.get("/{public_id}", response_model=MutantLineDetail)
 async def get_mutant_line(
-    mutant_line_id: int,
+    public_id: str,
     db: AsyncSession = Depends(get_db),
 ) -> MutantLineDetail:
-    """Get mutant line detail."""
+    """Get a public mutant line by its public identifier.
+
+    Any value that does not correspond to a visible public record yields
+    the same not-found response — including existing internal identifiers.
+    """
+    variant_count = func.count(VariantSummary.id).label("variant_count")
     result = await db.execute(
-        select(MutantLine).where(
-            MutantLine.id == mutant_line_id, MutantLine.is_deleted.is_(False)
+        select(MutantLine, variant_count)
+        .outerjoin(VariantSummary, VariantSummary.mutant_line_id == MutantLine.id)
+        .where(
+            func.upper(MutantLine.public_id) == normalize_public_id(public_id),
+            *_visible_public_conditions(),
         )
+        .group_by(MutantLine.id)
     )
-    ml = result.scalar_one_or_none()
-    if ml is None:
-        raise NotFoundError(f"Mutant line {mutant_line_id} not found")
-    return _to_detail(ml)
+    row = result.one_or_none()
+    if row is None:
+        raise NotFoundError(f"Mutant line {public_id} not found")
+    ml, count = row
+    return _to_detail(ml, count)
 
 
-@router.get("/{mutant_line_id}/phenotypes", response_model=list[PhenotypeResponse])
+@router.get("/{public_id}/phenotypes", response_model=list[PhenotypeResponse])
 async def get_phenotypes(
-    mutant_line_id: int,
+    public_id: str,
     db: AsyncSession = Depends(get_db),
 ) -> list[PhenotypeResponse]:
-    """List phenotypes for a mutant line."""
+    """List phenotypes for a public mutant line."""
+    visible_parent = await db.execute(
+        select(MutantLine).where(
+            func.upper(MutantLine.public_id) == normalize_public_id(public_id),
+            *_visible_public_conditions(),
+        )
+    )
+    ml = visible_parent.scalar_one_or_none()
+    if ml is None:
+        raise NotFoundError(f"Mutant line {public_id} not found")
+
     result = await db.execute(
-        select(Phenotype).where(Phenotype.mutant_line_id == mutant_line_id)
+        select(Phenotype).where(Phenotype.mutant_line_id == ml.id)
     )
     return [
         PhenotypeResponse(
             id=str(p.id),
-            mutant_line_id=str(p.mutant_line_id),
+            mutant_line_public_id=ml.public_id or "",
             trait_category=p.trait_category,
             trait_name=p.trait_name,
             trait_value=p.trait_value,
@@ -68,22 +112,23 @@ async def get_phenotypes(
     ]
 
 
-def _to_response(ml: MutantLine) -> MutantLineResponse:
+def _to_response(ml: MutantLine, variant_count: int = 0) -> MutantLineResponse:
     return MutantLineResponse(
-        id=str(ml.id),
+        public_id=ml.public_id or "",
         name=ml.name,
         mutagen=ml.mutagen,
         cultivar=ml.cultivar,
-        variant_count=0,
+        variant_count=variant_count,
     )
 
 
-def _to_detail(ml: MutantLine) -> MutantLineDetail:
+def _to_detail(ml: MutantLine, variant_count: int = 0) -> MutantLineDetail:
     return MutantLineDetail(
-        id=str(ml.id),
+        public_id=ml.public_id or "",
         name=ml.name,
         mutagen=ml.mutagen,
         cultivar=ml.cultivar,
+        variant_count=variant_count,
         species=ml.species,
         description=ml.description,
         generation=ml.generation,

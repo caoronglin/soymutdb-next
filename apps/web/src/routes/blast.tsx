@@ -497,12 +497,14 @@ function BlastComponent() {
                 {t("blast.title")}
               </span>
             }
-            description={<Typography.Text type="secondary">Submit a sequence for homology search</Typography.Text>}
+            description={
+              <Typography.Text type="secondary">{t("blast.desc")}</Typography.Text>
+            }
           />
           <Form
             layout="horizontal"
-            labelCol={{ span: 6 }}
-            wrapperCol={{ span: 18 }}
+            labelCol={{ xs: { span: 24 }, sm: { span: 6 } }}
+            wrapperCol={{ xs: { span: 24 }, sm: { span: 18 } }}
             onFinish={onSubmit}
             className="mt-6"
           >
@@ -571,7 +573,7 @@ function BlastComponent() {
               />
             </Form.Item>
 
-            <Form.Item wrapperCol={{ offset: 6, span: 18 }} className="mb-0">
+            <Form.Item wrapperCol={{ xs: { span: 24 }, sm: { offset: 6, span: 18 } }} className="mb-0">
               <div className="flex flex-wrap gap-2">
                 <Button
                   type="primary"
@@ -586,7 +588,7 @@ function BlastComponent() {
             </Form.Item>
 
             {submitMutation.isError ? (
-              <Form.Item wrapperCol={{ offset: 6, span: 18 }} className="mb-0 mt-4">
+              <Form.Item wrapperCol={{ xs: { span: 24 }, sm: { offset: 6, span: 18 } }} className="mb-0 mt-4">
                 <Alert
                   type="error"
                   showIcon

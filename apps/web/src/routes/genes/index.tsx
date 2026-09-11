@@ -96,6 +96,7 @@ function GenesComponent() {
         <Link
           to="/genes/$geneId"
           params={{ geneId: row.gene_id }}
+          search={{ assembly: row.assembly_id ? String(row.assembly_id) : undefined }}
           className="link-underline font-mono text-sm font-medium text-primary"
         >
           {compactGeneId(row.gene_id, 18)}
@@ -159,6 +160,7 @@ function GenesComponent() {
         <Link
           to="/genes/$geneId"
           params={{ geneId: row.gene_id }}
+          search={{ assembly: row.assembly_id ? String(row.assembly_id) : undefined }}
           className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
           aria-label={`View ${row.gene_id}`}
         >
@@ -210,7 +212,7 @@ function GenesComponent() {
 
         <Form
           layout="inline"
-          className="mt-8 flex flex-wrap items-end gap-x-4 gap-y-4"
+          className="mt-8 flex flex-wrap items-center gap-x-4 gap-y-4"
           onFinish={() => navigate({ to: "/genes", search: { ...search, q: q.trim(), page: 1 } })}
         >
           <Form.Item label={get("genes.search", t("genes.search"))} className="mb-0">

@@ -41,6 +41,7 @@ from typing import Any
 from structlog import get_logger
 
 from ..core.database import get_redis
+from ..core.metrics import CACHE_LOOKUPS_TOTAL, CACHE_WRITE_FAILURES_TOTAL
 
 logger = get_logger(__name__)
 
@@ -92,16 +93,23 @@ async def get_or_set[T](
     key = make_cache_key(name, params)
     effective_ttl = ttl if ttl is not None else get_settings().redis_cache_default_ttl
 
-    # 1. Cache hit.
+    # 1. Cache lookup. The label is a stable call-site name, never a full key.
+    outcome = "miss"
     try:
         cached = await client.get(key)
         if cached is not None:
             try:
-                return json.loads(cached)
+                value = json.loads(cached)
             except (json.JSONDecodeError, TypeError):
+                outcome = "decode_error"
                 logger.debug("cache_decode_failed", key=key)
+            else:
+                CACHE_LOOKUPS_TOTAL.labels(cache=name, outcome="hit").inc()
+                return value
     except Exception:
+        outcome = "read_error"
         logger.debug("cache_read_failed_fallback_to_db", key=key)
+    CACHE_LOOKUPS_TOTAL.labels(cache=name, outcome=outcome).inc()
 
     # 2. Cache miss (or Redis unavailable) — load from the source of truth.
     value = await loader()
@@ -110,9 +118,49 @@ async def get_or_set[T](
     try:
         await client.setex(key, effective_ttl, json.dumps(value, default=_json_default))
     except Exception:
+        CACHE_WRITE_FAILURES_TOTAL.labels(cache=name).inc()
         logger.debug("cache_write_failed", key=key)
 
     return value
 
 
-__all__ = ["get_or_set", "make_cache_key"]
+async def delete_prefix(prefix: str, *, redis: Any = None) -> int:
+    """Delete cache entries whose logical name starts with the prefix.
+
+    Redis SCAN keeps invalidation incremental and non-blocking; UNLINK moves
+    deletion off the Redis event loop when supported. Cache failures are
+    deliberately swallowed because invalidation is an optimization, not a
+    source-of-truth operation.
+    """
+    if not prefix:
+        return 0
+    client = redis if redis is not None else get_redis()
+    pattern = f"{_CACHE_PREFIX}:{prefix}*"
+    deleted = 0
+    try:
+        batch: list[str] = []
+        async for key in client.scan_iter(match=pattern, count=100):
+            batch.append(key)
+            if len(batch) < 100:
+                continue
+            deleted += await _delete_keys(client, batch)
+            batch.clear()
+        if batch:
+            deleted += await _delete_keys(client, batch)
+    except Exception:
+        logger.debug("cache_prefix_delete_failed", prefix=prefix)
+    return deleted
+
+
+async def _delete_keys(client: Any, keys: list[str]) -> int:
+    """Delete one bounded batch, falling back for older Redis servers."""
+    unlink = getattr(client, "unlink", None)
+    try:
+        if unlink is not None:
+            return int(await unlink(*keys))
+        return int(await client.delete(*keys))
+    except Exception:
+        return int(await client.delete(*keys))
+
+
+__all__ = ["delete_prefix", "get_or_set", "make_cache_key"]

@@ -103,6 +103,10 @@ class Settings(BaseSettings):
     db_pool_timeout: int = 30
     db_pool_recycle: int = 1800
     db_pool_pre_ping: bool = True
+    # Process topology is consumed by the container entrypoint. Keep these
+    # values in Settings so validation/docs share one canonical contract.
+    api_workers: int = Field(default=2, ge=1, le=16)
+    api_graceful_shutdown_seconds: int = Field(default=30, ge=5, le=600)
     db_echo: bool = False
     #: Per-statement timeout in **seconds** sent to PostgreSQL via asyncpg
     #: ``server_settings.statement_timeout`` (0 disables).  Prevents a slow
@@ -134,6 +138,10 @@ class Settings(BaseSettings):
     rate_limit_per_minute: int = 60
     login_rate_limit_window: int = Field(default=60, ge=1)
     login_rate_limit_max: int = Field(default=10, ge=1)
+    # External article previews issue bounded outbound requests, so they need a
+    # tighter per-editor budget than the generic inbound middleware limit.
+    external_article_preview_rate_limit_window: int = Field(default=300, ge=1)
+    external_article_preview_rate_limit_max: int = Field(default=6, ge=1)
     #: Default TTL (seconds) for the cache-aside read-through helper in
     #: ``app.services.cache`` (stats / releases hotspots).
     redis_cache_default_ttl: int = 300
@@ -414,7 +422,8 @@ class Settings(BaseSettings):
             analytics_salt = self.analytics_ip_salt.strip()
             if len(analytics_salt) < 32 or analytics_salt == "soymutdb-analytics-dev":
                 validation_errors.append(
-                    "analytics_ip_salt must be at least 32 characters and must not use the development default"
+                    "analytics_ip_salt must be at least 32 characters and must not use "
+                    "the development default"
                 )
 
             if not self.cors_origins:

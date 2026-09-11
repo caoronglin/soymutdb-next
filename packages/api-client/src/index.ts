@@ -12,6 +12,8 @@ export {
   setAuthTokens,
   clearAuth,
   getAccessToken,
+  setReleaseId,
+  getReleaseId,
   ApiError,
   TimeoutPresets,
   isTimeoutError,

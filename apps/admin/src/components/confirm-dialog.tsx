@@ -1,5 +1,6 @@
 import { WarningOutlined, SafetyOutlined } from "@ant-design/icons";
 import { type ReactNode, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { cn } from "../lib/cn";
 import { Button, Input, Modal, Typography } from "@/lib/antd";
 interface ConfirmDialogProps {
@@ -40,16 +41,19 @@ export function ConfirmDialog({
   onOpenChange,
   title,
   description,
-  confirmLabel = "Confirm",
-  cancelLabel = "Cancel",
+  confirmLabel,
+  cancelLabel,
   onConfirm,
   severity = "default",
   confirmPhrase,
   children,
   loading = false,
 }: ConfirmDialogProps) {
+  const { t } = useTranslation();
   const isDestructive = severity === "destructive" || severity === "critical";
   const isCritical = severity === "critical";
+  const confirmLabelText = confirmLabel ?? t("admin.confirm.confirm", { defaultValue: "Confirm" });
+  const cancelLabelText = cancelLabel ?? t("admin.confirm.cancel", { defaultValue: "Cancel" });
 
   const handleConfirm = useCallback(() => {
     void onConfirm();
@@ -60,8 +64,8 @@ export function ConfirmDialog({
       open={open}
       onCancel={() => onOpenChange(false)}
       footer={[
-        <Button key="cancel" onClick={() => onOpenChange(false)} disabled={loading}>{cancelLabel}</Button>,
-        <Button key="confirm" type="primary" danger={isDestructive} onClick={handleConfirm} disabled={loading} data-confirm-phrase={confirmPhrase}>{loading ? "Working…" : confirmLabel}</Button>,
+        <Button key="cancel" onClick={() => onOpenChange(false)} disabled={loading}>{cancelLabelText}</Button>,
+        <Button key="confirm" type="primary" danger={isDestructive} onClick={handleConfirm} disabled={loading} data-confirm-phrase={confirmPhrase}>{loading ? t("admin.confirm.working", { defaultValue: "Working…" }) : confirmLabelText}</Button>,
       ]}
       title={<div className="flex items-start gap-3"><span className={cn("flex size-10 items-center justify-center rounded-full", isDestructive ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary")}>{isCritical ? <SafetyOutlined /> : <WarningOutlined />}</span><span><Typography.Title level={4}>{title}</Typography.Title><Typography.Text type="secondary">{description}</Typography.Text></span></div>}
     >
@@ -78,10 +82,13 @@ export function ConfirmDialog({
  * controlled via a data attribute and CSS.
  */
 function ConfirmPhraseInput({ phrase }: { phrase: string }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-2">
       <Typography.Text>
-        Type <code className="font-mono font-semibold">{phrase}</code> to confirm
+        {t("admin.confirm.typePhrasePrefix", { defaultValue: "Type" })}{" "}
+        <code className="font-mono font-semibold">{phrase}</code>{" "}
+        {t("admin.confirm.typePhraseSuffix", { defaultValue: "to confirm" })}
       </Typography.Text>
       <Input
         id="confirm-phrase"

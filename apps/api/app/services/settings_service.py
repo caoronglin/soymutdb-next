@@ -16,7 +16,9 @@ from ..core.exceptions import (
 )
 from ..core.sanitize import sanitize_rich_html
 from ..core.settings_registry import (
+    SettingRedaction,
     SettingValidationError,
+    get_setting_definition,
     public_setting_value,
     registered_keys_for_section,
     validate_setting_update,
@@ -33,6 +35,7 @@ from ..schemas.settings import (
     SettingsHistoryResponse,
     SettingValue,
 )
+from .content_snapshot_cache import invalidate_mutable_content_snapshot
 
 _RICH_TEXT_KEYS = frozenset(
     {
@@ -177,6 +180,11 @@ async def _live_snapshot(
             validation_section = legacy_section
         else:
             continue
+        if short_key not in keys:
+            continue
+        definition = get_setting_definition(validation_section, short_key)
+        if definition.redaction is SettingRedaction.OMIT:
+            continue
         try:
             value = validate_setting_update(validation_section, short_key, row.value)
         except SettingValidationError as exc:
@@ -247,6 +255,8 @@ async def patch_settings(
             ip_address=ip_address,
         )
         await db.commit()
+        if section == "about":
+            await invalidate_mutable_content_snapshot()
     except IntegrityError as exc:
         await db.rollback()
         winner = await _latest_revision(db, section, lock=False)
@@ -403,6 +413,8 @@ async def rollback_settings(
         ip_address=ip_address,
     )
     await db.commit()
+    if section == "about":
+        await invalidate_mutable_content_snapshot()
     return _document(section, version, snapshot)
 
 
@@ -452,6 +464,8 @@ async def put_settings_compat(
         ip_address=ip_address,
     )
     await db.commit()
+    if section == "about":
+        await invalidate_mutable_content_snapshot()
     return _document(section, version, snapshot)
 
 

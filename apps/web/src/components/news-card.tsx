@@ -48,7 +48,7 @@ export function NewsCard({ item, coverHeight = 160 }: NewsCardProps) {
         {item.cover_url ? (
           <img
             src={item.cover_url}
-            alt={title}
+            alt={item.cover_alt_text ?? title}
             loading="lazy"
             className="w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
             style={{ height: coverHeight }}

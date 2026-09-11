@@ -44,9 +44,9 @@ check_chunk() { # $1 = 标签  $2 = glob  $3 = 阈值KB  $4 = chunk 名（输出
     local base
     base=$(basename "$f")
     if [ "$kb" -le "$max_kb" ]; then
-      printf '  PASS  %-4s %-6sKB/%sKB  %s\n' "$label" "$kb" "${max_kb}KB" "$base"
+      printf '  PASS  %-4s %-6sKB/%s  %s\n' "$label" "$kb" "${max_kb}KB" "$base"
     else
-      printf '  FAIL  %-4s %-6sKB/%sKB  %s\n' "$label" "$kb" "${max_kb}KB" "$base"
+      printf '  FAIL  %-4s %-6sKB/%s  %s\n' "$label" "$kb" "${max_kb}KB" "$base"
       fail=1
     fi
   done
@@ -54,6 +54,33 @@ check_chunk() { # $1 = 标签  $2 = glob  $3 = 阈值KB  $4 = chunk 名（输出
     printf '  SKIP  %-4s (no %s chunk emitted — 页面尚未引用该库)\n' "$label" "$name"
   fi
 }
+
+
+# Guard the known-safe manual chunk topology.  AntD and rc-* deliberately remain
+# co-located (see apps/web/vite.config.ts): requiring one emitted runtime chunk
+# makes an accidental split visible in CI without changing module assignment.
+require_single_chunk() { # $1 = label  $2 = glob  $3 = optional excluded glob
+  local label="$1" glob="$2" excluded_glob="${3:-}" count=0
+  local f excluded
+  for f in "$DIST_DIR"/$glob; do
+    [ -e "$f" ] || continue
+    for excluded in "$DIST_DIR"/$excluded_glob; do
+      [ -n "$excluded_glob" ] && [ "$f" = "$excluded" ] && continue 2
+    done
+    count=$((count + 1))
+  done
+  if [ "$count" -eq 1 ]; then
+    printf '  PASS  %-8s single runtime chunk\n' "$label"
+  else
+    printf '  FAIL  %-8s expected exactly one %s chunk, found %s\n' "$label" "$glob" "$count"
+    fail=1
+  fi
+}
+
+if ! command -v gzip >/dev/null 2>&1; then
+  echo "G2 bundle check: gzip is required to measure compressed artifact sizes"
+  exit 1
+fi
 
 if [ ! -d "$DIST_DIR" ]; then
   echo "G2 bundle check: dist 目录不存在（$DIST_DIR）— 请先构建 apps/web"
@@ -63,6 +90,10 @@ fi
 echo "G2 bundle size budget (gzip):"
 echo "  dir = $DIST_DIR"
 echo "  thresholds: antd<=${ANTD_MAX_KB}KB  pro-components<=${PRO_MAX_KB}KB  entry<=${ENTRY_MAX_KB}KB"
+
+require_single_chunk "antd-runtime" "antd-*.js" "antd-icons-*.js"
+require_single_chunk "react-runtime" "react-*.js"
+require_single_chunk "router-runtime" "router-*.js"
 
 check_chunk "antd" "antd-*.js"        "$ANTD_MAX_KB"  "antd"
 check_chunk "pro"  "pro-*.js"             "$PRO_MAX_KB" "pro-components"

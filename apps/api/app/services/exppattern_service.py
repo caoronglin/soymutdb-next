@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.exceptions import ValidationError
 from ..models.expression import ExpressionData, ExpressionLibrary
+from ..models.genomic import Gene
 
 MAX_GENES = 50
 MAX_CONDITIONS = 200
@@ -158,12 +159,34 @@ async def fetch_expression_pattern(
             details={"limit": MAX_CONDITIONS},
         )
 
+    # Resolve accessions to surrogate keys; ambiguous accessions (same
+    # accession in multiple assemblies) are rejected so a matrix cell can
+    # never mix v4/v5 data silently.
+    acc_stmt = select(Gene.accession, Gene.gene_pk).where(
+        Gene.accession.in_(genes)
+    )
+    acc_result = await db.execute(acc_stmt)
+    pk_by_accession: dict[str, list[int]] = {}
+    for accession, gene_pk in acc_result.all():
+        pk_by_accession.setdefault(accession, []).append(gene_pk)
+    ambiguous = sorted(a for a, pks in pk_by_accession.items() if len(pks) > 1)
+    if ambiguous:
+        raise ValidationError(
+            f"Genes exist in multiple assemblies; supply assembly-scoped IDs: "
+            f"{', '.join(ambiguous)}",
+            details={"code": "ambiguous_assembly", "accessions": ambiguous},
+        )
+    pk_to_accession = {
+        pk: accession for accession, pks in pk_by_accession.items() for pk in pks
+    }
+    resolved_pks = [pk for a in genes for pk in pk_by_accession.get(a, [])]
+
     # Fetch expression rows for the requested genes (same join as
     # app/api/v1/expression.py).
     data_stmt = (
         select(ExpressionData)
         .join(ExpressionLibrary, ExpressionData.library_id == ExpressionLibrary.id)
-        .where(ExpressionData.gene_id.in_(genes))
+        .where(ExpressionData.gene_id.in_(resolved_pks))
         .order_by(ExpressionData.library_id.asc())
     )
     if conditions:
@@ -179,7 +202,7 @@ async def fetch_expression_pattern(
     ]
     found: set[str] = set()
     for row in rows:
-        gene_id = row.gene_id
+        gene_id = pk_to_accession.get(row.gene_id, row.gene_id)
         col = col_index.get(row.library.library_name)
         if gene_id not in row_index or col is None:
             continue

@@ -18,13 +18,16 @@ import * as React from "react";
 import { Alert, Button, Card, Empty, Form, Input, Select, Table, Tag, Typography, type TableColumnsType } from "@/lib/antd";
 import { SearchOutlined } from "@ant-design/icons";
 import {
-  searchGenes,
   getAssemblies,
+  getReleaseId,
+  searchGenes,
   type GeneSummary,
   type AssemblyInfo,
 } from "@soymutdb/api-client";
 import { FadeUp } from "../../components/route-motion";
 import { compactGeneId, formatNumber } from "../../lib/format";
+import { queryKeys } from "../../lib/query-keys";
+import { SITE_VARIANT } from "../../lib/site-variant";
 import { buildJbrowseLocusUrl } from "../../lib/deployment";
 
 interface GeneSearchParams {
@@ -68,7 +71,7 @@ function GeneIdSearchComponent() {
   const [page, setPage] = React.useState(1);
 
   const assembliesQuery = useQuery({
-    queryKey: ["assemblies"],
+    queryKey: queryKeys.assemblies.all(),
     queryFn: getAssemblies,
     staleTime: 30 * 60 * 1000,
   });
@@ -110,8 +113,15 @@ function GeneIdSearchComponent() {
     (a) => String(a.id) === String(resolvedAssemblyId),
   );
 
+  const releaseId = getReleaseId();
   const resultsQuery = useQuery({
-    queryKey: ["search-genes", submitted?.q, submitted?.assemblyId, page],
+    queryKey: queryKeys.genes.search({
+      q: submitted?.q,
+      assemblyId: submitted?.assemblyId,
+      page,
+      releaseId,
+      siteVariant: SITE_VARIANT,
+    }),
     queryFn: () =>
       searchGenes({
         q: submitted?.q || undefined,
@@ -120,7 +130,17 @@ function GeneIdSearchComponent() {
         page_size: PAGE_SIZE,
       } as Parameters<typeof searchGenes>[0]),
     enabled: submitted != null,
-    placeholderData: (prev) => prev,
+    // Keep previous rows only while the biological/deployment context is
+    // unchanged (same query + assembly); a context switch must never present
+    // old-context rows as new-context results. Page changes share the cache.
+    placeholderData: (prev, prevQuery) => {
+      const prevKey = prevQuery?.queryKey as readonly unknown[] | undefined;
+      const sameContext =
+        prevKey != null &&
+        (prevKey[3] ?? null) === (submitted?.q ?? null) &&
+        (prevKey[4] ?? null) === (submitted?.assemblyId ?? null);
+      return sameContext ? prev : undefined;
+    },
   });
 
   const data = resultsQuery.data?.items ?? [];
@@ -188,6 +208,7 @@ function GeneIdSearchComponent() {
         <Link
           to="/genes/$geneId"
           params={{ geneId: row.gene_id }}
+          search={{ assembly: resolvedAssemblyId }}
           aria-label={t("search.genes.openGene", { geneId: row.gene_id })}
           className="link-underline font-mono text-sm font-medium text-primary"
         >

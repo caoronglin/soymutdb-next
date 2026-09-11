@@ -12,6 +12,7 @@ import { RouteErrorBoundary } from "./components/route-error-boundary";
 import AdminLayout from "./routes/__root";
 import LoginPage from "./routes/login";
 import { useAuth } from "./lib/auth-context";
+import { parseContentPageSearch } from "./routes/content/search";
 import {
   parseMotionPreference,
   resolveMotionDecision,
@@ -22,12 +23,23 @@ import {
 const DashboardPage = lazy(() => import("./routes/index"));
 const ResourceCatalogPage = lazy(() => import("./routes/resource-catalog"));
 const ImportsPage = lazy(() => import("./routes/imports"));
+const NewImportPage = lazy(() => import("./routes/imports/new"));
+const ImportTaskDetailPage = lazy(() => import("./routes/imports/task-detail"));
 const ContentPage = lazy(() => import("./routes/content"));
+const MediaPage = lazy(() => import("./routes/media"));
 const NewsListPage = lazy(() => import("./routes/news/index"));
 const NewsNewPage = lazy(() => import("./routes/news/new"));
+const NewsTrashPage = lazy(() => import("./routes/news/trash"));
 const NewsEditPage = lazy(() => import("./routes/news/$id"));
 const AuditPage = lazy(() => import("./routes/audit"));
-const SettingsPage = lazy(() => import("./routes/settings"));
+const SettingsLegacyPage = lazy(() => import("./routes/settings"));
+const SettingsOverviewPage = lazy(() => import("./routes/settings/index"));
+const SettingsSitePage = lazy(() => import("./routes/settings/site"));
+const SettingsAppearancePage = lazy(() => import("./routes/settings/appearance"));
+const SettingsIntegrationsPage = lazy(() => import("./routes/settings/integrations"));
+const SettingsSecurityPage = lazy(() => import("./routes/settings/security"));
+const SettingsLocalizationPage = lazy(() => import("./routes/settings/localization"));
+const SettingsAdvancedPage = lazy(() => import("./routes/settings/advanced"));
 const FeaturesPage = lazy(() => import("./routes/features"));
 const AnalyticsSettingsPage = lazy(() => import("./routes/analytics-settings"));
 const WidgetsPage = lazy(() => import("./routes/widgets"));
@@ -37,6 +49,7 @@ const WidgetPreviewPage = lazy(() => import("./routes/widget-preview"));
 const WidgetHealthPage = lazy(() => import("./routes/widget-health"));
 const PageBuilderIndexPage = lazy(() => import("./routes/page-builder/index"));
 const PageBuilderEditPage = lazy(() => import("./routes/page-builder/$pageId"));
+const PublicationsAdminPage = lazy(() => import("./routes/publications"));
 
 /** Loading fallback for lazy-loaded routes. */
 function RouteLoading() {
@@ -97,12 +110,15 @@ const authLayoutRoute = createRoute({
   component: RequireAuth,
 });
 
-/** Auth guard + admin chrome wrapper.
- * TEMP (layout preview): bypass login so the admin chrome renders directly.
- * Remove this bypass before production. */
+/** Auth guard + admin chrome wrapper. */
 function RequireAuth() {
-  // const { isAuthenticated } = useAuth();
-  // if (!isAuthenticated) return <LoginPage />;
+  const { isRestoringSession, isAuthenticated } = useAuth();
+  if (isRestoringSession) {
+    return <RouteLoading />;
+  }
+  if (!isAuthenticated) {
+    return <LoginPage />;
+  }
   return (
     <AdminLayout>
       <Outlet />
@@ -128,10 +144,42 @@ const importsRoute = createRoute({
   component: () => withSuspense(ImportsPage),
 });
 
+const newImportRoute = createRoute({
+  getParentRoute: () => authLayoutRoute,
+  path: "/imports/new",
+  component: () => withSuspense(NewImportPage),
+});
+
+const importTaskDetailRoute = createRoute({
+  getParentRoute: () => authLayoutRoute,
+  path: "/imports/$taskId",
+  component: () => withSuspense(ImportTaskDetailPage),
+});
+
 const contentRoute = createRoute({
   getParentRoute: () => authLayoutRoute,
   path: "/content",
+  validateSearch: parseContentPageSearch,
   component: () => withSuspense(ContentPage),
+});
+
+const contentPagesRoute = createRoute({
+  getParentRoute: () => authLayoutRoute,
+  path: "/content/pages",
+  component: () => withSuspense(PageBuilderIndexPage),
+});
+
+const contentLegacyRoute = createRoute({
+  getParentRoute: () => authLayoutRoute,
+  path: "/content/legacy",
+  validateSearch: parseContentPageSearch,
+  component: () => withSuspense(ContentPage),
+});
+
+const mediaRoute = createRoute({
+  getParentRoute: () => authLayoutRoute,
+  path: "/media",
+  component: () => withSuspense(MediaPage),
 });
 
 const newsRoute = createRoute({
@@ -144,6 +192,12 @@ const newsNewRoute = createRoute({
   getParentRoute: () => authLayoutRoute,
   path: "/news/new",
   component: () => withSuspense(NewsNewPage),
+});
+
+const newsTrashRoute = createRoute({
+  getParentRoute: () => authLayoutRoute,
+  path: "/news/trash",
+  component: () => withSuspense(NewsTrashPage),
 });
 
 const newsEditRoute = createRoute({
@@ -161,8 +215,21 @@ const auditRoute = createRoute({
 const settingsRoute = createRoute({
   getParentRoute: () => authLayoutRoute,
   path: "/settings",
-  component: () => withSuspense(SettingsPage),
+  component: () => withSuspense(SettingsOverviewPage),
 });
+
+const settingsLegacyRoute = createRoute({
+  getParentRoute: () => authLayoutRoute,
+  path: "/settings/legacy",
+  component: () => withSuspense(SettingsLegacyPage),
+});
+
+const settingsSiteRoute = createRoute({ getParentRoute: () => authLayoutRoute, path: "/settings/site", component: () => withSuspense(SettingsSitePage) });
+const settingsAppearanceRoute = createRoute({ getParentRoute: () => authLayoutRoute, path: "/settings/appearance", component: () => withSuspense(SettingsAppearancePage) });
+const settingsIntegrationsRoute = createRoute({ getParentRoute: () => authLayoutRoute, path: "/settings/integrations", component: () => withSuspense(SettingsIntegrationsPage) });
+const settingsSecurityRoute = createRoute({ getParentRoute: () => authLayoutRoute, path: "/settings/security", component: () => withSuspense(SettingsSecurityPage) });
+const settingsLocalizationRoute = createRoute({ getParentRoute: () => authLayoutRoute, path: "/settings/localization", component: () => withSuspense(SettingsLocalizationPage) });
+const settingsAdvancedRoute = createRoute({ getParentRoute: () => authLayoutRoute, path: "/settings/advanced", component: () => withSuspense(SettingsAdvancedPage) });
 
 const featuresRoute = createRoute({
   getParentRoute: () => authLayoutRoute,
@@ -218,18 +285,37 @@ const pageBuilderEditRoute = createRoute({
   component: () => withSuspense(PageBuilderEditPage),
 });
 
+const publicationsAdminRoute = createRoute({
+  getParentRoute: () => authLayoutRoute,
+  path: "/publications",
+  component: () => withSuspense(PublicationsAdminPage),
+});
+
 const routeTree = rootRoute.addChildren([
   loginRoute,
   authLayoutRoute.addChildren([
     dashboardRoute,
     resourceCatalogRoute,
     importsRoute,
+    newImportRoute,
+    importTaskDetailRoute,
     contentRoute,
+    contentPagesRoute,
+    contentLegacyRoute,
+    mediaRoute,
     newsRoute,
     newsNewRoute,
+    newsTrashRoute,
     newsEditRoute,
     auditRoute,
     settingsRoute,
+    settingsLegacyRoute,
+    settingsSiteRoute,
+    settingsAppearanceRoute,
+    settingsIntegrationsRoute,
+    settingsSecurityRoute,
+    settingsLocalizationRoute,
+    settingsAdvancedRoute,
     featuresRoute,
     analyticsSettingsRoute,
     widgetsRoute,
@@ -239,13 +325,16 @@ const routeTree = rootRoute.addChildren([
     widgetHealthRoute,
     pageBuilderIndexRoute,
     pageBuilderEditRoute,
+    publicationsAdminRoute,
   ]),
 ]);
 
 const router = createRouter({
   routeTree,
   defaultPreload: "intent",
-  defaultPreloadStaleTime: 0,
+  // Keep intent-prefetched route chunks/data warm for one navigation window;
+  // React Query uses the same 30s freshness budget in main.tsx.
+  defaultPreloadStaleTime: 30_000,
 });
 
 // View Transitions API is the only route-change animation mechanism (admin).

@@ -8,6 +8,7 @@
 
 import {
   request,
+  requestBlob,
   http,
   ApiError,
   isTimeoutError,
@@ -15,6 +16,7 @@ import {
   setAuthTokens,
   clearAuth,
   getAccessToken,
+  setReleaseId,
 } from "./client";
 
 // ---------------------------------------------------------------------------
@@ -75,14 +77,14 @@ describe("withRetry", () => {
     expect(fn).toHaveBeenCalledTimes(1);
   });
 
-  it("retries once on timeout then succeeds", async () => {
+  it("retries an explicitly idempotent operation on timeout", async () => {
     vi.useFakeTimers();
     const fn = vi
       .fn()
       .mockRejectedValueOnce(new ApiError("to", 408, "GATEWAY_TIMEOUT"))
       .mockResolvedValueOnce("ok");
 
-    const promise = withRetry(fn, 1);
+    const promise = withRetry(fn, { idempotent: true, maxRetries: 1 });
     await vi.advanceTimersByTimeAsync(500);
     await expect(promise).resolves.toBe("ok");
     expect(fn).toHaveBeenCalledTimes(2);
@@ -132,6 +134,7 @@ describe("request()", () => {
   });
 
   afterEach(() => {
+    setReleaseId(null);
     vi.restoreAllMocks();
   });
 
@@ -223,11 +226,35 @@ describe("request()", () => {
     expect(headers.get("Content-Type")).toBe("application/json");
   });
 
+  it("pins requests to the configured release without overriding an explicit header", async () => {
+    setReleaseId("2026.09");
+    await request("/search");
+    let [, init] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit];
+    expect((init.headers as Headers).get("X-SoyMutDB-Release")).toBe("2026.09");
+
+    await request("/search", { headers: { "X-SoyMutDB-Release": "2026.10" } });
+    [, init] = vi.mocked(fetch).mock.calls[1] as [string, RequestInit];
+    expect((init.headers as Headers).get("X-SoyMutDB-Release")).toBe("2026.10");
+  });
+
   // --- Response parsing ---
 
   it("parses successful JSON response", async () => {
     const result = await request<{ data: string }>("/test");
     expect(result).toEqual({ data: "ok" });
+  });
+
+  it("reads a successful non-JSON response as a Blob", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response("timestamp,action\n2026-01-01,login\n", {
+        status: 200,
+        headers: { "content-type": "text/csv" },
+      }),
+    );
+
+    const result = await requestBlob("/audit-logs/export");
+    expect(result).toBeInstanceOf(Blob);
+    await expect(result.text()).resolves.toContain("timestamp,action");
   });
 
   it("returns undefined for 204 No Content", async () => {

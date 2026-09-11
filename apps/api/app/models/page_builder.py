@@ -19,12 +19,14 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    Boolean,
     DateTime,
     Enum,
     ForeignKey,
     Index,
     Integer,
     String,
+    Text,
     UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -91,20 +93,12 @@ class PageDefinitionVersion(Base, TimestampMixin):
         server_default=PageDefinitionStatus.DRAFT.value,
         nullable=False,
     )
-    definition: Mapped[dict[str, object]] = mapped_column(
-        JSONB, nullable=False, default=dict
-    )
-    edited_by: Mapped[uuid.UUID | None] = mapped_column(
-        PG_UUID(as_uuid=True), nullable=True
-    )
+    definition: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
+    edited_by: Mapped[uuid.UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
     edit_comment: Mapped[str | None] = mapped_column(String(512), nullable=True)
-    published_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    page: Mapped[PageDefinition] = relationship(
-        back_populates="versions", lazy="joined"
-    )
+    page: Mapped[PageDefinition] = relationship(back_populates="versions", lazy="joined")
 
     __table_args__ = (
         UniqueConstraint("page_id", "version", name="uq_page_def_version"),
@@ -118,8 +112,33 @@ class PageDefinitionVersion(Base, TimestampMixin):
         )
 
 
+class PageTemplate(Base, TimestampMixin):
+    """Reusable server-owned Page Builder starting point."""
+
+    __tablename__ = "page_templates"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    key: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    label: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    category: Mapped[str] = mapped_column(String(64), nullable=False, default="general", index=True)
+    definition: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    preview_image_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("media_assets.id", ondelete="SET NULL"), nullable=True
+    )
+    builtin: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+
+    __table_args__ = (Index("ix_page_templates_category_sort", "category", "sort_order"),)
+
+
 __all__ = [
     "PageDefinition",
     "PageDefinitionStatus",
     "PageDefinitionVersion",
+    "PageTemplate",
 ]

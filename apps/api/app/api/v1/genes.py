@@ -100,8 +100,13 @@ async def get_gene(
     gene_id: str,
     db: AsyncSession = Depends(get_db),
     release_context: ReleaseContext = Depends(get_release_context),
+    assembly_id: int | None = Query(default=None),
 ) -> GeneDetail:
     """Get gene detail with transcripts and aliases.
+
+    ``gene_id`` is the assembly-scoped accession. When it exists in
+    multiple assemblies, ``assembly_id`` is required; the API returns an
+    explicit disambiguation error otherwise.
 
     Domain errors (e.g. ``NotFoundError``) propagate to the error envelope;
     unexpected exceptions are converted to a 500 HTTP error so the client
@@ -112,6 +117,7 @@ async def get_gene(
             db,
             gene_id,
             release_context=release_context,
+            assembly_id=assembly_id,
         )
     except SoyMutDBError:
         raise

@@ -102,6 +102,12 @@ const TOOL_ENTRIES: ToolEntry[] = [
   { key: "blast", labelKey: "home.toolBlastLabel", label: "BLAST 比对", descKey: "home.toolBlastDesc", desc: "序列比对检索同源", route: "/blast", icon: <ThunderboltOutlined /> },
 ];
 
+const DATABASE_ENTRIES = [
+  { key: "mutants", route: "/mutants", label: "突变体", description: "浏览已发布的突变体记录", search: { mutagen: "" } },
+  { key: "genes", route: "/genes", label: "基因", description: "按基因与组装版本筛选", search: { q: "", chromosome: "", biotype: "", page: 1, sort_by: "gene_id", sort_dir: "asc" as const } },
+  { key: "variants", route: "/variants", label: "变异", description: "按染色体、类型与影响筛选", search: { chromosome: "", variant_type: "" as const, impact: "" as const, mutant_line_id: "", cursor: undefined } },
+] as const;
+
 function LatestNewsPanel() {
   const { t, i18n } = useTranslation();
   const query = useQuery({
@@ -207,6 +213,38 @@ export function AntdHome({
               />
             </div>
           ) : null}
+        </div>
+      </section>
+
+      <section className="border-b border-border/60 bg-muted/20" data-testid="database-entrypoints">
+        <div className="container-prose py-10 md:py-12">
+          <div className="mb-5 flex flex-wrap items-baseline justify-between gap-3">
+            <div>
+              <Text className="eyebrow">{t("home.databaseEyebrow", { defaultValue: "SOYMUTDB DATABASE" })}</Text>
+              <Title level={2} style={{ margin: "8px 0 0", fontWeight: 700 }}>
+                {t("home.databaseTitle", { defaultValue: "生物信息学数据库" })}
+              </Title>
+            </div>
+            <Link to="/search" className="home-section-link shrink-0 text-primary" style={{ fontWeight: 500 }}>
+              {t("home.databaseSearch", { defaultValue: "查询数据库" })} →
+            </Link>
+          </div>
+          <Row gutter={[20, 20]}>
+            {DATABASE_ENTRIES.map((entry) => (
+              <Col key={entry.key} xs={24} md={8}>
+                <Link
+                  to={entry.route}
+                  search={entry.search}
+                  className="block h-full rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <Card className="h-full rounded-xl border border-border bg-card shadow-sm transition-colors hover:border-primary/40">
+                    <Text strong className="block text-base text-foreground">{t(`home.database.${entry.key}`, { defaultValue: entry.label })}</Text>
+                    <Paragraph className="mb-0 mt-1 text-sm text-muted-foreground">{t(`home.database.${entry.key}Description`, { defaultValue: entry.description })}</Paragraph>
+                  </Card>
+                </Link>
+              </Col>
+            ))}
+          </Row>
         </div>
       </section>
 

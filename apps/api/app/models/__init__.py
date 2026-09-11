@@ -17,6 +17,9 @@ from .blast import BlastDatabase, BlastHit, BlastJob
 from .content import (
     DownloadFile,
     NewsArticle,
+    NewsArticleRevision,
+    NewsPublicationSchedule,
+    NewsScheduleState,
     NewsStatus,
     Publication,
     Release,
@@ -26,7 +29,15 @@ from .content import (
 from .data_publishing import ActiveRelease, DataSet, ImportStatus, Provenance, ReleaseDataSet
 from .expression import ExpressionData, ExpressionLibrary
 from .gene_data_cache import GeneDataCache
-from .genomic import Assembly, Chromosome, Exon, Gene, GeneAlias, Transcript
+from .genomic import (
+    Assembly,
+    Chromosome,
+    Exon,
+    Gene,
+    GeneAlias,
+    GeneCrosswalk,
+    Transcript,
+)
 from .gwas import GwasFileType, GwasJob, GwasJobStatus, GwasMethod
 from .homolog import GeneHomolog
 from .import_studio import (
@@ -39,6 +50,7 @@ from .import_studio import (
     PublicationManifest,
 )
 from .import_task import ImportTask, ImportTaskStatus, ImportTaskType
+from .media import MediaAsset, MediaAssetStatus
 from .module_data import ModuleDataRow, ModuleSchema
 from .notification import Notification
 from .outbox import OutboxEvent
@@ -74,6 +86,7 @@ __all__ = [
     "ExpressionLibrary",
     "Gene",
     "GeneAlias",
+    "GeneCrosswalk",
     "GeneDataCache",
     "GeneHomolog",
     "GwasFileType",
@@ -97,8 +110,13 @@ __all__ = [
     "Provenance",
     "ModuleDataRow",
     "ModuleSchema",
+    "MediaAsset",
+    "MediaAssetStatus",
     "MutantLine",
     "NewsArticle",
+    "NewsArticleRevision",
+    "NewsPublicationSchedule",
+    "NewsScheduleState",
     "NewsStatus",
     "Notification",
     "Organization",

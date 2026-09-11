@@ -158,6 +158,34 @@ class TestGetGeneHomologs:
         data = response.json()
         assert len(data["homologs"]) == 2
 
+    async def test_get_homologs_uses_bounded_keyset_page(
+        self, client, mock_session, mock_homolog
+    ):
+        next_homolog = MagicMock()
+        next_homolog.id = 2
+        next_homolog.homolog_species = "Glycine max"
+        next_homolog.homolog_gene_id = "Glyma.02G000200"
+        next_homolog.homolog_type = "paralog"
+        next_homolog.source = "Ensembl"
+        result = MagicMock()
+        result.scalars.return_value.all.return_value = [mock_homolog, next_homolog]
+        mock_session.execute.return_value = result
+
+        response = await client.get(
+            "/api/v1/homologs/genes/Glyma.01G000100/homologs?limit=1"
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["homologs"]) == 1
+        assert data["has_more"] is True
+        assert data["next_cursor"] == "1"
+
+    async def test_get_homologs_rejects_unbounded_limit(self, client):
+        response = await client.get(
+            "/api/v1/homologs/genes/Glyma.01G000100/homologs?limit=201"
+        )
+        assert response.status_code == 422
+
 
 # ---------------------------------------------------------------------------
 # Tests: GET /api/v1/homologs/search

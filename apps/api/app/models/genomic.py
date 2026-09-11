@@ -104,8 +104,12 @@ class Chromosome(Base):
 class Gene(Base, TimestampMixin):
     __tablename__ = "genes"
 
-    id: Mapped[str] = mapped_column(
-        String(64), primary_key=True, comment="e.g. Glyma.01G000100"
+    # Surrogate persistence key. Gene accessions are only unique per assembly
+    # (v4 and v5 are distinct namespaces), so the string accession can never
+    # be the primary key. Child tables reference ``gene_pk``.
+    gene_pk: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    accession: Mapped[str] = mapped_column(
+        String(64), nullable=False, comment="e.g. Glyma.01G000100"
     )
     assembly_id: Mapped[int] = mapped_column(
         ForeignKey("assemblies.id", ondelete="CASCADE"), nullable=False
@@ -156,6 +160,10 @@ class Gene(Base, TimestampMixin):
     )
 
     __table_args__ = (
+        UniqueConstraint(
+            "assembly_id", "accession", name="uq_gene_assembly_accession"
+        ),
+        Index("ix_gene_accession", "accession"),
         Index("ix_gene_assembly_chr", "assembly_id", "chromosome_id"),
         Index("ix_gene_location", "chromosome_id", "start", "end"),
         Index("ix_gene_name", "name"),
@@ -163,15 +171,16 @@ class Gene(Base, TimestampMixin):
     )
 
     def __repr__(self) -> str:
-        return f"<Gene id={self.id!r} name={self.name!r}>"
+        return f"<Gene gene_pk={self.gene_pk} accession={self.accession!r}>"
 
 
 class Transcript(Base):
     __tablename__ = "transcripts"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    gene_id: Mapped[str] = mapped_column(
-        ForeignKey("genes.id", ondelete="CASCADE"), nullable=False
+    gene_id: Mapped[int] = mapped_column(
+        ForeignKey("genes.gene_pk", ondelete="CASCADE"), nullable=False,
+        comment="FK to genes.gene_pk (surrogate)",
     )
     name: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
     biotype: Mapped[str] = mapped_column(
@@ -228,8 +237,9 @@ class GeneAlias(Base):
     __tablename__ = "gene_aliases"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    gene_id: Mapped[str] = mapped_column(
-        ForeignKey("genes.id", ondelete="CASCADE"), nullable=False
+    gene_id: Mapped[int] = mapped_column(
+        ForeignKey("genes.gene_pk", ondelete="CASCADE"), nullable=False,
+        comment="FK to genes.gene_pk (surrogate)",
     )
     alias: Mapped[str] = mapped_column(String(256), nullable=False)
     source: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
@@ -245,11 +255,65 @@ class GeneAlias(Base):
         return f"<GeneAlias gene={self.gene_id!r} alias={self.alias!r}>"
 
 
+class GeneCrosswalk(Base, TimestampMixin):
+    """Explicit, provenance-bearing cross-version gene mapping (e.g. v4↔v5).
+
+    Equivalence between genes in different assemblies is ONLY expressed by
+    rows in this table. It must never be inferred from string similarity or
+    coordinate proximity.
+
+    One row per (source, target) pair; one-to-many / many-to-one relations
+    are represented by multiple rows, with ``relation_type`` carrying the
+    curated semantics.
+    """
+
+    __tablename__ = "gene_crosswalks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    source_gene_id: Mapped[int] = mapped_column(
+        ForeignKey("genes.gene_pk", ondelete="CASCADE"), nullable=False
+    )
+    target_gene_id: Mapped[int] = mapped_column(
+        ForeignKey("genes.gene_pk", ondelete="CASCADE"), nullable=False
+    )
+    relation_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    provenance_source: Mapped[str] = mapped_column(String(256), nullable=False)
+    provenance_evidence: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    release_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("releases.id", ondelete="SET NULL"), nullable=True
+    )
+
+    source_gene: Mapped["Gene"] = relationship(
+        foreign_keys=[source_gene_id], lazy="joined"
+    )
+    target_gene: Mapped["Gene"] = relationship(
+        foreign_keys=[target_gene_id], lazy="joined"
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "source_gene_id",
+            "target_gene_id",
+            "relation_type",
+            name="uq_gene_crosswalk_pair_type",
+        ),
+        Index("ix_gene_crosswalk_source", "source_gene_id"),
+        Index("ix_gene_crosswalk_target", "target_gene_id"),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<GeneCrosswalk source={self.source_gene_id} "
+            f"target={self.target_gene_id} type={self.relation_type!r}>"
+        )
+
+
 __all__ = [
     "Assembly",
     "Chromosome",
     "Exon",
     "Gene",
+    "GeneCrosswalk",
     "GeneAlias",
     "Transcript",
 ]

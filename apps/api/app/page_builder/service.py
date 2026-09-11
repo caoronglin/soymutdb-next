@@ -20,17 +20,19 @@ from ..core.exceptions import (
     NotFoundError,
     ValidationError,
 )
-from ..models.outbox import OutboxEvent, OutboxEventStatus
+from ..core.task_contract import PAGE_BUILDER_PUBLISH_TASK
+from ..models.outbox import OutboxEvent
 from ..models.page_builder import (
     PageDefinition,
     PageDefinitionStatus,
     PageDefinitionVersion,
 )
+from ..services.outbox_service import enqueue_task_event
 from .registry import validate_definition, validate_plugin_launchers, validate_route
 
-#: Outbox event emitted by a publish request (consumed by the publication
-#: pipeline; the page builder itself never mutates public files).
-STATIC_PUBLISH_REQUESTED_EVENT = "static_publish_requested"
+#: Domain event consumed by the dedicated Page Builder lifecycle task. Static
+#: artifact deployment remains an explicit, target-scoped publication action.
+PAGE_DEFINITION_PUBLISH_REQUESTED_EVENT = "page_definition_publish_requested"
 
 
 async def list_pages(
@@ -57,6 +59,32 @@ async def list_pages(
     result = await db.execute(stmt)
     pages = list(result.scalars().all())
     return pages, total
+
+
+async def get_latest_versions(
+    db: AsyncSession, page_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, PageDefinitionVersion]:
+    """Load one latest version per page with a single query."""
+    if not page_ids:
+        return {}
+
+    latest = (
+        select(
+            PageDefinitionVersion.page_id,
+            func.max(PageDefinitionVersion.version).label("latest_version"),
+        )
+        .where(PageDefinitionVersion.page_id.in_(page_ids))
+        .group_by(PageDefinitionVersion.page_id)
+        .subquery()
+    )
+    result = await db.execute(
+        select(PageDefinitionVersion).join(
+            latest,
+            (PageDefinitionVersion.page_id == latest.c.page_id)
+            & (PageDefinitionVersion.version == latest.c.latest_version),
+        )
+    )
+    return {version.page_id: version for version in result.scalars().all()}
 
 
 async def _latest_version(
@@ -253,9 +281,9 @@ async def publish_request(
 ) -> tuple[PageDefinition, PageDefinitionVersion, OutboxEvent]:
     """Validate and mark a version ``requested``, emitting a publish event.
 
-    The page builder never mutates public files: it emits a named
-    ``static_publish_requested`` outbox event consumed by the publication
-    pipeline.  Returns ``(page, version, outbox_event)``.
+    The page builder never mutates public files: it emits a typed task event
+    consumed by the dedicated lifecycle worker. Static multi-target deployment
+    remains a separate explicit workflow. Returns ``(page, version, event)``.
     """
     page = await get_page(db, page_id)
 
@@ -279,21 +307,23 @@ async def publish_request(
     version.status = PageDefinitionStatus.REQUESTED
     version.edit_comment = version.edit_comment or reason
 
-    event = OutboxEvent(
+    event = await enqueue_task_event(
+        db,
         aggregate_type="page_definition",
         aggregate_id=str(page.id),
-        event_type=STATIC_PUBLISH_REQUESTED_EVENT,
-        payload={
+        event_type=PAGE_DEFINITION_PUBLISH_REQUESTED_EVENT,
+        task_name=PAGE_BUILDER_PUBLISH_TASK,
+        kwargs={
             "page_id": str(page.id),
-            "route": page.route,
             "version_id": str(version.id),
-            "version": version.version,
-            "reason": reason,
         },
-        status=OutboxEventStatus.PENDING,
-        attempt_count=0,
+        metadata={
+            "requested_by": str(edited_by),
+            "reason": reason,
+            "route": page.route,
+            "version": version.version,
+        },
     )
-    db.add(event)
     await db.commit()
     await db.refresh(version)
     await db.refresh(page)
@@ -332,8 +362,9 @@ async def get_published(
 
 
 __all__ = [
-    "STATIC_PUBLISH_REQUESTED_EVENT",
+    "PAGE_DEFINITION_PUBLISH_REQUESTED_EVENT",
     "create_page",
+    "get_latest_versions",
     "get_page",
     "get_page_by_route",
     "get_published",

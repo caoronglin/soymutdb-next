@@ -34,6 +34,9 @@ SEED_REQUEST_EMAIL_TASK: Final[str] = (
 )
 #: Cache/notification refresh after the active release pointer changes.
 STATIC_PUBLISH_TASK: Final[str] = "soymutdb_worker.tasks.static_publish.build_static_release"
+PAGE_BUILDER_PUBLISH_TASK: Final[str] = (
+    "soymutdb_worker.tasks.page_builder_publish.publish_definition"
+)
 RELEASE_POINTER_CHANGED_TASK: Final[str] = (
     "soymutdb_worker.tasks.release.refresh_release_pointer"
 )
@@ -55,6 +58,7 @@ TASK_QUEUE_MAP: Final[dict[str, str]] = {
     BLAST_RUN_TASK: QUEUE_BLAST,
     BUILD_STATIC_PAGES_TASK: QUEUE_STATS,
     STATIC_PUBLISH_TASK: QUEUE_STATS,
+    PAGE_BUILDER_PUBLISH_TASK: QUEUE_DEFAULT,
     EXPORT_VARIANTS_TASK: QUEUE_EXPORT,
     IMPORT_ADAPTER_TASK: QUEUE_INGEST,
     IMPORT_EXPRESSION_TASK: QUEUE_INGEST,
@@ -88,10 +92,12 @@ __all__ = [
     "IMPORT_VCF_TASK",
     "IMPORT_BLAST_DB_TASK",
     "IMPORT_SEED_TASK",
+    "PAGE_BUILDER_PUBLISH_TASK",
     "PAYLOAD_VERSION",
     "QUEUE_ANALYSES",
     "SEED_REQUEST_EMAIL_TASK",
     "RELEASE_POINTER_CHANGED_TASK",
+    "STATIC_PUBLISH_TASK",
     "QUEUE_BLAST",
     "QUEUE_CLEANUP",
     "QUEUE_DEFAULT",

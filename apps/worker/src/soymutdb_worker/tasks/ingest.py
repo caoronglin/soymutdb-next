@@ -156,7 +156,13 @@ def current_batch() -> int | None:
 
 
 def _surrogate_id(key: str) -> int:
-    """Return a deterministic unsigned UInt32 surrogate ID."""
+    """Return a deterministic unsigned UInt32 surrogate ID for CH projection.
+
+    This is a **ClickHouse projection surrogate only** — it must never be
+    used as an authoritative foreign key into PostgreSQL. Gene and mutant-line
+    identity in PG is resolved via ``(assembly, accession)`` and
+    ``public_id`` respectively, not via this hash.
+    """
     return (
         int.from_bytes(hashlib.sha256(key.encode()).digest()[:4], "big", signed=False)
         & 0xFFFFFFFF
@@ -164,7 +170,14 @@ def _surrogate_id(key: str) -> int:
 
 
 def _pick_mutant_line(sample_names: list[str], gt_types: Any, alt_idx: int) -> tuple[str, int]:
-    """Choose the first known non-reference sample for an ALT row."""
+    """Choose the first known non-reference sample for an ALT row.
+
+    The returned ``ml_sid`` is a ClickHouse projection surrogate
+    (``_surrogate_id``), not an authoritative PostgreSQL mutant-line key.
+    When VCF import is re-enabled, sample-name→mutant-line resolution must
+    query PG by ``public_id`` or lab designation and use the real
+    ``mutant_lines.id`` (or ``public_id``) for any authoritative linkage.
+    """
     if not sample_names or gt_types is None:
         return "", 0
     for sample_idx, gt_type in enumerate(gt_types):

@@ -16,10 +16,12 @@ from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import and_, delete, func, or_, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.config import get_settings
 from ..core.exceptions import ValidationError
+from ..core.metrics import OUTBOX_DELIVERY_EXHAUSTED_TOTAL
 from ..core.task_contract import IMPORT_ADAPTER_TASK
 from ..models.content import Release, ReleaseStatus
 from ..models.data_publishing import DataSet
@@ -40,21 +42,30 @@ async def get_or_create_idempotent_event(
     payload: dict,
 ) -> tuple[OutboxEvent, bool]:
     result = await db.execute(
-        select(OutboxEvent).where(
-            OutboxEvent.payload["idempotency_key"].astext == idempotency_key
-        )
+        select(OutboxEvent).where(OutboxEvent.idempotency_key == idempotency_key)
     )
     existing = result.scalar_one_or_none()
     if existing:
         return existing, False
-    event = await create_outbox_event(
-        db,
-        aggregate_type=aggregate_type,
-        aggregate_id=aggregate_id,
-        event_type=event_type,
-        payload={**payload, "idempotency_key": idempotency_key},
-    )
-    return event, True
+    try:
+        async with db.begin_nested():
+            event = await create_outbox_event(
+                db,
+                aggregate_type=aggregate_type,
+                aggregate_id=aggregate_id,
+                event_type=event_type,
+                payload={**payload, "idempotency_key": idempotency_key},
+            )
+        return event, True
+    except IntegrityError:
+        # A concurrent transaction won the unique-key race. The savepoint
+        # keeps the caller's business transaction usable; return its row.
+        existing = await db.scalar(
+            select(OutboxEvent).where(OutboxEvent.idempotency_key == idempotency_key)
+        )
+        if existing is None:
+            raise
+        return existing, False
 
 
 async def create_import_command(
@@ -165,6 +176,17 @@ def new_event_id() -> uuid.UUID:
     return uuid.uuid4()
 
 
+def _payload_idempotency_key(payload: dict) -> str | None:
+    value = payload.get("idempotency_key")
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("idempotency_key must be a non-empty string")
+    if len(value) > 255:
+        raise ValueError("idempotency_key must not exceed 255 characters")
+    return value
+
+
 async def create_outbox_event(
     db: AsyncSession,
     *,
@@ -184,6 +206,7 @@ async def create_outbox_event(
         aggregate_id=str(aggregate_id),
         event_type=event_type,
         payload=payload,
+        idempotency_key=_payload_idempotency_key(payload),
         status=OutboxEventStatus.PENDING,
         attempt_count=0,
     )
@@ -200,6 +223,7 @@ async def enqueue_task_event(
     aggregate_id: str,
     task_name: str,
     kwargs: dict,
+    metadata: dict | None = None,
 ) -> OutboxEvent:
     """Enqueue a typed task event with an explicit Celery task name.
 
@@ -217,7 +241,11 @@ async def enqueue_task_event(
         event_type=event_type,
         aggregate_type=aggregate_type,
         aggregate_id=aggregate_id,
-        payload={"task_name": task_name, "kwargs": kwargs},
+        payload={
+            "task_name": task_name,
+            "kwargs": kwargs,
+            **({"metadata": metadata} if metadata else {}),
+        },
     )
 
 
@@ -275,7 +303,7 @@ async def claim_pending(
     )
     result = await db.execute(stmt)
     events = list(result.scalars().all())
-    await db.execute(
+    exhausted_result = await db.execute(
         update(OutboxEvent)
         .where(
             OutboxEvent.status == OutboxEventStatus.PROCESSING,
@@ -283,7 +311,10 @@ async def claim_pending(
             OutboxEvent.lease_until <= claimed_at,
         )
         .values(
+            # The claim predicate gates retryable failed rows by attempt_count.
+            # Do not mark an unacknowledged broker delivery as sent.
             status=OutboxEventStatus.FAILED,
+            sent_at=None,
             lease_owner=None,
             lease_until=None,
             last_error="delivery lease expired after maximum attempts",
@@ -295,6 +326,9 @@ async def claim_pending(
         event.lease_owner = lease_owner
         event.lease_until = lease_until
     await db.commit()
+    exhausted_count = max(getattr(exhausted_result, "rowcount", 0) or 0, 0)
+    if exhausted_count:
+        OUTBOX_DELIVERY_EXHAUSTED_TOTAL.inc(exhausted_count)
     return events
 
 
@@ -395,6 +429,32 @@ async def renew_leases(
     return getattr(result, "rowcount", 0) or 0
 
 
+async def get_metrics_snapshot(
+    db: AsyncSession, *, now: datetime | None = None
+) -> tuple[dict[str, int], float]:
+    """Return status counts and oldest unsent age without mutating rows."""
+    result = await db.execute(
+        select(OutboxEvent.status, func.count(OutboxEvent.id)).group_by(
+            OutboxEvent.status
+        )
+    )
+    counts = {
+        str(getattr(status, "value", status)): int(count)
+        for status, count in result.all()
+    }
+    oldest = await db.scalar(
+        select(func.min(OutboxEvent.created_at)).where(
+            OutboxEvent.status != OutboxEventStatus.SENT
+        )
+    )
+    if oldest is None:
+        return counts, 0.0
+    if oldest.tzinfo is None:
+        oldest = oldest.replace(tzinfo=UTC)
+    current = now or datetime.now(UTC)
+    return counts, max(0.0, (current - oldest).total_seconds())
+
+
 async def delete_sent_older_than(
     db: AsyncSession, *, days: int | None = None
 ) -> int:
@@ -415,6 +475,7 @@ __all__ = [
     "claim_pending",
     "create_outbox_event",
     "delete_sent_older_than",
+    "get_metrics_snapshot",
     "mark_failed",
     "mark_sent",
     "new_event_id",

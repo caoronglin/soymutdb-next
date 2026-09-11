@@ -92,8 +92,9 @@ class VariantSummary(Base):
         Enum(VariantType, name="variant_type_enum", create_constraint=True, values_callable=enum_values),
         nullable=False,
     )
-    gene_id: Mapped[Optional[str]] = mapped_column(
-        ForeignKey("genes.id", ondelete="SET NULL"), nullable=True
+    gene_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("genes.gene_pk", ondelete="SET NULL"), nullable=True,
+        comment="FK to genes.gene_pk (surrogate)",
     )
     consequence: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     impact: Mapped[Optional[str]] = mapped_column(
@@ -138,6 +139,12 @@ class MutantLine(Base, TimestampMixin, SoftDeleteMixin):
     __tablename__ = "mutant_lines"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    # Stable public identifier for external URLs/search/citation. Never
+    # derived from the persistence key (``id``) or the lab designation
+    # (``name``). Nullable only while unpublished; publication requires it.
+    public_id: Mapped[Optional[str]] = mapped_column(
+        String(32), unique=True, nullable=True, index=True
+    )
     name: Mapped[str] = mapped_column(
         String(128), unique=True, nullable=False, index=True
     )
@@ -186,7 +193,7 @@ class MutantLine(Base, TimestampMixin, SoftDeleteMixin):
     )
 
     def __repr__(self) -> str:
-        return f"<MutantLine id={self.id} name={self.name!r}>"
+        return f"<MutantLine id={self.id} name={self.name!r} public_id={self.public_id!r}>"
 
 
 class Phenotype(Base, TimestampMixin):

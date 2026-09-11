@@ -62,22 +62,28 @@ export function isTimeoutError(err: unknown): boolean {
     return err instanceof ApiError && err.code === "GATEWAY_TIMEOUT";
 }
 
+/** Explicit assertion required by new transport callers before they retry. */
+export interface IdempotentRetryOptions {
+    /** This operation is known to be idempotent and may be replayed. */
+    idempotent: true;
+    /** Maximum number of retry attempts (default 1). */
+    maxRetries?: number;
+}
+
 /**
- * Retry a request function on transient failures, with exponential backoff
- * and jitter.
+ * Retry a request function on transient failures, with exponential backoff.
  *
  * Retryable: timeouts (408/GATEWAY_TIMEOUT), rate limits (429), gateway errors
- * (502/503/504), and network failures (NETWORK_ERROR). Non-retryable errors
- * (4xx client errors, 5xx without retry-after semantics) fail immediately.
- *
- * @param fn Request function returning a Promise
- * @param maxRetries Maximum number of retry attempts (default 1)
- * @returns The result of `fn`, or throws the last error
+ * (502/503/504), and network failures (NETWORK_ERROR). New transport callers
+ * must pass ``{ idempotent: true }``. The numeric form is retained unchanged
+ * for public API compatibility; generic callers remain responsible for proving
+ * their operation safe to replay.
  */
 export async function withRetry<T>(
     fn: () => Promise<T>,
-    maxRetries = 1,
+    options: number | IdempotentRetryOptions = 1,
 ): Promise<T> {
+    const maxRetries = typeof options === "number" ? options : (options.maxRetries ?? 1);
     let lastErr: unknown;
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {
@@ -178,16 +184,15 @@ export function clearAuth(): void {
 }
 
 /**
- * Core request function. Merges auth headers, serializes JSON bodies, applies
- * a timeout via AbortController, and normalizes errors.
+ * Execute a request and return the raw response after normalising failures.
  *
- * Side-effect free: no auth clearing, no redirects, no refresh on 401 — see
- * ./auth.ts for the coordinating layer.
+ * Keeping response handling here lets JSON and streamed file requests share the
+ * same auth, release pinning, timeout, and error semantics.
  */
-export async function request<T>(
+async function requestResponse(
     path: string,
     options: RequestOptions = {},
-): Promise<T> {
+): Promise<Response> {
     const {
         json,
         params,
@@ -204,7 +209,7 @@ export async function request<T>(
     const requestHeaders = new Headers(headers);
     if (auth) {
         const token = getAccessToken();
-        if (token) requestHeaders.set("Authorization", `Bearer ${token}`);
+        if (token) requestHeaders.set("Authorization", "Bearer " + token);
     }
     if (releaseId && !requestHeaders.has("X-SoyMutDB-Release")) {
         requestHeaders.set("X-SoyMutDB-Release", releaseId);
@@ -240,13 +245,13 @@ export async function request<T>(
     }
     clearTimeout(timer);
 
-    const contentType = response.headers.get("content-type") ?? "";
-    const isJson = contentType.includes("application/json");
-    const payload = isJson ? await response.json().catch(() => null) : null;
-
     if (!response.ok) {
         // Unified error envelope: { error: { code, message, details? }, request_id, status_code }
         // Fall back to a flat { code, message } payload for legacy servers.
+        const contentType = response.headers.get("content-type") ?? "";
+        const payload = contentType.includes("application/json")
+            ? await response.json().catch(() => null)
+            : null;
         const envelope =
             payload && typeof payload === "object"
                 ? (payload as Record<string, unknown>)
@@ -275,11 +280,36 @@ export async function request<T>(
         throw new ApiError(message, response.status, code, payload, requestId);
     }
 
+    return response;
+}
+
+/**
+ * Core JSON request function. The transport is side-effect free: auth refresh,
+ * redirects, and logout handling live in ./auth.ts.
+ */
+export async function request<T>(
+    path: string,
+    options: RequestOptions = {},
+): Promise<T> {
+    const response = await requestResponse(path, options);
+    const contentType = response.headers.get("content-type") ?? "";
+    const payload = contentType.includes("application/json")
+        ? await response.json().catch(() => null)
+        : null;
+
     // Some endpoints (DELETE) return no content.
     if (response.status === 204 || payload === null) {
         return undefined as T;
     }
     return payload as T;
+}
+
+/** Read a successful response as a Blob for streamed file downloads. */
+export async function requestBlob(
+    path: string,
+    options: RequestOptions = {},
+): Promise<Blob> {
+    return (await requestResponse(path, options)).blob();
 }
 
 /**
@@ -325,6 +355,7 @@ export const http = {
 
 export default {
     request,
+    requestBlob,
     http,
     apiBaseUrl,
     setAuthTokens,

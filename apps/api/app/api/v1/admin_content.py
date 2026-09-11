@@ -23,6 +23,7 @@ from ...schemas.content import (
     StaticPageMigrationDryRunResponse,
     StaticPageUpdate,
 )
+from ...services.content_snapshot_cache import invalidate_mutable_content_snapshot
 from ...services.static_page_migration_service import migrate_static_pages
 from .deps import get_current_user, get_user_roles
 
@@ -263,6 +264,7 @@ async def create_page(
     )
     db.add(version)
     await db.commit()
+    await invalidate_mutable_content_snapshot()
     await db.refresh(page)
     await db.refresh(version)
 
@@ -331,6 +333,7 @@ async def update_page(
     )
     db.add(version)
     await db.commit()
+    await invalidate_mutable_content_snapshot()
     await db.refresh(page)
 
     return _page_to_detail_response(page, next_version)
@@ -357,6 +360,7 @@ async def delete_page(
 
     await db.delete(page)
     await db.commit()
+    await invalidate_mutable_content_snapshot()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -383,6 +387,7 @@ async def publish_page(
     if page.published_at is None:
         page.published_at = datetime.now(datetime.UTC)
     await db.commit()
+    await invalidate_mutable_content_snapshot()
     await db.refresh(page)
 
     cv = await _get_current_version(db, page.id)
@@ -410,6 +415,7 @@ async def unpublish_page(
 
     page.status = PageStatus.DRAFT.value
     await db.commit()
+    await invalidate_mutable_content_snapshot()
     await db.refresh(page)
 
     cv = await _get_current_version(db, page.id)
@@ -540,6 +546,7 @@ async def restore_version(
     )
     db.add(new_version)
     await db.commit()
+    await invalidate_mutable_content_snapshot()
     await db.refresh(page)
 
     return _page_to_detail_response(page, next_version)

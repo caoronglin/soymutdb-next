@@ -92,6 +92,17 @@ def test_analyses_tasks_route_to_dedicated_queue(monkeypatch) -> None:
     assert mod._queue_of_task("soymutdb_worker.tasks.analyses.run_scanpy") == "analyses"
 
 
+def test_page_builder_publish_task_is_included_and_defaults_queue(monkeypatch) -> None:
+    mod = _reload_worker()
+    module_name = "soymutdb_worker.tasks.page_builder_publish"
+
+    assert module_name in mod.celery_app.conf.include
+    importlib.reload(importlib.import_module(module_name))
+    task_name = "soymutdb_worker.tasks.page_builder_publish.publish_definition"
+    assert task_name in mod.celery_app.tasks
+    assert mod._queue_of_task(task_name) == "default"
+
+
 def test_analyses_queue_is_distinct_from_existing_queues(monkeypatch) -> None:
     """The analyses route must not shadow any previously registered queue."""
     mod = _reload_worker()

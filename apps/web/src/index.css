@@ -106,13 +106,14 @@
  *
  * Theme: rich scientific green (plant science), OKLCH color space.
  * Type scale: display 3.5rem / h1 2.5rem / h2 1.875rem / h3 1.5rem / body 1rem.
- * Fonts: HarmonyOS Sans SC (display + body), JetBrains Mono (code).
+ * Fonts: system CJK stack (display + body), JetBrains Mono (code).
  * Layout: max-width 1400px, section spacing 6-8rem, hairline borders.
  */
 
 @theme {
-    --font-display: "HarmonyOS Sans SC", ui-sans-serif, system-ui, sans-serif;
-    --font-sans: "HarmonyOS Sans SC", ui-sans-serif, system-ui, sans-serif;
+    /* Avoid a multi-megabyte CJK web-font download on the LCP path. */
+    --font-display: system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+    --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
     --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
 
     /* Expose the Web-owned OKLCH tokens to Tailwind utilities. */
@@ -857,29 +858,9 @@
     }
 }
 
-/* HarmonyOS Sans SC — local fonts (public/fonts/harmonyos), Latin + CJK.
-   Placed after @theme: Tailwind 4 requires @theme to follow @import directly. */
-@font-face {
-    font-family: "HarmonyOS Sans SC";
-    src: url("/fonts/harmonyos/HarmonyOS-Sans-SC-Regular.woff2") format("woff2");
-    font-weight: 400;
-    font-style: normal;
-    font-display: swap;
-}
-@font-face {
-    font-family: "HarmonyOS Sans SC";
-    src: url("/fonts/harmonyos/HarmonyOS-Sans-SC-Medium.woff2") format("woff2");
-    font-weight: 500;
-    font-style: normal;
-    font-display: swap;
-}
-@font-face {
-    font-family: "HarmonyOS Sans SC";
-    src: url("/fonts/harmonyos/HarmonyOS-Sans-SC-Bold.woff2") format("woff2");
-    font-weight: 700;
-    font-style: normal;
-    font-display: swap;
-}
+/* System CJK stacks are used for first paint so no multi-megabyte web-font request
+   competes with LCP. The old HarmonyOS sources remain available for a future
+   intentionally subsetted opt-in, but are not referenced by portal CSS. */
 
 /* -------------------------------------------------------------------------
  * Interaction target policy (Ant Design 6 + WCAG 2.5.8)

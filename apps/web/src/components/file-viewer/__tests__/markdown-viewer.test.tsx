@@ -29,7 +29,7 @@ import { MarkdownViewer } from "../markdown-viewer";
 describe("MarkdownViewer", () => {
   beforeEach(() => {
     state.parse.mockReset();
-    state.parse.mockResolvedValue('<p>Safe content</p><script>alert(1)</script><img src="x" onerror="alert(1)">');
+    state.parse.mockResolvedValue('<p>Safe content</p><script>alert(1)</script><img src="x" onerror="alert(1)"><a href="https://example.com" target="_blank">reference</a>');
   });
 
   afterEach(() => {
@@ -46,5 +46,8 @@ describe("MarkdownViewer", () => {
     expect(state.parse).toHaveBeenCalledWith("# Preview");
     expect(viewer?.querySelector("script")).toBeNull();
     expect(viewer?.querySelector("img")?.getAttribute("onerror")).toBeNull();
+    expect(viewer?.querySelector("a")?.getAttribute("rel")).toBe(
+      "noopener noreferrer",
+    );
   });
 });

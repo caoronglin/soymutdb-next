@@ -108,7 +108,7 @@ def _build_gene_data(
     }
 
 
-def _build_expression_summary(session, gene_id: str) -> tuple[list[dict[str, Any]], int]:
+def _build_expression_summary(session, gene_id: int) -> tuple[list[dict[str, Any]], int]:
     """Query expression data for a gene.
 
     Returns (top_N_list, total_count).
@@ -148,7 +148,7 @@ def _build_expression_summary(session, gene_id: str) -> tuple[list[dict[str, Any
     ], total_count
 
 
-def _build_homolog_summary(session, gene_id: str) -> list[dict[str, Any]]:
+def _build_homolog_summary(session, gene_id: int) -> list[dict[str, Any]]:
     """Query homolog data for a gene."""
     rows = session.execute(
         select(
@@ -304,6 +304,7 @@ def build_static_pages(
     self: Task,
     gene_ids: list[str] | None = None,
     *,
+    release_id: int | None = None,
     upload_s3: bool = True,
 ) -> dict[str, Any]:
     """Build pre-computed gene data cache for one, many, or all genes.
@@ -315,10 +316,19 @@ def build_static_pages(
 
     Stores the result as JSON in ``gene_data_cache`` (upsert).  Optionally
     also writes a gzipped JSON file and a prerendered HTML page to S3 under
-    ``genes/{gene_id}.json.gz`` and ``genes/{gene_id}.html.gz``.
+    a release/assembly-scoped prefix so the same accession in v4 and v5
+    does not overwrite each other.
+
+    Object key layout (when ``release_id`` is provided):
+      ``{release_id}/{assembly_id}/genes/{accession}.json.gz``
+      ``{release_id}/{assembly_id}/genes/{accession}.html.gz``
+
+    Fallback (backward compatibility when ``release_id`` is omitted):
+      ``{assembly_id}/genes/{accession}.json.gz``
 
     Args:
         gene_ids: Specific gene IDs to process, or ``None`` for all genes.
+        release_id: Optional release identifier for the object namespace.
         upload_s3: Whether to upload gzipped copies to S3 (default True).
 
     Returns:
@@ -336,7 +346,9 @@ def build_static_pages(
     with get_db() as session:
         stmt = (
             select(
-                genes.c.id,
+                genes.c.gene_pk,
+                genes.c.accession,
+                genes.c.assembly_id,
                 genes.c.name,
                 genes.c.biotype,
                 genes.c.start,
@@ -348,7 +360,7 @@ def build_static_pages(
             .outerjoin(chromosomes, genes.c.chromosome_id == chromosomes.c.id)
         )
         if gene_ids is not None:
-            stmt = stmt.where(genes.c.id.in_(gene_ids))
+            stmt = stmt.where(genes.c.accession.in_(gene_ids))
         gene_rows = session.execute(stmt).all()
 
     total = len(gene_rows)
@@ -370,7 +382,7 @@ def build_static_pages(
                 generated_at = now.isoformat()
 
                 gene_info = _build_gene_data(
-                    gene_id=row.id,
+                    gene_id=row.accession,
                     gene_name=row.name,
                     biotype=row.biotype,
                     chromosome_name=row.chromosome_name,
@@ -382,9 +394,9 @@ def build_static_pages(
 
                 with get_db() as session:
                     expression_data_rows, total_expression_count = _build_expression_summary(
-                        session, row.id
+                        session, row.gene_pk
                     )
-                    homolog_data = _build_homolog_summary(session, row.id)
+                    homolog_data = _build_homolog_summary(session, row.gene_pk)
 
                 cache_data: dict[str, Any] = {
                     "gene": gene_info,
@@ -396,7 +408,7 @@ def build_static_pages(
                 # ── Upsert into GeneDataCache ──────────────────────────────
                 with get_db() as session:
                     upsert_stmt = pg_insert(gene_data_cache).values(
-                        gene_id=row.id,
+                        gene_id=row.gene_pk,
                         data=cache_data,
                         updated_at=now,
                     )
@@ -409,6 +421,15 @@ def build_static_pages(
 
                 # ── Upload to S3 (if enabled) ──────────────────────────────
                 if s3_client is not None:
+                    # Namespace keys by release/assembly so v4 and v5 genes
+                    # with the same accession never overwrite each other.
+                    prefix_parts: list[str] = []
+                    if release_id is not None:
+                        prefix_parts.append(str(release_id))
+                    prefix_parts.append(str(row.assembly_id))
+                    prefix_parts.append("genes")
+                    key_prefix = "/".join(prefix_parts)
+
                     # --- JSON ---
                     json_bytes = json.dumps(cache_data, default=_serialize_value).encode(
                         "utf-8"
@@ -416,7 +437,7 @@ def build_static_pages(
                     _upload_gzipped(
                         s3_client,
                         bucket,
-                        f"genes/{row.id}.json.gz",
+                        f"{key_prefix}/{row.accession}.json.gz",
                         json_bytes,
                         content_type="application/json",
                     )
@@ -432,7 +453,7 @@ def build_static_pages(
                     _upload_gzipped(
                         s3_client,
                         bucket,
-                        f"genes/{row.id}.html.gz",
+                        f"{key_prefix}/{row.accession}.html.gz",
                         html_str.encode("utf-8"),
                         content_type="text/html",
                     )
@@ -440,7 +461,7 @@ def build_static_pages(
                 processed += 1
 
             except Exception as e:
-                logger.error("Failed to build cache for gene %s: %s", row.id, e)
+                logger.error("Failed to build cache for gene %s: %s", row.accession, e)
                 failed += 1
 
         # Report progress for this chunk

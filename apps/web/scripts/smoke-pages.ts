@@ -112,7 +112,7 @@ export function runChecks(opts: SmokeOptions): CheckResult[] {
         generated_at: string;
         news_detail?: Record<string, unknown>;
       };
-      if (snap.schema_version !== 1 || !snap.generated_at) {
+      if (snap.schema_version !== 2 || !snap.generated_at) {
         results.push({
           name: "dist/data/content.json",
           ok: false,

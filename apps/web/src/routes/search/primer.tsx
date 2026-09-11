@@ -38,6 +38,7 @@ import {
 import { getAssemblies, seqFetchRegion } from "@soymutdb/api-client";
 import { FadeUp } from "../../components/route-motion";
 import { SOYBEAN_CHROMOSOMES } from "../../lib/format";
+import { queryKeys } from "../../lib/query-keys";
 import {
   designPrimerPair,
   parseFasta,
@@ -59,7 +60,7 @@ function PrimerComponent() {
   const [error, setError] = React.useState<string | null>(null);
 
   const assembliesQuery = useQuery({
-    queryKey: ["assemblies"],
+    queryKey: queryKeys.assemblies.all(),
     queryFn: getAssemblies,
     staleTime: 30 * 60 * 1000,
   });

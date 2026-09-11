@@ -21,6 +21,9 @@ import { request } from "./client";
 /** News lifecycle status (backend `NewsStatus` StrEnum). */
 export type NewsStatus = "draft" | "published" | "archived";
 
+/** Approved external origins supported by the review-only CMS preview flow. */
+export type ExternalArticlePlatform = "wechat" | "xmol";
+
 /** Public list-item view (no body content). */
 export interface NewsSummary {
   id: string;
@@ -48,6 +51,11 @@ export interface NewsDetail extends NewsSummary {
   /** Visibility window — returned since D4 for the admin edit form. */
   visible_from: string | null;
   visible_to: string | null;
+  /** Optional attribution for an editor-reviewed external article import. */
+  source_platform: ExternalArticlePlatform | null;
+  source_url: string | null;
+  source_published_at: string | null;
+  source_synced_at: string | null;
 }
 
 /** Paginated public news list. */

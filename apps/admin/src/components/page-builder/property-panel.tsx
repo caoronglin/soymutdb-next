@@ -9,6 +9,7 @@
  */
 
 import { Badge, Button, Card, Input, Select, Typography } from "@/lib/antd";
+import { useTranslation } from "react-i18next";
 import type { ComponentDescriptor, PageComponentNode } from "@soymutdb/shared";
 
 type JsonSchema = Record<string, unknown>;
@@ -36,6 +37,7 @@ function FieldControl({
   value: unknown;
   onChange: (value: unknown) => void;
 }) {
+  const { t } = useTranslation();
   const enumValues = Array.isArray(schema.enum) ? (schema.enum as Array<string | number>) : undefined;
   const anyOf = schema.anyOf as JsonSchema[] | undefined;
   const type = schema.type ?? anyOf?.[0]?.type;
@@ -91,7 +93,7 @@ function FieldControl({
           });
           onChange(parsed);
         }}
-        placeholder="one item per line"
+        placeholder={t("admin.builder.oneItemPerLine", { defaultValue: "one item per line" })}
       />
     );
   }
@@ -115,6 +117,7 @@ function ObjectArrayControl({
   schema: JsonSchema;
   onChange: (v: unknown) => void;
 }) {
+  const { t } = useTranslation();
   const items = Array.isArray(value) ? (value as Array<Record<string, unknown>>) : [];
   const itemSchema = (schema.items as JsonSchema | undefined) ?? {};
   const fields = Object.keys((itemSchema.properties as Record<string, unknown> | undefined) ?? {});
@@ -128,7 +131,7 @@ function ObjectArrayControl({
       {items.map((item, index) => (
         <fieldset key={index} className="space-y-2 rounded-md border p-2">
           <div className="flex items-center justify-between">
-            <legend className="text-xs font-medium text-muted-foreground">Item {index + 1}</legend>
+            <legend className="text-xs font-medium text-muted-foreground">{t("admin.builder.itemLabel", { defaultValue: "Item {{index}}", index: index + 1 })}</legend>
             <div className="flex gap-1">
               <Button type="text" size="small" className="h-7 px-2" disabled={index === 0} onClick={() => {
                 const next = [...items]; [next[index - 1], next[index]] = [next[index], next[index - 1]]; onChange(next);
@@ -136,7 +139,7 @@ function ObjectArrayControl({
               <Button type="text" size="small" className="h-7 px-2" disabled={index === items.length - 1} onClick={() => {
                 const next = [...items]; [next[index], next[index + 1]] = [next[index + 1], next[index]]; onChange(next);
               }}>↓</Button>
-              <Button type="text" size="small" className="h-7 px-2" onClick={() => onChange(items.filter((_, i) => i !== index))} aria-label={`Remove item ${index + 1}`}>×</Button>
+              <Button type="text" size="small" className="h-7 px-2" onClick={() => onChange(items.filter((_, i) => i !== index))} aria-label={t("admin.builder.removeItemLabel", { defaultValue: "Remove item {{index}}", index: index + 1 })}>×</Button>
             </div>
           </div>
           {fields.map((field) => (
@@ -155,7 +158,7 @@ function ObjectArrayControl({
           ))}
         </fieldset>
       ))}
-      <Button size="small" onClick={() => onChange([...items, defaults])}>Add item</Button>
+      <Button size="small" onClick={() => onChange([...items, defaults])}>{t("admin.builder.addItem", { defaultValue: "Add item" })}</Button>
     </div>
   );
 }
@@ -165,12 +168,13 @@ export function PropertyPanel({
   node,
   onChangeProps,
 }: PropertyPanelProps) {
+  const { t } = useTranslation();
   const props = node?.props ?? {};
 
   if (!component) {
     return (
-      <Card title="Properties">
-        <Typography.Text type="secondary">Select a component in the tree to edit its properties.</Typography.Text>
+      <Card title={t("admin.builder.propertiesTitle", { defaultValue: "Properties" })}>
+        <Typography.Text type="secondary">{t("admin.builder.selectComponent", { defaultValue: "Select a component in the tree to edit its properties." })}</Typography.Text>
       </Card>
     );
   }
@@ -183,12 +187,12 @@ export function PropertyPanel({
   const propertyNames = Object.keys(properties);
 
   return (
-    <Card title={<span className="flex items-center gap-2">Properties <Badge color="default">{component.renderer_key}</Badge></span>}>
+    <Card title={<span className="flex items-center gap-2">{t("admin.builder.propertiesTitle", { defaultValue: "Properties" })} <Badge color="default">{component.renderer_key}</Badge></span>}>
       <Typography.Paragraph type="secondary">{component.label}</Typography.Paragraph>
       <div className="space-y-4">
         {propertyNames.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            This component has no configurable properties.
+            {t("admin.builder.noConfigurableProperties", { defaultValue: "This component has no configurable properties." })}
           </p>
         ) : (
           propertyNames.map((name) => {

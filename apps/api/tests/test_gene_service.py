@@ -96,8 +96,9 @@ def _now() -> datetime:
 
 
 def make_gene(
-    gene_id: str = "Glyma.01G000100",
+    accession: str = "Glyma.01G000100",
     *,
+    gene_pk: int = 1,
     chromosome_id: int = 1,
     name: str = "Disease Resistance",
     biotype: str = "protein_coding",
@@ -108,7 +109,8 @@ def make_gene(
     aliases: list[GeneAlias] | None = None,
 ) -> Gene:
     gene = Gene(
-        id=gene_id,
+        gene_pk=gene_pk,
+        accession=accession,
         assembly_id=1,
         chromosome_id=chromosome_id,
         name=name,
@@ -123,18 +125,19 @@ def make_gene(
         aliases=aliases or [],
     )
     gene.chromosome = make_chromosome(chr_id=chromosome_id)
+    gene.assembly = make_assembly(asm_id=1)
     return gene
 
 
 def make_transcript(
     tx_id: str = "Glyma.01G000100.1",
     *,
-    gene_id: str = "Glyma.01G000100",
+    gene_pk: int = 1,
     is_canonical: bool = True,
 ) -> Transcript:
     return Transcript(
         id=tx_id,
-        gene_id=gene_id,
+        gene_id=gene_pk,
         name=None,
         biotype="mRNA",
         start=1000,
@@ -173,6 +176,7 @@ class TestCursor:
     def test_roundtrip(self):
         cursor = encode_cursor(
             "Glyma.01G000100",
+            1,
             release_context=RELEASE_CONTEXT,
             params=DEFAULT_GENE_PARAMS,
         )
@@ -180,11 +184,12 @@ class TestCursor:
             cursor,
             release_context=RELEASE_CONTEXT,
             params=DEFAULT_GENE_PARAMS,
-        ) == "Glyma.01G000100"
+        ) == ("Glyma.01G000100", 1)
 
     def test_roundtrip_unicode_gene_id(self):
         cursor = encode_cursor(
             "Glyma.20G000100",
+            2,
             release_context=RELEASE_CONTEXT,
             params=DEFAULT_GENE_PARAMS,
         )
@@ -192,7 +197,7 @@ class TestCursor:
             cursor,
             release_context=RELEASE_CONTEXT,
             params=DEFAULT_GENE_PARAMS,
-        ) == "Glyma.20G000100"
+        ) == ("Glyma.20G000100", 2)
 
     def test_invalid_cursor_raises_validation_error(self):
         with pytest.raises(ValidationError):
@@ -233,6 +238,7 @@ class TestListGenes:
             update={
                 "cursor": encode_cursor(
                     "Glyma.01G000050",
+                    50,
                     release_context=RELEASE_CONTEXT,
                     params=params_without_cursor,
                 )
@@ -248,9 +254,9 @@ class TestListGenes:
         assert "genes.assembly_id" in sql
         assert "chromosomes.name" in sql
         assert "genes.biotype" in sql
-        assert "lower(genes.id) LIKE" in sql
-        assert "genes.id >" in sql
-        assert "ORDER BY genes.id" in sql
+        assert "lower(genes.accession) LIKE" in sql
+        assert "genes.accession >" in sql
+        assert "ORDER BY genes.accession" in sql
         assert "LIMIT" in sql
 
     async def test_chromosome_filter_joins_chromosomes(self):
@@ -276,7 +282,7 @@ class TestListGenes:
 
     async def test_has_more_when_rows_exceed_limit(self):
         genes = [
-            make_gene(f"Glyma.01G00010{i}", chromosome_id=1)
+            make_gene(f"Glyma.01G00010{i}", gene_pk=i + 1, chromosome_id=1)
             for i in range(3)
         ]
         session = FakeDbSession(genes=genes)
@@ -288,7 +294,8 @@ class TestListGenes:
         assert response.has_more is True
         assert len(response.items) == 2
         assert response.next_cursor == encode_cursor(
-            genes[1].id,
+            genes[1].accession,
+            genes[1].gene_pk,
             release_context=RELEASE_CONTEXT,
             params=GeneListParams(limit=2),
         )
@@ -326,7 +333,7 @@ class TestGetGene:
     async def test_found_returns_detail_with_transcripts_and_aliases(self):
         gene = make_gene(
             transcripts=[make_transcript()],
-            aliases=[GeneAlias(gene_id="Glyma.01G000100", alias="DR1")],
+            aliases=[GeneAlias(gene_id=1, alias="DR1")],
         )
         gene.chromosome = make_chromosome(name="Gm01")
         session = FakeDbSession(genes=[gene])

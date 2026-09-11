@@ -25,6 +25,8 @@ interface LoginResponse {
 
 /** Value exposed by the auth context. */
 export interface AuthContextValue {
+  /** True while the initial refresh-cookie session restore is pending. */
+  isRestoringSession: boolean;
   isAuthenticated: boolean;
   user: AuthUser | null;
   login: (username: string, password: string) => Promise<AuthUser>;
@@ -67,6 +69,7 @@ function usernameFromToken(token: string): string | null {
  * back to the login screen.
  */
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [isRestoringSession, setIsRestoringSession] = React.useState(true);
   const [isAuthenticated, setIsAuthenticated] = React.useState<boolean>(false);
   const [user, setUser] = React.useState<AuthUser | null>(null);
 
@@ -74,13 +77,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // any in-flight refresh triggered by requests). Failure → anonymous state.
   React.useEffect(() => {
     let cancelled = false;
-    void restoreSession().then((ok) => {
-      if (cancelled || !ok) return;
-      const token = getAccessToken();
-      const username = token ? usernameFromToken(token) : null;
-      setIsAuthenticated(true);
-      setUser(username ? { username } : null);
-    });
+    void restoreSession()
+      .then((ok) => {
+        if (cancelled || !ok) return;
+        const token = getAccessToken();
+        const username = token ? usernameFromToken(token) : null;
+        setIsAuthenticated(true);
+        setUser(username ? { username } : null);
+      })
+      .finally(() => {
+        if (!cancelled) setIsRestoringSession(false);
+      });
     return () => {
       cancelled = true;
     };
@@ -130,8 +137,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = React.useMemo<AuthContextValue>(
-    () => ({ isAuthenticated, user, login, logout }),
-    [isAuthenticated, user, login, logout],
+    () => ({ isRestoringSession, isAuthenticated, user, login, logout }),
+    [isRestoringSession, isAuthenticated, user, login, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

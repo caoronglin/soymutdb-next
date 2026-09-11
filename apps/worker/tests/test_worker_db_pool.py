@@ -42,11 +42,11 @@ def _capture_engine_kwargs(monkeypatch, env: dict[str, str] | None = None):
 
 
 def test_worker_engine_default_pool_is_small(monkeypatch) -> None:
-    """Worker pools must default to 2+4 (fits the connection budget)."""
+    """Each synchronous Celery child defaults to one DB connection."""
     kwargs = _capture_engine_kwargs(monkeypatch)
 
-    assert kwargs["pool_size"] == 2
-    assert kwargs["max_overflow"] == 4
+    assert kwargs["pool_size"] == 1
+    assert kwargs["max_overflow"] == 0
     assert kwargs["pool_recycle"] == 1800
     assert kwargs["pool_timeout"] == 30
     assert kwargs["pool_pre_ping"] is True

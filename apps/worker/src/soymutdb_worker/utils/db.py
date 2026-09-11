@@ -44,14 +44,15 @@ def get_engine():
     """Return the global sync engine, creating it on first call."""
     global _engine
     if _engine is None:
-        # Connection budget: small pool per worker process (2+4).  Tune via
-        # SOYMUTDB_WORKER_DB_POOL_SIZE / SOYMUTDB_WORKER_DB_MAX_OVERFLOW;
-        # keep the fleet total within postgres max_connections budget (see
-        # docker-compose.yml postgres service comment).
+        # Celery prefork creates this lazy engine independently in each child.
+        # A synchronous child executes one task at a time, so 1+0 is the safe
+        # default; multiplying a larger pool by fleet concurrency can exhaust
+        # PostgreSQL even when every container appears to have a small pool.
+        # Tune only with the fleet-wide budget in docker-compose.yml.
         _engine = create_engine(
             get_database_url(),
-            pool_size=int(get_setting("WORKER_DB_POOL_SIZE", "2")),
-            max_overflow=int(get_setting("WORKER_DB_MAX_OVERFLOW", "4")),
+            pool_size=int(get_setting("WORKER_DB_POOL_SIZE", "1")),
+            max_overflow=int(get_setting("WORKER_DB_MAX_OVERFLOW", "0")),
             pool_recycle=int(get_setting("WORKER_DB_POOL_RECYCLE", "1800")),
             pool_timeout=int(get_setting("WORKER_DB_POOL_TIMEOUT", "30")),
             pool_pre_ping=True,

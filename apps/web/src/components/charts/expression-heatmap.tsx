@@ -25,7 +25,16 @@ export function ExpressionHeatmap({ data, className }: ExpressionHeatmapProps) {
     }
     const genesArr = [...geneSet].sort();
     const libsArr = [...libSet].sort();
-    const sData = data.map((d) => [libsArr.indexOf(d.library_name), genesArr.indexOf(d.gene_id), d.fpkm] as [number, number, number]);
+    const geneIndex = new Map(genesArr.map((gene, index) => [gene, index]));
+    const libraryIndex = new Map(libsArr.map((library, index) => [library, index]));
+    const sData = data.map(
+      (datum) =>
+        [
+          libraryIndex.get(datum.library_name) ?? 0,
+          geneIndex.get(datum.gene_id) ?? 0,
+          datum.fpkm,
+        ] as [number, number, number],
+    );
     return { genes: genesArr, libraries: libsArr, seriesData: sData, maxFpkm: mx };
   }, [data]);
 

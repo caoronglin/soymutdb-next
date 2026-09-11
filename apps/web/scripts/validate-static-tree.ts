@@ -58,6 +58,38 @@ function checkUnsafeMarkup(html: string): string[] {
   return problems;
 }
 
+function checkPageDefinitionBootstrap(html: string): string | null {
+  const match = html.match(/<script[^>]*id=\"rl-page-definition\"[^>]*>([\s\S]*?)<\/script>/i);
+  if (!match) return null;
+  try {
+    const payload = JSON.parse(match[1]) as { status?: unknown };
+    return payload.status === "published" ? null : "PageDefinition bootstrap is not published";
+  } catch {
+    return "PageDefinition bootstrap is invalid JSON";
+  }
+}
+
+function checkStaticPageArtifacts(artifactDir: string, errors: string[]): void {
+  const snapshotPath = join(artifactDir, "data", "content.json");
+  if (!existsSync(snapshotPath)) return;
+  try {
+    const snapshot = JSON.parse(readFileSync(snapshotPath, "utf-8")) as { static_pages?: unknown[] };
+    if (!Array.isArray(snapshot.static_pages)) return;
+    const pagesDir = join(artifactDir, "pages");
+    let generated = 0;
+    if (existsSync(pagesDir)) {
+      for (const entry of readdirSync(pagesDir)) {
+        if (existsSync(join(pagesDir, entry, "index.html"))) generated += 1;
+      }
+    }
+    if (generated !== snapshot.static_pages.length) {
+      errors.push("StaticPage output mismatch: snapshot has " + snapshot.static_pages.length + ", dist/pages has " + generated + " index.html files");
+    }
+  } catch (err) {
+    errors.push("could not validate StaticPage snapshot: " + (err as Error).message);
+  }
+}
+
 function main(): void {
   const args = process.argv.slice(2);
   const artifactDir = args[0];
@@ -124,6 +156,8 @@ function main(): void {
     }
   }
 
+  checkStaticPageArtifacts(artifactDir, errors);
+
   // Scan generated HTML for unsafe markup.
   for (const rel of walk(artifactDir, artifactDir)) {
     if (!rel.endsWith(".html")) continue;
@@ -131,6 +165,8 @@ function main(): void {
     for (const p of checkUnsafeMarkup(html)) {
       errors.push(`${rel}: ${p}`);
     }
+    const definitionProblem = checkPageDefinitionBootstrap(html);
+    if (definitionProblem) errors.push(`${rel}: ${definitionProblem}`);
   }
 
   if (errors.length) {

@@ -10,8 +10,16 @@ import {
   SearchOutlined as SearchIcon,
 } from "@ant-design/icons";
 import { Card, Empty, Input, Skeleton, Tag } from "@/lib/antd";
-import { globalSearch, type FederatedSearchResponse, type SearchResponse, type SearchResult } from "@soymutdb/api-client";
+import {
+  getReleaseId,
+  globalSearch,
+  type FederatedSearchResponse,
+  type SearchResponse,
+  type SearchResult,
+} from "@soymutdb/api-client";
 import { FadeUp } from "../components/route-motion";
+import { queryKeys } from "../lib/query-keys";
+import { SITE_VARIANT } from "../lib/site-variant";
 
 const EXTERNAL_SOURCES = ["ncbi", "uniprot", "ensembl", "ebi"];
 
@@ -22,10 +30,8 @@ export const Route = createFileRoute("/search")({
     types: Array.isArray(search.types) ? search.types.map(String) : undefined,
     cursor: search.cursor ? String(search.cursor) : undefined,
     limit: search.limit ? Number(search.limit) : undefined,
+    assembly: search.assembly ? String(search.assembly) : undefined,
     external: search.external === "1" || search.external === 1 || search.external === true,
-    tissue: search.tissue ? String(search.tissue) : undefined,
-    treatment: search.treatment ? String(search.treatment) : undefined,
-    min_fpkm: search.min_fpkm ? Number(search.min_fpkm) : undefined,
   })) as any,
 });
 
@@ -44,7 +50,7 @@ const RESULT_ICONS: Record<string, typeof Dna> = {
 };
 
 function SearchComponent() {
-  const { q, types, cursor, limit, external } = Route.useSearch();
+  const { q, types, cursor, limit, external, assembly } = Route.useSearch();
   const navigate = useNavigate();
   const [input, setInput] = React.useState(q ?? "");
   const [externalInput, setExternalInput] = React.useState(Boolean(external));
@@ -52,15 +58,26 @@ function SearchComponent() {
   React.useEffect(() => setInput(q ?? ""), [q]);
   React.useEffect(() => setExternalInput(Boolean(external)), [external]);
 
+  const releaseId = getReleaseId();
+  const resultLimit = limit ?? 20;
   const query = useQuery({
-    queryKey: ["global-search", q, types, cursor, limit, external],
+    queryKey: queryKeys.search.global({
+      query: q,
+      types,
+      cursor,
+      limit: resultLimit,
+      assemblyId: assembly,
+      releaseId,
+      siteVariant: SITE_VARIANT,
+      federated: Boolean(external),
+    }),
     queryFn: () => globalSearch({
-      q: q!, types, cursor, limit: limit ?? 20,
+      q: q!, types, cursor, limit: resultLimit,
+      assembly_id: assembly ? Number(assembly) : undefined,
       sources: external ? EXTERNAL_SOURCES : undefined,
     }),
     enabled: Boolean(q?.trim()),
     staleTime: 60_000,
-    placeholderData: (previous) => previous,
   });
 
   const submit = (event: React.FormEvent) => {
@@ -68,8 +85,7 @@ function SearchComponent() {
     const next = input.trim();
     navigate({ to: "/search", search: {
       q: next || undefined, types: undefined, cursor: undefined,
-      external: next ? externalInput : false, limit: next ? 20 : undefined,
-      tissue: undefined, treatment: undefined, min_fpkm: undefined,
+      assembly: undefined, external: next ? externalInput : false, limit: next ? 20 : undefined,
     } });
   };
 
@@ -77,7 +93,7 @@ function SearchComponent() {
   const internal = data && isInternal(data) ? data : undefined;
   const federated = data && isFederated(data) ? data : undefined;
   const results = internal?.results ?? [];
-  const hasOldData = Boolean(data) && query.isFetching;
+  const isRefreshing = Boolean(data) && query.isFetching;
 
   return (
     <div className="container-prose section-rhythm">
@@ -103,7 +119,7 @@ function SearchComponent() {
       {q && query.isLoading && !data ? <div data-testid="search-results" className="mt-10 grid gap-3">{Array.from({ length: 5 }, (_, index) => <Skeleton key={index} className="h-20 w-full" />)}</div> : null}
 
       {internal ? <section data-testid="search-results" className="mt-10" aria-label="Search results">
-        <div className="mb-4 flex items-center justify-between text-sm text-muted-foreground"><span>Results for <span className="font-mono text-foreground">“{q}”</span>{hasOldData ? " · refreshing" : ""}</span>{internal.total_count !== null ? <span>{internal.total_count} results</span> : null}</div>
+        <div className="mb-4 flex items-center justify-between text-sm text-muted-foreground"><span>Results for <span className="font-mono text-foreground">“{q}”</span>{isRefreshing ? " · refreshing" : ""}</span>{internal.total_count !== null ? <span>{internal.total_count} results</span> : null}</div>
         {results.length === 0 ? <Empty image={<SearchIcon style={{ fontSize: 40, color: "var(--muted-foreground)" }} />} description={<><p className="font-medium">No matches</p><p className="text-sm text-muted-foreground">No records matched this query. Try a broader term.</p></>} /> : <div className="grid gap-3">{results.map((result) => <ResultRow key={`${result.type}-${result.id}`} result={result} />)}</div>}
       </section> : null}
 

@@ -13,9 +13,9 @@
 #   make deploy-linux  - Deploy to production (Linux)
 # =====================================================================
 
-.PHONY: help dev install env db-up db-down migrate init-clickhouse start stop restart logs ps \
+.PHONY: help dev install env db-up db-down migrate init-clickhouse start stop restart logs ps dev-compose-check prod-compose-check \
         run-api run-worker run-web run-admin \
-        test test-api test-web test-e2e load-test smoke-test \
+        test test-api test-web test-e2e load-test smoke-test slow-query-report explain-query check-architecture \
         build build-web build-admin build-jbrowse build-docker \
         lint lint-fix typecheck \
         backup backup-full restore upgrade health deploy-linux \
@@ -72,11 +72,19 @@ env: ## Create .env from .env.example
 # Database
 # =====================================================================
 
-db-up: ## Start database services (Docker)
-	$(DOCKER_COMPOSE) up -d postgres clickhouse redis minio minio-init
+DEV_COMPOSE = $(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml --profile core
 
-db-down: ## Stop database services
-	$(DOCKER_COMPOSE) stop postgres clickhouse redis minio
+db-up: ## Start development data services (Docker)
+	$(DEV_COMPOSE) up -d postgres clickhouse redis redis-celery minio minio-init
+
+db-down: ## Stop development data services
+	$(DEV_COMPOSE) stop postgres clickhouse redis redis-celery minio
+
+dev-compose-check: ## Validate the development Compose contract without Docker
+	python3 -m pytest -q scripts/test_development_compose_contract.py
+
+prod-compose-check: ## Validate production runtime hardening without Docker
+	python3 -m pytest -q scripts/test_production_compose_contract.py
 
 migrate: ## Run database migrations
 	@echo "$(CYAN)Running database migrations...$(RESET)"
@@ -106,13 +114,13 @@ logs-api: ## Follow API logs
 	$(DOCKER_COMPOSE) logs -f api
 
 logs-worker: ## Follow worker logs
-	$(DOCKER_COMPOSE) logs -f worker-default worker-blast worker-ingestion
+	$(DOCKER_COMPOSE) logs -f worker-default worker-blast worker-ingest worker-analyses
 
 ps: ## Show service status
 	$(DOCKER_COMPOSE) ps
 
 run-api: ## Run API server locally (dev mode)
-	cd $(API_DIR) && uvicorn soymutdb.main:app --reload --host 0.0.0.0 --port 8000
+	cd $(API_DIR) && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 run-worker: ## Run Celery worker locally
 	cd apps/worker && celery -A soymutdb_worker.main:celery_app worker --loglevel=info --concurrency=2
@@ -152,9 +160,14 @@ smoke-test: ## Run k6 smoke test
 stress-test: ## Run k6 stress test
 	k6 run tests/load/variant-stress.js
 
-.PHONY: slow-query-report
+check-architecture: ## Enforce backend import direction and service acyclicity
+	python3 scripts/check_architecture.py
+
 slow-query-report: ## Append pg_stat_statements Top-20 weekly baseline
 	bash scripts/slow-query-report.sh
+
+explain-query: ## Explain read-only query (Q="SELECT ...")
+	bash scripts/explain-query.sh
 
 # =====================================================================
 # Building

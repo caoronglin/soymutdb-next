@@ -6,7 +6,10 @@
  *   GET    /api/v1/admin/news                     -> NewsListResponse (all statuses)
  *   POST   /api/v1/admin/news                     NewsCreate   -> NewsDetail (201)
  *   PUT    /api/v1/admin/news/{news_id}           NewsUpdate   -> NewsDetail
- *   DELETE /api/v1/admin/news/{news_id}           -> 204
+ *   DELETE /api/v1/admin/news/{news_id}           -> 204 (soft delete)
+ *   GET    /api/v1/admin/news/deleted             -> DeletedAdminNewsListResponse
+ *   POST   /api/v1/admin/news/{news_id}/restore    -> NewsDetail
+ *   DELETE /api/v1/admin/news/{news_id}/purge      -> 204 (permanent delete)
  *   PATCH  /api/v1/admin/news/reorder           NewsReorderRequest -> NewsReorderResponse
  *   GET    /api/v1/admin/news/{news_id}/preview-token -> PreviewTokenResponse
  *   GET    /api/v1/admin/news/{news_id}         (via preview-token dance) -> NewsDetail
@@ -15,11 +18,16 @@
  * retry, logout events) with the in-memory Bearer token attached.
  */
 
-import type { NewsDetail, NewsSummary, NewsStatus } from "./news";
+import type {
+  ExternalArticlePlatform,
+  NewsDetail,
+  NewsSummary,
+  NewsStatus,
+} from "./news";
 import { getNewsBySlug } from "./news";
 import { http } from "./auth";
 
-export type { NewsStatus };
+export type { ExternalArticlePlatform, NewsStatus };
 
 /** Full article view as returned by admin create/update (bilingual body). */
 export type AdminNewsDetail = NewsDetail;
@@ -44,6 +52,34 @@ export interface AdminNewsListResponse {
   page_size: number;
 }
 
+/** Metadata-only item returned from the administrator trash. */
+export interface DeletedAdminNewsItem {
+  id: number;
+  title_en: string;
+  title_zh: string | null;
+  slug: string;
+  category: string | null;
+  status: NewsStatus;
+  published_at: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string;
+}
+
+/** Paginated administrator trash response. */
+export interface DeletedAdminNewsListResponse {
+  items: DeletedAdminNewsItem[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+/** Administrator-trash pagination parameters accepted by the server. */
+export interface DeletedAdminNewsListParams {
+  page?: number;
+  page_size?: number;
+}
+
 /** Create payload — mirrors backend `NewsCreate`. */
 export interface NewsCreatePayload {
   title_en: string;
@@ -61,6 +97,8 @@ export interface NewsCreatePayload {
   status?: NewsStatus;
   visible_from?: string | null;
   visible_to?: string | null;
+  /** Opaque short-lived proof returned by external-preview. */
+  source_preview_token?: string;
 }
 
 /** Update payload — mirrors backend `NewsUpdate` (partial; all optional). */
@@ -80,6 +118,27 @@ export interface NewsUpdatePayload {
   status?: NewsStatus;
   visible_from?: string | null;
   visible_to?: string | null;
+  is_published?: boolean | null;
+  /** Replace attribution only with a fresh external preview attestation. */
+  source_preview_token?: string | null;
+  /** Explicitly remove any existing external-source attribution. */
+  clear_source_provenance?: boolean;
+}
+
+/** Sanitized, non-persistent result of an approved external source preview. */
+export interface ExternalArticlePreview {
+  platform: ExternalArticlePlatform;
+  source_url: string;
+  title: string;
+  content_html: string;
+  /** Opaque short-lived proof used when the normal news form is saved. */
+  source_preview_token: string;
+  source_published_at: string | null;
+}
+
+export interface ExternalArticlePreviewRequest {
+  platform: ExternalArticlePlatform;
+  source_url: string;
 }
 
 /** Reorder item — `featured_sort` is 0-based drag order. */
@@ -121,6 +180,29 @@ export function listAdminNews(
   return http.get<AdminNewsListResponse>("/admin/news", { params: query });
 }
 
+
+/** List soft-deleted news metadata in the administrator trash. */
+export function listDeletedAdminNews(
+  params: DeletedAdminNewsListParams = {},
+): Promise<DeletedAdminNewsListResponse> {
+  const query: Record<string, string> = {};
+  if (params.page) query.page = String(params.page);
+  if (params.page_size) query.page_size = String(params.page_size);
+  return http.get<DeletedAdminNewsListResponse>("/admin/news/deleted", {
+    params: query,
+  });
+}
+
+/**
+ * Fetch and sanitize one approved WeChat/X-MOL article for human review.
+ * This endpoint never writes or publishes a news record.
+ */
+export function previewExternalNewsArticle(
+  payload: ExternalArticlePreviewRequest,
+): Promise<ExternalArticlePreview> {
+  return http.post<ExternalArticlePreview>("/admin/news/external-preview", { json: payload });
+}
+
 /** Create a news article (draft by default; publish via `status`). */
 export function createNews(payload: NewsCreatePayload): Promise<AdminNewsDetail> {
   return http.post<AdminNewsDetail>("/admin/news", { json: payload });
@@ -134,9 +216,20 @@ export function updateNews(
   return http.put<AdminNewsDetail>(`/admin/news/${newsId}`, { json: payload });
 }
 
-/** Hard-delete a news article (204). */
+/** Move a news article to the recoverable administrator trash (204). */
 export function deleteNews(newsId: number | string): Promise<void> {
   return http.delete<void>(`/admin/news/${newsId}`);
+}
+
+
+/** Restore a soft-deleted news article from the administrator trash. */
+export function restoreNews(newsId: number | string): Promise<AdminNewsDetail> {
+  return http.post<AdminNewsDetail>(`/admin/news/${newsId}/restore`);
+}
+
+/** Permanently delete a soft-deleted news article (204). */
+export function purgeNews(newsId: number | string): Promise<void> {
+  return http.delete<void>(`/admin/news/${newsId}/purge`);
 }
 
 /** Apply a full drag-and-drop ordering of `featured_sort` values. */

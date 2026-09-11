@@ -85,8 +85,12 @@ function ComparePage() {
             Compare Mutant Variants
           </h1>
           <p className="mt-2 text-muted-foreground max-w-2xl">
-            Select up to {MAX_COMPARE} variants to compare gene, mutation type,
+            Select up to {MAX_COMPARE} curated reference variants to compare gene, mutation type,
             impact, mutagen, and phenotype side-by-side.
+          </p>
+          <p className="mt-2 text-sm text-amber-700 dark:text-amber-300" role="note">
+            This comparison uses a fixed curated reference set, not the current database release.
+            Release-pinned live comparison will be available when its evidence API is implemented.
           </p>
         </div>
       </FadeUp>

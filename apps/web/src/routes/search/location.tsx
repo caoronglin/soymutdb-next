@@ -39,6 +39,7 @@ import {
 import { FadeUp } from "../../components/route-motion";
 import { formatNumber, compactGeneId } from "../../lib/format";
 import { buildJbrowseLocusUrl } from "../../lib/deployment";
+import { queryKeys } from "../../lib/query-keys";
 
 interface LocationSearchParams {
   assembly?: string;
@@ -81,7 +82,7 @@ function LocationSearchComponent() {
   const [submitted, setSubmitted] = React.useState<RegionQuery | null>(null);
 
   const assembliesQuery = useQuery({
-    queryKey: ["assemblies"],
+    queryKey: queryKeys.assemblies.all(),
     queryFn: getAssemblies,
     staleTime: 30 * 60 * 1000,
   });
@@ -97,7 +98,7 @@ function LocationSearchComponent() {
   }, [assemblies, assemblyId]);
 
   const chromosomesQuery = useQuery({
-    queryKey: ["assembly-chromosomes", assemblyId],
+    queryKey: queryKeys.assemblies.chromosomes(assemblyId),
     queryFn: () => getAssemblyChromosomes(assemblyId!),
     enabled: Boolean(assemblyId),
     staleTime: 30 * 60 * 1000,
@@ -212,6 +213,7 @@ function LocationSearchComponent() {
           <Link
             to="/genes/$geneId"
             params={{ geneId: row.gene_id }}
+            search={{ assembly: selectedAssembly ? String(selectedAssembly.id) : undefined }}
             aria-label={t("search.location.openGene", { geneId: row.gene_id })}
             className="link-underline font-mono text-sm font-medium text-primary"
           >

@@ -1,7 +1,7 @@
-"""Search endpoints — internal DB search (JSON) and external federated search (HTML).
+"""Search endpoints — SoyMutDB database search (JSON) and federated search (HTML).
 
 Content negotiation:
-* ``Accept: application/json`` or ``?format=json`` → internal
+* ``Accept: application/json`` or ``?format=json`` → public SoyMutDB
   :class:`GlobalSearchResponse` (backward-compatible).
 * Otherwise (default ``text/html``) → federated external search across
   NCBI, UniProt, Ensembl and EMBL-EBI, rendered as a sanitized HTML
@@ -17,16 +17,26 @@ from __future__ import annotations
 import time
 
 import structlog
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
-from fastapi.responses import JSONResponse, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.database import get_db, get_redis
+from ...core.exceptions import ServiceUnavailableError
 from ...core.features import FeatureFlagService
-from ...schemas.search import GlobalSearchResponse, SearchResultType
+from ...core.site_variant import SiteVariant
+from ...models.auth import AuditLog
+from ...schemas.search import (
+    GlobalSearchResponse,
+    InternalSearchResponse,
+    SearchResultType,
+)
 from ...search import ExternalSearchAggregator, ExternalSearchResponse, SearchSource, render_search_html
 from ...search.cache import SearchCache
+from ...services.release_context import resolve_release_context
 from ...services.search_service import SearchService
+from .deps import require_role
+from ...core.security import RoleName
 
 logger = structlog.get_logger(__name__)
 
@@ -125,12 +135,13 @@ async def global_search(
     ),
     cursor: str | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=50),
+    assembly_id: int | None = Query(default=None, ge=1),
     format: str | None = Query(default=None, alias="format", description="'json' or 'html'"),
     accept: str | None = Header(default=None, alias="accept"),
 ) -> Response:
     """Global search endpoint.
 
-    Returns JSON (internal DB search) when the client sends
+    Returns JSON (public SoyMutDB search) when the client sends
     ``Accept: application/json`` or ``?format=json``.  Otherwise returns a
     sanitized HTML fragment built from federated external search results.
     """
@@ -146,9 +157,15 @@ async def global_search(
                 limit_per_source=max(3, min(10, limit)),
             )
             return JSONResponse(content=_external_json_payload(ext_resp))
-        # ---- Internal DB search (legacy / programmatic clients) ------------
+        # ---- Public SoyMutDB search (legacy / programmatic clients) --------
         resp = await service.global_search(
-            db, query=q, types=types, cursor=cursor, limit=limit
+            db,
+            query=q,
+            types=types,
+            cursor=cursor,
+            limit=limit,
+            assembly_id=assembly_id,
+            site_variant=SiteVariant.EXTERNAL,
         )
         payload = resp if isinstance(resp, dict) else resp.model_dump()
         return JSONResponse(content=payload)
@@ -199,6 +216,56 @@ async def suggest(
     q: str = Query(..., min_length=1, max_length=100),
     limit: int = Query(default=5, ge=1, le=20),
 ) -> list[dict]:
-    """Autocomplete suggestions (internal DB only)."""
-    suggestions = await service.suggest(db, query=q, limit=limit)
+    """Autocomplete suggestions (internal DB only, release-scoped)."""
+    context: int | None
+    try:
+        release_context = await resolve_release_context(db)
+        context = release_context.release_id
+    except ServiceUnavailableError:
+        # Degrade gracefully: without a published release, suggest stays
+        # release-unscoped rather than failing the autocomplete surface.
+        context = None
+    suggestions = await service.suggest(
+        db, query=q, limit=limit, release_id=context
+    )
     return [s if isinstance(s, dict) else s.model_dump() for s in suggestions]
+
+
+# ------------------------------------------------------------------- internal
+@router.get(
+    "/internal",
+    response_model=InternalSearchResponse,
+    summary="Authorized internal search across public and internal identifiers",
+)
+async def internal_search(
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    current_user: object = Depends(require_role(RoleName.RESEARCHER)),
+    q: str = Query(..., min_length=1, max_length=500, alias="query"),
+    limit: int = Query(default=20, ge=1, le=100),
+) -> InternalSearchResponse:
+    """Internal-site search: server-side authorized, audited, uncached.
+
+    Results carry both identities (public_id / internal_id) and the field
+    that matched. The shared search cache is deliberately bypassed so
+    authorized rows cannot leak into another scope, and the response is
+    marked ``private, no-store``.
+    """
+    context = await resolve_release_context(db)
+    result = await service.internal_search(
+        db, q, release_id=context.release_id, limit=limit
+    )
+    # Structured audit of internal retrieval. The query text is recorded;
+    # credentials and tokens never are.
+    db.add(
+        AuditLog(
+            user_id=getattr(current_user, "id", None),
+            action="search.internal",
+            resource_type="search",
+            resource_id=q[:128],
+            new_value={"limit": limit, "results": result.total_count},
+        )
+    )
+    await db.commit()
+    response.headers["Cache-Control"] = "private, no-store"
+    return result

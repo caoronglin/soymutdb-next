@@ -28,8 +28,22 @@ describe("getGeneHomologs", () => {
 
     const result = await getGeneHomologs("Glyma.01G000100");
 
-    expect(mockGet).toHaveBeenCalledWith("/genes/Glyma.01G000100/homologs");
+    // No assembly scope → params stay undefined; assembly is forwarded only
+    // when provided (see the test below).
+    expect(mockGet).toHaveBeenCalledWith("/genes/Glyma.01G000100/homologs", {
+      params: undefined,
+    });
     expect(result).toEqual(mockResponse);
+  });
+
+  it("forwards the assembly scope when provided", async () => {
+    mockGet.mockResolvedValueOnce({ gene_id: "Glyma.01G000100", homologs: [] });
+
+    await getGeneHomologs("Glyma.01G000100", { assembly_id: "4" });
+
+    expect(mockGet).toHaveBeenCalledWith("/genes/Glyma.01G000100/homologs", {
+      params: { assembly_id: "4" },
+    });
   });
 });
 

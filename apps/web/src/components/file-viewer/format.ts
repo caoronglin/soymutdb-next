@@ -21,7 +21,8 @@ export type FileKind =
   | "docx"
   | "markdown"
   | "code"
-  | "text";
+  | "text"
+  | "binary";
 
 export const IMAGE_EXTENSIONS = new Set([
   "png",
@@ -93,18 +94,29 @@ export const CODE_LANGUAGES: Record<string, string> = {
 /** Genomic text formats rendered as plain text (no highlighting). */
 const PLAIN_TEXT_EXTENSIONS = new Set(["txt", "text", "gff3", "gff", "gtf", "bed", "vcf", "log"]);
 
-/** Strip double-compression suffixes (.gz/.bz2/.zip) to reach the real format. */
+/** Compression suffixes need bounded decompression before they are previewable. */
+export const COMPRESSED_EXTENSIONS = new Set(["gz", "bz2", "xz", "zip", "zst"]);
+
+/** Strip a compression suffix only for the display/format label. */
 export function getFileExtension(name: string): string {
   const parts = name.toLowerCase().split(".");
-  if (parts.length < 2) return "txt";
+  if (parts.length < 2) return "bin";
   const last = parts[parts.length - 1];
-  if (last === "gz" || last === "bz2" || last === "zip") {
-    return parts.length > 2 ? parts[parts.length - 2] : "txt";
+  if (COMPRESSED_EXTENSIONS.has(last)) {
+    return parts.length > 2 ? parts[parts.length - 2] : "bin";
   }
   return last;
 }
 
+export function isCompressedFile(name: string): boolean {
+  const last = name.toLowerCase().split(".").at(-1) ?? "";
+  return COMPRESSED_EXTENSIONS.has(last);
+}
+
 export function getFileKind(name: string): FileKind {
+  // Fetching compressed bytes as text produces corrupt FASTA/VCF/CSV previews.
+  // Keep them download-only until a bounded worker/server decoder is available.
+  if (isCompressedFile(name)) return "binary";
   const ext = getFileExtension(name);
   if (IMAGE_EXTENSIONS.has(ext)) return "image";
   if (CSV_EXTENSIONS.has(ext)) return "csv";
@@ -114,8 +126,8 @@ export function getFileKind(name: string): FileKind {
   if (MARKDOWN_EXTENSIONS.has(ext)) return "markdown";
   if (ext in CODE_LANGUAGES) return "code";
   if (PLAIN_TEXT_EXTENSIONS.has(ext)) return "text";
-  // Unknown extensions default to plain text (best-effort preview).
-  return "text";
+  // Unknown formats can be binary; avoid speculative browser decoding.
+  return "binary";
 }
 
 /** Whether the kind is fetched as text (subject to truncation) rather than binary. */

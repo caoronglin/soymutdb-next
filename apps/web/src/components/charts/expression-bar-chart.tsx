@@ -2,6 +2,7 @@
  * ExpressionBarChart — grouped bar chart of mean FPKM by tissue and treatment.
  * Lazy-loaded via React.lazy in routes that use it.
  */
+import { useMemo } from "react";
 import type { EChartsOption } from "echarts";
 import { useECharts } from "../../lib/use-echarts";
 import { Empty } from "@/lib/antd";
@@ -13,9 +14,25 @@ export interface ExpressionBarChartProps {
 }
 
 export function ExpressionBarChart({ data, className }: ExpressionBarChartProps) {
-  // Group data by treatment for the legend/series
-  const treatments = [...new Set(data.map((d) => d.treatment))].sort();
-  const tissues = [...new Set(data.map((d) => d.tissue))].sort();
+  // Group once so series construction does not repeatedly scan all input rows.
+  const { treatments, tissues, valuesByTreatment } = useMemo(() => {
+    const treatmentSet = new Set<string>();
+    const tissueSet = new Set<string>();
+    const values = new Map<string, Map<string, number>>();
+    for (const datum of data) {
+      treatmentSet.add(datum.treatment);
+      tissueSet.add(datum.tissue);
+      const byTissue = values.get(datum.treatment) ?? new Map<string, number>();
+      // Preserve the first value to retain the historic Array.find behavior.
+      if (!byTissue.has(datum.tissue)) byTissue.set(datum.tissue, datum.mean_fpkm);
+      values.set(datum.treatment, byTissue);
+    }
+    return {
+      treatments: [...treatmentSet].sort(),
+      tissues: [...tissueSet].sort(),
+      valuesByTreatment: values,
+    };
+  }, [data]);
 
   const option: EChartsOption = {
     tooltip: {
@@ -66,10 +83,9 @@ export function ExpressionBarChart({ data, className }: ExpressionBarChartProps)
         color: [`var(--chart-1)`, `var(--chart-2)`, `var(--chart-3)`, `var(--chart-4)`, `var(--chart-5)`][i % 5],
         borderRadius: [2, 2, 0, 0],
       },
-      data: tissues.map((tissue) => {
-        const match = data.find((d) => d.tissue === tissue && d.treatment === treatment);
-        return match ? match.mean_fpkm : 0;
-      }),
+      data: tissues.map(
+        (tissue) => valuesByTreatment.get(treatment)?.get(tissue) ?? 0,
+      ),
     })),
   };
 

@@ -3,7 +3,7 @@
  *
  * AntD 5 migration (A1): DataTable → Table, FilterBar → inline Form,
  * PageHeader → Typography. TanStack Query data flow and URL search state
- * (chromosome / variant_type / impact / page / sort_by / sort_dir) unchanged.
+ * (chromosome / variant_type / impact / page) unchanged.
  */
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
@@ -21,32 +21,30 @@ import {
   Tag,
   Typography,
   type TableColumnsType,
-  type TableProps,
 } from "@/lib/antd";
-import { searchVariants, type VariantSummary } from "@soymutdb/api-client";
+import { searchVariants, type VariantImpact, type VariantSummary, type VariantType } from "@soymutdb/api-client";
 import { FadeUp } from "../../components/route-motion";
 import { SOYBEAN_CHROMOSOMES, formatPosition } from "../../lib/format";
+
+const VARIANT_TYPES = ["SNP", "INS", "DEL", "MNV", "SV"] as const satisfies readonly VariantType[];
+const IMPACTS = ["HIGH", "MODERATE", "LOW", "MODIFIER"] as const satisfies readonly VariantImpact[];
 
 export const Route = createFileRoute("/variants/")({
   component: VariantsComponent,
   validateSearch: (search: Record<string, unknown>) => ({
     chromosome: String(search.chromosome ?? ""),
-    variant_type: String(search.variant_type ?? ""),
-    impact: String(search.impact ?? ""),
+    variant_type: VARIANT_TYPES.includes(search.variant_type as VariantType)
+      ? (search.variant_type as VariantType)
+      : ("" as const),
+    impact: IMPACTS.includes(search.impact as VariantImpact)
+      ? (search.impact as VariantImpact)
+      : ("" as const),
+    mutant_line_id: typeof search.mutant_line_id === "string" ? search.mutant_line_id : "",
     cursor: search.cursor ? String(search.cursor) : undefined,
-    sort_by: String(search.sort_by ?? "position"),
-    sort_dir: (search.sort_dir as "asc" | "desc") ?? "asc",
   }),
 });
 
-const VARIANT_TYPES = ["SNP", "INS", "DEL", "MNV", "SV"];
-const IMPACTS = ["HIGH", "MODERATE", "LOW", "MODIFIER"];
 const PAGE_SIZE = 25;
-
-interface SortState {
-  sort_by: string;
-  sort_dir: "asc" | "desc";
-}
 
 function VariantsComponent() {
   const { t } = useTranslation();
@@ -68,12 +66,11 @@ function VariantsComponent() {
     queryFn: () =>
       searchVariants({
         chromosome: search.chromosome || undefined,
-        variant_type: search.variant_type ? [search.variant_type] : undefined,
-        impact: search.impact ? [search.impact] : undefined,
+        variant_type: search.variant_type ? search.variant_type : undefined,
+        impact: search.impact ? search.impact : undefined,
+        mutant_line_id: search.mutant_line_id || undefined,
         cursor: search.cursor,
         limit: PAGE_SIZE,
-        sort_by: search.sort_by,
-        sort_dir: search.sort_dir,
       }),
     placeholderData: (prev) => prev,
   });
@@ -81,7 +78,6 @@ function VariantsComponent() {
   const data = query.data?.items ?? [];
   const total = query.data?.total_count ?? null;
 
-  const currentSort: SortState = { sort_by: search.sort_by, sort_dir: search.sort_dir };
 
   const columns: TableColumnsType<VariantSummary> = [
     {
@@ -100,13 +96,6 @@ function VariantsComponent() {
       title: get("variants.positionLabel", t("variants.positionLabel")),
       dataIndex: "position",
       key: "position",
-      sorter: true,
-      sortOrder:
-        currentSort.sort_by === "position"
-          ? currentSort.sort_dir === "asc"
-            ? "ascend"
-            : "descend"
-          : null,
       align: "right",
       render: (_, row) => <span className="font-mono text-xs">{formatPosition(row.position)}</span>,
     },
@@ -146,37 +135,12 @@ function VariantsComponent() {
     },
   ];
 
-  const handleTableChange: TableProps<VariantSummary>["onChange"] = (
-    _pagination,
-    _filters,
-    sorter,
-  ) => {
-    const s = Array.isArray(sorter) ? sorter[0] : sorter;
-    const next: SortState | null =
-      s && s.order
-        ? { sort_by: String(s.field), sort_dir: s.order === "ascend" ? "asc" : "desc" }
-        : null;
-    // Pagination-triggered onChange reports the unchanged sort — ignore it.
-    if (
-      next
-        ? next.sort_by === currentSort.sort_by && next.sort_dir === currentSort.sort_dir
-        : currentSort.sort_by === "position" && currentSort.sort_dir === "asc"
-    ) {
-      return;
-    }
-    navigate({
-      to: "/variants",
-      search: next
-        ? { ...search, ...next, cursor: undefined }
-        : { ...search, sort_by: "position", sort_dir: "asc", cursor: undefined },
-    });
-  };
 
-  const activeFilters = [search.chromosome, search.variant_type, search.impact].filter(Boolean).length;
+  const activeFilters = [search.chromosome, search.variant_type, search.impact, search.mutant_line_id].filter(Boolean).length;
   const reset = () =>
     navigate({
       to: "/variants",
-      search: { chromosome: "", variant_type: "", impact: "", cursor: undefined, sort_by: "position", sort_dir: "asc" },
+      search: { chromosome: "", variant_type: "", impact: "", mutant_line_id: "", cursor: undefined },
     });
 
   return (
@@ -194,7 +158,7 @@ function VariantsComponent() {
           </Button>
         </div>
 
-        <Form layout="inline" className="mt-8 flex flex-wrap items-end gap-x-4 gap-y-4">
+        <Form layout="inline" className="mt-8 flex flex-wrap items-center gap-x-4 gap-y-4">
           <Form.Item label={get("variants.chromosome", t("variants.chromosome"))} className="mb-0">
             <Select
               value={search.chromosome || "all"}
@@ -209,10 +173,17 @@ function VariantsComponent() {
             />
           </Form.Item>
           <Form.Item label={get("variants.variantType", t("variants.variantType"))} className="mb-0">
-            <Select
+            <Select<"all" | VariantType>
               value={search.variant_type || "all"}
               onChange={(v) =>
-                navigate({ to: "/variants", search: { ...search, variant_type: v === "all" ? "" : v, cursor: undefined } })
+                navigate({
+                  to: "/variants",
+                  search: {
+                    ...search,
+                    variant_type: v === "all" ? ("" as const) : (v as VariantType),
+                    cursor: undefined,
+                  },
+                })
               }
               style={{ width: 170 }}
               options={[
@@ -222,10 +193,17 @@ function VariantsComponent() {
             />
           </Form.Item>
           <Form.Item label={get("variants.impact", t("variants.impact"))} className="mb-0">
-            <Select
+            <Select<"all" | VariantImpact>
               value={search.impact || "all"}
               onChange={(v) =>
-                navigate({ to: "/variants", search: { ...search, impact: v === "all" ? "" : v, cursor: undefined } })
+                navigate({
+                  to: "/variants",
+                  search: {
+                    ...search,
+                    impact: v === "all" ? ("" as const) : (v as VariantImpact),
+                    cursor: undefined,
+                  },
+                })
               }
               style={{ width: 170 }}
               options={[
@@ -234,6 +212,16 @@ function VariantsComponent() {
               ]}
             />
           </Form.Item>
+          {search.mutant_line_id ? (
+            <Form.Item className="mb-0">
+              <Tag
+                closable
+                onClose={() => navigate({ to: "/variants", search: { ...search, mutant_line_id: "", cursor: undefined } })}
+              >
+                {t("mutants.detail.variantFilter", { id: search.mutant_line_id })}
+              </Tag>
+            </Form.Item>
+          ) : null}
           <Form.Item className="mb-0">
             <Button icon={<ReloadOutlined />} onClick={reset} disabled={activeFilters === 0}>
               {t("common.clear")}
@@ -247,7 +235,6 @@ function VariantsComponent() {
             columns={columns}
             dataSource={data}
             loading={query.isLoading}
-            onChange={handleTableChange}
             pagination={false}
             locale={{
               emptyText: (

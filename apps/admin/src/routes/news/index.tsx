@@ -258,6 +258,9 @@ export default function NewsListPage() {
             <Typography.Text strong>{t("admin.news.title")}</Typography.Text>
           </Space>
           <Space>
+            <Button onClick={() => router.navigate({ to: "/news/trash" })}>
+              {t("admin.news.trash.title")}
+            </Button>
             <Button onClick={() => setReorderOpen(true)}>
               {t("admin.news.actions.reorder")}
             </Button>

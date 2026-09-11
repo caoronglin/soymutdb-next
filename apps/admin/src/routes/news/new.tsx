@@ -33,6 +33,9 @@ export default function NewsNewPage() {
         status: values.status ?? "draft",
         visible_from: values.visible_from ? values.visible_from.toISOString() : null,
         visible_to: values.visible_to ? values.visible_to.toISOString() : null,
+        ...(values.source_preview_token
+          ? { source_preview_token: values.source_preview_token }
+          : {}),
       });
       message.success(t("admin.news.messages.saveSuccess"));
       router.navigate({ to: "/news" });

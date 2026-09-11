@@ -8,6 +8,7 @@ import { GridComponent, LegendComponent, TooltipComponent } from "echarts/compon
 import { CanvasRenderer } from "echarts/renderers";
 import { Badge, Button, Card, Typography } from "@/lib/antd";
 import { widgetApi, type WidgetHealthItem } from "../lib/widget-api";
+import { useTranslation } from "react-i18next";
 
 
 // ---------------------------------------------------------------------------
@@ -29,6 +30,8 @@ function formatMs(ms: number): string {
   return `${(ms / 1000).toFixed(2)} s`;
 }
 
+const EMPTY_WIDGETS: WidgetHealthItem[] = [];
+
 // ---------------------------------------------------------------------------
 // Bar chart: P50 / P95 latency per widget
 // ---------------------------------------------------------------------------
@@ -36,16 +39,20 @@ function formatMs(ms: number): string {
 // Lazy one-time registration of the chart modules this file renders.
 let rl_echartsReady = false;
 
+function ensureEchartsReady(): void {
+  if (rl_echartsReady) return;
+  echarts.use([BarChart, LineChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer]);
+  rl_echartsReady = true;
+}
+
 function LatencyBarChart({ widgets }: { widgets: WidgetHealthItem[] }) {
+  const { t } = useTranslation();
   const chartRef = useRef<HTMLDivElement>(null);
   const instanceRef = useRef<echarts.ECharts | null>(null);
 
   useEffect(() => {
     if (!chartRef.current) return;
-    if (!rl_echartsReady) {
-      echarts.use([BarChart, LineChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer]);
-      rl_echartsReady = true;
-    }
+    ensureEchartsReady();
     instanceRef.current = echarts.init(chartRef.current);
     const resize = () => instanceRef.current?.resize();
     window.addEventListener("resize", resize);
@@ -117,11 +124,11 @@ function LatencyBarChart({ widgets }: { widgets: WidgetHealthItem[] }) {
 
         <Typography.Title level={5}>
           <ClockCircleOutlined className="size-4 text-primary" />
-          Latency per Widget (P50 / P95)
+          {t("admin.ops.latencyPerWidget", { defaultValue: "Latency per Widget (P50 / P95)" })}
         </Typography.Title>
 
 
-        <div ref={chartRef} className="h-80 w-full" role="img" aria-label="Widget latency bar chart" />
+        <div ref={chartRef} className="h-80 w-full" role="img" aria-label={t("admin.ops.latencyChartAria", { defaultValue: "Widget latency bar chart" })} />
 
     </Card>
   );
@@ -132,46 +139,34 @@ function LatencyBarChart({ widgets }: { widgets: WidgetHealthItem[] }) {
 // ---------------------------------------------------------------------------
 
 function CacheHitRateChart({ widgets }: { widgets: WidgetHealthItem[] }) {
+  const { t } = useTranslation();
   const chartRef = useRef<HTMLDivElement>(null);
   const instanceRef = useRef<echarts.ECharts | null>(null);
   const [selectedWidget, setSelectedWidget] = useState<string | null>(null);
 
-  // Default to first widget when data loads
-  useEffect(() => {
-    if (!selectedWidget && widgets.length > 0) {
-      setSelectedWidget(widgets[0]?.name ?? null);
-    }
-  }, [widgets, selectedWidget]);
+  const selectedWidgetName =
+    selectedWidget && widgets.some((widget) => widget.name === selectedWidget)
+      ? selectedWidget
+      : widgets[0]?.name ?? null;
 
   useEffect(() => {
-    if (!chartRef.current) return;
-    if (!instanceRef.current) {
-      instanceRef.current = echarts.init(chartRef.current);
-      const resize = () => instanceRef.current?.resize();
-      window.addEventListener("resize", resize);
-      // cleanup handled on unmount via ref check below
-      chartRef.current.dataset.init = "1";
-    }
-    const inst = instanceRef.current;
+    const element = chartRef.current;
+    if (!element) return;
+    ensureEchartsReady();
+    const instance = echarts.init(element);
+    instanceRef.current = instance;
+    const resize = () => instance.resize();
+    window.addEventListener("resize", resize);
     return () => {
-      if (inst && !chartRef.current?.isConnected) {
-        window.removeEventListener("resize", () => inst.resize());
-        inst.dispose();
-      }
-    };
-  }, []);
-
-  // Handle full unmount
-  useEffect(() => {
-    return () => {
-      instanceRef.current?.dispose();
-      instanceRef.current = null;
+      window.removeEventListener("resize", resize);
+      instance.dispose();
+      if (instanceRef.current === instance) instanceRef.current = null;
     };
   }, []);
 
   useEffect(() => {
     if (!instanceRef.current) return;
-    const w = widgets.find((x) => x.name === selectedWidget);
+    const w = widgets.find((x) => x.name === selectedWidgetName);
     const isDark =
       document.documentElement.getAttribute("data-theme") === "dark";
     const xData = w ? w.cache_hit_history.map((p) => p.timestamp) : [];
@@ -194,7 +189,7 @@ function CacheHitRateChart({ widgets }: { widgets: WidgetHealthItem[] }) {
       },
       yAxis: {
         type: "value",
-        name: "Cache Hit %",
+        name: t("admin.ops.cacheHitPercent", { defaultValue: "Cache Hit %" }),
         min: 0,
         max: 100,
         axisLabel: {
@@ -215,7 +210,7 @@ function CacheHitRateChart({ widgets }: { widgets: WidgetHealthItem[] }) {
         },
       ],
     });
-  }, [widgets, selectedWidget]);
+  }, [widgets, selectedWidgetName, t]);
 
   return (
     <Card>
@@ -223,17 +218,17 @@ function CacheHitRateChart({ widgets }: { widgets: WidgetHealthItem[] }) {
         <div>
           <Typography.Title level={5}>
             <ThunderboltOutlined className="size-4 text-primary" />
-            Cache Hit Rate Over Time
+            {t("admin.ops.cacheHitRateTitle", { defaultValue: "Cache Hit Rate Over Time" })}
           </Typography.Title>
           <Typography.Text type="secondary">
-            Select a widget to view its cache hit rate trend.
+            {t("admin.ops.cacheHitRateSubtitle", { defaultValue: "Select a widget to view its cache hit rate trend." })}
           </Typography.Text>
         </div>
         <select
           className="rounded-md border border-border bg-background px-3 py-1.5 text-sm"
-          value={selectedWidget ?? ""}
+          value={selectedWidgetName ?? ""}
           onChange={(e) => setSelectedWidget(e.target.value)}
-          aria-label="Select widget for cache hit rate"
+          aria-label={t("admin.ops.cacheHitSelectAria", { defaultValue: "Select widget for cache hit rate" })}
         >
           {widgets.map((w) => (
             <option key={w.name} value={w.name}>
@@ -243,7 +238,7 @@ function CacheHitRateChart({ widgets }: { widgets: WidgetHealthItem[] }) {
         </select>
 
 
-        <div ref={chartRef} className="h-64 w-full" role="img" aria-label="Cache hit rate over time" />
+        <div ref={chartRef} className="h-64 w-full" role="img" aria-label={t("admin.ops.cacheHitRateAria", { defaultValue: "Cache hit rate over time" })} />
 
     </Card>
   );
@@ -254,13 +249,14 @@ function CacheHitRateChart({ widgets }: { widgets: WidgetHealthItem[] }) {
 // ---------------------------------------------------------------------------
 
 export default function WidgetHealthPage() {
+  const { t } = useTranslation();
   const { data, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ["admin-widget-health"],
     queryFn: () => widgetApi.health(),
     refetchInterval: 60_000, // auto-refresh every 60s
   });
 
-  const widgets = data?.widgets ?? [];
+  const widgets = data?.widgets ?? EMPTY_WIDGETS;
   const totalErrors = widgets.reduce((sum, w) => sum + w.error_count, 0);
   const avgCacheHit =
     widgets.length > 0
@@ -278,17 +274,17 @@ export default function WidgetHealthPage() {
           <Link to="/widgets">
             <Button type="text" size="small">
               <ArrowLeftOutlined className="size-4" />
-              Widgets
+              {t("admin.ops.widgets", { defaultValue: "Widgets" })}
             </Button>
           </Link>
           <div>
-            <h2 className="font-serif text-2xl font-semibold">Widget Health</h2>
+            <h2 className="font-serif text-2xl font-semibold">{t("admin.ops.widgetHealthTitle", { defaultValue: "Widget Health" })}</h2>
             <p className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
               <RiseOutlined className="size-3.5" />
-              Performance, cache efficiency, and error metrics.
+              {t("admin.ops.widgetHealthSubtitle", { defaultValue: "Performance, cache efficiency, and error metrics." })}
               {data?.generated_at ? (
                 <span className="text-xs">
-                  · Updated {new Date(data.generated_at).toLocaleTimeString()}
+                  · {t("admin.ops.updatedAt", { time: new Date(data.generated_at).toLocaleTimeString(), defaultValue: "Updated {{time}}" })}
                 </span>
               ) : null}
             </p>
@@ -301,7 +297,7 @@ export default function WidgetHealthPage() {
           disabled={isRefetching}
         >
           <ReloadOutlined className={`size-4 ${isRefetching ? "animate-spin" : ""}`} />
-          Refresh
+          {t("admin.ops.refresh", { defaultValue: "Refresh" })}
         </Button>
       </div>
 
@@ -309,7 +305,7 @@ export default function WidgetHealthPage() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <div className="p-4">
-            <p className="text-xs text-muted-foreground">Tracked Widgets</p>
+            <p className="text-xs text-muted-foreground">{t("admin.ops.trackedWidgets", { defaultValue: "Tracked Widgets" })}</p>
             <p className="mt-1 font-serif text-2xl font-semibold">
               {isLoading ? "…" : widgets.length}
             </p>
@@ -317,7 +313,7 @@ export default function WidgetHealthPage() {
         </Card>
         <Card>
           <div className="p-4">
-            <p className="text-xs text-muted-foreground">Avg P95 Latency</p>
+            <p className="text-xs text-muted-foreground">{t("admin.ops.avgP95Latency", { defaultValue: "Avg P95 Latency" })}</p>
             <p className="mt-1 font-serif text-2xl font-semibold">
               {isLoading ? "…" : formatMs(avgP95)}
             </p>
@@ -325,7 +321,7 @@ export default function WidgetHealthPage() {
         </Card>
         <Card>
           <div className="p-4">
-            <p className="text-xs text-muted-foreground">Cache Hit Rate</p>
+            <p className="text-xs text-muted-foreground">{t("admin.ops.cacheHitRate", { defaultValue: "Cache Hit Rate" })}</p>
             <p className="mt-1 font-serif text-2xl font-semibold">
               {isLoading ? "…" : `${(avgCacheHit * 100).toFixed(1)}%`}
             </p>
@@ -335,7 +331,7 @@ export default function WidgetHealthPage() {
           <div className="p-4">
             <p className="flex items-center gap-1 text-xs text-muted-foreground">
               <WarningOutlined className="size-3" />
-              Total Errors (24h)
+              {t("admin.ops.totalErrors24h", { defaultValue: "Total Errors (24h)" })}
             </p>
             <p
               className={`mt-1 font-serif text-2xl font-semibold ${
@@ -374,18 +370,18 @@ export default function WidgetHealthPage() {
       {/* Per-widget table */}
       <Card>
 
-          <Typography.Title level={5}>Per-Widget Breakdown</Typography.Title>
+          <Typography.Title level={5}>{t("admin.ops.perWidgetBreakdown", { defaultValue: "Per-Widget Breakdown" })}</Typography.Title>
 
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
-                <th className="pb-2 pr-4 font-medium">Widget</th>
+                <th className="pb-2 pr-4 font-medium">{t("admin.ops.widgetColumn", { defaultValue: "Widget" })}</th>
                 <th className="pb-2 pr-4 font-medium">P50</th>
                 <th className="pb-2 pr-4 font-medium">P95</th>
-                <th className="pb-2 pr-4 font-medium">Cache Hit</th>
-                <th className="pb-2 pr-4 font-medium">Requests</th>
-                <th className="pb-2 pr-4 font-medium">Errors</th>
+                <th className="pb-2 pr-4 font-medium">{t("admin.ops.cacheHitColumn", { defaultValue: "Cache Hit" })}</th>
+                <th className="pb-2 pr-4 font-medium">{t("admin.ops.requests", { defaultValue: "Requests" })}</th>
+                <th className="pb-2 pr-4 font-medium">{t("admin.ops.errors", { defaultValue: "Errors" })}</th>
                 <th className="pb-2 font-medium"></th>
               </tr>
             </thead>
@@ -433,7 +429,7 @@ export default function WidgetHealthPage() {
                           params={{ name: w.name }}
                           className="inline-flex items-center text-xs text-primary hover:underline"
                         >
-                          Inspect <ExportOutlined className="ml-0.5 size-3" />
+                          {t("admin.ops.inspect", { defaultValue: "Inspect" })} <ExportOutlined className="ml-0.5 size-3" />
                         </Link>
                       </td>
                     </tr>

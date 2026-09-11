@@ -19,22 +19,27 @@
  * existing legacy pages remain untouched.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import createDOMPurify from "dompurify";
-// jsdom ships no types; the script runs via tsx (scripts are outside the
-// typecheck path — ssg-build.ts has the same pattern).
-// @ts-expect-error jsdom has no bundled types
+// The SSG script runs via tsx and is kept outside the application typecheck.
 import jsdomPkg from "jsdom";
-import { renderBaseTemplate, discoverAssets } from "./base-template";
+import { renderBaseTemplate } from "./base-template";
 
 const { JSDOM } = jsdomPkg as {
   JSDOM: new (html: string) => { window: unknown };
 };
 
-const DIST_DIR = join(process.cwd(), "dist");
+const SITE_VARIANT = (process.env.VITE_SITE_VARIANT ?? process.env.SOYMUTDB_SITE_VARIANT ?? "external").trim().toLowerCase();
+if (SITE_VARIANT !== "external" && SITE_VARIANT !== "internal") {
+  throw new Error(`Invalid site variant "${SITE_VARIANT}". Use external or internal.`);
+}
+const ROBOTS_POLICY = SITE_VARIANT === "internal" ? "noindex, nofollow, noarchive" : undefined;
+const DIST_DIR = resolve(process.cwd(), process.env.SOYMUTDB_DIST_DIR ?? "dist");
 const SNAPSHOT_FILE = join(DIST_DIR, "data", "content.json");
 const NEWS_DIR = join(DIST_DIR, "news");
+const PUBLICATIONS_DIR = join(DIST_DIR, "publications");
+const PAGES_DIR = join(DIST_DIR, "pages");
 
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -49,6 +54,36 @@ interface Snapshot {
   };
   news_detail: Record<string, NewsDetail | null>;
   about: About | null;
+  publications?: Publication[];
+  static_pages: StaticPage[];
+}
+
+interface Publication {
+  id: string;
+  title: string;
+  title_zh: string | null;
+  authors: string;
+  authors_zh: string | null;
+  journal: string | null;
+  year: number | null;
+  doi: string | null;
+  pmid: string | null;
+  abstract: string | null;
+  abstract_zh: string | null;
+  is_featured: boolean;
+  created_at: string;
+}
+
+interface StaticPage {
+  id: string;
+  slug: string;
+  title_en: string;
+  title_zh: string | null;
+  content_en: string;
+  content_zh: string | null;
+  summary: string | null;
+  category: string | null;
+  sort_order: number;
 }
 
 interface NewsItem {
@@ -169,6 +204,7 @@ function renderNewsList(snapshot: Snapshot): string {
         ${truncationNotice}
       </div>`,
     bodyScripts: bootstrap,
+    robots: ROBOTS_POLICY,
   });
 }
 
@@ -203,6 +239,7 @@ function renderNewsDetail(slug: string, detail: NewsDetail, snapshot: Snapshot):
         <div class="news-body">${bodyHtml}</div>
       </article>`,
     bodyScripts: bootstrap,
+    robots: ROBOTS_POLICY,
     jsonLd: {
       "@context": "https://schema.org",
       "@type": "Article",
@@ -237,9 +274,45 @@ function renderAbout(snapshot: Snapshot): string | null {
         <div class="about-body">${content}</div>
       </article>`,
     bodyScripts: bootstrap,
+    robots: ROBOTS_POLICY,
   });
 }
 
+function renderPublications(snapshot: Snapshot): string | null {
+  const items = snapshot.publications;
+  if (!items) return null;
+  const cards = items.map((item) => {
+    const title = item.title_zh || item.title;
+    const authors = item.authors_zh || item.authors;
+    const doiHref = item.doi && item.doi.startsWith("10.")
+      ? `https://doi.org/${encodeURIComponent(item.doi)}`
+      : null;
+    const doi = item.doi ? `DOI: ${item.doi}` : "";
+    return `<article class="publication-card">
+      <h2>${escapeAttr(title)}</h2>
+      <p class="publication-authors">${escapeAttr(authors)}</p>
+      <p class="publication-meta">${escapeAttr([item.journal, item.year, doi].filter(Boolean).join(" · "))}</p>
+      ${doiHref ? `<a href="${escapeAttr(doiHref)}" rel="noopener noreferrer">View paper</a>` : ""}
+    </article>`;
+  }).join("\n");
+  return renderBaseTemplate({
+    title: "Publications — SoyMutDB",
+    description: "Research publications citing SoyMutDB.",
+    widgetsHtml: `<main class="container-prose publications-page"><header><p class="eyebrow">SoyMutDB</p><h1>Publications</h1></header><div class="publication-grid">${cards}</div></main>`,
+    bodyScripts: embedBootstrap({ page: "publications-list", data: items, generated_at: snapshot.generated_at }),
+    robots: ROBOTS_POLICY,
+    jsonLd: {
+      "@context": "https://schema.org",
+      "@type": "ItemList",
+      itemListElement: items.map((item, index) => ({
+        "@type": "ListItem",
+        position: index + 1,
+        name: item.title,
+        url: item.doi?.startsWith("10.") ? `https://doi.org/${encodeURIComponent(item.doi)}` : undefined,
+      })),
+    },
+  });
+}
 function escapeAttr(value: string): string {
   return value
     .replace(/&/g, "&amp;")
@@ -271,6 +344,19 @@ function validateSlug(slug: string): string | null {
   return SLUG_RE.test(slug) ? slug : null;
 }
 
+function renderStaticPage(page: StaticPage, snapshot: Snapshot): string {
+  const title = page.title_en || page.slug;
+  const eyebrow = page.category ? "<p class=\"eyebrow\">" + escapeAttr(page.category) + "</p>" : "";
+  const body = sanitizeHtml(page.content_en ?? "");
+  return renderBaseTemplate({
+    title: title + " — SoyMutDB",
+    description: page.summary ?? truncate(stripTags(page.content_en ?? "")),
+    widgetsHtml: "<article class=\"container-prose static-page\"><header>" + eyebrow + "<h1>" + escapeAttr(title) + "</h1></header><div class=\"static-page-body\">" + body + "</div></article>",
+    bodyScripts: embedBootstrap({ page: "static-page", slug: page.slug, data: page, generated_at: snapshot.generated_at }),
+    robots: ROBOTS_POLICY,
+  });
+}
+
 /* ------------------------------------------------------------------ */
 /*  Main                                                              */
 /* ------------------------------------------------------------------ */
@@ -292,8 +378,6 @@ function main(): void {
   }
 
   mkdirSync(NEWS_DIR, { recursive: true });
-  const assets = discoverAssets();
-
   // News list.
   const listHtml = renderNewsList(snapshot);
   writeFileSync(join(DIST_DIR, "news", "index.html"), listHtml);
@@ -316,7 +400,33 @@ function main(): void {
     console.log("[ssg-content] wrote about.html");
   }
 
-  // Append news URLs to the existing sitemap.xml (written by
+  // Publications are generated only when the snapshot carries the block; an
+  // absent block keeps the SPA/API route as the explicit fallback.
+  const publicationsHtml = renderPublications(snapshot);
+  if (publicationsHtml) {
+    mkdirSync(PUBLICATIONS_DIR, { recursive: true });
+    writeFileSync(join(PUBLICATIONS_DIR, "index.html"), publicationsHtml);
+    console.log(`[ssg-content] wrote publications/index.html (${snapshot.publications?.length ?? 0} items)`);
+  }
+
+  // Rebuild this managed subtree on every snapshot so unpublishing a page
+  // removes its former public HTML rather than leaving stale content online.
+  rmSync(PAGES_DIR, { recursive: true, force: true });
+  let staticPageCount = 0;
+  for (const page of snapshot.static_pages ?? []) {
+    const slug = validateSlug(page.slug);
+    if (!slug) {
+      console.warn("[ssg-content] skipping StaticPage with unsafe slug: " + page.slug);
+      continue;
+    }
+    const outputDir = join(PAGES_DIR, slug);
+    mkdirSync(outputDir, { recursive: true });
+    writeFileSync(join(outputDir, "index.html"), renderStaticPage(page, snapshot));
+    staticPageCount += 1;
+  }
+  console.log("[ssg-content] wrote " + staticPageCount + " static pages");
+
+  // Append content URLs to the existing sitemap.xml (written by
   // generate-samples.ts) so search engines discover the static pages.
   appendNewsToSitemap(snapshot);
 }
@@ -328,28 +438,36 @@ function appendNewsToSitemap(snapshot: Snapshot): void {
     return;
   }
   let sitemap = readFileSync(sitemapPath, "utf-8");
-  if (sitemap.includes("news/")) {
-    // Already appended (idempotent).
-    return;
-  }
   const urls: string[] = [];
-  urls.push(`<url><loc>${join(SITE_BASE, "news")}</loc><priority>0.6</priority></url>`);
-  for (const slug of Object.keys(snapshot.news_detail)) {
-    if (snapshot.news_detail[slug]) {
-      urls.push(
-        `<url><loc>${join(SITE_BASE, "news", slug)}</loc><priority>0.5</priority></url>`,
-      );
+  const newsUrl = `${SITE_BASE}/news`;
+  if (!sitemap.includes(`<loc>${newsUrl}</loc>`)) {
+    urls.push(`<url><loc>${newsUrl}</loc><priority>0.6</priority></url>`);
+    for (const slug of Object.keys(snapshot.news_detail)) {
+      if (snapshot.news_detail[slug]) {
+        urls.push(`<url><loc>${SITE_BASE}/news/${slug}</loc><priority>0.5</priority></url>`);
+      }
     }
   }
+  for (const page of snapshot.static_pages ?? []) {
+    const slug = validateSlug(page.slug);
+    if (!slug) continue;
+    const pageUrl = SITE_BASE + "/pages/" + slug;
+    if (!sitemap.includes("<loc>" + pageUrl + "</loc>")) {
+      urls.push("<url><loc>" + pageUrl + "</loc><priority>0.5</priority></url>");
+    }
+  }
+  const publicationsUrl = `${SITE_BASE}/publications`;
+  if (snapshot.publications && !sitemap.includes(`<loc>${publicationsUrl}</loc>`)) {
+    urls.push(`<url><loc>${publicationsUrl}</loc><priority>0.6</priority></url>`);
+  }
+  if (urls.length === 0) return;
   const urlsetEnd = sitemap.lastIndexOf("</urlset>");
   if (urlsetEnd === -1) return;
-  sitemap =
-    sitemap.slice(0, urlsetEnd) + urls.join("\n") + "\n" + sitemap.slice(urlsetEnd);
+  sitemap = sitemap.slice(0, urlsetEnd) + urls.join("\n") + "\n" + sitemap.slice(urlsetEnd);
   writeFileSync(sitemapPath, sitemap, "utf-8");
-  console.log(`[ssg-content] appended ${urls.length} news URLs to sitemap.xml`);
+  console.log(`[ssg-content] appended ${urls.length} content URLs to sitemap.xml`);
 }
-
 //: Site base for sitemap <loc> entries (env-configurable, defaults to root).
-const SITE_BASE = process.env.SITE_BASE_URL ?? "https://caoronglin.github.io/soymutdb-next";
+const SITE_BASE = (process.env.SOYMUTDB_SITE_URL ?? process.env.SITE_BASE_URL ?? "https://caoronglin.github.io/soymutdb-next").replace(/\/$/, "");
 
 main();

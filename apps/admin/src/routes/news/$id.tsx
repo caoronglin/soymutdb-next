@@ -36,6 +36,9 @@ function toFormValues(detail: NewsDetail): Partial<NewsFormValues> {
     // since D4 — pre-fill the visibility window in the edit form.
     visible_from: detail.visible_from ? dayjs(detail.visible_from) : null,
     visible_to: detail.visible_to ? dayjs(detail.visible_to) : null,
+    source_platform: detail.source_platform ?? null,
+    source_url: detail.source_url ?? null,
+    source_published_at: detail.source_published_at ?? null,
   };
 }
 
@@ -92,6 +95,11 @@ export default function NewsEditPage() {
         status: values.status ?? "draft",
         visible_from: values.visible_from ? values.visible_from.toISOString() : null,
         visible_to: values.visible_to ? values.visible_to.toISOString() : null,
+        ...(values.source_preview_token
+          ? { source_preview_token: values.source_preview_token }
+          : values.clear_source_provenance
+            ? { clear_source_provenance: true }
+            : {}),
       });
       message.success(t("admin.news.messages.saveSuccess"));
       router.navigate({ to: "/news" });

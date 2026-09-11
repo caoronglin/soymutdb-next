@@ -36,6 +36,7 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getSiteContent, type SiteContent } from "@soymutdb/api-client";
+import { SITE_VARIANT } from "./site-variant";
 
 /**
  * Built-in fallback values. They mirror the registered `content.*` defaults
@@ -183,6 +184,21 @@ export const SITE_CONTENT_DEFAULTS: Record<string, string> = {
   "search.location.submit": "Search",
 };
 
+/** Internal starts with a distinct safe default copy before the authenticated
+ * content request resolves. Administrators can replace every field per site.
+ * Vite constant-folds this branch, so the external artifact does not carry the
+ * internal default copy. */
+const SITE_CONTENT_DEFAULTS_FOR_BUILD: Record<string, string> = __SOYMUTDB_INTERNAL_SITE__
+  ? {
+      ...SITE_CONTENT_DEFAULTS,
+      "hero.eyebrow": "SOYMUTDB · INTERNAL RESEARCH",
+      "hero.title": "Internal Research Workspace for SoyMutDB",
+      "hero.subtitle": "A private workspace for curators and collaborators to review mutation data, releases, and analysis tools.",
+      "nav.home": "Research Workspace",
+      "nav.about": "Project Notes",
+    }
+  : SITE_CONTENT_DEFAULTS;
+
 export interface SiteContentContextValue {
   /** The loaded site-content map, undefined while loading or on error. */
   data?: SiteContent;
@@ -207,8 +223,8 @@ const SiteContentContext = React.createContext<SiteContentContextValue | undefin
 
 export function SiteContentProvider({ children }: { children: React.ReactNode }) {
   const query = useQuery({
-    queryKey: ["site-content"],
-    queryFn: getSiteContent,
+    queryKey: ["site-content", SITE_VARIANT],
+    queryFn: () => getSiteContent(SITE_VARIANT),
     staleTime: 60_000,
     retry: false,
   });
@@ -220,7 +236,7 @@ export function SiteContentProvider({ children }: { children: React.ReactNode })
       const value = data?.[key];
       if (value !== undefined) return value;
       if (fallback !== undefined) return fallback;
-      return SITE_CONTENT_DEFAULTS[key] ?? "";
+      return SITE_CONTENT_DEFAULTS_FOR_BUILD[key] ?? "";
     },
     [data],
   );

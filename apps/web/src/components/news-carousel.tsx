@@ -73,7 +73,7 @@ export function NewsCarousel() {
             >
               <img
                 src={item.cover_url ?? ""}
-                alt={title}
+                alt={item.cover_alt_text ?? title}
                 className="h-72 w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
               />
               <span className="absolute inset-x-0 bottom-0 block bg-gradient-to-t from-black/70 via-black/30 to-transparent px-6 pb-5 pt-16">

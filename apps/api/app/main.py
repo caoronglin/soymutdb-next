@@ -26,6 +26,7 @@ from .core.config import get_settings
 from .core.database import close_db
 from .core.exceptions import (
     SoyMutDBError,
+    error_code_catalog,
     http_exception_handler,
     soy_mut_db_exception_handler,
     unhandled_exception_handler,
@@ -82,6 +83,23 @@ OPENAPI_TAGS = [
     {"name": "analytics", "description": "Behavioural analytics tracking and summaries."},
     {"name": "widgets", "description": "Dashboard widgets and layouts."},
 ]
+
+# Explicit per-operation pagination behavior.  The homolog endpoint retains its
+# legacy offset fallback, so it must not be advertised as keyset-only.
+PAGINATION_CONTRACTS: dict[tuple[str, str], dict[str, str | bool]] = {
+    ("/api/v1/homologs/search", "get"): {
+        "mode": "keyset-optional",
+        "cursor_parameter": "cursor",
+        "next_cursor_field": "next_cursor",
+        "has_more_field": "has_more",
+        "cursor_is_exclusive": True,
+        "fallback": "offset",
+    },
+}
+
+# Only login has a registered fail-closed rate limiter today. Do not document
+# generic rate-limit headers until a limiter actually emits them at runtime.
+RATE_LIMITED_OPERATIONS = {("/api/v1/auth/login", "post")}
 
 
 def _build_openapi_schema(app: FastAPI) -> dict[str, Any]:
@@ -145,12 +163,38 @@ def _build_openapi_schema(app: FastAPI) -> dict[str, Any]:
         },
     )
 
+    # Publish behavior contracts alongside the existing unified error schema.
+    schema["x-error-codes"] = error_code_catalog()
+
     # Document the unified error responses on every path operation.
-    for path_item in schema.get("paths", {}).values():
-        for operation in path_item.values():
+    for path, path_item in schema.get("paths", {}).items():
+        for method, operation in path_item.items():
             if not isinstance(operation, dict) or "responses" not in operation:
                 continue
+            if method.upper() in {"GET", "PUT", "DELETE"}:
+                operation["x-idempotent"] = True
+            pagination = PAGINATION_CONTRACTS.get((path, method))
+            if pagination is not None:
+                operation["x-pagination"] = pagination
             responses = operation["responses"]
+            if (path, method) in RATE_LIMITED_OPERATIONS:
+                responses.setdefault(
+                    "429",
+                    {
+                        "description": "Rate limit exceeded; retry after the indicated number of seconds.",
+                        "headers": {
+                            "Retry-After": {
+                                "description": "Seconds until this login attempt may be retried.",
+                                "schema": {"type": "integer", "minimum": 1},
+                            }
+                        },
+                        "content": {
+                            "application/json": {
+                                "schema": {"$ref": "#/components/schemas/ErrorResponse"}
+                            }
+                        },
+                    },
+                )
             responses.setdefault(
                 "422",
                 {

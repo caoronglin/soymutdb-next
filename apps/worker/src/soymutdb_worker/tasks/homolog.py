@@ -21,12 +21,16 @@ import logging
 from typing import Any
 
 from celery import Task
-from sqlalchemy import insert, select
+from sqlalchemy import insert
 
 from soymutdb_worker.main import celery_app
 from soymutdb_worker.repositories import ImportTaskStore
 from soymutdb_worker.shared import JobStatus
-from soymutdb_worker.tables import gene_homologs, genes, utcnow
+from soymutdb_worker.tables import gene_homologs, utcnow
+from soymutdb_worker.tasks.gene_resolution import (
+    AssemblyResolutionError,
+    resolve_gene_accessions,
+)
 from soymutdb_worker.tasks.ingest import BATCH_SIZE
 from soymutdb_worker.utils.db import get_db
 from soymutdb_worker.utils.s3 import stream_s3_file
@@ -43,6 +47,7 @@ def import_homolog_csv(
     self: Task,
     import_task_id: int,
     file_path: str,
+    assembly: str = "",
 ) -> dict[str, Any]:
     """Import homolog relationships from a CSV file stored on S3.
 
@@ -53,9 +58,17 @@ def import_homolog_csv(
     Args:
         import_task_id: PK of the ``ImportTask`` row to track status.
         file_path: S3 URI of the CSV file (``s3://bucket/key``).
+        assembly: Optional assembly name (or version). When set, gene
+            accessions resolve against that assembly only, so v4/v5
+            coexisting accessions map to the right ``gene_pk``. Unknown or
+            ambiguous assemblies fail the import loudly (never a silent
+            default). Empty keeps the legacy fail-closed behaviour:
+            cross-assembly ambiguous accessions are skipped and reported,
+            never guessed.
 
     Returns:
-        dict with ingestion statistics.
+        dict with ingestion statistics, including an auditable ``skipped_*``
+        breakdown (ambiguous / unknown gene).
     """
     logger.info("Starting homolog CSV import: task_id=%s file=%s", import_task_id, file_path)
 
@@ -87,7 +100,12 @@ def import_homolog_csv(
                 JobStatus.SUCCEEDED,
                 fields={"processed_records": 0, "total_records": 0, "progress": 100},
             )
-        return {"imported": 0, "skipped": 0, "total": 0}
+        return {
+            "imported": 0,
+            "skipped": 0,
+            "total": 0,
+            "assembly": assembly,
+        }
 
     # ── Mark task as running ────────────────────────────────────────────
     with get_db() as session:
@@ -98,10 +116,24 @@ def import_homolog_csv(
         )
 
     # ── Pre-load valid reference sets ───────────────────────────────────
-    with get_db() as session:
-        existing_gene_ids: set[str] = set(
-            session.execute(select(genes.c.id)).scalars().all()
-        )
+    try:
+        with get_db() as session:
+            # assembly+accession -> gene_pk. A CSV row carries an accession
+            # only; without an assembly, an accession shared across v4/v5
+            # is ambiguous and must be rejected rather than guessed.
+            gene_pk_by_accession, ambiguous_accessions = resolve_gene_accessions(
+                session, assembly=assembly
+            )
+            existing_gene_ids: set[str] = set(gene_pk_by_accession)
+    except AssemblyResolutionError as exc:
+        logger.error("Homolog CSV import rejected: %s", exc)
+        with get_db() as session:
+            ImportTaskStore(session).update(
+                import_task_id,
+                JobStatus.FAILED,
+                fields={"error_message": str(exc)},
+            )
+        raise
     logger.info("Reference sets loaded: %d genes", len(existing_gene_ids))
 
     # ── Pass 2: stream, validate, batch insert ──────────────────────────
@@ -109,18 +141,31 @@ def import_homolog_csv(
     skipped = 0
     batch: list[dict[str, Any]] = []
 
+    skipped_ambiguous = 0
+    skipped_unknown_gene = 0
+
     def flush_batch() -> None:
-        nonlocal imported
+        nonlocal imported, skipped_ambiguous, skipped_unknown_gene
         if not batch:
             return
         with get_db() as session:
             rows = []
             for row_data in batch:
                 gid = row_data["gene_id"]
-                if gid not in existing_gene_ids:
-                    logger.warning("Skipping: gene_id %r not found", gid)
+                gene_pk = gene_pk_by_accession.get(gid)
+                if gene_pk is None:
+                    if gid in ambiguous_accessions:
+                        skipped_ambiguous += 1
+                        logger.warning(
+                            "Skipping: gene_id %r ambiguous across assemblies", gid
+                        )
+                    else:
+                        skipped_unknown_gene += 1
+                        logger.warning("Skipping: gene_id %r not found", gid)
                     continue
-                rows.append(row_data)
+                mapped = dict(row_data)
+                mapped["gene_id"] = gene_pk
+                rows.append(mapped)
             if rows:
                 session.execute(insert(gene_homologs), rows)
                 imported += len(rows)
@@ -194,7 +239,14 @@ def import_homolog_csv(
             imported,
             skipped,
         )
-        return {"imported": imported, "skipped": skipped, "total": total_rows}
+        return {
+            "imported": imported,
+            "skipped": skipped,
+            "total": total_rows,
+            "assembly": assembly,
+            "skipped_ambiguous_gene": skipped_ambiguous,
+            "skipped_unknown_gene": skipped_unknown_gene,
+        }
 
     except Exception as e:
         logger.error("Homolog CSV import failed: %s", e)

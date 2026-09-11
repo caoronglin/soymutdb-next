@@ -44,26 +44,32 @@ const ExpressionBarChart = React.lazy(
 
 export const Route = createFileRoute("/genes/$geneId")({
   component: GeneDetailComponent,
+  // Keep deep-link assembly context typed, but do not render it until the
+  // detail API accepts assembly and binds the returned record to it.
+  validateSearch: (search: Record<string, unknown>) => ({
+    assembly: search.assembly ? String(search.assembly) : undefined,
+  }),
 });
 
 function GeneDetailComponent() {
   const { t } = useTranslation();
   const { geneId } = Route.useParams();
+  const { assembly } = Route.useSearch();
 
   const geneQuery = useQuery({
-    queryKey: ["gene", geneId],
-    queryFn: () => getGene(geneId),
+    queryKey: ["gene", geneId, assembly],
+    queryFn: () => getGene(geneId, { assembly_id: assembly }),
   });
 
   const expressionQuery = useQuery({
-    queryKey: ["gene-expression", geneId],
-    queryFn: () => getGeneExpression(geneId),
+    queryKey: ["gene-expression", geneId, assembly],
+    queryFn: () => getGeneExpression(geneId, { assembly_id: assembly }),
     enabled: !!geneId,
   });
 
   const homologQuery = useQuery({
-    queryKey: ["gene-homologs", geneId],
-    queryFn: () => getGeneHomologs(geneId),
+    queryKey: ["gene-homologs", geneId, assembly],
+    queryFn: () => getGeneHomologs(geneId, { assembly_id: assembly }),
     enabled: !!geneId,
   });
 
@@ -177,11 +183,14 @@ function GeneDetailComponent() {
                 ) : null}
               </div>
               <Button
-                href={jbrowseUrl({
-                  chromosome: gene.chromosome,
-                  start: gene.start_pos,
-                  end: gene.end_pos,
-                })}
+                href={jbrowseUrl(
+                  {
+                    chromosome: gene.chromosome,
+                    start: gene.start_pos,
+                    end: gene.end_pos,
+                  },
+                  gene.assembly_name ?? undefined,
+                )}
                 icon={<Microscope className="size-4" aria-hidden />}
               >
                 {t("genes.viewInBrowser")}

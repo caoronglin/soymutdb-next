@@ -116,3 +116,73 @@ async def test_public_http_endpoint_returns_published_version(app, db_session):
         body = after.json()
         assert body["status"] == "published"
         assert body["definition"]["root"]["props"]["content"] == "<p>public page</p>"
+
+@pytest.mark.asyncio
+async def test_published_routes_endpoint_exposes_only_ssg_safe_published_pages(db_session):
+    from fastapi import FastAPI
+    from app.api.v1.page_definitions import router
+    from app.core.database import get_db
+    from app.core.exceptions import SoyMutDBError, soy_mut_db_exception_handler
+
+    application = FastAPI()
+    application.add_exception_handler(SoyMutDBError, soy_mut_db_exception_handler)
+    application.include_router(router, prefix="/api/v1")
+
+    async def override_db():
+        yield db_session
+
+    application.dependency_overrides[get_db] = override_db
+
+    page, draft = await page_service.create_page(
+        db_session,
+        route="/ssg-published",
+        title_key="nav.ssg",
+        definition=_valid_definition("SSG content"),
+        edited_by=_editor(),
+    )
+    _page, requested, _event = await page_service.publish_request(
+        db_session,
+        page_id=page.id,
+        version_id=draft.id,
+        reason=None,
+        edited_by=_editor(),
+    )
+    await page_service.publish_version(db_session, requested)
+
+    await page_service.create_page(
+        db_session,
+        route="/ssg-draft",
+        title_key="nav.draft",
+        definition=_valid_definition("draft content"),
+        edited_by=_editor(),
+    )
+
+    transport = ASGITransport(app=application)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.get("/api/v1/page-definitions/published-routes")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload) == 1
+    published = payload[0]
+    assert published["route"] == "/ssg-published"
+    assert published["version"] == requested.version
+    assert published["status"] == "published"
+    assert published["definition"]["root"]["props"]["content"] == "<p>SSG content</p>"
+    assert published["definition"]["schema_version"] == 2
+
+
+@pytest.mark.parametrize(
+    ("route", "expected"),
+    [
+        ("/", True),
+        ("/research/tools", True),
+        ("/bad//route", False),
+        ("/bad_route", False),
+        ("/bad/../route", False),
+    ],
+)
+def test_ssg_route_filter_matches_web_writer(route, expected):
+    from app.api.v1.page_definitions import _is_ssg_route
+
+    assert _is_ssg_route(route) is expected

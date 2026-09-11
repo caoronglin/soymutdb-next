@@ -22,8 +22,31 @@ vi.mock("@tanstack/react-router", async () => {
       ...options,
       useSearch: () => state.search,
     }),
-    Link: ({ children, params: _params, to, ...props }: { children?: React.ReactNode; params?: unknown; to: string }) =>
-      React.createElement("a", { href: to, ...props }, children),
+    Link: ({
+      children,
+      params: _params,
+      search,
+      to,
+      ...props
+    }: {
+      children?: React.ReactNode;
+      params?: unknown;
+      search?: Record<string, unknown>;
+      to: string;
+    }) => {
+      const query = search
+        ? new URLSearchParams(
+            Object.entries(search)
+              .filter(([, value]) => value != null)
+              .map(([key, value]) => [key, String(value)]),
+          )
+        : null;
+      return React.createElement(
+        "a",
+        { href: query && query.toString() ? `${to}?${query}` : to, ...props },
+        children,
+      );
+    },
     useRouter: () => ({
       buildLocation: ({ to }: { to: string }) => ({ href: to }),
     }),
@@ -231,6 +254,12 @@ describe("gene search assembly context", () => {
     const browserHref = within(results).getByRole("link", { name: "search.genes.openBrowser" }).getAttribute("href");
     expect(new URL(browserHref ?? "", "https://portal.example.invalid").searchParams.get("assembly")).toBe(
       alternateAssembly.name,
+    );
+    const geneHref = within(results)
+      .getByRole("link", { name: /search.genes.openGene/ })
+      .getAttribute("href");
+    expect(new URL(geneHref ?? "", "https://portal.example.invalid").searchParams.get("assembly")).toBe(
+      alternateAssembly.id,
     );
   });
 

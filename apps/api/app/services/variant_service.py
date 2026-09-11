@@ -5,9 +5,10 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+from clickhouse_connect.driver.exceptions import ClickHouseError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..core.exceptions import NotFoundError, ValidationError
+from ..core.exceptions import NotFoundError, ServiceUnavailableError, ValidationError
 from ..schemas.variant import (
     VariantDetail,
     VariantFilterParams,
@@ -102,11 +103,13 @@ class VariantService:
                 params=params,
             )
 
-        rows = await self.ch.query_variants(
-            params=params,
-            release_context=release_context,
-            limit=params.limit + 1,  # fetch one extra to detect has_more
-            cursor_key=cursor_key,
+        rows = await self._ch_query(
+            self.ch.query_variants(
+                params=params,
+                release_context=release_context,
+                limit=params.limit + 1,  # fetch one extra to detect has_more
+                cursor_key=cursor_key,
+            )
         )
 
         has_more = len(rows) > params.limit
@@ -139,9 +142,11 @@ class VariantService:
         release_context: ReleaseContext,
     ) -> VariantDetail:
         """Fetch a single variant detail from ClickHouse."""
-        row = await self.ch.get_variant_by_id(
-            variant_id,
-            release_context=release_context,
+        row = await self._ch_query(
+            self.ch.get_variant_by_id(
+                variant_id,
+                release_context=release_context,
+            )
         )
         if row is None:
             raise NotFoundError(f"Variant {variant_id} not found")
@@ -160,13 +165,15 @@ class VariantService:
         """Region query – ``assembly`` is required (never hardcoded)."""
         if not assembly:
             raise ValidationError("assembly parameter is required for region queries")
-        rows = await self.ch.query_variants_by_region(
-            release_context=release_context,
-            assembly=assembly,
-            chromosome=chromosome,
-            start=start,
-            end=end,
-            max_results=max_results,
+        rows = await self._ch_query(
+            self.ch.query_variants_by_region(
+                release_context=release_context,
+                assembly=assembly,
+                chromosome=chromosome,
+                start=start,
+                end=end,
+                max_results=max_results,
+            )
         )
         return [self._row_to_response(r) for r in rows]
 
@@ -177,14 +184,33 @@ class VariantService:
         release_context: ReleaseContext,
     ) -> int:
         """Return the total count of matching variants (best-effort)."""
-        return await self.ch.count_variants(
-            params,
-            release_context=release_context,
+        return await self._ch_query(
+            self.ch.count_variants(
+                params,
+                release_context=release_context,
+            )
         )
 
     # ------------------------------------------------------------------ #
     # Helpers
     # ------------------------------------------------------------------ #
+
+    @staticmethod
+    async def _ch_query(coro):
+        """Run a ClickHouse projection query with capability-aware failure.
+
+        The analytics projection (H01) is a required capability in extended
+        deployments but may be absent in baseline/disposable environments.
+        Transport errors must surface as ``503 service_unavailable`` with a
+        clear message (no stack trace / host details), never as ``500`` —
+        the endpoint reports capability state instead of crashing.
+        """
+        try:
+            return await coro
+        except ClickHouseError as exc:
+            raise ServiceUnavailableError(
+                "Variant analytics projection (ClickHouse) is unavailable"
+            ) from exc
 
     @staticmethod
     def _row_to_response(row: dict[str, Any]) -> VariantResponse:

@@ -19,6 +19,7 @@
  */
 import {
     request,
+    requestBlob,
     apiBaseUrl,
     ApiError,
     TimeoutPresets,
@@ -159,11 +160,17 @@ function emitLogoutOnce(): void {
     }
 }
 
+/** HTTP methods the server advertises as idempotent OpenAPI operations. */
+function isRetrySafeMethod(method: string | undefined): boolean {
+    return ["GET", "HEAD", "OPTIONS", "PUT", "DELETE"].includes((method ?? "GET").toUpperCase());
+}
+
 /**
- * Coordinated request: on 401, trigger a single-flight refresh and retry the
- * request exactly once. If the refresh fails, in-memory auth is cleared and
- * the logout event fires once (per unauthenticated period). The refresh
- * endpoint itself is never recursed into.
+ * Coordinated request: on 401, trigger a single-flight refresh and replay a
+ * retry-safe request exactly once. Unsafe mutations preserve the original 401
+ * after refresh rather than risking duplicate submission. If refresh fails,
+ * in-memory auth is cleared and the logout event fires once (per unauthenticated
+ * period). The refresh endpoint itself is never recursed into.
  */
 export async function authRequest<T>(
     path: string,
@@ -173,7 +180,7 @@ export async function authRequest<T>(
     // CSRF is attached centrally so Web and Admin mutations share the same
     // protection (no app-local bypass).
     const secured = attachCsrf(options, method);
-    const isIdempotent = ["GET", "HEAD", "OPTIONS"].includes(method.toUpperCase());
+    const canRetry = isRetrySafeMethod(method);
 
     const exec = async (): Promise<T> => {
         try {
@@ -182,17 +189,49 @@ export async function authRequest<T>(
             if (err instanceof ApiError && err.status === 401 && !isRefreshEndpoint(path)) {
                 const refreshed = await refreshAccessToken();
                 if (refreshed) {
-                    return await request<T>(path, secured);
+                    if (canRetry) return await request<T>(path, secured);
+                } else {
+                    emitLogoutOnce();
                 }
-                emitLogoutOnce();
             }
             throw err;
         }
     };
 
-    // Idempotent reads retry transient failures (network/timeout/5xx);
-    // non-idempotent mutations do NOT auto-retry to avoid double submission.
-    return isIdempotent ? withRetry(exec, 1) : exec();
+    // Only OpenAPI-idempotent methods retry transient failures or replay after
+    // refresh. POST/PATCH are never repeated to avoid duplicate mutations.
+    return canRetry ? withRetry(exec, { idempotent: true, maxRetries: 1 }) : exec();
+}
+
+/**
+ * Coordinated blob request for streamed downloads. It follows the same 401
+ * refresh and idempotent retry path as JSON GET requests.
+ */
+export async function authRequestBlob(
+    path: string,
+    options: RequestOptions = {},
+): Promise<Blob> {
+    const method = options.method ?? "GET";
+    const secured = attachCsrf(options, method);
+    const canRetry = isRetrySafeMethod(method);
+
+    const exec = async (): Promise<Blob> => {
+        try {
+            return await requestBlob(path, secured);
+        } catch (err) {
+            if (err instanceof ApiError && err.status === 401 && !isRefreshEndpoint(path)) {
+                const refreshed = await refreshAccessToken();
+                if (refreshed) {
+                    if (canRetry) return await requestBlob(path, secured);
+                } else {
+                    emitLogoutOnce();
+                }
+            }
+            throw err;
+        }
+    };
+
+    return canRetry ? withRetry(exec, { idempotent: true, maxRetries: 1 }) : exec();
 }
 
 /**
@@ -229,6 +268,12 @@ export const http = {
             timeoutMs: TimeoutPresets.CRITICAL,
             ...options,
             method: "DELETE",
+        }),
+    download: (path: string, options?: RequestOptions) =>
+        authRequestBlob(path, {
+            timeoutMs: TimeoutPresets.FILE_TRANSFER,
+            ...options,
+            method: "GET",
         }),
 };
 

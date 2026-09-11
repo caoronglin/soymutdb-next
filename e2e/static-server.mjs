@@ -243,7 +243,9 @@ const server = createServer(async (req, res) => {
   }
 
   const mime = MIME[extname(file)] ?? "application/octet-stream";
-  res.writeHead(200, { "Content-Type": mime });
+  // Resource Timing needs a body length to report static asset sizes. This is
+  // also what a production static host normally sends for immutable artifacts.
+  res.writeHead(200, { "Content-Type": mime, "Content-Length": statSync(file).size });
   createReadStream(file).pipe(res);
 });
 

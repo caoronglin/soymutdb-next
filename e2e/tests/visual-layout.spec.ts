@@ -29,6 +29,8 @@ type Metric = {
   document: { scrollWidth: number; clientWidth: number; scrollHeight: number };
   visible: { main: boolean; heading: boolean; bodyTextLength: number };
   interactives: { count: number; undersized: Array<{ tag: string; text: string; width: number; height: number }> };
+  overlaps: Array<{ first: string; second: string; area: number; ratio: number }>;
+  overflowing: Array<{ tag: string; id: string; className: string; left: number; right: number; width: number }>;
   screenshot: string;
 };
 const metrics: Metric[] = [];
@@ -43,7 +45,7 @@ async function collect(page: Page, route: string, viewport: string, screenshot: 
       if (!element) return false;
       const style = getComputedStyle(element);
       const rect = element.getBoundingClientRect();
-      return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
+      return style.display !== "none" && style.visibility !== "hidden" && style.opacity !== "0" && style.pointerEvents !== "none" && rect.width > 0 && rect.height > 0;
     };
     const interactive = Array.from(document.querySelectorAll<HTMLElement>("a, button, input, select, textarea, [role=button]"))
       .filter(visible)
@@ -56,6 +58,55 @@ async function collect(page: Page, route: string, viewport: string, screenshot: 
           height: Math.round(rect.height),
         };
       });
+    const ignored = (element: HTMLElement) =>
+      element.hasAttribute("data-layout-overlap-ok") ||
+      element.getAttribute("aria-hidden") === "true" ||
+      /^(increase|decrease) value$/i.test(element.getAttribute("aria-label") ?? "") ||
+      ["absolute", "fixed", "sticky"].includes(getComputedStyle(element).position);
+    const label = (element: HTMLElement) =>
+      `${element.tagName.toLowerCase()}${element.id ? `#${element.id}` : ""} ${(element.innerText || element.getAttribute("aria-label") || "").trim()}`.slice(0, 100);
+    const overlapViolations: Array<{ first: string; second: string; area: number; ratio: number }> = [];
+    const candidates = Array.from(document.querySelectorAll<HTMLElement>(
+      "header, main, footer, nav, section, article, form, [role=region], [data-layout-zone], .card-lift",
+    )).filter((element) => visible(element) && !ignored(element));
+    const recordOverlap = (first: HTMLElement, second: HTMLElement, threshold: number) => {
+      if (first.contains(second) || second.contains(first)) return;
+      const a = first.getBoundingClientRect();
+      const b = second.getBoundingClientRect();
+      const area = Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left)) *
+        Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+      const smaller = Math.min(a.width * a.height, b.width * b.height);
+      const ratio = smaller > 0 ? area / smaller : 0;
+      if (area > 8 && ratio > threshold) {
+        overlapViolations.push({ first: label(first), second: label(second), area: Math.round(area), ratio: Number(ratio.toFixed(3)) });
+      }
+    };
+    for (let i = 0; i < candidates.length; i += 1) {
+      for (let j = i + 1; j < candidates.length; j += 1) {
+        if (candidates[i].parentElement === candidates[j].parentElement) recordOverlap(candidates[i], candidates[j], 0.15);
+      }
+    }
+    const controls = Array.from(document.querySelectorAll<HTMLElement>("a, button, input, select, textarea, [role=button]"))
+      .filter((element) => visible(element) && !ignored(element));
+    for (let i = 0; i < controls.length; i += 1) {
+      for (let j = i + 1; j < controls.length; j += 1) recordOverlap(controls[i], controls[j], 0.25);
+    }
+    const overflowing = Array.from(document.querySelectorAll<HTMLElement>("body *"))
+      .filter(visible)
+      .map((element) => {
+        const rect = element.getBoundingClientRect();
+        return {
+          tag: element.tagName.toLowerCase(),
+          id: element.id,
+          className: typeof element.className === "string" ? element.className.slice(0, 120) : "",
+          left: Math.round(rect.left),
+          right: Math.round(rect.right),
+          width: Math.round(rect.width),
+        };
+      })
+      .filter((item) => item.left < -1 || item.right > document.documentElement.clientWidth + 1)
+      .slice(0, 20);
+    const overlaps = overlapViolations.slice(0, 20);
     return {
       route,
       viewport,
@@ -74,6 +125,8 @@ async function collect(page: Page, route: string, viewport: string, screenshot: 
         count: interactive.length,
         undersized: interactive.filter((item) => item.width < 24 || item.height < 24).slice(0, 20),
       },
+      overlaps,
+      overflowing,
       screenshot,
     };
   }, { route, viewport, screenshot });
@@ -94,9 +147,10 @@ for (const route of routes) {
       await page.screenshot({ path: resolve(ARTIFACT_DIR, imageName), fullPage: true });
       const metric = await collect(page, route.path, viewport.name, imageName);
       metrics.push(metric);
-      expect(metric.document.scrollWidth, `${route.path} has page-level horizontal overflow at ${viewport.name}`).toBeLessThanOrEqual(metric.document.clientWidth + 1);
+      expect(metric.document.scrollWidth, `${route.path} has page-level horizontal overflow at ${viewport.name}: ${JSON.stringify(metric.overflowing)}`).toBeLessThanOrEqual(metric.document.clientWidth + 1);
       expect(metric.visible.main, `${route.path} has no visible main content at ${viewport.name}`).toBeTruthy();
       expect(metric.visible.bodyTextLength, `${route.path} rendered an empty page at ${viewport.name}`).toBeGreaterThan(30);
+      expect(metric.overlaps, `${route.path} has unintentional component/control overlap at ${viewport.name}: ${JSON.stringify(metric.overlaps)}`).toEqual([]);
     });
   }
 }

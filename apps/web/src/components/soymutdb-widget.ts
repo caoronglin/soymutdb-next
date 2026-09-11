@@ -30,10 +30,6 @@ interface NetworkInformationLike extends EventTarget {
     effectiveType?: string;
     saveData?: boolean;
 }
-interface IdleDeadlineLike {
-    readonly didTimeout: boolean;
-    timeRemaining(): number;
-}
 interface WindowWithBrowserApis extends Window {
     trustedTypes?: TrustedTypePolicyFactoryLike;
     // requestIdleCallback/cancelIdleCallback are already typed on Window;

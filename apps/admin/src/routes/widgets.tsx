@@ -6,6 +6,20 @@ import { Badge, Button, Card, Typography } from "@/lib/antd";
 import { DataTable, type DataTableColumn } from "../components/data-table";
 import { ConfirmDialog } from "../components/confirm-dialog";
 import { widgetApi, type WidgetDefinition } from "../lib/widget-api";
+import { useTranslation } from "react-i18next";
+
+const CATEGORY_LABEL_KEYS: Record<string, string> = {
+  hero: "categoryHero",
+  navigation: "categoryNavigation",
+  search: "categorySearch",
+  data_table: "categoryDataTable",
+  detail: "categoryDetail",
+  visualization: "categoryVisualization",
+  stats: "categoryStats",
+  external: "categoryExternal",
+  layout: "categoryLayout",
+  custom: "categoryCustom",
+};
 
 const WIDGET_CATEGORIES: Record<string, string> = {
   hero: "Hero",
@@ -40,6 +54,11 @@ function permissionBadge(perm: string): string {
 }
 
 export default function WidgetsPage() {
+  const { t } = useTranslation();
+  const categoryLabel = (c: string) => {
+    const key = CATEGORY_LABEL_KEYS[c];
+    return key ? t(`admin.ops.${key}`, { defaultValue: WIDGET_CATEGORIES[c] ?? c }) : c;
+  };
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
@@ -64,7 +83,7 @@ export default function WidgetsPage() {
   const columns: DataTableColumn<WidgetDefinition>[] = [
     {
       key: "name",
-      header: "Name",
+      header: t("admin.ops.name", { defaultValue: "Name" }),
       sortable: true,
       sortAccessor: (w) => w.name,
       cell: (w) => (
@@ -76,18 +95,18 @@ export default function WidgetsPage() {
     },
     {
       key: "category",
-      header: "Category",
+      header: t("admin.news.columns.category", { defaultValue: "Category" }),
       sortable: true,
       sortAccessor: (w) => w.category,
       cell: (w) => (
         <Badge color={categoryBadgeColor(w.category)}>
-          {WIDGET_CATEGORIES[w.category] ?? w.category}
+          {categoryLabel(w.category)}
         </Badge>
       ),
     },
     {
       key: "permissions",
-      header: "Permissions",
+      header: t("admin.ops.permissions", { defaultValue: "Permissions" }),
       sortable: true,
       sortAccessor: (w) => w.permissions,
       cell: (w) => (
@@ -96,7 +115,7 @@ export default function WidgetsPage() {
     },
     {
       key: "cache_ttl",
-      header: "Cache TTL",
+      header: t("admin.ops.cacheTtl", { defaultValue: "Cache TTL" }),
       sortable: true,
       sortAccessor: (w) => w.cache_ttl,
       align: "right",
@@ -108,19 +127,19 @@ export default function WidgetsPage() {
     },
     {
       key: "is_active",
-      header: "Status",
+      header: t("admin.news.columns.status", { defaultValue: "Status" }),
       sortable: true,
       sortAccessor: (w) => (w.is_active ? 1 : 0),
       cell: (w) =>
         w.is_active ? (
-          <Badge color="success">Active</Badge>
+          <Badge color="success">{t("admin.ops.active", { defaultValue: "Active" })}</Badge>
         ) : (
-          <Badge >Inactive</Badge>
+          <Badge >{t("admin.ops.inactive", { defaultValue: "Inactive" })}</Badge>
         ),
     },
     {
       key: "actions",
-      header: "Actions",
+      header: t("admin.news.columns.actions", { defaultValue: "Actions" }),
       align: "right",
       cell: (w) => (
         <div className="flex items-center justify-end gap-1">
@@ -129,8 +148,8 @@ export default function WidgetsPage() {
               type="text"
               size="small"
               className="size-8 p-0"
-              title="Preview"
-              aria-label={`Preview widget ${w.display_name}`}
+              title={t("admin.news.actions.preview", { defaultValue: "Preview" })}
+              aria-label={t("admin.ops.previewWidgetAria", { name: w.display_name, defaultValue: "Preview widget {{name}}" })}
             >
               <EyeOutlined className="size-3.5" />
             </Button>
@@ -140,8 +159,8 @@ export default function WidgetsPage() {
             size="small"
             className="size-8 p-0"
             onClick={() => navigate({ to: "/widgets/$name", params: { name: w.name } })}
-            title="Edit"
-            aria-label={`Edit widget ${w.display_name}`}
+            title={t("admin.news.actions.edit", { defaultValue: "Edit" })}
+            aria-label={t("admin.ops.editWidgetAria", { name: w.display_name, defaultValue: "Edit widget {{name}}" })}
           >
             <EditOutlined className="size-3.5" />
           </Button>
@@ -150,8 +169,8 @@ export default function WidgetsPage() {
             size="small"
             className="size-8 p-0"
             onClick={() => setDeleteTarget(w)}
-            title="Delete"
-            aria-label={`Delete widget ${w.display_name}`}
+            title={t("admin.news.actions.delete", { defaultValue: "Delete" })}
+            aria-label={t("admin.ops.deleteWidgetAria", { name: w.display_name, defaultValue: "Delete widget {{name}}" })}
           >
             <DeleteOutlined className="size-3.5 text-destructive" />
           </Button>
@@ -164,13 +183,13 @@ export default function WidgetsPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <Typography.Title level={2}>Widget Manager</Typography.Title>
-          <Typography.Text type="secondary">Create, edit, and manage reusable UI widgets across the site.</Typography.Text>
+          <Typography.Title level={2}>{t("admin.ops.widgetManagerTitle", { defaultValue: "Widget Manager" })}</Typography.Title>
+          <Typography.Text type="secondary">{t("admin.ops.widgetManagerSubtitle", { defaultValue: "Create, edit, and manage reusable UI widgets across the site." })}</Typography.Text>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link to="/widget-health"><Button size="small" icon={<RiseOutlined />}>Health</Button></Link>
-          <Link to="/layout"><Button size="small" icon={<LayoutOutlined />}>Layout Editor</Button></Link>
-          <Link to="/widgets/$name" params={{ name: "new" }}><Button type="primary" size="small" icon={<PlusOutlined />}>New Widget</Button></Link>
+          <Link to="/widget-health"><Button size="small" icon={<RiseOutlined />}>{t("admin.ops.health", { defaultValue: "Health" })}</Button></Link>
+          <Link to="/layout"><Button size="small" icon={<LayoutOutlined />}>{t("admin.ops.layoutEditor", { defaultValue: "Layout Editor" })}</Button></Link>
+          <Link to="/widgets/$name" params={{ name: "new" }}><Button type="primary" size="small" icon={<PlusOutlined />}>{t("admin.ops.newWidget", { defaultValue: "New Widget" })}</Button></Link>
         </div>
       </div>
 
@@ -178,14 +197,12 @@ export default function WidgetsPage() {
 
           <Typography.Title level={5}>
             <AppstoreOutlined className="size-4 text-primary" />
-            All Widgets
+            {t("admin.ops.allWidgets", { defaultValue: "All Widgets" })}
           </Typography.Title>
 
 
           <p className="text-sm text-muted-foreground">
-            Widgets are reusable UI components that can be placed on pages via the
-            layout editor. Each widget has a template, data source, and optional
-            parameter schema.
+            {t("admin.ops.widgetsIntro", { defaultValue: "Widgets are reusable UI components that can be placed on pages via the layout editor. Each widget has a template, data source, and optional parameter schema." })}
           </p>
 
       </Card>
@@ -202,16 +219,16 @@ export default function WidgetsPage() {
         onRowClick={(w) =>
           navigate({ to: "/widgets/$name", params: { name: w.name } })
         }
-        emptyTitle="No widgets defined"
-        emptyDescription="Create your first widget to start building page layouts."
+        emptyTitle={t("admin.ops.noWidgets", { defaultValue: "No widgets defined" })}
+        emptyDescription={t("admin.ops.noWidgetsDesc", { defaultValue: "Create your first widget to start building page layouts." })}
       />
 
       <ConfirmDialog
         open={deleteTarget !== null}
         onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
-        title="Delete widget"
-        description={`Are you sure you want to delete the widget "${deleteTarget?.display_name}"? This will remove it from all page layouts.`}
-        confirmLabel="Delete"
+        title={t("admin.ops.deleteWidgetTitle", { defaultValue: "Delete widget" })}
+        description={t("admin.ops.deleteWidgetConfirm", { name: deleteTarget?.display_name ?? "", defaultValue: "Are you sure you want to delete the widget \"{{name}}\"? This will remove it from all page layouts." })}
+        confirmLabel={t("admin.news.actions.delete", { defaultValue: "Delete" })}
         severity="destructive"
         loading={deleteMutation.isPending}
         onConfirm={() => {

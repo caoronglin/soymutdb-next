@@ -98,8 +98,9 @@ class ExpressionData(Base, TimestampMixin):
     __tablename__ = "expression_data"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    gene_id: Mapped[str] = mapped_column(
-        ForeignKey("genes.id", ondelete="CASCADE"), nullable=False
+    gene_id: Mapped[int] = mapped_column(
+        ForeignKey("genes.gene_pk", ondelete="CASCADE"), nullable=False,
+        comment="FK to genes.gene_pk (surrogate)",
     )
     library_id: Mapped[int] = mapped_column(
         ForeignKey("expression_libraries.id", ondelete="CASCADE"), nullable=False

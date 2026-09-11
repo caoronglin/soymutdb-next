@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 
 export type ImportPreviewRow = Record<string, unknown>;
 
@@ -80,6 +81,7 @@ const PreviewRow = React.memo(function PreviewRow({
   onCancelEdit,
   inputRef,
 }: PreviewRowProps) {
+  const { t } = useTranslation();
   const rowPatches = patchesByRow.get(rowKey);
 
   return (
@@ -98,7 +100,7 @@ const PreviewRow = React.memo(function PreviewRow({
         const value = patch ? displayValue(patch.new_value) : displayValue(row[columnName]);
         const isEditing =
           editing?.rowKey === rowKey && editing.columnName === columnName;
-        const label = `Edit ${columnName} for row ${rowKey}`;
+        const label = t("admin.ops.editCellForRow", { column: columnName, row: rowKey, defaultValue: "Edit {{column}} for row {{row}}" });
 
         return (
           <div
@@ -164,9 +166,11 @@ export function ImportPreviewTable({
   height = 360,
   rowHeight = 36,
   overscan = 1,
-  ariaLabel = "Import preview",
+  ariaLabel,
   className,
 }: ImportPreviewTableProps) {
+  const { t } = useTranslation();
+  const resolvedAriaLabel = ariaLabel ?? t("admin.ops.importPreviewAria", { defaultValue: "Import preview" });
   const [windowStart, setWindowStart] = React.useState(0);
   const [editing, setEditing] = React.useState<EditingCell | null>(null);
   const [patchRevision, setPatchRevision] = React.useState(0);
@@ -215,7 +219,7 @@ export function ImportPreviewTable({
       const key = rowKey(row, rowIndex);
       const existingPatch = patchesByRow.get(key)?.get(columnName);
       if (!existingPatch && patchCountRef.current >= maxPatches) {
-        setEditError(`Maximum of ${maxPatches} pending edits reached.`);
+        setEditError(t("admin.ops.maxPendingEdits", { max: String(maxPatches), defaultValue: "Maximum of {{max}} pending edits reached." }));
         return;
       }
       const id = editSequenceRef.current + 1;
@@ -230,7 +234,7 @@ export function ImportPreviewTable({
         value: displayValue(existingPatch?.new_value ?? row[columnName]),
       });
     },
-    [editable, maxPatches, patchesByRow, rowKey, rows],
+    [t, editable, maxPatches, patchesByRow, rowKey, rows],
   );
 
   const changeEditValue = React.useCallback((value: string) => {
@@ -287,7 +291,7 @@ export function ImportPreviewTable({
       </div>
       <div
         role="grid"
-        aria-label={ariaLabel}
+        aria-label={resolvedAriaLabel}
         aria-rowcount={rows.length + 1}
         aria-colcount={columns.length}
         className="overflow-auto rounded-b-md border border-t-0 border-border bg-card"

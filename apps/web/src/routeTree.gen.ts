@@ -30,6 +30,8 @@ import { Route as ToolsEnrichmentRouteImport } from './routes/tools/enrichment'
 import { Route as ToolsExppatternRouteImport } from './routes/tools/exppattern'
 import { Route as GenesIndexRouteImport } from './routes/genes/index'
 import { Route as GenesGeneIdRouteImport } from './routes/genes/$geneId'
+import { Route as MutantsIndexRouteImport } from './routes/mutants/index'
+import { Route as MutantsIdRouteImport } from './routes/mutants/$id'
 import { Route as NewsIndexRouteImport } from './routes/news/index'
 import { Route as NewsSlugRouteImport } from './routes/news/$slug'
 import { Route as VariantsIndexRouteImport } from './routes/variants/index'
@@ -149,6 +151,16 @@ const GenesGeneIdRoute = GenesGeneIdRouteImport.update({
   path: '/genes/$geneId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MutantsIndexRoute = MutantsIndexRouteImport.update({
+  id: '/mutants/',
+  path: '/mutants/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MutantsIdRoute = MutantsIdRouteImport.update({
+  id: '/mutants/$id',
+  path: '/mutants/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const NewsIndexRoute = NewsIndexRouteImport.update({
   id: '/news/',
   path: '/news/',
@@ -261,6 +273,8 @@ export interface FileRoutesByFullPath {
   '/tools/enrichment': typeof ToolsEnrichmentRoute
   '/tools/exppattern': typeof ToolsExppatternRoute
   '/genes/$geneId': typeof GenesGeneIdRoute
+  '/mutants/$id': typeof MutantsIdRoute
+  '/mutants/': typeof MutantsIndexRoute
   '/news/$slug': typeof NewsSlugRoute
   '/tools/': typeof ToolsIndexRoute
   '/genes/': typeof GenesIndexRoute
@@ -298,6 +312,8 @@ export interface FileRoutesByTo {
   '/tools/enrichment': typeof ToolsEnrichmentRoute
   '/tools/exppattern': typeof ToolsExppatternRoute
   '/genes/$geneId': typeof GenesGeneIdRoute
+  '/mutants/$id': typeof MutantsIdRoute
+  '/mutants': typeof MutantsIndexRoute
   '/news/$slug': typeof NewsSlugRoute
   '/genes': typeof GenesIndexRoute
   '/news': typeof NewsIndexRoute
@@ -334,6 +350,8 @@ export interface FileRoutesById {
   '/tools/enrichment': typeof ToolsEnrichmentRoute
   '/tools/exppattern': typeof ToolsExppatternRoute
   '/genes/$geneId': typeof GenesGeneIdRoute
+  '/mutants/$id': typeof MutantsIdRoute
+  '/mutants/': typeof MutantsIndexRoute
   '/news/$slug': typeof NewsSlugRoute
   '/tools/': typeof ToolsIndexRoute
   '/genes/': typeof GenesIndexRoute
@@ -372,6 +390,8 @@ export interface FileRouteTypes {
     | '/tools/enrichment'
     | '/tools/exppattern'
     | '/genes/$geneId'
+    | '/mutants/$id'
+    | '/mutants/'
     | '/news/$slug'
     | '/tools/'
     | '/genes/'
@@ -409,6 +429,8 @@ export interface FileRouteTypes {
     | '/tools/enrichment'
     | '/tools/exppattern'
     | '/genes/$geneId'
+    | '/mutants/$id'
+    | '/mutants'
     | '/news/$slug'
     | '/genes'
     | '/news'
@@ -444,6 +466,8 @@ export interface FileRouteTypes {
     | '/tools/enrichment'
     | '/tools/exppattern'
     | '/genes/$geneId'
+    | '/mutants/$id'
+    | '/mutants/'
     | '/news/$slug'
     | '/tools/'
     | '/genes/'
@@ -476,6 +500,8 @@ export interface RootRouteChildren {
   ToolsEnrichmentRoute: typeof ToolsEnrichmentRoute
   ToolsExppatternRoute: typeof ToolsExppatternRoute
   GenesGeneIdRoute: typeof GenesGeneIdRoute
+  MutantsIndexRoute: typeof MutantsIndexRoute
+  MutantsIdRoute: typeof MutantsIdRoute
   NewsSlugRoute: typeof NewsSlugRoute
   GenesIndexRoute: typeof GenesIndexRoute
   NewsIndexRoute: typeof NewsIndexRoute
@@ -649,6 +675,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof GenesGeneIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/mutants/': {
+      id: '/mutants/'
+      path: '/mutants'
+      fullPath: '/mutants/'
+      preLoaderRoute: typeof MutantsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/mutants/$id': {
+      id: '/mutants/$id'
+      path: '/mutants/$id'
+      fullPath: '/mutants/$id'
+      preLoaderRoute: typeof MutantsIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/news/': {
       id: '/news/'
       path: '/news'
@@ -750,6 +790,8 @@ const rootRouteChildren: RootRouteChildren = {
   ToolsEnrichmentRoute: ToolsEnrichmentRoute,
   ToolsExppatternRoute: ToolsExppatternRoute,
   GenesGeneIdRoute: GenesGeneIdRoute,
+  MutantsIndexRoute: MutantsIndexRoute,
+  MutantsIdRoute: MutantsIdRoute,
   NewsSlugRoute: NewsSlugRoute,
   GenesIndexRoute: GenesIndexRoute,
   NewsIndexRoute: NewsIndexRoute,

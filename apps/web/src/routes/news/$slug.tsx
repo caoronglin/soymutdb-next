@@ -168,7 +168,7 @@ function NewsDetailComponent() {
           {article.cover_url ? (
             <img
               src={article.cover_url}
-              alt={title}
+              alt={article.cover_alt_text ?? title}
               className="mb-8 w-full rounded-xl border border-border object-cover"
               style={{ maxHeight: 380 }}
             />
@@ -209,6 +209,25 @@ function NewsDetailComponent() {
               ),
             }}
           />
+
+          {article.source_url ? (
+            <aside className="mt-6 rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+              <span className="font-medium text-foreground">
+                {t("news.externalSource", { defaultValue: "Original source" })}:
+              </span>{" "}
+              <a
+                href={article.source_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="link-underline break-all text-primary hover:text-primary/80"
+              >
+                {article.source_platform === "wechat" ? "WeChat" : "X-MOL"}
+              </a>
+              {article.source_published_at ? (
+                <span className="ml-2">{formatDate(article.source_published_at)}</span>
+              ) : null}
+            </aside>
+          ) : null}
 
           {(prevItem || nextItem) && (
             <nav className="mt-10 grid gap-4 border-t border-border pt-6 sm:grid-cols-2" aria-label={t("news.siblingsAria")}>

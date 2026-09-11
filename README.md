@@ -75,7 +75,7 @@ cd apps/api && uvicorn app.main:app --reload --port 8000
 cd apps/worker && celery -A soymutdb_worker.main:celery_app worker --loglevel=info
 ```
 
-数据层可用 `docker compose -f docker-compose.dev.yml up -d` 起 PostgreSQL/ClickHouse/Redis/MinIO。
+Docker 开发拓扑使用生产基础文件加开发 overlay：`docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile core up --build`。它会启动 API、workers、PostgreSQL、ClickHouse、Redis、MinIO，以及 Vite web/admin（端口 5173/5174）。只需数据层时可在同一命令后指定 `postgres clickhouse redis redis-celery minio minio-init`。
 
 ### Build
 

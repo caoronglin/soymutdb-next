@@ -293,6 +293,35 @@ class TestGetGeneExpression:
         assert response.status_code == 200
         assert len(response.json()["expressions"]) == 1
 
+    async def test_gene_expression_uses_bounded_keyset_page(
+        self, client, mock_session, mock_expression_data
+    ):
+        """One extra row produces a cursor instead of an unbounded response."""
+        next_row = MagicMock()
+        next_row.id = 2
+        next_row.library = mock_expression_data.library
+        next_row.fpkm = 1.0
+        next_row.tpm = 2.0
+        next_row.raw_count = 3
+        mock_session.execute.return_value = _make_exec_result(
+            scalars_list=[mock_expression_data, next_row]
+        )
+
+        response = await client.get(
+            "/api/v1/expression/genes/Glyma.01G000100/expression?limit=1"
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["expressions"]) == 1
+        assert data["has_more"] is True
+        assert data["next_cursor"] == 1
+
+    async def test_gene_expression_rejects_unbounded_limit(self, client):
+        response = await client.get(
+            "/api/v1/expression/genes/Glyma.01G000100/expression?limit=201"
+        )
+        assert response.status_code == 422
+
 
 # ---------------------------------------------------------------------------
 # Tests: GET /api/v1/expression/search

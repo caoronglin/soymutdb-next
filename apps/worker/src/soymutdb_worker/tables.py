@@ -41,6 +41,14 @@ release_status_enum = ENUM(
     name="release_status_enum",
     create_type=False,
 )
+page_definition_status_enum = ENUM(
+    "draft",
+    "preview",
+    "requested",
+    "published",
+    name="page_definition_status_enum",
+    create_type=False,
+)
 import_status_enum = ENUM(
     "uploading",
     "validating",
@@ -65,14 +73,24 @@ releases = Table(
 genes = Table(
     "genes",
     metadata,
-    Column("id", String(64), primary_key=True),
+    Column("gene_pk", BigInteger, primary_key=True),
+    Column("accession", String(64), nullable=False),
+    Column("assembly_id", Integer, nullable=False),
+    Column("chromosome_id", Integer, nullable=False),
     Column("name", String(256)),
     Column("biotype", String(64)),
-    Column("chromosome_id", Integer),
     Column("start", BigInteger),
     Column("end", BigInteger),
     Column("strand", String(1)),
     Column("description", Text),
+)
+
+assemblies = Table(
+    "assemblies",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("name", String(128), nullable=False),
+    Column("version", String(64), nullable=False),
 )
 
 chromosomes = Table(
@@ -86,8 +104,8 @@ expression_data = Table(
     "expression_data",
     metadata,
     Column("id", Integer, primary_key=True),
-    Column("gene_id", String(64)),
-    Column("library_id", Integer),
+    Column("gene_id", BigInteger, nullable=False),
+    Column("library_id", Integer, nullable=False),
     Column("fpkm", Float),
     Column("tpm", Float),
     Column("raw_count", BigInteger),
@@ -106,19 +124,19 @@ gene_homologs = Table(
     "gene_homologs",
     metadata,
     Column("id", Integer, primary_key=True),
-    Column("gene_id", String(64)),
-    Column("homolog_species", String(128)),
-    Column("homolog_gene_id", String(64)),
-    Column("homolog_type", String(16)),
+    Column("gene_id", BigInteger, nullable=False),
+    Column("homolog_species", String(128), nullable=False),
+    Column("homolog_gene_id", String(64), nullable=False),
+    Column("homolog_type", String(16), nullable=False),
     Column("source", String(128)),
 )
 
 gene_data_cache = Table(
     "gene_data_cache",
     metadata,
-    Column("gene_id", String(64), primary_key=True),
-    Column("data", JSON),
-    Column("updated_at", DateTime(timezone=True)),
+    Column("gene_id", BigInteger, primary_key=True),
+    Column("data", JSONB, nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
 )
 
 import_tasks = Table(
@@ -262,6 +280,18 @@ notifications = Table(
     Column("created_at", DateTime(timezone=True)),
 )
 
+#: Page Builder version activation. The worker updates only the lifecycle
+#: fields after consuming a durable publish request; schema remains API-owned.
+page_definition_versions = Table(
+    "page_definition_versions",
+    metadata,
+    Column("id", UUID(as_uuid=True), primary_key=True),
+    Column("page_id", UUID(as_uuid=True), nullable=False),
+    Column("status", page_definition_status_enum, nullable=False),
+    Column("published_at", DateTime(timezone=True)),
+    Column("updated_at", DateTime(timezone=True)),
+)
+
 #: Immutable static publication rows (Phase 3).  The worker reads/writes the
 #: status columns only; the API owns the migration.  Column set mirrors
 #: ``app.models.publication.StaticPublication``.
@@ -315,6 +345,7 @@ __all__ = [
     "import_tasks",
     "metadata",
     "notifications",
+    "page_definition_versions",
     "publication_target_leases",
     "releases",
     "static_publications",

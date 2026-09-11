@@ -10,9 +10,8 @@ import csv
 import gzip
 import json
 import logging
-import os
 import tempfile
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from celery import Task
@@ -68,6 +67,10 @@ def build_export_query(filters: dict) -> tuple[str, dict]:
         conditions.append("release_key = %(release_key)s")
         params["release_key"] = filters["release_key"]
 
+    if filters.get("assembly"):
+        conditions.append("assembly_key = %(assembly)s")
+        params["assembly"] = filters["assembly"]
+
     if filters.get("chromosome"):
         conditions.append("chromosome = %(chromosome)s")
         params["chromosome"] = filters["chromosome"]
@@ -80,21 +83,41 @@ def build_export_query(filters: dict) -> tuple[str, dict]:
         conditions.append("position <= %(end)s")
         params["end"] = filters["end"]
 
-    if filters.get("gene_surrogate_id"):
-        conditions.append("gene_surrogate_id = %(gene_sid)s")
-        params["gene_sid"] = filters["gene_surrogate_id"]
+    if filters.get("ref"):
+        conditions.append("ref_allele = %(ref)s")
+        params["ref"] = filters["ref"]
 
-    if filters.get("mutant_line_surrogate_id"):
-        conditions.append("mutant_line_surrogate_id = %(ml_sid)s")
-        params["ml_sid"] = filters["mutant_line_surrogate_id"]
+    if filters.get("alt"):
+        conditions.append("alt_allele = %(alt)s")
+        params["alt"] = filters["alt"]
+
+    if filters.get("gene_id"):
+        conditions.append("gene_id = %(gene_id)s")
+        params["gene_id"] = filters["gene_id"]
+
+    if filters.get("mutant_line_id"):
+        conditions.append("mutant_line_surrogate_id = %(ml_id)s")
+        params["ml_id"] = filters["mutant_line_id"]
 
     if filters.get("variant_type"):
         conditions.append("variant_type = %(vtype)s")
         params["vtype"] = filters["variant_type"]
 
+    if filters.get("consequence"):
+        conditions.append("consequence = %(consequence)s")
+        params["consequence"] = filters["consequence"]
+
     if filters.get("impact"):
         conditions.append("impact = %(impact)s")
         params["impact"] = filters["impact"]
+
+    if filters.get("min_af") is not None:
+        conditions.append("allele_frequency >= %(min_af)s")
+        params["min_af"] = filters["min_af"]
+
+    if filters.get("max_af") is not None:
+        conditions.append("allele_frequency <= %(max_af)s")
+        params["max_af"] = filters["max_af"]
 
     where = " AND ".join(conditions) if conditions else "1=1"
 
@@ -133,7 +156,7 @@ def _write_tsv_csv(output_file, rows, delimiter: str) -> int:
 def _write_vcf(output_file, rows) -> int:
     """Write rows in VCF 4.2 format."""
     output_file.write("##fileformat=VCFv4.2\n")
-    output_file.write(f"##fileDate={datetime.now(timezone.utc).strftime('%Y%m%d')}\n")
+    output_file.write(f"##fileDate={datetime.now(UTC).strftime('%Y%m%d')}\n")
     output_file.write("##source=SoyMutDB export\n")
     output_file.write("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n")
     count = 0
@@ -200,7 +223,9 @@ def export_variants(
         dict with export metadata, S3 path, and pre-signed download URL.
     """
     if format not in EXPORT_FORMATS:
-        raise ValueError(f"Unsupported export format: {format!r}. Allowed: {sorted(EXPORT_FORMATS)}")
+        raise ValueError(
+            f"Unsupported export format: {format!r}. Allowed: {sorted(EXPORT_FORMATS)}"
+        )
 
     logger.info("Starting export %s: %s format", export_id, format)
 
@@ -265,7 +290,7 @@ def export_variants(
             "file_size": file_size,
             "s3_path": s3_path,
             "download_url": presigned_url,
-            "expires_at": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(),
+            "expires_at": (datetime.now(UTC) + timedelta(days=1)).isoformat(),
         }
 
 
@@ -282,7 +307,7 @@ def cleanup_old_exports() -> dict:
     logger.info("Cleaning up old exports")
 
     bucket = get_setting("S3_EXPORT_BUCKET", "exports")
-    cutoff = datetime.now(timezone.utc) - timedelta(days=EXPORT_RETENTION_DAYS)
+    cutoff = datetime.now(UTC) - timedelta(days=EXPORT_RETENTION_DAYS)
     deleted = 0
 
     objects = list_objects(f"{bucket}/exports/")
@@ -291,7 +316,7 @@ def cleanup_old_exports() -> dict:
         if last_modified is not None:
             # botocore returns timezone-aware datetime
             if last_modified.tzinfo is None:
-                last_modified = last_modified.replace(tzinfo=timezone.utc)
+                last_modified = last_modified.replace(tzinfo=UTC)
             if last_modified < cutoff:
                 key = obj["Key"]
                 delete_object(f"{bucket}/{key}")

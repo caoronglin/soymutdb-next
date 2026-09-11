@@ -14,9 +14,9 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from app.main import app
 from app.core.exceptions import AuthorizationError
 from app.core.security import RoleName, require_admin_roles
+from app.main import app
 
 EXPECTED_PATHS = [
     "/api/v1/stats/homepage",
@@ -56,6 +56,7 @@ class _RequestIdMiddleware(BaseHTTPMiddleware):
 def error_app():
     """A minimal FastAPI app with the production exception handlers."""
     from fastapi import FastAPI, HTTPException
+    from fastapi.exceptions import RequestValidationError
 
     from app.core.exceptions import (
         SoyMutDBError,
@@ -64,7 +65,6 @@ def error_app():
         unhandled_exception_handler,
         validation_exception_handler,
     )
-    from fastapi.exceptions import RequestValidationError
 
     test_app = FastAPI()
     test_app.add_middleware(_RequestIdMiddleware)
@@ -128,6 +128,46 @@ class TestOpenApiContract:
         schemas = set(SCHEMA["components"]["schemas"])
         for name in ("ErrorDetail", "ErrorResponse", "FieldError", "ValidationErrorResponse"):
             assert name in schemas, f"missing schema {name}"
+
+    def test_error_code_catalog_is_exported(self):
+        catalog = SCHEMA["x-error-codes"]
+        assert catalog["not_found"] == ""
+        assert "plugin_disabled" in catalog
+        assert "settings_version_conflict" in catalog
+        assert list(catalog) == sorted(catalog)
+
+    def test_safe_methods_are_declared_idempotent(self):
+        for path, path_item in SCHEMA["paths"].items():
+            for method, operation in path_item.items():
+                if method in {"get", "put", "delete"}:
+                    assert operation["x-idempotent"] is True, f"{method.upper()} {path}"
+
+    def test_homolog_search_declares_cursor_pagination_fields(self):
+        operation = SCHEMA["paths"]["/api/v1/homologs/search"]["get"]
+        assert operation["x-pagination"] == {
+            "mode": "keyset-optional",
+            "cursor_parameter": "cursor",
+            "next_cursor_field": "next_cursor",
+            "has_more_field": "has_more",
+            "cursor_is_exclusive": True,
+            "fallback": "offset",
+        }
+        parameters = {parameter["name"] for parameter in operation["parameters"]}
+        assert {"cursor", "page", "page_size"} <= parameters
+
+    def test_login_rate_limit_response_documents_retry_after_only(self):
+        responses = SCHEMA["paths"]["/api/v1/auth/login"]["post"]["responses"]
+        response = responses["429"]
+        assert response["content"]["application/json"]["schema"] == {
+            "$ref": "#/components/schemas/ErrorResponse"
+        }
+        assert response["headers"] == {
+            "Retry-After": {
+                "description": "Seconds until this login attempt may be retried.",
+                "schema": {"type": "integer", "minimum": 1},
+            }
+        }
+        assert "429" not in SCHEMA["paths"]["/api/v1/health/ready"]["get"]["responses"]
 
     def test_security_schemes_documented(self):
         schemes = SCHEMA["components"]["securitySchemes"]

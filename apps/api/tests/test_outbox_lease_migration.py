@@ -13,6 +13,16 @@ REVISION = API_ROOT / "migrations" / "versions" / "0018_outbox_leases.py"
 
 def _offline_alembic(command: str, revision_range: str) -> str:
     environment = os.environ.copy()
+    site_packages = next((API_ROOT / ".venv/lib").glob("python*/site-packages"))
+    workspace_root = API_ROOT.parents[1]
+    environment["PYTHONPATH"] = os.pathsep.join(
+        [
+            str(workspace_root / "packages/jobs-py/src"),
+            str(API_ROOT),
+            str(site_packages),
+            environment.get("PYTHONPATH", ""),
+        ]
+    )
     environment["SOYMUTDB_DATABASE_URL"] = (
         "postgresql+asyncpg://offline:offline@localhost/offline"
     )

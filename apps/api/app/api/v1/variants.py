@@ -15,7 +15,6 @@ from ...core.database import get_db
 from ...core.exceptions import ValidationError
 from ...core.security import RoleName
 from ...core.task_contract import EXPORT_VARIANTS_TASK
-from ...core.task_dispatch import dispatch_task
 from ...schemas.variant import (
     ConsequenceType,
     ExportRequest,
@@ -27,6 +26,7 @@ from ...schemas.variant import (
     VariantResponse,
     VariantType,
 )
+from ...services.outbox_service import enqueue_task_event
 from ...services.release_context import ReleaseContext, get_release_context
 from ...services.variant_service import VariantService
 from .deps import require_role
@@ -122,23 +122,31 @@ async def get_variant(
 )
 async def export_variants(
     request: ExportRequest,
+    db: AsyncSession = Depends(get_db),
     release_context: ReleaseContext = Depends(get_release_context),
 ) -> ExportResponse:
     """Submit an asynchronous export job (vcf/tsv/csv/json/bed)."""
     export_id = str(uuid.uuid4())
-    filters = request.filters.model_dump(mode="json")
+    filters = request.filters.model_dump(
+        mode="json", exclude_none=True, exclude={"cursor", "limit"}
+    )
     filters["release_key"] = release_context.release_key
-    dispatch_task(
-        EXPORT_VARIANTS_TASK,
-        identifier=export_id,
+    # Exports have no persistence model of their own, so this event is the
+    # durable command record. The dispatcher owns all broker I/O after commit.
+    await enqueue_task_event(
+        db,
+        event_type="variant_export_requested",
+        aggregate_type="variant_export",
+        aggregate_id=export_id,
+        task_name=EXPORT_VARIANTS_TASK,
         kwargs={
             "export_id": export_id,
             "filters": filters,
             "format": request.format,
             "compress": request.compress,
         },
-        queue="export",
     )
+    await db.commit()
 
     return ExportResponse(
         export_id=export_id,

@@ -201,3 +201,7 @@ apps/worker/celerybeat-schedule
 e2e/visual-artifacts/
 eslint_out.txt
 tsc_out.txt
+
+# 本地 pnpm 运行状态与一次性测试报告（非源码）
+.pnpm-state/
+apps/admin/.trash-vitest-report.json

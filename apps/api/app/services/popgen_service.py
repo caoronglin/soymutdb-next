@@ -83,17 +83,27 @@ class PopGenService:
         the client supplied the coordinates directly.
         """
         if request.gene_id is not None:
-            result = await db.execute(
+            stmt = (
                 select(Gene)
                 .join(Assembly, Gene.assembly_id == Assembly.id)
                 .where(
-                    Gene.id == request.gene_id,
+                    Gene.accession == request.gene_id,
                     Assembly.release_id == release_context.release_id,
                 )
             )
-            gene = result.scalar_one_or_none()
-            if gene is None:
+            if request.assembly is not None:
+                stmt = stmt.where(Assembly.name == request.assembly)
+            result = await db.execute(stmt)
+            genes = list(result.scalars().all())
+            if not genes:
                 raise NotFoundError(f"Gene {request.gene_id!r} not found")
+            if len(genes) > 1:
+                raise ValidationError(
+                    f"Gene {request.gene_id!r} exists in multiple assemblies; "
+                    "supply an explicit 'assembly'",
+                    details={"code": "ambiguous_assembly"},
+                )
+            gene = genes[0]
             assembly: Assembly | None = getattr(gene, "assembly", None)
             chromosome: Chromosome | None = getattr(gene, "chromosome", None)
             if assembly is None or chromosome is None:
@@ -104,7 +114,7 @@ class PopGenService:
                 "start": int(gene.start),
                 "end": int(gene.end),
                 "source": "gene",
-                "gene_id": gene.id,
+                "gene_id": gene.accession,
             }
 
         assert request.assembly is not None

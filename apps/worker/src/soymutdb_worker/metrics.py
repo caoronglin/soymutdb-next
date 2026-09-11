@@ -41,6 +41,7 @@ from prometheus_client import (  # noqa: E402
     CollectorRegistry,
     Counter,
     Gauge,
+    Histogram,
     multiprocess,
     start_http_server,
 )
@@ -51,8 +52,16 @@ logger = logging.getLogger(__name__)
 # ``expose`` so it is never reachable from the host).
 METRICS_PORT: int = int(os.environ.get("SOYMUTDB_WORKER_METRICS_PORT", "9808"))
 
-# The six runtime queues (contract: packages/jobs-py + compose worker commands).
-QUEUES: tuple[str, ...] = ("ingest", "export", "stats", "cleanup", "blast", "default")
+# The seven runtime queues (contract: packages/jobs-py + compose worker commands).
+QUEUES: tuple[str, ...] = (
+    "ingest",
+    "export",
+    "stats",
+    "cleanup",
+    "blast",
+    "analyses",
+    "default",
+)
 
 # ---------------------------------------------------------------------------
 # Metrics (registered on the default registry; writes go to multiproc files)
@@ -71,6 +80,13 @@ TASK_FAILURES_TOTAL = Counter(
     "soymutdb_worker_task_failures_total",
     "Number of Celery tasks that failed",
     ["queue"],
+)
+
+TASK_DURATION = Histogram(
+    "soymutdb_worker_task_duration_seconds",
+    "Celery task runtime by queue and terminal state",
+    ["queue", "state"],
+    buckets=(1, 5, 15, 30, 60, 300, 900, 3600, 21600, 86400),
 )
 
 WORKER_UP = Gauge(

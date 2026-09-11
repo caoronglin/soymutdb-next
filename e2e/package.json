@@ -11,7 +11,8 @@
     "test:production": "playwright test -c playwright-production.config.ts",
     "test:production:list": "playwright test -c playwright-production.config.ts --list",
     "test:visual": "VISUAL_RUN_ID=$(date -u +%Y%m%dT%H%M%SZ) playwright test -c playwright-visual.config.ts",
-    "test:visual:list": "playwright test -c playwright-visual.config.ts --list"
+    "test:visual:list": "playwright test -c playwright-visual.config.ts --list",
+    "test:web-performance": "playwright test -c playwright-web-performance.config.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

@@ -14,8 +14,9 @@ export interface GeneHomologResponse {
 
 export async function getGeneHomologs(
   geneId: string,
+  params?: { assembly_id?: string },
 ): Promise<GeneHomologResponse> {
-  return http.get<GeneHomologResponse>(`/genes/${geneId}/homologs`);
+  return http.get<GeneHomologResponse>(`/genes/${geneId}/homologs`, { params });
 }
 
 export async function searchHomologs(params: {

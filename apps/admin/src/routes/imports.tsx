@@ -88,16 +88,13 @@ const TYPE_LABELS: Record<ImportType, string> = {
   module_tsv: "Module Data",
 };
 
-const ALL_IMPORT_TYPES: ImportType[] = [
-  "vcf",
-  "gff3",
-  "fasta",
-  "blast_db",
-  "seed_data",
-  "expression_csv",
-  "homolog_csv",
-  "module_tsv",
-];
+/**
+ * Historical task labels remain in TYPE_LABELS so previously submitted jobs
+ * continue to render correctly. New submissions expose only durable writers.
+ */
+export const AVAILABLE_SUBMISSION_IMPORT_TYPES = ["module_tsv"] as const;
+export const DEFAULT_SUBMISSION_IMPORT_TYPE: (typeof AVAILABLE_SUBMISSION_IMPORT_TYPES)[number] =
+  "module_tsv";
 
 /** File extensions accepted for ``module_tsv`` (multi-format module import). */
 const MODULE_FORMAT_EXTENSIONS = [".tsv", ".txt", ".csv", ".xlsx"] as const;
@@ -131,7 +128,7 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
 
   // CloudUploadOutlined dialog state
   const [showUpload, setShowUpload] = useState(initialUploadOpen);
-  const [uploadType, setUploadType] = useState<ImportType>("vcf");
+  const [uploadType, setUploadType] = useState<ImportType>(DEFAULT_SUBMISSION_IMPORT_TYPE);
   const [uploadFilename, setUploadFilename] = useState("");
   const [uploadFilePath, setUploadFilePath] = useState("");
   const [uploadModuleKey, setUploadModuleKey] = useState("genes");
@@ -225,7 +222,7 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
       setShowUpload(false);
       setUploadFilename("");
       setUploadFilePath("");
-      setUploadType("vcf");
+      setUploadType(DEFAULT_SUBMISSION_IMPORT_TYPE);
       setUploadModuleKey("genes");
       setUploadDataSetId("1");
       setUploadReleaseId("");
@@ -709,7 +706,7 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-wrap items-start justify-between gap-4"><div><Typography.Title level={2}>Data Imports</Typography.Title><Typography.Text type="secondary">Monitor and manage data import tasks (VCF, GFF3, FASTA, BLAST databases, expression data, homologs).</Typography.Text></div><Button type="primary" onClick={openUploadDialog} disabled={!capabilitiesQuery.isSuccess} icon={<CloudUploadOutlined aria-hidden />} aria-label="New Import">New Import</Button></div>
+      <div className="flex flex-wrap items-start justify-between gap-4"><div><Typography.Title level={2}>Data Imports</Typography.Title><Typography.Text type="secondary">Submit durable module data imports and monitor historical import tasks. Biological specialized importers are not yet available for submission.</Typography.Text></div><Button type="primary" onClick={openUploadDialog} disabled={!capabilitiesQuery.isSuccess} icon={<CloudUploadOutlined aria-hidden />} aria-label="New Import">New Import</Button></div>
 
       {capabilitiesQuery.isPending ? (
         <p role="status" className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
@@ -892,11 +889,11 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
               >
 
 
-                  {ALL_IMPORT_TYPES.map((type) => (
+                  {AVAILABLE_SUBMISSION_IMPORT_TYPES.map((type) => (
                     <Select.Option
                       key={type}
                       value={type}
-                      disabled={type === "module_tsv" && !moduleImportEnabled}
+                      disabled={!moduleImportEnabled}
                     >
                       {TYPE_LABELS[type]}
                     </Select.Option>
@@ -947,7 +944,7 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
                     setUploadError(null);
                     invalidatePreview();
                   }}
-                  accept=".txt,.tsv,.csv,.xlsx,.vcf,.gff3,.fasta"
+                  accept=".txt,.tsv,.csv,.xlsx"
                 />
                 {uploadFile ? (
                   <p className="text-xs text-muted-foreground">

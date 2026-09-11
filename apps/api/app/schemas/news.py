@@ -12,6 +12,7 @@ Admin contract (researcher+):
 - ``DELETE /api/v1/admin/news/{news_id}``                              -> 204
 - ``PATCH  /api/v1/admin/news/reorder``             NewsReorderRequest -> NewsReorderResponse
 - ``GET    /api/v1/admin/news/{news_id}/preview-token``                -> PreviewTokenResponse
+- ``POST   /api/v1/admin/news/external-preview`` -> ExternalArticlePreviewResponse
 
 ``status`` (draft/published/archived) is the source of truth; ``is_published``
 is kept in sync by the service layer (double-write, migration 0010).
@@ -31,6 +32,30 @@ class NewsStatus(StrEnum):
     DRAFT = "draft"
     PUBLISHED = "published"
     ARCHIVED = "archived"
+
+
+class ExternalArticlePlatform(StrEnum):
+    """Approved external article origins for an explicit editor preview."""
+
+    WECHAT = "wechat"
+    XMOL = "xmol"
+
+
+_UNATTESTED_SOURCE_FIELDS = frozenset(
+    {
+        "source_platform",
+        "source_url",
+        "source_content_hash",
+        "source_published_at",
+    }
+)
+
+
+def _reject_unattested_source_fields(values: object) -> object:
+    """Keep browser-supplied provenance out of the CMS write boundary."""
+    if isinstance(values, dict) and _UNATTESTED_SOURCE_FIELDS & values.keys():
+        raise ValueError("External source metadata must come from source_preview_token")
+    return values
 
 
 def _coerce_id_to_str(value: object) -> object:
@@ -70,6 +95,34 @@ class NewsSummaryResponse(BaseModel):
     _coerce_id = field_validator("id", mode="before")(_coerce_id_to_str)
 
 
+class DeletedNewsSummaryResponse(BaseModel):
+    """Metadata-only administrative view of a soft-deleted news article."""
+
+    id: str
+    title_en: str
+    title_zh: str | None = None
+    slug: str
+    category: str | None = None
+    status: NewsStatus = NewsStatus.DRAFT
+    published_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+    deleted_at: datetime
+
+    model_config = {"from_attributes": True}
+
+    _coerce_id = field_validator("id", mode="before")(_coerce_id_to_str)
+
+
+class DeletedNewsListResponse(BaseModel):
+    """Paginated metadata-only list of soft-deleted news articles."""
+
+    items: list[DeletedNewsSummaryResponse]
+    total: int
+    page: int
+    page_size: int
+
+
 class NewsDetailResponse(NewsSummaryResponse):
     """Full article view including body content."""
 
@@ -79,6 +132,12 @@ class NewsDetailResponse(NewsSummaryResponse):
     # scheduled publishing dates (B3 gap fixed in D4).
     visible_from: datetime | None = None
     visible_to: datetime | None = None
+    # Provenance is returned on the full detail view so public pages can
+    # attribute imported content without exposing an internal content hash.
+    source_platform: ExternalArticlePlatform | None = None
+    source_url: str | None = None
+    source_published_at: datetime | None = None
+    source_synced_at: datetime | None = None
 
 
 class NewsListResponse(BaseModel):
@@ -105,6 +164,29 @@ class NewsFeaturedResponse(BaseModel):
     carousel: list[CarouselGroupResponse]
 
 
+class ExternalArticlePreviewRequest(BaseModel):
+    """One explicit, review-only fetch of an approved external article URL.
+
+    The endpoint never persists or publishes content.  The caller must apply
+    the sanitized preview to a news form and save it through normal CMS review.
+    """
+
+    platform: ExternalArticlePlatform
+    source_url: str = Field(..., min_length=12, max_length=2048)
+
+
+class ExternalArticlePreviewResponse(BaseModel):
+    """Sanitized result of an external article preview fetch."""
+
+    platform: ExternalArticlePlatform
+    source_url: str
+    title: str
+    content_html: str
+    # Opaque, short-lived server attestation used only by the save boundary.
+    source_preview_token: str = Field(..., min_length=32, max_length=4096)
+    source_published_at: datetime | None = None
+
+
 # ---------------------------------------------------------------------------
 # Admin write payloads
 # ---------------------------------------------------------------------------
@@ -127,6 +209,14 @@ class NewsCreate(BaseModel):
     visible_from: datetime | None = None
     visible_to: datetime | None = None
     is_published: bool = False
+    # A reviewed source is asserted only by the signed preview response; the
+    # service rehydrates platform, URL, fingerprint and source date from it.
+    source_preview_token: str | None = Field(default=None, min_length=32, max_length=4096)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _attested_source_only(cls, values: object) -> object:
+        return _reject_unattested_source_fields(values)
 
     @model_validator(mode="after")
     def _visibility_window_is_ordered(self):
@@ -144,9 +234,7 @@ class NewsUpdate(BaseModel):
     title_zh: str | None = Field(default=None, max_length=512)
     content_en: str | None = Field(default=None, min_length=1)
     content_zh: str | None = None
-    slug: str | None = Field(
-        default=None, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$"
-    )
+    slug: str | None = Field(default=None, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
     category: str | None = Field(default=None, max_length=64)
     cover_url: str | None = Field(default=None, max_length=1024)
     cover_asset_id: UUID | None = None
@@ -158,6 +246,15 @@ class NewsUpdate(BaseModel):
     visible_from: datetime | None = None
     visible_to: datetime | None = None
     is_published: bool | None = None
+    # Provenance can be replaced only by a fresh, signed preview attestation.
+    # Removing attribution is explicit and never requires a client-supplied URL.
+    source_preview_token: str | None = Field(default=None, min_length=32, max_length=4096)
+    clear_source_provenance: bool = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def _attested_source_only(cls, values: object) -> object:
+        return _reject_unattested_source_fields(values)
 
     @model_validator(mode="after")
     def _visibility_window_is_ordered(self):
@@ -167,6 +264,8 @@ class NewsUpdate(BaseModel):
             and self.visible_from >= self.visible_to
         ):
             raise ValueError("visible_from must be earlier than visible_to")
+        if self.source_preview_token is not None and self.clear_source_provenance:
+            raise ValueError("source_preview_token cannot be combined with clear_source_provenance")
         return self
 
 

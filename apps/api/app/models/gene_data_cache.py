@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import DateTime, ForeignKey, String, func
+from sqlalchemy import BigInteger, DateTime, ForeignKey, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -15,10 +15,11 @@ from .base import Base
 class GeneDataCache(Base):
     __tablename__ = "gene_data_cache"
 
-    gene_id: Mapped[str] = mapped_column(
-        String(64),
-        ForeignKey("genes.id", ondelete="CASCADE"),
+    gene_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("genes.gene_pk", ondelete="CASCADE"),
         primary_key=True,
+        comment="FK to genes.gene_pk (surrogate)",
     )
     data: Mapped[dict] = mapped_column(JSONB, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(

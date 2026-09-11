@@ -1,35 +1,21 @@
 #!/usr/bin/env tsx
-/**
- * Embed release-pinned PageDefinitions into static pages (Phase 8).
- *
- * After the SPA assets and content pages are built, this script fetches the
- * published PageDefinition route(s) from the API and injects a
- * `#rl-page-definition` bootstrap `<script type="application/json">` into the
- * matching static HTML so the public renderer hydrates the definition without
- * a refetch (version match → no refetch; see src/page-builder/loader.ts).
- *
- * Offline / API-unavailable behaviour mirrors fetch-content-snapshot.ts:
- * local builds (and non-production CI) SKIP silently (exit 0) so the plain SPA
- * path and immutable seed fallback still work.
- */
+/** Embed published PageDefinition bootstraps into release static HTML. */
 
-import { readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 
-const API_BASE = process.env.SOYMUTDB_API_URL ?? "http://localhost:8000";
-const DIST_DIR = join(process.cwd(), "dist");
-const IS_PRODUCTION_BUILD =
-  process.env.CI === "true" || process.env.NODE_ENV === "production";
-
-/** Routes we embed bootstrap for (the SPA home + generic hub pages). */
-const EMBED_ROUTES: ReadonlyArray<{ route: string; file: string }> = [
-  { route: "/", file: "index.html" },
-];
-
-interface VersionPayload {
+export interface PublishedRoute {
+  route: string;
   version: number;
   status: string;
   definition: { title_key?: string; root: unknown };
+}
+
+export interface EmbedOptions {
+  apiBase: string;
+  distDir: string;
+  production?: boolean;
+  fetchImpl?: typeof fetch;
 }
 
 function embedBootstrap(payload: Record<string, unknown>): string {
@@ -37,57 +23,83 @@ function embedBootstrap(payload: Record<string, unknown>): string {
   return `<script type="application/json" id="rl-page-definition">${json}</script>`;
 }
 
-async function fetchDefinition(route: string): Promise<VersionPayload | null> {
-  const normalized = route === "/" ? "" : route.replace(/^\/+/, "");
-  const url = `${API_BASE}/api/v1/page-definitions/${normalized}`;
+async function fetchPublishedRoutes(apiBase: string, fetchImpl: typeof fetch): Promise<PublishedRoute[]> {
   try {
-    const res = await fetch(url, { headers: { Accept: "application/json" } });
-    if (!res.ok) return null;
-    return (await res.json()) as VersionPayload;
+    const res = await fetchImpl(`${apiBase}/api/v1/page-definitions/published-routes`, {
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) return [];
+    const payload = (await res.json()) as unknown;
+    return Array.isArray(payload) ? payload as PublishedRoute[] : [];
   } catch {
-    return null;
+    return [];
   }
+}
+
+/** Reject traversal, empty segments, and non-URL-safe route segments. */
+export function routeToFile(route: string): string | null {
+  if (route === "/") return "index.html";
+  if (!route.startsWith("/") || route.includes("//")) return null;
+  const segments = route.slice(1).split("/");
+  if (!segments.length || segments.some((segment) => !/^[a-z0-9][a-z0-9-]*$/i.test(segment))) return null;
+  return join(...segments, "index.html");
 }
 
 function inject(html: string, bootstrap: string): string {
-  const marker = "</head>";
-  if (!html.includes(marker)) return html;
-  return html.replace(marker, `${bootstrap}${marker}`);
+  return html.includes("</head>") ? html.replace("</head>", bootstrap + "</head>") : html;
+}
+
+/**
+ * Generates one SPA-shell HTML file per published PageDefinition route.
+ * An unreachable or empty public manifest is non-fatal: the existing SPA
+ * output remains usable, including in offline local builds.
+ */
+export async function embedPublishedDefinitions(options: EmbedOptions): Promise<number> {
+  const routes = await fetchPublishedRoutes(options.apiBase, options.fetchImpl ?? fetch);
+  if (routes.length === 0) {
+    console.warn("[embed-page-definitions] no published routes received; leaving SPA fallback intact");
+    return 0;
+  }
+
+  const shellPath = join(options.distDir, "index.html");
+  if (!existsSync(shellPath)) throw new Error(`missing SPA shell ${shellPath}`);
+  const shell = readFileSync(shellPath, "utf-8");
+  let embedded = 0;
+  for (const payload of routes) {
+    const file = routeToFile(payload.route);
+    if (!file || payload.status !== "published" || !payload.definition?.root) {
+      console.warn(`[embed-page-definitions] ignoring invalid unpublished route ${payload.route}`);
+      continue;
+    }
+    const target = join(options.distDir, file);
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, inject(shell, embedBootstrap({
+      route: payload.route,
+      version: payload.version,
+      status: payload.status,
+      definition: payload.definition,
+      generated_at: new Date().toISOString(),
+    })), "utf-8");
+    embedded += 1;
+    console.log(`[embed-page-definitions] embedded ${payload.route} (v${payload.version}) into ${file}`);
+  }
+  if (embedded === 0 && options.production) {
+    console.warn("[embed-page-definitions] no valid published definitions embedded");
+  }
+  return embedded;
 }
 
 async function main(): Promise<void> {
-  let embedded = 0;
-  for (const { route, file } of EMBED_ROUTES) {
-    const target = join(DIST_DIR, file);
-    const html = readFileSync(target, "utf-8");
-
-    const payload = await fetchDefinition(route);
-    if (!payload || payload.status !== "published" || !payload.definition?.root) {
-      console.warn(
-        `[embed-page-definitions] no published definition for ${route}; leaving ${file} on seed fallback`,
-      );
-      continue;
-    }
-
-    const bootstrap = embedBootstrap({
-      route,
-      version: payload.version,
-      definition: payload.definition,
-      generated_at: new Date().toISOString(),
-    });
-    writeFileSync(target, inject(html, bootstrap), "utf-8");
-    embedded += 1;
-    console.log(`[embed-page-definitions] embedded ${route} (v${payload.version}) into ${file}`);
-  }
-
-  if (embedded === 0 && IS_PRODUCTION_BUILD) {
-    // A production CI build that cannot reach the API still ships SPA pages;
-    // the seed fallback covers the renderer. Report but do not fail.
-    console.warn("[embed-page-definitions] no definitions embedded (API unavailable)");
-  }
+  await embedPublishedDefinitions({
+    apiBase: process.env.SOYMUTDB_API_URL ?? "http://localhost:8000",
+    distDir: resolve(process.cwd(), process.env.SOYMUTDB_DIST_DIR ?? "dist"),
+    production: process.env.CI === "true" || process.env.NODE_ENV === "production",
+  });
 }
 
-main().catch((err) => {
-  console.error("[embed-page-definitions] failed:", (err as Error).message);
-  process.exitCode = 1;
-});
+if (process.argv[1]?.endsWith("embed-page-definitions.ts")) {
+  main().catch((err) => {
+    console.error("[embed-page-definitions] failed:", (err as Error).message);
+    process.exitCode = 1;
+  });
+}

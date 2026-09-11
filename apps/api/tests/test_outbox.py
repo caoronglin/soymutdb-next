@@ -207,13 +207,26 @@ async def test_create_event_flushes_pending_row() -> None:
         aggregate_type="blast_job",
         aggregate_id="job-1",
         event_type="blast_job.run",
-        payload={"task_name": BLAST_RUN_TASK},
+        payload={"task_name": BLAST_RUN_TASK, "idempotency_key": "blast:job-1"},
     )
     assert session.added == [event]
     assert event.status == OutboxEventStatus.PENDING
     assert event.attempt_count == 0
     assert event.event_id is not None
+    assert event.idempotency_key == "blast:job-1"
     assert session.commits == 0  # caller owns the transaction
+
+
+@pytest.mark.parametrize("key", ["", "   ", 7, "x" * 256])
+async def test_create_event_rejects_invalid_idempotency_key(key) -> None:
+    with pytest.raises(ValueError, match="idempotency_key"):
+        await outbox_service.create_outbox_event(
+            FakeSession(),
+            aggregate_type="blast_job",
+            aggregate_id="job-1",
+            event_type="blast_job.run",
+            payload={"task_name": BLAST_RUN_TASK, "idempotency_key": key},
+        )
 
 
 async def test_claim_pending_only_returns_pending_and_retryable_failed() -> None:
@@ -426,10 +439,12 @@ async def test_enqueue_task_event_requires_task_name_and_stores_kwargs() -> None
         aggregate_id="import-1",
         task_name="soymutdb_worker.tasks.ingest.run_import_adapter",
         kwargs={"import_task_id": 1},
+        metadata={"requested_by": "user-1"},
     )
     assert session.added == [event]
     assert event.payload["task_name"] == "soymutdb_worker.tasks.ingest.run_import_adapter"
     assert event.payload["kwargs"] == {"import_task_id": 1}
+    assert event.payload["metadata"] == {"requested_by": "user-1"}
     assert event.status == OutboxEventStatus.PENDING
 
 

@@ -17,7 +17,7 @@
  */
 
 import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { join, posix } from "node:path";
+import { join, posix, resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { gzipSync } from "node:zlib";
 
@@ -27,7 +27,7 @@ import { gzipSync } from "node:zlib";
 
 const ROOT = process.cwd();
 const TEMPLATE = join(ROOT, "public", "sw.js");
-const DIST_DIR = join(ROOT, "dist");
+const DIST_DIR = resolve(ROOT, process.env.SOYMUTDB_DIST_DIR ?? "dist");
 const ASSETS_DIR = join(DIST_DIR, "assets");
 const OUT_FILE = join(DIST_DIR, "sw.js");
 const OUT_GZ = `${OUT_FILE}.gz`;

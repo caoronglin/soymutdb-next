@@ -9,7 +9,7 @@
 #   - redis-exporter     port 9121 (service: redis-exporter; scrapes both
 #                         redis and redis-celery instances)
 #   - node-exporter      port 9100 (service: node-exporter)
-#   - worker-default / worker-blast / worker-ingest / beat
+#   - worker-default / worker-blast / worker-ingest / worker-analyses / beat
 #                        worker /metrics on port 9808 (container network only)
 # Alert rules: infra/monitoring/rules/*.yml
 # =====================================================================
@@ -98,6 +98,11 @@ scrape_configs:
   - job_name: "worker-ingest"
     static_configs:
       - targets: ["worker-ingest:9808"]
+    scrape_interval: 15s
+
+  - job_name: "worker-analyses"
+    static_configs:
+      - targets: ["worker-analyses:9808"]
     scrape_interval: 15s
 
   - job_name: "beat"

@@ -28,6 +28,7 @@ export interface ExpressionLibrary {
 export async function getGeneExpression(
   geneId: string,
   params?: {
+    assembly_id?: string;
     tissue?: string;
     treatment?: string;
     min_fpkm?: number;

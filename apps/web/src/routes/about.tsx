@@ -18,6 +18,7 @@ import { Empty, Result, Skeleton, Typography } from "@/lib/antd";
 import { ReloadOutlined } from "@ant-design/icons";
 import DOMPurify from "dompurify";
 import { ApiError, getSiteAbout } from "@soymutdb/api-client";
+import { IS_INTERNAL_SITE, SITE_VARIANT } from "../lib/site-variant";
 import {
   isAboutData,
   loadSnapshotJson,
@@ -39,15 +40,15 @@ function AboutComponent() {
   const isZh = i18n.language.toLowerCase().startsWith("zh");
 
   // Bootstrap is read synchronously once per mount — SSG /about.html embeds it.
-  const bootstrap = React.useMemo(() => readBootstrap(), []);
+  const bootstrap = React.useMemo(() => (IS_INTERNAL_SITE ? undefined : readBootstrap()), []);
   const bootstrapAbout =
     bootstrap?.page === "about" && isAboutData(bootstrap.data)
       ? bootstrap.data
       : undefined;
 
   const aboutQuery = useQuery({
-    queryKey: ["site-about"],
-    queryFn: getSiteAbout,
+    queryKey: ["site-about", SITE_VARIANT],
+    queryFn: () => getSiteAbout(SITE_VARIANT),
     staleTime: bootstrapAbout ? PREFILL_STALE_TIME : 60_000,
     retry: false,
     // First paint renders the snapshot about block — no loading flash.
@@ -62,17 +63,17 @@ function AboutComponent() {
   // refresh replaces it.
   React.useEffect(() => {
     if (!bootstrapAbout || !bootstrap) return;
-    prefillQueryData(queryClient, ["site-about"], bootstrapAbout, bootstrap.generated_at);
+    prefillQueryData(queryClient, ["site-about", SITE_VARIANT], bootstrapAbout, bootstrap.generated_at);
   }, [bootstrapAbout, bootstrap, queryClient]);
 
   // No bootstrap (plain SPA / dev): the site-wide snapshot JSON can still
   // prefill the about block. Fetch once per session, silently.
   React.useEffect(() => {
-    if (bootstrap) return;
+    if (bootstrap || IS_INTERNAL_SITE) return;
     let cancelled = false;
     void loadSnapshotJson().then((snap) => {
       if (cancelled || !snap?.about) return;
-      prefillQueryData(queryClient, ["site-about"], snap.about, snap.generated_at);
+      prefillQueryData(queryClient, ["site-about", SITE_VARIANT], snap.about, snap.generated_at);
     });
     return () => {
       cancelled = true;

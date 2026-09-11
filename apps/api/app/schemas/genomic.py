@@ -50,6 +50,7 @@ class GeneResponse(BaseModel):
     id: str | None = None
     gene_id: str | None = None
     assembly_id: str | None = None
+    assembly_name: str | None = None
     chromosome: str
     name: str | None = None
     symbol: str | None = None

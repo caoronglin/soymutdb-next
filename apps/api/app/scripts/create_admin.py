@@ -118,7 +118,7 @@ async def create_admin(
                 resource_type="user",
                 resource_id=str(user.id),
                 new_value={"username": username, "email": email},
-                ip_address="localhost",
+                ip_address="127.0.0.1",
                 timestamp=datetime.now(timezone.utc),
             )
         )

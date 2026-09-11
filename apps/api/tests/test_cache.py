@@ -19,6 +19,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from app.core.metrics import CACHE_LOOKUPS_TOTAL, CACHE_WRITE_FAILURES_TOTAL
 from app.services.cache import get_or_set, make_cache_key
 
 
@@ -111,6 +112,37 @@ class TestGetOrSet:
         value = await get_or_set("demo", ttl=60, loader=loader, redis=redis)
 
         assert value == {"fallback": True}
+
+    async def test_cache_metrics_distinguish_hit_miss_and_degradation(self) -> None:
+        hit = CACHE_LOOKUPS_TOTAL.labels(cache="metrics-hit", outcome="hit")
+        miss = CACHE_LOOKUPS_TOTAL.labels(cache="metrics-miss", outcome="miss")
+        read_error = CACHE_LOOKUPS_TOTAL.labels(
+            cache="metrics-error", outcome="read_error"
+        )
+        write_error = CACHE_WRITE_FAILURES_TOTAL.labels(cache="metrics-error")
+        before = tuple(metric._value.get() for metric in (hit, miss, read_error, write_error))
+
+        await get_or_set(
+            "metrics-hit",
+            ttl=60,
+            loader=AsyncMock(side_effect=AssertionError("must hit")),
+            redis=FakeRedis(store={"cache:metrics-hit": "1"}),
+        )
+        await get_or_set(
+            "metrics-miss",
+            ttl=60,
+            loader=AsyncMock(return_value=1),
+            redis=FakeRedis(),
+        )
+        await get_or_set(
+            "metrics-error",
+            ttl=60,
+            loader=AsyncMock(return_value=1),
+            redis=FakeRedis(fail_get=True, fail_set=True),
+        )
+
+        after = tuple(metric._value.get() for metric in (hit, miss, read_error, write_error))
+        assert after == tuple(value + 1 for value in before)
 
     async def test_corrupt_cache_entry_falls_through(self) -> None:
         redis = FakeRedis(store={"cache:demo": "{not-json"})
@@ -396,3 +428,75 @@ class TestEndpointCacheIntegration:
         assert result.featured == []
         assert called["name"] == "news:featured"
         assert called["ttl"] == news_module.FEATURED_CACHE_TTL_SECONDS == 60
+
+
+class TestCachedDecorator:
+    @pytest.mark.asyncio
+    async def test_binds_selected_parameters_independent_of_call_style(self, monkeypatch) -> None:
+        from app.core import cache_decorator
+
+        called: dict[str, object] = {}
+
+        async def fake_get_or_set(name, ttl, loader, *, params=None):
+            called["name"] = name
+            called["ttl"] = ttl
+            called["params"] = params
+            return await loader()
+
+        monkeypatch.setattr(cache_decorator, "get_or_set", fake_get_or_set)
+
+        @cache_decorator.cached("release:context", ttl=60, key_params=("release_id",))
+        async def load(release_id: int, include_drafts: bool = False) -> dict[str, object]:
+            return {"release_id": release_id, "include_drafts": include_drafts}
+
+        result = await load(7, include_drafts=True)
+
+        assert result == {"release_id": 7, "include_drafts": True}
+        assert called == {
+            "name": "release:context",
+            "ttl": 60,
+            "params": {"release_id": 7},
+        }
+
+    def test_rejects_unknown_cache_key_parameter(self) -> None:
+        from app.core.cache_decorator import cached
+
+        with pytest.raises(ValueError, match="not function parameters"):
+            @cached("release:context", key_params=("missing",))
+            async def load(release_id: int) -> dict[str, int]:
+                return {"release_id": release_id}
+
+    def test_rejects_blank_cache_name(self) -> None:
+        from app.core.cache_decorator import cached
+
+        with pytest.raises(ValueError, match="non-empty"):
+            cached("   ")
+
+    @pytest.mark.asyncio
+    async def test_release_context_cache_hit_skips_database(self, monkeypatch) -> None:
+        from app.core import cache_decorator
+        from app.services import release_context
+
+        called: dict[str, object] = {}
+
+        async def fake_get_or_set(name, ttl, loader, *, params=None):
+            called["name"] = name
+            called["ttl"] = ttl
+            called["params"] = params
+            return {"release_id": 9, "assembly_id": 4, "assembly": "Wm82.v4"}
+
+        monkeypatch.setattr(cache_decorator, "get_or_set", fake_get_or_set)
+        db = AsyncMock()
+        db.execute = AsyncMock(side_effect=AssertionError("database must not run on cache hit"))
+
+        context = await release_context.resolve_release_context(db, requested_release_id=9)
+
+        assert context.release_id == 9
+        assert context.assembly_id == 4
+        assert context.assembly == "Wm82.v4"
+        assert called == {
+            "name": "release-context",
+            "ttl": 60,
+            "params": {"request_id": 9},
+        }
+

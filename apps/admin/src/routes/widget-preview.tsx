@@ -5,6 +5,33 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useSearch } from "@tanstack/react-router";
 import DOMPurify from "dompurify";
 import { widgetApi, type WidgetPreviewResponse } from "../lib/widget-api";
+import { useTranslation } from "react-i18next";
+
+const CATEGORY_LABEL_KEYS: Record<string, string> = {
+  hero: "categoryHero",
+  navigation: "categoryNavigation",
+  search: "categorySearch",
+  data_table: "categoryDataTable",
+  detail: "categoryDetail",
+  visualization: "categoryVisualization",
+  stats: "categoryStats",
+  external: "categoryExternal",
+  layout: "categoryLayout",
+  custom: "categoryCustom",
+};
+
+const CATEGORY_LABEL_DEFAULTS: Record<string, string> = {
+  hero: "Hero",
+  navigation: "Navigation",
+  search: "Search",
+  data_table: "Data Table",
+  detail: "Detail",
+  visualization: "Visualization",
+  stats: "Stats",
+  external: "External",
+  layout: "Layout",
+  custom: "Custom",
+};
 
 function isValidJson(s: string): boolean {
   if (!s.trim()) return true;
@@ -17,6 +44,11 @@ function isValidJson(s: string): boolean {
 }
 
 export default function WidgetPreviewPage() {
+  const { t } = useTranslation();
+  const categoryLabel = (c: string) => {
+    const key = CATEGORY_LABEL_KEYS[c];
+    return key ? t(`admin.ops.${key}`, { defaultValue: CATEGORY_LABEL_DEFAULTS[c] ?? c }) : c;
+  };
   const search = useSearch({ from: "/_auth/widget-preview" }) as { name?: string };
   const [selectedName, setSelectedName] = useState<string>(search.name ?? "");
   const [paramsJson, setParamsJson] = useState<string>("{}");
@@ -91,14 +123,14 @@ export default function WidgetPreviewPage() {
           <Link to="/widgets">
             <Button type="text" size="small">
               <ArrowLeftOutlined className="size-4" />
-              Widgets
+              {t("admin.ops.widgets", { defaultValue: "Widgets" })}
             </Button>
           </Link>
           <div>
-            <h2 className="font-serif text-2xl font-semibold">Widget Preview</h2>
+            <h2 className="font-serif text-2xl font-semibold">{t("admin.ops.widgetPreviewTitle", { defaultValue: "Widget Preview" })}</h2>
             <p className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
               <CodeOutlined className="size-3.5" />
-              Test-render widgets in a sandboxed iframe with custom parameters.
+              {t("admin.ops.widgetPreviewSubtitle", { defaultValue: "Test-render widgets in a sandboxed iframe with custom parameters." })}
             </p>
           </div>
         </div>
@@ -109,12 +141,12 @@ export default function WidgetPreviewPage() {
         <div className="space-y-6 lg:col-span-2">
           <Card>
             <div>
-              <Typography.Title level={5}>Preview Controls</Typography.Title>
-              <Typography.Text type="secondary">Select a widget and provide test parameters.</Typography.Text>
+              <Typography.Title level={5}>{t("admin.ops.previewControls", { defaultValue: "Preview Controls" })}</Typography.Title>
+              <Typography.Text type="secondary">{t("admin.ops.previewControlsSubtitle", { defaultValue: "Select a widget and provide test parameters." })}</Typography.Text>
             </div>
             <div className="space-y-4">
               <div className="space-y-1.5">
-                <label>Widget</label>
+                <label>{t("admin.ops.widgetField", { defaultValue: "Widget" })}</label>
                 <Select value={selectedName} onChange={setSelectedName}>
 
 
@@ -131,20 +163,20 @@ export default function WidgetPreviewPage() {
                 {selectedWidget ? (
                   <div className="flex items-center gap-2 pt-1">
                     <Badge color="default" className="text-xs">
-                      {selectedWidget.category}
+                      {categoryLabel(selectedWidget.category)}
                     </Badge>
                     <Badge
                       color={selectedWidget.is_active ? "success" : "secondary"}
                       className="text-xs"
                     >
-                      {selectedWidget.is_active ? "Active" : "Inactive"}
+                      {selectedWidget.is_active ? t("admin.ops.active", { defaultValue: "Active" }) : t("admin.ops.inactive", { defaultValue: "Inactive" })}
                     </Badge>
                   </div>
                 ) : null}
               </div>
 
               <div className="space-y-1.5">
-                <label htmlFor="params">Test Params (JSON)</label>
+                <label htmlFor="params">{t("admin.ops.testParamsJson", { defaultValue: "Test Params (JSON)" })}</label>
                 <Input.TextArea
                   id="params"
                   rows={10}
@@ -154,10 +186,10 @@ export default function WidgetPreviewPage() {
                   placeholder='{\n  "limit": 5,\n  "show_chart": true\n}'
                 />
                 {!validJson ? (
-                  <p className="text-xs text-destructive">Invalid JSON</p>
+                  <p className="text-xs text-destructive">{t("admin.ops.invalidJson", { defaultValue: "Invalid JSON" })}</p>
                 ) : (
                   <p className="text-xs text-muted-foreground">
-                    Parameters passed to the widget renderer.
+                    {t("admin.ops.parametersPassed", { defaultValue: "Parameters passed to the widget renderer." })}
                   </p>
                 )}
               </div>
@@ -172,14 +204,14 @@ export default function WidgetPreviewPage() {
                 ) : (
                   <CaretRightOutlined className="size-4" />
                 )}
-                {previewMutation.isPending ? "Rendering…" : "Render Preview"}
+                {previewMutation.isPending ? t("admin.ops.rendering", { defaultValue: "Rendering…" }) : t("admin.ops.renderPreview", { defaultValue: "Render Preview" })}
               </Button>
 
               {previewMutation.error ? (
                 <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-xs text-destructive">
                   {previewMutation.error instanceof Error
                     ? previewMutation.error.message
-                    : "Preview failed"}
+                    : t("admin.ops.previewFailed", { defaultValue: "Preview failed" })}
                 </div>
               ) : null}
             </div>
@@ -191,9 +223,9 @@ export default function WidgetPreviewPage() {
           <Card>
             <div className="flex-row items-center justify-between">
               <div>
-                <Typography.Title level={5}>Sandbox Preview</Typography.Title>
+                <Typography.Title level={5}>{t("admin.ops.sandboxPreview", { defaultValue: "Sandbox Preview" })}</Typography.Title>
                 <Typography.Text type="secondary">
-                  Rendered output — HTML is sanitized with DOMPurify.
+                  {t("admin.ops.sandboxPreviewDesc", { defaultValue: "Rendered output — HTML is sanitized with DOMPurify." })}
                 </Typography.Text>
               </div>
               {previewResult ? (
@@ -207,7 +239,7 @@ export default function WidgetPreviewPage() {
               <div className="overflow-hidden rounded-lg border border-border bg-background">
                 <iframe
                   ref={iframeRef}
-                  title="Widget Preview Sandbox"
+                  title={t("admin.ops.previewSandboxTitle", { defaultValue: "Widget Preview Sandbox" })}
                   sandbox="allow-same-origin"
                   className="w-full"
                   style={{ height: iframeHeight }}
@@ -215,13 +247,13 @@ export default function WidgetPreviewPage() {
               </div>
               {!previewResult && !previewMutation.isPending ? (
                 <div className="py-12 text-center text-sm text-muted-foreground">
-                  Select a widget and click <strong>Render Preview</strong> to see its output.
+                  {t("admin.ops.previewHintPrefix", { defaultValue: "Select a widget and click" })}{" "}<strong>{t("admin.ops.renderPreview", { defaultValue: "Render Preview" })}</strong>{" "}{t("admin.ops.previewHintSuffix", { defaultValue: "to see its output." })}
                 </div>
               ) : null}
               {previewMutation.isPending ? (
                 <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
                   <LoadingOutlined className="mr-2 size-4 animate-spin" />
-                  Rendering widget…
+                  {t("admin.ops.renderingWidget", { defaultValue: "Rendering widget…" })}
                 </div>
               ) : null}
             </div>

@@ -6,6 +6,39 @@ GitHub Pages（`.github/workflows/ci.yml` 生成 `pages-demo-dist` → `.github/
 
 ---
 
+## 双站点部署：external 与 internal
+
+门户必须按站点变体分别构建和部署，而不是在 API 中按访问者自动识别。执行 apps/web 的 pnpm run build:sites 会顺序生成：
+
+- dist/external：公开站点；使用 VITE_SITE_VARIANT=external，部署到公开 Pages 自定义域名。
+- dist/internal：内部站点；使用 VITE_SITE_VARIANT=internal，部署到独立的内部 Pages 项目或私有静态 origin。生产构建必须设置 SOYMUTDB_INTERNAL_SITE_URL；不能把内部 origin 的地址、token 或任何密钥放进 VITE_*。
+
+两套制品的静态文件和 manifest 互不复用。internal bundle 会请求 /api/v1/site/*?variant=internal；该变体要求认证 viewer，响应为 private, no-store。external 请求默认使用 external 变体并可按公开内容短时缓存。
+
+### Internal 必须有真正的访问控制
+
+- Cloudflare Pages 项目和自定义域名必须启用 Cloudflare Access/Zero Trust（推荐）或由 VPN、私有负载均衡、企业 SSO 网关限制来源；只把 internal 目录放在一个难猜 URL、robots.txt 或 noindex 后面不算安全。
+- 不要把 internal API 路径接到只面向公开数据的 Cloudflare Tunnel hostname；管理 API、Admin Web 和 internal Web 使用独立的受保护 origin。
+- 后端 SOYMUTDB_CORS_ORIGINS 精确列出 external Web、internal Web、Admin 和 staging origin，禁止 *。认证 cookie 与 API 的 HTTPS、SameSite、Secure 配置按实际域名验收。
+- Admin 设置页的 External site/Internal site 选择器写入独立、版本化、可回滚、可审计的设置分区。旧的全局分区只在迁移期间作为读取 fallback；首次保存后应复核两套内容。
+
+### 双站点发布验收
+
+~~~bash
+# 非生产本地验证（internal canonical URL 使用保留域名）
+VITE_DEPLOYMENT_MODE=standard SOYMUTDB_INTERNAL_SITE_URL=https://internal.soymutdb.invalid pnpm --filter @soymutdb/web build:sites
+
+# 未登录 internal API 必须失败；登录 viewer 才能返回内容
+curl -i 'https://internal.example.com/api/v1/site/content?variant=internal'
+curl -i 'https://www.example.com/api/v1/site/content?variant=external'
+
+# internal 制品必须 noindex 且不携带 public snapshot
+grep -R 'noindex, nofollow, noarchive' apps/web/dist/internal/*.html
+test ! -e apps/web/dist/internal/data/content.json
+~~~
+
+将 internal 当成私有应用而不是公开网站处理：边缘 Access 策略、API 授权、数据库审计和部署清单缺一不可。
+
 ## 1. 架构总览
 
 ```
@@ -298,13 +331,13 @@ grep -c "cloudflareinsights\|testtoken" apps/web/dist/index.html   # 应 ≥1
 ## 7. Preview 部署注意事项
 
 - **构建期变量**：在 Pages Dashboard → Settings → Environment variables 中按 **Production / Preview** 两组分别配置（Preview 组为 staging 值）。
-- **CSP 占位符**：`_headers` 与门户 `<meta>` CSP 是仓库内静态文本，生产与 preview 共享。preview 联调时，把其中 `connect-src` / `frame-src` / `frame-ancestors` 的占位域名**临时**替换为 staging 域名（提交到 preview 分支），联调完成后改回。生产部署前必须确认占位符已替换为生产域名。
+- **CSP 构建绑定**：门户/JBrowse 的 `_headers` 与 `<meta>` CSP 仍按静态模板 + Pages 环境变量发布；Admin 的 `_headers` 由 `apps/admin/vite.config.ts` 在构建收尾阶段从 `VITE_API_BASE_URL` 提取 origin 后生成。生产模式缺变量、非 HTTPS 或占位域名会直接使构建失败，禁止手工把示例域名带入制品。
 - **生产认证隔离**：preview 域名不在生产 `SOYMUTDB_CORS_ORIGINS` 内，无法在生产 API 上登录 —— 这是既定安全行为，不要为 preview 放开生产白名单。
 - 若需要多套固定 preview 域名（如 `staging.<project>.pages.dev`），可配置 **Branch deployment controls / custom branch alias**，并把该固定域名加入 staging 后端白名单。
 
 ---
 
-## 8. 上线前占位符替换清单（遗留项）
+## 8. 上线前 CSP 与占位符检查清单
 
 | 位置 | 占位符 | 替换为 |
 | --- | --- | --- |
@@ -314,7 +347,7 @@ grep -c "cloudflareinsights\|testtoken" apps/web/dist/index.html   # 应 ≥1
 | `apps/web/scripts/base-template.ts`（SSG 模板 meta CSP） | 同上两处 | 同上 |
 | `apps/jbrowse/public/_headers`（CSP `connect-src`） | `https://api.example.com` | 生产 API origin |
 | `apps/jbrowse/public/_headers`（CSP `frame-ancestors`） | `https://portal.example.com` / `https://admin.example.com` | 门户 / 管理端生产 origin |
-| `apps/admin/public/_headers`（CSP `connect-src`） | `https://api.example.com` | 生产 API origin |
+| `apps/admin/vite.config.ts` + `apps/admin/public/_headers` | `VITE_API_BASE_URL` | 构建时校验并注入管理 API origin；不得手工修改生成的 `dist/_headers` |
 | 各应用 `.env.example` / Pages Dashboard | `https://api.example.com` 等 | 真实生产 / staging 域名（Dashboard 中配置） |
 
 > 占位符域名若未替换即上线：CSP 只多放行一个不存在的域名，不会放行真实 API —— 表现为 API 请求被 CSP 拦截（安全失败），不会静默放行。

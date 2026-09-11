@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, List, Optional
 
 from sqlalchemy import (
     BigInteger,
+    CheckConstraint,
     DateTime,
     Enum,
     ForeignKey,
@@ -16,10 +17,10 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
-    func,
+    UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base, TimestampMixin, enum_values
@@ -53,36 +54,33 @@ class Release(Base, TimestampMixin):
     gene_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     mutant_line_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     status: Mapped[str] = mapped_column(
-        Enum(ReleaseStatus, name="release_status_enum", create_constraint=True, values_callable=enum_values),
+        Enum(
+            ReleaseStatus,
+            name="release_status_enum",
+            create_constraint=True,
+            values_callable=enum_values,
+        ),
         default=ReleaseStatus.DRAFT,
         server_default="draft",
         nullable=False,
     )
-    published_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    published_by: Mapped[Optional[uuid.UUID]] = mapped_column(
-        PG_UUID(as_uuid=True), nullable=True
-    )
-    approved_by: Mapped[Optional[uuid.UUID]] = mapped_column(
-        PG_UUID(as_uuid=True), nullable=True
-    )
+    published_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    published_by: Mapped[Optional[uuid.UUID]] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
+    approved_by: Mapped[Optional[uuid.UUID]] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     assembly: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     manifest: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     active_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    rolled_back_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    rolled_back_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
-    assemblies: Mapped[List["Assembly"]] = relationship(
-        back_populates="release", lazy="noload"
-    )
+    assemblies: Mapped[List["Assembly"]] = relationship(back_populates="release", lazy="noload")
     variant_summaries: Mapped[List["VariantSummary"]] = relationship(
         back_populates="release", lazy="noload"
     )
-    mutant_lines: Mapped[List["MutantLine"]] = relationship(
-        back_populates="release", lazy="noload"
-    )
+    mutant_lines: Mapped[List["MutantLine"]] = relationship(back_populates="release", lazy="noload")
     download_files: Mapped[List["DownloadFile"]] = relationship(
         back_populates="release", lazy="noload"
     )
@@ -115,9 +113,18 @@ class NewsArticle(Base, TimestampMixin):
     title_zh: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     content_en: Mapped[str] = mapped_column(Text, nullable=False)
     content_zh: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    slug: Mapped[str] = mapped_column(
-        String(256), unique=True, nullable=False, index=True
+    # Provenance is recorded only for a controlled external-source preview that
+    # an editor explicitly applies and later saves as a normal CMS draft.
+    source_platform: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    source_url: Mapped[Optional[str]] = mapped_column(String(2048), nullable=True)
+    source_content_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    source_published_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
+    source_synced_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    slug: Mapped[str] = mapped_column(String(256), unique=True, nullable=False, index=True)
     category: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     # cover_url remains for backwards compatibility; new editors should bind
     # cover_asset_id so the media library is the canonical source.
@@ -139,35 +146,110 @@ class NewsArticle(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(
         String(16), default="draft", server_default="draft", nullable=False
     )
-    visible_from: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    visible_to: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    visible_from: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    visible_to: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     is_published: Mapped[bool] = mapped_column(
         default=False, server_default="false", nullable=False
     )
-    published_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    published_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     author_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
+    # Deleted records remain addressable only by the lifecycle restore path.
+    # Keeping their slug reserves the canonical public URL and audit history.
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_by: Mapped[Optional[uuid.UUID]] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    lock_version: Mapped[int] = mapped_column(
+        Integer, default=1, server_default="1", nullable=False
+    )
+    schedule_generation: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
+    )
 
     author: Mapped[Optional["User"]] = relationship(
-        back_populates="articles", lazy="joined"
+        back_populates="articles", foreign_keys=[author_id], lazy="joined"
     )
 
     __table_args__ = (
         Index("ix_news_published", "is_published", "published_at"),
         Index("ix_news_status_window", "status", "visible_from", "visible_to"),
+        Index("ix_news_articles_deleted_at", "deleted_at"),
+        # PostgreSQL allows multiple NULLs in a unique index, so locally
+        # authored articles remain unrestricted while a canonical external URL
+        # can never be claimed by two CMS records.
+        Index("uq_news_articles_source_url", "source_url", unique=True),
     )
 
     def __repr__(self) -> str:
         return f"<NewsArticle id={self.id} slug={self.slug!r} status={self.status}>"
+
+
+class NewsScheduleState(str, enum.Enum):
+    PENDING = "pending"
+    LEASED = "leased"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+
+
+class NewsArticleRevision(Base, TimestampMixin):
+    __tablename__ = "news_article_revisions"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    article_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("news_articles.id", ondelete="RESTRICT"), nullable=False
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    snapshot: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+    __table_args__ = (
+        UniqueConstraint("article_id", "version", name="uq_news_article_revisions_article_version"),
+        Index("ix_news_article_revisions_article_id", "article_id"),
+    )
+
+
+class NewsPublicationSchedule(Base, TimestampMixin):
+    __tablename__ = "news_publication_schedules"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    article_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("news_articles.id", ondelete="RESTRICT"), nullable=False
+    )
+    generation: Mapped[int] = mapped_column(Integer, nullable=False)
+    scheduled_for: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    state: Mapped[str] = mapped_column(
+        Enum(NewsScheduleState, name="news_schedule_state_enum", values_callable=enum_values),
+        default=NewsScheduleState.PENDING,
+        server_default="pending",
+        nullable=False,
+    )
+    leased_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    lease_expires_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "(state = 'leased') = (leased_at IS NOT NULL AND lease_expires_at IS NOT NULL)",
+            name="ck_news_publication_schedules_leased_lease",
+        ),
+        UniqueConstraint(
+            "article_id", "generation", name="uq_news_publication_schedules_article_generation"
+        ),
+        Index("ix_news_publication_schedules_due", "state", "scheduled_for"),
+    )
 
 
 class Publication(Base, TimestampMixin):
@@ -184,9 +266,7 @@ class Publication(Base, TimestampMixin):
     pmid: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, unique=True)
     abstract: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     abstract_zh: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    is_featured: Mapped[bool] = mapped_column(
-        default=False, server_default="false", nullable=False
-    )
+    is_featured: Mapped[bool] = mapped_column(default=False, server_default="false", nullable=False)
 
     __table_args__ = (Index("ix_pub_year", "year"),)
 
@@ -198,9 +278,7 @@ class StaticPage(Base, TimestampMixin):
     __tablename__ = "static_pages"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    slug: Mapped[str] = mapped_column(
-        String(256), unique=True, nullable=False, index=True
-    )
+    slug: Mapped[str] = mapped_column(String(256), unique=True, nullable=False, index=True)
     title_en: Mapped[str] = mapped_column(String(512), nullable=False)
     title_zh: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     content_en: Mapped[str] = mapped_column(Text, nullable=False)
@@ -215,12 +293,8 @@ class StaticPage(Base, TimestampMixin):
     )
     summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     category: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    sort_order: Mapped[int] = mapped_column(
-        Integer, default=0, server_default="0", nullable=False
-    )
-    published_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    published_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     author: Mapped[Optional["User"]] = relationship(lazy="joined")
     versions: Mapped[List["ContentVersion"]] = relationship(
@@ -253,14 +327,10 @@ class ContentVersion(Base, TimestampMixin):
     content_en: Mapped[str] = mapped_column(Text, nullable=False)
     content_zh: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    edited_by: Mapped[Optional[uuid.UUID]] = mapped_column(
-        PG_UUID(as_uuid=True), nullable=True
-    )
+    edited_by: Mapped[Optional[uuid.UUID]] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
     edit_comment: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
 
-    page: Mapped["StaticPage"] = relationship(
-        back_populates="versions", lazy="joined"
-    )
+    page: Mapped["StaticPage"] = relationship(back_populates="versions", lazy="joined")
 
     __table_args__ = (Index("ix_content_version_page", "page_id", "version"),)
 

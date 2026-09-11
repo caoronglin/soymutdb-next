@@ -1,5 +1,11 @@
 /// <reference types="vite/client" />
 
+declare const __SOYMUTDB_INTERNAL_SITE__: boolean;
+
+interface ImportMetaEnv {
+    readonly VITE_SOYMUTDB_RELEASE_ID?: string;
+}
+
 // Web Worker module declarations — allow `import WorkerUrl from './foo.worker.ts?worker'`
 declare module '*.worker.ts?worker' {
     const WorkerConstructor: { new (): Worker };

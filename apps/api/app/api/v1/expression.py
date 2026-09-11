@@ -8,9 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.database import get_db
 from ...core.exceptions import NotFoundError
+from ...core.exceptions import ValidationError
 from ...models.expression import ExpressionData, ExpressionLibrary
+from ...services.gene_service import GeneService
 
 router = APIRouter(prefix="/expression", tags=["expression"])
+_gene_service = GeneService()
 
 
 # ---------------------------------------------------------------------------
@@ -135,14 +138,41 @@ async def get_library(
 async def get_gene_expression(
     gene_id: str,
     db: AsyncSession = Depends(get_db),
+    assembly_id: int | None = Query(default=None),
     tissue: str | None = Query(default=None),
     treatment: str | None = Query(default=None),
     library_id: int | None = Query(default=None),
     min_fpkm: float | None = Query(default=None, ge=0.0),
     max_fpkm: float | None = Query(default=None, ge=0.0),
+    cursor: int | None = Query(
+        default=None,
+        ge=1,
+        description="Exclusive ExpressionData.id cursor.",
+    ),
+    limit: int = Query(default=100, ge=1, le=200),
 ) -> dict:
-    """Get expression data for a specific gene, with optional filters."""
-    conditions = [ExpressionData.gene_id == gene_id]
+    """Get a bounded, keyset-paginated expression slice for a gene.
+
+    ``gene_id`` is the assembly-scoped accession; when it exists in
+    multiple assemblies, ``assembly_id`` is required.
+
+    Complete data exports must use the asynchronous export path rather than
+    materialising every matching library in an API worker.
+    """
+    resolved = await _gene_service.find_by_accessions(
+        db, [gene_id], assembly_id=assembly_id
+    )
+    matches = resolved.get(gene_id, [])
+    if not matches:
+        raise NotFoundError(f"Gene {gene_id} not found")
+    if len(matches) > 1:
+        raise ValidationError(
+            f"Gene {gene_id} exists in multiple assemblies; "
+            "supply an explicit assembly_id",
+            details={"code": "ambiguous_assembly"},
+        )
+    gene_pk = matches[0].gene_pk
+    conditions = [ExpressionData.gene_id == gene_pk]
     if tissue:
         conditions.append(ExpressionLibrary.tissue == tissue)
     if treatment:
@@ -153,15 +183,20 @@ async def get_gene_expression(
         conditions.append(ExpressionData.fpkm >= min_fpkm)
     if max_fpkm is not None:
         conditions.append(ExpressionData.fpkm <= max_fpkm)
+    if cursor is not None:
+        conditions.append(ExpressionData.id > cursor)
 
     stmt = (
         select(ExpressionData)
         .join(ExpressionLibrary, ExpressionData.library_id == ExpressionLibrary.id)
         .where(and_(*conditions))
-        .order_by(ExpressionData.library_id.asc())
+        .order_by(ExpressionData.id.asc())
+        .limit(limit + 1)
     )
     result = await db.execute(stmt)
     rows = result.scalars().all()
+    has_more = len(rows) > limit
+    rows = rows[:limit]
 
     expressions = []
     for row in rows:
@@ -176,7 +211,12 @@ async def get_gene_expression(
             "raw_count": row.raw_count,
         })
 
-    return {"gene_id": gene_id, "expressions": expressions}
+    return {
+        "gene_id": gene_id,
+        "expressions": expressions,
+        "next_cursor": rows[-1].id if has_more and rows else None,
+        "has_more": has_more,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -188,6 +228,7 @@ async def get_gene_expression(
 async def search_expression(
     db: AsyncSession = Depends(get_db),
     gene_id: str | None = Query(default=None),
+    assembly_id: int | None = Query(default=None),
     library_id: int | None = Query(default=None),
     tissue: str | None = Query(default=None),
     treatment: str | None = Query(default=None),
@@ -199,7 +240,19 @@ async def search_expression(
     """Search expression data rows, joined with library info, with pagination."""
     conditions = []
     if gene_id:
-        conditions.append(ExpressionData.gene_id == gene_id)
+        resolved = await _gene_service.find_by_accessions(
+            db, [gene_id], assembly_id=assembly_id
+        )
+        matches = resolved.get(gene_id, [])
+        if not matches:
+            raise NotFoundError(f"Gene {gene_id} not found")
+        if len(matches) > 1:
+            raise ValidationError(
+                f"Gene {gene_id} exists in multiple assemblies; "
+                "supply an explicit assembly_id",
+                details={"code": "ambiguous_assembly"},
+            )
+        conditions.append(ExpressionData.gene_id == matches[0].gene_pk)
     if library_id is not None:
         conditions.append(ExpressionData.library_id == library_id)
     if tissue:
@@ -240,7 +293,7 @@ async def search_expression(
         lib = row.library
         items.append({
             "id": row.id,
-            "gene_id": row.gene_id,
+            "gene_id": row.gene.accession,
             "library_id": lib.id,
             "library_name": lib.library_name,
             "tissue": lib.tissue,

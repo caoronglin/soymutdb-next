@@ -49,7 +49,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/health/ready": {
@@ -93,7 +94,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/auth/register": {
@@ -183,6 +185,25 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded; retry after the indicated number of seconds.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until this login attempt may be retried.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -326,7 +347,8 @@
           {
             "HTTPBearer": []
           }
-        ]
+        ],
+        "x-idempotent": true
       }
     },
     "/api/v1/auth/change-password": {
@@ -423,7 +445,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/genes/assemblies/{assembly_id}/chromosomes": {
@@ -481,7 +504,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/genes": {
@@ -704,7 +728,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/genes/{gene_id}": {
@@ -713,7 +738,7 @@
           "genes"
         ],
         "summary": "Get Gene",
-        "description": "Get gene detail with transcripts and aliases.\n\nDomain errors (e.g. ``NotFoundError``) propagate to the error envelope;\nunexpected exceptions are converted to a 500 HTTP error so the client\nalways receives a structured response.",
+        "description": "Get gene detail with transcripts and aliases.\n\n``gene_id`` is the assembly-scoped accession. When it exists in\nmultiple assemblies, ``assembly_id`` is required; the API returns an\nexplicit disambiguation error otherwise.\n\nDomain errors (e.g. ``NotFoundError``) propagate to the error envelope;\nunexpected exceptions are converted to a 500 HTTP error so the client\nalways receives a structured response.",
         "operationId": "get_gene_api_v1_genes__gene_id__get",
         "parameters": [
           {
@@ -723,6 +748,22 @@
             "schema": {
               "type": "string",
               "title": "Gene Id"
+            }
+          },
+          {
+            "name": "assembly_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Assembly Id"
             }
           },
           {
@@ -791,7 +832,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/gwas/uploads": {
@@ -964,7 +1006,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/gwas/{job_id}/results": {
@@ -1023,7 +1066,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/jobs/events": {
@@ -1063,7 +1107,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/tools/ld": {
@@ -1651,7 +1696,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/variants/region": {
@@ -1785,7 +1831,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/variants/{variant_id}": {
@@ -1872,7 +1919,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/variants/export": {
@@ -2026,7 +2074,7 @@
           "search"
         ],
         "summary": "Global search (JSON or HTML fragment)",
-        "description": "Global search endpoint.\n\nReturns JSON (internal DB search) when the client sends\n``Accept: application/json`` or ``?format=json``.  Otherwise returns a\nsanitized HTML fragment built from federated external search results.",
+        "description": "Global search endpoint.\n\nReturns JSON (public SoyMutDB search) when the client sends\n``Accept: application/json`` or ``?format=json``.  Otherwise returns a\nsanitized HTML fragment built from federated external search results.",
         "operationId": "global_search_api_v1_search_get",
         "parameters": [
           {
@@ -2109,6 +2157,23 @@
             }
           },
           {
+            "name": "assembly_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Assembly Id"
+            }
+          },
+          {
             "name": "format",
             "in": "query",
             "required": false,
@@ -2174,7 +2239,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/search/suggest": {
@@ -2183,7 +2249,7 @@
           "search"
         ],
         "summary": "Suggest",
-        "description": "Autocomplete suggestions (internal DB only).",
+        "description": "Autocomplete suggestions (internal DB only, release-scoped).",
         "operationId": "suggest_api_v1_search_suggest_get",
         "parameters": [
           {
@@ -2246,7 +2312,81 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
+      }
+    },
+    "/api/v1/search/internal": {
+      "get": {
+        "tags": [
+          "search"
+        ],
+        "summary": "Authorized internal search across public and internal identifiers",
+        "description": "Internal-site search: server-side authorized, audited, uncached.\n\nResults carry both identities (public_id / internal_id) and the field\nthat matched. The shared search cache is deliberately bypassed so\nauthorized rows cannot leak into another scope, and the response is\nmarked ``private, no-store``.",
+        "operationId": "internal_search_api_v1_search_internal_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500,
+              "title": "Query"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalSearchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/stats/dashboard": {
@@ -2288,7 +2428,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/stats/homepage": {
@@ -2330,7 +2471,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/stats/variant-types": {
@@ -2390,7 +2532,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/stats/summary/variant-types": {
@@ -2454,7 +2597,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/stats/summary/impact": {
@@ -2518,7 +2662,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/stats/chromosome-density": {
@@ -2582,7 +2727,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/stats/discovery-trend": {
@@ -2658,7 +2804,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/stats/releases": {
@@ -2716,7 +2863,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/stats/mutagens": {
@@ -2780,7 +2928,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/stats/density": {
@@ -2855,7 +3004,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/blast/databases": {
@@ -2901,7 +3051,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/blast/jobs": {
@@ -3044,7 +3195,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/blast/jobs/{job_id}": {
@@ -3103,7 +3255,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/blast/jobs/{job_id}/results": {
@@ -3185,7 +3338,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/analyses": {
@@ -3246,7 +3400,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/analyses/uploads": {
@@ -3429,7 +3584,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/analyses/{job_id}/download": {
@@ -3498,7 +3654,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/tracks": {
@@ -3584,7 +3741,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/tracks/categories": {
@@ -3631,7 +3789,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/tracks/jbrowse-config": {
@@ -3694,7 +3853,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/tracks/{track_id}": {
@@ -3754,7 +3914,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/tracks/{track_id}/signed-url": {
@@ -3812,7 +3973,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/releases": {
@@ -3876,7 +4038,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/releases/{release_id}": {
@@ -3928,7 +4091,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/mutants": {
@@ -3937,7 +4101,7 @@
           "mutants"
         ],
         "summary": "List Mutant Lines",
-        "description": "List mutant lines.",
+        "description": "List public mutant lines.",
         "operationId": "list_mutant_lines_api_v1_mutants_get",
         "parameters": [
           {
@@ -4004,25 +4168,26 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
-    "/api/v1/mutants/{mutant_line_id}": {
+    "/api/v1/mutants/{public_id}": {
       "get": {
         "tags": [
           "mutants"
         ],
         "summary": "Get Mutant Line",
-        "description": "Get mutant line detail.",
-        "operationId": "get_mutant_line_api_v1_mutants__mutant_line_id__get",
+        "description": "Get a public mutant line by its public identifier.\n\nAny value that does not correspond to a visible public record yields\nthe same not-found response \u2014 including existing internal identifiers.",
+        "operationId": "get_mutant_line_api_v1_mutants__public_id__get",
         "parameters": [
           {
-            "name": "mutant_line_id",
+            "name": "public_id",
             "in": "path",
             "required": true,
             "schema": {
-              "type": "integer",
-              "title": "Mutant Line Id"
+              "type": "string",
+              "title": "Public Id"
             }
           }
         ],
@@ -4057,25 +4222,26 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
-    "/api/v1/mutants/{mutant_line_id}/phenotypes": {
+    "/api/v1/mutants/{public_id}/phenotypes": {
       "get": {
         "tags": [
           "mutants"
         ],
         "summary": "Get Phenotypes",
-        "description": "List phenotypes for a mutant line.",
-        "operationId": "get_phenotypes_api_v1_mutants__mutant_line_id__phenotypes_get",
+        "description": "List phenotypes for a public mutant line.",
+        "operationId": "get_phenotypes_api_v1_mutants__public_id__phenotypes_get",
         "parameters": [
           {
-            "name": "mutant_line_id",
+            "name": "public_id",
             "in": "path",
             "required": true,
             "schema": {
-              "type": "integer",
-              "title": "Mutant Line Id"
+              "type": "string",
+              "title": "Public Id"
             }
           }
         ],
@@ -4089,7 +4255,7 @@
                   "items": {
                     "$ref": "#/components/schemas/PhenotypeResponse"
                   },
-                  "title": "Response Get Phenotypes Api V1 Mutants  Mutant Line Id  Phenotypes Get"
+                  "title": "Response Get Phenotypes Api V1 Mutants  Public Id  Phenotypes Get"
                 }
               }
             }
@@ -4114,7 +4280,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/seeds/inventory": {
@@ -4178,7 +4345,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/seeds/inventory/{inventory_id}": {
@@ -4231,7 +4399,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/seeds/requests": {
@@ -4350,7 +4519,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/seeds/requests/{request_id}": {
@@ -4559,7 +4729,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/admin/seed-requests/{request_id}": {
@@ -4708,7 +4879,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/content/news": {
@@ -4768,7 +4940,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/content/news/{slug}": {
@@ -4820,7 +4993,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/content/publications": {
@@ -4880,7 +5054,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/content/publications/{publication_id}": {
@@ -4932,7 +5107,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/content/pages": {
@@ -4978,7 +5154,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/content/pages/{slug}": {
@@ -5030,7 +5207,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/content/downloads": {
@@ -5094,7 +5272,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/content/downloads/{file_id}/url": {
@@ -5147,7 +5326,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/news": {
@@ -5231,7 +5411,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/news/featured": {
@@ -5273,7 +5454,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/news/{slug}": {
@@ -5359,7 +5541,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/notifications": {
@@ -5420,7 +5603,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/notifications/unread-count": {
@@ -5467,7 +5651,8 @@
           {
             "HTTPBearer": []
           }
-        ]
+        ],
+        "x-idempotent": true
       }
     },
     "/api/v1/notifications/read": {
@@ -5608,7 +5793,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/ontology/term": {
@@ -5674,7 +5860,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/ontology/graph": {
@@ -5764,7 +5951,55 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
+      }
+    },
+    "/api/v1/page-definitions/published-routes": {
+      "get": {
+        "tags": [
+          "page-definitions"
+        ],
+        "summary": "Get Published Routes",
+        "description": "Return only published, SSG-safe routes with their minimal public payload.",
+        "operationId": "get_published_routes_api_v1_page_definitions_published_routes_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PublishedPageDefinitionRoute"
+                  },
+                  "type": "array",
+                  "title": "Response Get Published Routes Api V1 Page Definitions Published Routes Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/page-definitions/{route}": {
@@ -5834,7 +6069,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/admin/releases": {
@@ -6217,7 +6453,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/admin/audit-logs": {
@@ -6390,7 +6627,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/admin/audit-logs/stats": {
@@ -6486,7 +6724,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/admin/audit-logs/online-duration": {
@@ -6557,7 +6796,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/admin/audit-logs/export": {
@@ -6703,7 +6943,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/admin/audit-logs/export-excel": {
@@ -6712,7 +6953,7 @@
           "admin"
         ],
         "summary": "Export Audit Logs Excel",
-        "description": "Export audit logs as an Excel (.xlsx) file (administrator-only).\n\nUses ``openpyxl`` for generation.  All results matching the filters are\nincluded (no pagination).",
+        "description": "Export a bounded audit-log slice as an Excel (.xlsx) file.\n\nXLSX generation is intentionally capped because ``openpyxl`` constructs a\nworkbook in process memory. Use the streaming CSV endpoint for complete,\nhigh-volume exports.",
         "operationId": "export_audit_logs_excel_api_v1_admin_audit_logs_export_excel_get",
         "security": [
           {
@@ -6818,6 +7059,20 @@
               ],
               "title": "End Date"
             }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50000,
+              "minimum": 1,
+              "description": "Maximum XLSX rows. Use the streaming CSV export for larger result sets.",
+              "default": 10000,
+              "title": "Limit"
+            },
+            "description": "Maximum XLSX rows. Use the streaming CSV export for larger result sets."
           }
         ],
         "responses": {
@@ -6849,115 +7104,8 @@
               }
             }
           }
-        }
-      }
-    },
-    "/api/v1/admin/cdn-config": {
-      "get": {
-        "tags": [
-          "admin"
-        ],
-        "summary": "Get Cdn Config",
-        "description": "Return current CDN configuration (administrator-only).\n\nReturns ``enabled`` (bool) and ``urls`` (list of str).",
-        "operationId": "get_cdn_config_api_v1_admin_cdn_config_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "type": "object",
-                  "title": "Response Get Cdn Config Api V1 Admin Cdn Config Get"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ValidationErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal Server Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
         },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      },
-      "put": {
-        "tags": [
-          "admin"
-        ],
-        "summary": "Update Cdn Config",
-        "description": "Update CDN configuration (administrator-only).\n\nAccepts ``enabled`` (bool) and ``urls`` (list of str).",
-        "operationId": "update_cdn_config_api_v1_admin_cdn_config_put",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "additionalProperties": true,
-                "type": "object",
-                "title": "Payload"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "type": "object",
-                  "title": "Response Update Cdn Config Api V1 Admin Cdn Config Put"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal Server Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
+        "x-idempotent": true
       }
     },
     "/api/v1/admin/timeout-config": {
@@ -7008,7 +7156,8 @@
           {
             "HTTPBearer": []
           }
-        ]
+        ],
+        "x-idempotent": true
       }
     },
     "/api/v1/admin/dashboard-stats": {
@@ -7055,7 +7204,8 @@
           {
             "HTTPBearer": []
           }
-        ]
+        ],
+        "x-idempotent": true
       }
     },
     "/api/v1/admin/dashboard-series": {
@@ -7116,7 +7266,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/admin/features": {
@@ -7162,7 +7313,8 @@
           {
             "HTTPBearer": []
           }
-        ]
+        ],
+        "x-idempotent": true
       },
       "put": {
         "tags": [
@@ -7216,7 +7368,8 @@
           {
             "HTTPBearer": []
           }
-        ]
+        ],
+        "x-idempotent": true
       }
     },
     "/api/v1/admin/content/pages": {
@@ -7322,7 +7475,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       },
       "post": {
         "tags": [
@@ -7492,7 +7646,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       },
       "put": {
         "tags": [
@@ -7558,7 +7713,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       },
       "delete": {
         "tags": [
@@ -7607,7 +7763,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/admin/content/pages/{page_id}/publish": {
@@ -7785,7 +7942,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/admin/content/pages/{page_id}/versions/{version_num}": {
@@ -7852,7 +8010,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/admin/content/pages/{page_id}/versions/{version_num}/restore": {
@@ -8035,7 +8194,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/admin/media/{asset_id}": {
@@ -8093,7 +8253,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       },
       "patch": {
         "tags": [
@@ -8208,7 +8369,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/admin/news": {
@@ -8334,7 +8496,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       },
       "post": {
         "tags": [
@@ -8390,6 +8553,136 @@
             }
           }
         }
+      }
+    },
+    "/api/v1/admin/news/deleted": {
+      "get": {
+        "tags": [
+          "admin-news"
+        ],
+        "summary": "List Deleted News Admin",
+        "description": "List soft-deleted news metadata; restricted to administrators.",
+        "operationId": "list_deleted_news_admin_api_v1_admin_news_deleted_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Page Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletedNewsListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-idempotent": true
+      }
+    },
+    "/api/v1/admin/news/external-preview": {
+      "post": {
+        "tags": [
+          "admin-news"
+        ],
+        "summary": "Preview External Article",
+        "description": "Fetch one approved external article for editor review.\n\nThis explicit, bounded fetch never creates, updates, or publishes a CMS\nrecord.  The client must apply the returned sanitized HTML to the normal\ndraft form and save it through the existing publishing workflow.",
+        "operationId": "preview_external_article_api_v1_admin_news_external_preview_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExternalArticlePreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExternalArticlePreviewResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/v1/admin/news/{news_id}": {
@@ -8457,14 +8750,15 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       },
       "delete": {
         "tags": [
           "admin-news"
         ],
         "summary": "Delete News",
-        "description": "Hard-delete a news article.",
+        "description": "Soft-delete a news article while preserving its audit history.",
         "operationId": "delete_news_api_v1_admin_news__news_id__delete",
         "security": [
           {
@@ -8506,7 +8800,118 @@
               }
             }
           }
+        },
+        "x-idempotent": true
+      }
+    },
+    "/api/v1/admin/news/{news_id}/restore": {
+      "post": {
+        "tags": [
+          "admin-news"
+        ],
+        "summary": "Restore News",
+        "description": "Restore a soft-deleted article; only administrators may do this.",
+        "operationId": "restore_news_api_v1_admin_news__news_id__restore_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "news_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "News Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NewsDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
         }
+      }
+    },
+    "/api/v1/admin/news/{news_id}/purge": {
+      "delete": {
+        "tags": [
+          "admin-news"
+        ],
+        "summary": "Purge News",
+        "description": "Permanently remove a soft-deleted article; only administrators may do this.",
+        "operationId": "purge_news_api_v1_admin_news__news_id__purge_delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "news_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "News Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/admin/news/reorder": {
@@ -8621,7 +9026,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/admin/page-builder/registry": {
@@ -8668,7 +9074,339 @@
           {
             "HTTPBearer": []
           }
+        ],
+        "x-idempotent": true
+      }
+    },
+    "/api/v1/admin/page-builder/templates": {
+      "get": {
+        "tags": [
+          "admin-page-builder"
+        ],
+        "summary": "List Templates",
+        "operationId": "list_templates_api_v1_admin_page_builder_templates_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageTemplateListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "x-idempotent": true
+      },
+      "post": {
+        "tags": [
+          "admin-page-builder"
+        ],
+        "summary": "Create Template",
+        "operationId": "create_template_api_v1_admin_page_builder_templates_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PageTemplateCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageTemplateResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
         ]
+      }
+    },
+    "/api/v1/admin/page-builder/templates/{key}": {
+      "get": {
+        "tags": [
+          "admin-page-builder"
+        ],
+        "summary": "Get Template",
+        "operationId": "get_template_api_v1_admin_page_builder_templates__key__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageTemplateResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-idempotent": true
+      },
+      "put": {
+        "tags": [
+          "admin-page-builder"
+        ],
+        "summary": "Update Template",
+        "operationId": "update_template_api_v1_admin_page_builder_templates__key__put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PageTemplateUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageTemplateResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-idempotent": true
+      },
+      "delete": {
+        "tags": [
+          "admin-page-builder"
+        ],
+        "summary": "Delete Template",
+        "operationId": "delete_template_api_v1_admin_page_builder_templates__key__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Key"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-idempotent": true
+      }
+    },
+    "/api/v1/admin/page-builder/templates/{key}/validate": {
+      "post": {
+        "tags": [
+          "admin-page-builder"
+        ],
+        "summary": "Validate Template",
+        "operationId": "validate_template_api_v1_admin_page_builder_templates__key__validate_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageTemplateValidationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/admin/page-builder/pages": {
@@ -8755,7 +9493,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       },
       "post": {
         "tags": [
@@ -8867,7 +9606,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/admin/page-builder/pages/{page_id}/draft": {
@@ -8935,7 +9675,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/admin/page-builder/pages/{page_id}/preview": {
@@ -9065,7 +9806,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/admin/page-builder/pages/{page_id}/publish-request": {
@@ -9179,7 +9921,8 @@
           {
             "HTTPBearer": []
           }
-        ]
+        ],
+        "x-idempotent": true
       }
     },
     "/api/v1/admin/plugins/{key}": {
@@ -9236,7 +9979,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/admin/plugins/{key}/state": {
@@ -9350,7 +10094,8 @@
           {
             "HTTPBearer": []
           }
-        ]
+        ],
+        "x-idempotent": true
       }
     },
     "/api/v1/admin/publication/request": {
@@ -9495,7 +10240,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/admin/publication/{publication_id}": {
@@ -9553,7 +10299,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/admin/publication/{publication_id}/rollback": {
@@ -9725,7 +10472,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       },
       "post": {
         "tags": [
@@ -9848,7 +10596,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       },
       "delete": {
         "tags": [
@@ -9897,7 +10646,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/admin/imports": {
@@ -10019,7 +10769,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       },
       "post": {
         "tags": [
@@ -10136,7 +10887,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       },
       "delete": {
         "tags": [
@@ -10185,7 +10937,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/admin/imports/{import_id}/status": {
@@ -10245,7 +10998,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/admin/imports/uploads/multipart": {
@@ -10550,7 +11304,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/admin/imports/studio/drafts": {
@@ -10601,7 +11356,8 @@
           {
             "HTTPBearer": []
           }
-        ]
+        ],
+        "x-idempotent": true
       },
       "post": {
         "tags": [
@@ -10714,7 +11470,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/admin/imports/studio/drafts/{draft_id}/mapping": {
@@ -10782,7 +11539,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/admin/imports/studio/drafts/{draft_id}/patches": {
@@ -11045,7 +11803,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/admin/modules/{module_key}/validate": {
@@ -11247,7 +12006,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/admin/settings/schema": {
@@ -11294,7 +12054,8 @@
           {
             "HTTPBearer": []
           }
-        ]
+        ],
+        "x-idempotent": true
       }
     },
     "/api/v1/admin/settings/validate": {
@@ -11409,7 +12170,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/admin/settings/{section}": {
@@ -11470,7 +12232,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       },
       "patch": {
         "tags": [
@@ -11617,7 +12380,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/admin/settings/{section}/history": {
@@ -11687,7 +12451,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/admin/settings/{section}/rollback": {
@@ -11875,7 +12640,8 @@
           {
             "HTTPBearer": []
           }
-        ]
+        ],
+        "x-idempotent": true
       }
     },
     "/api/v1/admin/uploads/presign": {
@@ -11903,6 +12669,63 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UploadPresignResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/uploads/complete": {
+      "post": {
+        "tags": [
+          "admin-uploads"
+        ],
+        "summary": "Complete Upload",
+        "description": "Verify the object bytes and register a reusable media asset.\n\nThe endpoint is intentionally separate from presign: an object is not\nselectable in the CMS until the server has checked its bytes, digest, MIME\ntype and dimensions. Repeating the request is idempotent for the same key.",
+        "operationId": "complete_upload_api_v1_admin_uploads_complete_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MediaAssetCompleteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaAssetResponse"
                 }
               }
             }
@@ -12049,7 +12872,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/expression/libraries/{library_id}": {
@@ -12104,7 +12928,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/expression/genes/{gene_id}/expression": {
@@ -12113,7 +12938,7 @@
           "expression"
         ],
         "summary": "Get Gene Expression",
-        "description": "Get expression data for a specific gene, with optional filters.",
+        "description": "Get a bounded, keyset-paginated expression slice for a gene.\n\n``gene_id`` is the assembly-scoped accession; when it exists in\nmultiple assemblies, ``assembly_id`` is required.\n\nComplete data exports must use the asynchronous export path rather than\nmaterialising every matching library in an API worker.",
         "operationId": "get_gene_expression_api_v1_expression_genes__gene_id__expression_get",
         "parameters": [
           {
@@ -12123,6 +12948,22 @@
             "schema": {
               "type": "string",
               "title": "Gene Id"
+            }
+          },
+          {
+            "name": "assembly_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Assembly Id"
             }
           },
           {
@@ -12206,6 +13047,37 @@
               ],
               "title": "Max Fpkm"
             }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Exclusive ExpressionData.id cursor.",
+              "title": "Cursor"
+            },
+            "description": "Exclusive ExpressionData.id cursor."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
           }
         ],
         "responses": {
@@ -12241,7 +13113,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/expression/search": {
@@ -12267,6 +13140,22 @@
                 }
               ],
               "title": "Gene Id"
+            }
+          },
+          {
+            "name": "assembly_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Assembly Id"
             }
           },
           {
@@ -12408,7 +13297,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/homologs/genes/{gene_id}/homologs": {
@@ -12417,7 +13307,7 @@
           "homologs"
         ],
         "summary": "Get Gene Homologs",
-        "description": "Get all homologs (orthologs/paralogs) for a specific gene.\n\nReturns an empty list if the gene has no homolog entries \u2014 no error\nis raised because the gene may simply not have annotated homologs.",
+        "description": "Get a bounded, keyset-paginated homolog slice for a specific gene.\n\n``gene_id`` is the assembly-scoped accession; when it exists in\nmultiple assemblies, ``assembly_id`` is required.\n\nEmpty pages remain a successful response because a gene may simply not\nhave annotated homologs.",
         "operationId": "get_gene_homologs_api_v1_homologs_genes__gene_id__homologs_get",
         "parameters": [
           {
@@ -12427,6 +13317,52 @@
             "schema": {
               "type": "string",
               "title": "Gene Id"
+            }
+          },
+          {
+            "name": "assembly_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Assembly Id"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Exclusive GeneHomolog.id keyset cursor.",
+              "title": "Cursor"
+            },
+            "description": "Exclusive GeneHomolog.id keyset cursor."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
             }
           }
         ],
@@ -12463,7 +13399,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/homologs/search": {
@@ -12489,6 +13426,22 @@
                 }
               ],
               "title": "Gene Id"
+            }
+          },
+          {
+            "name": "assembly_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Assembly Id"
             }
           },
           {
@@ -12530,9 +13483,11 @@
             "schema": {
               "type": "integer",
               "minimum": 1,
+              "description": "Offset page; ignored when cursor is supplied.",
               "default": 1,
               "title": "Page"
-            }
+            },
+            "description": "Offset page; ignored when cursor is supplied."
           },
           {
             "name": "page_size",
@@ -12545,6 +13500,24 @@
               "default": 50,
               "title": "Page Size"
             }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Exclusive GeneHomolog.id keyset cursor.",
+              "title": "Cursor"
+            },
+            "description": "Exclusive GeneHomolog.id keyset cursor."
           }
         ],
         "responses": {
@@ -12580,6 +13553,15 @@
               }
             }
           }
+        },
+        "x-idempotent": true,
+        "x-pagination": {
+          "mode": "keyset-optional",
+          "cursor_parameter": "cursor",
+          "next_cursor_field": "next_cursor",
+          "has_more_field": "has_more",
+          "cursor_is_exclusive": true,
+          "fallback": "offset"
         }
       }
     },
@@ -12643,7 +13625,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/site/about": {
@@ -12701,7 +13684,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/site/home": {
@@ -12759,7 +13743,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/site/footer": {
@@ -12817,7 +13802,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/site/content": {
@@ -12879,7 +13865,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/capabilities": {
@@ -12920,7 +13907,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/sra/run/{accession}": {
@@ -12975,7 +13963,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/sra/samples": {
@@ -13019,7 +14008,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/tools/enrichment": {
@@ -13186,7 +14176,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/widget/{name}": {
@@ -13256,7 +14247,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/admin/widgets": {
@@ -13344,7 +14336,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       },
       "post": {
         "tags": [
@@ -13457,7 +14450,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       },
       "put": {
         "tags": [
@@ -13523,7 +14517,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       },
       "delete": {
         "tags": [
@@ -13572,7 +14567,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/admin/widgets/{name}/preview": {
@@ -13687,7 +14683,8 @@
           {
             "HTTPBearer": []
           }
-        ]
+        ],
+        "x-idempotent": true
       }
     },
     "/api/v1/admin/layout/{page}": {
@@ -13755,7 +14752,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     },
     "/health": {
@@ -13800,7 +14798,8 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
       }
     }
   },
@@ -15300,6 +16299,11 @@
             },
             "type": "array",
             "title": "Allowed Children"
+          },
+          "is_layout_container": {
+            "type": "boolean",
+            "title": "Is Layout Container",
+            "default": false
           }
         },
         "type": "object",
@@ -15760,6 +16764,118 @@
           "status"
         ],
         "title": "DatasetVersionResponse"
+      },
+      "DeletedNewsListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DeletedNewsSummaryResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "DeletedNewsListResponse",
+        "description": "Paginated metadata-only list of soft-deleted news articles."
+      },
+      "DeletedNewsSummaryResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "title_en": {
+            "type": "string",
+            "title": "Title En"
+          },
+          "title_zh": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title Zh"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "status": {
+            "$ref": "#/components/schemas/NewsStatus",
+            "default": "draft"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "deleted_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Deleted At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title_en",
+          "slug",
+          "created_at",
+          "updated_at",
+          "deleted_at"
+        ],
+        "title": "DeletedNewsSummaryResponse",
+        "description": "Metadata-only administrative view of a soft-deleted news article."
       },
       "DiscoveryTrendPoint": {
         "properties": {
@@ -16593,6 +17709,82 @@
         "title": "ExportResponse",
         "description": "Response after submitting an export job."
       },
+      "ExternalArticlePlatform": {
+        "type": "string",
+        "enum": [
+          "wechat",
+          "xmol"
+        ],
+        "title": "ExternalArticlePlatform",
+        "description": "Approved external article origins for an explicit editor preview."
+      },
+      "ExternalArticlePreviewRequest": {
+        "properties": {
+          "platform": {
+            "$ref": "#/components/schemas/ExternalArticlePlatform"
+          },
+          "source_url": {
+            "type": "string",
+            "maxLength": 2048,
+            "minLength": 12,
+            "title": "Source Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "platform",
+          "source_url"
+        ],
+        "title": "ExternalArticlePreviewRequest",
+        "description": "One explicit, review-only fetch of an approved external article URL.\n\nThe endpoint never persists or publishes content.  The caller must apply\nthe sanitized preview to a news form and save it through normal CMS review."
+      },
+      "ExternalArticlePreviewResponse": {
+        "properties": {
+          "platform": {
+            "$ref": "#/components/schemas/ExternalArticlePlatform"
+          },
+          "source_url": {
+            "type": "string",
+            "title": "Source Url"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "content_html": {
+            "type": "string",
+            "title": "Content Html"
+          },
+          "source_preview_token": {
+            "type": "string",
+            "maxLength": 4096,
+            "minLength": 32,
+            "title": "Source Preview Token"
+          },
+          "source_published_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Published At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "platform",
+          "source_url",
+          "title",
+          "content_html",
+          "source_preview_token"
+        ],
+        "title": "ExternalArticlePreviewResponse",
+        "description": "Sanitized result of an external article preview fetch."
+      },
       "FeatureDefinitionResponse": {
         "properties": {
           "key": {
@@ -16789,6 +17981,17 @@
               }
             ],
             "title": "Assembly Id"
+          },
+          "assembly_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assembly Name"
           },
           "chromosome": {
             "type": "string",
@@ -16995,6 +18198,17 @@
             ],
             "title": "Assembly Id"
           },
+          "assembly_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assembly Name"
+          },
           "chromosome": {
             "type": "string",
             "title": "Chromosome"
@@ -17131,6 +18345,18 @@
             },
             "type": "object",
             "title": "By Type"
+          },
+          "by_assembly": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "By Assembly"
+          },
+          "ambiguous": {
+            "type": "boolean",
+            "title": "Ambiguous",
+            "default": false
           },
           "cursor": {
             "anyOf": [
@@ -18294,6 +19520,178 @@
         ],
         "title": "ImportValidationRequest"
       },
+      "InternalGeneSearchItem": {
+        "properties": {
+          "entity_type": {
+            "$ref": "#/components/schemas/SearchResultType",
+            "default": "gene"
+          },
+          "gene_id": {
+            "type": "string",
+            "title": "Gene Id"
+          },
+          "internal_id": {
+            "type": "string",
+            "title": "Internal Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "matched_field": {
+            "type": "string",
+            "title": "Matched Field"
+          },
+          "match_type": {
+            "$ref": "#/components/schemas/MatchType",
+            "default": "text"
+          },
+          "assembly_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assembly Id"
+          },
+          "release_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release Id"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "gene_id",
+          "internal_id",
+          "matched_field"
+        ],
+        "title": "InternalGeneSearchItem"
+      },
+      "InternalMutantSearchItem": {
+        "properties": {
+          "entity_type": {
+            "$ref": "#/components/schemas/SearchResultType",
+            "default": "mutant_line"
+          },
+          "public_id": {
+            "type": "string",
+            "title": "Public Id"
+          },
+          "internal_id": {
+            "type": "string",
+            "title": "Internal Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "matched_field": {
+            "type": "string",
+            "title": "Matched Field"
+          },
+          "match_type": {
+            "$ref": "#/components/schemas/MatchType",
+            "default": "text"
+          },
+          "is_public": {
+            "type": "boolean",
+            "title": "Is Public"
+          },
+          "release_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release Id"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "public_id",
+          "internal_id",
+          "name",
+          "matched_field",
+          "is_public"
+        ],
+        "title": "InternalMutantSearchItem",
+        "description": "Internal-search mutant hit: both identities plus the matched field.\n\nOnly served by the authenticated internal search endpoint; never by\nexternal routes."
+      },
+      "InternalSearchResponse": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "title": "Query"
+          },
+          "mutants": {
+            "items": {
+              "$ref": "#/components/schemas/InternalMutantSearchItem"
+            },
+            "type": "array",
+            "title": "Mutants"
+          },
+          "genes": {
+            "items": {
+              "$ref": "#/components/schemas/InternalGeneSearchItem"
+            },
+            "type": "array",
+            "title": "Genes"
+          },
+          "total_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Total Count",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "title": "InternalSearchResponse"
+      },
       "LayoutResponse": {
         "properties": {
           "page_name": {
@@ -18654,6 +20052,67 @@
         ],
         "title": "MarkReadResponse",
         "description": "Number of rows flipped to read."
+      },
+      "MatchType": {
+        "type": "string",
+        "enum": [
+          "exact",
+          "alias",
+          "cross-version",
+          "text"
+        ],
+        "title": "MatchType",
+        "description": "How a search hit matched the query.\n\n``exact`` \u2014 canonical identifier equality; ``alias`` \u2014 curated alias\nequality; ``cross_version`` \u2014 provenance-bearing cross-assembly mapping;\n``text`` \u2014 substring/prose match. Never inferred from similarity alone."
+      },
+      "MediaAssetCompleteRequest": {
+        "properties": {
+          "object_key": {
+            "type": "string",
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Object Key"
+          },
+          "filename": {
+            "type": "string",
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Filename"
+          },
+          "purpose": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Purpose"
+          },
+          "size": {
+            "type": "integer",
+            "maximum": 10485760.0,
+            "minimum": 1.0,
+            "title": "Size"
+          },
+          "content_type": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Content Type"
+          },
+          "checksum_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{64}$",
+            "title": "Checksum Sha256"
+          }
+        },
+        "type": "object",
+        "required": [
+          "object_key",
+          "filename",
+          "purpose",
+          "size",
+          "content_type",
+          "checksum_sha256"
+        ],
+        "title": "MediaAssetCompleteRequest",
+        "description": "Complete a presigned upload after the object reached S3/MinIO."
       },
       "MediaAssetListResponse": {
         "properties": {
@@ -19041,9 +20500,9 @@
       },
       "MutantLineDetail": {
         "properties": {
-          "id": {
+          "public_id": {
             "type": "string",
-            "title": "Id"
+            "title": "Public Id"
           },
           "name": {
             "type": "string",
@@ -19134,7 +20593,7 @@
         },
         "type": "object",
         "required": [
-          "id",
+          "public_id",
           "name",
           "created_at",
           "updated_at"
@@ -19144,9 +20603,9 @@
       },
       "MutantLineResponse": {
         "properties": {
-          "id": {
+          "public_id": {
             "type": "string",
-            "title": "Id"
+            "title": "Public Id"
           },
           "name": {
             "type": "string",
@@ -19184,11 +20643,11 @@
         },
         "type": "object",
         "required": [
-          "id",
+          "public_id",
           "name"
         ],
         "title": "MutantLineResponse",
-        "description": "Compact mutant line representation."
+        "description": "Compact public mutant-line representation.\n\n``public_id`` is the canonical external identity. The private\npersistence key is never part of this public contract."
       },
       "NewsCreate": {
         "properties": {
@@ -19335,6 +20794,19 @@
             "type": "boolean",
             "title": "Is Published",
             "default": false
+          },
+          "source_preview_token": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4096,
+                "minLength": 32
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Preview Token"
           }
         },
         "type": "object",
@@ -19505,6 +20977,51 @@
               }
             ],
             "title": "Visible To"
+          },
+          "source_platform": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExternalArticlePlatform"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "source_published_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Published At"
+          },
+          "source_synced_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Synced At"
           }
         },
         "type": "object",
@@ -20032,6 +21549,24 @@
               }
             ],
             "title": "Is Published"
+          },
+          "source_preview_token": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4096,
+                "minLength": 32
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Preview Token"
+          },
+          "clear_source_provenance": {
+            "type": "boolean",
+            "title": "Clear Source Provenance",
+            "default": false
           }
         },
         "type": "object",
@@ -20679,6 +22214,265 @@
         ],
         "title": "PageStatus"
       },
+      "PageTemplateCreate": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "title": "Key"
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Label"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "category": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Category",
+            "default": "general"
+          },
+          "definition": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Definition"
+          },
+          "preview_image_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preview Image Id"
+          },
+          "sort_order": {
+            "type": "integer",
+            "title": "Sort Order",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "label",
+          "definition"
+        ],
+        "title": "PageTemplateCreate"
+      },
+      "PageTemplateListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PageTemplateResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "PageTemplateListResponse"
+      },
+      "PageTemplateResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "category": {
+            "type": "string",
+            "title": "Category"
+          },
+          "definition": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Definition"
+          },
+          "preview_image_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preview Image Id"
+          },
+          "builtin": {
+            "type": "boolean",
+            "title": "Builtin"
+          },
+          "sort_order": {
+            "type": "integer",
+            "title": "Sort Order"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "key",
+          "label",
+          "description",
+          "category",
+          "definition",
+          "preview_image_id",
+          "builtin",
+          "sort_order",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "PageTemplateResponse"
+      },
+      "PageTemplateUpdate": {
+        "properties": {
+          "label": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "definition": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Definition"
+          },
+          "preview_image_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preview Image Id"
+          },
+          "sort_order": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sort Order"
+          }
+        },
+        "type": "object",
+        "title": "PageTemplateUpdate"
+      },
+      "PageTemplateValidationResponse": {
+        "properties": {
+          "valid": {
+            "type": "boolean",
+            "title": "Valid",
+            "default": true
+          },
+          "definition": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Definition"
+          }
+        },
+        "type": "object",
+        "required": [
+          "definition"
+        ],
+        "title": "PageTemplateValidationResponse"
+      },
       "PasswordChangeRequest": {
         "properties": {
           "current_password": {
@@ -20706,9 +22500,9 @@
             "type": "string",
             "title": "Id"
           },
-          "mutant_line_id": {
+          "mutant_line_public_id": {
             "type": "string",
-            "title": "Mutant Line Id"
+            "title": "Mutant Line Public Id"
           },
           "trait_category": {
             "type": "string",
@@ -20755,7 +22549,7 @@
         "type": "object",
         "required": [
           "id",
-          "mutant_line_id",
+          "mutant_line_public_id",
           "trait_category",
           "trait_name"
         ],
@@ -21587,6 +23381,35 @@
         ],
         "title": "PublishRequestResponse"
       },
+      "PublishedPageDefinitionRoute": {
+        "properties": {
+          "route": {
+            "type": "string",
+            "title": "Route"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PageDefinitionStatusEnum"
+          },
+          "definition": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Definition"
+          }
+        },
+        "type": "object",
+        "required": [
+          "route",
+          "version",
+          "status",
+          "definition"
+        ],
+        "title": "PublishedPageDefinitionRoute",
+        "description": "Minimal public SSG payload for a safely routable published definition."
+      },
       "QueryLatencyPoint": {
         "properties": {
           "date": {
@@ -21908,6 +23731,10 @@
             "title": "Score",
             "default": 0.0
           },
+          "match_type": {
+            "$ref": "#/components/schemas/MatchType",
+            "default": "text"
+          },
           "url": {
             "anyOf": [
               {
@@ -21923,6 +23750,28 @@
             "type": "string",
             "title": "Source",
             "default": "internal"
+          },
+          "release_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release Id"
+          },
+          "assembly_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assembly Id"
           }
         },
         "type": "object",
@@ -21931,7 +23780,7 @@
           "id"
         ],
         "title": "SearchResultItem",
-        "description": "A single global-search hit (stable public contract)."
+        "description": "A single global-search hit (stable public contract).\n\n``id`` is the canonical public identity of the entity: gene accession\nfor genes, ``public_id`` for mutant lines. Private persistence keys are\nnever placed here."
       },
       "SearchResultType": {
         "type": "string",
@@ -25582,5 +27431,19 @@
       "name": "widgets",
       "description": "Dashboard widgets and layouts."
     }
-  ]
+  ],
+  "x-error-codes": {
+    "authentication_failed": "",
+    "conflict": "",
+    "forbidden": "",
+    "internal_error": "Base class for all SoyMutDB domain errors.",
+    "not_found": "",
+    "plugin_disabled": "A deployed plugin exists but is intentionally hidden/disabled.",
+    "plugin_unavailable": "A plugin is enabled but not configured or currently unhealthy.",
+    "rate_limit_exceeded": "",
+    "service_unavailable": "",
+    "settings_version_conflict": "An optimistic settings mutation used a stale section version.",
+    "task_dispatch_failed": "A background task could not be handed to the Celery broker.",
+    "validation_error": ""
+  }
 }

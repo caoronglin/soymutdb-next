@@ -20,6 +20,7 @@ from sqlalchemy.dialects import postgresql
 
 from app.core import outbox_dispatcher
 from app.core.config import Settings
+from app.core.metrics import OUTBOX_DELIVERY_EXHAUSTED_TOTAL
 from app.core.task_contract import BLAST_RUN_TASK
 from app.models.outbox import OutboxEvent, OutboxEventStatus
 from app.services import outbox_service
@@ -86,6 +87,7 @@ class _ClaimSession:
                     and event.lease_until <= self.now
                 ):
                     event.status = OutboxEventStatus.FAILED
+                    event.sent_at = None
                     event.lease_owner = None
                     event.lease_until = None
                     event.last_error = "delivery lease expired after maximum attempts"
@@ -113,6 +115,14 @@ class _ClaimSession:
 
     async def commit(self) -> None:
         self.commits += 1
+
+
+class _CommitFailingClaimSession(_ClaimSession):
+    """Claim session that proves metrics are not recorded before commit."""
+
+    async def commit(self) -> None:
+        self.commits += 1
+        raise RuntimeError("simulated commit failure")
 
 
 class _UpdateSession:
@@ -249,7 +259,7 @@ async def test_expired_processing_lease_is_reclaimed_with_new_fence() -> None:
     assert event.lease_until == now + timedelta(seconds=30)
 
 
-async def test_expired_final_attempt_is_failed_instead_of_left_processing() -> None:
+async def test_expired_final_attempt_is_not_reclaimed_or_marked_sent() -> None:
     now = datetime(2026, 8, 19, 8, tzinfo=UTC)
     event = _event(
         status="processing",
@@ -258,6 +268,7 @@ async def test_expired_final_attempt_is_failed_instead_of_left_processing() -> N
         lease_until=now - timedelta(seconds=1),
     )
     session = _ClaimSession([event], now=now, max_attempts=5)
+    exhausted_before = OUTBOX_DELIVERY_EXHAUSTED_TOTAL._value.get()
 
     claimed = await outbox_service.claim_pending(
         session,
@@ -269,9 +280,21 @@ async def test_expired_final_attempt_is_failed_instead_of_left_processing() -> N
 
     assert claimed == []
     assert event.status == OutboxEventStatus.FAILED
+    assert event.sent_at is None
     assert event.attempt_count == 5
     assert event.lease_owner is None
     assert event.lease_until is None
+    assert OUTBOX_DELIVERY_EXHAUSTED_TOTAL._value.get() == exhausted_before + 1
+
+    # A subsequent poll cannot reclaim or re-count an exhausted delivery.
+    assert await outbox_service.claim_pending(
+        session,
+        max_attempts=5,
+        lease_owner=uuid.uuid4(),
+        lease_seconds=30,
+        now=now,
+    ) == []
+    assert OUTBOX_DELIVERY_EXHAUSTED_TOTAL._value.get() == exhausted_before + 1
     cleanup_statement = next(
         statement
         for statement in session.statements
@@ -281,6 +304,29 @@ async def test_expired_final_attempt_is_failed_instead_of_left_processing() -> N
     assert "outbox_events.status" in sql
     assert "outbox_events.attempt_count >=" in sql
     assert "outbox_events.lease_until <=" in sql
+
+
+async def test_exhausted_lease_does_not_increment_metric_when_commit_fails() -> None:
+    now = datetime(2026, 8, 19, 8, tzinfo=UTC)
+    event = _event(
+        status="processing",
+        attempt_count=5,
+        lease_owner=uuid.uuid4(),
+        lease_until=now - timedelta(seconds=1),
+    )
+    session = _CommitFailingClaimSession([event], now=now, max_attempts=5)
+    exhausted_before = OUTBOX_DELIVERY_EXHAUSTED_TOTAL._value.get()
+
+    with pytest.raises(RuntimeError, match="simulated commit failure"):
+        await outbox_service.claim_pending(
+            session,
+            max_attempts=5,
+            lease_owner=uuid.uuid4(),
+            lease_seconds=30,
+            now=now,
+        )
+
+    assert OUTBOX_DELIVERY_EXHAUSTED_TOTAL._value.get() == exhausted_before
 
 
 async def test_stale_owner_cannot_complete_reclaimed_event() -> None:
@@ -543,6 +589,7 @@ async def test_poll_loop_logs_exception_type_without_exception_text(monkeypatch)
     stop_event = asyncio.Event()
     stop_event.set()
     errors: list[tuple[str, dict[str, Any]]] = []
+    warnings: list[tuple[str, dict[str, Any]]] = []
     exceptions: list[str] = []
 
     class _Logger:
@@ -551,6 +598,9 @@ async def test_poll_loop_logs_exception_type_without_exception_text(monkeypatch)
 
         def error(self, name: str, **kwargs: Any) -> None:
             errors.append((name, kwargs))
+
+        def warning(self, name: str, **kwargs: Any) -> None:
+            warnings.append((name, kwargs))
 
         def exception(self, name: str, **kwargs: Any) -> None:
             del kwargs
@@ -563,9 +613,13 @@ async def test_poll_loop_logs_exception_type_without_exception_text(monkeypatch)
     async def cleanup() -> int:
         return 0
 
+    async def refresh_metrics() -> None:
+        return None
+
     monkeypatch.setattr(outbox_dispatcher, "logger", _Logger())
     monkeypatch.setattr(outbox_dispatcher, "poll_outbox_once", fail_poll)
     monkeypatch.setattr(outbox_dispatcher, "cleanup_outbox", cleanup)
+    monkeypatch.setattr(outbox_dispatcher, "refresh_outbox_metrics", refresh_metrics)
     monkeypatch.setattr(
         outbox_dispatcher,
         "settings",
@@ -578,4 +632,5 @@ async def test_poll_loop_logs_exception_type_without_exception_text(monkeypatch)
     await outbox_dispatcher.run_outbox_dispatcher(stop_event)
 
     assert exceptions == []
+    assert warnings == []
     assert errors == [("outbox.poll_error", {"error_type": "RuntimeError"})]

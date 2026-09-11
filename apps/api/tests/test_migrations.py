@@ -198,6 +198,16 @@ async def test_registration_fails_closed_when_viewer_role_is_missing() -> None:
 
 def test_offline_upgrade_uses_model_enum_values_and_safe_blast_ddl() -> None:
     environment = os.environ.copy()
+    site_packages = next((API_ROOT / ".venv/lib").glob("python*/site-packages"))
+    workspace_root = API_ROOT.parents[1]
+    environment["PYTHONPATH"] = os.pathsep.join(
+        [
+            os.path.relpath(workspace_root / "packages/jobs-py/src", API_ROOT),
+            os.path.relpath(API_ROOT, API_ROOT),
+            os.path.relpath(site_packages, API_ROOT),
+            environment.get("PYTHONPATH", ""),
+        ]
+    )
     environment["SOYMUTDB_DATABASE_URL"] = (
         "postgresql+asyncpg://offline:offline@localhost/offline"
     )

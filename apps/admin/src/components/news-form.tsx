@@ -7,11 +7,17 @@
  * Field set mirrors the backend schemas (apps/api/app/schemas/news.py):
  * NewsCreate / NewsUpdate.
  */
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Button, DatePicker, Form, Input, InputNumber, Select, Space } from "../lib/antd";
+import { Button, Checkbox, DatePicker, Form, Input, InputNumber, Select, Space } from "../lib/antd";
 import dayjs from "dayjs";
-import type { NewsStatus } from "@soymutdb/api-client";
+import type {
+  ExternalArticlePlatform,
+  ExternalArticlePreview,
+  NewsStatus,
+} from "@soymutdb/api-client";
 import FileUpload from "./file-upload";
+import { ExternalArticleImportModal } from "./external-article-import-modal";
 import { MediaPicker } from "./media-picker";
 import { RichEditor } from "./rich-editor/rich-editor";
 
@@ -32,6 +38,13 @@ export interface NewsFormValues {
   carousel_sort: number;
   visible_from?: dayjs.Dayjs | null;
   visible_to?: dayjs.Dayjs | null;
+  /** Review-only provenance supplied by the external-preview endpoint. */
+  source_platform?: ExternalArticlePlatform | null;
+  source_url?: string | null;
+  source_published_at?: string | null;
+  /** Opaque short-lived proof returned by the reviewed preview endpoint. */
+  source_preview_token?: string | null;
+  clear_source_provenance?: boolean;
 }
 
 export interface NewsFormProps {
@@ -58,9 +71,30 @@ export function NewsForm({
   submitting,
 }: NewsFormProps) {
   const { t } = useTranslation();
+  const [form] = Form.useForm<NewsFormValues>();
+  const [externalImportOpen, setExternalImportOpen] = useState(false);
+
+  const applyExternalPreview = (preview: ExternalArticlePreview) => {
+    // This only stages data in the normal draft form. The admin must still
+    // review it, select a lifecycle status, and explicitly save/publish.
+    form.setFieldsValue({
+      title_en: preview.title,
+      content_en: preview.content_html,
+      source_platform: preview.platform,
+      source_url: preview.source_url,
+      source_published_at: preview.source_published_at,
+      source_preview_token: preview.source_preview_token,
+      clear_source_provenance: false,
+      // Never carry a previous published selection into newly imported content.
+      status: "draft",
+    });
+    setExternalImportOpen(false);
+  };
 
   return (
-    <Form<NewsFormValues>
+    <>
+      <Form<NewsFormValues>
+        form={form}
       onFinish={(values) => onSubmit(values)}
       initialValues={initialValues}
       layout="vertical"
@@ -91,6 +125,81 @@ export function NewsForm({
         ]}
       >
         <Input />
+      </Form.Item>
+      <Form.Item
+        label={t("admin.news.form.externalSource", {
+          defaultValue: "External article source",
+        })}
+        extra={t("admin.news.form.externalSourceHelp", {
+          defaultValue:
+            "Preview imports are sanitized and staged as a draft. Review the article and save it before publishing.",
+        })}
+      >
+        <Space direction="vertical" size="small" className="w-full">
+          <Button
+            htmlType="button"
+            onClick={() => setExternalImportOpen(true)}
+            disabled={submitting}
+          >
+            {t("admin.news.form.importExternal", {
+              defaultValue: "Import from WeChat / X-MOL",
+            })}
+          </Button>
+          <Form.Item noStyle shouldUpdate>
+            {({ getFieldValue }) => {
+              const sourceUrl = getFieldValue("source_url") as string | undefined;
+              const sourcePlatform = getFieldValue("source_platform") as
+                | ExternalArticlePlatform
+                | undefined;
+              return (
+                <>
+                  <Input
+                    value={sourceUrl ?? ""}
+                    readOnly
+                    aria-label="External article source URL"
+                    placeholder="No external source is attached"
+                    prefix={sourcePlatform === "wechat" ? "WeChat" : sourcePlatform === "xmol" ? "X-MOL" : undefined}
+                  />
+                  {sourceUrl ? (
+                    <Button
+                      danger
+                      htmlType="button"
+                      disabled={submitting}
+                      onClick={() =>
+                        form.setFieldsValue({
+                          source_platform: null,
+                          source_url: null,
+                          source_published_at: null,
+                          source_preview_token: null,
+                          clear_source_provenance: true,
+                        })
+                      }
+                    >
+                      {t("admin.news.form.removeExternalSource", {
+                        defaultValue: "Remove source attribution",
+                      })}
+                    </Button>
+                  ) : null}
+                </>
+              );
+            }}
+          </Form.Item>
+        </Space>
+      </Form.Item>
+      <Form.Item name="source_platform" hidden>
+        <Input />
+      </Form.Item>
+      <Form.Item name="source_url" hidden>
+        <Input />
+      </Form.Item>
+      <Form.Item name="source_published_at" hidden>
+        <Input />
+      </Form.Item>
+      <Form.Item name="source_preview_token" hidden>
+        <Input />
+      </Form.Item>
+      <Form.Item name="clear_source_provenance" hidden valuePropName="checked">
+        <Checkbox />
       </Form.Item>
       <Form.Item
         name="content_en"
@@ -238,6 +347,13 @@ export function NewsForm({
           </Button>
         </Space>
       </Form.Item>
-    </Form>
+      </Form>
+      <ExternalArticleImportModal
+        open={externalImportOpen}
+        onOpenChange={setExternalImportOpen}
+        onApply={applyExternalPreview}
+        disabled={submitting}
+      />
+    </>
   );
 }

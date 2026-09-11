@@ -10,6 +10,8 @@ export interface SearchResult {
   url?: string;
   source?: string;
   score?: number;
+  release_id?: number | null;
+  assembly_id?: number | null;
 }
 
 export interface SearchResponse {
@@ -67,12 +69,16 @@ export interface SearchParams {
   sources?: string[];
   cursor?: string;
   limit?: number;
+  assembly_id?: number;
 }
 
 export function globalSearch(
   params: SearchParams,
 ): Promise<SearchResponse | FederatedSearchResponse> {
-  return http.get<SearchResponse | FederatedSearchResponse>("/search", { params });
+  const { q, ...rest } = params;
+  return http.get<SearchResponse | FederatedSearchResponse>("/search", {
+    params: { ...rest, query: q },
+  });
 }
 
 export function getSearchSuggestions(q: string, limit = 10): Promise<SearchSuggestion[]> {

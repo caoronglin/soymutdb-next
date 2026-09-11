@@ -61,9 +61,36 @@ def postgres_engine() -> Iterator[object]:
     The only skip is the explicit local opt-in gate. Once requested (as in
     CI), missing Testcontainers, Docker, an image pull, migration failure, or
     sync driver failure are all hard test failures rather than skip-green.
+
+    When ``SOYMUTDB_TEST_DATABASE_URL`` is set (a ``postgresql+asyncpg://``
+    URL, mirroring ``apps/api/tests/conftest.py``), it bypasses Testcontainers
+    and targets that explicitly provisioned disposable PostgreSQL database.
+    Callers must use a fresh fixture database per run: the suite asserts
+    against the Alembic schema and commits seed data.
     """
     if os.environ.get(POSTGRES_INTEGRATION_ENV) != "1":
         pytest.skip(f"set {POSTGRES_INTEGRATION_ENV}=1 to run PostgreSQL integration")
+
+    external_url = os.environ.get("SOYMUTDB_TEST_DATABASE_URL")
+    if external_url:
+        if not external_url.startswith("postgresql+asyncpg://"):
+            pytest.fail(
+                "SOYMUTDB_TEST_DATABASE_URL must use the postgresql+asyncpg:// "
+                "scheme"
+            )
+        async_url = external_url
+        sync_url = (
+            make_url(external_url)
+            .set(drivername="postgresql+psycopg2")
+            .render_as_string(hide_password=False)
+        )
+        _upgrade_test_database(async_url)
+        engine = create_engine(sync_url)
+        try:
+            yield engine
+        finally:
+            engine.dispose()
+        return
 
     try:
         from testcontainers.community.postgres import PostgresContainer
@@ -150,6 +177,19 @@ def _seed_release(session_factory, release_id: int, *, status: str = "draft") ->
         )
 
 
+def _expected_alembic_head() -> str:
+    """Derive the head from the real migration chain, not a pinned revision."""
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    config = Config(str(API_ROOT / "alembic.ini"))
+    config.set_main_option("script_location", str(API_ROOT / "migrations"))
+    head = ScriptDirectory.from_config(config).get_current_head()
+    if head is None:
+        pytest.fail("Alembic migration chain has no head revision")
+    return head
+
+
 def test_module_tsv_integration_schema_matches_release_and_uniqueness_contract(postgres_engine):
     """The worker must exercise the Alembic schema, not a look-alike Core DDL."""
     inspector = inspect(postgres_engine)
@@ -159,7 +199,7 @@ def test_module_tsv_integration_schema_matches_release_and_uniqueness_contract(p
         revision = connection.exec_driver_sql(
             "SELECT version_num FROM alembic_version"
         ).scalar_one()
-    assert revision == "0021"
+    assert revision == _expected_alembic_head()
 
     enum_labels = {item["name"]: item["labels"] for item in inspector.get_enums()}
     assert enum_labels["release_status_enum"] == [

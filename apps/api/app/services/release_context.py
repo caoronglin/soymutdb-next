@@ -14,6 +14,7 @@ from fastapi import Depends, Header, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..core.cache_decorator import cached
 from ..core.config import get_settings
 from ..core.database import get_db
 from ..core.exceptions import (
@@ -69,16 +70,24 @@ async def resolve_release_context(
             Release.status == ReleaseStatus.PUBLISHED,
         )
 
-    release = (await db.execute(statement)).scalar_one_or_none()
-    if release is None and requested_release_id is None:
-        raise ServiceUnavailableError("No active data release is available")
-    if release is None:
-        raise NotFoundError(f"Release {requested_release_id} is not available")
+    @cached("release-context", ttl=60, key_params=("request_id",))
+    async def load_identity(request_id: int | None) -> dict[str, Any]:
+        release = (await db.execute(statement)).scalar_one_or_none()
+        if release is None and requested_release_id is None:
+            raise ServiceUnavailableError("No active data release is available")
+        if release is None:
+            raise NotFoundError(f"Release {requested_release_id} is not available")
+        return {
+            "release_id": int(release.id),
+            "assembly_id": release.assembly_id,
+            "assembly": release.assembly,
+        }
 
+    identity = await load_identity(requested_release_id)
     return ReleaseContext(
-        release_id=int(release.id),
-        assembly_id=release.assembly_id,
-        assembly=release.assembly,
+        release_id=int(identity["release_id"]),
+        assembly_id=identity.get("assembly_id"),
+        assembly=identity.get("assembly"),
     )
 
 

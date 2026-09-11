@@ -125,26 +125,36 @@ export function FilePreviewDialog({
     const controller = new AbortController();
     setTextState({ status: "loading" });
 
-    const fetchSize = current.size > MAX_FULL_SIZE ? TRUNCATED_SIZE : undefined;
+    // A missing size is untrusted metadata: sample it rather than risking an
+    // unbounded text decode in the browser.
+    const fetchSize =
+      current.size <= 0 || current.size > MAX_FULL_SIZE
+        ? TRUNCATED_SIZE
+        : undefined;
 
     fetch(current.url, { signal: controller.signal })
       .then(async (res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
         let text: string;
-        if (fetchSize && res.body) {
+        let truncated = false;
+        if (fetchSize) {
+          if (!res.body) throw new Error("The server did not provide a readable stream");
           const reader = res.body.getReader();
           const decoder = new TextDecoder();
           let result = "";
-          let total = 0;
+          let receivedBytes = 0;
           while (true) {
             const { done, value } = await reader.read();
-            if (done) break;
-            const chunk = decoder.decode(value, { stream: true });
-            total += chunk.length;
-            result += chunk;
-            if (total >= fetchSize) {
-              reader.cancel();
+            if (done) {
+              result += decoder.decode();
+              break;
+            }
+            receivedBytes += value.byteLength;
+            result += decoder.decode(value, { stream: true });
+            if (receivedBytes >= fetchSize) {
+              truncated = true;
+              await reader.cancel();
               break;
             }
           }
@@ -157,7 +167,7 @@ export function FilePreviewDialog({
         setTextState({
           status: "ready",
           content: text,
-          truncated: current.size > MAX_FULL_SIZE,
+          truncated,
         });
       })
       .catch((err) => {
@@ -228,6 +238,8 @@ export function FilePreviewDialog({
         if (textState.status === "loading") return <LoadingSkeleton />;
         if (textState.status === "error") return <ErrorState message={textState.message} />;
         return <MarkdownViewer content={textState.content} />;
+      case "binary":
+        return <DownloadOnlyState url={current.url} name={current.name} />;
       case "code": {
         if (textState.status === "loading") return <LoadingSkeleton />;
         if (textState.status === "error") return <ErrorState message={textState.message} />;
@@ -328,7 +340,7 @@ export function FilePreviewDialog({
           <span className="mx-1 h-4 w-px bg-[var(--border)]" />
 
           <div className="ml-auto flex items-center gap-1">
-            {textState.status === "ready" && textState.truncated && (
+            {isTextKind(kind) && textState.status === "ready" && textState.truncated && (
               <span className="hidden text-xs text-muted-foreground sm:inline">
                 {t("downloads.showing_partial")}
               </span>
@@ -338,7 +350,7 @@ export function FilePreviewDialog({
                 type="text"
                 size="small"
                 icon={<DownloadOutlined className="size-4" />}
-                onClick={() => window.open(current.url, "_blank")}
+                onClick={() => window.open(current.url, "_blank", "noopener,noreferrer")}
               />
             </Tooltip>
             <Tooltip title={t("fileViewer.print")}>
@@ -379,6 +391,28 @@ function LoadingSkeleton() {
     <div className="space-y-3 p-4">
       <Skeleton className="h-4 w-3/4" active paragraph={{ rows: 0 }} />
       <Skeleton active paragraph={{ rows: 4 }} />
+    </div>
+  );
+}
+
+function DownloadOnlyState({ url, name }: { url: string; name: string }) {
+  const { t } = useTranslation();
+  return (
+    <div className="rl-preview-empty">
+      <p>{t("fileViewer.downloadOnly", { defaultValue: "Download-only preview" })}</p>
+      <p className="rl-preview-empty-sub">
+        {t("fileViewer.downloadOnlyHint", {
+          defaultValue: "This compressed, unknown, or binary format is not decoded in the browser.",
+        })}
+      </p>
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="link-underline text-sm text-primary hover:text-primary/80"
+      >
+        {t("downloads.download")}: {name}
+      </a>
     </div>
   );
 }

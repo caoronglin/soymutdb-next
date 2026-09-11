@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import func, select
@@ -12,8 +13,9 @@ from ...core.database import get_db
 from ...core.exceptions import AuthorizationError
 from ...core.security import RoleName, has_role
 from ...core.task_contract import BUILD_STATIC_PAGES_TASK
-from ...core.task_dispatch import dispatch_task
+from ...services.outbox_service import enqueue_task_event
 from ...models.auth import User
+from ...models.data_publishing import ActiveRelease
 from ...models.gene_data_cache import GeneDataCache
 from ...models.import_task import ImportTask, ImportTaskType, ImportTaskStatus
 from .deps import get_current_user, get_user_roles
@@ -61,27 +63,34 @@ async def trigger_build(
         )
         total_genes = int(total_result.scalar() or 0)
 
-    # Record a build import task.
+    # Resolve the active release for the object namespace.
+    active_result = await db.execute(select(ActiveRelease.release_id))
+    active_release_id = active_result.scalar_one_or_none()
+
+    # Persist the job record and its outbox event in one transaction. The
+    # dispatcher owns broker I/O, preventing a broker failure from leaving a
+    # committed queued task with no durable delivery intent.
     task = ImportTask(
         filename="static_pages_build",
         type=ImportTaskType.SEED_DATA.value,
         status=ImportTaskStatus.QUEUED.value,
         file_path="internal://build-static",
         submitted_by=str(current_user.id),
+        idempotency_key=f"static-pages:{uuid4()}",
     )
     db.add(task)
+    await db.flush()
+    event = await enqueue_task_event(
+        db,
+        event_type="static_pages_build_requested",
+        aggregate_type="import_task",
+        aggregate_id=str(task.id),
+        task_name=BUILD_STATIC_PAGES_TASK,
+        kwargs={"gene_ids": gene_ids, "release_id": active_release_id},
+    )
+    task.celery_task_id = str(event.event_id)
     await db.commit()
     await db.refresh(task)
-
-    # Dispatch Celery task.
-    async_result = dispatch_task(
-        BUILD_STATIC_PAGES_TASK,
-        identifier=task.id,
-        kwargs={"gene_ids": gene_ids},
-        queue="stats",
-    )
-    task.celery_task_id = async_result.id
-    await db.commit()
 
     return {
         "task_id": task.id,

@@ -332,16 +332,45 @@ async def test_region_query_without_release_context_fails_before_clickhouse():
 
 
 @pytest.mark.asyncio
-async def test_variant_export_dispatch_is_pinned_to_release():
+async def test_variant_export_writes_durable_event_pinned_to_release():
     variants_route = import_module("app.api.v1.variants")
-    with patch.object(variants_route, "dispatch_task") as dispatch:
+
+    class _Db:
+        def __init__(self):
+            self.commits = 0
+
+        async def flush(self):
+            pass
+
+        def add(self, event):
+            self.event = event
+
+        async def commit(self):
+            self.commits += 1
+
+    db = _Db()
+    with patch.object(variants_route, "dispatch_task", create=True) as dispatch:
         response = await variants_route.export_variants(
             ExportRequest(filters=VariantFilterParams(chromosome="Gm01")),
+            db=db,
             release_context=_context(),
         )
 
     assert response.status == "pending"
-    assert dispatch.call_args.kwargs["kwargs"]["filters"]["release_key"] == "7"
+    assert db.commits == 1
+    assert dispatch.call_count == 0
+    assert db.event.aggregate_type == "variant_export"
+    assert db.event.aggregate_id == response.export_id
+    assert db.event.event_type == "variant_export_requested"
+    assert db.event.payload == {
+        "task_name": variants_route.EXPORT_VARIANTS_TASK,
+        "kwargs": {
+            "export_id": response.export_id,
+            "filters": {"chromosome": "Gm01", "release_key": "7"},
+            "format": "tsv",
+            "compress": True,
+        },
+    }
 
 
 class _InMemoryVariantStore:

@@ -3,8 +3,9 @@
 # =====================================================================
 # 指标来源与依赖：
 #   - API 层    soymutdb_http_requests_total / soymutdb_http_request_duration_seconds
-#               （apps/api MetricsMiddleware，本任务补齐）
-#   - Worker 层 soymutdb_worker_up / tasks_total / task_failures_total / queue_depth
+#               soymutdb_outbox_* / cache_* / db_pool_connections
+#   - Worker 层 soymutdb_worker_up / tasks_total / task_failures_total /
+#               task_duration_seconds / queue_depth
 #               （apps/worker/src/soymutdb_worker/metrics.py，端口 9808）
 #   - PG        pg_stat_database_numbackends（postgres-exporter）
 #   - Redis     redis_memory_used_bytes / redis_memory_max_bytes（redis-exporter）
@@ -45,6 +46,59 @@ groups:
           summary: "API p95 latency above 1s"
           description: "API p95 latency is {{ $value }}s over the last 5 minutes (threshold 1s)."
 
+      - alert: OutboxDeliveryStalled
+        expr: soymutdb_outbox_oldest_unsent_age_seconds > 300
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Transactional outbox delivery is stalled"
+          description: "The oldest unsent event is {{ $value | humanizeDuration }} old."
+
+      - alert: OutboxDeliveryExhausted
+        expr: increase(soymutdb_outbox_delivery_exhausted_total[15m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Outbox delivery exhausted its retry budget"
+          description: "At least one transactional outbox event reached its maximum delivery attempts during the last 15 minutes."
+
+      - alert: OutboxFailuresPresent
+        expr: soymutdb_outbox_events{status="failed"} > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Outbox has failed delivery records"
+          description: "{{ $value }} outbox events remain failed for at least 10 minutes."
+
+      - alert: ApiDatabasePoolSaturation
+        expr: >
+          max by (job, instance) (
+            soymutdb_db_pool_connections{state="checked_out"}
+          )
+          / clamp_min(
+            max by (job, instance) (
+              soymutdb_db_pool_connections{state="capacity"}
+            ), 1
+          ) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API database pool above 80% utilization"
+          description: "The scraped API process has sustained database pool pressure."
+
+      - alert: CacheReadErrors
+        expr: sum(rate(soymutdb_cache_lookups_total{outcome="read_error"}[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis cache read errors are elevated"
+          description: "Cache reads are degrading to source queries at {{ $value }} errors/s."
+
   # ------------------------------------------------------------------
   # Celery workers, beat & queue backlog
   # ------------------------------------------------------------------
@@ -52,7 +106,7 @@ groups:
     rules:
       - alert: WorkerOffline
         # up==0 同时覆盖 readiness 失败与进程死亡（job 与 compose 服务一一对应）。
-        expr: up{job=~"worker-(default|blast|ingest)"} == 0
+        expr: up{job=~"worker-(default|blast|ingest|analyses)"} == 0
         for: 2m
         labels:
           severity: critical

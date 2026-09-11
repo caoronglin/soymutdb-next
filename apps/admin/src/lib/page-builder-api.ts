@@ -33,6 +33,23 @@ export type {
 };
 export type { CompatiblePageDefinition as PageDefinition, PageDefinitionV2 };
 
+export interface PageTemplate {
+  id: string;
+  key: string;
+  label: string;
+  description: string | null;
+  category: string;
+  definition: CompatiblePageDefinition;
+  preview_image_id: string | null;
+  builtin: boolean;
+  sort_order: number;
+}
+
+export interface PageTemplateListResponse {
+  items: PageTemplate[];
+  total: number;
+}
+
 export interface PageDefinitionCreatePayload {
   route: string;
   title_key: string;
@@ -71,6 +88,11 @@ export const pageBuilderApi = {
   /** Fetch the server-owned component registry (palette + property schemas). */
   registry() {
     return http.get<RegistryResponse>("/admin/page-builder/registry");
+  },
+
+  /** List data-managed starting templates. */
+  listTemplates() {
+    return http.get<PageTemplateListResponse>("/admin/page-builder/templates");
   },
 
   /** List page definitions. */

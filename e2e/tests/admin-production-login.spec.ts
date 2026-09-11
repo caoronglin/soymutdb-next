@@ -7,7 +7,7 @@ test.describe("admin production artifact — login", () => {
 
     await page.goto("/login", { waitUntil: "load" });
 
-    await expect(page).toHaveTitle("SoyMutDB Admin");
+    await expect(page).toHaveTitle("SoyMutDB 管理后台");
     expect(
       pageErrors.map((error) => error.message),
       "the emitted Admin artifact must not throw while loading /login",
@@ -20,14 +20,14 @@ test.describe("admin production artifact — login", () => {
 
     await page.goto("/login", { waitUntil: "load" });
 
-    await expect(page).toHaveTitle("SoyMutDB Admin");
-    await expect(page.getByRole("heading", { name: "SoyMutDB Admin" })).toBeVisible();
+    await expect(page).toHaveTitle("SoyMutDB 管理后台");
+    await expect(page.getByRole("heading", { name: "SoyMutDB 管理后台" })).toBeVisible();
 
-    const username = page.getByLabel("Username", { exact: true });
-    const password = page.getByLabel("Password", { exact: true });
+    const username = page.getByLabel("用户名", { exact: true });
+    const password = page.getByLabel("密码", { exact: true });
     await expect(username).toBeVisible();
     await expect(password).toBeVisible();
-    await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "登录" })).toBeVisible();
 
     await username.fill("production-smoke-user");
     await password.fill("ProductionSmokePassword1!");

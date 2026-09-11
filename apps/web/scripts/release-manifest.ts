@@ -17,12 +17,16 @@
 
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { join, posix, relative } from "node:path";
+import { join, posix, relative, resolve } from "node:path";
 import { isProductionDeploymentMode } from "../src/lib/deployment";
 
 const MANIFEST_NAME = "manifest.json";
 const SHA256_NAME = "SHA256SUMS";
-const DIST_DIR = join(process.cwd(), "dist");
+const DIST_DIR = resolve(process.cwd(), process.env.SOYMUTDB_DIST_DIR ?? "dist");
+const SITE_VARIANT = (process.env.VITE_SITE_VARIANT ?? process.env.SOYMUTDB_SITE_VARIANT ?? "external").trim().toLowerCase();
+if (SITE_VARIANT !== "external" && SITE_VARIANT !== "internal") {
+  throw new Error(`Invalid site variant "${SITE_VARIANT}". Use external or internal.`);
+}
 
 /** A real positive release id is mandatory for a production artifact. */
 export function requireReleaseId(env: NodeJS.ProcessEnv): number {
@@ -79,6 +83,7 @@ export function writeReleaseManifest(
     schema_version: 1,
     release_id: releaseId,
     application,
+    site_variant: SITE_VARIANT,
     generated_at: new Date().toISOString(),
     files,
   };

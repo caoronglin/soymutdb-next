@@ -13,8 +13,12 @@ let initialized = false;
  * @soymutdb/i18n package resources (the package is shared/read-only for this
  * task, so new portal-only strings are merged in at runtime instead).
  */
-const EXTRA_RESOURCES: Record<string, Record<string, Record<string, string>>> = {
+type TranslationResource = string | { [key: string]: TranslationResource };
+
+const EXTRA_RESOURCES: Record<string, Record<string, TranslationResource>> = {
   en: {
+    nav: { mutantLines: "Mutant Lines" },
+    mutants: { eyebrow: "Mutant lines", title: "Browse mutant lines", subtitle: "Variant counts are counts of linked VariantSummary records.", resultsAria: "Mutant line results", loading: "Loading mutant lines", error: "Could not load mutant lines. Please try again later.", emptyFiltered: "No mutant lines match this mutagen.", empty: "No public mutant lines are available.", filter: { label: "Exact mutagen", placeholder: "Enter an exact mutagen label, for example EMS", apply: "Apply filter", clear: "Clear filter" }, columns: { name: "Name", cultivar: "Cultivar", mutagen: "Mutagen", linkedVariants: "Linked variants" }, detail: { loading: "Loading mutant line", notFound: "This mutant line is unavailable.", back: "Back to mutant lines", details: "Line details", viewVariants: "Browse active-release variants", variantFilter: "Mutant line: {{id}}" }, fields: { species: "Species", cultivar: "Cultivar", mutagen: "Mutagen", generation: "Generation", description: "Description", phenotypeSummary: "Phenotype summary" }, phenotypes: { title: "Phenotype observations", boundary: "Current phenotype fields are recorded observations, not yet ontology-, environment-, or protocol-qualified evidence.", loading: "Loading phenotype observations", error: "Could not load phenotype observations. Please try again later.", empty: "No phenotype observations are available.", category: "Trait category", name: "Trait name", value: "Value", unit: "Unit", description: "Description" } },
     browser: {
       back: "Back",
       stillLoading: "Still loading…",
@@ -28,6 +32,8 @@ const EXTRA_RESOURCES: Record<string, Record<string, Record<string, string>>> = 
     },
   },
   zh: {
+    nav: { mutantLines: "突变系" },
+    mutants: { eyebrow: "突变系", title: "浏览突变系", subtitle: "变异计数是关联 VariantSummary 记录的数量。", resultsAria: "突变系结果", loading: "正在加载突变系", error: "无法加载突变系，请稍后再试。", emptyFiltered: "没有与该诱变剂匹配的突变系。", empty: "暂无公开突变系。", filter: { label: "精确诱变剂", placeholder: "输入精确诱变剂标签，例如 EMS", apply: "应用筛选", clear: "清除筛选" }, columns: { name: "名称", cultivar: "栽培品种", mutagen: "诱变剂", linkedVariants: "关联变异" }, detail: { loading: "正在加载突变系", notFound: "该突变系不可用。", back: "返回突变系列表", details: "突变系详情", viewVariants: "浏览当前发布版本中的变异", variantFilter: "突变系：{{id}}" }, fields: { species: "物种", cultivar: "栽培品种", mutagen: "诱变剂", generation: "世代", description: "描述", phenotypeSummary: "表型摘要" }, phenotypes: { title: "表型观察记录", boundary: "当前表型字段为已记录的观察结果，尚不是经本体、环境或实验方案限定的证据。", loading: "正在加载表型观察记录", error: "无法加载表型观察记录，请稍后再试。", empty: "暂无表型观察记录。", category: "性状类别", name: "性状名称", value: "数值", unit: "单位", description: "描述" } },
     browser: {
       back: "返回",
       stillLoading: "仍在加载…",

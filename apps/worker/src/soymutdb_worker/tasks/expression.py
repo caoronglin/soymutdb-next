@@ -26,7 +26,15 @@ from sqlalchemy import insert, select
 from soymutdb_worker.main import celery_app
 from soymutdb_worker.repositories import ImportTaskStore
 from soymutdb_worker.shared import JobStatus
-from soymutdb_worker.tables import expression_data, expression_libraries, genes, utcnow
+from soymutdb_worker.tables import (
+    expression_data,
+    expression_libraries,
+    utcnow,
+)
+from soymutdb_worker.tasks.gene_resolution import (
+    AssemblyResolutionError,
+    resolve_gene_accessions,
+)
 from soymutdb_worker.tasks.ingest import BATCH_SIZE
 from soymutdb_worker.utils.db import get_db
 from soymutdb_worker.utils.s3 import stream_s3_file
@@ -43,6 +51,7 @@ def import_expression_csv(
     self: Task,
     import_task_id: int,
     file_path: str,
+    assembly: str = "",
 ) -> dict[str, Any]:
     """Import expression data from a CSV file stored on S3.
 
@@ -53,9 +62,17 @@ def import_expression_csv(
     Args:
         import_task_id: PK of the ``ImportTask`` row to track status.
         file_path: S3 URI of the CSV file (``s3://bucket/key``).
+        assembly: Optional assembly name (or version). When set, gene
+            accessions resolve against that assembly only, so v4/v5
+            coexisting accessions map to the right ``gene_pk``. Unknown or
+            ambiguous assemblies fail the import loudly (never a silent
+            default). Empty keeps the legacy fail-closed behaviour:
+            cross-assembly ambiguous accessions are skipped and reported,
+            never guessed.
 
     Returns:
-        dict with ingestion statistics.
+        dict with ingestion statistics, including an auditable ``skipped_*``
+        breakdown (ambiguous / unknown gene / unknown library).
     """
     logger.info("Starting expression CSV import: task_id=%s file=%s", import_task_id, file_path)
 
@@ -89,7 +106,12 @@ def import_expression_csv(
                 JobStatus.SUCCEEDED,
                 fields={"processed_records": 0, "total_records": 0, "progress": 100},
             )
-        return {"imported": 0, "skipped": 0, "total": 0}
+        return {
+            "imported": 0,
+            "skipped": 0,
+            "total": 0,
+            "assembly": assembly,
+        }
 
     # ── Mark task as running ────────────────────────────────────────────
     with get_db() as session:
@@ -100,13 +122,26 @@ def import_expression_csv(
         )
 
     # ── Pre-load valid reference sets ───────────────────────────────────
-    with get_db() as session:
-        existing_gene_ids: set[str] = set(
-            session.execute(select(genes.c.id)).scalars().all()
-        )
-        existing_lib_ids: set[int] = set(
-            session.execute(select(expression_libraries.c.id)).scalars().all()
-        )
+    try:
+        with get_db() as session:
+            # assembly+accession -> gene_pk. Cross-assembly ambiguous
+            # accessions are skipped (and counted) rather than guessed.
+            gene_pk_by_accession, ambiguous_accessions = resolve_gene_accessions(
+                session, assembly=assembly
+            )
+            existing_gene_ids: set[str] = set(gene_pk_by_accession)
+            existing_lib_ids: set[int] = set(
+                session.execute(select(expression_libraries.c.id)).scalars().all()
+            )
+    except AssemblyResolutionError as exc:
+        logger.error("Expression CSV import rejected: %s", exc)
+        with get_db() as session:
+            ImportTaskStore(session).update(
+                import_task_id,
+                JobStatus.FAILED,
+                fields={"error_message": str(exc)},
+            )
+        raise
     logger.info(
         "Reference sets loaded: %d genes, %d expression libraries",
         len(existing_gene_ids),
@@ -118,22 +153,37 @@ def import_expression_csv(
     skipped = 0
     batch: list[dict[str, Any]] = []
 
+    skipped_ambiguous = 0
+    skipped_unknown_gene = 0
+    skipped_unknown_library = 0
+
     def flush_batch() -> None:
-        nonlocal imported
+        nonlocal imported, skipped_ambiguous, skipped_unknown_gene, skipped_unknown_library
         if not batch:
             return
         with get_db() as session:
-            rows = [
-                row
-                for row in batch
-                if row["gene_id"] in existing_gene_ids
-                and row["library_id"] in existing_lib_ids
-            ]
+            rows = []
             for row in batch:
-                if row["gene_id"] not in existing_gene_ids:
-                    logger.warning("Skipping: gene_id %r not found", row["gene_id"])
+                gene_pk = gene_pk_by_accession.get(row["gene_id"])
+                if gene_pk is None:
+                    if row["gene_id"] in ambiguous_accessions:
+                        skipped_ambiguous += 1
+                        logger.warning(
+                            "Skipping: gene_id %r ambiguous across assemblies",
+                            row["gene_id"],
+                        )
+                    else:
+                        skipped_unknown_gene += 1
+                        logger.warning(
+                            "Skipping: gene_id %r not found", row["gene_id"]
+                        )
                 elif row["library_id"] not in existing_lib_ids:
+                    skipped_unknown_library += 1
                     logger.warning("Skipping: library_id %s not found", row["library_id"])
+                else:
+                    mapped = dict(row)
+                    mapped["gene_id"] = gene_pk
+                    rows.append(mapped)
             if rows:
                 session.execute(insert(expression_data), rows)
                 imported += len(rows)
@@ -206,7 +256,15 @@ def import_expression_csv(
             imported,
             skipped,
         )
-        return {"imported": imported, "skipped": skipped, "total": total_rows}
+        return {
+            "imported": imported,
+            "skipped": skipped,
+            "total": total_rows,
+            "assembly": assembly,
+            "skipped_ambiguous_gene": skipped_ambiguous,
+            "skipped_unknown_gene": skipped_unknown_gene,
+            "skipped_unknown_library": skipped_unknown_library,
+        }
 
     except Exception as e:
         logger.error("Expression CSV import failed: %s", e)

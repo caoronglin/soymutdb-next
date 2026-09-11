@@ -21,6 +21,13 @@
 # 生产 fail-fast：JWT_SECRET / CORS 等缺失时 API 拒绝启动
 # （config.py validate_security_configuration），upgrade.sh 会在发布前预检。
 # ------------------------------------------------------------------
+x-app-runtime: &app-runtime
+  init: true
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+
 x-app-env: &app-env
   SOYMUTDB_APP_ENV: prod
   SOYMUTDB_CLICKHOUSE_HOST: clickhouse
@@ -36,9 +43,10 @@ x-app-env: &app-env
   SOYMUTDB_CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis-celery:6379/1
   # Celery result TTL（秒，默认 7 天，1-7 天范围内）
   SOYMUTDB_CELERY_RESULT_EXPIRES: ${SOYMUTDB_CELERY_RESULT_EXPIRES:-604800}
-  # worker 同步 engine 连接池（每个 worker 进程 2+4；API 忽略此变量）
-  SOYMUTDB_WORKER_DB_POOL_SIZE: ${SOYMUTDB_WORKER_DB_POOL_SIZE:-2}
-  SOYMUTDB_WORKER_DB_MAX_OVERFLOW: ${SOYMUTDB_WORKER_DB_MAX_OVERFLOW:-4}
+  # Worker sync engines are per Celery child process. One task runs per
+  # child, so the production-safe default is exactly one connection each.
+  SOYMUTDB_WORKER_DB_POOL_SIZE: ${SOYMUTDB_WORKER_DB_POOL_SIZE:-1}
+  SOYMUTDB_WORKER_DB_MAX_OVERFLOW: ${SOYMUTDB_WORKER_DB_MAX_OVERFLOW:-0}
   SOYMUTDB_S3_ENDPOINT: http://minio:9000
   SOYMUTDB_S3_ACCESS_KEY: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
   SOYMUTDB_S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
@@ -50,6 +58,8 @@ x-app-env: &app-env
   SOYMUTDB_S3_ANALYSES_BUCKET: ${S3_ANALYSES_BUCKET:-analyses}
   # 生产必填（此处无默认值：缺失时 prod 校验失败、API 拒绝启动）：
   SOYMUTDB_JWT_SECRET: ${SOYMUTDB_JWT_SECRET:-}
+  # Analytics IP pseudonymisation salt is mandatory in production (config.py).
+  SOYMUTDB_ANALYTICS_IP_SALT: ${SOYMUTDB_ANALYTICS_IP_SALT:-}
   SOYMUTDB_CORS_ORIGINS: ${SOYMUTDB_CORS_ORIGINS:-}
   SOYMUTDB_ADMIN_EMAIL: ${SOYMUTDB_ADMIN_EMAIL:-}
   SOYMUTDB_ADMIN_PASSWORD: ${SOYMUTDB_ADMIN_PASSWORD:-}
@@ -58,20 +68,15 @@ services:
   # ------------------------------------------------------------------
   # Data stores
   # ------------------------------------------------------------------
-  # PostgreSQL 连接预算（默认 max_connections=100，应用总预算 <= 80 连接）：
-  #   api (1 container)        pool 5 + overflow 5   = 10  （默认 4 进程理论上限，
-  #                                                        但 gunicorn 按需借用）
-  #   worker-default           pool 2 + overflow 4   =  6
-  #   worker-blast             pool 2 + overflow 4   =  6
-  #   worker-ingest            pool 2 + overflow 4   =  6
-  #   migrate (one-shot)       单连接                =  1
-  #   beat                     （无 DB 访问）        =  0
-  #   monitoring / 运维余量                          ≈ 11
+  # PostgreSQL fleet budget (default max_connections=100):
+  #   API: 2 processes x (pool 3 + overflow 2)              <= 10
+  #   Celery prefork children: 4 + 2 + 2 + 2, each pool 1  <= 10
+  #   migrate / admin / exporter / operational reserve      <= 20
   #   ----------------------------------------------------------------
-  #   小计                                        = 40  <= 80（80% of 100）
-  # 调大 pool 时需同步调大 postgres max_connections（默认 100，未显式覆盖，
-  # 保持官方默认；如需覆盖可加 command: postgres -c max_connections=200）。
-  # PgBouncer 暂不引入（本任务只做池预算；如需接入见 infra/ 后续任务）。
+  #   supported profile total                               <= 40
+  # Pools are per OS process, not per container. Any increase in replicas,
+  # API workers, Celery concurrency, pool size, or overflow must update this
+  # calculation. Introduce PgBouncer before sustained horizontal scaling.
   postgres:
     profiles: [ "core" ]
     image: postgres:18.4-alpine
@@ -172,8 +177,11 @@ services:
     volumes:
       - miniodata:/data
     networks:
-      - default
-      - tunnel-backend
+      default:
+      tunnel-backend:
+        aliases: ["minio-tunnel"]
+      local-data-proxy:
+        aliases: ["minio-local"]
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
       interval: 10s
@@ -229,6 +237,7 @@ services:
   # Application services
   # ------------------------------------------------------------------
   api:
+    <<: *app-runtime
     profiles: [ "core" ]
     image: ${API_IMAGE_REF:?API_IMAGE_REF is required as image@sha256 - see deploy/.env.example}
     depends_on:
@@ -247,6 +256,13 @@ services:
     environment:
       <<: *app-env
       SOYMUTDB_DATABASE_URL: postgresql+asyncpg://soymutdb:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/soymutdb
+      SOYMUTDB_API_WORKERS: ${SOYMUTDB_API_WORKERS:-2}
+      SOYMUTDB_API_GRACEFUL_SHUTDOWN_SECONDS: ${SOYMUTDB_API_GRACEFUL_SHUTDOWN_SECONDS:-30}
+      # Trust forwarding headers only from the two proxy-only networks below.
+      SOYMUTDB_FORWARDED_ALLOW_IPS: ${SOYMUTDB_FORWARDED_ALLOW_IPS:-172.30.252.0/28,172.30.253.0/28}
+      # Per-process pool budget: 2 API workers x (3 + 2) = at most 10.
+      SOYMUTDB_DB_POOL_SIZE: ${SOYMUTDB_DB_POOL_SIZE:-3}
+      SOYMUTDB_DB_MAX_OVERFLOW: ${SOYMUTDB_DB_MAX_OVERFLOW:-2}
       # Deployment-only plugin signing material is intentionally API-scoped;
       # workers, beat, and migrations must not receive this secret.
       SOYMUTDB_PLUGIN_MANIFEST_SIGNING_KEY: ${SOYMUTDB_PLUGIN_MANIFEST_SIGNING_KEY:-}
@@ -254,18 +270,25 @@ services:
     expose:
       - "8000"
     networks:
-      - default
-      - tunnel-backend
+      default:
+      api-proxy:
+        aliases: ["api-local"]
+      tunnel-api:
+        aliases: ["api-tunnel"]
     healthcheck:
       # Liveness（readiness 由发布脚本轮询 /api/v1/health/ready）
-      test: [ "CMD", "curl", "-f", "http://localhost:8000/api/v1/health/live" ]
+      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health/live', timeout=5)" ]
       interval: 15s
       timeout: 5s
       retries: 5
       start_period: 30s
+    mem_limit: ${API_MEMORY_LIMIT:-2g}
+    cpus: ${API_CPU_LIMIT:-2.0}
+    pids_limit: ${API_PIDS_LIMIT:-512}
+    stop_grace_period: ${API_STOP_GRACE_PERIOD:-45s}
     restart: unless-stopped
 
-  # 队列契约（六队列）：ingest / export / stats / cleanup / blast / default
+  # Queue contract: ingest / export / stats / cleanup / blast / analyses / default
   # 分工（按资源合理性）：
   #   - worker-default / worker-ingest 消费非 BLAST 队列
   #     （ingest,export,stats,cleanup,default），两个实例并行分摊负载；
@@ -274,6 +297,7 @@ services:
   # Celery workers. Each service listens on a subset of queues.
   # ------------------------------------------------------------------
   worker-default:
+    <<: *app-runtime
     profiles: [ "core" ]
     image: ${WORKER_IMAGE_REF:?WORKER_IMAGE_REF is required as image@sha256 - see deploy/.env.example}
     depends_on:
@@ -301,9 +325,14 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+    mem_limit: ${WORKER_DEFAULT_MEMORY_LIMIT:-4g}
+    cpus: ${WORKER_DEFAULT_CPU_LIMIT:-4.0}
+    pids_limit: ${WORKER_PIDS_LIMIT:-512}
+    stop_grace_period: ${WORKER_STOP_GRACE_PERIOD:-5m}
     restart: unless-stopped
 
   worker-blast:
+    <<: *app-runtime
     profiles: [ "blast" ]
     image: ${WORKER_IMAGE_REF:?WORKER_IMAGE_REF is required as image@sha256 - see deploy/.env.example}
     depends_on:
@@ -331,9 +360,14 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+    mem_limit: ${WORKER_BLAST_MEMORY_LIMIT:-8g}
+    cpus: ${WORKER_BLAST_CPU_LIMIT:-4.0}
+    pids_limit: ${WORKER_PIDS_LIMIT:-512}
+    stop_grace_period: ${WORKER_BLAST_STOP_GRACE_PERIOD:-10m}
     restart: unless-stopped
 
   worker-ingest:
+    <<: *app-runtime
     profiles: [ "core" ]
     image: ${WORKER_IMAGE_REF:?WORKER_IMAGE_REF is required as image@sha256 - see deploy/.env.example}
     depends_on:
@@ -361,9 +395,14 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+    mem_limit: ${WORKER_INGEST_MEMORY_LIMIT:-4g}
+    cpus: ${WORKER_INGEST_CPU_LIMIT:-2.0}
+    pids_limit: ${WORKER_PIDS_LIMIT:-512}
+    stop_grace_period: ${WORKER_STOP_GRACE_PERIOD:-5m}
     restart: unless-stopped
 
   worker-analyses:
+    <<: *app-runtime
     profiles: [ "analyses" ]
     image: ${WORKER_IMAGE_REF:?WORKER_IMAGE_REF is required as image@sha256 - see deploy/.env.example}
     depends_on:
@@ -392,9 +431,14 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+    mem_limit: ${WORKER_ANALYSES_MEMORY_LIMIT:-8g}
+    cpus: ${WORKER_ANALYSES_CPU_LIMIT:-4.0}
+    pids_limit: ${WORKER_PIDS_LIMIT:-512}
+    stop_grace_period: ${WORKER_STOP_GRACE_PERIOD:-5m}
     restart: unless-stopped
 
   beat:
+    <<: *app-runtime
     profiles: [ "core" ]
     image: ${WORKER_IMAGE_REF:?WORKER_IMAGE_REF is required as image@sha256 - see deploy/.env.example}
     depends_on:
@@ -417,6 +461,10 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+    mem_limit: ${BEAT_MEMORY_LIMIT:-512m}
+    cpus: ${BEAT_CPU_LIMIT:-0.5}
+    pids_limit: ${WORKER_PIDS_LIMIT:-512}
+    stop_grace_period: ${BEAT_STOP_GRACE_PERIOD:-30s}
     restart: unless-stopped
 
   # ------------------------------------------------------------------
@@ -428,6 +476,7 @@ services:
   # infra/nginx/conf.d/default.conf）。
   # ------------------------------------------------------------------
   mcp-server:
+    <<: *app-runtime
     profiles: [ "mcp" ]
     image: ${MCP_IMAGE_REF:?MCP_IMAGE_REF is required as image@sha256 - see deploy/.env.example}
     depends_on:
@@ -439,6 +488,10 @@ services:
       SOYMUTDB_MCP_REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis:6379/0
     expose:
       - "9000"
+    networks:
+      default:
+      local-mcp-proxy:
+        aliases: ["mcp-local"]
     command: [ "python", "-m", "mcp_server.server", "--host", "0.0.0.0", "--port", "9000" ]
     healthcheck:
       test: [ "CMD", "python", "-c", "import json, os, urllib.request; payload = json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'initialize', 'params': {'protocolVersion': '2024-11-05', 'capabilities': {}, 'clientInfo': {'name': 'healthcheck', 'version': '1'}}}).encode(); request = urllib.request.Request('http://localhost:9000/mcp', method='POST', data=payload, headers={'Authorization': 'Bearer ' + os.environ['SOYMUTDB_MCP_API_TOKEN'], 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream'}); response = urllib.request.urlopen(request, timeout=3); assert 200 <= response.status < 300" ]
@@ -446,6 +499,10 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+    mem_limit: ${MCP_MEMORY_LIMIT:-1g}
+    cpus: ${MCP_CPU_LIMIT:-1.0}
+    pids_limit: ${MCP_PIDS_LIMIT:-256}
+    stop_grace_period: ${MCP_STOP_GRACE_PERIOD:-30s}
     restart: unless-stopped
 
   # Optional self-hosted JBrowse runtime. The default production topology uses
@@ -486,6 +543,10 @@ services:
       - "web:127.0.0.1"
       - "admin:127.0.0.1"
       - "jbrowse:127.0.0.1"
+    networks:
+      - api-proxy
+      - local-data-proxy
+      - local-mcp-proxy
     healthcheck:
       test: [ "CMD", "wget", "--spider", "-q", "http://localhost:80/health" ]
       interval: 15s
@@ -517,6 +578,7 @@ services:
     expose:
       - "8081"
     networks:
+      - tunnel-api
       - tunnel-backend
       - cloudflare-edge
     volumes:
@@ -717,13 +779,33 @@ volumes:
   grafanadata:
 
 networks:
-  # Only api, minio, and tunnel-origin join this network. It prevents a
-  # compromised Tunnel origin from reaching databases, queues, MCP, or
-  # observability services on the shared default network.
+  # Forwarding headers are trusted only on the two proxy-only API networks.
+  # Override both the subnet and SOYMUTDB_FORWARDED_ALLOW_IPS together if the
+  # defaults overlap an existing host/VPN route.
+  api-proxy:
+    ipam:
+      config:
+        - subnet: ${SOYMUTDB_API_PROXY_SUBNET:-172.30.252.0/28}
+  tunnel-api:
+    ipam:
+      config:
+        - subnet: ${SOYMUTDB_TUNNEL_API_SUBNET:-172.30.253.0/28}
+  # Data and MCP use separate networks so those services cannot impersonate a
+  # trusted API reverse proxy after compromise.
+  local-data-proxy:
+    ipam:
+      config:
+        - subnet: ${SOYMUTDB_DATA_PROXY_SUBNET:-172.30.254.0/28}
+  local-mcp-proxy:
+    ipam:
+      config:
+        - subnet: ${SOYMUTDB_MCP_PROXY_SUBNET:-172.30.251.0/28}
   tunnel-backend:
-  # cloudflared gets egress to Cloudflare but no direct attachment to the
-  # default application network. tunnel-origin bridges this and the narrow
-  # tunnel-backend network instead.
+    ipam:
+      config:
+        - subnet: ${SOYMUTDB_TUNNEL_DATA_SUBNET:-172.30.250.0/28}
+  # cloudflared has egress but no attachment to application/data networks;
+  # tunnel-origin bridges the edge to the two narrow tunnel networks.
   cloudflare-edge:
 
 secrets:

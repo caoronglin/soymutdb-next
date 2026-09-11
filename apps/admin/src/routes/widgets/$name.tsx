@@ -7,6 +7,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { widgetApi, type WidgetCategory, type WidgetPermission } from "../../lib/widget-api";
+import { useTranslation } from "react-i18next";
 
 // ---------------------------------------------------------------------------
 // Schema
@@ -37,57 +38,107 @@ function isValidJson(s: string): boolean {
   }
 }
 
-const widgetSchema = z.object({
-  name: z
-    .string()
-    .min(2, "Name must be at least 2 characters")
-    .regex(/^[a-z][a-z0-9_-]*$/, "Must be lowercase: letters, numbers, hyphen, underscore"),
-  display_name: z.string().min(1, "Display name is required"),
-  description: z.string().max(500).optional().or(z.literal("")),
-  category: z.enum([
-    "hero",
-    "navigation",
-    "search",
-    "data_table",
-    "detail",
-    "visualization",
-    "stats",
-    "external",
-    "layout",
-    "custom",
-  ]),
-  template_path: z.string().min(1, "Template path is required"),
-  data_source: z.string().optional().or(z.literal("")),
-  params_schema: z
-    .string()
-    .refine(isValidJson, "Must be valid JSON or empty")
-    .optional()
-    .or(z.literal("")),
-  cache_ttl: z.coerce
-    .number()
-    .int("Must be an integer")
-    .min(0, "Must be >= 0 (0 disables caching)")
-    .max(86400, "Max 86400 seconds (24h)"),
-  admin_config: z
-    .string()
-    .refine(isValidJson, "Must be valid JSON or empty")
-    .optional()
-    .or(z.literal("")),
-  permissions: z.enum(["public", "authenticated", "admin"]),
-  is_active: z.boolean().default(true),
-});
+const CATEGORY_LABEL_KEYS: Record<string, string> = {
+  hero: "categoryHero",
+  navigation: "categoryNavigation",
+  search: "categorySearch",
+  data_table: "categoryDataTable",
+  detail: "categoryDetail",
+  visualization: "categoryVisualization",
+  stats: "categoryStats",
+  external: "categoryExternal",
+  layout: "categoryLayout",
+  custom: "categoryCustom",
+};
 
-type WidgetFormValues = z.infer<typeof widgetSchema>;
+const CATEGORY_LABEL_DEFAULTS: Record<string, string> = {
+  hero: "Hero",
+  navigation: "Navigation",
+  search: "Search",
+  data_table: "Data Table",
+  detail: "Detail",
+  visualization: "Visualization",
+  stats: "Stats",
+  external: "External",
+  layout: "Layout",
+  custom: "Custom",
+};
+
+const PERMISSION_LABEL_KEYS: Record<string, string> = {
+  public: "permissionPublic",
+  authenticated: "permissionAuthenticated",
+  admin: "permissionAdmin",
+};
+
+const PERMISSION_LABEL_DEFAULTS: Record<string, string> = {
+  public: "Public",
+  authenticated: "Authenticated",
+  admin: "Admin",
+};
+
+function makeWidgetSchema(t: (key: string, opts?: Record<string, unknown>) => string) {
+  return z.object({
+    name: z
+      .string()
+      .min(2, t("admin.ops.validationNameMin", { defaultValue: "Name must be at least 2 characters" }))
+      .regex(/^[a-z][a-z0-9_-]*$/, t("admin.ops.validationNamePattern", { defaultValue: "Must be lowercase: letters, numbers, hyphen, underscore" })),
+    display_name: z.string().min(1, t("admin.ops.validationDisplayName", { defaultValue: "Display name is required" })),
+    description: z.string().max(500).optional().or(z.literal("")),
+    category: z.enum([
+      "hero",
+      "navigation",
+      "search",
+      "data_table",
+      "detail",
+      "visualization",
+      "stats",
+      "external",
+      "layout",
+      "custom",
+    ]),
+    template_path: z.string().min(1, t("admin.ops.validationTemplatePath", { defaultValue: "Template path is required" })),
+    data_source: z.string().optional().or(z.literal("")),
+    params_schema: z
+      .string()
+      .refine(isValidJson, t("admin.ops.validationJson", { defaultValue: "Must be valid JSON or empty" }))
+      .optional()
+      .or(z.literal("")),
+    cache_ttl: z.coerce
+      .number()
+      .int(t("admin.ops.validationInt", { defaultValue: "Must be an integer" }))
+      .min(0, t("admin.ops.validationCacheMin", { defaultValue: "Must be >= 0 (0 disables caching)" }))
+      .max(86400, t("admin.ops.validationCacheMax", { defaultValue: "Max 86400 seconds (24h)" })),
+    admin_config: z
+      .string()
+      .refine(isValidJson, t("admin.ops.validationJson", { defaultValue: "Must be valid JSON or empty" }))
+      .optional()
+      .or(z.literal("")),
+    permissions: z.enum(["public", "authenticated", "admin"]),
+    is_active: z.boolean().default(true),
+  });
+}
+
+type WidgetFormValues = z.infer<ReturnType<typeof makeWidgetSchema>>;
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
 export default function WidgetEditorPage() {
+  const { t } = useTranslation();
   const { name: routeName } = useParams({ from: "/_auth/widgets/$name" });
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const isNew = routeName === "new";
+  const widgetSchema = useMemo(() => makeWidgetSchema(t), [t]);
+  const categoryLabel = (c: string) => {
+    const key = CATEGORY_LABEL_KEYS[c];
+    return key ? t(`admin.ops.${key}`, { defaultValue: CATEGORY_LABEL_DEFAULTS[c] ?? c }) : c;
+  };
+  const permissionLabel = (p: string) => {
+    const key = PERMISSION_LABEL_KEYS[p];
+    return key ? t(`admin.ops.${key}`, { defaultValue: PERMISSION_LABEL_DEFAULTS[p] ?? p }) : p;
+  };
 
   const { data: existingWidget, isLoading: isLoadingWidget } = useQuery({
     queryKey: ["admin-widget", routeName],
@@ -224,21 +275,21 @@ export default function WidgetEditorPage() {
           <Link to="/widgets">
             <Button type="text" size="small">
               <ArrowLeftOutlined className="size-4" />
-              Back
+              {t("admin.ops.back", { defaultValue: "Back" })}
             </Button>
           </Link>
           <div>
             <h2 className="font-serif text-2xl font-semibold">
-              {isNew ? "New Widget" : existingWidget?.display_name ?? routeName}
+              {isNew ? t("admin.ops.newWidget", { defaultValue: "New Widget" }) : existingWidget?.display_name ?? routeName}
             </h2>
             <p className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
               <AppstoreOutlined className="size-3.5" />
-              {isNew ? "Define a new reusable widget" : routeName}
+              {isNew ? t("admin.ops.defineWidgetSubtitle", { defaultValue: "Define a new reusable widget" }) : routeName}
               {!isNew && (
                 <>
                   <span>·</span>
                   <Badge color={watchedIsActive ? "success" : "secondary"}>
-                    {watchedIsActive ? "Active" : "Inactive"}
+                    {watchedIsActive ? t("admin.ops.active", { defaultValue: "Active" }) : t("admin.ops.inactive", { defaultValue: "Inactive" })}
                   </Badge>
                 </>
               )}
@@ -250,24 +301,24 @@ export default function WidgetEditorPage() {
             <Link to="/widget-preview" search={{ name: routeName }}>
               <Button type="default" size="small">
                 <EyeOutlined className="size-4" />
-                Preview
+                {t("admin.news.actions.preview", { defaultValue: "Preview" })}
               </Button>
             </Link>
           )}
           <Button type="default" size="small" onClick={() => navigate({ to: "/widgets" })}>
             <CloseOutlined className="size-4" />
-            Cancel
+            {t("admin.news.form.cancel", { defaultValue: "Cancel" })}
           </Button>
           <Button size="small" onClick={handleSubmit(onSubmit)} disabled={isSaving || !isDirty}>
             {isSaving ? <LoadingOutlined className="size-4 animate-spin" /> : <SaveOutlined className="size-4" />}
-            {isSaving ? "Saving…" : "SaveOutlined"}
+            {isSaving ? t("admin.ops.saving", { defaultValue: "Saving…" }) : t("admin.ops.saveOutlined", { defaultValue: "Save" })}
           </Button>
         </div>
       </div>
 
       {saveError ? (
         <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          {saveError instanceof Error ? saveError.message : "Failed to save widget"}
+          {saveError instanceof Error ? saveError.message : t("admin.ops.saveWidgetFailed", { defaultValue: "Failed to save widget" })}
         </div>
       ) : null}
 
@@ -276,18 +327,18 @@ export default function WidgetEditorPage() {
         <div className="space-y-6 lg:col-span-2">
           <Card>
             <div>
-              <Typography.Title level={5}>General</Typography.Title>
+              <Typography.Title level={5}>{t("admin.ops.general", { defaultValue: "General" })}</Typography.Title>
               <Typography.Text type="secondary">
-                Basic identity and rendering configuration.
+                {t("admin.ops.generalDesc", { defaultValue: "Basic identity and rendering configuration." })}
               </Typography.Text>
             </div>
             <div className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <label htmlFor="name">Widget Name (slug)</label>
+                  <label htmlFor="name">{t("admin.ops.widgetNameSlug", { defaultValue: "Widget Name (slug)" })}</label>
                   <Input
                     id="name"
-                    placeholder="e.g. recent-releases"
+                    placeholder={t("admin.ops.exampleRecentReleases", { defaultValue: "e.g. recent-releases" })}
                     disabled={!isNew}
                     {...register("name")}
                   />
@@ -295,15 +346,15 @@ export default function WidgetEditorPage() {
                     <p className="text-xs text-destructive">{errors.name.message}</p>
                   ) : (
                     <p className="text-xs text-muted-foreground">
-                      Unique identifier; cannot be changed after creation.
+                      {t("admin.ops.uniqueIdentifierHint", { defaultValue: "Unique identifier; cannot be changed after creation." })}
                     </p>
                   )}
                 </div>
                 <div className="space-y-1.5">
-                  <label htmlFor="display_name">Display Name</label>
+                  <label htmlFor="display_name">{t("admin.ops.displayName", { defaultValue: "Display Name" })}</label>
                   <Input
                     id="display_name"
-                    placeholder="e.g. Recent Releases"
+                    placeholder={t("admin.ops.exampleRecentReleasesDisplay", { defaultValue: "e.g. Recent Releases" })}
                     {...register("display_name")}
                   />
                   {errors.display_name && (
@@ -313,18 +364,18 @@ export default function WidgetEditorPage() {
               </div>
 
               <div className="space-y-1.5">
-                <label htmlFor="description">Description</label>
+                <label htmlFor="description">{t("admin.ops.description", { defaultValue: "Description" })}</label>
                 <Input.TextArea
                   id="description"
                   rows={2}
-                  placeholder="Brief description shown in admin"
+                  placeholder={t("admin.ops.descriptionPlaceholder", { defaultValue: "Brief description shown in admin" })}
                   {...register("description")}
                 />
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <label htmlFor="template_path">Template Path</label>
+                  <label htmlFor="template_path">{t("admin.ops.templatePath", { defaultValue: "Template Path" })}</label>
                   <Input
                     id="template_path"
                     placeholder="widgets/recent-releases.njk"
@@ -335,14 +386,14 @@ export default function WidgetEditorPage() {
                   )}
                 </div>
                 <div className="space-y-1.5">
-                  <label htmlFor="data_source">Data Source</label>
+                  <label htmlFor="data_source">{t("admin.ops.dataSource", { defaultValue: "Data Source" })}</label>
                   <Input
                     id="data_source"
-                    placeholder="e.g. /api/stats/recent-releases"
+                    placeholder={t("admin.ops.exampleApiEndpoint", { defaultValue: "e.g. /api/stats/recent-releases" })}
                     {...register("data_source")}
                   />
                   <p className="text-xs text-muted-foreground">
-                    API endpoint or query identifier.
+                    {t("admin.ops.apiEndpointHint", { defaultValue: "API endpoint or query identifier." })}
                   </p>
                 </div>
               </div>
@@ -351,14 +402,14 @@ export default function WidgetEditorPage() {
 
           <Card>
             <div>
-              <Typography.Title level={5}>Schemas & Configuration</Typography.Title>
+              <Typography.Title level={5}>{t("admin.ops.schemasConfig", { defaultValue: "Schemas & Configuration" })}</Typography.Title>
               <Typography.Text type="secondary">
-                Parameter schema (JSON Schema) and admin configuration as JSON.
+                {t("admin.ops.schemasConfigDesc", { defaultValue: "Parameter schema (JSON Schema) and admin configuration as JSON." })}
               </Typography.Text>
             </div>
             <div className="space-y-4">
               <div className="space-y-1.5">
-                <label htmlFor="params_schema">Params Schema (JSON)</label>
+                <label htmlFor="params_schema">{t("admin.ops.paramsSchemaJson", { defaultValue: "Params Schema (JSON)" })}</label>
                 <Input.TextArea
                   id="params_schema"
                   rows={8}
@@ -372,7 +423,7 @@ export default function WidgetEditorPage() {
               </div>
 
               <div className="space-y-1.5">
-                <label htmlFor="admin_config">Admin Config (JSON)</label>
+                <label htmlFor="admin_config">{t("admin.ops.adminConfigJson", { defaultValue: "Admin Config (JSON)" })}</label>
                 <Input.TextArea
                   id="admin_config"
                   rows={6}
@@ -392,11 +443,11 @@ export default function WidgetEditorPage() {
         <div className="space-y-6">
           <Card>
             <div>
-              <Typography.Title level={5}>Settings</Typography.Title>
+              <Typography.Title level={5}>{t("admin.ops.settings", { defaultValue: "Settings" })}</Typography.Title>
             </div>
             <div className="space-y-4">
               <div className="space-y-1.5">
-                <label>Category</label>
+                <label>{t("admin.news.columns.category", { defaultValue: "Category" })}</label>
                 <Select
                   value={watchedCategory}
                   onChange={(v) => setValue("category", v as WidgetCategory, { shouldDirty: true })}
@@ -405,7 +456,7 @@ export default function WidgetEditorPage() {
 
                     {WIDGET_CATEGORIES.map((c) => (
                       <Select.Option key={c} value={c}>
-                        {c.charAt(0).toUpperCase() + c.slice(1)}
+                        {categoryLabel(c)}
                       </Select.Option>
                     ))}
 
@@ -413,7 +464,7 @@ export default function WidgetEditorPage() {
               </div>
 
               <div className="space-y-1.5">
-                <label>Permissions</label>
+                <label>{t("admin.ops.permissions", { defaultValue: "Permissions" })}</label>
                 <Select
                   value={watchedPermissions}
                   onChange={(v) => setValue("permissions", v as WidgetPermission, { shouldDirty: true })}
@@ -422,7 +473,7 @@ export default function WidgetEditorPage() {
 
                     {WIDGET_PERMISSIONS.map((p) => (
                       <Select.Option key={p} value={p}>
-                        {p.charAt(0).toUpperCase() + p.slice(1)}
+                        {permissionLabel(p)}
                       </Select.Option>
                     ))}
 
@@ -430,7 +481,7 @@ export default function WidgetEditorPage() {
               </div>
 
               <div className="space-y-1.5">
-                <label htmlFor="cache_ttl">Cache TTL (seconds)</label>
+                <label htmlFor="cache_ttl">{t("admin.ops.cacheTtlSeconds", { defaultValue: "Cache TTL (seconds)" })}</label>
                 <Input
                   id="cache_ttl"
                   type="number"
@@ -445,9 +496,9 @@ export default function WidgetEditorPage() {
 
               <div className="flex items-center justify-between rounded-lg border border-border p-3">
                 <div>
-                  <p className="text-sm font-medium">Active</p>
+                  <p className="text-sm font-medium">{t("admin.ops.active", { defaultValue: "Active" })}</p>
                   <p className="text-xs text-muted-foreground">
-                    When inactive, the widget will not render on pages.
+                    {t("admin.ops.neverRenderWhenInactive", { defaultValue: "When inactive, the widget will not render on pages." })}
                   </p>
                 </div>
                 <button
@@ -470,7 +521,7 @@ export default function WidgetEditorPage() {
             <div className="flex-col items-stretch gap-2 border-t pt-4">
               <Button htmlType="submit" disabled={isSaving || !isDirty} className="w-full">
                 {isSaving ? <LoadingOutlined className="size-4 animate-spin" /> : <SaveOutlined className="size-4" />}
-                {isSaving ? "Saving…" : isNew ? "Create Widget" : "SaveOutlined Changes"}
+                {isSaving ? t("admin.ops.saving", { defaultValue: "Saving…" }) : isNew ? t("admin.ops.createWidget", { defaultValue: "Create Widget" }) : t("admin.ops.saveChanges", { defaultValue: "Save Changes" })}
               </Button>
             </div>
           </Card>

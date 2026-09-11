@@ -32,6 +32,15 @@ class PageDefinitionDetail(PageDefinitionSummary):
     pass
 
 
+class PublishedPageDefinitionRoute(BaseModel):
+    """Minimal public SSG payload for a safely routable published definition."""
+
+    route: str
+    version: int
+    status: PageDefinitionStatusEnum
+    definition: dict[str, Any]
+
+
 class PageDefinitionVersionResponse(BaseModel):
     id: uuid.UUID
     page_id: uuid.UUID
@@ -99,6 +108,49 @@ class PublishRequestResponse(BaseModel):
     event_id: str | None = None
 
 
+class PageTemplateCreate(BaseModel):
+    key: str = Field(..., min_length=1, max_length=64, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+    label: str = Field(..., min_length=1, max_length=200)
+    description: str | None = None
+    category: str = Field(default="general", max_length=64)
+    definition: dict[str, Any]
+    preview_image_id: uuid.UUID | None = None
+    sort_order: int = 0
+
+
+class PageTemplateUpdate(BaseModel):
+    label: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = None
+    category: str | None = Field(default=None, max_length=64)
+    definition: dict[str, Any] | None = None
+    preview_image_id: uuid.UUID | None = None
+    sort_order: int | None = None
+
+
+class PageTemplateResponse(BaseModel):
+    id: uuid.UUID
+    key: str
+    label: str
+    description: str | None
+    category: str
+    definition: dict[str, Any]
+    preview_image_id: uuid.UUID | None
+    builtin: bool
+    sort_order: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class PageTemplateListResponse(BaseModel):
+    items: list[PageTemplateResponse] = Field(default_factory=list)
+    total: int = 0
+
+
+class PageTemplateValidationResponse(BaseModel):
+    valid: bool = True
+    definition: dict[str, Any]
+
+
 class ComponentDescriptor(BaseModel):
     """A registry component exposed to Admin for the palette/property panel."""
 
@@ -106,6 +158,7 @@ class ComponentDescriptor(BaseModel):
     label: str
     config_schema: dict[str, Any]
     allowed_children: list[str] = Field(default_factory=list)
+    is_layout_container: bool = False
 
 
 class RegistryResponse(BaseModel):
@@ -122,6 +175,12 @@ __all__ = [
     "PageDefinitionSummary",
     "PageDefinitionUpdate",
     "PageDefinitionVersionResponse",
+    "PublishedPageDefinitionRoute",
+    "PageTemplateCreate",
+    "PageTemplateListResponse",
+    "PageTemplateResponse",
+    "PageTemplateUpdate",
+    "PageTemplateValidationResponse",
     "PreviewRequest",
     "PreviewResponse",
     "PublishRequest",

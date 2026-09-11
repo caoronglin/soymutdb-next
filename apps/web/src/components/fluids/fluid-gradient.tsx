@@ -10,6 +10,7 @@
  * shader renders a single static frame and never starts the animation loop.
  */
 import * as React from "react";
+import { subscribeMotion } from "../../lib/motion/ticker";
 
 export interface FluidGradientProps {
   /** Five-stop deep-blue palette (defaults to the DeepSeek brand ramp). */
@@ -69,7 +70,7 @@ float fbm(vec2 p) {
   float v = 0.0;
   float a = 0.5;
   mat2 rot = mat2(0.8, 0.6, -0.6, 0.8);
-  for (int i = 0; i < 5; i++) {
+  for (int i = 0; i < 3; i++) {
     v += a * noise(p);
     p = rot * p * 2.0;
     a *= 0.5;
@@ -210,7 +211,7 @@ export function FluidGradient({
     const uScale = gl.getUniformLocation(program, "u_scale");
     const uGrain = gl.getUniformLocation(program, "u_grain");
 
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5) * 0.6;
     let width = 0;
     let height = 0;
     function resize() {
@@ -226,20 +227,20 @@ export function FluidGradient({
     }
     resize();
 
-    let raf = 0;
     const start = performance.now();
     let stopped = false;
+    let visible = true;
+    const observer = typeof IntersectionObserver !== "undefined" ? new IntersectionObserver(([entry]) => { visible = entry.isIntersecting; }) : null;
+    observer?.observe(node);
 
-    function frame(now: number) {
-      if (stopped) return;
-      const t = (now - start) / 1000;
-      gl.uniform1f(uTime, t);
+    const frame = (now: number) => {
+      if (stopped || !visible || document.hidden) return;
+      gl.uniform1f(uTime, (now - start) / 1000);
       gl.uniform1f(uSpeed, speed);
       gl.uniform1f(uScale, scale);
       gl.uniform1f(uGrain, grain);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
-      raf = requestAnimationFrame(frame);
-    }
+    };
 
     function drawStatic() {
       gl.uniform1f(uTime, 0);
@@ -249,18 +250,16 @@ export function FluidGradient({
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     }
 
-    if (reduced) {
-      drawStatic();
-    } else {
-      raf = requestAnimationFrame(frame);
-    }
+    const unsubscribe = reduced ? () => {} : subscribeMotion(frame);
+    if (reduced) drawStatic();
 
     const onResize = () => resize();
     window.addEventListener("resize", onResize);
 
     return () => {
       stopped = true;
-      if (raf) cancelAnimationFrame(raf);
+      unsubscribe();
+      observer?.disconnect();
       window.removeEventListener("resize", onResize);
       const lose = gl.getExtension("WEBGL_lose_context");
       lose?.loseContext();

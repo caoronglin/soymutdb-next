@@ -22,6 +22,7 @@ from sqlalchemy import (
     String,
     Text,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
@@ -54,6 +55,7 @@ class OutboxEvent(Base):
     aggregate_id: Mapped[str] = mapped_column(String(64), nullable=False)
     event_type: Mapped[str] = mapped_column(String(64), nullable=False)
     payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    idempotency_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[str] = mapped_column(
         Enum(
             OutboxEventStatus,
@@ -99,6 +101,12 @@ class OutboxEvent(Base):
             "ix_outbox_events_status_lease_until", "status", "lease_until"
         ),
         Index("ix_outbox_events_aggregate", "aggregate_type", "aggregate_id"),
+        Index(
+            "uq_outbox_events_idempotency_key",
+            "idempotency_key",
+            unique=True,
+            postgresql_where=text("idempotency_key IS NOT NULL"),
+        ),
     )
 
     def __repr__(self) -> str:

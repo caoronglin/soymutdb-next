@@ -24,6 +24,37 @@ import type { EffectiveMotionMode } from "./motion-policy";
 
 /** hex seed —— 只用于 tinycolor 生成链，避免 oklch 解析失败。 */
 export const ANTD_PRIMARY_HEX = "#2f6f4f";
+export const ADMIN_PRIMARY_COLOR_STORAGE_KEY = "soymutdb-admin-primary-color";
+export const ADMIN_PRIMARY_COLOR_EVENT = "soymutdb-admin-primary-color-changed";
+
+const HEX_COLOR_RE = /^#[0-9a-f]{6}$/i;
+
+export function isValidAdminPrimaryColor(value: string): boolean {
+    return HEX_COLOR_RE.test(value);
+}
+
+export function readAdminPrimaryColor(): string {
+    if (typeof localStorage === "undefined") return ANTD_PRIMARY_HEX;
+    try {
+        const stored = localStorage.getItem(ADMIN_PRIMARY_COLOR_STORAGE_KEY);
+        return stored && isValidAdminPrimaryColor(stored)
+            ? stored.toLowerCase()
+            : ANTD_PRIMARY_HEX;
+    } catch {
+        return ANTD_PRIMARY_HEX;
+    }
+}
+
+export function saveAdminPrimaryColor(value: string): void {
+    if (!isValidAdminPrimaryColor(value) || typeof localStorage === "undefined") return;
+    const normalized = value.toLowerCase();
+    try {
+        localStorage.setItem(ADMIN_PRIMARY_COLOR_STORAGE_KEY, normalized);
+    } catch {
+        return;
+    }
+    window.dispatchEvent(new CustomEvent(ADMIN_PRIMARY_COLOR_EVENT, { detail: normalized }));
+}
 /** 亮色下用户可见高频 token 的 OKLCH 值（与 Tailwind --primary 同色系）。 */
 export const ANTD_PRIMARY_OKLCH = "oklch(0.46 0.13 152)";
 /** 暗色下单独覆盖（略提亮保证可读性）。 */
@@ -42,23 +73,29 @@ export function isAdminDark(): boolean {
  * 构建 ConfigProvider theme。
  *
  * @param opts.dark 暗色：algorithm 切 darkAlgorithm + 独立 OKLCH 覆盖。
+ * @param opts.primaryColor Admin 选择的 6 位十六进制主色。
  */
 export function createAntdTheme(opts?: {
     dark?: boolean;
     motion?: EffectiveMotionMode;
+    primaryColor?: string;
 }): ThemeConfig {
     const dark = opts?.dark ?? false;
     const motion = opts?.motion ?? "standard";
+    const primaryColor = opts?.primaryColor && isValidAdminPrimaryColor(opts.primaryColor)
+        ? opts.primaryColor.toLowerCase()
+        : ANTD_PRIMARY_HEX;
     const primaryOklch = dark ? ANTD_PRIMARY_OKLCH_DARK : ANTD_PRIMARY_OKLCH;
+    const primaryVisibleColor = opts?.primaryColor ? primaryColor : primaryOklch;
     const minimalMotion = motion === "minimal";
 
     return {
         algorithm: dark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
         token: {
             // hex seed —— oklch 值只出现在 components 级覆盖里
-            colorPrimary: ANTD_PRIMARY_HEX,
-            colorInfo: ANTD_PRIMARY_HEX,
-            colorLink: ANTD_PRIMARY_HEX,
+            colorPrimary: primaryColor,
+            colorInfo: primaryColor,
+            colorLink: primaryColor,
             fontFamily: ANTD_FONT_FAMILY,
             // §二 字号映射：display/h1/h2 仍走 Tailwind；AntD heading 显式映射
             fontSizeHeading1: 40, // 2.5rem (h1)
@@ -79,11 +116,11 @@ export function createAntdTheme(opts?: {
                 : {}),
         },
         components: {
-            // 高频可见 token 的 OKLCH 覆盖（oracle 修正，亮/暗各自覆盖）
-            Button: { colorPrimary: primaryOklch },
-            Tag: { colorPrimary: primaryOklch },
+            // 高频组件优先使用 Admin 选择的颜色；未选择时保持亮/暗默认方案。
+            Button: { colorPrimary: primaryVisibleColor },
+            Tag: { colorPrimary: primaryVisibleColor },
             Menu: {
-                itemSelectedBg: primaryOklch,
+                itemSelectedBg: primaryVisibleColor,
                 itemSelectedColor: "#fff",
             },
         },

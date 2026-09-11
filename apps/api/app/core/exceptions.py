@@ -178,6 +178,10 @@ async def soy_mut_db_exception_handler(
         headers=(
             {"Retry-After": str(exc.retry_after)}
             if isinstance(exc, RateLimitExceededError)
+            # Auth failures occur on internal routes; they must never enter
+            # shared caches (existence-oracle / cache-poisoning safety).
+            else {"Cache-Control": "private, no-store"}
+            if isinstance(exc, (AuthenticationError, AuthorizationError))
             else None
         ),
     )
@@ -194,11 +198,17 @@ async def http_exception_handler(
         code = "forbidden"
     elif exc.status_code == 404:
         code = "not_found"
+    headers: dict[str, str] | None = None
+    if exc.status_code in (401, 403):
+        # Auth failures occur on internal routes; they must never enter
+        # shared caches (existence-oracle / cache-poisoning safety).
+        headers = {"Cache-Control": "private, no-store"}
     return JSONResponse(
         status_code=exc.status_code,
         content=jsonable_encoder(
             _error_envelope(request, exc.status_code, code, str(exc.detail))
         ),
+        headers=headers,
     )
 
 

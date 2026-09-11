@@ -18,7 +18,7 @@ bucket，fastp/scanpy 等分析使用 `analyses` bucket。
 
 Cloudflare Pages/Tunnel 是可选生产边缘方案：`cloudflare-tunnel` profile 使用 `cloudflared` 连接仅含 API、
 公开基因组数据和健康检查的 `tunnel-origin`。管理端/API、MCP、数据库、MinIO 控制台和监控不经过该 Tunnel；
-管理端须使用独立的受保护 origin。完整变量、上线、回滚与验证步骤见 [Cloudflare 部署手册](../../deploy/cloudflare.md)。
+管理端须使用独立的受保护 origin。完整变量、上线、回滚与验证步骤见 [Cloudflare 部署手册](../../deploy/cloudflare.md)。Admin 当前页面、API、数据库和性能边界见 [Admin 架构与 API 数据库映射](admin-architecture.md)。
 
 ## 模型与状态机
 
@@ -100,3 +100,15 @@ CI（失败/取消/PR 运行被拦截），deploy job 再 checkout `workflow_run
 已移除 Tauri 桌面壳（`apps/admin/src-tauri`）、Rust 热路径（`apps/core-rs`）、Windows 打包链、无消费者
 search worker 和遗留 `search.html`/Cloudflare `_headers`；保留 news/about 等有效 SSG 链（`ssg-content.ts`）。
 Admin 现在为 Web-only（`/soymutdb-admin/`）。删除前须确认无生产或测试引用。
+
+## 双站点变体与安全边界
+
+SoyMutDB 的门户现在支持两个**独立静态制品**：external（外部站点）和 internal（内部站点）。两者共用 React/Vite 代码，但通过构建变量显式选择，不根据 hostname、IP、请求头、cookie、User-Agent 或访客身份在后端推断站点。
+
+- 在 apps/web 执行 pnpm run build:sites 会按顺序生成 dist/external 与 dist/internal 两棵完整制品树；每棵树的 hashed bundle、SSG HTML、robots.txt、Service Worker 和 integrity manifest 都独立生成。
+- VITE_SITE_VARIANT 只允许 external 或 internal。external 的 site API 可公开缓存；internal 的 site API（about、home、footer、content）必须携带 Bearer 访问令牌，并返回 private, no-store，避免共享缓存泄露内容。
+- Admin 设置页的站点变体选择器分别写入 about_external、home_external、footer_external、content_external 或对应的 internal 命名空间。它们继续使用服务端 registry 校验、乐观版本、回滚和结构化审计；旧的无变体设置仅作为迁移期只读 fallback。
+- internal 制品不会嵌入 public content snapshot，且所有 SSG 页面带 noindex、nofollow、noarchive。robots/noindex 只是防误索引措施，**不是访问控制**；internal origin 必须额外放在 Cloudflare Access/Zero Trust、VPN、私有负载均衡或等价 SSO/网络策略后面。
+- internal API origin 不得复用只面向公开数据的 Tunnel hostname。CORS 必须为每个 external/internal/admin origin 精确列举，禁止使用星号；内部站点的 CDN/Pages 项目也必须关闭匿名公开访问或在边缘强制 Access。
+
+首次切换步骤：先在 Admin 选择 Internal site 保存一套内容，再以 SOYMUTDB_INTERNAL_SITE_URL 配置生产内部 origin，执行 build:sites；将 dist/internal 单独部署到受保护 origin，将 dist/external 部署到公开 origin。发布前用未登录请求验证 internal 的 /api/v1/site/content?variant=internal 返回 401，并用已授权 viewer 验证 200；同时确认响应没有 shared-cache 命中。

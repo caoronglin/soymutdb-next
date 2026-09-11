@@ -103,6 +103,34 @@ describe("auth coordination", () => {
     expect(getAccessToken()).toBe("fresh-token");
   });
 
+  it("replays an idempotent PUT once after a successful refresh", async () => {
+    const { calls } = installFetchMock({
+      refreshResponse: () =>
+        jsonResponse({ access_token: "fresh-token", token_type: "bearer", expires_in: 900 }),
+      failures: 1,
+      okBody: { saved: true },
+    });
+
+    await expect(authRequest("/settings/site", { method: "PUT", json: { title: "SoyMutDB" } })).resolves.toEqual({
+      saved: true,
+    });
+    expect(calls.filter((call) => call.url === "/api/v1/settings/site")).toHaveLength(2);
+  });
+
+  it("does not replay a POST after a successful refresh", async () => {
+    const { calls } = installFetchMock({
+      refreshResponse: () =>
+        jsonResponse({ access_token: "fresh-token", token_type: "bearer", expires_in: 900 }),
+      failures: 1,
+    });
+
+    await expect(authRequest("/imports", { method: "POST", json: { source: "upload" } })).rejects.toMatchObject({
+      status: 401,
+    });
+    expect(calls.filter((call) => call.url === "/api/v1/imports")).toHaveLength(1);
+    expect(getAccessToken()).toBe("fresh-token");
+  });
+
   it("refresh request carries credentials:include and no body", async () => {
     const { refreshCalls } = installFetchMock({
       refreshResponse: () =>
@@ -208,6 +236,30 @@ describe("auth coordination", () => {
 
     expect(calls).toHaveLength(3);
     expect(calls[0].init.method).toBe("GET");
+  });
+
+  it("downloads a Blob through the authenticated transport", async () => {
+    setAccessToken("download-token");
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      async (input: string | URL | Request, init?: RequestInit) => {
+        calls.push({ url: String(input), init: init ?? {} });
+        return new Response("timestamp,action\n2026-01-01,login\n", {
+          status: 200,
+          headers: { "content-type": "text/csv" },
+        });
+      },
+    );
+
+    const result = await http.download("/admin/audit-logs/export");
+
+    expect(result).toBeInstanceOf(Blob);
+    await expect(result.text()).resolves.toContain("timestamp,action");
+    expect(calls).toHaveLength(1);
+    expect(calls[0].init.method).toBe("GET");
+    expect((calls[0].init.headers as Headers).get("Authorization")).toBe(
+      "Bearer download-token",
+    );
   });
 
   it("restoreSession restores the token from the refresh cookie", async () => {

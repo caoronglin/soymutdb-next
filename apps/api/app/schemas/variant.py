@@ -141,9 +141,13 @@ class VariantListResponse(BaseModel):
 
 
 class MutantLineResponse(BaseModel):
-    """Compact mutant line representation."""
+    """Compact public mutant-line representation.
 
-    id: str
+    ``public_id`` is the canonical external identity. The private
+    persistence key is never part of this public contract.
+    """
+
+    public_id: str
     name: str
     mutagen: str | None = None
     cultivar: str | None = Field(default="Williams 82")
@@ -168,7 +172,7 @@ class PhenotypeResponse(BaseModel):
     """Public representation of a phenotype observation."""
 
     id: str
-    mutant_line_id: str
+    mutant_line_public_id: str
     trait_category: str
     trait_name: str
     trait_value: str | None = None

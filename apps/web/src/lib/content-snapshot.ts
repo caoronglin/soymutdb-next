@@ -9,13 +9,13 @@
  * lets the API refresh in the background.
  *
  * Frozen contract (docs/design/static-content-richtext-2026-08.md §4.1/§5):
- *   - snapshot JSON: { schema_version, generated_at, news, news_detail, about }
- *   - bootstrap JSON: { page: "news-list"|"news-detail"|"about",
+ *   - snapshot JSON: { schema_version, generated_at, news, news_detail, about, publications }
+ *   - bootstrap JSON: { page: "news-list"|"news-detail"|"about"|"publications-list",
  *       category?, slug?, data, generated_at }
  *   - preview/exp requests always hit the API — never prefilled.
  */
 import type { QueryClient } from "@tanstack/react-query";
-import type { NewsDetail, NewsListResponse, NewsSummary } from "@soymutdb/api-client";
+import type { NewsDetail, NewsListResponse, NewsSummary, Publication } from "@soymutdb/api-client";
 
 /** News block of the site-wide snapshot. */
 export interface SnapshotNews {
@@ -36,6 +36,20 @@ export interface SnapshotAbout {
   content_zh: string | null;
 }
 
+export interface StaticPage {
+  id: string;
+  slug: string;
+  title_en: string;
+  title_zh: string | null;
+  content_en: string;
+  content_zh: string | null;
+  summary: string | null;
+  category: string | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
 /** Site-wide snapshot shipped at `<base>/data/content.json`. */
 export interface Snapshot {
   schema_version: number;
@@ -47,23 +61,31 @@ export interface Snapshot {
    */
   news_detail: Record<string, NewsDetail | null>;
   about: SnapshotAbout | null;
+  /** Publications bibliography (newest first, year desc, id desc, capped at 100). */
+  publications?: Publication[];
+  static_pages: StaticPage[];
 }
 
 /** Per-page bootstrap payload embedded by SSG pages. */
 export interface BootstrapPayload {
-  page: "news-list" | "news-detail" | "about";
+  page: "news-list" | "news-detail" | "about" | "publications-list";
   /** News list only — category the static page was generated for. */
   category?: string;
   /** News detail only — the generated article slug. */
   slug?: string;
-  /** Page data — shape depends on `page` (NewsListResponse / NewsDetail / SnapshotAbout). */
+  /** Page data — shape depends on `page` (NewsListResponse / NewsDetail / SnapshotAbout / Publication[]). */
   data: unknown;
   generated_at: string;
 }
 
 const BOOTSTRAP_ID = "rl-bootstrap";
 
-const BOOTSTRAP_PAGES = ["news-list", "news-detail", "about"] as const;
+const BOOTSTRAP_PAGES = [
+  "news-list",
+  "news-detail",
+  "about",
+  "publications-list",
+] as const;
 
 function isBootstrapPage(value: unknown): value is BootstrapPayload["page"] {
   return typeof value === "string" && (BOOTSTRAP_PAGES as readonly string[]).includes(value);
@@ -104,7 +126,7 @@ export async function loadSnapshotJson(): Promise<Snapshot | null> {
     const res = await fetch(url, { credentials: "omit" });
     if (!res.ok) return null;
     const json = (await res.json()) as Partial<Snapshot>;
-    if (!json || typeof json !== "object" || json.schema_version !== 1) return null;
+    if (!json || typeof json !== "object" || json.schema_version !== 2) return null;
     if (typeof json.generated_at !== "string") return null;
     return json as Snapshot;
   } catch {
@@ -173,5 +195,18 @@ export function isAboutData(value: unknown): value is SnapshotAbout {
     typeof value === "object" &&
     value !== null &&
     ("title_en" in value || "content_en" in value)
+  );
+}
+
+/** Runtime guard: is the value a publications array we can prefill? */
+export function isPublicationsArray(value: unknown): value is Publication[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (item) =>
+        typeof item === "object" &&
+        item !== null &&
+        typeof (item as Publication).title === "string",
+    )
   );
 }

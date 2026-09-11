@@ -13,27 +13,22 @@ export type PageDefinitionStatus =
   | "requested"
   | "published";
 
-/** Component renderer keys owned by the server registry. */
-export type PageComponentType =
-  | "navigation"
-  | "news_list"
-  | "media_carousel"
-  | "resource_cards"
-  | "rich_text"
-  | "tool_entries"
-  | "assembly_select"
-  | "gene_search_form"
-  | "location_search_form"
-  | "data_table"
-  | "button"
-  | "link"
-  | "notice"
-  | "divider"
-  | "tabs"
-  | "columns"
-  | "jbrowse_launcher"
-  | "blast_launcher"
-  | "ontology_relationship_graph";
+/** Component renderer keys mirrored from the server registry. */
+export const PAGE_COMPONENT_TYPES = [
+  "navigation", "news_list", "media_carousel", "resource_cards", "rich_text",
+  "tool_entries", "assembly_select", "gene_search_form", "location_search_form",
+  "data_table", "button", "link", "notice", "divider", "tabs", "columns",
+  "jbrowse_launcher", "blast_launcher", "ontology_relationship_graph",
+] as const;
+
+export type PageComponentType = (typeof PAGE_COMPONENT_TYPES)[number];
+
+/** Components allowed to contain arbitrary registered component children. */
+export const PAGE_LAYOUT_CONTAINERS = ["columns", "tabs"] as const satisfies readonly PageComponentType[];
+
+export function isLayoutContainer(value: unknown): value is (typeof PAGE_LAYOUT_CONTAINERS)[number] {
+  return typeof value === "string" && (PAGE_LAYOUT_CONTAINERS as readonly string[]).includes(value);
+}
 
 export interface PageComponentNode {
   type: PageComponentType;
@@ -186,6 +181,7 @@ export interface ComponentDescriptor {
   label: string;
   config_schema: Record<string, unknown>;
   allowed_children: string[];
+  is_layout_container: boolean;
 }
 
 export interface RegistryResponse {

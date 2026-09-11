@@ -13,9 +13,17 @@ Fixes vs. quartz reference:
 from __future__ import annotations
 
 import fnmatch
+import time
 
 from celery import Celery
-from celery.signals import beat_init, task_failure, task_success, worker_ready
+from celery.signals import (
+    beat_init,
+    task_failure,
+    task_postrun,
+    task_prerun,
+    task_success,
+    worker_ready,
+)
 
 from soymutdb_worker import metrics as worker_metrics
 from soymutdb_worker.config import get_setting
@@ -30,6 +38,7 @@ RESULT_BACKEND = get_setting("CELERY_RESULT_BACKEND", "redis://localhost:6379/2"
 # default 7 days (within the recommended 1-7 day window).  Production compose
 # sets the canonical SOYMUTDB_ name explicitly.
 RESULT_EXPIRES = int(get_setting("CELERY_RESULT_EXPIRES", "604800"))
+_task_started_at: dict[str, float] = {}
 
 celery_app = Celery(
     "soymutdb_worker",
@@ -49,6 +58,7 @@ celery_app = Celery(
         "soymutdb_worker.tasks.email",
         "soymutdb_worker.tasks.release",
         "soymutdb_worker.tasks.static_publish",
+        "soymutdb_worker.tasks.page_builder_publish",
     ],
 )
 
@@ -131,6 +141,7 @@ celery_app.autodiscover_tasks(
         "soymutdb_worker.tasks.static_pages",
         "soymutdb_worker.tasks.release",
         "soymutdb_worker.tasks.static_publish",
+        "soymutdb_worker.tasks.page_builder_publish",
     ]
 )
 
@@ -163,6 +174,31 @@ def _start_metrics_on_worker_ready(**kwargs: object) -> None:
 @beat_init.connect
 def _start_metrics_on_beat_init(**kwargs: object) -> None:
     worker_metrics.start_metrics_server(broker_url=BROKER_URL)
+
+
+@task_prerun.connect
+def _record_task_start(task_id: str | None = None, **kwargs: object) -> None:
+    if task_id:
+        _task_started_at[task_id] = time.monotonic()
+
+
+@task_postrun.connect
+def _observe_task_duration(
+    task_id: str | None = None,
+    task: object | None = None,
+    state: str | None = None,
+    **kwargs: object,
+) -> None:
+    if not task_id:
+        return
+    started_at = _task_started_at.pop(task_id, None)
+    if started_at is None:
+        return
+    task_name = str(getattr(task, "name", ""))
+    state_label = (state or "unknown").lower()
+    worker_metrics.TASK_DURATION.labels(
+        queue=_queue_of_task(task_name), state=state_label
+    ).observe(max(0.0, time.monotonic() - started_at))
 
 
 @task_success.connect

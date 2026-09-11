@@ -281,6 +281,10 @@ export interface paths {
          * Get Gene
          * @description Get gene detail with transcripts and aliases.
          *
+         *     ``gene_id`` is the assembly-scoped accession. When it exists in
+         *     multiple assemblies, ``assembly_id`` is required; the API returns an
+         *     explicit disambiguation error otherwise.
+         *
          *     Domain errors (e.g. ``NotFoundError``) propagate to the error envelope;
          *     unexpected exceptions are converted to a 500 HTTP error so the client
          *     always receives a structured response.
@@ -608,7 +612,7 @@ export interface paths {
          * Global search (JSON or HTML fragment)
          * @description Global search endpoint.
          *
-         *     Returns JSON (internal DB search) when the client sends
+         *     Returns JSON (public SoyMutDB search) when the client sends
          *     ``Accept: application/json`` or ``?format=json``.  Otherwise returns a
          *     sanitized HTML fragment built from federated external search results.
          */
@@ -630,9 +634,34 @@ export interface paths {
         };
         /**
          * Suggest
-         * @description Autocomplete suggestions (internal DB only).
+         * @description Autocomplete suggestions (internal DB only, release-scoped).
          */
         get: operations["suggest_api_v1_search_suggest_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/search/internal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Authorized internal search across public and internal identifiers
+         * @description Internal-site search: server-side authorized, audited, uncached.
+         *
+         *     Results carry both identities (public_id / internal_id) and the field
+         *     that matched. The shared search cache is deliberately bypassed so
+         *     authorized rows cannot leak into another scope, and the response is
+         *     marked ``private, no-store``.
+         */
+        get: operations["internal_search_api_v1_search_internal_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1222,7 +1251,7 @@ export interface paths {
         };
         /**
          * List Mutant Lines
-         * @description List mutant lines.
+         * @description List public mutant lines.
          */
         get: operations["list_mutant_lines_api_v1_mutants_get"];
         put?: never;
@@ -1233,7 +1262,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/mutants/{mutant_line_id}": {
+    "/api/v1/mutants/{public_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1242,9 +1271,12 @@ export interface paths {
         };
         /**
          * Get Mutant Line
-         * @description Get mutant line detail.
+         * @description Get a public mutant line by its public identifier.
+         *
+         *     Any value that does not correspond to a visible public record yields
+         *     the same not-found response — including existing internal identifiers.
          */
-        get: operations["get_mutant_line_api_v1_mutants__mutant_line_id__get"];
+        get: operations["get_mutant_line_api_v1_mutants__public_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1253,7 +1285,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/mutants/{mutant_line_id}/phenotypes": {
+    "/api/v1/mutants/{public_id}/phenotypes": {
         parameters: {
             query?: never;
             header?: never;
@@ -1262,9 +1294,9 @@ export interface paths {
         };
         /**
          * Get Phenotypes
-         * @description List phenotypes for a mutant line.
+         * @description List phenotypes for a public mutant line.
          */
-        get: operations["get_phenotypes_api_v1_mutants__mutant_line_id__phenotypes_get"];
+        get: operations["get_phenotypes_api_v1_mutants__public_id__phenotypes_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1796,6 +1828,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/page-definitions/published-routes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Published Routes
+         * @description Return only published, SSG-safe routes with their minimal public payload.
+         */
+        get: operations["get_published_routes_api_v1_page_definitions_published_routes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/page-definitions/{route}": {
         parameters: {
             query?: never;
@@ -2017,41 +2069,14 @@ export interface paths {
         };
         /**
          * Export Audit Logs Excel
-         * @description Export audit logs as an Excel (.xlsx) file (administrator-only).
+         * @description Export a bounded audit-log slice as an Excel (.xlsx) file.
          *
-         *     Uses ``openpyxl`` for generation.  All results matching the filters are
-         *     included (no pagination).
+         *     XLSX generation is intentionally capped because ``openpyxl`` constructs a
+         *     workbook in process memory. Use the streaming CSV endpoint for complete,
+         *     high-volume exports.
          */
         get: operations["export_audit_logs_excel_api_v1_admin_audit_logs_export_excel_get"];
         put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/cdn-config": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Cdn Config
-         * @description Return current CDN configuration (administrator-only).
-         *
-         *     Returns ``enabled`` (bool) and ``urls`` (list of str).
-         */
-        get: operations["get_cdn_config_api_v1_admin_cdn_config_get"];
-        /**
-         * Update Cdn Config
-         * @description Update CDN configuration (administrator-only).
-         *
-         *     Accepts ``enabled`` (bool) and ``urls`` (list of str).
-         */
-        put: operations["update_cdn_config_api_v1_admin_cdn_config_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -2387,6 +2412,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/news/deleted": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Deleted News Admin
+         * @description List soft-deleted news metadata; restricted to administrators.
+         */
+        get: operations["list_deleted_news_admin_api_v1_admin_news_deleted_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/news/external-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview External Article
+         * @description Fetch one approved external article for editor review.
+         *
+         *     This explicit, bounded fetch never creates, updates, or publishes a CMS
+         *     record.  The client must apply the returned sanitized HTML to the normal
+         *     draft form and save it through the existing publishing workflow.
+         */
+        post: operations["preview_external_article_api_v1_admin_news_external_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/news/{news_id}": {
         parameters: {
             query?: never;
@@ -2403,9 +2472,49 @@ export interface paths {
         post?: never;
         /**
          * Delete News
-         * @description Hard-delete a news article.
+         * @description Soft-delete a news article while preserving its audit history.
          */
         delete: operations["delete_news_api_v1_admin_news__news_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/news/{news_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore News
+         * @description Restore a soft-deleted article; only administrators may do this.
+         */
+        post: operations["restore_news_api_v1_admin_news__news_id__restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/news/{news_id}/purge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Purge News
+         * @description Permanently remove a soft-deleted article; only administrators may do this.
+         */
+        delete: operations["purge_news_api_v1_admin_news__news_id__purge_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2470,6 +2579,60 @@ export interface paths {
         get: operations["get_registry_api_v1_admin_page_builder_registry_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/page-builder/templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Templates */
+        get: operations["list_templates_api_v1_admin_page_builder_templates_get"];
+        put?: never;
+        /** Create Template */
+        post: operations["create_template_api_v1_admin_page_builder_templates_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/page-builder/templates/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Template */
+        get: operations["get_template_api_v1_admin_page_builder_templates__key__get"];
+        /** Update Template */
+        put: operations["update_template_api_v1_admin_page_builder_templates__key__put"];
+        post?: never;
+        /** Delete Template */
+        delete: operations["delete_template_api_v1_admin_page_builder_templates__key__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/page-builder/templates/{key}/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Validate Template */
+        post: operations["validate_template_api_v1_admin_page_builder_templates__key__validate_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3344,6 +3507,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/uploads/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Complete Upload
+         * @description Verify the object bytes and register a reusable media asset.
+         *
+         *     The endpoint is intentionally separate from presign: an object is not
+         *     selectable in the CMS until the server has checked its bytes, digest, MIME
+         *     type and dimensions. Repeating the request is idempotent for the same key.
+         */
+        post: operations["complete_upload_api_v1_admin_uploads_complete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/expression/libraries": {
         parameters: {
             query?: never;
@@ -3393,7 +3580,13 @@ export interface paths {
         };
         /**
          * Get Gene Expression
-         * @description Get expression data for a specific gene, with optional filters.
+         * @description Get a bounded, keyset-paginated expression slice for a gene.
+         *
+         *     ``gene_id`` is the assembly-scoped accession; when it exists in
+         *     multiple assemblies, ``assembly_id`` is required.
+         *
+         *     Complete data exports must use the asynchronous export path rather than
+         *     materialising every matching library in an API worker.
          */
         get: operations["get_gene_expression_api_v1_expression_genes__gene_id__expression_get"];
         put?: never;
@@ -3433,10 +3626,13 @@ export interface paths {
         };
         /**
          * Get Gene Homologs
-         * @description Get all homologs (orthologs/paralogs) for a specific gene.
+         * @description Get a bounded, keyset-paginated homolog slice for a specific gene.
          *
-         *     Returns an empty list if the gene has no homolog entries — no error
-         *     is raised because the gene may simply not have annotated homologs.
+         *     ``gene_id`` is the assembly-scoped accession; when it exists in
+         *     multiple assemblies, ``assembly_id`` is required.
+         *
+         *     Empty pages remain a successful response because a gene may simply not
+         *     have annotated homologs.
          */
         get: operations["get_gene_homologs_api_v1_homologs_genes__gene_id__homologs_get"];
         put?: never;
@@ -4442,6 +4638,11 @@ export interface components {
             };
             /** Allowed Children */
             allowed_children?: string[];
+            /**
+             * Is Layout Container
+             * @default false
+             */
+            is_layout_container: boolean;
         };
         /**
          * ConsequenceType
@@ -4609,6 +4810,55 @@ export interface components {
             created_at?: unknown | null;
             /** Updated At */
             updated_at?: unknown | null;
+        };
+        /**
+         * DeletedNewsListResponse
+         * @description Paginated metadata-only list of soft-deleted news articles.
+         */
+        DeletedNewsListResponse: {
+            /** Items */
+            items: components["schemas"]["DeletedNewsSummaryResponse"][];
+            /** Total */
+            total: number;
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+        };
+        /**
+         * DeletedNewsSummaryResponse
+         * @description Metadata-only administrative view of a soft-deleted news article.
+         */
+        DeletedNewsSummaryResponse: {
+            /** Id */
+            id: string;
+            /** Title En */
+            title_en: string;
+            /** Title Zh */
+            title_zh?: string | null;
+            /** Slug */
+            slug: string;
+            /** Category */
+            category?: string | null;
+            /** @default draft */
+            status: components["schemas"]["NewsStatus"];
+            /** Published At */
+            published_at?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Deleted At
+             * Format: date-time
+             */
+            deleted_at: string;
         };
         /**
          * DiscoveryTrendPoint
@@ -5068,6 +5318,41 @@ export interface components {
             /** Message */
             message: string;
         };
+        /**
+         * ExternalArticlePlatform
+         * @description Approved external article origins for an explicit editor preview.
+         * @enum {string}
+         */
+        ExternalArticlePlatform: "wechat" | "xmol";
+        /**
+         * ExternalArticlePreviewRequest
+         * @description One explicit, review-only fetch of an approved external article URL.
+         *
+         *     The endpoint never persists or publishes content.  The caller must apply
+         *     the sanitized preview to a news form and save it through normal CMS review.
+         */
+        ExternalArticlePreviewRequest: {
+            platform: components["schemas"]["ExternalArticlePlatform"];
+            /** Source Url */
+            source_url: string;
+        };
+        /**
+         * ExternalArticlePreviewResponse
+         * @description Sanitized result of an external article preview fetch.
+         */
+        ExternalArticlePreviewResponse: {
+            platform: components["schemas"]["ExternalArticlePlatform"];
+            /** Source Url */
+            source_url: string;
+            /** Title */
+            title: string;
+            /** Content Html */
+            content_html: string;
+            /** Source Preview Token */
+            source_preview_token: string;
+            /** Source Published At */
+            source_published_at?: string | null;
+        };
         /** FeatureDefinitionResponse */
         FeatureDefinitionResponse: {
             /** Key */
@@ -5136,6 +5421,8 @@ export interface components {
             gene_id?: string | null;
             /** Assembly Id */
             assembly_id?: string | null;
+            /** Assembly Name */
+            assembly_name?: string | null;
             /** Chromosome */
             chromosome: string;
             /** Name */
@@ -5212,6 +5499,8 @@ export interface components {
             gene_id?: string | null;
             /** Assembly Id */
             assembly_id?: string | null;
+            /** Assembly Name */
+            assembly_name?: string | null;
             /** Chromosome */
             chromosome: string;
             /** Name */
@@ -5261,6 +5550,15 @@ export interface components {
             by_type?: {
                 [key: string]: number;
             };
+            /** By Assembly */
+            by_assembly?: {
+                [key: string]: number;
+            };
+            /**
+             * Ambiguous
+             * @default false
+             */
+            ambiguous: boolean;
             /** Cursor */
             cursor?: string | null;
             /** Next Cursor */
@@ -5708,6 +6006,68 @@ export interface components {
             /** Field Mapping */
             field_mapping?: components["schemas"]["FieldMappingItem"][];
         };
+        /** InternalGeneSearchItem */
+        InternalGeneSearchItem: {
+            /** @default gene */
+            entity_type: components["schemas"]["SearchResultType"];
+            /** Gene Id */
+            gene_id: string;
+            /** Internal Id */
+            internal_id: string;
+            /** Name */
+            name?: string | null;
+            /** Matched Field */
+            matched_field: string;
+            /** @default text */
+            match_type: components["schemas"]["MatchType"];
+            /** Assembly Id */
+            assembly_id?: number | null;
+            /** Release Id */
+            release_id?: number | null;
+            /** Url */
+            url?: string | null;
+        };
+        /**
+         * InternalMutantSearchItem
+         * @description Internal-search mutant hit: both identities plus the matched field.
+         *
+         *     Only served by the authenticated internal search endpoint; never by
+         *     external routes.
+         */
+        InternalMutantSearchItem: {
+            /** @default mutant_line */
+            entity_type: components["schemas"]["SearchResultType"];
+            /** Public Id */
+            public_id: string;
+            /** Internal Id */
+            internal_id: string;
+            /** Name */
+            name: string;
+            /** Matched Field */
+            matched_field: string;
+            /** @default text */
+            match_type: components["schemas"]["MatchType"];
+            /** Is Public */
+            is_public: boolean;
+            /** Release Id */
+            release_id?: number | null;
+            /** Url */
+            url?: string | null;
+        };
+        /** InternalSearchResponse */
+        InternalSearchResponse: {
+            /** Query */
+            query: string;
+            /** Mutants */
+            mutants?: components["schemas"]["InternalMutantSearchItem"][];
+            /** Genes */
+            genes?: components["schemas"]["InternalGeneSearchItem"][];
+            /**
+             * Total Count
+             * @default 0
+             */
+            total_count: number;
+        };
         /** LayoutResponse */
         LayoutResponse: {
             /** Page Name */
@@ -5836,6 +6196,34 @@ export interface components {
         MarkReadResponse: {
             /** Marked */
             marked: number;
+        };
+        /**
+         * MatchType
+         * @description How a search hit matched the query.
+         *
+         *     ``exact`` — canonical identifier equality; ``alias`` — curated alias
+         *     equality; ``cross_version`` — provenance-bearing cross-assembly mapping;
+         *     ``text`` — substring/prose match. Never inferred from similarity alone.
+         * @enum {string}
+         */
+        MatchType: "exact" | "alias" | "cross-version" | "text";
+        /**
+         * MediaAssetCompleteRequest
+         * @description Complete a presigned upload after the object reached S3/MinIO.
+         */
+        MediaAssetCompleteRequest: {
+            /** Object Key */
+            object_key: string;
+            /** Filename */
+            filename: string;
+            /** Purpose */
+            purpose: string;
+            /** Size */
+            size: number;
+            /** Content Type */
+            content_type: string;
+            /** Checksum Sha256 */
+            checksum_sha256: string;
         };
         /** MediaAssetListResponse */
         MediaAssetListResponse: {
@@ -5982,8 +6370,8 @@ export interface components {
          * @description Extended mutant line information.
          */
         MutantLineDetail: {
-            /** Id */
-            id: string;
+            /** Public Id */
+            public_id: string;
             /** Name */
             name: string;
             /** Mutagen */
@@ -6027,11 +6415,14 @@ export interface components {
         };
         /**
          * MutantLineResponse
-         * @description Compact mutant line representation.
+         * @description Compact public mutant-line representation.
+         *
+         *     ``public_id`` is the canonical external identity. The private
+         *     persistence key is never part of this public contract.
          */
         MutantLineResponse: {
-            /** Id */
-            id: string;
+            /** Public Id */
+            public_id: string;
             /** Name */
             name: string;
             /** Mutagen */
@@ -6090,6 +6481,8 @@ export interface components {
              * @default false
              */
             is_published: boolean;
+            /** Source Preview Token */
+            source_preview_token?: string | null;
         };
         /**
          * NewsDetailResponse
@@ -6151,6 +6544,13 @@ export interface components {
             visible_from?: string | null;
             /** Visible To */
             visible_to?: string | null;
+            source_platform?: components["schemas"]["ExternalArticlePlatform"] | null;
+            /** Source Url */
+            source_url?: string | null;
+            /** Source Published At */
+            source_published_at?: string | null;
+            /** Source Synced At */
+            source_synced_at?: string | null;
         };
         /**
          * NewsFeaturedResponse
@@ -6311,6 +6711,13 @@ export interface components {
             visible_to?: string | null;
             /** Is Published */
             is_published?: boolean | null;
+            /** Source Preview Token */
+            source_preview_token?: string | null;
+            /**
+             * Clear Source Provenance
+             * @default false
+             */
+            clear_source_provenance: boolean;
         };
         /**
          * NotificationListResponse
@@ -6586,6 +6993,106 @@ export interface components {
          * @enum {string}
          */
         PageStatus: "draft" | "published" | "archived";
+        /** PageTemplateCreate */
+        PageTemplateCreate: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Description */
+            description?: string | null;
+            /**
+             * Category
+             * @default general
+             */
+            category: string;
+            /** Definition */
+            definition: {
+                [key: string]: unknown;
+            };
+            /** Preview Image Id */
+            preview_image_id?: string | null;
+            /**
+             * Sort Order
+             * @default 0
+             */
+            sort_order: number;
+        };
+        /** PageTemplateListResponse */
+        PageTemplateListResponse: {
+            /** Items */
+            items?: components["schemas"]["PageTemplateResponse"][];
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+        };
+        /** PageTemplateResponse */
+        PageTemplateResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Description */
+            description: string | null;
+            /** Category */
+            category: string;
+            /** Definition */
+            definition: {
+                [key: string]: unknown;
+            };
+            /** Preview Image Id */
+            preview_image_id: string | null;
+            /** Builtin */
+            builtin: boolean;
+            /** Sort Order */
+            sort_order: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** PageTemplateUpdate */
+        PageTemplateUpdate: {
+            /** Label */
+            label?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Category */
+            category?: string | null;
+            /** Definition */
+            definition?: {
+                [key: string]: unknown;
+            } | null;
+            /** Preview Image Id */
+            preview_image_id?: string | null;
+            /** Sort Order */
+            sort_order?: number | null;
+        };
+        /** PageTemplateValidationResponse */
+        PageTemplateValidationResponse: {
+            /**
+             * Valid
+             * @default true
+             */
+            valid: boolean;
+            /** Definition */
+            definition: {
+                [key: string]: unknown;
+            };
+        };
         /**
          * PasswordChangeRequest
          * @description Payload for changing the current user's password.
@@ -6603,8 +7110,8 @@ export interface components {
         PhenotypeResponse: {
             /** Id */
             id: string;
-            /** Mutant Line Id */
-            mutant_line_id: string;
+            /** Mutant Line Public Id */
+            mutant_line_public_id: string;
             /** Trait Category */
             trait_category: string;
             /** Trait Name */
@@ -6903,6 +7410,21 @@ export interface components {
             event_id?: string | null;
         };
         /**
+         * PublishedPageDefinitionRoute
+         * @description Minimal public SSG payload for a safely routable published definition.
+         */
+        PublishedPageDefinitionRoute: {
+            /** Route */
+            route: string;
+            /** Version */
+            version: number;
+            status: components["schemas"]["PageDefinitionStatusEnum"];
+            /** Definition */
+            definition: {
+                [key: string]: unknown;
+            };
+        };
+        /**
          * QueryLatencyPoint
          * @description Daily query-latency percentiles (ms).
          */
@@ -7041,6 +7563,10 @@ export interface components {
         /**
          * SearchResultItem
          * @description A single global-search hit (stable public contract).
+         *
+         *     ``id`` is the canonical public identity of the entity: gene accession
+         *     for genes, ``public_id`` for mutant lines. Private persistence keys are
+         *     never placed here.
          */
         SearchResultItem: {
             type: components["schemas"]["SearchResultType"];
@@ -7055,6 +7581,8 @@ export interface components {
              * @default 0
              */
             score: number;
+            /** @default text */
+            match_type: components["schemas"]["MatchType"];
             /** Url */
             url?: string | null;
             /**
@@ -7062,6 +7590,10 @@ export interface components {
              * @default internal
              */
             source: string;
+            /** Release Id */
+            release_id?: number | null;
+            /** Assembly Id */
+            assembly_id?: number | null;
         };
         /**
          * SearchResultType
@@ -8637,6 +9169,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description Rate limit exceeded; retry after the indicated number of seconds. */
+            429: {
+                headers: {
+                    /** @description Seconds until this login attempt may be retried. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Internal Server Error */
             500: {
                 headers: {
@@ -8932,6 +9475,7 @@ export interface operations {
     get_gene_api_v1_genes__gene_id__get: {
         parameters: {
             query?: {
+                assembly_id?: number | null;
                 release_id?: number | null;
             };
             header?: {
@@ -9559,6 +10103,7 @@ export interface operations {
                 sources?: string[] | null;
                 cursor?: string | null;
                 limit?: number;
+                assembly_id?: number | null;
                 /** @description 'json' or 'html' */
                 format?: string | null;
             };
@@ -9620,6 +10165,47 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     }[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    internal_search_api_v1_search_internal_get: {
+        parameters: {
+            query: {
+                query: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InternalSearchResponse"];
                 };
             };
             /** @description Validation Error */
@@ -10784,12 +11370,12 @@ export interface operations {
             };
         };
     };
-    get_mutant_line_api_v1_mutants__mutant_line_id__get: {
+    get_mutant_line_api_v1_mutants__public_id__get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                mutant_line_id: number;
+                public_id: string;
             };
             cookie?: never;
         };
@@ -10824,12 +11410,12 @@ export interface operations {
             };
         };
     };
-    get_phenotypes_api_v1_mutants__mutant_line_id__phenotypes_get: {
+    get_phenotypes_api_v1_mutants__public_id__phenotypes_get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                mutant_line_id: number;
+                public_id: string;
             };
             cookie?: never;
         };
@@ -11928,6 +12514,44 @@ export interface operations {
             };
         };
     };
+    get_published_routes_api_v1_page_definitions_published_routes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublishedPageDefinitionRoute"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     get_page_definition_api_v1_page_definitions__route__get: {
         parameters: {
             query?: {
@@ -12425,6 +13049,8 @@ export interface operations {
                 ip_address?: string | null;
                 start_date?: string | null;
                 end_date?: string | null;
+                /** @description Maximum XLSX rows. Use the streaming CSV export for larger result sets. */
+                limit?: number;
             };
             header?: never;
             path?: never;
@@ -12439,92 +13065,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_cdn_config_api_v1_admin_cdn_config_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationErrorResponse"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    update_cdn_config_api_v1_admin_cdn_config_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
                 };
             };
             /** @description Validation Error */
@@ -13454,6 +13994,89 @@ export interface operations {
             };
         };
     };
+    list_deleted_news_admin_api_v1_admin_news_deleted_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeletedNewsListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    preview_external_article_api_v1_admin_news_external_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExternalArticlePreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExternalArticlePreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     update_news_api_v1_admin_news__news_id__put: {
         parameters: {
             query?: never;
@@ -13499,6 +14122,84 @@ export interface operations {
         };
     };
     delete_news_api_v1_admin_news__news_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                news_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    restore_news_api_v1_admin_news__news_id__restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                news_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NewsDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    purge_news_api_v1_admin_news__news_id__purge_delete: {
         parameters: {
             query?: never;
             header?: never;
@@ -13643,6 +14344,248 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_templates_api_v1_admin_page_builder_templates_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageTemplateListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_template_api_v1_admin_page_builder_templates_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PageTemplateCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageTemplateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_template_api_v1_admin_page_builder_templates__key__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageTemplateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_template_api_v1_admin_page_builder_templates__key__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PageTemplateUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageTemplateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    delete_template_api_v1_admin_page_builder_templates__key__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    validate_template_api_v1_admin_page_builder_templates__key__validate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageTemplateValidationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
             /** @description Internal Server Error */
@@ -15825,6 +16768,48 @@ export interface operations {
             };
         };
     };
+    complete_upload_api_v1_admin_uploads_complete_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MediaAssetCompleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaAssetResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     list_libraries_api_v1_expression_libraries_get: {
         parameters: {
             query?: {
@@ -15916,11 +16901,15 @@ export interface operations {
     get_gene_expression_api_v1_expression_genes__gene_id__expression_get: {
         parameters: {
             query?: {
+                assembly_id?: number | null;
                 tissue?: string | null;
                 treatment?: string | null;
                 library_id?: number | null;
                 min_fpkm?: number | null;
                 max_fpkm?: number | null;
+                /** @description Exclusive ExpressionData.id cursor. */
+                cursor?: number | null;
+                limit?: number;
             };
             header?: never;
             path: {
@@ -15965,6 +16954,7 @@ export interface operations {
         parameters: {
             query?: {
                 gene_id?: string | null;
+                assembly_id?: number | null;
                 library_id?: number | null;
                 tissue?: string | null;
                 treatment?: string | null;
@@ -16012,7 +17002,12 @@ export interface operations {
     };
     get_gene_homologs_api_v1_homologs_genes__gene_id__homologs_get: {
         parameters: {
-            query?: never;
+            query?: {
+                assembly_id?: number | null;
+                /** @description Exclusive GeneHomolog.id keyset cursor. */
+                cursor?: string | null;
+                limit?: number;
+            };
             header?: never;
             path: {
                 gene_id: string;
@@ -16056,10 +17051,14 @@ export interface operations {
         parameters: {
             query?: {
                 gene_id?: string | null;
+                assembly_id?: number | null;
                 homolog_species?: string | null;
                 homolog_type?: string | null;
+                /** @description Offset page; ignored when cursor is supplied. */
                 page?: number;
                 page_size?: number;
+                /** @description Exclusive GeneHomolog.id keyset cursor. */
+                cursor?: string | null;
             };
             header?: never;
             path?: never;

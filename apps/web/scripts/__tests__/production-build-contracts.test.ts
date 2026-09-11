@@ -178,6 +178,17 @@ describe("build pipeline & env hashing contract", () => {
     expect(turbo).toContain("SOYMUTDB_RELEASE_ID");
   });
 
+  it("pins browser API requests to the artifact release", () => {
+    const buildSites = readRepositoryFile("apps/web/scripts/build-sites.ts");
+    const main = readRepositoryFile("apps/web/src/main.tsx");
+    expect(buildSites).toContain(
+      "VITE_SOYMUTDB_RELEASE_ID: process.env.SOYMUTDB_RELEASE_ID",
+    );
+    expect(main).toContain(
+      "setReleaseId(import.meta.env.VITE_SOYMUTDB_RELEASE_ID)",
+    );
+  });
+
   it("admin vite config supports VITE_BASE_URL", async () => {
     const source = readRepositoryFile("apps/admin/vite.config.ts");
     expect(source).toContain("loadEnv");

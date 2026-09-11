@@ -52,15 +52,23 @@ export function formatMb(pos: number | null | undefined): string {
   return `${(pos / 1_000_000).toFixed(2)} Mb`;
 }
 
-/** Build a JBrowse 2 deep link for a genomic location. */
-export function jbrowseUrl(loc: { chromosome: string; start?: number; end?: number }): string {
-  const assembly = "Wm82.a4.v1";
+/** Build a JBrowse 2 deep link for a genomic location.
+ *
+ * ``assembly`` should be the JBrowse assembly name (e.g. ``Wm82.a4.v1``).
+ * When omitted the caller is responsible for providing a default only
+ * when the context is unambiguous.
+ */
+export function jbrowseUrl(
+  loc: { chromosome: string; start?: number; end?: number },
+  assembly?: string,
+): string {
+  const assemblyName = assembly ?? "Wm82.a4.v1";
   const locStr =
     loc.start && loc.end
       ? `${loc.chromosome}:${Math.max(1, loc.start)}..${loc.end}`
       : loc.chromosome;
   const params = new URLSearchParams({
-    assembly,
+    assembly: assemblyName,
     loc: locStr,
   });
   return `/browser?${params.toString()}`;

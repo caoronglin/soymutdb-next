@@ -220,8 +220,10 @@ class SeqFetchService:
         if len(gene_ids) > MAX_GENES:
             raise ValidationError(f"'genes' accepts at most {MAX_GENES} IDs")
 
-        result = await db.execute(select(Gene).where(Gene.id.in_(gene_ids)))
-        found = {g.id: g for g in result.scalars().all()}
+        result = await db.execute(
+            select(Gene).where(Gene.accession.in_(gene_ids))
+        )
+        found = {g.accession: g for g in result.scalars().all()}
 
         missing = [gid for gid in gene_ids if gid not in found]
         records: list[tuple[str, str]] = []

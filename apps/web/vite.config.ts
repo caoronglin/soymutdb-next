@@ -73,6 +73,10 @@ export default defineConfig(({ mode }) => {
     // Load env WITHOUT the VITE_ prefix filter so the token is visible here.
     const env = loadEnv(mode, __dirname, "");
     const cfAnalyticsToken = env.VITE_CLOUDFLARE_ANALYTICS_TOKEN?.trim() || undefined;
+    const siteVariant = (env.VITE_SITE_VARIANT?.trim().toLowerCase() || "external");
+    if (siteVariant !== "external" && siteVariant !== "internal") {
+        throw new Error(`VITE_SITE_VARIANT must be external or internal, got "${siteVariant}"`);
+    }
 
     // Deployment base path (oracle review R1, fixed 2026-08-09):
     // gh-pages hosts the site under /soymutdb-next/ — without a base the
@@ -83,15 +87,28 @@ export default defineConfig(({ mode }) => {
     const minimalDeployment = isMinimalDeploymentMode(env.VITE_DEPLOYMENT_MODE);
     // The portal still pins an explicit API origin in every production mode so
     // its CSP stays narrow and API-unavailable states remain deterministic.
-    const apiOrigin = requireDeploymentOrigin(env.VITE_API_BASE_URL || (mode === "development" ? "http://localhost:8000" : undefined), "API");
+    const allowInsecureDevOrigins = mode === "development";
+    const apiOrigin = requireDeploymentOrigin(
+        env.VITE_API_BASE_URL || (mode === "development" ? "http://localhost:8000" : undefined),
+        "API",
+        { allowInsecureHttp: allowInsecureDevOrigins },
+    );
+    const apiProxyTarget = apiOrigin;
     // Minimal Pages releases intentionally contain no JBrowse bundle. Do not
     // manufacture a localhost/placeholder frame origin: omit frame access
     // altogether and let the public UI use its linear/unavailable fallbacks.
     const jbrowseOrigin = minimalDeployment
         ? undefined
-        : requireDeploymentOrigin(env.VITE_JBROWSE_BASE_URL || env.VITE_JBROWSE_URL || (mode === "development" ? "http://localhost:5175" : undefined), "JBrowse");
+        : requireDeploymentOrigin(
+            env.VITE_JBROWSE_BASE_URL || env.VITE_JBROWSE_URL || (mode === "development" ? "http://localhost:5175" : undefined),
+            "JBrowse",
+            { allowInsecureHttp: allowInsecureDevOrigins },
+        );
 
     return {
+        define: {
+            __SOYMUTDB_INTERNAL_SITE__: siteVariant === "internal",
+        },
         base: deployBase,
         plugins: [react(), deploymentCsp(buildCsp({ apiOrigin, jbrowseOrigin }, Boolean(cfAnalyticsToken))), cloudflareWebAnalytics(cfAnalyticsToken)],
         resolve: {
@@ -104,14 +121,14 @@ export default defineConfig(({ mode }) => {
             host: "0.0.0.0",
             proxy: {
                 "/api": {
-                    target: "http://localhost:8000",
+                    target: apiProxyTarget,
                     changeOrigin: true,
                 },
             },
         },
         build: {
             target: "es2022",
-            outDir: "dist",
+            outDir: env.SOYMUTDB_DIST_DIR?.trim() || "dist",
             sourcemap: false,
             chunkSizeWarningLimit: 2048,
             rollupOptions: {

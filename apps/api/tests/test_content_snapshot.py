@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.models.content import NewsArticle
 
 _FIXTURE_SNAPSHOT: dict = {
     "schema_version": 2,
@@ -133,10 +135,13 @@ class TestContentSnapshot:
         first = self.client.get("/api/v1/content/snapshot")
         etag = first.headers.get("etag")
         assert etag
+        assert first.headers["cache-control"] == "public, max-age=0, must-revalidate"
         second = self.client.get(
             "/api/v1/content/snapshot", headers={"If-None-Match": etag}
         )
         assert second.status_code == 304
+        assert second.headers["etag"] == etag
+        assert second.headers["cache-control"] == "public, max-age=0, must-revalidate"
 
     def test_snapshot_public_no_auth(self) -> None:
         resp = self.client.get("/api/v1/content/snapshot")
@@ -183,3 +188,83 @@ class TestReleaseAwareSnapshot:
         assert self._seen["release_id"] == 7
         assert self._seen["page_definition_version"] == 3
         assert "release_id" not in resp.json()  # fixture has no release_id key
+
+
+class _SnapshotRows:
+    def __init__(self, rows: list[object]) -> None:
+        self._rows = rows
+
+    def scalars(self) -> _SnapshotRows:
+        return self
+
+    def all(self) -> list[object]:
+        return self._rows
+
+
+class _SnapshotSession:
+    def __init__(self, articles: list[NewsArticle]) -> None:
+        self.articles = articles
+        self.statements: list[object] = []
+
+    async def scalar(self, statement):
+        self.statements.append(statement)
+        if "FROM news_articles" not in str(statement):
+            return None
+        return len(
+            [article for article in self.articles if article.deleted_at is None]
+        )
+
+    async def execute(self, statement):
+        self.statements.append(statement)
+        if "FROM news_articles" in str(statement):
+            return _SnapshotRows(
+                [article for article in self.articles if article.deleted_at is None]
+            )
+        return _SnapshotRows([])
+
+
+@pytest.mark.asyncio
+async def test_snapshot_service_excludes_soft_deleted_news() -> None:
+    from app.services.content_snapshot_service import ContentSnapshotService
+
+    now = datetime.now(UTC)
+    active = NewsArticle(
+        id=1,
+        title_en="Active",
+        content_en="<p>Active</p>",
+        slug="active",
+        status="published",
+        is_published=True,
+        featured_sort=0,
+        carousel_sort=0,
+        published_at=now,
+        created_at=now,
+        updated_at=now,
+    )
+    deleted = NewsArticle(
+        id=2,
+        title_en="Deleted",
+        content_en="<p>Deleted</p>",
+        slug="deleted",
+        status="published",
+        is_published=True,
+        featured_sort=0,
+        carousel_sort=0,
+        published_at=now,
+        deleted_at=now,
+        created_at=now,
+        updated_at=now,
+    )
+    session = _SnapshotSession([active, deleted])
+
+    snapshot = await ContentSnapshotService().build_snapshot(session)
+
+    assert snapshot["news"]["source_total"] == 1
+    assert [item["slug"] for item in snapshot["news"]["items"]] == ["active"]
+    news_sql = [
+        str(statement)
+        for statement in session.statements
+        if "news_articles" in str(statement)
+    ]
+    assert news_sql
+    assert all("news_articles.deleted_at IS NULL" in sql for sql in news_sql)

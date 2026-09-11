@@ -12,6 +12,7 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "ssg:build": "tsx scripts/ssg-build.ts",
+    "build:sites": "tsx scripts/build-sites.ts",
     "ssg:samples": "tsx scripts/generate-samples.ts",
     "ssg:compress": "tsx scripts/gzip-compress.ts",
     "clean": "rimraf dist .turbo",

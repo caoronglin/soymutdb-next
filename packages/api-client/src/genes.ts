@@ -6,6 +6,8 @@ export interface GeneSummary {
   symbol: string | null;
   name: string | null;
   biotype: string;
+  assembly_id: string | null;
+  assembly_name: string | null;
   chromosome: string;
   start_pos: number;
   end_pos: number;
@@ -62,9 +64,12 @@ export function searchGenes(params: GeneSearchParams): Promise<GeneSearchRespons
   });
 }
 
-export function getGene(geneId: string, releaseId?: string): Promise<GeneDetail> {
+export function getGene(
+  geneId: string,
+  params?: { release_id?: string; assembly_id?: string },
+): Promise<GeneDetail> {
   return http.get<GeneDetail>(`/genes/${geneId}`, {
-    params: { release_id: releaseId },
+    params,
   });
 }
 

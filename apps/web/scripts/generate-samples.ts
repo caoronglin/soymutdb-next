@@ -12,7 +12,7 @@
  */
 
 import { writeFileSync, mkdirSync, existsSync, unlinkSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { renderBaseTemplate, discoverAssets } from "./base-template";
 import { FALLBACK_VARIANTS, renderSampleDetailHtml, type SampleVariant } from "./fallback-data";
 import { normalizeBasePath, resolveAppUrl, resolveDeploymentMode, isProductionDeploymentMode } from "../src/lib/deployment";
@@ -22,15 +22,19 @@ import { normalizeBasePath, resolveAppUrl, resolveDeploymentMode, isProductionDe
 /* ------------------------------------------------------------------ */
 
 const API_BASE = (process.env.VITE_API_BASE_URL ?? process.env.SOYMUTDB_API_URL ?? "").trim();
-const DIST_DIR = join(process.cwd(), "dist");
+const DIST_DIR = resolve(process.cwd(), process.env.SOYMUTDB_DIST_DIR ?? "dist");
 const SAMPLES_DIR = join(DIST_DIR, "samples");
 const FETCH_TIMEOUT = Number(process.env.SOYMUTDB_FETCH_TIMEOUT ?? 5000);
-const SITE_URL = process.env.SOYMUTDB_SITE_URL ?? "https://soymutdb.org";
+const SITE_VARIANT = (process.env.VITE_SITE_VARIANT ?? process.env.SOYMUTDB_SITE_VARIANT ?? "external").trim().toLowerCase();
+if (SITE_VARIANT !== "external" && SITE_VARIANT !== "internal") {
+    throw new Error(`Invalid site variant "${SITE_VARIANT}". Use external or internal.`);
+}
+const SITE_URL = (process.env.SOYMUTDB_SITE_URL ?? "https://soymutdb.org").replace(/\/$/, "");
 const BASE_PATH = normalizeBasePath(process.env.VITE_BASE_URL ?? "/");
 const DEMO_MODE = resolveDeploymentMode(process.env.VITE_DEPLOYMENT_MODE) === "demo";
 const PRODUCTION_MODE = isProductionDeploymentMode(process.env.VITE_DEPLOYMENT_MODE);
 const PUBLICATION_MODE = resolvePublicationMode(process.env.SOYMUTDB_PUBLICATION_MODE, DEMO_MODE);
-const NON_RELEASE_MODE = PUBLICATION_MODE !== "release";
+const NON_RELEASE_MODE = PUBLICATION_MODE !== "release" || SITE_VARIANT === "internal";
 const SAFE_SAMPLE_ID = /^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,126}[A-Za-z0-9])?$/;
 const SITEMAP_PATH = join(DIST_DIR, "sitemap.xml");
 

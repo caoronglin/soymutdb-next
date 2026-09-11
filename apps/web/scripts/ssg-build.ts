@@ -14,7 +14,7 @@
  */
 
 import { writeFileSync, mkdirSync, existsSync, copyFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { renderBaseTemplate, discoverAssets, renderRedirectTemplate } from "./base-template";
 import { FALLBACK_PAGES, type PageLayout, type WidgetLayout } from "./fallback-data";
 import { isProductionDeploymentMode } from "../src/lib/deployment";
@@ -35,7 +35,17 @@ if (PRODUCTION_MODE && !API_BASE.trim()) {
         "Production SSG build requires SOYMUTDB_API_URL or VITE_API_BASE_URL (a real API origin) — refusing to build without a release API",
     );
 }
-const DIST_DIR = join(process.cwd(), "dist");
+const SITE_VARIANT = (process.env.VITE_SITE_VARIANT ?? process.env.SOYMUTDB_SITE_VARIANT ?? "external").trim().toLowerCase();
+if (SITE_VARIANT !== "external" && SITE_VARIANT !== "internal") {
+    throw new Error(`Invalid site variant "${SITE_VARIANT}". Use external or internal.`);
+}
+const configuredSiteUrl = process.env.SOYMUTDB_SITE_URL?.trim();
+if (PRODUCTION_MODE && SITE_VARIANT === "internal" && !configuredSiteUrl) {
+    throw new Error("Internal production SSG requires SOYMUTDB_INTERNAL_SITE_URL via the dual-site builder");
+}
+const SITE_URL = (configuredSiteUrl ?? "https://soymutdb.org").replace(/\/$/, "");
+const DIST_DIR = resolve(process.cwd(), process.env.SOYMUTDB_DIST_DIR ?? "dist");
+const ROBOTS_POLICY = SITE_VARIANT === "internal" ? "noindex, nofollow, noarchive" : undefined;
 const PAGES = [
     "index",
     "about",
@@ -272,8 +282,9 @@ async function build() {
             bodyScripts: i18nScript,
             canonical:
                 pageName === "index"
-                    ? "https://soymutdb.org/"
-                    : `https://soymutdb.org/${pageName}`,
+                    ? `${SITE_URL}/`
+                    : `${SITE_URL}/${pageName}`,
+            robots: ROBOTS_POLICY,
             assets,
         });
 
@@ -296,11 +307,12 @@ async function build() {
         lang: "en",
         widgetsHtml: indexWidgetHtmls.join("\n    "),
         bodyScripts: i18nScript,
-        canonical: "https://soymutdb.org/",
+        canonical: `${SITE_URL}/`,
+        robots: ROBOTS_POLICY,
         assets,
     });
     writeFileSync(join(DIST_DIR, "index.html"), indexHtml, "utf8");
-    console.log(`[ssg-build] Rewrote dist/index.html with static fallback content.`);
+    console.log(`[ssg-build] Rewrote ${DIST_DIR}/index.html for ${SITE_VARIANT} with static fallback content.`);
 
     console.log(`[ssg-build] Done. Built ${PAGES.length} pages to ${DIST_DIR}`);
 }

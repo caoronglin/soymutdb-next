@@ -60,37 +60,29 @@ export interface VariantSearchResponse {
   total_count: number | null;
 }
 
+export type VariantType = "SNP" | "INS" | "DEL" | "MNV" | "SV";
+export type VariantImpact = "HIGH" | "MODERATE" | "LOW" | "MODIFIER";
+
+/** Public GET /variants filter vocabulary. Keep this aligned with VariantFilterParams in the API. */
 export interface VariantFilterParams {
+  assembly?: string;
   chromosome?: string;
-  start_pos?: number;
-  end_pos?: number;
+  start?: number;
+  end?: number;
+  ref?: string;
+  alt?: string;
   gene_id?: string;
-  gene_symbol?: string;
-  variant_type?: string[];
-  impact?: string[];
-  consequence?: string[];
   mutant_line_id?: string;
-  mutagen?: string;
-  zygosity?: string[];
-  min_read_depth?: number;
-  min_allele_frequency?: number;
-  max_allele_frequency?: number;
-  min_quality?: number;
-  filter_pass_only?: boolean;
-  is_nonsense?: boolean;
-  is_missense?: boolean;
-  is_synonymous?: boolean;
-  is_frameshift?: boolean;
-  has_splicing_effect?: boolean;
-  release_id?: string;
-  assembly_id?: string;
+  variant_type?: VariantType;
+  consequence?: string;
+  impact?: VariantImpact;
+  min_af?: number;
+  max_af?: number;
 }
 
 export interface VariantSearchParams extends VariantFilterParams {
   cursor?: string;
   limit?: number;
-  sort_by?: string;
-  sort_dir?: "asc" | "desc";
 }
 
 export function searchVariants(
