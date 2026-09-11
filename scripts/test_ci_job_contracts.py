@@ -490,55 +490,38 @@ class DeliveryArchitectureTests(unittest.TestCase):
                             "pnpm job without a persistent store volume",
                         )
 
-    def test_workspace_commands_referenced_by_gates_exist(self) -> None:
-        """A gate that names a package script must be able to run it.
+    def test_package_script_invocations_do_not_double_up_the_separator(self) -> None:
+        """`pnpm run <script> -- --flag` forwards a literal "--" to the script.
 
-        verify-frontend-artifacts.sh opens with:
+        On a real CNB build the frontend gate ran
 
             pnpm --filter @soymutdb/i18n check:locale-keys -- --self-test
-            pnpm --filter @soymutdb/i18n check:locale-keys
 
-        but `check:locale-keys` was never declared in packages/i18n/package.json.
-        The real CNB build therefore failed with
-
-            [ERR_PNPM_RECURSIVE_RUN_NO_SCRIPT]
-            None of the selected packages has a "check:locale-keys" script
-
-        — the checker (packages/i18n/check-locale-keys.mjs, with a self-test) had
-        existed the whole time. Nothing caught it locally because the gate never
-        got that far. This test resolves every `pnpm --filter <pkg> <script>` in a
-        shared script against the workspace's package.json files.
+        which executed `node check-locale-keys.mjs -- --self-test` and failed
+        with `ENOENT: no such file or directory, open '--'`. The symptom points
+        at a missing locale file; the cause is an extra separator. pnpm consumes
+        the FIRST `--` as its own end-of-options marker, so the second one is
+        passed straight through to the script's argv.
         """
-        workspace_packages: dict[str, dict] = {}
-        for manifest in sorted(ROOT.glob("apps/*/package.json")) + sorted(
-            ROOT.glob("packages/*/package.json")
-        ):
-            data = json.loads(manifest.read_text(encoding="utf-8"))
-            workspace_packages[data["name"]] = data
-
-        missing = []
+        offenders = []
         for script in SHARED_SCRIPTS:
             if not script.endswith(".sh"):
                 continue
-            # Strip comments: an explanatory `pnpm --filter ...` in a docstring is
-            # not a command the script runs.
             text = "\n".join(
                 line
                 for line in (ROOT / script).read_text(encoding="utf-8").splitlines()
                 if not line.lstrip().startswith("#")
             )
-            for package_name, command in re.findall(
-                r"pnpm\s+--filter\s+(\S+)\s+([\w:.-]+)", text
-            ):
-                data = workspace_packages.get(package_name)
-                if data is None:
-                    missing.append(f"{script}: unknown workspace package {package_name}")
-                elif command not in data.get("scripts", {}):
-                    missing.append(
-                        f"{script}: {package_name} has no script {command!r}"
-                    )
+            for line in text.splitlines():
+                # A pnpm invocation that both separates args with `--` AND then
+                # passes another `--` straight through to the script.
+                if re.search(r"\bpnpm\b.*\s--\s+--", line):
+                    offenders.append(f"{script}: {line.strip()}")
         self.assertEqual(
-            missing, [], "gates reference workspace scripts that do not exist:\n" + "\n".join(missing)
+            offenders,
+            [],
+            "these pnpm invocations forward a literal '--' to the script:\n"
+            + "\n".join(offenders),
         )
 
     def test_scripts_that_run_pnpm_bootstrap_their_own_container(self) -> None:

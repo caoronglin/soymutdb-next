@@ -68,7 +68,11 @@ function selfTest() {
   console.log("Locale key checker self-test passed");
 }
 
-const args = process.argv.slice(2);
+// Tolerate a stray `--`: `pnpm run <script> -- --self-test` forwards the `--`
+// verbatim, and a bare `--` here would otherwise be treated as a file path,
+// failing with `ENOENT: no such file or directory, open '--'` — which reads as a
+// missing locale file rather than an argument-forwarding mistake.
+const args = process.argv.slice(2).filter((arg) => arg !== "--");
 if (args[0] === "--self-test") {
   selfTest();
 } else {
