@@ -485,14 +485,33 @@ class DeliveryArchitectureTests(unittest.TestCase):
                         f"{branch}/{event}/{pipeline['name']}: {name!r} implies it "
                         "prepares later stages, which is impossible across containers",
                     )
-                # Every stage that runs a pnpm-dependent job body must mount the
-                # store, or the install silently de-caches into a dead layer.
+                # Every stage that runs a pnpm-dependent job body must be able
+                # to reach the store, or the install silently de-caches into a
+                # dead layer. The store lives in the PIPELINE-level volumes
+                # (`docker.volumes`); a stage-level `volumes:` key is not part of
+                # the CNB schema and aborts the whole build in Prepare:
+                #
+                #   Unsupported volume type. 不支持的数据卷类型: /cache/pnpm-store
+                #
+                # So assert against `docker.volumes`, and separately assert that
+                # no stage declares `volumes:` at all.
+                pipeline_volumes = " ".join(
+                    str(v) for v in (pipeline.get("docker", {}).get("volumes") or [])
+                )
                 for stage in pipeline.get("stages", []):
+                    self.assertNotIn(
+                        "volumes",
+                        stage,
+                        f"{branch}/{event}/{pipeline['name']}/{stage.get('name')}: "
+                        "stage-level `volumes` is not a supported key and fails "
+                        "Prepare with `Unsupported volume type`; declare it as "
+                        "pipeline `docker.volumes`",
+                    )
                     script = stage.get("script", "")
                     if "run frontend" in script or "run dependency-governance" in script:
-                        volumes = stage.get("volumes") or []
-                        self.assertTrue(
-                            any("pnpm-store" in str(v) for v in volumes),
+                        self.assertIn(
+                            "pnpm-store",
+                            pipeline_volumes,
                             f"{branch}/{event}/{pipeline['name']}/{stage['name']}: "
                             "pnpm job without a persistent store volume",
                         )
@@ -839,15 +858,17 @@ class DeliveryArchitectureTests(unittest.TestCase):
         ):
             pipelines = _cnb_pipelines(branch, event)
             pipeline = next(p for p in pipelines if p["name"] == pipeline_name)
+            pipeline_volumes = " ".join(
+                str(v) for v in (pipeline.get("docker", {}).get("volumes") or [])
+            )
             for stage in pipeline["stages"]:
-                volumes = " ".join(str(v) for v in (stage.get("volumes") or []))
                 uses_pnpm = bool(
                     re.search(r"(^|[^\w-])pnpm\s", _flatten(stage).replace("run ", " "))
                 ) or "build-pages-artifact" in _flatten(stage)
                 if uses_pnpm:
                     self.assertIn(
                         "pnpm-store",
-                        volumes,
+                        pipeline_volumes,
                         f"{branch}/{event}/{pipeline_name}/{stage['name']}: "
                         "pnpm stage without a persistent store volume",
                     )
@@ -1093,6 +1114,122 @@ class DeliveryArchitectureTests(unittest.TestCase):
         volumes = " ".join(str(v) for v in pipeline["docker"]["volumes"])
         self.assertIn("pnpm-store", volumes)
 
+    def test_no_stage_declares_volumes_and_paths_do_not_nest(self) -> None:
+        """`volumes` is a pipeline key; a stage-level one kills the build.
+
+        Real CNB failure this guards (the pipeline never reached a single stage):
+
+            Pipeline prepare error:
+              Unsupported volume type. 不支持的数据卷类型: /cache/pnpm-store
+
+        The build declared the pnpm store as a STAGE key:
+
+            stages:
+              - name: Frontend verification
+                image: node:24.19.0
+                volumes:                      # <-- not in the CNB schema
+                  - /cache/pnpm-store:/cache/pnpm-store
+
+        CNB only understands `volumes` under `docker:` (pipeline level). Prepare
+        parses the whole document before the first stage runs, so one bad key
+        fails every pipeline that copies it. Two invariants:
+
+          1. No stage may declare `volumes`.
+          2. No declared volume path may be a prefix of, or nested inside, another
+             (`/a` and `/a/b/c` are rejected -- "存在包含关系的卷路径"). In
+             particular `.turbo:/workspace/.turbo` is invalid, because /workspace
+             is always shared.
+        """
+        document = yaml.safe_load(CNB_CONFIG.read_text(encoding="utf-8"))
+
+        # 1. No stage-level volumes anywhere in the file. Walk branch -> event ->
+        #    pipeline -> stages, which is the only place a stage can appear.
+        for branch, events in document.items():
+            if not isinstance(events, dict):
+                continue
+            for event, pipelines in events.items():
+                for pipeline in pipelines or []:
+                    for stage in pipeline.get("stages", []) or []:
+                        self.assertNotIn(
+                            "volumes",
+                            stage,
+                            f"{branch}/{event}/{pipeline.get('name')}/"
+                            f"{stage.get('name')}: stage-level `volumes` is not a "
+                            "supported key and fails Prepare with `Unsupported "
+                            "volume type`; move it to the pipeline's "
+                            "`docker.volumes`",
+                        )
+
+        # 2. Within ONE pipeline, every declared volume must be a normalised,
+        #    non-nested absolute path. The inclusion rule is per pipeline, so the
+        #    same store path may legitimately appear in several pipelines.
+        def declared_volumes(body: object) -> list[str]:
+            """Collect `docker.volumes` at any depth (pipeline and cloud-dev)."""
+            found: list[str] = []
+            if isinstance(body, dict):
+                docker = body.get("docker")
+                if isinstance(docker, dict):
+                    found.extend(str(v) for v in (docker.get("volumes") or []))
+                for value in body.values():
+                    found.extend(declared_volumes(value))
+            elif isinstance(body, list):
+                for value in body:
+                    found.extend(declared_volumes(value))
+            return found
+
+        pipelines_checked = 0
+        for branch, events in document.items():
+            if not isinstance(events, dict):
+                continue
+            for event, pipelines in events.items():
+                for pipeline in pipelines or []:
+                    entries = declared_volumes(pipeline)
+                    if not entries:
+                        continue
+                    pipelines_checked += 1
+                    location = f"{branch}/{event}/{pipeline.get('name')}"
+
+                    paths: list[str] = []
+                    for entry in entries:
+                        # Forms: <path>, <path>:<type>, <group>:<path>:<type>.
+                        parts = entry.split(":")
+                        if len(parts) == 1:
+                            path = parts[0]
+                        elif len(parts) == 2 and parts[0].startswith("/"):
+                            path = parts[0]
+                        else:
+                            path = parts[1]
+                        self.assertTrue(
+                            path.startswith("/"),
+                            f"{location}: volume {entry!r}: only absolute "
+                            "container paths are portable",
+                        )
+                        self.assertFalse(
+                            path.startswith("/workspace") and path != "/workspace",
+                            f"{location}: volume {entry!r}: /workspace is already "
+                            "shared, so a volume nested inside it is rejected "
+                            "(存在包含关系的卷路径)",
+                        )
+                        paths.append(path.rstrip("/"))
+
+                    for index, path in enumerate(paths):
+                        for other in paths[index + 1 :]:
+                            nested = (
+                                path == other
+                                or path.startswith(other + "/")
+                                or other.startswith(path + "/")
+                            )
+                            self.assertFalse(
+                                nested,
+                                f"{location}: volume paths {path!r} and {other!r} "
+                                "overlap or nest; CNB rejects volumes with an "
+                                "inclusion relationship",
+                            )
+
+        self.assertGreater(
+            pipelines_checked, 0, "the pnpm store volume is required for caching"
+        )
+
     def test_cloud_development_buttons_share_one_bootstrap(self) -> None:
         """The manual preview pipeline must not fork the environment prep.
 
@@ -1155,7 +1292,10 @@ class DeliveryArchitectureTests(unittest.TestCase):
         self.assertEqual(pipeline["env"]["SOYMUTDB_RUN_POSTGRES_INTEGRATION"], "1")
         backend_stage = pipeline["stages"][1]
         self.assertIn("postgres:16", backend_stage["services"])
-        self.assertIn("pnpm-store", " ".join(str(v) for v in pipeline["stages"][2]["volumes"]))
+        self.assertIn(
+            "pnpm-store",
+            " ".join(str(v) for v in pipeline["docker"]["volumes"]),
+        )
 
         # Evidence is uploaded even when a layer fails, so a failed acceptance
         # still leaves the per-layer verdicts for review.

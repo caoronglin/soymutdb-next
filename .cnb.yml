@@ -48,6 +48,20 @@ main:
       # 16 cores: pnpm install + turbo build + three vitest projects + Python.
       runner:
         cpus: 16
+      # `volumes` is a PIPELINE-level key (docker.volumes), not a stage key. A
+      # stage-level `volumes:` fails the whole build in Prepare, before any
+      # stage runs:
+      #   Unsupported volume type. 不支持的数据卷类型: /cache/pnpm-store
+      # Declaring it here mounts the same paths into every container of the
+      # pipeline, and only paths declared here (plus /workspace) cross a
+      # container boundary -- see scripts/setup-workspace.sh.
+      docker:
+        volumes:
+          - /cache/pnpm-store:/cache/pnpm-store
+          # Turbo's cache. A relative path is resolved against the workspace,
+          # and the workspace is already shared, so .turbo must NOT be a volume:
+          # it is a descendant of /workspace, and a volume nested inside another
+          # shared path is rejected ("存在包含关系的卷路径").
       env:
         # The offline demo build must not need a live release API.
         VITE_DEPLOYMENT_MODE: demo
@@ -56,13 +70,12 @@ main:
       stages:
         # No "setup workspace" stage: every CNB stage gets a fresh container, so
         # a bootstrap stage would not prepare the stages after it. Each job body
-        # bootstraps itself via scripts/setup-workspace.sh. The volumes below are
-        # the only state that crosses a container boundary.
+        # bootstraps itself via scripts/setup-workspace.sh. Only the pipeline's
+        # `docker.volumes` (declared above) and /workspace cross a container
+        # boundary -- there is deliberately no stage-level `volumes:` key. CNB
+        # rejects it in Prepare with "Unsupported volume type".
         - name: Frontend verification
           image: node:24.19.0
-          volumes:
-            - /cache/pnpm-store:/cache/pnpm-store
-            - .turbo:/workspace/.turbo
           script: bash scripts/ci-job-steps.sh run frontend
         - name: API + Worker verification
           image: python:3.14
@@ -71,8 +84,6 @@ main:
           script: bash scripts/ci-job-steps.sh run api-tests
         - name: Dependency governance
           image: node:24.19.0
-          volumes:
-            - /cache/pnpm-store:/cache/pnpm-store
           script: bash scripts/ci-job-steps.sh run dependency-governance
 
   # ---------------------------------------------------------------------------
@@ -82,6 +93,10 @@ main:
     - name: verify
       runner:
         cpus: 16
+      # Pipeline-level volumes; see the note on the pull_request pipeline.
+      docker:
+        volumes:
+          - /cache/pnpm-store:/cache/pnpm-store
       env:
         VITE_DEPLOYMENT_MODE: demo
         VITE_API_BASE_URL: https://api.soymutdb.test
@@ -89,13 +104,12 @@ main:
       stages:
         # No "setup workspace" stage: every CNB stage gets a fresh container, so
         # a bootstrap stage would not prepare the stages after it. Each job body
-        # bootstraps itself via scripts/setup-workspace.sh. The volumes below are
-        # the only state that crosses a container boundary.
+        # bootstraps itself via scripts/setup-workspace.sh. Only the pipeline's
+        # `docker.volumes` (declared above) and /workspace cross a container
+        # boundary -- there is deliberately no stage-level `volumes:` key. CNB
+        # rejects it in Prepare with "Unsupported volume type".
         - name: Frontend verification
           image: node:24.19.0
-          volumes:
-            - /cache/pnpm-store:/cache/pnpm-store
-            - .turbo:/workspace/.turbo
           script: bash scripts/ci-job-steps.sh run frontend
         - name: API + Worker verification
           image: python:3.14
@@ -104,14 +118,9 @@ main:
           script: bash scripts/ci-job-steps.sh run api-tests
         - name: Dependency governance
           image: node:24.19.0
-          volumes:
-            - /cache/pnpm-store:/cache/pnpm-store
           script: bash scripts/ci-job-steps.sh run dependency-governance
         - name: Build the checksummed Pages artifact
           image: node:24.19.0
-          volumes:
-            - /cache/pnpm-store:/cache/pnpm-store
-            - .turbo:/workspace/.turbo
           # Both scripts carry a bash shebang and bootstrap their own container
           # (build-pages-artifact.sh runs `pnpm --filter ... build`).
           script: bash scripts/build-pages-artifact.sh && bash scripts/verify-pages-artifact.sh pages-dist
@@ -342,9 +351,10 @@ $:
           # Deps are linked from the store instead of re-downloaded when the
           # environment container is cycled, exactly as in the delivery stages.
           - /cache/pnpm-store:/cache/pnpm-store
-          # Turbo's cache survives 代码备份/漫游, so an in-progress edit is not
-          # lost when the environment is recycled.
-          - .turbo:/workspace/.turbo
+          # `.turbo` is intentionally NOT declared: it lives inside /workspace,
+          # which is already shared, and CNB rejects a volume whose path is a
+          # descendant of another shared path ("存在包含关系的卷路径").
+          # Turbo's cache therefore rides along with /workspace.
       services:
         - docker
         - name: vscode
@@ -367,6 +377,10 @@ $:
     - name: verify-manual
       runner:
         cpus: 16
+      # Pipeline-level volumes; see the note on the pull_request pipeline.
+      docker:
+        volumes:
+          - /cache/pnpm-store:/cache/pnpm-store
       env:
         VITE_DEPLOYMENT_MODE: demo
         VITE_API_BASE_URL: https://api.soymutdb.test
@@ -374,13 +388,12 @@ $:
       stages:
         # No "setup workspace" stage: every CNB stage gets a fresh container, so
         # a bootstrap stage would not prepare the stages after it. Each job body
-        # bootstraps itself via scripts/setup-workspace.sh. The volumes below are
-        # the only state that crosses a container boundary.
+        # bootstraps itself via scripts/setup-workspace.sh. Only the pipeline's
+        # `docker.volumes` (declared above) and /workspace cross a container
+        # boundary -- there is deliberately no stage-level `volumes:` key. CNB
+        # rejects it in Prepare with "Unsupported volume type".
         - name: Frontend verification
           image: node:24.19.0
-          volumes:
-            - /cache/pnpm-store:/cache/pnpm-store
-            - .turbo:/workspace/.turbo
           script: bash scripts/ci-job-steps.sh run frontend
         - name: API + Worker verification
           image: python:3.14
@@ -439,6 +452,10 @@ $:
     - name: acceptance-manual
       runner:
         cpus: 8
+      # Pipeline-level volumes; see the note on the pull_request pipeline.
+      docker:
+        volumes:
+          - /cache/pnpm-store:/cache/pnpm-store
       env:
         SOYMUTDB_RUN_POSTGRES_INTEGRATION: "1"
         SOYMUTDB_ACCEPTANCE_DIR: artifacts/acceptance
@@ -453,9 +470,6 @@ $:
           script: bash scripts/acceptance.sh --profile backend
         - name: Static artifact acceptance
           image: node:24.19.0
-          volumes:
-            - /cache/pnpm-store:/cache/pnpm-store
-            - .turbo:/workspace/.turbo
           script: bash scripts/acceptance.sh --profile static
       endStages:
         - name: Upload acceptance evidence
