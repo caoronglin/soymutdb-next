@@ -126,7 +126,43 @@ checkout 也不带 `node_modules`。修复：
 * `test_no_stage_depends_on_another_stages_container_state`：容器生命周期
   （CNB stage 之间不共享容器文件系统）
 
-`scripts/test_ci_job_contracts.py` 现为 27 passed。
+`scripts/test_ci_job_contracts.py` 现为 29 passed。
+
+### 4.2.2 第三次构建：`pnpm run` 之后的 `--` 被原样转发
+
+引导修好、`check:locale-keys` 脚本补上之后，前端门禁第一次真正跑到 i18n 校验，
+又失败了：
+
+```
+==> i18n locale key parity
+$ node check-locale-keys.mjs -- --self-test
+Error: ENOENT: no such file or directory, open '--'
+```
+
+根因不是脚本，而是**调用方式**：`scripts/verify-frontend-artifacts.sh` 写的是
+
+```bash
+pnpm --filter @soymutdb/i18n check:locale-keys -- --self-test
+```
+
+`--` 是给需要自己解析 argv 的工具（`npm run`、`node --run`、`yarn`）用的分隔符。
+pnpm 把**第一个** `--` 当作自己的 end-of-options，其后的参数原样转发，于是校验脚本
+收到 `["--", "--self-test"]`：`--self-test` 没命中模式开关，脚本退化成"把 `--` 当成
+en 路径读文件"。
+
+这一格最值得记录的地方是**它看起来像在自测**：门禁名字叫 self-test，实际上在执行
+一次文件读取，而报错还指向"文件不存在"，很容易被误读成 locale JSON 缺失。所以修复
+分三层：
+
+| 层 | 修复 |
+| --- | --- |
+| 调用点 | `scripts/verify-frontend-artifacts.sh` 去掉 `--`，改为 `check:locale-keys --self-test` |
+| 纵深防御 | `check-locale-keys.mjs` 主动过滤掉游离的 `--`，这样任何调用方犯同样的错都降级成一次正常校验，而不是一个指向 `--` 的 `ENOENT` |
+| 防复发 | 新增 `test_package_script_invocations_do_not_double_up_the_separator`：扫描所有共享脚本，禁止脚本名之后出现裸 `--`。注意不能只匹配 `-- --` ——单分隔符形态（`pnpm run check -- --self-test`）同样是坏的，窄模式会漏掉它 |
+| 防"假自测" | 新增 `test_frontend_gate_self_test_really_runs_the_self_test`：断言门禁命令的确切形态、脚本确有 `--self-test` 分支、manifest 确有该 script，并真实执行有参/无参两种形式；同时断言游离 `--` 的那次调用**既返回 0、又仍打印 self-test 结果** —— 只断言"能跑过"是不够的，如果脚本把 `--self-test` 也一起吞掉，它会用一次普通校验冒充自测，正是同一个假绿灯换了个外衣 |
+
+`pnpm --filter <pkg> <script>` 的转发语义与 `npm run` 不同，这一点此前没有测试锁定，
+所以同一个错误可以在三个不同门禁里各犯一次。
 
 ## 4.3 `.cnb/env/` 引用文件的补齐
 
@@ -138,20 +174,62 @@ checkout 也不带 `node_modules`。修复：
 | 文件 | 内容 | 边界 |
 | --- | --- | --- |
 | `Dockerfile.build-tools` | `FROM docker:<pin>-cli` + bash/coreutils/curl/jq/python3/gnupg/tar/gzip | 不含密钥；**不能**用 alpine（Alpine 无 `docker` 包，第一条 docker 命令就会失败） |
-| `release.yml` | OIDC issuer + 透明日志开关 | keyless 签名无长期私钥，提交值是"身份"而非凭据 |
+| `release.yml` | `env:` 里的 `SOYMUTDB_OIDC_ISSUER`（release 校验时 pin 的 OIDC trust root） | 不含密钥；keyless 签名只认"身份"。真实凭据放平台 secret store，示例见 `.cnb/examples/release-secrets.example.yml` |
 
 同时把"基础镜像必须固定版本"并入 `scripts/check-toolchain-pins.py`：`.cnb/env/*`
 里的 `FROM` 一旦浮动（或写 `:latest`），扫描并签名发布的环境就可能在没人 review 的
 情况下变化。
 
+### 4.3.1 为什么"补齐"之后文件仍然不在仓库里
+
+按上表补完两个文件、跑完契约测试之后，本地测试仍然全绿，但文件依旧没有被提交。
+根因不在文件内容，而在 `.gitignore`：
+
+```
+.gitignore:151  env/   →  .cnb/env/release.yml
+```
+
+`env/` 是 Python virtualenv 的忽略模式，**不带前导斜杠**，因此匹配任意深度，
+把 `.cnb/env/` 整个目录静默吃掉了。于是出现了一个骗过所有本地检查的状态：
+
+* `.cnb/env/Dockerfile.build-tools` 在文件系统里存在 → `is_file()` 断言通过
+* 契约测试只问"文件在不在"，不问"git 知不知道" → 全绿
+* `git add` 被 ignore 静默拒绝 → 文件永远不进 commit
+* 失败只会在远程构建里出现，也就是最初的现象
+
+修复分两层：
+
+| 层 | 修复 |
+| --- | --- |
+| 忽略规则 | `.gitignore` 在 `env/` 之后补 `!/.cnb/env/`（带前导斜杠，只针对仓库根下的 `.cnb/env`） |
+| 防复发 | `test_cnb_env_helpers_referenced_by_cnb_yml_exist` 改为用 `git check-ignore` 与 `git ls-files --cached` 提问，而不是 `is_file()`。文件存在但被忽略、或存在但未跟踪，都会失败 |
+
+教训与前几格一致：**"文件在不在"和"文件在不在仓库里"是两个不同的问题**，
+而只有后一个决定 CI 能不能跑。凡是 `.cnb.yml` 按路径引用的文件，都必须用 git 的
+视角校验。
+
 ## 5. 验证证据
 
 ```bash
-# 交付契约（本次新增）
-python3 -m pytest scripts/test_ci_job_contracts.py -q          # 18 passed
+# 交付契约
+python3 -m pytest scripts/test_ci_job_contracts.py -q          # 28 passed
+python3 scripts/check-toolchain-pins.py                        # toolchain pins OK
 
 # 全部无依赖契约
-bash scripts/smoke.sh --profile contracts                       # 142 passed, SMOKE PASS
+bash scripts/smoke.sh --profile contracts                       # 144 passed, SMOKE PASS
+#   （本机 3 failed / 7 passed 来自 test_cloudflare_tunnel_contract.py 与
+#     test_worker_image_boundary.py，改动前后一致，属已知前置缺陷）
+
+# 交付/部署契约套件
+python3 -m pytest scripts/test_deployment_workflows.py scripts/test_platform_delivery_contracts.py \
+  scripts/test_ci_job_contracts.py scripts/test_dependency_governance_contracts.py -q   # 87 passed
+
+# 所有 stage 体仍可被平台默认 sh 解析
+#   26 stage bodies parsed under `sh -n`, 0 bad
+
+# i18n 校验（真实执行）
+node packages/i18n/check-locale-keys.mjs --self-test            # 自测通过
+node packages/i18n/check-locale-keys.mjs                        # en/zh 键一致
 
 # CNB 配置合法性（YAML + 语义 + Schema 三项）
 node <cnb-pipeline-skill>/validator/validate.js .cnb.yml        # 三项均通过

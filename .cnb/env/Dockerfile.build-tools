@@ -1,0 +1,57 @@
+# =============================================================================
+# SoyMutDB — CNB build environment for image build / scan / SBOM / release
+# =============================================================================
+# Referenced by .cnb.yml as the stage image for:
+#
+#   scripts/ci-job-steps.sh run image-build   (docker-images amd64/arm64)
+#   scripts/ci-job-steps.sh run mcp-e2e       (nginx-behind MCP transport smoke)
+#
+# and, through scripts/build-release-image.sh / scripts/release-contract.golden.sh,
+# as the environment that builds, scans, SBOMs, signs and publishes releases.
+#
+# Two constraints are load-bearing:
+#
+#   1. The base MUST provide the docker CLI. Every one of those scripts starts by
+#      shelling out to `docker build` / `docker run` / `docker image inspect`, so
+#      a distro base without the docker package (notably alpine, which has none)
+#      fails on the first command with `docker: command not found`.
+#   2. The base tag MUST stay version-pinned. scripts/check-toolchain-pins.py
+#      rejects an untagged or `:latest` FROM in .cnb/env/*: a floating tag moves
+#      the environment that signs releases without any review noticing.
+#
+# This image carries tooling only. It holds no registry credential, no signing
+# key and no token — keyless OIDC signing happens in the release stage, and
+# credentials are injected by the platform at run time.
+#
+# `.cnb/env/release.yml` is intentionally absent: keyless signing needs no
+# identity file, and shipping an issuer stub that nothing reads would be a false
+# contract (docs/ops/ci-cd.md).
+# =============================================================================
+FROM docker:27.5.1-cli
+
+# bash       every shared script carries a `#!/usr/bin/env bash` shebang and
+#            .cnb.yml pins stage bodies to bash
+# coreutils  sha256sum/sort/cut used by the checksummed release manifest
+# curl/jq    release-contract.golden.sh parses registry and attestation JSON
+# gnupg      cosign's keyless trust root and, for GitHub Actions, gpg verify
+# tar/gzip   image export/import artifacts
+# python3    runs the Python contract/migration assertions already staged here
+RUN apk add --no-cache \
+      bash \
+      coreutils \
+      curl \
+      jq \
+      gnupg \
+      tar \
+      gzip \
+      python3 \
+ && rm -rf /var/cache/apk/*
+
+# Deliberately NOT installed here, because their versions are pinned by the
+# shared scripts so CNB and the GitHub mirror scan and sign with the same
+# tooling:
+#   * trivy   - used directly, else as `docker run aquasecurity/trivy:0.61.0`
+#   * cosign  - release-contract.golden.sh installs and checksum-verifies it
+#               itself, which is what keeps releases reproducible.
+# Installing a floating copy here would silently move the scanner/signer.
+WORKDIR /workspace

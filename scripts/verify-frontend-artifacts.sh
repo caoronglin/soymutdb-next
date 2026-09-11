@@ -27,9 +27,10 @@ SOYMUTDB_CI_DEMO_JBROWSE_URL="${SOYMUTDB_CI_DEMO_JBROWSE_URL:-https://jbrowse.so
 step() { printf '\n==> %s\n' "$*"; }
 
 step "i18n locale key parity"
-# `pnpm run <script> -- <args>` forwards args verbatim, so `-- --self-test`
-# arrives at the script as a literal ["--", "--self-test"] and `node` then tries
-# to open a file named "--" (observed on a real CNB build). Pass the flag alone.
+# `pnpm run <script> -- <args>` forwards the FIRST `--` as its own end-of-options
+# marker and passes everything after it verbatim, so `-- --self-test` reached the
+# script as a literal ["--", "--self-test"]: `node` then tried to open a file
+# named "--" (observed on a real CNB build). Pass the flag alone.
 pnpm --filter @soymutdb/i18n check:locale-keys --self-test
 pnpm --filter @soymutdb/i18n check:locale-keys
 

@@ -93,7 +93,7 @@ CNB 的每个 stage 跑在**自己的新容器**里。`corepack enable` 只是�
 | 文件 | 用途 | 内容边界 |
 | --- | --- | --- |
 | `.cnb/env/Dockerfile.build-tools` | 镜像构建/扫描/SBOM/签名 stage 的构建环境 | 基础镜像为 `docker:<pin>-cli` + bash/curl/jq/python3；**不含任何密钥** |
-| `.cnb/env/release.yml` | 手动发布按钮的签发身份 | 只有 OIDC issuer 与透明日志开关，keyless 签名没有长期私钥 |
+| `.cnb/env/release.yml` | 发布流水线/手动按钮导入的**非密钥**配置 | 只有 `SOYMUTDB_OIDC_ISSUER`：`cosign verify` 要 pin 的 OIDC trust root。keyless 签名没有长期私钥；真实凭据仍只在平台 secret store |
 
 两点容易误判：
 
@@ -102,7 +102,10 @@ CNB 的每个 stage 跑在**自己的新容器**里。`corepack enable` 只是�
   用的是 `docker:<pin>-cli`。
 * 基础镜像 tag 必须固定。`scripts/check-toolchain-pins.py` 现在会拒绝
   `.cnb/env/*` 里未固定版本或 `:latest` 的 `FROM`——否则"扫描并签名发布的那个环境"
-  可以在没有 review 的情况下变化。
+  可以在没有 review 的情况下变化。当前为 `docker:27.5.1-cli`。
+* `trivy` 与 `cosign` **故意不预装**：它们的版本由共享脚本固定
+  （`aquasecurity/trivy:0.61.0`，cosign 由 `release-contract.golden.sh` 自行安装并
+  校验和），装一份浮动副本会让 CNB 与 GitHub 用不同工具扫同一个镜像。
 
 ## 3. 流水线拓扑
 

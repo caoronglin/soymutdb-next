@@ -513,15 +513,79 @@ class DeliveryArchitectureTests(unittest.TestCase):
                 if not line.lstrip().startswith("#")
             )
             for line in text.splitlines():
-                # A pnpm invocation that both separates args with `--` AND then
-                # passes another `--` straight through to the script.
-                if re.search(r"\bpnpm\b.*\s--\s+--", line):
+                # Any bare `--` after the script name. Looking only for `-- --`
+                # would miss the equally broken one-separator form
+                # (`pnpm run check -- --self-test`, where the flag itself is
+                # `--self-test` and the separator is the sole `--`).
+                if re.search(r"\bpnpm\b.*(^|\s)--(\s|$)", line):
                     offenders.append(f"{script}: {line.strip()}")
         self.assertEqual(
             offenders,
             [],
             "these pnpm invocations forward a literal '--' to the script:\n"
             + "\n".join(offenders),
+        )
+
+    def test_frontend_gate_self_test_really_runs_the_self_test(self) -> None:
+        """Regression: the locale checker must be invoked as a self-test.
+
+        The bare `--` above meant the parity gate's self-test never executed; the
+        checker instead read a file called `--` and failed. Assert the exact
+        command shape that pnpm turns into `node check-locale-keys.mjs
+        --self-test`, and that the checker treats `--self-test` as a mode flag
+        rather than a path.
+        """
+        gate = (ROOT / "scripts/verify-frontend-artifacts.sh").read_text(encoding="utf-8")
+        self.assertIn(
+            "pnpm --filter @soymutdb/i18n check:locale-keys --self-test",
+            gate,
+            "the locale parity gate must run the checker's self-test",
+        )
+
+        checker = (ROOT / "packages/i18n/check-locale-keys.mjs").read_text(encoding="utf-8")
+        self.assertIn('args[0] === "--self-test"', checker)
+
+        manifest = json.loads(
+            (ROOT / "packages/i18n/package.json").read_text(encoding="utf-8")
+        )
+        self.assertIn("check:locale-keys", manifest.get("scripts", {}))
+
+        # Run the real thing: both the self-test and the fixture check must pass.
+        for args in (["--self-test"], []):
+            completed = subprocess.run(
+                ["node", "check-locale-keys.mjs", *args],
+                cwd=ROOT / "packages/i18n",
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(
+                completed.returncode,
+                0,
+                f"check-locale-keys.mjs {args} failed:\n{completed.stdout}\n{completed.stderr}",
+            )
+
+        # The invocation the gate used to make. The checker now filters a stray
+        # `--` as defence in depth, so passing is correct — but the flag after it
+        # must still select the self-test. A checker that swallowed the flag too
+        # would "pass" by running the plain parity check, which is exactly the
+        # false green this regression exists to prevent.
+        completed = subprocess.run(
+            ["node", "check-locale-keys.mjs", "--", "--self-test"],
+            cwd=ROOT / "packages/i18n",
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(
+            completed.returncode,
+            0,
+            f"the `--` form must degrade to a normal run:\n{completed.stdout}\n{completed.stderr}",
+        )
+        self.assertIn(
+            "self-test passed",
+            completed.stdout,
+            "a stray `--` must not swallow the following --self-test flag",
         )
 
     def test_scripts_that_run_pnpm_bootstrap_their_own_container(self) -> None:
@@ -690,6 +754,35 @@ class DeliveryArchitectureTests(unittest.TestCase):
         self.assertTrue(
             (ROOT / ".cnb/env/release.yml").is_file(),
             ".cnb.yml imports .cnb/env/release.yml but it is not committed",
+        )
+        # Existing in the working tree is not enough: `.gitignore` had a
+        # virtualenv pattern (`env/`, no leading slash) that matched at any
+        # depth, so .cnb/env/ was ignored and these files were "added" in review
+        # after review without ever being committed. Ask git, not the filesystem.
+        untracked = []
+        for relative in (".cnb/env/Dockerfile.build-tools", ".cnb/env/release.yml"):
+            check = subprocess.run(
+                ["git", "check-ignore", "--quiet", relative],
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+            )
+            if check.returncode == 0:
+                untracked.append(f"{relative}: ignored by .gitignore")
+                continue
+            staged = subprocess.run(
+                ["git", "ls-files", "--cached", "--error-unmatch", relative],
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+            )
+            if staged.returncode != 0:
+                untracked.append(f"{relative}: present but not tracked by git")
+        self.assertEqual(
+            untracked,
+            [],
+            "files .cnb.yml references must be tracked, not just present:\n"
+            + "\n".join(untracked),
         )
         for referenced in re.findall(r"\.cnb/env/([\w.-]+)", text):
             self.assertTrue(
