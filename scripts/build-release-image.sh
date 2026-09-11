@@ -179,13 +179,19 @@ for image in "${validated_images[@]}"; do
 done
 mv "validated-runtime-images-${ARCH}.txt" "${OUTPUT_DIR}/image-ids-${ARCH}.txt"
 printf '%s\n' "${PLATFORM}" > "${OUTPUT_DIR}/platform.txt"
+# The revision these images were built from. The publisher reads it to prove it
+# is signing a coherent release: two packages from different builds would still
+# be "made of verified bytes" while describing no single revision.
+# The x86 build resolves it from the checkout, which is the tree it just built.
+REVISION="${SOURCE_REVISION:-${CNB_COMMIT:-$(git rev-parse HEAD)}}"
+printf '%s\n' "${REVISION}" > "${OUTPUT_DIR}/revision.txt"
 docker save "${validated_images[@]}" | gzip -1 > "${OUTPUT_DIR}/soymutdb-runtime-images-${ARCH}.tar.gz"
 
 step "validate-runtime-images (checksums)"
 (
   cd "${OUTPUT_DIR}"
   sha256sum "soymutdb-runtime-images-${ARCH}.tar.gz" \
-    "image-ids-${ARCH}.txt" platform.txt sbom-*-"${ARCH}".spdx.json > SHA256SUMS
+    "image-ids-${ARCH}.txt" platform.txt revision.txt sbom-*-"${ARCH}".spdx.json > SHA256SUMS
   sha256sum -c SHA256SUMS
 )
 

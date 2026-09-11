@@ -77,7 +77,11 @@ def test_publish_keeps_local_to_registry_image_name_mapping() -> None:
     golden = (ROOT / "scripts/release-contract.golden.sh").read_text(encoding="utf-8")
 
     assert "soymutdb-mcp:ci-${ARCH}" in verification
-    assert "local_names=(api worker mcp jbrowse)" in golden
+    # The local names are the single source of the image set: the package
+    # verifier reads the same list, so "the four images" cannot be edited in one
+    # place and silently skipped in the other.
+    assert "RUNTIME_IMAGES=(api worker mcp jbrowse)" in golden
+    assert "local_names=(\"${RUNTIME_IMAGES[@]}\")" in golden
     assert "remote_names=(api worker mcp-server jbrowse)" in golden
     assert 'docker tag "soymutdb-${local_names[$index]}:ci-${arch}" "${image}"' in golden
 

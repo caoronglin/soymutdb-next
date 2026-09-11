@@ -2107,6 +2107,217 @@ class DeliveryArchitectureTests(unittest.TestCase):
         self.assertRegex(golden, re.compile(r"CNB_TOKEN"))
 
 
+class ArchivedPipelineMirrorTests(unittest.TestCase):
+    """`.cnb/pipelines/release.yml` must mirror the release pipeline.
+
+    The archived files are the reviewable record of what each pipeline runs, so
+    a reviewer reading `release.yml` must see the same stages `.cnb.yml`
+    executes. Only `verify.yml` was ever compared, and `release.yml` is the one
+    a release reviewer opens, so it gets the same treatment here.
+    """
+
+    def _release_documents(self) -> tuple[dict, dict]:
+        root = next(
+            pipeline
+            for pipeline in _cnb_pipelines("$", "push")
+            if pipeline["name"] == "release"
+        )
+        archived = yaml.safe_load(
+            (ROOT / ".cnb/pipelines/release.yml").read_text(encoding="utf-8")
+        )
+        return root, archived
+
+    def test_release_pipeline_file_mirrors_the_root_config(self) -> None:
+        root, archived = self._release_documents()
+
+        def _stage_map(pipeline: dict, key: str = "stages") -> dict[str, str]:
+            mapped: dict[str, str] = {}
+            for stage in pipeline.get(key, []) or []:
+                if not isinstance(stage, dict) or "name" not in stage:
+                    continue
+                if stage.get("type"):
+                    body = f"{stage['type']}:{stage['options'].get('key')}"
+                else:
+                    body = str(
+                        stage.get("script")
+                        or _flatten(stage.get("settings") or {})
+                    )
+                mapped[str(stage["name"])] = body
+            return mapped
+
+        # `.cnb.yml` splits the terminal upload into `endStages`; the archived
+        # pipeline (and the provider-neutral pipeline file convention) lists it
+        # as a final stage. Compare the concatenation, and compare the two
+        # ordered lists separately.
+        root_stages = _stage_map(root)
+        archived_stages = _stage_map(archived)
+        root_end = _stage_map(root, "endStages")
+        self.assertEqual(
+            list(root_stages) + list(root_end),
+            list(archived_stages),
+            "the archived release pipeline runs a different stage list than .cnb.yml",
+        )
+        # Acceptance criterion: the archived file must name the same delegated
+        # job, whichever indirection the copy uses. `.cnb.yml` goes through the
+        # shared job entrypoint, the archived file calls the golden script the
+        # entrypoint forwards to; both are the one implementation.
+        delegations = {
+            "bash scripts/ci-job-steps.sh run release": "release",
+            "bash scripts/release-contract.golden.sh": "release",
+        }
+        for name, body in {**root_stages, **root_end}.items():
+            expected = delegations.get(body, body)
+            actual = delegations.get(archived_stages[name], archived_stages[name])
+            self.assertEqual(
+                expected, actual, f"archived release stage {name!r} is stale"
+            )
+
+        # The start gate is the part most likely to be dropped when someone
+        # edits one copy: the wait must be present in BOTH, and first.
+        for pipeline in (root, archived):
+            stages = pipeline["stages"]
+            self.assertEqual("cnb:await", stages[0].get("type"))
+            self.assertEqual(
+                "validated-runtime-images-amd64", stages[0]["options"]["key"]
+            )
+
+        # The pipeline holding the registry credentials is the one that fetches
+        # and signs, and it is the only place the artifact plugin may appear.
+        self.assertIn("cnbcool/artifact", _flatten(root))
+        self.assertNotIn("cnbcool/attachments", _flatten(root))
+
+
+class ReleasePublisherTests(unittest.TestCase):
+    """The publisher must be able to obtain the packages it verifies.
+
+    Regression for a release that could never run on CNB. `docker-images (amd64)`
+    and `docker-images (arm64)` are separate pipelines on separate native
+    runners; the publisher is a third one. The GitHub mirror bridges that with
+    an explicit `actions/download-artifact`, the CNB release pipeline had no
+    equivalent, so a real release died at the first step:
+
+      ==> Verify and load both platform packages
+      missing validated package for amd64: validated-platforms/validated-runtime-images-amd64
+
+    These contracts pin the four things that fix requires: the fetch exists, it
+    is fail-closed for BOTH architectures, it never uses a credential-free
+    pipeline, and the release cannot start before the packages do.
+    """
+
+    def _release_pipeline(self) -> dict:
+        pipelines = [
+            pipeline
+            for pipeline in _cnb_pipelines("$", "push")
+            if pipeline["name"] == "release"
+        ]
+        self.assertEqual(1, len(pipelines), "expected exactly one release pipeline")
+        return pipelines[0]
+
+    def test_publisher_fetches_the_packages_it_verifies(self) -> None:
+        golden = (ROOT / "scripts/release-contract.golden.sh").read_text(encoding="utf-8")
+
+        # Section 0 exists and runs before any verification.
+        self.assertIn("materialize_platform_packages", golden)
+        self.assertLess(
+            golden.index("materialize_platform_packages\n"),
+            golden.index("Verify and load both platform packages"),
+        )
+
+        # It uses the plugin the platform documents for CI artifacts.
+        self.assertIn("cnbcool/attachments", golden)
+        self.assertIn("PLUGIN_TYPE=DOWNLOAD", golden)
+        # ...and both architectures, never a single one discovered at runtime.
+        self.assertRegex(golden, re.compile(r"RUNTIME_PACKAGE_ARCHES=\(amd64 arm64\)"))
+
+        # Fail-closed: a package that does not materialize aborts the run.
+        self.assertIn("failed to fetch the", golden)
+        self.assertNotIn("continue", golden.split("fetch_platform_package")[1][:2000])
+
+        # The verify pipelines stay credential-free; the fetch lives here.
+        for pipeline in _cnb_pipelines("main", "pull_request"):
+            self.assertNotIn("cnbcool/attachments", _flatten(pipeline))
+
+    def test_platform_packages_must_describe_one_revision(self) -> None:
+        golden = (ROOT / "scripts/release-contract.golden.sh").read_text(encoding="utf-8")
+        verification = (ROOT / "scripts/build-release-image.sh").read_text(encoding="utf-8")
+
+        # The verify pipeline records the revision it built from...
+        self.assertIn("revision.txt", verification)
+        self.assertIn("SOURCE_REVISION", verification)
+        # ...and checksums it with the rest of the package.
+        export_step = verification[verification.index("Export validated runtime images") :]
+        self.assertIn("revision.txt", export_step[export_step.index("sha256sum") :])
+
+        # The publisher compares both packages against each other and against
+        # the revision the contract records: verified bytes from two different
+        # builds would describe no single revision, so the provenance the
+        # release signs would be false.
+        self.assertIn("revision.txt", golden)
+        self.assertIn("platform packages disagree on the revision", golden)
+        self.assertIn("but this release records", golden)
+
+        # Both verify pipelines stamp the same variable the publisher reads.
+        for name in ("docker-images (amd64)", "docker-images (arm64)"):
+            pipeline = next(
+                pipeline
+                for pipeline in _cnb_pipelines("main", "push")
+                if pipeline["name"] == name
+            )
+            self.assertIn("SOURCE_REVISION", pipeline.get("env", {}), name)
+
+    def test_release_starts_only_after_the_verified_packages_exist(self) -> None:
+        """Every pipeline of a `main` push starts at once; the release must not.
+
+        The packages arrive as uploaded artifacts, so "the release pipeline runs
+        after the image pipelines" is not automatic: without an explicit order
+        the publisher races the builds it consumes.
+        """
+        release = self._release_pipeline()
+
+        await_jobs = [
+            stage
+            for stage in release["stages"]
+            if stage.get("type") == "cnb:await"
+        ]
+        self.assertEqual(1, len(await_jobs), "the release must await the image pipeline")
+        self.assertEqual(
+            "validated-runtime-images-amd64", await_jobs[0]["options"]["key"]
+        )
+        # The gate must be the FIRST stage: waiting after publishing is useless.
+        self.assertIs(await_jobs[0], release["stages"][0])
+
+        # The matching resolve is the verify pipeline's LAST job, so it fires
+        # only once the images exist and are exported.
+        verify = next(
+            pipeline
+            for pipeline in _cnb_pipelines("main", "push")
+            if pipeline["name"] == "docker-images (amd64)"
+        )
+        resolves = [
+            stage for stage in verify["stages"] if stage.get("type") == "cnb:resolve"
+        ]
+        self.assertEqual(1, len(resolves), "the image pipeline must hand off")
+        self.assertEqual(
+            await_jobs[0]["options"]["key"], resolves[0]["options"]["key"]
+        )
+        self.assertIs(resolves[0], verify["stages"][-1])
+
+        # `cnb:await` / `cnb:resolve` only pair between pipelines of the SAME
+        # event, so the release must name the image pipeline as a resource of
+        # the event it runs in.
+        resources = _flatten(release.get("resources", {}))
+        self.assertIn("docker-images (amd64)", resources)
+        # Neither of these jobs may run outside `stages`.
+        for pipeline in _cnb_pipelines("$", "push"):
+            for key in ("endStages", "failStages"):
+                for stage in pipeline.get(key, []) or []:
+                    self.assertNotIn(
+                        stage.get("type"),
+                        {"cnb:await", "cnb:resolve"},
+                        f"{pipeline['name']}: {key} cannot hold {stage.get('type')}",
+                    )
+
+
 class CnbVolumeGrammarTests(unittest.TestCase):
     """The volume parser must reject what CNB refuses to prepare."""
 

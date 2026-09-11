@@ -12,6 +12,13 @@
 #   * the images loaded from them match the recorded image IDs exactly
 #   * the built architecture matches the declared platform
 #
+# The publisher never rebuilds and never reaches back into the verify pipeline,
+# so the two platform packages have to arrive as bytes. On GitHub Actions that
+# is `actions/download-artifact`; on CNB it is the artifact plugin's
+# `copy` mode, which materializes the `validated-runtime-images-<arch>` artifacts
+# of the completed `docker-images` pipelines into exactly the layout below. The
+# layout itself lives here so both providers materialize the same tree.
+#
 # Guarantees:
 #   * the release manifest references digests, never tags
 #   * every image digest and platform digest is signed and carries a
@@ -33,6 +40,9 @@
 #   SOURCE_PIPELINE        pipeline identity recorded in provenance
 #   VALIDATED_ROOT         directory holding validated-runtime-images-* packages
 #   RELEASE_OUTPUT_DIR     output directory (default release-contract)
+#   SOYMUTDB_ARTIFACT_FETCH_CMD
+#                          override the fetch of one verified package when it is
+#                          not already present (see section 0 below)
 # =============================================================================
 set -euo pipefail
 
@@ -49,10 +59,132 @@ RELEASE_REGISTRY_OWNER="$(printf '%s' "${RELEASE_REGISTRY_OWNER}" | tr '[:upper:
 RELEASE_TAG="${RELEASE_TAG:-$(date -u +%Y.%m.%d)-$(printf '%s' "${SOURCE_REVISION}" | cut -c1-7)}"
 VALIDATED_ROOT="${VALIDATED_ROOT:-validated-platforms}"
 RELEASE_OUTPUT_DIR="${RELEASE_OUTPUT_DIR:-release-contract}"
+RUNTIME_IMAGES=(api worker mcp jbrowse)
 
 step() { printf '\n==> %s\n' "$*"; }
 
+# --- 0. materialize the two verified packages --------------------------------
+# The verify pipelines and this publisher are separate, independently triggered
+# pipelines. The platform therefore never hands their files over implicitly: the
+# packages exist as uploaded artifacts, and the fetch is part of the publisher's
+# job. On GitHub Actions `actions/download-artifact` does it; on CNB the
+# `cnbcool/attachments` plugin does, exactly as documented for a CI artifact:
+#
+#   https://cnb.cool/cnb/plugins/cnbcool/attachments
+#
+# The fetch is fail-closed by construction:
+#   * both architectures are required. The publisher never discovers its inputs
+#     from what happens to be uploaded, and the expected image set is fixed, so
+#     a half-finished `docker-images` run cannot be published;
+#   * a package that does not materialize aborts the run;
+#   * the per-platform verification below still refuses a package whose
+#     checksums, image IDs or architecture disagree with what was recorded.
+#
+# Ordering is not this script's business: `docker-images (amd64)` ends with a
+# `cnb:resolve` and this pipeline starts with the matching `cnb:await`, so the
+# packages exist by the time this runs. Reaching here without them means that
+# gate was removed, which is precisely the race this script cannot absorb.
+#
+# Env:
+#   SOYMUTDB_ARTIFACT_FETCH_CMD
+#       Override the fetch for one artifact. Substitutions: {name} {path}
+#       (destination directory). `none` means "the packages are already in
+#       ${VALIDATED_ROOT}"; the presence of both is still enforced.
+#   CNB_ATTACHMENTS_IMAGE   fetch plugin image (default cnbcool/attachments:latest)
+#   SOYMUTDB_VALIDATED_ARCHES  default `amd64 arm64`
+# =============================================================================
+RUNTIME_PACKAGE_ARCHES=(amd64 arm64)
+
+platform_package_dir() {
+  printf '%s/validated-runtime-images-%s' "${VALIDATED_ROOT}" "$1"
+}
+
+fetch_platform_package() {
+  local arch="$1" name="$2" destination="$3"
+  local custom="${SOYMUTDB_ARTIFACT_FETCH_CMD:-}"
+
+  if [[ "${custom}" == "none" ]]; then
+    echo "artifact fetch disabled (SOYMUTDB_ARTIFACT_FETCH_CMD=none)" >&2
+    return 1
+  fi
+
+  if [[ -n "${custom}" ]]; then
+    local command="${custom//\{name\}/${name}}"
+    command="${command//\{path\}/${destination}}"
+    echo "fetching ${name} into ${destination}"
+    # shellcheck disable=SC2086  # the command is a caller-provided shell command
+    bash -c "${command}"
+    return $?
+  fi
+
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "docker is unavailable: cannot fetch the ${name} artifact" >&2
+    return 1
+  fi
+
+  # The plugin writes into the working directory, so run it inside the
+  # destination. `DOWNLOAD` takes bare artifact names and keeps the file names
+  # the verify pipeline uploaded; the layout this script verifies is preserved.
+  #
+  # The token is the pipeline's own short-lived credential: uploading and
+  # downloading artifacts is repo-scoped work, and the release pipeline is the
+  # only one that holds credentials at all (asserted by
+  # scripts/test_ci_job_contracts.py).
+  local attachment="${name}.zip"
+  docker run --rm \
+    --volume "${destination}:/workspace" \
+    --workdir /workspace \
+    --env "CNB_TOKEN=${CNB_TOKEN:-}" \
+    --env "CNB_REPO_SLUG=${CNB_REPO_SLUG:-}" \
+    --env "CNB_API_ENDPOINT=${CNB_API_ENDPOINT:-https://api.cnb.cool}" \
+    --env "CNB_WEB_ENDPOINT=${CNB_WEB_ENDPOINT:-https://cnb.cool}" \
+    --env "PLUGIN_TYPE=DOWNLOAD" \
+    --env "PLUGIN_ATTACHMENTS=${attachment}" \
+    "${CNB_ATTACHMENTS_IMAGE:-cnbcool/attachments:latest}"
+}
+
+materialize_platform_packages() {
+  local arches="${SOYMUTDB_VALIDATED_ARCHES:-${RUNTIME_PACKAGE_ARCHES[*]}}"
+  local arch artifact_dir missing=()
+  for arch in ${arches}; do
+    [[ -d "$(platform_package_dir "${arch}")" ]] || missing+=("${arch}")
+  done
+  if [[ "${#missing[@]}" -eq 0 ]]; then
+    step "Verified platform packages already present under ${VALIDATED_ROOT}"
+    return 0
+  fi
+
+  step "Fetch the platform packages the verify pipelines produced"
+  # The revision the artifacts were uploaded under is the one this contract
+  # records, so it has to be resolved before the fetch.
+  if [[ -z "${SOURCE_REVISION}" ]]; then
+    SOURCE_REVISION="$(git rev-parse HEAD)"
+    export SOURCE_REVISION
+  fi
+
+  for arch in "${missing[@]}"; do
+    artifact_dir="$(platform_package_dir "${arch}")"
+    mkdir -p "${artifact_dir}"
+    fetch_platform_package "${arch}" "validated-runtime-images-${arch}" "${artifact_dir}" || {
+      echo "failed to fetch the validated-runtime-images-${arch} artifact" >&2
+      return 1
+    }
+    test -d "${artifact_dir}" || {
+      echo "artifact validated-runtime-images-${arch} did not materialize" >&2
+      return 1
+    }
+  done
+}
+
+materialize_platform_packages
+
 # --- 1. verify both platform packages ---------------------------------------
+# `SOURCE_REVISION` labels the images that travel as `latest` tags, so what
+# carries this revision onwards is the *image identity*: every image ID and
+# digest below comes from the package, and the merged per-platform digests are
+# what the release manifest references. Re-verifying the same revision's source
+# here would add nothing; re-verifying the *bytes* is the whole point of the
+# verify/merge split.
 step "Verify and load both platform packages"
 for arch in amd64 arm64; do
   artifact_dir="${VALIDATED_ROOT}/validated-runtime-images-${arch}"
@@ -63,7 +195,20 @@ for arch in amd64 arm64; do
   test "$(cat "${artifact_dir}/platform.txt")" = "linux/${arch}"
   (cd "${artifact_dir}" && sha256sum -c SHA256SUMS)
   gzip -dc "${artifact_dir}/soymutdb-runtime-images-${arch}.tar.gz" | docker load
-  expected_images=(api worker mcp jbrowse)
+  # Both platform packages must come from one verify run: a release that mixed
+  # an amd64 package from one build with an arm64 package from another would
+  # still be "made of verified bytes" while describing no single revision.
+  package_revision="$(cat "${artifact_dir}/revision.txt")"
+  if [[ -z "${release_package_revision:-}" ]]; then
+    release_package_revision="${package_revision}"
+  fi
+  test "${package_revision}" = "${release_package_revision}" || {
+    echo "platform packages disagree on the revision they were built from:" >&2
+    echo "  ${arch}: ${package_revision}" >&2
+    echo "  release: ${release_package_revision}" >&2
+    exit 1
+  }
+  expected_images=("${RUNTIME_IMAGES[@]}")
   test "$(wc -l < "${artifact_dir}/image-ids-${arch}.txt")" -eq "${#expected_images[@]}"
   for image_name in "${expected_images[@]}"; do
     image="soymutdb-${image_name}:ci-${arch}"
@@ -74,6 +219,17 @@ for arch in amd64 arm64; do
     test "$(docker image inspect --format '{{.Architecture}}' "${image}")" = "${arch}"
   done
 done
+
+# The verified packages are only known to be a coherent release if they were
+# built from the revision this contract records. A mismatch means the publisher
+# resolved an older (or newer) verify build, so the provenance it is about to
+# sign would be false -- refuse rather than sign it.
+test -n "${release_package_revision}"
+if [[ -n "${SOURCE_REVISION}" && "${release_package_revision}" != "${SOURCE_REVISION}" ]]; then
+  echo "verified packages were built from ${release_package_revision}," >&2
+  echo "but this release records ${SOURCE_REVISION}" >&2
+  exit 1
+fi
 
 # --- 2. authenticate ---------------------------------------------------------
 step "Authenticate to ${RELEASE_REGISTRY}"
@@ -93,7 +249,7 @@ fi
 
 # --- 3. push per-platform images --------------------------------------------
 step "Tag and push validated platform images"
-local_names=(api worker mcp jbrowse)
+local_names=("${RUNTIME_IMAGES[@]}")
 remote_names=(api worker mcp-server jbrowse)
 for arch in amd64 arm64; do
   for index in "${!local_names[@]}"; do

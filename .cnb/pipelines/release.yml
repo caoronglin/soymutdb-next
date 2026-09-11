@@ -12,6 +12,21 @@
 #   $SOYMUTDB_RELEASE_COSIGN_KEY  optional offline cosign key
 #   $SOYMUTDB_OIDC_ISSUER         OIDC issuer to verify against
 #
+# Ordering
+#   The packages this pipeline consumes are artifacts of two other pipelines
+#   (`docker-images (amd64)` and `(arm64)`), so the release must not start until
+#   they exist. `cnb:await` / `cnb:resolve` provide that ordered start: the
+#   image pipeline ends with the matching `resolve`, and this pipeline opens
+#   with the `await`. `cnb:await` may only run in `stages`, which is why the
+#   wait is a stage here rather than an `endStages`/`failStages` entry.
+#
+#   The wait is not sufficient on its own: the packages themselves travel as
+#   uploaded artifacts, and `scripts/release-contract.golden.sh` fetches them
+#   with the plugin the platform documents for that job
+#   (https://cnb.cool/cnb/plugins/cnbcool/attachments). Both halves are required
+#   -- a wait without the fetch still finds an empty directory, and a fetch
+#   without the wait races the build.
+#
 # The release job body lives once, in scripts/release-contract.golden.sh: it
 # resolves the verified per-architecture packages, logs into the registry,
 # merges the manifest, signs keylessly through the pipeline OIDC identity, emits
@@ -32,6 +47,14 @@ env:
   RELEASE_OUTPUT_DIR: release-contract
 
 stages:
+  - name: Wait for the verified amd64 image package
+    # Blocks until `docker-images (amd64)` resolves the same key, which is its
+    # last job. A pipeline that never resolves is reported as a dead lock rather
+    # than waiting forever.
+    type: cnb:await
+    options:
+      key: validated-runtime-images-amd64
+
   - name: Publish signed multi-architecture release
     # A CNB stage body is executed with `sh`, which rejects bash-only syntax.
     # Pinning the interpreter here keeps the stage runnable regardless of the

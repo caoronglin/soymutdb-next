@@ -258,6 +258,11 @@ main:
       env:
         SOYMUTDB_CI_ARCH: amd64
         SOYMUTDB_CI_OUTPUT_DIR: validate-runtime-images-amd64
+        # Stamp the package with the revision it was built from. The publisher
+        # reads it back and refuses to sign a release whose two platform
+        # packages disagree or that does not match the revision it records.
+        # CNB_COMMIT is this build's commit, which is the checkout below.
+        SOURCE_REVISION: $CNB_COMMIT
       # CNB accepts a Dockerfile only in `docker.build`, and `docker.build`
       # is pipeline-scoped: the platform's runner passes a stage-level
       # `image:` straight to `docker pull`, so a repository path in it fails
@@ -274,6 +279,17 @@ main:
       stages:
         - name: Verify images for linux/amd64
           script: bash scripts/ci-job-steps.sh run image-build
+        # Release the `release` pipeline's start gate. This job is LAST in the
+        # pipeline on purpose: `stages` run in order, so by the time it resolves,
+        # the images have been built, smoke-tested, scanned, SBOM'd and exported.
+        # Resolving earlier would let the publisher start against a package that
+        # does not exist yet -- the exact race the gate exists to close.
+        #
+        # Do not add a job after this one.
+        - name: Hand the amd64 package to the release pipeline
+          type: cnb:resolve
+          options:
+            key: validated-runtime-images-amd64
       endStages:
         - name: Upload validated runtime images (amd64)
           image: cnbcool/artifact
@@ -288,6 +304,9 @@ main:
       env:
         SOYMUTDB_CI_ARCH: arm64
         SOYMUTDB_CI_OUTPUT_DIR: validate-runtime-images-arm64
+        # Same stamp as the amd64 pipeline: both packages must name one revision
+        # for the publisher to accept the pair.
+        SOURCE_REVISION: $CNB_COMMIT
       # CNB accepts a Dockerfile only in `docker.build`, and `docker.build`
       # is pipeline-scoped: the platform's runner passes a stage-level
       # `image:` straight to `docker pull`, so a repository path in it fails
@@ -345,6 +364,33 @@ $:
   push:
     # Publication consumes the two verified packages; it never rebuilds.
     - name: release
+      # `resources` is the event-level start gate: the pipelines named here are
+      # the ones this event is guaranteed to have started. Declaring the image
+      # verifiers is what makes the `docker-images` pipelines part of the `$` ->
+      # `push` event at all, and therefore what lets `cnb:await` below pair with
+      # their resolves ("await and resolve only work between pipelines of the
+      # SAME event"). `main` -> `push` also starts a `docker-images (amd64)`, so
+      # it is listed as well; the resource declaration is per event, and the two
+      # are the same pipeline body.
+      #
+      # The publisher runs on main pushes, tags and manual buttons, but it may
+      # only start once the artifacts it consumes exist. Every pipeline of a
+      # `main` push event starts at the same moment, so without a start gate the
+      # release races the two native-architecture image pipelines and
+      # scripts/release-contract.golden.sh dies with
+      #
+      #   ==> Verify and load both platform packages
+      #   missing validated package for amd64: validated-platforms/validated-runtime-images-amd64
+      #
+      # on a run where those packages were about to be produced.
+      #
+      # `cnb:await` is the platform's ordered start: it holds this pipeline until
+      # the `docker-images (amd64)` pipeline of the same event resolves the key,
+      # and the resolve is that pipeline's last job -- after the artifact upload.
+      # A failed resolve is reported as a dead lock rather than waiting forever.
+      resources:
+        pipelines:
+          - name: docker-images (amd64)
       runner:
         cpus: 8
       imports:
@@ -364,6 +410,10 @@ $:
       services:
         - docker
       stages:
+        - name: Wait for the verified amd64 image package
+          type: cnb:await
+          options:
+            key: validated-runtime-images-amd64
         - name: Publish signed multi-architecture release
           script: bash scripts/ci-job-steps.sh run release
       endStages:

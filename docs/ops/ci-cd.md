@@ -332,12 +332,14 @@ CNB 文档明确"任务级仅支持 `image` 配置，不支持 `dockerfile`"。�
 | main push | `clickhouse-migration` | 真实 ClickHouse 遗留迁移 + 幂等复跑 |
 | main push | `mcp-e2e` | nginx 后的 MCP 鉴权契约 |
 | main push | `docker-images (amd64)` / `(arm64)` | 原生架构构建 → 冒烟 → Trivy → SPDX → 导出 |
-| main push / tag / 手动 | `release` | 合并双架构 manifest、keyless 签名、SLSA+SPDX attestation |
+| main push / tag / 手动 | `release` | 取回双架构包 → 校验同源 → 合并 manifest、keyless 签名、SLSA+SPDX attestation |
 | main push / 手动 | `publish` | 字节级复制已验证静态树（**不重新构建**） |
 | 每日 02:00 | `smoke` | 线上站点 Playwright 冒烟 |
 
 镜像校验与发布**刻意分离**：校验流水线没有任何 registry 写权限，发布流水线不做
-任何 `docker build`。这样"发出去的字节"必然等于"验过的字节"。
+任何 `docker build`。这样"发出去的字节"必然等于"验过的字节"。分离的代价是两条
+流水线之间没有隐式传递——制品要显式取回、顺序要显式声明，见
+"镜像构建与打包发布"一节。
 
 ## 4. 镜像构建与打包发布
 
@@ -349,21 +351,75 @@ CNB 文档明确"任务级仅支持 `image` 配置，不支持 `dockerfile`"。�
 4. 断言 `docker image inspect .Architecture` 等于目标平台（原生，非仿真）
 5. Trivy CRITICAL/HIGH 硬门禁（`.trivyignore` 为可审计例外）
 6. 逐镜像 SPDX SBOM
-7. 导出 `validate-runtime-images-<arch>/`：压缩 tar + image ID 清单 + `SHA256SUMS`
+7. 导出 `validate-runtime-images-<arch>/`：压缩 tar + image ID 清单 +
+   `platform.txt`、`revision.txt` + `SHA256SUMS`
 
 **打包发布**（`scripts/release-contract.golden.sh`，provider 无关）：
 
-1. 校验两个架构包（checksum + image ID + 架构）
-2. 推送 `<registry>/<owner>/<image>:<tag>-<arch>`
-3. 合并 manifest，断言平台集合恰为 `linux/amd64,linux/arm64`
-4. 对每个镜像 digest 与平台 digest 做 keyless `cosign sign` + SLSA provenance +
+1. 取回两个架构包（见下节"制品必须被显式取回"）
+2. 校验两个架构包（checksum + image ID + 架构 + 两包同源同一 revision）
+3. 推送 `<registry>/<owner>/<image>:<tag>-<arch>`
+4. 合并 manifest，断言平台集合恰为 `linux/amd64,linux/arm64`
+5. 对每个镜像 digest 与平台 digest 做 keyless `cosign sign` + SLSA provenance +
    SPDX attestation，并**立即 verify**
-5. 输出 `release-contract/`：`release-manifest.json`（只引用 digest）、
+6. 输出 `release-contract/`：`release-manifest.json`（只引用 digest）、
    provenance、SBOM、`OCI_SHA256SUMS`、`SHA256SUMS`、签名的 manifest blob
 
 registry 命名空间、源码身份、pipeline id 全部来自环境变量
 （`RELEASE_REGISTRY_OWNER` / `SOURCE_REPOSITORY` / `SOURCE_REVISION`），
 因此 GitHub 与 CNB 产出结构完全一致。
+
+### 制品必须被显式取回，发布必须被显式排序
+
+校验与发布是**两条独立流水线**（各自的事件、各自的 runner），平台不会替它们
+传递文件。校验产物以"上传的制品"存在，取回属于**发布方**的责任：
+
+| | GitHub Actions | CNB |
+| --- | --- | --- |
+| 取回 | `actions/download-artifact`（`pattern: validated-runtime-images-*`） | `cnbcool/attachments` 的 `DOWNLOAD`，插件在流水线内运行 |
+| 排序 | `needs: [docker-build, kubernetes-kind]` | `cnb:await` / `cnb:resolve` |
+
+CNB 侧原本**两边都缺**，于是第一次真实发布死在第一步：
+
+```
+==> Verify and load both platform packages
+missing validated package for amd64: validated-platforms/validated-runtime-images-amd64
+```
+
+**取回**：`scripts/release-contract.golden.sh` 的 section 0 用
+[`cnbcool/attachments`](https://cnb.cool/cnb/plugins/cnbcool/attachments) 的
+`DOWNLOAD` 模式把制品落到 `validated-platforms/validated-runtime-images-<arch>/`。
+它是 **fail-closed** 的：两个架构都必须到手、取不到即非零退出；期望的镜像集合
+是脚本里的常量，不从"上传了什么"反推，所以只跑完一半的 `docker-images` 不可能
+被发布。`SOYMUTDB_ARTIFACT_FETCH_CMD=none` 表示"制品已在
+`${VALIDATED_ROOT}` 下"，此时**仍然**要求两个架构都在。
+
+**排序**：一次 `main` push 会同时启动该事件下的所有流水线，发布因此会和两条
+原生架构镜像流水线**抢跑**。`docker-images (amd64)` 在 `stages` 的**最后**放一个
+`cnb:resolve`（该位置有意义：`stages` 顺序执行，resolve 时镜像已经构建、冒烟、
+扫描、SBOM、导出完毕），`release` 的**第一个** stage 放对应的 `cnb:await`。
+未 resolve 会被死锁检测报出来，而不是无限等待。
+
+两条约束缺一不可：只 await 而不取回，目录依然是空的；只取回而不 await，发布
+会与构建抢跑。`cnb:await`/`cnb:resolve` 只能用于**同一事件**的流水线之间，因此
+release 用 `resources.pipelines` 声明它等待的那个事件内流水线。`await` 也只能
+出现在 `stages`（不能在 `endStages`/`failStages`），所以它是一条 stage 而不是
+结束阶段。
+
+### 两个架构包必须描述同一个 revision
+
+`docker-images` 的每个平台各自跑在原生 runner 上，两条流水线是两次独立构建。
+发布若把**某次**构建的 amd64 包和**另一次**构建的 arm64 包合在一起，它依然
+"由校验过的字节组成"，却不对应任何一个 revision——而 `SOURCE_REVISION` 记录的
+是发布流水线自己的 commit，于是签名背书的 provenance 是假的。
+
+因此校验包新增 `revision.txt`（由 `SOURCE_REVISION` 写出，和其它成员一起进
+`SHA256SUMS`），发布方在加载后做两道比较：
+
+* 两个包互相比较：不同源 → 失败；
+* 与 `SOURCE_REVISION` 比较：不一致 → **拒绝签名**，并打印两个 revision。
+
+`SOYMUTDB_VALIDATED_ARCHES` 可覆盖参与校验的架构集合（默认 `amd64 arm64`）。
 
 ## 5. 冒烟测试
 
