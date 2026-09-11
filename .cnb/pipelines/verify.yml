@@ -9,16 +9,21 @@
 name: verify
 runner:
   cpus: 16
+# `volumes` is a PIPELINE-level key (`docker.volumes`), and each entry follows
+# CNB's grammar `<path>[:<type>]` -- not Docker's `host:container`. A stage-level
+# `volumes:` key, or an entry like `- /cache/pnpm-store:/cache/pnpm-store`, both
+# abort the build in Prepare with:
+# "Unsupported volume type. 不支持的数据卷类型: /cache/pnpm-store".
+docker:
+  volumes:
+    # pnpm store only; `.turbo` sits under the always-shared /workspace and must
+    # not be declared as a nested volume ("存在包含关系的卷路径").
+    - /cache/pnpm-store
 env:
   VITE_DEPLOYMENT_MODE: demo
   VITE_API_BASE_URL: https://api.soymutdb.test
   VITE_JBROWSE_BASE_URL: https://jbrowse.soymutdb.test
 stages:
-- name: Setup workspace with cache
-  image: node:24.19.0
-  script: bash scripts/setup-workspace.sh
-  volumes:
-  - /cache/pnpm-store:/cache/pnpm-store
 - name: Frontend verification
   image: node:24.19.0
   script: bash scripts/ci-job-steps.sh run frontend

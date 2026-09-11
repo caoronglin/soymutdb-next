@@ -65,8 +65,9 @@ export NODE_VERSION PNPM_VERSION PYTHON_VERSION UV_VERSION
 #
 # So each job body that needs the JS toolchain bootstraps it itself, through
 # scripts/setup-workspace.sh. That is idempotent and store-linked, so the cost is
-# a link pass rather than a download pass. Only declared stage `volumes`
-# (the pnpm store, the turbo cache) cross the container boundary.
+# a link pass rather than a download pass. Only the pipeline's declared
+# `docker.volumes` (the pnpm store) cross the container boundary; turbo's cache
+# simply lives under the always-shared /workspace.
 ensure_workspace() {
   bash "${REPO_ROOT}/scripts/setup-workspace.sh"
 }
