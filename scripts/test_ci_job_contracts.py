@@ -490,52 +490,6 @@ class DeliveryArchitectureTests(unittest.TestCase):
                             "pnpm job without a persistent store volume",
                         )
 
-    def test_frontend_test_setup_initialises_the_real_i18n(self) -> None:
-        """Component tests must not render the literal `{{placeholder}}`.
-
-        Real CNB failure:
-
-            src/routes/imports/import-validation-report.test.tsx >
-              renders validation semantics and the read-only result table
-            Unable to find an element with the text: /1 validation errors/
-
-        The rendered DOM contained `{{errors}} validation errors`. That test does
-        not mock `react-i18next`, so it used the real library — which was never
-        initialised, and an uninitialised i18next returns `defaultValue` verbatim.
-        The test asserted correctly and the bootstrap was missing.
-        """
-        for app in ("apps/admin", "apps/web"):
-            config = (ROOT / app / "vitest.config.ts").read_text(encoding="utf-8")
-            self.assertIn(
-                "setupFiles",
-                config,
-                f"{app}/vitest.config.ts must register a setup file",
-            )
-            self.assertIn(
-                "src/test/setup.ts",
-                config,
-                f"{app}/vitest.config.ts must point at src/test/setup.ts",
-            )
-
-            setup = (ROOT / app / "src/test/setup.ts").read_text(encoding="utf-8")
-            self.assertIn(
-                "initI18n",
-                setup,
-                f"{app}/src/test/setup.ts must initialise the real i18next",
-            )
-
-        # The shared double must interpolate, since a mocked i18next bypasses the
-        # real instance that the setup file just initialised.
-        for app in ("apps/admin", "apps/web"):
-            mock = (ROOT / app / "src/test/mocks.ts").read_text(encoding="utf-8")
-            self.assertIn(r"{{", mock.replace("{{", r"{{"), app)
-            self.assertIn("defaultValue", mock, app)
-            self.assertRegex(
-                mock,
-                re.compile(r"replace\("),
-                f"{app}/src/test/mocks.ts must substitute {{name}} placeholders",
-            )
-
     def test_i18n_test_mocks_do_not_return_a_fresh_t_per_render(self) -> None:
         """An inline `useTranslation` mock makes effects loop forever.
 

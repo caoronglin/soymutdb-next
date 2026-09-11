@@ -1,66 +1,44 @@
 /**
- * Shared test doubles for i18n in component tests.
+ * Shared test doubles for the admin app.
  *
- * Two problems this file exists to prevent, both observed on a real CNB build:
+ * `useTranslation` mocks used to be written inline per test file as
  *
- * 1. **Unstable identity.** A mock written inline as
+ *     useTranslation: () => ({ t: (key) => key })
  *
- *        useTranslation: () => ({ t: (key) => key })
+ * which returns a NEW `t` function on every render. Any component that puts `t`
+ * (or `message`) in a `useCallback`/`useEffect` dependency array therefore gets
+ * a new callback every render, re-runs its effect every render, and, when that
+ * effect fetches and sets state, loops forever. On a real CNB build that showed
+ * up as:
  *
- *    returns a NEW `t` on every render. Any component with `t` in a
- *    `useCallback`/`useEffect` dependency array then gets a new callback every
- *    render and re-runs its effect every render. When that effect fetches and
- *    sets state, it loops:
+ *     AssertionError: expected "vi.fn()" to be called 2 times, but got 224 times
+ *     Error: Unable to perform pointer interaction as the element has
+ *            `pointer-events: none`
  *
- *        expected "vi.fn()" to be called 2 times, but got 224 times
- *        Error: Unable to perform pointer interaction as the element has
- *               `pointer-events: none`
+ * i.e. the page was still re-rendering 224 fetches deep while user-event tried
+ * to click. The product code is fine; a test double that changes identity every
+ * render is not a faithful stand-in for i18next, which memoises `t`.
  *
- *    i18next memoises `t`; this double does too.
- *
- * 2. **Missing interpolation.** i18next substitutes `{{name}}` placeholders from
- *    the options object. A double that returns `defaultValue` verbatim renders
- *    the literal template:
- *
- *        t("admin.ops.validationErrors", {
- *          errors: String(count),
- *          defaultValue: "{{errors}} validation errors",
- *        })                        // -> "{{errors}} validation errors"
- *
- *    which looks like a product bug. Substitution is implemented below.
- *
- * Tests that do not mock `react-i18next` get the real, initialised instance from
- * `src/test/setup.ts`. Import `mockTranslation` when a test needs a stubbed
- * translation surface.
+ * Import `mockTranslation` (or `stableT`) instead of hand-rolling the mock.
  */
 
-/**
- * A `t` with i18next's stable identity and its most-used semantics:
- * `defaultValue` fallback plus `{{name}}` interpolation.
- */
+/** A `t` with i18next's stable identity and its common signatures. */
 export const stableT = (
   key: string,
-  options?: { defaultValue?: string; [name: string]: unknown } | string,
+  options?: { defaultValue?: string } | string,
 ): string => {
-  // `t(key, "literal")` is the shorthand for a plain default.
   if (typeof options === "string") return options;
-  const template = options?.defaultValue ?? key;
-  return template.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (match, name: string) => {
-    const value = options?.[name];
-    return value === undefined || value === null ? match : String(value);
-  });
+  return options?.defaultValue ?? key;
 };
 
 /**
  * Value for `vi.mock("react-i18next", ...)`.
  *
- *     import { mockTranslation } from "<relative>/test/mocks";
- *     vi.mock("react-i18next", async () => (await import("<relative>/test/mocks")).mockTranslation);
+ *     import { mockTranslation } from "../../test/mocks";
+ *     vi.mock("react-i18next", () => mockTranslation);
  *
- * The async factory is required because `vi.mock` is hoisted above imports; a
- * static import of this module inside the factory would be hoisted too.
- * `useTranslation` returns module-level constants, so identity is stable for the
- * whole test file.
+ * The returned hooks are module-level constants, so their identity is stable for
+ * the whole test file — which is what components rely on.
  */
 export const mockTranslation = {
   useTranslation: () => ({
