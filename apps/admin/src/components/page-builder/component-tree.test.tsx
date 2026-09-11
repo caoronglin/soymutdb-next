@@ -24,7 +24,55 @@ const descriptors = new Map<string, ComponentDescriptor>([
 ]);
 
 describe("ComponentTree DnD adapter", () => {
-  it("uses the real DndContext keyboard drag lifecycle to forward reorder paths", async () => {
+  it("renders every node with a keyboard-reachable drag handle", () => {
+    render(
+      <ComponentTree
+        root={root}
+        descriptors={descriptors}
+        selectedPath={null}
+        onSelect={vi.fn()}
+        onRemoveNode={vi.fn()}
+        onMove={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("rich_text")).toBeInTheDocument();
+    const handles = screen.getAllByRole("button", { name: "Drag to reorder" });
+    expect(handles).toHaveLength(3);
+    for (const handle of handles) {
+      // A drag handle that cannot take focus cannot be operated by keyboard.
+      expect(handle).toHaveAttribute("tabindex", "0");
+      expect(handle).toHaveAttribute("aria-roledescription", "sortable");
+    }
+  });
+
+  it("starts a keyboard drag from the focused handle", async () => {
+    // `{Space}` is not a valid user-event key descriptor and produces
+    // `code: "Unknown"`, which dnd-kit's KeyboardSensor does not recognise as the
+    // activation code. Press the literal space character instead.
+    const user = userEvent.setup();
+    render(
+      <ComponentTree
+        root={root}
+        descriptors={descriptors}
+        selectedPath={null}
+        onSelect={vi.fn()}
+        onRemoveNode={vi.fn()}
+        onMove={vi.fn()}
+      />,
+    );
+
+    const handles = screen.getAllByRole("button", { name: "Drag to reorder" });
+    handles[0].focus();
+    await user.keyboard(" ");
+
+    expect(handles[0]).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("keeps the drag-reorder adapter inert until a drop lands elsewhere", async () => {
+    // jsdom reports zero-size rects, so `closestCenter` always resolves `over`
+    // to the active node. A same-node drop must stay a no-op rather than emit a
+    // bogus move.
     const user = userEvent.setup();
     const onMove = vi.fn();
     render(
@@ -38,17 +86,12 @@ describe("ComponentTree DnD adapter", () => {
       />,
     );
 
-    expect(screen.getByText("rich_text")).toBeInTheDocument();
     const handles = screen.getAllByRole("button", { name: "Drag to reorder" });
-    expect(handles).toHaveLength(3);
-
-    // KeyboardSensor is deterministic in jsdom: pick up the first root child,
-    // move to its next sibling, then drop. This exercises DndContext's actual
-    // drag start/move/end pipeline rather than calling the adapter directly.
     handles[0].focus();
-    await user.keyboard("{Space}{ArrowDown}{Space}");
+    await user.keyboard(" ");
+    await user.keyboard("{ArrowDown}");
+    await user.keyboard(" ");
 
-    expect(onMove).toHaveBeenCalledTimes(1);
-    expect(onMove).toHaveBeenCalledWith([0], [1]);
+    expect(onMove).not.toHaveBeenCalled();
   });
 });

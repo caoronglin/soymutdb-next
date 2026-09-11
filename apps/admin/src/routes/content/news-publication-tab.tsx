@@ -1,10 +1,10 @@
-import { DeleteOutlined, EditOutlined, EyeOutlined, PlusOutlined } from "@ant-design/icons";
+import { DeleteOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { http } from "@soymutdb/api-client";
-import { Badge, Button, Card, Input, Select, Typography } from "@/lib/antd";
+import { Badge, Button } from "@/lib/antd";
 import { ConfirmDialog } from "../../components/confirm-dialog";
 import { DataTable, type DataTableColumn } from "../../components/data-table";
 
@@ -20,11 +20,6 @@ function statusBadgeVariant(status: PageStatus): "warning" | "success" | "second
   if (status === "published") return "success";
   if (status === "draft") return "warning";
   return "secondary";
-}
-
-function getErrorMessage(err: unknown, t: (key: string, options?: Record<string, unknown>) => string): string {
-  if (err instanceof Error) return err.message;
-  return t("admin.content.unknownError", { defaultValue: "An unknown error occurred" });
 }
 
 export function NewsPublicationTab({ type }: { type: "news" | "publication" }) {

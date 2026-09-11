@@ -44,7 +44,8 @@ describe("StaticPageMigrationReport", () => {
     });
     renderReport();
 
-    fireEvent.click(screen.getByRole("button", { name: "Preview migration" }));
+    // The button's accessible name includes its icon label ("eye Preview migration").
+    fireEvent.click(screen.getByRole("button", { name: /Preview migration/ }));
 
     expect(await screen.findByText("Dry run: 1 ready, 0 already mapped, 1 needs review.")).toBeInTheDocument();
     expect(screen.getByText("legacy-about")).toBeInTheDocument();

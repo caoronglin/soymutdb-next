@@ -111,6 +111,68 @@ frontend_install() {
   ensure_workspace
 }
 
+# The frontend gate ends with the OpenAPI client contract, which exports the
+# backend schema and therefore needs a Python interpreter with the API's
+# dependencies. In a fresh CNB container that venv does not exist, and the gate
+# died with:
+#
+#   scripts/check-contract.sh: line 18: /workspace/apps/api/.venv/bin/python:
+#   No such file or directory
+#   [ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL] @soymutdb/api-client@2.0.0
+#   check:contract: `bash scripts/check-contract.sh`
+#
+# The GitHub mirror escapes this because `actions/setup-python` puts a system
+# `python3` on PATH and the workflow prepares the venv by hand; CNB runs the
+# gate in `node:24.19.0`, which has no Python at all. Bootstrap the venv exactly
+# where check-contract.sh already looks for it, from the same closed dependency
+# set the API job installs, so no gate is skipped and the contract is still
+# checked on every provider.
+SOYMUTDB_CI_VENV_PYTHON="${SOYMUTDB_CI_VENV_PYTHON:-python3}"
+
+# Accept the interpreter only when it is the PINNED major.minor. The image
+# provides it today, but `command -v python3` succeeding is not the same claim:
+# a rebuilt or re-tagged image could put 3.11 on PATH, the venv would be
+# created, and the contract gate would run against a backend the repository
+# never declared — the failure mode this whole gate exists to catch.
+interpreter_matches_pin() {
+  local interpreter="$1"
+  "${interpreter}" -c "import sys; sys.exit(
+    0 if sys.version_info[:2] == tuple(int(p) for p in '${PYTHON_VERSION}'.split('.')[:2])
+    else 1
+  )"
+}
+
+ensure_api_venv() {
+  local venv="${REPO_ROOT}/apps/api/.venv"
+  # Idempotent: the backend job may have already created it, and a warm stage
+  # should not reinstall. Only the generated venv python is authoritative.
+  if [[ -x "${venv}/bin/python" ]]; then
+    echo "[ci-job-steps] API virtualenv already present: ${venv}" >&2
+    return 0
+  fi
+
+  if ! command -v "${SOYMUTDB_CI_VENV_PYTHON}" >/dev/null 2>&1; then
+    log "cannot prepare ${venv}: ${SOYMUTDB_CI_VENV_PYTHON} is not on PATH"
+    log "the stage image must provide Python ${PYTHON_VERSION} for the OpenAPI contract gate"
+    return 1
+  fi
+
+  if ! interpreter_matches_pin "${SOYMUTDB_CI_VENV_PYTHON}"; then
+    log "cannot prepare ${venv}: ${SOYMUTDB_CI_VENV_PYTHON} is $("${SOYMUTDB_CI_VENV_PYTHON}" -V 2>&1), not ${PYTHON_VERSION}"
+    log "the OpenAPI export must run on the pinned interpreter"
+    return 1
+  fi
+
+  log "creating API virtualenv for the OpenAPI contract gate ($("${SOYMUTDB_CI_VENV_PYTHON}" -V 2>&1))"
+  "${SOYMUTDB_CI_VENV_PYTHON}" -m venv "${venv}"
+  "${venv}/bin/pip" install --upgrade pip
+  # Mirror api_install: the contract exports app.main's OpenAPI document, so the
+  # API and its local jobs package must be importable. No [dev] extra here: the
+  # gate imports the app, it does not run the test tree.
+  "${venv}/bin/pip" install --quiet -e "${REPO_ROOT}/packages/jobs-py"
+  "${venv}/bin/pip" install --quiet -e "${REPO_ROOT}/apps/api"
+}
+
 frontend_build_demo() {
   VITE_DEPLOYMENT_MODE="${SOYMUTDB_CI_DEMO_MODE}" \
   VITE_API_BASE_URL="${SOYMUTDB_CI_DEMO_API_URL}" \
@@ -120,20 +182,51 @@ frontend_build_demo() {
 
 frontend_run() {
   frontend_install
+  ensure_api_venv
   bash "${REPO_ROOT}/scripts/verify-frontend-artifacts.sh"
 }
 
 # -----------------------------------------------------------------------------
 # api-tests — Python venv, architecture guard, pytest, worker pytest
 # -----------------------------------------------------------------------------
+# The venv interpreter, not whatever `python` happens to be on PATH. The stage
+# image is pinned to PYTHON_VERSION, so accepting a stray interpreter would let
+# the suite run against a backend the repository never declared.
 api_install() {
-  python -m venv apps/api/.venv
-  apps/api/.venv/bin/pip install --upgrade pip
-  apps/api/.venv/bin/pip install --quiet -e packages/jobs-py
-  apps/api/.venv/bin/pip install -e "apps/api[dev]"
+  local interpreter="${SOYMUTDB_CI_VENV_PYTHON}"
+  local venv="${REPO_ROOT}/apps/api/.venv"
+
+  if ! command -v "${interpreter}" >/dev/null 2>&1; then
+    log "cannot build ${venv}: ${interpreter} is not on PATH"
+    log "the api-tests stage image must provide Python ${PYTHON_VERSION}"
+    return 1
+  fi
+
+  if ! interpreter_matches_pin "${interpreter}"; then
+    log "cannot build ${venv}: ${interpreter} is $("${interpreter}" -V 2>&1), not ${PYTHON_VERSION}"
+    return 1
+  fi
+
+  # Absolute paths: this container's cwd is not guaranteed to be the checkout,
+  # and a relative `apps/api/.venv` would create the venv somewhere else while
+  # check-contract.sh keeps looking under the repo root.
+  rm -rf "${venv}"
+  "${interpreter}" -m venv "${venv}"
+  "${venv}/bin/pip" install --upgrade pip
+  "${venv}/bin/pip" install --quiet -e "${REPO_ROOT}/packages/jobs-py"
+  "${venv}/bin/pip" install -e "${REPO_ROOT}/apps/api[dev]"
 }
 
-api_run() {
+# The job name in the catalog is `api-tests`, so the dispatcher resolves
+# `api_tests_run`. This function used to be called `api_run`, which meant the
+# documented command died before any test ran:
+#
+#   $ bash scripts/ci-job-steps.sh run api-tests
+#   unknown job: api-tests
+#
+# The contract tests pinned the string `run api-tests`, so they passed while the
+# step itself exited 2. Name it after the job.
+api_tests_run() {
   api_install
   bash "${REPO_ROOT}/scripts/verify-backend-tests.sh"
 }

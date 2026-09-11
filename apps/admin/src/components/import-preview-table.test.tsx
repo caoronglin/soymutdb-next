@@ -2,6 +2,11 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { ImportPreviewTable, type ImportPreviewRow } from "./import-preview-table";
 
+// The shared double keeps a stable `t` identity and interpolates `{{placeholders}}`:
+// an unmocked i18next leaves raw keys/templates in the DOM, which reads as a product bug.
+// See test/mocks.ts.
+vi.mock("react-i18next", async () => (await import("../test/mocks")).mockTranslation);
+
 function makeRows(count: number): ImportPreviewRow[] {
   return Array.from({ length: count }, (_, index) => ({
     _row_key: `row-${index}`,

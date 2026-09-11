@@ -93,6 +93,34 @@ CNB 的每个 stage 跑在**自己的新容器**里。`corepack enable` 只是�
   检查每个 `pnpm` job 是否真的到达引导脚本，并禁止再出现 "Setup workspace" 这类
   stage 名，同时要求 pnpm job 必须挂 store volume。
 
+### `.cnb/env/Dockerfile.*` 只能出现在 `docker.build`，不能是 `image:`
+
+第一次真实构建在 `Frontend verification` stage **脚本执行前**就失败了：
+
+```
+Runner[docker] $ docker pull .cnb/env/Dockerfile.frontend
+invalid reference format: repository name (env/Dockerfile.frontend) must be lowercase
+```
+
+`image:` 是**镜像仓库引用**，runner 把它原样交给 `docker pull`。写仓库里的文件路径
+必然失败，而且失败发生在任何脚本之前（同一问题在 main 的 `docker-images` /
+`release` / `mcp-e2e` 管线同样存在：`docker pull .cnb/env/Dockerfile.build-tools`）。
+
+用 Dockerfile 只有一条合法路径：`docker.build`，而它**只在流水线级别**存在——
+CNB 文档明确"任务级仅支持 `image` 配置，不支持 `dockerfile`"。因此：
+
+* 需要 Dockerfile 的 stage，其 `image:` 必须**留空**，由流水线级
+  `docker.build.dockerfile` 提供默认环境。
+* 同一流水线里需要别的环境（API 用 `python:3.14`、governance 用 `node:24.19.0`）
+  的 stage，**保留自己的 `image:`** 覆盖默认值，语义与之前完全一致。
+* `docker.build.by` 只列 Dockerfile 本身：stage 体通过 `scripts/` 自行引导工具链，
+  Dockerfile 是唯一能改变门禁运行环境的输入。
+
+`test_no_stage_image_is_a_dockerfile_path` 现在对**每个**流水线、**每个** stage 的
+`image:` 做静态检查：以 `.`/`/` 开头或含 `Dockerfile` 的值一律失败。此前三个测试
+只断言"被引用的文件存在、已被 git 跟踪、带对应工具链"——这些在当时全部成立，构建
+依然失败，因为它们都没问"平台能不能在这个位置消费一个路径"。
+
 ### `.cnb/env/` 的两个引用文件
 
 `.cnb.yml` 通过路径引用它们，因此它们必须真的在仓库里（

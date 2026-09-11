@@ -12,7 +12,7 @@ export default function NewsTrashPage() {
   const [items, setItems] = useState<DeletedAdminNewsItem[]>([]); const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1); const [pageSize, setPageSize] = useState(10); const [loading, setLoading] = useState(true);
   const [purging, setPurging] = useState<DeletedAdminNewsItem | null>(null); const [slug, setSlug] = useState("");
-  const load = useCallback(async () => { setLoading(true); try { const data = await listDeletedAdminNews({ page, page_size: pageSize }); setItems(data.items); setTotal(data.total); } catch (err) { message.error(t("admin.news.trash.loadError")); } finally { setLoading(false); } }, [message, page, pageSize, t]);
+  const load = useCallback(async () => { setLoading(true); try { const data = await listDeletedAdminNews({ page, page_size: pageSize }); setItems(data.items); setTotal(data.total); } catch { message.error(t("admin.news.trash.loadError")); } finally { setLoading(false); } }, [message, page, pageSize, t]);
   useEffect(() => { void load(); }, [load]);
   const restore = (record: DeletedAdminNewsItem) => Modal.confirm({ title: t("admin.news.trash.restoreTitle"), content: t("admin.news.trash.restoreContent", { title: record.title_en }), onOk: async () => { try { await restoreNews(record.id); message.success(t("admin.news.trash.restoreSuccess")); await load(); } catch { message.error(t("admin.news.trash.restoreError")); } } });
   const columns: TableColumnsType<DeletedAdminNewsItem> = [

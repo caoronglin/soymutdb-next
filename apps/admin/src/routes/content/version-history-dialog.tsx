@@ -7,7 +7,7 @@ import { Button, Modal, Typography } from "@/lib/antd";
 import { ConfirmDialog } from "../../components/confirm-dialog";
 import { DataTable, type DataTableColumn } from "../../components/data-table";
 import { contentKeys } from "./query-keys";
-import type { StaticPage, VersionHistoryDialogProps } from "./pages-tab";
+import type { VersionHistoryDialogProps } from "./pages-tab";
 
 export interface ContentVersion { id: string; page_id: string; version: number; title_en: string; title_zh: string | null; content_en: string; content_zh: string | null; summary: string | null; edited_by: string | null; edit_comment: string | null; created_at: string; }
 export interface VersionDetailProps { version: ContentVersion; onBack: () => void; }

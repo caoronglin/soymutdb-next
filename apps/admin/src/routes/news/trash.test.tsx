@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import "@testing-library/jest-dom/vitest";
@@ -26,6 +26,10 @@ beforeEach(() => {
 });
 
 describe("NewsTrashPage", () => {
+  // The purge flow drives an animated antd Modal through user-event; under a
+  // fully loaded suite run it routinely exceeds the 5s default, which showed up
+  // as a hard CI failure rather than a real regression.
+  const MODAL_TIMEOUT = 30_000;
   it("requests only pagination and renders no body or preview controls", async () => {
     renderPage();
     await screen.findByText("Deleted article");
@@ -36,34 +40,34 @@ describe("NewsTrashPage", () => {
   it("requires exact slug before permanently deleting", async () => {
     const user = userEvent.setup(); renderPage(); await screen.findByText("Deleted article");
     await user.click(screen.getByRole("button", { name: "admin.news.trash.purge" }));
-    const confirm = screen.getAllByRole("button", { name: "admin.news.trash.purge" }).at(-1)!;
+    const confirm = within(await screen.findByRole("dialog")).getByRole("button", { name: "admin.news.trash.purge" });
     expect(confirm).toBeDisabled();
     await user.type(screen.getByLabelText("admin.news.trash.slug"), "wrong");
     expect(confirm).toBeDisabled();
     await user.clear(screen.getByLabelText("admin.news.trash.slug"));
     await user.type(screen.getByLabelText("admin.news.trash.slug"), article.slug);
     expect(confirm).toBeEnabled();
-  });
+  }, MODAL_TIMEOUT);
 
   it("purges only after exact slug, then reloads", async () => {
     const user = userEvent.setup(); purgeMock.mockResolvedValue(); renderPage();
     await screen.findByText("Deleted article");
     await user.click(screen.getByRole("button", { name: "admin.news.trash.purge" }));
     await user.type(screen.getByLabelText("admin.news.trash.slug"), article.slug);
-    await user.click(screen.getAllByRole("button", { name: "admin.news.trash.purge" }).at(-1)!);
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "admin.news.trash.purge" }));
     await waitFor(() => expect(purgeMock).toHaveBeenCalledWith(9));
     await waitFor(() => expect(listMock).toHaveBeenCalledTimes(2));
-  });
+  }, MODAL_TIMEOUT);
 
   it("keeps purge confirmation open after a failed request", async () => {
     const user = userEvent.setup(); purgeMock.mockRejectedValue(new Error("offline")); renderPage();
     await screen.findByText("Deleted article");
     await user.click(screen.getByRole("button", { name: "admin.news.trash.purge" }));
     await user.type(screen.getByLabelText("admin.news.trash.slug"), article.slug);
-    await user.click(screen.getAllByRole("button", { name: "admin.news.trash.purge" }).at(-1)!);
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "admin.news.trash.purge" }));
     await waitFor(() => expect(purgeMock).toHaveBeenCalledWith(9));
     expect(screen.getByLabelText("admin.news.trash.slug")).toBeInTheDocument();
-  });
+  }, MODAL_TIMEOUT);
 
   it("reloads after restore success", async () => {
     const user = userEvent.setup(); restoreMock.mockResolvedValue({} as never);
@@ -71,5 +75,5 @@ describe("NewsTrashPage", () => {
     await user.click(screen.getByRole("button", { name: "admin.news.trash.restore" }));
     await user.click(await screen.findByRole("button", { name: "OK" }));
     await waitFor(() => expect(restoreMock).toHaveBeenCalledWith(9));
-  });
+  }, MODAL_TIMEOUT);
 });

@@ -162,6 +162,23 @@ def _iter_script_bodies(node: object, path: str = ""):
             yield from _iter_script_bodies(value, f"{path}[{index}]")
 
 
+def _iter_pipelines(node: object):
+    """Yield every pipeline object, whatever branch/event nests it.
+
+    The CNB config is `branch -> event -> [pipeline]`. Walking it generically
+    keeps the assertions from hard-coding a shape that a new event would break.
+    """
+    if isinstance(node, dict):
+        if "stages" in node or "name" in node:
+            yield node
+            return
+        for value in node.values():
+            yield from _iter_pipelines(value)
+    elif isinstance(node, list):
+        for value in node:
+            yield from _iter_pipelines(value)
+
+
 def _cnb_config_files() -> tuple[Path, ...]:
     return (CNB_CONFIG, *sorted((ROOT / ".cnb").glob("*.yml"))) + tuple(
         ROOT / name for name in PIPELINE_FILES
@@ -946,6 +963,270 @@ class DeliveryArchitectureTests(unittest.TestCase):
                         "pnpm stage without a persistent store volume",
                     )
 
+    def test_frontend_stage_can_reach_the_openapi_contract_gate(self) -> None:
+        """The frontend gate ends with a Python-backed contract check.
+
+        Regression for a real CNB build:
+
+            ==> API client contract
+            $ bash scripts/check-contract.sh
+            >> exporting OpenAPI from backend...
+            scripts/check-contract.sh: line 18:
+            /workspace/apps/api/.venv/bin/python: No such file or directory
+            [ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL] @soymutdb/api-client@2.0.0
+            check:contract: `bash scripts/check-contract.sh`
+
+        `verify-frontend-artifacts.sh` closes with
+        `pnpm --filter @soymutdb/api-client check:contract`, and that script
+        exports the backend OpenAPI document from `apps/api/.venv/bin/python`.
+        CNB ran the gate in `node:24.19.0`, which carries no Python, so the venv
+        could neither exist nor be created. The GitHub mirror escaped the same
+        failure only because `actions/setup-python` installs an interpreter.
+
+        Every one of these is load-bearing; dropping any of them re-opens the
+        failure without changing the failure message.
+        """
+        # 1. The gate really is a hard, non-skippable step of the frontend
+        #    script, or nothing below would matter.
+        gate = (ROOT / "scripts/verify-frontend-artifacts.sh").read_text(encoding="utf-8")
+        self.assertIn("@soymutdb/api-client check:contract", gate)
+        self.assertIn(
+            "SOYMUTDB_CI_SKIP_CONTRACT",
+            gate,
+            "the contract gate must be the only thing an explicit skip flag bypasses",
+        )
+
+        # 2. The contract script must keep exporting the schema with the venv
+        #    interpreter, so the venv is genuinely required.
+        contract = (ROOT / "packages/api-client/scripts/check-contract.sh").read_text(
+            encoding="utf-8"
+        )
+        # The contract script resolves the venv from the package root, so the
+        # marker is the relative venv path, not a literal absolute one.
+        self.assertIn(".venv/bin/python", contract)
+        self.assertIn('API_DIR="$REPO_ROOT/apps/api"', contract)
+
+        # 3. The frontend job body must create that venv before running the gate.
+        steps = (ROOT / "scripts/ci-job-steps.sh").read_text(encoding="utf-8")
+
+        def function_bodies(text: str) -> dict[str, str]:
+            bodies: dict[str, str] = {}
+            for match in re.finditer(r"^(\w+)\(\) \{\n", text, re.M):
+                start = match.end()
+                end = text.index("\n}\n", start)
+                bodies[match.group(1)] = text[start:end]
+            return bodies
+
+        bodies = function_bodies(steps)
+        self.assertIn("ensure_api_venv", bodies)
+
+        venv_body = bodies["ensure_api_venv"]
+        self.assertIn("apps/api/.venv", venv_body)
+        self.assertIn("-m venv", venv_body)
+        # The export imports `app.main`, so both the API package and its local
+        # jobs dependency must be installed, matching the API job's install.
+        self.assertIn("packages/jobs-py", venv_body)
+        self.assertIn("apps/api", venv_body)
+
+        # The interpreter must be the PINNED one. The image supplies it, but
+        # `command -v python3` succeeding is a weaker claim than "python3 is
+        # 3.14": a rebuilt image could put 3.11 on PATH, the venv would be
+        # created, and the contract gate would validate against a backend the
+        # repository never declared. Assert the version check is real.
+        self.assertIn("interpreter_matches_pin", bodies)
+        check_body = bodies["interpreter_matches_pin"]
+        self.assertIn("PYTHON_VERSION", check_body)
+        self.assertIn(
+            "version_info",
+            check_body,
+            "the interpreter must be compared against the pin, not merely found",
+        )
+        self.assertRegex(
+            venv_body,
+            r"(?m)^\s*if ! interpreter_matches_pin",
+            "ensure_api_venv must reject an interpreter that misses the pin",
+        )
+
+        # frontend_run must actually call it, in the same container as the gate.
+        self.assertRegex(
+            bodies["frontend_run"],
+            r"(?m)^\s*ensure_api_venv\s*$",
+        )
+
+        # 4. The frontend stage's environment must carry BOTH toolchains, and it
+        #    must be declared where CNB can actually consume a Dockerfile.
+        #
+        #    This is the regression that made the first CNB build of this PR fail
+        #    before a single gate ran:
+        #
+        #        docker pull .cnb/env/Dockerfile.frontend
+        #        invalid reference format: repository name must be lowercase
+        #
+        #    `image:` is a registry reference. The platform's runner passes it
+        #    straight to `docker pull`, so a repository path is not a valid value
+        #    there, whatever it points at. A Dockerfile may only appear in
+        #    `docker.build`, and `build` exists at the PIPELINE level only
+        #    ("任务级仅支持 image 配置，不支持 dockerfile"). Assert both halves, or
+        #    the config can pass every other check while still failing on the
+        #    runner.
+        frontend_dockerfiles = set()
+        for config in _cnb_config_files():
+            document = yaml.safe_load(config.read_text(encoding="utf-8"))
+            for pipeline in _iter_pipelines(document):
+                frontend_stages = [
+                    stage
+                    for stage in pipeline.get("stages", [])
+                    if "run frontend" in str(stage.get("script", ""))
+                ]
+                if not frontend_stages:
+                    continue
+
+                # 4a. Never put a path in `image:`; the runner would `docker
+                #     pull` it. This is the exact failure being guarded.
+                for stage in frontend_stages:
+                    image = str(stage.get("image", ""))
+                    self.assertNotRegex(
+                        image,
+                        r"^[./]|Dockerfile",
+                        f"{config.name}: the frontend stage sets image={image!r}; "
+                        "`image:` is handed to `docker pull`, so it must be a "
+                        "registry reference, not a Dockerfile path (use docker.build)",
+                    )
+
+                # 4b. The environment therefore comes from the pipeline-level
+                #     `docker.build`, which must name a committed Dockerfile that
+                #     carries both pinned toolchains.
+                build = (pipeline.get("docker") or {}).get("build")
+                self.assertIsNotNone(
+                    build,
+                    f"{config.name}: the frontend stage needs a dual-toolchain "
+                    "image, which only a pipeline-level `docker.build` can supply",
+                )
+                dockerfile = build if isinstance(build, str) else build.get("dockerfile")
+                self.assertTrue(
+                    dockerfile,
+                    f"{config.name}: docker.build names no Dockerfile",
+                )
+                frontend_dockerfiles.add(str(dockerfile))
+
+        self.assertTrue(
+            frontend_dockerfiles, "no CNB pipeline declares the frontend environment"
+        )
+        for dockerfile_path in frontend_dockerfiles:
+            path = ROOT / dockerfile_path
+            self.assertTrue(
+                path.is_file(),
+                f"{dockerfile_path} runs the frontend gate but is not committed",
+            )
+            # Present is not enough. `.gitignore` once had an unanchored `env/`
+            # pattern that matched `.cnb/env/` at any depth, so these files
+            # existed in the working tree but never in a checkout and the
+            # schema-documenting test above still passed. Ask git.
+            ignored = subprocess.run(
+                ["git", "check-ignore", "--quiet", dockerfile_path],
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(
+                ignored.returncode,
+                0,
+                f"{dockerfile_path} is ignored by .gitignore; a CNB checkout "
+                "would not have it",
+            )
+            docker_text = path.read_text(encoding="utf-8")
+            self.assertRegex(
+                docker_text,
+                r"(?m)^FROM python:3\.14",
+                f"{dockerfile_path} must carry Python for the OpenAPI contract gate",
+            )
+            # Node is installed from the official release tarball, not from a
+            # `FROM node:` base: python:3.14 and node:24.19.0 sit on different
+            # Debian generations, and `COPY --from` cannot carry the C library
+            # the copied interpreter needs, so the reverse composition dies with
+            # `GLIBC_2.38 not found`. Assert the version arrives pinned AND that
+            # the download is verified, or the toolchain can be swapped under a
+            # reviewed pin.
+            self.assertRegex(
+                docker_text,
+                r"(?m)^ARG NODE_VERSION=24\.19\.0$",
+                f"{dockerfile_path} must pin Node to the repository version",
+            )
+            self.assertIn(
+                "sha256sum --check",
+                docker_text,
+                f"{dockerfile_path} must verify the Node tarball checksum",
+            )
+            self.assertNotRegex(
+                docker_text,
+                r"(?m)^FROM node:",
+                f"{dockerfile_path} cannot be built on a node: base and also "
+                "provide Python 3.14 from python: via COPY --from",
+            )
+
+    def test_no_stage_image_is_a_dockerfile_path(self) -> None:
+        """A Dockerfile belongs in `docker.build`, never in `image:`.
+
+        Regression for the failure that took down the first CNB build of the PR
+        that added the frontend environment, and for the same breakage already
+        present on main in the release/image pipelines:
+
+            Runner[docker] $ docker pull .cnb/env/Dockerfile.frontend
+            invalid reference format: repository name (env/Dockerfile.frontend)
+            must be lowercase
+
+            Runner[docker] $ docker pull .cnb/env/Dockerfile.build-tools
+            invalid reference format: repository name (env/Dockerfile.build-tools)
+            must be lowercase
+
+        `image:` is a registry reference. The runner hands it to `docker pull`
+        verbatim, so any value that names a file in the repository fails before
+        a single stage script runs, on every provider and every branch. Only
+        `docker.build` accepts a Dockerfile, and `build` exists at the pipeline
+        level alone ("任务级仅支持 image 配置，不支持 dockerfile").
+
+        The two earlier tests asserted that the referenced file exists, is
+        tracked and carries the right toolchains. All of that held while the
+        build still failed, because none of them asked whether the platform can
+        consume a path in that position. This one does, for every `image:` in
+        every pipeline and every stage, not just the frontend one.
+        """
+        offenders = []
+        for config in _cnb_config_files():
+            document = yaml.safe_load(config.read_text(encoding="utf-8"))
+            for pipeline in _iter_pipelines(document):
+                docker = pipeline.get("docker") or {}
+                images = [
+                    str(docker.get("image", "")),
+                    *[
+                        str(stage.get("image", ""))
+                        for stage in pipeline.get("stages", [])
+                        if isinstance(stage, dict)
+                    ],
+                ]
+                for image in images:
+                    if not image:
+                        continue
+                    # A registry reference is `<name>[:tag]`; it never starts
+                    # with a path component and never names a Dockerfile.
+                    # Anything else is a file path the runner would try to pull.
+                    looks_like_path = (
+                        image.startswith((".", "/"))
+                        or "Dockerfile" in image
+                    )
+                    if looks_like_path:
+                        offenders.append(
+                            f"{config.name}: image={image!r} is a repository path; "
+                            "`image:` is passed to `docker pull` — use "
+                            "`docker.build.dockerfile` instead"
+                        )
+        self.assertEqual(
+            offenders,
+            [],
+            "stage/pipeline images must be registry references, not Dockerfiles:\n"
+            + "\n".join(offenders),
+        )
+
     def test_every_cnb_stage_script_target_exists_on_disk(self) -> None:
         """No stage may reference a script that is not in the repository."""
         missing = []
@@ -1048,6 +1329,70 @@ class DeliveryArchitectureTests(unittest.TestCase):
             documented_commands,
             implemented,
             f"documented but not implemented: {documented_commands - implemented}",
+        )
+
+    def test_every_advertised_job_actually_dispatches(self) -> None:
+        """`run <job>` must resolve for every job `list` prints.
+
+        Regression for a real CNB build. `api-tests` was advertised by `list`
+        and invoked by five pipeline stages, but its body was named `api_run`,
+        while the dispatcher resolves `<job with - as _>_run`. The stage died in
+        1.6s with no test executed:
+
+            $ bash scripts/ci-job-steps.sh run api-tests
+            unknown job: api-tests
+            Finished, code: 2
+
+        The sibling contract only asserted the *string* `run api-tests` was
+        present in the pipeline configs, so it passed the entire time. This test
+        exercises the dispatcher itself. It never runs a job body, so it stays
+        fast and toolchain-free: the dispatcher is asked to resolve each name
+        with its own rule, then verified with `declare -F`.
+        """
+        steps = ROOT / "scripts/ci-job-steps.sh"
+        catalog = subprocess.run(
+            ["bash", str(steps), "list"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        jobs = catalog.stdout.split()
+        self.assertTrue(jobs, "the job catalog is empty")
+
+        # Resolve each advertised job exactly as `main()` does.
+        resolver = "; ".join(
+            f'if declare -F "{job.replace("-", "_")}_run" >/dev/null; '
+            f'then echo "OK {job}"; else echo "MISSING {job}"; fi'
+            for job in jobs
+        )
+        # `main "$@"` would execute the job instead of only defining it, so the
+        # library is sourced with that single dispatch line removed.
+        source_without_dispatch = 'source <(sed "s|^main \\"\\$@\\"$||" "$1")'
+        resolved = subprocess.run(
+            ["bash", "-c", f'{source_without_dispatch}; {resolver}', "bash", str(steps)],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(
+            resolved.returncode,
+            0,
+            f"dispatcher probe failed:\n{resolved.stdout}\n{resolved.stderr}",
+        )
+
+        reported = [line.split(None, 1) for line in resolved.stdout.splitlines() if line.strip()]
+        self.assertEqual(
+            len(reported),
+            len(jobs),
+            f"dispatcher probe reported {len(reported)} of {len(jobs)} jobs: {resolved.stdout}",
+        )
+
+        missing = [job for verdict, job in reported if verdict == "MISSING"]
+        self.assertEqual(
+            missing,
+            [],
+            "jobs advertised by `list` but not dispatchable by `run`: " + ", ".join(missing),
         )
 
     def test_smoke_profiles_cover_every_layer_and_never_fake_a_pass(self) -> None:

@@ -42,7 +42,28 @@ EXPECTED_PYTHON_MIN = (3, 14)
 # releases without any review noticing.
 BUILD_ENV_DOCKERFILES = (
     ".cnb/env/Dockerfile.build-tools",
+    # The frontend gate exports the backend OpenAPI schema, so its stage image
+    # must carry Node AND Python. Both pins live in this Dockerfile.
+    ".cnb/env/Dockerfile.frontend",
 )
+
+# (dockerfile, tag the base image must use) for the frontend environment. It
+# starts from the Python image and installs Node from the official release
+# tarball, because `COPY --from=python:3.14` into a node:24.19.0 base cannot
+# work: the two sit on different Debian generations and the copied interpreter
+# needs a glibc the older base does not have.
+FRONTEND_BUILD_ENV = ".cnb/env/Dockerfile.frontend"
+FRONTEND_BUILD_ENV_BASE = "python:3.14"
+
+# The Node tarball checksums published in
+# https://nodejs.org/dist/v<version>/SHASUMS256.txt. Duplicated here on purpose:
+# the Dockerfile verifies the download against its own copy, and this guard
+# fails when the two disagree, so a checksum can never be edited to fit a
+# tampered tarball without also editing this file and a reviewer seeing it.
+NODE_TARBALL_SHA256 = {
+    "x64": "14b342e71204f811bde6153be8e04b62aef63c236fef92b55f9c83154b409647",
+    "arm64": "01443c1e1a29e531ccad5a46fefa6df490d2189c49f7955904aecdbb0fe86fdc",
+}
 
 # Shared scripts that carry a SOYMUTDB_CI_*_VERSION default.
 # (file, variables that file is responsible for declaring)
@@ -145,6 +166,74 @@ def check_build_env_images(errors: list[str]) -> None:
                 )
 
 
+def check_build_env_toolchain_tags(errors: list[str]) -> None:
+    """The frontend stage image must pin the exact Node/Python versions.
+
+    `check_build_env_images` only rejects a completely untagged `FROM`. That is
+    enough for the release tooling image, but not for the image that runs the
+    frontend gates: it must track `.nvmrc` and the Python pin, or the gate would
+    run on a toolchain the repository never declared.
+
+    Both toolchains matter here. Python comes from the base image; Node comes
+    from the official release tarball, so it is pinned by version AND by the
+    published checksum the Dockerfile verifies before unpacking.
+    """
+    path = ROOT / FRONTEND_BUILD_ENV
+    if not path.is_file():
+        _fail(errors, f"missing build environment image: {FRONTEND_BUILD_ENV}")
+        return
+    text = path.read_text(encoding="utf-8")
+
+    tags = {
+        line.strip().split()[1]
+        for line in text.splitlines()
+        if line.strip().upper().startswith("FROM ") and len(line.split()) > 1
+    }
+    if FRONTEND_BUILD_ENV_BASE not in tags:
+        _fail(
+            errors,
+            f"{FRONTEND_BUILD_ENV}: no FROM uses {FRONTEND_BUILD_ENV_BASE!r} "
+            f"(found {sorted(tags)!r})",
+        )
+
+    # The Node version must be the repository pin, not a second copy that can
+    # drift from .nvmrc.
+    match = re.search(r"^ARG NODE_VERSION=(\S+)\s*$", text, re.M)
+    if not match:
+        _fail(errors, f"{FRONTEND_BUILD_ENV}: no ARG NODE_VERSION default found")
+    elif match.group(1) != EXPECTED_NODE:
+        _fail(
+            errors,
+            f"{FRONTEND_BUILD_ENV}: NODE_VERSION is {match.group(1)!r}, "
+            f"expected {EXPECTED_NODE!r}",
+        )
+
+    # The checksum the Dockerfile verifies must be the published one, per
+    # architecture. A wrong-but-consistent pair would still fail the build, but
+    # a swapped pair would silently verify the wrong artifact on arm64.
+    for arch, expected_sha in NODE_TARBALL_SHA256.items():
+        variable = f"NODE_SHA256_{arch.upper()}"
+        match = re.search(rf"^ARG {variable}=(\S+)\s*$", text, re.M)
+        if not match:
+            _fail(errors, f"{FRONTEND_BUILD_ENV}: no ARG {variable} found")
+            continue
+        if match.group(1) != expected_sha:
+            _fail(
+                errors,
+                f"{FRONTEND_BUILD_ENV}: {variable} is {match.group(1)!r}, "
+                f"expected the published {expected_sha!r}",
+            )
+
+    # Node replaces the base image's Python from being the only toolchain, so
+    # the build must fail if the interpreter cannot actually run.
+    if "sha256sum --check" not in text:
+        _fail(
+            errors,
+            f"{FRONTEND_BUILD_ENV}: the Node tarball is downloaded without a "
+            "sha256 verification",
+        )
+
+
 def check_pin_sources(errors: list[str]) -> None:
     expected = {
         "NODE_VERSION": EXPECTED_NODE,
@@ -181,6 +270,7 @@ def main() -> int:
     check_pnpm(errors)
     check_python(errors)
     check_build_env_images(errors)
+    check_build_env_toolchain_tags(errors)
     check_pin_sources(errors)
 
     if args.json:

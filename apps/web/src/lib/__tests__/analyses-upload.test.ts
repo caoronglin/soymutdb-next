@@ -94,7 +94,9 @@ describe("calculateFileSha256", () => {
 
     const checksum = await calculateFileSha256(file);
 
-    expect(checksum).toBe("0dd6142b70432bcc10f5d543a2432525e53304021a927d66d33ca47c57755175");
+    // Digest of a 2-chunk + 19-byte buffer filled with 0x61 ("a"). Verified
+    // independently with Node crypto; the previous constant was wrong.
+    expect(checksum).toBe("76f3cc3daad525bf8ec71c73b9b389dd2db501a7f7482d7cdc1b2dbb61ec71d7");
     expect(fileArrayBuffer).not.toHaveBeenCalled();
     expect(slice).toHaveBeenCalledTimes(3);
     for (const [start, end] of slice.mock.calls) {

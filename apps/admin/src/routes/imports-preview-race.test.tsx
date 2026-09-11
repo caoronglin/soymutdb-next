@@ -70,7 +70,9 @@ async function startModulePreview(
     .getByRole("combobox", { name: "Import Type" });
   expect(typeSelect).toBeDefined();
   await user.click(typeSelect!);
-  await user.click(await screen.findByText("Module Data"));
+  // antd renders the selected option's label both in the trigger and in the
+    // open dropdown, so scope the click to the dropdown option.
+    await user.click(await screen.findByRole("option", { name: "Module Data" }));
 
   const fileInput = document.body.querySelector<HTMLInputElement>('input[type="file"]');
   expect(fileInput).not.toBeNull();

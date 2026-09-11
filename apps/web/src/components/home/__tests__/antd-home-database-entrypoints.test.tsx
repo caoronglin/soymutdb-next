@@ -43,7 +43,25 @@ vi.mock("../../../page-builder/renderer", () => ({ RenderNode: () => null }));
 vi.mock("../../news-carousel", () => ({ NEWS_FEATURED_KEY: ["news"] }));
 vi.mock("../../news-card", () => ({ pickNewsTitle: () => "News" }));
 vi.mock("@soymutdb/api-client", () => ({ getFeaturedNews: vi.fn() }));
-vi.mock("@ant-design/icons", () => new Proxy({}, { get: () => () => null }));
+// Stub the icon exports this page pulls in.
+//
+// A `new Proxy` catch-all must not be used here. Vitest validates the named
+// exports of a module mock, and a proxy that answers `then` also makes the mock
+// look like a never-settling thenable — the whole file then hangs before a
+// single assertion runs. List the icons explicitly; `vi.mock` factories are
+// hoisted, so the list has to be inlined rather than shared.
+vi.mock("@ant-design/icons", () => {
+  const Icon = () => null;
+  return {
+    ArrowRightOutlined: Icon,
+    EnvironmentOutlined: Icon,
+    ExperimentOutlined: Icon,
+    GlobalOutlined: Icon,
+    IdcardOutlined: Icon,
+    SearchOutlined: Icon,
+    ThunderboltOutlined: Icon,
+  };
+});
 vi.mock("@/lib/format", () => ({ formatDate: () => "" }));
 vi.mock("@/lib/antd", () => {
   const passthrough = ({ children }: { children?: React.ReactNode }) => (
