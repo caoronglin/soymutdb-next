@@ -128,6 +128,58 @@ def test_frontend_platform_lines_remain_bounded() -> None:
         assert package["devDependencies"]["vite"].startswith("^6.")
 
 
+def test_tiptap_family_stays_above_the_redos_advisory() -> None:
+    """Every @tiptap/* pin must clear GHSA-j95f-988m-3j2f.
+
+    The governance gate runs `pnpm audit --audit-level high` and blocks on a
+    nonzero exit, so a transitive high advisory under one of these pins is a
+    build failure. The advisory is only patched from 3.30.5, and it is a
+    **production** dependency of the admin rich-text editor -- not dev-only.
+
+    The family is pinned explicitly in apps/admin rather than through a
+    workspace override, so this is the one place a pin can silently fall back
+    under the fix. Assert every pin, and that they all agree: @tiptap/core and
+    @tiptap/pm must resolve as a matching pair or the editor fails to load.
+    """
+    patched = (3, 30, 5)
+    package = _json("apps/admin/package.json")
+    pins = {name: value for name, value in package["dependencies"].items() if name.startswith("@tiptap/")}
+
+    assert pins, "apps/admin must pin its @tiptap/* dependencies explicitly"
+    for name, raw in pins.items():
+        value = re.sub(r"^[^\d]*", "", str(raw))
+        resolved = tuple(int(part) for part in value.split(".")[:3])
+        assert resolved >= patched, (
+            f"{name} is {raw}; GHSA-j95f-988m-3j2f is only patched from "
+            f"{'.'.join(str(p) for p in patched)}, and the governance gate "
+            "fails the build on it"
+        )
+
+    versions = {str(value) for value in pins.values()}
+    assert len(versions) == 1, (
+        f"the @tiptap/* family must move in lockstep, found {sorted(versions)}"
+    )
+
+
+def test_workspace_security_override_holds_the_js_yaml_floor() -> None:
+    """The js-yaml floor must clear GHSA-2883-xcg3-v3hh.
+
+    `js-yaml` is reached transitively (api-client > openapi-typescript >
+    @redocly/openapi-core), so it cannot be pinned in a package.json; the
+    workspace `overrides` block is the only lever. Assert the resolved FLOOR,
+    not merely that the key exists -- a floor lowered below 4.3.2 re-introduces
+    the high-severity advisory while still looking configured.
+    """
+    workspace = yaml.safe_load((ROOT / "pnpm-workspace.yaml").read_text(encoding="utf-8"))
+    raw = workspace["overrides"].get("js-yaml")
+    assert raw is not None, (
+        "js-yaml has a blocking high advisory (GHSA-2883-xcg3-v3hh); keep the "
+        "security floor in pnpm-workspace.yaml `overrides`"
+    )
+    resolved = tuple(int(part) for part in str(raw).split("."))
+    assert resolved >= (4, 3, 2), f"js-yaml floor {raw} is below the patched 4.3.2"
+
+
 def test_workspace_catalog_pins_platform_dependencies() -> None:
     workspace = yaml.safe_load((ROOT / "pnpm-workspace.yaml").read_text(encoding="utf-8"))
 
