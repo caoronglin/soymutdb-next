@@ -27,6 +27,9 @@ overrides:
   # Security floors for transitive production/development utility packages.
   lodash: 4.18.1
   ansi-regex: 5.0.1
+  # GHSA: maxTotalMergeKeys does not bound CPU use for empty merge sources.
+  # Reached through api-client -> openapi-typescript -> @redocly/openapi-core.
+  js-yaml: 4.3.2
 
 allowBuilds:
   # Vite's platform-specific binary is required at build time. All other
