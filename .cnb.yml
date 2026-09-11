@@ -53,6 +53,23 @@ main:
         VITE_DEPLOYMENT_MODE: demo
         VITE_API_BASE_URL: https://api.soymutdb.test
         VITE_JBROWSE_BASE_URL: https://jbrowse.soymutdb.test
+      # Pipeline-level data volumes (`docker.volumes`). Two rules bite here:
+      #
+      #   1. `volumes` is a PIPELINE key, not a stage key. A stage-level
+      #      `volumes:` is not in the CNB schema and aborts the build in
+      #      Prepare, before any stage runs.
+      #   2. The entry format is `<path>[:<type>]`, NOT Docker's
+      #      `host:container`. `- /cache/pnpm-store:/cache/pnpm-store` is read
+      #      as a path with an unknown *type*, which Prepare rejects with:
+      #        Unsupported volume type. 不支持的数据卷类型: /cache/pnpm-store
+      #      Grouping is `<group>:<path>:<type>`, so a bare mount is just
+      #      `- /cache/pnpm-store` (type defaults to copy-on-write).
+      #
+      # Only the paths declared here (plus /workspace) cross a container
+      # boundary -- see scripts/setup-workspace.sh.
+      # Turbo's cache is intentionally NOT declared: it lives inside /workspace,
+      # which is already shared, and CNB rejects a volume whose path is a
+      # descendant of another shared path ("存在包含关系的卷路径").
       # Default environment for every stage below. `docker.build` is the ONLY
       # place CNB accepts a Dockerfile: a stage-level `image:` is a registry
       # reference handed to `docker pull`, so a repository path in `image:`
@@ -60,6 +77,8 @@ main:
       # Stages that need another environment (API on python:3.14, governance on
       # node:24.19.0) still declare their own `image:` and override this.
       docker:
+        volumes:
+          - /cache/pnpm-store
         build:
           dockerfile: .cnb/env/Dockerfile.frontend
           # Rebuild the image only when the Dockerfile changes; the stage bodies
@@ -70,17 +89,19 @@ main:
       stages:
         # No "setup workspace" stage: every CNB stage gets a fresh container, so
         # a bootstrap stage would not prepare the stages after it. Each job body
-        # bootstraps itself via scripts/setup-workspace.sh. The volumes below are
-        # the only state that crosses a container boundary.
+        # bootstraps itself via scripts/setup-workspace.sh. Only the pipeline's
+        # `docker.volumes` (declared above) and /workspace cross a container
+        # boundary -- there is deliberately no stage-level `volumes:` key. CNB
+        # rejects it in Prepare with "Unsupported volume type".
         # The frontend gate closes with the OpenAPI client contract, which
         # exports the backend schema and therefore needs Python 3.14, and it
-        # also runs `python3 scripts/check_*.py`. The image must carry both
-        # toolchains: node:24.19.0 has no Python at all, and the GitHub mirror
-        # only avoids this because actions/setup-python provides one.
+        # also runs `python3 scripts/check_*.py`. The environment it runs in is
+        # the pipeline-level `docker.build` above, which is the only place CNB
+        # accepts a Dockerfile; a path in a stage `image:` is handed to
+        # `docker pull` and fails with `invalid reference format`. The image must
+        # carry both toolchains: node:24.19.0 has no Python at all, and the
+        # GitHub mirror only avoids this because actions/setup-python provides one.
         - name: Frontend verification
-          volumes:
-            - /cache/pnpm-store:/cache/pnpm-store
-            - .turbo:/workspace/.turbo
           script: bash scripts/ci-job-steps.sh run frontend
         - name: API + Worker verification
           image: python:3.14
@@ -89,8 +110,6 @@ main:
           script: bash scripts/ci-job-steps.sh run api-tests
         - name: Dependency governance
           image: node:24.19.0
-          volumes:
-            - /cache/pnpm-store:/cache/pnpm-store
           script: bash scripts/ci-job-steps.sh run dependency-governance
 
   # ---------------------------------------------------------------------------
@@ -104,13 +123,11 @@ main:
         VITE_DEPLOYMENT_MODE: demo
         VITE_API_BASE_URL: https://api.soymutdb.test
         VITE_JBROWSE_BASE_URL: https://jbrowse.soymutdb.test
-      # Default environment for every stage below. `docker.build` is the ONLY
-      # place CNB accepts a Dockerfile: a stage-level `image:` is a registry
-      # reference handed to `docker pull`, so a repository path in `image:`
-      # fails the stage with `invalid reference format` before any script runs.
-      # Stages that need another environment (API on python:3.14) still declare
-      # their own `image:` and override this.
+      # Volume rules and the `docker.build` rationale are documented on the
+      # pull_request pipeline above; the shape here must stay identical.
       docker:
+        volumes:
+          - /cache/pnpm-store
         build:
           dockerfile: .cnb/env/Dockerfile.frontend
           # Rebuild the image only when the Dockerfile changes; the stage bodies
@@ -121,17 +138,19 @@ main:
       stages:
         # No "setup workspace" stage: every CNB stage gets a fresh container, so
         # a bootstrap stage would not prepare the stages after it. Each job body
-        # bootstraps itself via scripts/setup-workspace.sh. The volumes below are
-        # the only state that crosses a container boundary.
+        # bootstraps itself via scripts/setup-workspace.sh. Only the pipeline's
+        # `docker.volumes` (declared above) and /workspace cross a container
+        # boundary -- there is deliberately no stage-level `volumes:` key. CNB
+        # rejects it in Prepare with "Unsupported volume type".
         # The frontend gate closes with the OpenAPI client contract, which
         # exports the backend schema and therefore needs Python 3.14, and it
-        # also runs `python3 scripts/check_*.py`. The image must carry both
-        # toolchains: node:24.19.0 has no Python at all, and the GitHub mirror
-        # only avoids this because actions/setup-python provides one.
+        # also runs `python3 scripts/check_*.py`. The environment it runs in is
+        # the pipeline-level `docker.build` above, which is the only place CNB
+        # accepts a Dockerfile; a path in a stage `image:` is handed to
+        # `docker pull` and fails with `invalid reference format`. The image must
+        # carry both toolchains: node:24.19.0 has no Python at all, and the
+        # GitHub mirror only avoids this because actions/setup-python provides one.
         - name: Frontend verification
-          volumes:
-            - /cache/pnpm-store:/cache/pnpm-store
-            - .turbo:/workspace/.turbo
           script: bash scripts/ci-job-steps.sh run frontend
         - name: API + Worker verification
           image: python:3.14
@@ -140,14 +159,9 @@ main:
           script: bash scripts/ci-job-steps.sh run api-tests
         - name: Dependency governance
           image: node:24.19.0
-          volumes:
-            - /cache/pnpm-store:/cache/pnpm-store
           script: bash scripts/ci-job-steps.sh run dependency-governance
         - name: Build the checksummed Pages artifact
           image: node:24.19.0
-          volumes:
-            - /cache/pnpm-store:/cache/pnpm-store
-            - .turbo:/workspace/.turbo
           # Both scripts carry a bash shebang and bootstrap their own container
           # (build-pages-artifact.sh runs `pnpm --filter ... build`).
           script: bash scripts/build-pages-artifact.sh && bash scripts/verify-pages-artifact.sh pages-dist
@@ -435,10 +449,11 @@ $:
         volumes:
           # Deps are linked from the store instead of re-downloaded when the
           # environment container is cycled, exactly as in the delivery stages.
-          - /cache/pnpm-store:/cache/pnpm-store
-          # Turbo's cache survives 代码备份/漫游, so an in-progress edit is not
-          # lost when the environment is recycled.
-          - .turbo:/workspace/.turbo
+          - /cache/pnpm-store
+          # `.turbo` is intentionally NOT declared: it lives inside /workspace,
+          # which is already shared, and CNB rejects a volume whose path is a
+          # descendant of another shared path ("存在包含关系的卷路径").
+          # Turbo's cache therefore rides along with /workspace.
       services:
         - docker
         - name: vscode
@@ -465,13 +480,11 @@ $:
         VITE_DEPLOYMENT_MODE: demo
         VITE_API_BASE_URL: https://api.soymutdb.test
         VITE_JBROWSE_BASE_URL: https://jbrowse.soymutdb.test
-      # Default environment for every stage below. `docker.build` is the ONLY
-      # place CNB accepts a Dockerfile: a stage-level `image:` is a registry
-      # reference handed to `docker pull`, so a repository path in `image:`
-      # fails the stage with `invalid reference format` before any script runs.
-      # Stages that need another environment (API on python:3.14) still declare
-      # their own `image:` and override this.
+      # Volume rules and the `docker.build` rationale are documented on the
+      # pull_request pipeline above; the shape here must stay identical.
       docker:
+        volumes:
+          - /cache/pnpm-store
         build:
           dockerfile: .cnb/env/Dockerfile.frontend
           # Rebuild the image only when the Dockerfile changes; the stage bodies
@@ -482,17 +495,19 @@ $:
       stages:
         # No "setup workspace" stage: every CNB stage gets a fresh container, so
         # a bootstrap stage would not prepare the stages after it. Each job body
-        # bootstraps itself via scripts/setup-workspace.sh. The volumes below are
-        # the only state that crosses a container boundary.
+        # bootstraps itself via scripts/setup-workspace.sh. Only the pipeline's
+        # `docker.volumes` (declared above) and /workspace cross a container
+        # boundary -- there is deliberately no stage-level `volumes:` key. CNB
+        # rejects it in Prepare with "Unsupported volume type".
         # The frontend gate closes with the OpenAPI client contract, which
         # exports the backend schema and therefore needs Python 3.14, and it
-        # also runs `python3 scripts/check_*.py`. The image must carry both
-        # toolchains: node:24.19.0 has no Python at all, and the GitHub mirror
-        # only avoids this because actions/setup-python provides one.
+        # also runs `python3 scripts/check_*.py`. The environment it runs in is
+        # the pipeline-level `docker.build` above, which is the only place CNB
+        # accepts a Dockerfile; a path in a stage `image:` is handed to
+        # `docker pull` and fails with `invalid reference format`. The image must
+        # carry both toolchains: node:24.19.0 has no Python at all, and the
+        # GitHub mirror only avoids this because actions/setup-python provides one.
         - name: Frontend verification
-          volumes:
-            - /cache/pnpm-store:/cache/pnpm-store
-            - .turbo:/workspace/.turbo
           script: bash scripts/ci-job-steps.sh run frontend
         - name: API + Worker verification
           image: python:3.14
@@ -516,7 +531,7 @@ $:
       docker:
         image: cnbcool/default-dev-env
         volumes:
-          - /cache/pnpm-store:/cache/pnpm-store
+          - /cache/pnpm-store
       services:
         - docker
         - name: vscode
@@ -551,6 +566,10 @@ $:
     - name: acceptance-manual
       runner:
         cpus: 8
+      # Pipeline-level volumes; see the note on the pull_request pipeline.
+      docker:
+        volumes:
+          - /cache/pnpm-store
       env:
         SOYMUTDB_RUN_POSTGRES_INTEGRATION: "1"
         SOYMUTDB_ACCEPTANCE_DIR: artifacts/acceptance
@@ -565,9 +584,6 @@ $:
           script: bash scripts/acceptance.sh --profile backend
         - name: Static artifact acceptance
           image: node:24.19.0
-          volumes:
-            - /cache/pnpm-store:/cache/pnpm-store
-            - .turbo:/workspace/.turbo
           script: bash scripts/acceptance.sh --profile static
       endStages:
         - name: Upload acceptance evidence

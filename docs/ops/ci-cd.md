@@ -81,8 +81,14 @@ CNB 的每个 stage 跑在**自己的新容器**里。`corepack enable` 只是�
   `scripts/setup-workspace.sh`；后者先 `corepack enable` + 校验 `command -v pnpm`
   （失败立刻报错，而不是留到三个 stage 之后变成 `command not found`），再
   `pnpm install --frozen-lockfile`。
-* **只有 `volumes` 跨容器传递**。pnpm store（`/cache/pnpm-store`）与 turbo cache
-  （`.turbo`）是显式挂载的，因此"每个容器装一次"实际是做链接而非重新下载。
+* **只有 pipeline 级的 `docker.volumes` 跨容器传递**。pnpm store
+  （`/cache/pnpm-store`）在流水线级显式挂载，因此"每个容器装一次"实际是做链接而非
+  重新下载；turbo 的 `.turbo` 不单独挂载——它位于始终共享的 `/workspace` 之下，
+  再声明会成为嵌套卷路径被 CNB 拒绝（"存在包含关系的卷路径"）。
+* **卷条目必须是 CNB 语法**：`<path>`、`<path>:<type>` 或
+  `<group>:<path>:<type>`，**不是** Docker 的 `host:container`。写成
+  `- /cache/pnpm-store:/cache/pnpm-store` 时第二段被当成 *类型* 解析，Prepare 直接报
+  `Unsupported volume type. 不支持的数据卷类型: /cache/pnpm-store`，一个 stage 都跑不到。
 * 契约测试 `test_no_stage_depends_on_another_stages_container_state` 沿调用链
   检查每个 `pnpm` job 是否真的到达引导脚本，并禁止再出现 "Setup workspace" 这类
   stage 名，同时要求 pnpm job 必须挂 store volume。

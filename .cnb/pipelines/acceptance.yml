@@ -32,6 +32,15 @@
 # =============================================================================
 name: SoyMutDB acceptance
 
+# Pipeline-level volumes in CNB grammar (`<path>[:<type>]`, not Docker's
+# `host:container`); a stage-level `volumes` or a `host:container` entry is
+# rejected by CNB Prepare with `Unsupported volume type`.
+# `.turbo` is deliberately absent: it lives inside /workspace, which is already
+# shared, and a volume nested inside another shared path is rejected.
+docker:
+  volumes:
+    - /cache/pnpm-store
+
 env:
   # The acceptance layers must be able to tell the truth about a data-backed
   # checkout; see the api.yml pipeline for the same flag.
@@ -51,9 +60,6 @@ stages:
 
   - name: Static artifact acceptance
     image: node:24.19.0
-    volumes:
-      - /cache/pnpm-store:/cache/pnpm-store
-      - .turbo:/workspace/.turbo
     script: bash scripts/acceptance.sh --profile static
 
 endStages:
