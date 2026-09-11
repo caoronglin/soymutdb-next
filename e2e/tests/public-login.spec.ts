@@ -7,6 +7,7 @@
  * fetch, JSON serialization, response handling, and router navigation.
  */
 import { expect, test, type Page, type Request } from "@playwright/test";
+import { waitForAppReady } from "./helpers";
 
 const BASE = "/soymutdb-next";
 const LOGIN_ENDPOINT = "/api/v1/auth/login";
@@ -35,6 +36,9 @@ async function openLogin(page: Page, redirect = "/analyses"): Promise<void> {
   await page.goto(`${BASE}/login?redirect=${encodeURIComponent(redirect)}`, {
     waitUntil: "load",
   });
+  // The static fallback is inert: wait for the SPA to own the document before
+  // interacting, otherwise a click is silently discarded and no request fires.
+  await waitForAppReady(page);
   await expect(page.getByRole("heading", { name: /sign in/i })).toBeVisible();
   await expect(page.getByLabel(/^email$/i)).toBeVisible();
   await expect(page.getByLabel(/^password$/i)).toBeVisible();

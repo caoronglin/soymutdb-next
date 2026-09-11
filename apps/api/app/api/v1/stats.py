@@ -530,21 +530,25 @@ async def chromosome_density(
     chromosome: str = Query(...),
     bin_size: int = Query(default=1_000_000, ge=1000),
 ) -> ChromosomeDensity:
-    """Variant density across a chromosome."""
-    try:
-        bins = await ch_service.get_chromosome_density(
-            assembly=assembly,
-            chromosome=chromosome,
-            bin_size=bin_size,
-        )
-    except Exception:
-        logger.warning("stats_clickhouse_unavailable", component="density")
-        bins = []
+    """Variant density across a chromosome.
+
+    Density is computed entirely from the ClickHouse projection, so an
+    unavailable projection is reported as capability-unavailable (503). The
+    response model also requires a concrete ``chromosome_length``: fabricating
+    ``0`` here would both violate the contract and present an empty chromosome
+    as a real result.
+    """
+    bins = await ch_service.get_chromosome_density(
+        assembly=assembly,
+        chromosome=chromosome,
+        bin_size=bin_size,
+    )
 
     total = sum(b["count"] for b in bins)
+    chromosome_length = max((b["bin_end"] for b in bins), default=0)
     return ChromosomeDensity(
         chromosome=chromosome,
-        chromosome_length=0,
+        chromosome_length=max(chromosome_length, 1) if bins else 1,
         bin_size=bin_size,
         bins=[ChromosomeDensityBin(**b) for b in bins],
         total_variants=total,

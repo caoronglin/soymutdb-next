@@ -7,6 +7,7 @@
  * skip (require a backend); see the "enabling live results" note at the bottom.
  */
 import { test, expect, type Page } from "@playwright/test";
+import { gotoReady } from "./helpers";
 
 const BASE = "/soymutdb-next";
 
@@ -28,7 +29,7 @@ function geneIdInput(page: Page) {
 
 test.describe("Gene ID search", () => {
   test("renders the assembly + gene-id form with labels", async ({ page }) => {
-    await page.goto(`${BASE}/search/genes`);
+    await gotoReady(page, `${BASE}/search/genes`);
     await expect(page.getByText(/gene id search/i).first()).toBeVisible();
     await expect(geneIdInput(page)).toBeVisible();
     await expect(page.getByText(/genome version/i).first()).toBeVisible();
@@ -36,11 +37,16 @@ test.describe("Gene ID search", () => {
 
   test("submit opens a parameterized result view in a new tab", async ({ page }) => {
     await captureWindowOpen(page);
-    await page.goto(`${BASE}/search/genes`);
+    await gotoReady(page, `${BASE}/search/genes`);
 
     const input = geneIdInput(page);
     await input.fill("Glyma.01G000100");
-    await page.getByRole("button", { name: "Search", exact: true }).click();
+    // The submit control stays disabled until the genome-version context is
+    // resolved (a request without an assembly would be ambiguous across v4/v5),
+    // so wait for the enabled state instead of racing the assemblies request.
+    const submit = page.getByRole("button", { name: "Search", exact: true });
+    await expect(submit).toBeEnabled();
+    await submit.click();
 
     const opened = await page.evaluate(
       () => (window as unknown as { __opened: string | null }).__opened,
@@ -53,14 +59,14 @@ test.describe("Gene ID search", () => {
   });
 
   test("restores form state from a parameterized URL", async ({ page }) => {
-    await page.goto(`${BASE}/search/genes?q=Glyma.01G000100&run=1`);
+    await gotoReady(page, `${BASE}/search/genes?q=Glyma.01G000100&run=1`);
     await expect(geneIdInput(page)).toHaveValue(/Glyma.01G000100/);
   });
 });
 
 test.describe("Physical Location search", () => {
   test("renders assembly/chromosome/start/end form", async ({ page }) => {
-    await page.goto(`${BASE}/search/location`);
+    await gotoReady(page, `${BASE}/search/location`);
     await expect(page.getByText(/physical location search/i).first()).toBeVisible();
     await expect(page.getByLabel(/^start$/i)).toBeVisible();
     await expect(page.getByLabel(/^end$/i)).toBeVisible();
@@ -69,7 +75,7 @@ test.describe("Physical Location search", () => {
 
   test("start < 1 or end < start is rejected (no new tab)", async ({ page }) => {
     await captureWindowOpen(page);
-    await page.goto(`${BASE}/search/location?assembly=Wm82.a4.v1&chromosome=chr01&start=5&end=1&run=1`);
+    await gotoReady(page, `${BASE}/search/location?assembly=Wm82.a4.v1&chromosome=chr01&start=5&end=1&run=1`);
     // Invalid range never auto-submits; no window.open must have fired.
     const opened = await page.evaluate(
       () => (window as unknown as { __opened: string | null }).__opened,
@@ -79,7 +85,7 @@ test.describe("Physical Location search", () => {
 
   test("submit opens a parameterized location URL in a new tab", async ({ page }) => {
     await captureWindowOpen(page);
-    await page.goto(`${BASE}/search/location`);
+    await gotoReady(page, `${BASE}/search/location`);
 
     // The mock assembly auto-selects; pick a chromosome so the form validates.
     await page.getByRole("combobox").nth(1).click();

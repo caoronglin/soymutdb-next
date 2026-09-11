@@ -9,12 +9,12 @@ from pydantic import BaseModel, Field, field_validator
 
 from ..core.compat import StrEnum
 
-
-class ReleaseStatus(StrEnum):
-    DRAFT = "draft"
-    STAGING = "staging"
-    ACTIVE = "active"
-    ARCHIVED = "archived"
+# The release lifecycle status is owned by the database enum in
+# ``app.models.content`` (draft / validated / ready / published / rolled_back).
+# Re-export it here instead of declaring a second vocabulary: a divergent
+# schema enum rejects legitimate rows at response serialization time and turns
+# a readable release into an unhandled 500.
+from ..models.content import ReleaseStatus
 
 
 class ReleaseResponse(BaseModel):

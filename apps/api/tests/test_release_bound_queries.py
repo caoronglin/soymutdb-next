@@ -487,18 +487,18 @@ def test_gene_cursor_rejects_cross_release_replay():
     params = GeneListParams(chromosome="Gm01")
     cursor = gene_service.encode_cursor(
         "Glyma.01G000100",
+        501,
         release_context=context,
         params=params,
     )
 
-    assert (
-        gene_service.decode_cursor(
-            cursor,
-            release_context=context,
-            params=params,
-        )
-        == "Glyma.01G000100"
-    )
+    # The sort key is (accession, gene_pk): accessions repeat across
+    # assemblies, so the surrogate key is the stable tiebreaker.
+    assert gene_service.decode_cursor(
+        cursor,
+        release_context=context,
+        params=params,
+    ) == ("Glyma.01G000100", 501)
     with pytest.raises(ValidationError, match="context"):
         gene_service.decode_cursor(
             cursor,

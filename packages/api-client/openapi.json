@@ -2938,7 +2938,7 @@
           "stats"
         ],
         "summary": "Chromosome Density",
-        "description": "Variant density across a chromosome.",
+        "description": "Variant density across a chromosome.\n\nDensity is computed entirely from the ClickHouse projection, so an\nunavailable projection is reported as capability-unavailable (503). The\nresponse model also requires a concrete ``chromosome_length``: fabricating\n``0`` here would both violate the contract and present an empty chromosome\nas a real result.",
         "operationId": "chromosome_density_api_v1_stats_density_get",
         "parameters": [
           {
@@ -3993,7 +3993,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "$ref": "#/components/schemas/ReleaseStatus-Input"
+                  "$ref": "#/components/schemas/ReleaseStatus"
                 },
                 {
                   "type": "null"
@@ -23597,7 +23597,7 @@
             "default": 0
           },
           "status": {
-            "$ref": "#/components/schemas/ReleaseStatus-Output"
+            "$ref": "#/components/schemas/ReleaseStatus"
           },
           "published_at": {
             "anyOf": [
@@ -23633,7 +23633,7 @@
         ],
         "title": "ReleaseResponse"
       },
-      "ReleaseStatus-Input": {
+      "ReleaseStatus": {
         "type": "string",
         "enum": [
           "draft",
@@ -23644,16 +23644,6 @@
           "validated",
           "published",
           "rolled_back"
-        ],
-        "title": "ReleaseStatus"
-      },
-      "ReleaseStatus-Output": {
-        "type": "string",
-        "enum": [
-          "draft",
-          "staging",
-          "active",
-          "archived"
         ],
         "title": "ReleaseStatus"
       },

@@ -6,7 +6,9 @@ export interface ReleaseSummary {
   description?: string;
   assembly_id: string;
   assembly_name: string;
-  status: "active" | "deprecated" | "pending" | "archived";
+  // The release lifecycle vocabulary is owned by the backend database enum
+  // (app/models/content.py ReleaseStatus) and surfaced by ReleaseResponse.
+  status: "draft" | "validated" | "ready" | "published" | "rolled_back";
   release_date?: string;
   variant_count: number;
   gene_count: number;

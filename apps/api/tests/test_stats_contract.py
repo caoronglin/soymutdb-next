@@ -19,6 +19,7 @@ import pytest
 
 from app.api.v1 import stats as stats_module
 from app.api.v1.stats import (
+    chromosome_density,
     chromosome_density_summary,
     discovery_trend,
     homepage_stats,
@@ -312,3 +313,56 @@ class TestMutagenStatistics:
         db = FakeDB(results=[FakeResult(rows=[("EMS", 7), ("NaN", 2)])])
         result = await mutagen_statistics(db=db)
         assert [(item.mutagen, item.count) for item in result] == [("EMS", 7), ("NaN", 2)]
+
+
+@pytest.mark.asyncio
+class TestChromosomeDensityEndpoint:
+    """The density endpoint is ClickHouse-only, so its degraded path is 503.
+
+    It must never fabricate a ``chromosome_length`` of 0 (the response model
+    requires >= 1) — that violation previously surfaced as an unhandled 500
+    with no capability information.
+    """
+
+    async def test_bins_derive_a_positive_chromosome_length(self):
+        with patch.object(
+            stats_module.ch_service,
+            "get_chromosome_density",
+            new=AsyncMock(
+                return_value=[
+                    {"bin_start": 0, "bin_end": 999, "count": 3},
+                    {"bin_start": 1000, "bin_end": 1999, "count": 5},
+                ]
+            ),
+        ):
+            result = await chromosome_density(
+                assembly="GmWm82.a4.v1", chromosome="chr01", bin_size=1000
+            )
+        assert result.total_variants == 8
+        assert result.chromosome_length == 1999
+
+    async def test_empty_bins_still_satisfy_the_response_model(self):
+        with patch.object(
+            stats_module.ch_service,
+            "get_chromosome_density",
+            new=AsyncMock(return_value=[]),
+        ):
+            result = await chromosome_density(
+                assembly="GmWm82.a4.v1", chromosome="chr01", bin_size=1000
+            )
+        assert result.bins == []
+        assert result.total_variants == 0
+        assert result.chromosome_length >= 1
+
+    async def test_unavailable_capability_propagates_as_service_unavailable(self):
+        from app.core.exceptions import ServiceUnavailableError
+
+        with patch.object(
+            stats_module.ch_service,
+            "get_chromosome_density",
+            new=AsyncMock(side_effect=ServiceUnavailableError("unavailable")),
+        ):
+            with pytest.raises(ServiceUnavailableError):
+                await chromosome_density(
+                    assembly="GmWm82.a4.v1", chromosome="chr01", bin_size=1000
+                )

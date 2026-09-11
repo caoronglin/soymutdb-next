@@ -192,19 +192,47 @@ describe("SSG-to-SPA ownership contract", () => {
       remove: vi.fn(),
     } as unknown as HTMLElement;
     const root = { hidden: false } as HTMLElement;
+    const documentElement = { dataset: {} as Record<string, string> } as unknown as HTMLElement;
     const documentStub = {
+      documentElement,
       getElementById: vi.fn((id: string) =>
         id === "ssg-content" ? staticContent : null,
       ),
     } as unknown as Document;
 
     const completeHandoff = runtime.prepareSsgHandoff(root, documentStub);
+    // The handoff marks the start of the inert window: the route tree is the
+    // only component allowed to announce interactive readiness.
+    expect(documentElement.dataset.appReady).toBe("false");
     expect(root.hidden).toBe(true);
     expect(staticContent.remove).not.toHaveBeenCalled();
 
     completeHandoff();
     completeHandoff();
     expect(staticContent.remove).toHaveBeenCalledOnce();
+    expect(root.hidden).toBe(false);
+    expect(documentElement.dataset.appReady).toBe("false");
+  });
+
+  it("does not hide the root for a document without a build-time fallback", async () => {
+    const runtimeUrl = new URL("../ssg-runtime.ts", import.meta.url).href;
+    const runtime = (await import(/* @vite-ignore */ runtimeUrl)) as {
+      prepareSsgHandoff: (root: HTMLElement, document: Document) => () => void;
+    };
+    const root = { hidden: false } as HTMLElement;
+    const documentElement = { dataset: {} as Record<string, string> } as unknown as HTMLElement;
+    const documentStub = {
+      documentElement,
+      getElementById: vi.fn(() => null),
+    } as unknown as Document;
+
+    const completeHandoff = runtime.prepareSsgHandoff(root, documentStub);
+    expect(documentElement.dataset.appReady).toBe("false");
+    // No fallback markup: the React tree owns the document from the start, so
+    // the root must not be hidden.
+    expect(root.hidden).toBe(false);
+
+    completeHandoff();
     expect(root.hidden).toBe(false);
   });
 });

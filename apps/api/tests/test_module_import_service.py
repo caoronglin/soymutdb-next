@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 from sqlalchemy import select
 
+from app.models.content import Release
 from app.models.data_publishing import DataSet, ImportStatus
 from app.models.module_data import ModuleDataRow
 from app.models.outbox import OutboxEvent
@@ -16,6 +17,11 @@ async def test_ready_module_data_does_not_implicitly_request_static_publication(
     db_session,
 ) -> None:
     """A publication target is required and must be selected explicitly."""
+    # data_sets.release_id is an FK: the release must exist before an import
+    # can be attached to it.
+    db_session.add(Release(id=1, version="module-r1", name="Module release"))
+    await db_session.flush()
+
     dataset = await import_rows(
         db_session,
         module_key="genes",

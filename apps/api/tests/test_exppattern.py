@@ -34,6 +34,24 @@ def _make_exec_result(scalars_list=None):
     return r
 
 
+def _make_rows_result(rows=None):
+    """Result of ``.all()`` (used by the accession -> gene_pk resolution)."""
+    r = MagicMock()
+    r.all.return_value = rows or []
+    return r
+
+
+# Stable surrogate keys for the accessions used throughout this module. The
+# service resolves accessions to ``gene_pk`` before querying expression rows,
+# so a mocked expression row must carry the *resolved* key, not the accession.
+ACCESSION_TO_PK = {"G1": 101, "G2": 102, "G3": 103}
+
+
+def _make_accession_result(accessions):
+    """``select(Gene.accession, Gene.gene_pk).where(accession.in_(...))``."""
+    return _make_rows_result([(a, ACCESSION_TO_PK[a]) for a in accessions])
+
+
 def _make_lib(lib_id: int, name: str):
     lib = MagicMock()
     lib.id = lib_id
@@ -43,9 +61,14 @@ def _make_lib(lib_id: int, name: str):
     return lib
 
 
-def _make_expr(gene_id: str, library, fpkm: float | None):
+def _make_expr(gene_id: str | int, library, fpkm: float | None):
+    """An expression row. ``gene_id`` here is the resolved ``gene_pk``.
+
+    Accepts a bare accession for readability and resolves it to the surrogate
+    key the service expects.
+    """
     ed = MagicMock()
-    ed.gene_id = gene_id
+    ed.gene_id = ACCESSION_TO_PK[gene_id] if isinstance(gene_id, str) else gene_id
     ed.library_id = library.id
     ed.fpkm = fpkm
     ed.library = library
@@ -94,10 +117,19 @@ async def client(mock_session):
     app.dependency_overrides.clear()
 
 
-def _setup_data(mock_session, libraries, expr_rows):
-    """Configure the two expected executes: libraries, then expression rows."""
+def _setup_data(mock_session, libraries, expr_rows, accessions=None):
+    """Configure the three expected executes of the service.
+
+    Order: expression libraries -> accession/gene_pk resolution -> expression
+    rows. ``accessions`` defaults to every accession referenced by
+    ``expr_rows`` (plus any passed explicitly).
+    """
+    if accessions is None:
+        resolved_pks = {row.gene_id for row in expr_rows}
+        accessions = [a for a, pk in ACCESSION_TO_PK.items() if pk in resolved_pks]
     mock_session.execute.side_effect = [
         _make_exec_result(scalars_list=libraries),
+        _make_accession_result(accessions),
         _make_exec_result(scalars_list=expr_rows),
     ]
 
@@ -210,6 +242,49 @@ class TestMatrixStructure:
         data = response.json()
         assert data["genes"] == ["G1", "G2"]
         assert len(data["matrix"]) == 2
+
+
+# ---------------------------------------------------------------------------
+# Assembly-scoped accession resolution
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+class TestAssemblyScopedResolution:
+    async def test_ambiguous_accession_across_assemblies_is_rejected(
+        self, client, mock_session, libraries
+    ):
+        """The same accession in two assemblies must not silently mix v4/v5."""
+        r = MagicMock()
+        r.all.return_value = [("G1", 101), ("G1", 201)]
+        mock_session.execute.side_effect = [
+            _make_exec_result(scalars_list=libraries),
+            r,
+        ]
+        response = await client.post(
+            "/api/v1/tools/exppattern", json={"genes": ["G1"]}
+        )
+        assert response.status_code == 422
+        body = response.json()
+        assert body["error"]["code"] == "validation_error"
+        assert body["error"].get("details", {}).get("code") == "ambiguous_assembly"
+        assert body["error"]["details"]["accessions"] == ["G1"]
+
+    async def test_unknown_accession_yields_null_row_without_data_query(
+        self, client, mock_session, libraries
+    ):
+        """An accession with no gene row is 'missing', not an error."""
+        _setup_data(mock_session, libraries, [], accessions=[])
+        response = await client.post(
+            "/api/v1/tools/exppattern", json={"genes": ["NOPE"], "scale": "none"}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["missing_genes"] == ["NOPE"]
+        assert data["matrix"] == [[None, None]]
+        # libraries + accession resolution; the expression query still runs but
+        # matches nothing because no surrogate key was resolved.
+        assert mock_session.execute.await_count == 3
 
 
 # ---------------------------------------------------------------------------

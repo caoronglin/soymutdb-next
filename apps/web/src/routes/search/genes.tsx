@@ -146,6 +146,10 @@ function GeneIdSearchComponent() {
   const data = resultsQuery.data?.items ?? [];
   const total = resultsQuery.data?.total ?? 0;
 
+  // A genome-version context is mandatory: without it the request would be
+  // ambiguous across the v4/v5 coordinate namespaces. The control therefore
+  // reports "not yet selectable" instead of silently discarding the submit.
+  const assemblyContextReady = formAssemblyId !== undefined;
   const submitInNewTab = () => {
     const q = geneIdsRaw.trim();
     if (!q || !formAssemblyId) return;
@@ -301,6 +305,14 @@ function GeneIdSearchComponent() {
                 htmlType="submit"
                 icon={<SearchOutlined aria-hidden />}
                 loading={resultsQuery.isFetching}
+                disabled={!assemblyContextReady}
+                title={
+                  assemblyContextReady
+                    ? undefined
+                    : t("search.genes.assembliesUnavailable", {
+                        defaultValue: "Assembly list unavailable",
+                      })
+                }
               >
                 {get("ui.searchButton", t("search.genes.submit"))}
               </Button>
