@@ -121,11 +121,28 @@ checkout 也不带 `node_modules`。修复：
 * `test_every_cnb_stage_script_target_exists_on_disk`：stage 不得引用不存在的脚本
 * `test_cnb_env_helpers_referenced_by_cnb_yml_exist`：`.cnb/env/*` 引用必须存在
 * `test_ci_job_steps_only_advertises_commands_it_implements`：文档命令必须已实现
-* `test_cnb_toolchain_pins_are_actually_in_sync`：直接跑工具链守门
+* `test_cnb_toolchain_pins_are_actually_in_sync`：直接跑工具链守门，并拒绝
+  `.cnb/env/*` 里未固定的 `FROM`
 * `test_no_stage_depends_on_another_stages_container_state`：容器生命周期
   （CNB stage 之间不共享容器文件系统）
 
-`scripts/test_ci_job_contracts.py` 现为 26 passed。
+`scripts/test_ci_job_contracts.py` 现为 27 passed。
+
+## 4.3 `.cnb/env/` 引用文件的补齐
+
+`.cnb.yml` 用路径引用 `.cnb/env/Dockerfile.build-tools` 与 `.cnb/env/release.yml`，
+但两者此前不存在于任何 commit——镜像构建/扫描/SBOM/签名/发布全部指向解析不到的文件，
+契约测试 `test_cnb_env_helpers_referenced_by_cnb_yml_exist` 只检查"引用存在"，
+不检查"文件在不在仓库"。
+
+| 文件 | 内容 | 边界 |
+| --- | --- | --- |
+| `Dockerfile.build-tools` | `FROM docker:<pin>-cli` + bash/coreutils/curl/jq/python3/gnupg/tar/gzip | 不含密钥；**不能**用 alpine（Alpine 无 `docker` 包，第一条 docker 命令就会失败） |
+| `release.yml` | OIDC issuer + 透明日志开关 | keyless 签名无长期私钥，提交值是"身份"而非凭据 |
+
+同时把"基础镜像必须固定版本"并入 `scripts/check-toolchain-pins.py`：`.cnb/env/*`
+里的 `FROM` 一旦浮动（或写 `:latest`），扫描并签名发布的环境就可能在没人 review 的
+情况下变化。
 
 ## 5. 验证证据
 

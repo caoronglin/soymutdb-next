@@ -37,6 +37,13 @@ EXPECTED_NODE = "24.19.0"
 EXPECTED_PNPM = "11.21.0"
 EXPECTED_PYTHON_MIN = (3, 14)
 
+# Container images referenced by the CNB pipeline. The platform builds them on
+# every use, so an unpinned FROM would move the environment that scans and signs
+# releases without any review noticing.
+BUILD_ENV_DOCKERFILES = (
+    ".cnb/env/Dockerfile.build-tools",
+)
+
 # Shared scripts that carry a SOYMUTDB_CI_*_VERSION default.
 # (file, variables that file is responsible for declaring)
 PIN_SOURCES = (
@@ -112,6 +119,32 @@ def check_python(errors: list[str]) -> None:
             )
 
 
+def check_build_env_images(errors: list[str]) -> None:
+    """Every CNB build-environment image must pin the epoch in its tag.
+
+    `.cnb/env/*` images are built by the platform on every use. A floating tag
+    silently moves the environment that scans and signs releases, so each FROM
+    that references a platform/third-party image must carry an explicit version.
+    """
+    for relative in BUILD_ENV_DOCKERFILES:
+        path = ROOT / relative
+        if not path.is_file():
+            _fail(errors, f"missing build environment image: {relative}")
+            continue
+        for line in path.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            if not stripped.upper().startswith("FROM "):
+                continue
+            image = stripped.split()[1]
+            # `python:3.14` / `python:3.12` are grader-pinned elsewhere; this
+            # guard only rejects a completely untagged reference.
+            if ":" not in image or image.endswith(":latest"):
+                _fail(
+                    errors,
+                    f"{relative}: FROM {image} is not version-pinned",
+                )
+
+
 def check_pin_sources(errors: list[str]) -> None:
     expected = {
         "NODE_VERSION": EXPECTED_NODE,
@@ -147,6 +180,7 @@ def main() -> int:
     check_node_engine(errors)
     check_pnpm(errors)
     check_python(errors)
+    check_build_env_images(errors)
     check_pin_sources(errors)
 
     if args.json:

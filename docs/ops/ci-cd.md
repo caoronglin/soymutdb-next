@@ -85,6 +85,25 @@ CNB 的每个 stage 跑在**自己的新容器**里。`corepack enable` 只是�
   检查每个 `pnpm` job 是否真的到达引导脚本，并禁止再出现 "Setup workspace" 这类
   stage 名，同时要求 pnpm job 必须挂 store volume。
 
+### `.cnb/env/` 的两个引用文件
+
+`.cnb.yml` 通过路径引用它们，因此它们必须真的在仓库里（
+`test_cnb_env_helpers_referenced_by_cnb_yml_exist` 会检查）：
+
+| 文件 | 用途 | 内容边界 |
+| --- | --- | --- |
+| `.cnb/env/Dockerfile.build-tools` | 镜像构建/扫描/SBOM/签名 stage 的构建环境 | 基础镜像为 `docker:<pin>-cli` + bash/curl/jq/python3；**不含任何密钥** |
+| `.cnb/env/release.yml` | 手动发布按钮的签发身份 | 只有 OIDC issuer 与透明日志开关，keyless 签名没有长期私钥 |
+
+两点容易误判：
+
+* 基础镜像**不能**用 `alpine`：Alpine 没有 `docker` 包，而 release / image-build
+  stage 全部要调 docker CLI，`FROM alpine` 会在第一条命令就 `docker: command not found`。
+  用的是 `docker:<pin>-cli`。
+* 基础镜像 tag 必须固定。`scripts/check-toolchain-pins.py` 现在会拒绝
+  `.cnb/env/*` 里未固定版本或 `:latest` 的 `FROM`——否则"扫描并签名发布的那个环境"
+  可以在没有 review 的情况下变化。
+
 ## 3. 流水线拓扑
 
 | 触发 | 流水线 | 作用 |
