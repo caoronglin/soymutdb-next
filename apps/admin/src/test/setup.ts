@@ -33,6 +33,25 @@ if (!window.matchMedia) {
   });
 }
 
+// Initialise the REAL i18next before any component renders.
+//
+// Components legitimately call
+//
+//     t("admin.ops.validationErrors", {
+//       errors: String(count),
+//       defaultValue: "{{errors}} validation errors",
+//     })
+//
+// and assert the interpolated output. Without an initialised instance, i18next
+// returns `defaultValue` verbatim, so the DOM contained the literal
+// `{{errors}} validation errors` and the assertion failed — a real CNB failure
+// that reads like a product bug but is a missing test bootstrap. Initialising
+// here means tests exercise the same translation pipeline as the app, and the
+// key map stays in one place (packages/i18n) instead of drifting per test file.
+import { initI18n } from "@soymutdb/i18n";
+
+initI18n("en");
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();

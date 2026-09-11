@@ -22,5 +22,9 @@ export default defineConfig({
     pool: "forks",
     maxWorkers: 1,
     css: false,
+    // Initialise i18next and clean up the DOM between tests. Without this a
+    // component that interpolates (`t(key, { defaultValue: "{{n}} rows" })`)
+    // renders the literal template and its assertion fails for the wrong reason.
+    setupFiles: ["./src/test/setup.ts"],
   },
 });
