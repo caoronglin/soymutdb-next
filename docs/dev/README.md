@@ -29,6 +29,7 @@ Admin 页面、API 绑定、数据库关系、Page Builder 模板和性能配置
 | [`desktop-client-plan.md`](desktop-client-plan.md) | Tauri 桌面客户端（v3.0） | 免安装分发、跨站认证、本地工具箱、本地/远程调度边界 |
 | [`platform-optimization-plan.md`](platform-optimization-plan.md) | 架构收口 · 查询性能 · 前端 · 管理后台（v4.0） | 横切管线化、`pg_trgm` 索引、游标分页、前端状态边界、Admin 巨型页拆分 |
 | [`content-template-plan.md`](content-template-plan.md) | 内容管理 · 模板生成 · SSG 管线（v5.0） | 三套内容源收敛、StaticPage 进 SSG、模板数据化、组件契约单一真相、编辑器拖拽 |
+| [`rust-rewrite-and-architecture-evaluation.md`](rust-rewrite-and-architecture-evaluation.md) | 架构优化 · Rust 重写评估（v7.0，2026-09-11） | 搜索执行计划收口、导入写入器闭环、CI 关键路径压缩；Rust 逐项否决与 Go/No-Go 门槛 |
 
 > **勘误（2026-08-29）**：此前本表及 v4.0、v5.0 曾把 v1.0 描述为"正确性审计"，并往其名下归因了"导入只计数不落库""nginx 正则误路由 admin/jbrowse"等条目。经回溯核实**这些说法不成立**——v1.0 实为工程化改造清单；`import_studio_service.py` 不落库是设计使然；nginx 的 `/admin/`、`/samples/` 路由已正确使用 `location ^~`，是范例而非 bug。详见 [总纲 §1 勘误表](optimization-master-plan.md)。
 
