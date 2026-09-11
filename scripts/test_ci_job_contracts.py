@@ -38,6 +38,7 @@ SHARED_SCRIPTS = (
     "scripts/stage-pages-publication.sh",
     "scripts/verify-frontend-artifacts.sh",
     "scripts/verify-backend-tests.sh",
+    "scripts/with-postgres-service.sh",
     "scripts/build-static-apps.sh",
     "scripts/build-release-image.sh",
     "scripts/release-contract.golden.sh",
@@ -1714,7 +1715,13 @@ class DeliveryArchitectureTests(unittest.TestCase):
         # privacy/identity/assembly matrix must fail closed, not skip green.
         self.assertEqual(pipeline["env"]["SOYMUTDB_RUN_POSTGRES_INTEGRATION"], "1")
         backend_stage = pipeline["stages"][1]
-        self.assertIn("postgres:16", backend_stage["services"])
+        # NOT `postgres`: that service name is accepted by CNB and starts
+        # nothing (no DNS entry, nothing on 5432, no docker socket), which sent
+        # the whole suite to Testcontainers and produced 116 docker stack
+        # traces. `docker` is a real service; the gate uses its dind daemon to
+        # run its own disposable PostgreSQL. See the test below.
+        self.assertIn("docker", backend_stage["services"])
+        self.assertNotIn("postgres:16", backend_stage["services"])
         self.assertIn(
             "pnpm-store",
             " ".join(str(v) for v in pipeline["docker"]["volumes"]),
@@ -1730,6 +1737,103 @@ class DeliveryArchitectureTests(unittest.TestCase):
         text = _flatten(pipeline)
         for forbidden in ("docker login", "docker push", "cosign"):
             self.assertNotIn(forbidden, text, forbidden)
+
+    def test_postgres_backed_stages_declare_a_real_service_and_resolve_a_database(self) -> None:
+        """The PostgreSQL gate must depend on a service CNB actually starts.
+
+        Regression for the first real CNB build of the api-tests stage
+        (cnb-ubo-1k2852ukb). The stage declared:
+
+            services:
+              - postgres:16
+
+        CNB accepted the declaration and started NOTHING. Measured in a probe
+        build on the same runner (cnb-j0g-1k285hm3b):
+
+            CLOSED postgres 5432 [Errno -2] Name or service not known
+            CLOSED 127.0.0.1 5432 [Errno 111] Connection refused
+            /var/run/docker.sock missing
+
+        `services` only implements `docker` and `vscode`, so any other name is
+        a silent no-op. The suite therefore fell through to Testcontainers and
+        every database-backed test errored with a docker stack trace:
+
+            docker.errors.DockerException: Error while fetching server API
+            version: ('Connection aborted.', FileNotFoundError(2, ...))
+
+        ...116 ERRORS that read as 116 product failures. The fix is a service
+        the platform does start (`docker`) plus a resolver that fails closed.
+        """
+        forbidden = {"postgres", "postgresql", "mysql", "mariadb", "redis", "mongo"}
+
+        database_stages: list[tuple[str, dict]] = []
+        for config in _cnb_config_files():
+            document = yaml.safe_load(config.read_text(encoding="utf-8"))
+            for pipeline in _iter_pipelines(document):
+                for stage in pipeline.get("stages", []) or []:
+                    if not isinstance(stage, dict):
+                        continue
+                    body = _flatten(stage)
+                    if "api-tests" not in body and "--profile backend" not in body:
+                        continue
+                    database_stages.append((config.name, stage))
+
+                    self.assertNotIn(
+                        forbidden,
+                        set(stage.get("services") or []),
+                        f"{config.name}/{stage.get('name')}: "
+                        "`services:` only implements docker and vscode; a "
+                        "database name here is accepted and starts nothing",
+                    )
+                    self.assertIn(
+                        "docker",
+                        stage.get("services") or [],
+                        f"{config.name}/{stage.get('name')}: the PostgreSQL gate "
+                        "needs `services: [docker]` so it can start a database "
+                        "through the dind daemon",
+                    )
+
+        self.assertTrue(
+            database_stages,
+            "no pipeline stage runs the PostgreSQL-backed gate; the privacy, "
+            "identity and assembly matrix would never execute",
+        )
+
+        # The resolver itself must stay fail-closed and driver-accurate.
+        resolver = (ROOT / "scripts/with-postgres-service.sh").read_text(encoding="utf-8")
+        self.assertIn("set -euo pipefail", resolver)
+        # An explicit caller-provided database is honoured, so local runs and
+        # the GitHub runner (where Testcontainers works) are unaffected.
+        self.assertIn("SOYMUTDB_TEST_DATABASE_URL", resolver)
+        marker = 'if [[ -n "${SOYMUTDB_TEST_DATABASE_URL:-}" ]]'
+        self.assertIn(
+            marker,
+            resolver,
+            "an explicitly provided database must short-circuit the bootstrap",
+        )
+        # Readiness must be proven with the suite's own driver: the vendor
+        # image serves `pg_isready` from a temporary socket during initdb, so a
+        # TCP-level check alone reports a healthy server as unusable.
+        self.assertIn("asyncpg.connect", resolver)
+        self.assertIn("pg_isready", resolver)
+        # It must never fall back to "skip because there is no database".
+        for skip in ("pytest.skip", "SKIPPED", "exit 0 #"):
+            self.assertNotIn(skip, resolver, skip)
+
+        # The gate consumes the resolver's output without `source`, because a
+        # CNB stage body runs under `sh` where `source` does not exist.
+        backend = (ROOT / "scripts/verify-backend-tests.sh").read_text(encoding="utf-8")
+        for marker in (
+            "with-postgres-service.sh",
+            "--print-exports",
+            "export SOYMUTDB_RUN_POSTGRES_INTEGRATION=1",
+        ):
+            self.assertIn(marker, backend, marker)
+        self.assertNotIn("source \"${PG_ENV_FILE}\"", backend)
+
+        # `--ensure` must write a POSIX `KEY=VALUE` file, not shell `export`
+        # lines, for the same reason.
+        self.assertNotIn("printf 'export SOYMUTDB_TEST_DATABASE_URL", resolver)
 
     def test_acceptance_entry_point_never_reports_a_missing_prerequisite_as_a_pass(self) -> None:
         """The acceptance/smoke difference is deliberate and must stay visible.

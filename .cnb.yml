@@ -105,8 +105,13 @@ main:
           script: bash scripts/ci-job-steps.sh run frontend
         - name: API + Worker verification
           image: python:3.14
+          # NOT `postgres:16`: that service is accepted but starts NOTHING on
+          # CNB (no DNS entry, nothing on 5432, no docker socket), which sent
+          # the suite to Testcontainers and produced 116 docker stack traces.
+          # `docker` is a real service; the gate starts its own disposable
+          # PostgreSQL through the dind daemon (scripts/with-postgres-service.sh).
           services:
-            - postgres:16
+            - docker
           script: bash scripts/ci-job-steps.sh run api-tests
         - name: Dependency governance
           image: node:24.19.0
@@ -154,8 +159,13 @@ main:
           script: bash scripts/ci-job-steps.sh run frontend
         - name: API + Worker verification
           image: python:3.14
+          # NOT `postgres:16`: that service is accepted but starts NOTHING on
+          # CNB (no DNS entry, nothing on 5432, no docker socket), which sent
+          # the suite to Testcontainers and produced 116 docker stack traces.
+          # `docker` is a real service; the gate starts its own disposable
+          # PostgreSQL through the dind daemon (scripts/with-postgres-service.sh).
           services:
-            - postgres:16
+            - docker
           script: bash scripts/ci-job-steps.sh run api-tests
         - name: Dependency governance
           image: node:24.19.0
@@ -511,8 +521,13 @@ $:
           script: bash scripts/ci-job-steps.sh run frontend
         - name: API + Worker verification
           image: python:3.14
+          # NOT `postgres:16`: that service is accepted but starts NOTHING on
+          # CNB (no DNS entry, nothing on 5432, no docker socket), which sent
+          # the suite to Testcontainers and produced 116 docker stack traces.
+          # `docker` is a real service; the gate starts its own disposable
+          # PostgreSQL through the dind daemon (scripts/with-postgres-service.sh).
           services:
-            - postgres:16
+            - docker
           script: bash scripts/ci-job-steps.sh run api-tests
 
   # ---------------------------------------------------------------------------
@@ -579,8 +594,9 @@ $:
           script: bash scripts/acceptance.sh --profile contracts
         - name: API + Worker acceptance
           image: python:3.14
+          # See the verify pipeline: `postgres:16` is a no-op service on CNB.
           services:
-            - postgres:16
+            - docker
           script: bash scripts/acceptance.sh --profile backend
         - name: Static artifact acceptance
           image: node:24.19.0

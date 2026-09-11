@@ -26,6 +26,7 @@ scripts/setup-workspace.sh       单容器引导（corepack + pnpm install），
 scripts/ci-job-steps.sh          任务体：list / run <job>
 scripts/verify-frontend-artifacts.sh
 scripts/verify-backend-tests.sh
+scripts/with-postgres-service.sh 一次性 PostgreSQL（dind 起容器 + 驱动级就绪探针）
 scripts/build-static-apps.sh
 scripts/build-release-image.sh   构建 → 冒烟 → 扫描 → SBOM → 导出
 scripts/release-contract.golden.sh 合并 → 签名 → attestation → 发布
@@ -92,6 +93,78 @@ CNB 的每个 stage 跑在**自己的新容器**里。`corepack enable` 只是�
 * 契约测试 `test_no_stage_depends_on_another_stages_container_state` 沿调用链
   检查每个 `pnpm` job 是否真的到达引导脚本，并禁止再出现 "Setup workspace" 这类
   stage 名，同时要求 pnpm job 必须挂 store volume。
+
+### `services:` 只实现了 docker 和 vscode——写数据库名等于没写
+
+`api-tests` stage 曾经这样声明数据库：
+
+```yaml
+- name: API + Worker verification
+  image: python:3.14
+  services:
+    - postgres:16        # ← 被接受，但什么都不启动
+  script: bash scripts/ci-job-steps.sh run api-tests
+```
+
+CNB 接受了这个声明，**然后什么都没起**。在真实构建机上探测
+（探针构建 `cnb-j0g-1k285hm3b`，`services: [postgres:16]`）：
+
+```
+CLOSED postgres 5432 [Errno -2] Name or service not known
+CLOSED 127.0.0.1 5432 [Errno 111] Connection refused
+/var/run/docker.sock missing
+getent hosts postgres → （空）
+```
+
+`services` 目前**只实现 `docker`（dind）和 `vscode`**，其他名字既不会报错也不会生效。
+于是 `apps/api/tests/conftest.py` 的 testcontainers 回退路径接管，而容器里没有
+docker socket，116 个用例全部报同一个错：
+
+```
+docker.errors.DockerException: Error while fetching server API version:
+('Connection aborted.', FileNotFoundError(2, 'No such file or directory'))
+```
+
+116 个 ERROR 看起来像 116 个产品缺陷，实际是**一个缺失的前置条件**。
+
+正确做法是声明平台真正实现的服务 `docker`，由门禁自己起数据库：
+
+```yaml
+- name: API + Worker verification
+  image: python:3.14
+  services:
+    - docker           # 真实 dind daemon + docker CLI
+  script: bash scripts/ci-job-steps.sh run api-tests
+```
+
+`scripts/with-postgres-service.sh` 负责这件事：
+
+1. 已经有 `SOYMUTDB_TEST_DATABASE_URL`（开发者本机 / GitHub runner）→ **原样沿用**，
+   完全不动 testcontainers 路径；
+2. 否则通过 dind daemon 起 `postgres:16-alpine`，**显式**
+   `-p 127.0.0.1:5432:5432`（不要用 `--network host`：它会被接受，但 daemon
+   的网络命名空间与 stage 容器不是同一个）；
+3. 用 **asyncpg** 真的跑一次 `select 1` 才算就绪。只调 `pg_isready` 不够——
+   官方镜像 initdb 期间会先在一个**临时 socket** 上提供服务，`pg_isready`
+   照样返回 0，于是脚本会在数据库其实已经可用时宣布它不可用（这正是第一次
+   修复时踩到的坑，日志里还顺手 dump 了一份完全健康的 initdb 日志）；
+4. 失败即**非零退出**，绝不降级成 skip：隐私/身份/组装矩阵是合并门禁，
+   `pytest.skip` 在这里等同于把门禁关掉。
+
+消费方式是 `--print-exports`（POSIX 的 `KEY=VALUE`）而不是 `source`：
+
+```bash
+PG_ENV="$(bash scripts/with-postgres-service.sh --print-exports)"
+while IFS='=' read -r key value; do export "${key}=${value}"; done <<< "${PG_ENV}"
+```
+
+原因和上面 `set -o pipefail` 是同一个：CNB stage 用 `sh`（dash）执行，
+`source` 在 dash 里不存在（实测报 `sh: 4: source: not found`，退出码 127）。
+
+契约测试 `test_postgres_backed_stages_declare_a_real_service_and_resolve_a_database`
+锁定四件事：跑数据库门禁的 stage 必须声明 `services: [docker]`、不得出现
+`postgres`/`mysql`/`redis` 之类的伪服务名、resolver 必须保留"外部 URL 优先"和
+驱动级就绪探针、门禁脚本不得再出现 `source`。
 
 ### `.cnb/env/Dockerfile.*` 只能出现在 `docker.build`，不能是 `image:`
 

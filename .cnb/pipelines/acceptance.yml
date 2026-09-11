@@ -55,7 +55,7 @@ stages:
   - name: API + Worker acceptance
     image: python:3.14
     services:
-      - postgres:16
+      - docker
     script: bash scripts/acceptance.sh --profile backend
 
   - name: Static artifact acceptance
