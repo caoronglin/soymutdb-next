@@ -192,6 +192,23 @@ while IFS='=' read -r key value; do export "${key}=${value}"; done <<< "${PG_ENV
 键**（它是 pipeline 级，写在 stage 里会被静默丢弃）、resolver 必须保留"外部 URL
 优先"和驱动级就绪探针、门禁脚本不得再出现 `source`。
 
+### 治理 stage 必须自己装 PyYAML
+
+`pnpm deps:graphs|deps:audit` 会调用 `scripts/dependency_governance.py`，而它
+`import yaml`。GitHub mirror 显式 `python -m pip install --quiet PyYAML==6.0.3`，
+但 CNB 的治理 stage 跑在 `node:24.19.0` 里——基础镜像里那个 `python3` 是裸解释器，
+没有任何 site-packages：
+
+```
+$ python3 scripts/dependency_governance.py graphs --output artifacts/dependency-graphs
+ModuleNotFoundError: No module named 'yaml'
+```
+
+修法是在 `scripts/ci-job-steps.sh` 里加 `ensure_governance_python`：先探测
+`import yaml`，已满足就静默返回（热容器零成本、开发者本机不被干扰），否则安装
+**固定版本**的 PyYAML。版本钉在共享脚本里，两个 provider 才不会各自解析出不同的
+依赖分析器。
+
 ### worker 测试的 `from tests.<module> import` 需要一个包标记
 
 数据库真的能连上之后，worker 套件立刻在**收集阶段**就挂了——一个用例都没跑：

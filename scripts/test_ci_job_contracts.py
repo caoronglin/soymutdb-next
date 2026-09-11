@@ -939,6 +939,18 @@ class DeliveryArchitectureTests(unittest.TestCase):
                 "it would fail with `pnpm: command not found` in its own container",
             )
 
+        # The governance job body must bootstrap the Python module its own
+        # `pnpm deps:*` scripts import. The GitHub mirror installs PyYAML by
+        # hand; the CNB stage runs in `node:24.19.0`, which has no PyYAML, and
+        # died with `ModuleNotFoundError: No module named 'yaml'`.
+        self.assertIn("ensure_governance_python", bodies["dependency_governance_step"])
+        governance_python = bodies["ensure_governance_python"]
+        self.assertIn("import yaml", governance_python)
+        self.assertIn("PyYAML==", governance_python)
+        # It must be pinned, or the two providers can resolve different linters.
+        self.assertIn("GOVERNANCE_PYYAML_VERSION", steps)
+        self.assertRegex(steps, r"GOVERNANCE_PYYAML_VERSION:-\d+\.\d+\.\d+")
+
         # And the stage that runs them must mount the store, or the install
         # caches into a container layer that is thrown away.
         document = yaml.safe_load(CNB_CONFIG.read_text(encoding="utf-8"))

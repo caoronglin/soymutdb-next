@@ -83,6 +83,46 @@ export SOYMUTDB_CI_DEMO_JBROWSE_URL="${SOYMUTDB_CI_DEMO_JBROWSE_URL:-https://jbr
 
 log() { printf '[ci-job-steps] %s\n' "$*" >&2; }
 
+# `pnpm deps:graphs|deps:audit` shell out to scripts/dependency_governance.py,
+# which imports PyYAML. The GitHub mirror installs it explicitly
+# (`python -m pip install --quiet PyYAML==6.0.3`), but the CNB governance stage
+# runs in `node:24.19.0`, whose only Python is the bare interpreter from the
+# base image -- so the job died with:
+#
+#   $ python3 scripts/dependency_governance.py graphs --output ...
+#   ModuleNotFoundError: No module named 'yaml'
+#
+# Installing it here rather than in the pipeline keeps both providers on the
+# same bytes and the same pin, and keeps `scripts/` the single source of truth.
+GOVERNANCE_PYYAML_VERSION="${SOYMUTDB_CI_GOVERNANCE_PYYAML_VERSION:-6.0.3}"
+
+ensure_governance_python() {
+  local interpreter
+  interpreter="$(command -v python3 || true)"
+  [[ -n "${interpreter}" ]] || {
+    log "the governance stage image must provide python3 for the dependency graphs"
+    return 1
+  }
+
+  # Idempotent and quiet when already satisfied, so a warm container pays
+  # nothing and a developer machine is not disturbed.
+  if "${interpreter}" -c 'import yaml' >/dev/null 2>&1; then
+    return 0
+  fi
+
+  log "installing PyYAML==${GOVERNANCE_PYYAML_VERSION} for the dependency graphs"
+  local pip=("${interpreter}" -m pip)
+  "${pip[@]}" install --quiet --disable-pip-version-check \
+    "PyYAML==${GOVERNANCE_PYYAML_VERSION}" 2>/dev/null \
+    || "${pip[@]}" install --quiet --disable-pip-version-check \
+        --break-system-packages "PyYAML==${GOVERNANCE_PYYAML_VERSION}"
+
+  "${interpreter}" -c 'import yaml' >/dev/null 2>&1 || {
+    log "PyYAML is still not importable by ${interpreter}"
+    return 1
+  }
+}
+
 # -----------------------------------------------------------------------------
 # Job catalog
 # -----------------------------------------------------------------------------
@@ -238,6 +278,7 @@ dependency_governance_step() {
   # `pnpm deps:*` needs an installed workspace, and this is a different container
   # from the frontend job: bootstrap instead of assuming.
   ensure_workspace
+  ensure_governance_python
 
   local rc=0
   pnpm deps:graphs || rc=$?
