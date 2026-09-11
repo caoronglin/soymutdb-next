@@ -733,9 +733,17 @@ class DeliveryArchitectureTests(unittest.TestCase):
         self.assertIn("PyYAML==", workflow)
         pyyaml_pin = re.search(r"PyYAML==(\d+\.\d+\.\d+)", workflow)
         self.assertIsNotNone(pyyaml_pin, "the GitHub governance step must pin PyYAML")
-        self.assertIn(
-            f"${{SOYMUTDB_CI_PYYAML_VERSION:-{pyyaml_pin.group(1)}}}",
+        pyyaml_default = re.search(
+            r"GOVERNANCE_PYYAML_VERSION=.*?SOYMUTDB_CI_GOVERNANCE_PYYAML_VERSION:-"
+            r"(\d+\.\d+\.\d+)",
             steps,
+        )
+        self.assertIsNotNone(
+            pyyaml_default, "the shared PyYAML pin must have a numeric default"
+        )
+        self.assertEqual(
+            pyyaml_default.group(1),
+            pyyaml_pin.group(1),
             "the shared PyYAML pin must match the version the GitHub step installs",
         )
 
@@ -1078,6 +1086,22 @@ class DeliveryArchitectureTests(unittest.TestCase):
                 f"{name} needs pnpm but never reaches scripts/setup-workspace.sh; "
                 "it would fail with `pnpm: command not found` in its own container",
             )
+
+        # The governance job body must bootstrap its Python tooling. The GitHub
+        # mirror installs PyYAML and uv by hand; the CNB stage had no
+        # equivalent and died with `ModuleNotFoundError: No module named
+        # 'yaml'`. The full contract is pinned by
+        # test_dependency_governance_stage_can_reach_its_python_tooling; this
+        # keeps the minimal, provider-facing invariant next to the pnpm
+        # bootstrap rule it shares a failure mode with.
+        self.assertIn("ensure_governance_tooling", bodies["dependency_governance_step"])
+        governance_tooling = bodies["ensure_governance_tooling"]
+        self.assertIn("import yaml", governance_tooling)
+        self.assertIn("PyYAML==", governance_tooling)
+        # It must be pinned, or the two providers can resolve different linters.
+        self.assertIn("GOVERNANCE_PYYAML_VERSION", steps)
+        # Pinned through a SOYMUTDB_CI_* variable, not an inline literal.
+        self.assertIn("SOYMUTDB_CI_GOVERNANCE_PYYAML_VERSION", steps)
 
         # And the stage that runs them must mount the store, or the install
         # caches into a container layer that is thrown away.
@@ -2017,6 +2041,10 @@ class DeliveryArchitectureTests(unittest.TestCase):
             "with-postgres-service.sh",
             "--print-exports",
             "export SOYMUTDB_RUN_POSTGRES_INTEGRATION=1",
+            # The worker suite reuses a fixture by package path, and a broken
+            # import aborts collection for the whole run. This must stay a hard
+            # step *before* the worker install so it fails fast and cheaply.
+            "scripts/check_worker_test_package.py",
         ):
             self.assertIn(marker, backend, marker)
         self.assertNotIn("source \"${PG_ENV_FILE}\"", backend)

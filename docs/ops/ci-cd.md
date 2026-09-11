@@ -192,6 +192,77 @@ while IFS='=' read -r key value; do export "${key}=${value}"; done <<< "${PG_ENV
 键**（它是 pipeline 级，写在 stage 里会被静默丢弃）、resolver 必须保留"外部 URL
 优先"和驱动级就绪探针、门禁脚本不得再出现 `source`。
 
+### 治理 stage 必须自带 Python 工具链（PyYAML + uv）
+
+`pnpm deps:graphs|deps:audit` 会调用 `scripts/dependency_governance.py`，而它
+`import yaml`；它随后执行的每个分析器命令又都是 `uv`/`uvx` 调用（deptry、
+`uv export`、pip-audit）。GitHub mirror 用一行显式安装把两者都补上：
+
+```
+python -m pip install --quiet PyYAML==6.0.3 uv==0.11.33
+```
+
+CNB 的治理 stage 没有对应步骤，于是门禁在任何分析器跑起来之前就挂了：
+
+```
+$ python3 scripts/dependency_governance.py graphs --output artifacts/dependency-graphs
+ModuleNotFoundError: No module named 'yaml'
+```
+
+`PyYAML` 是**未声明**依赖——没有任何 pyproject 列它，所以它此前只是碰巧存在于
+mirror 上。修法两处，缺一不可：
+
+1. `scripts/ci-job-steps.sh` 新增 `ensure_governance_tooling`：先校验 `python3`
+   存在且命中 `PYTHON_VERSION` 钉住的 major.minor（不匹配就 fail closed，避免在
+   仓库从未声明的解释器上跑分析器），再探测 `import yaml` 与 `command -v uv`，
+   缺哪个装哪个。安装走 `governance_pip_install`，裸 `pip install` 被
+   externally-managed 拒绝时回退 `--break-system-packages`（容器是一次性的）。
+   版本钉在共享脚本里（`SOYMUTDB_CI_PYYAML_VERSION` / `SOYMUTDB_CI_UV_VERSION`），
+   两个 provider 才不会各自解析出不同的分析器版本。
+2. 三个阶段（`.cnb.yml` 的 PR/main 两条 verify、`.cnb/pipelines/verify.yml`）
+   去掉 `image: node:24.19.0`，改用 `.cnb/env/Dockerfile.frontend` 这个
+   Node + Python 双工具链镜像（仅 `docker.build` 能引用 Dockerfile）。
+   `.cnb/pipelines/dependency-governance.yml` 作为独立 pipeline 补上自己的
+   `docker.build` 与 pnpm store 卷。job body 能装 PyYAML/uv，但变不出解释器。
+
+`scripts/test_ci_job_contracts.py` 的
+`test_dependency_governance_stage_can_reach_its_python_tooling` 把以上每条都钉住，
+包括共享 pin 必须与 GitHub 步骤的写法一致。
+
+### worker 测试的 `from tests.<module> import` 需要一个包标记
+
+数据库真的能连上之后，worker 套件立刻在**收集阶段**就挂了——一个用例都没跑：
+
+```
+apps/worker/tests/test_gene_resolution.py:25: in <module>
+    from tests.test_module_tsv_postgres_integration import postgres_engine
+E   ModuleNotFoundError: No module named 'tests.test_module_tsv_postgres_integration'
+```
+
+`test_gene_resolution.py` 按**包路径**复用共享集成 fixture。这个 import 只有在
+`apps/worker/tests` 是可导入包、并以 `tests` 出现在 `sys.path` 上时才成立。
+pytest 默认的 `prepend` 导入模式把**测试目录本身**放进 `sys.path`，每个文件按顶层
+模块导入——单文件够用，跨模块 import 不够。
+
+**它为什么一直没被发现**：这个模块从来没有真正运行过。stage 连不上数据库，
+整个文件被 Testcontainers 的失败挡在后面。所以"只让数据库可达"会把
+116 个 error 换成 1 个 collection error——而 collection error 会**中断整轮**，
+于是 worker 套件里剩下的用例一个都不会执行。
+
+修法是补上 `apps/worker/tests/__init__.py`（与 `apps/api/tests/__init__.py` 对称），
+并加 `scripts/check_worker_test_package.py` 作为门禁。它检查四件事：
+
+1. `__init__.py` 存在；
+2. 它**被 git 跟踪**（只存在于工作区、不在 checkout 里的文件等于不存在——
+   本仓库已经因为一条未锚定的 `.gitignore` 丢过 `.cnb/env/`）；
+3. 每一处 `from tests.<module> import` 指向的模块真实存在且是 `test_*`；
+4. 按 pytest 真正使用的导入模式**实测可解析**——注意那不是仓库根目录，
+   第一次写这个检查时就是想当然地用了仓库根，结果检查自己先失败了。这条
+   打印实际解析路径，避免"检查通过但门禁跑起来仍然挂"。
+
+它在 worker 依赖安装**之前**执行：collection error 会吞掉整轮，这个检查又便宜，
+必须抢在昂贵的安装之前失败。
+
 ### `.cnb/env/Dockerfile.*` 只能出现在 `docker.build`，不能是 `image:`
 
 第一次真实构建在 `Frontend verification` stage **脚本执行前**就失败了：
