@@ -9,7 +9,7 @@ import { listDeletedAdminNews, purgeNews, restoreNews } from "@soymutdb/api-clie
 // The shared double keeps a stable `t` identity: an inline
 // `() => ({ t: ... })` returns a new function per render and makes any
 // component with `t` in an effect dependency loop forever. See test/mocks.ts.
-vi.mock("react-i18next", async () => (await import("../../../test/mocks")).mockTranslation);
+vi.mock("react-i18next", async () => (await import("../../test/mocks")).mockTranslation);
 vi.mock("@tanstack/react-router", () => ({ useRouter: () => ({ navigate: vi.fn() }) }));
 vi.mock("@soymutdb/api-client", () => ({ listDeletedAdminNews: vi.fn(), purgeNews: vi.fn(), restoreNews: vi.fn() }));
 

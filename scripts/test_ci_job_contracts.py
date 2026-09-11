@@ -989,6 +989,43 @@ class DeliveryArchitectureTests(unittest.TestCase):
             for leak in ("echo ${CNB_TOKEN", "echo $CNB_TOKEN", "set -x"):
                 self.assertNotIn(leak, text, f"{script}: {leak}")
 
+    def test_frontend_test_imports_resolve_to_real_files(self) -> None:
+        """Relative imports inside test files must point at files that exist.
+
+        The shared i18n double (apps/<app>/src/test/mocks.ts) is imported with a
+        hand-written relative path in every test file that needs it. Five of six
+        paths were wrong, and the failure mode is quiet: Vite reports one resolve
+        error per file, and the suite summary then reports *fewer* tests rather
+        than any failure, so a broken import can read as a healthy run.
+
+          Test Files  12 failed | 35 passed (47)
+          Tests       10 failed | 76 passed (86)     ← 40 of 116 never collected
+
+        Resolving each relative import against the importing file's directory
+        turns that into a build-time error the reviewer can see.
+        """
+        unresolved: list[str] = []
+        for test_file in sorted(
+            list(ROOT.glob("apps/*/src/**/*.test.ts")) + list(ROOT.glob("apps/*/src/**/*.test.tsx"))
+        ):
+            text = test_file.read_text(encoding="utf-8")
+            for match in re.finditer(r"""(?:import|require)\s*\(\s*["']([^"']+)["']\s*\)""", text):
+                specifier = match.group(1)
+                if not specifier.startswith("."):
+                    continue
+                base = test_file.parent / specifier
+                candidates = [
+                    base,
+                    *[base.with_suffix(suffix) for suffix in (".ts", ".tsx", ".js", ".jsx", ".json")],
+                    base / "index.ts",
+                    base / "index.tsx",
+                ]
+                if not any(candidate.is_file() for candidate in candidates):
+                    unresolved.append(
+                        f"{test_file.relative_to(ROOT)}: {specifier}"
+                    )
+        self.assertEqual([], unresolved, "test imports that do not resolve:")
+
     def test_release_contract_is_provider_agnostic(self) -> None:
         golden = (ROOT / "scripts/release-contract.golden.sh").read_text(encoding="utf-8")
         # Registry namespace, source identity and pipeline id come from the

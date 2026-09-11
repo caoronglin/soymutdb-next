@@ -48,7 +48,7 @@ vi.mock("@soymutdb/api-client", () => ({
 // `() => ({ t: (key) => key })` returns a new function per render, which
 // makes any component with `t` in an effect dependency loop forever.
 // See src/test/mocks.ts.
-vi.mock("react-i18next", async () => (await import("../../../test/mocks")).mockTranslation);
+vi.mock("react-i18next", async () => (await import("../../test/mocks")).mockTranslation);
 
 vi.mock("@/components/route-motion", () => ({
   FadeUp: ({ children }: { children?: React.ReactNode }) => <>{children}</>,

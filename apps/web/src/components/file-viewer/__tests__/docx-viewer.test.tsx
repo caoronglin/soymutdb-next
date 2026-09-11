@@ -14,7 +14,7 @@ vi.mock("mammoth/mammoth.browser", () => ({
 // `() => ({ t: (key) => key })` returns a new function per render, which
 // makes any component with `t` in an effect dependency loop forever.
 // See src/test/mocks.ts.
-vi.mock("react-i18next", async () => (await import("../../../../test/mocks")).mockTranslation);
+vi.mock("react-i18next", async () => (await import("../../../test/mocks")).mockTranslation);
 
 vi.mock("@/lib/antd", () => ({
   Skeleton: () => null,

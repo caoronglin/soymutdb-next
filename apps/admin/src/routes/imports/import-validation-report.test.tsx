@@ -17,7 +17,7 @@ vi.mock("../../components/import-preview-table", () => ({
 // `t` returns `defaultValue` verbatim, so the DOM contains the literal
 // `{{errors}} validation errors`. The shared double substitutes placeholders the
 // way i18next does, and keeps a stable `t` identity. See src/test/mocks.ts.
-vi.mock("react-i18next", async () => (await import("../../../test/mocks")).mockTranslation);
+vi.mock("react-i18next", async () => (await import("../../test/mocks")).mockTranslation);
 
 describe("ImportValidationReport", () => {
   it("keeps unavailable preview reasons visible", () => {

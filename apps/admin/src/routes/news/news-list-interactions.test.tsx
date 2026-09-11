@@ -20,7 +20,7 @@ import { listAdminNews } from "@soymutdb/api-client";
 // The shared double keeps a stable `t` identity: an inline
 // `() => ({ t: ... })` returns a new function per render and makes any
 // component with `t` in an effect dependency loop forever. See test/mocks.ts.
-vi.mock("react-i18next", async () => (await import("../../../test/mocks")).mockTranslation);
+vi.mock("react-i18next", async () => (await import("../../test/mocks")).mockTranslation);
 
 vi.mock("@tanstack/react-router", () => ({
   useRouter: () => ({ navigate: vi.fn() }),
