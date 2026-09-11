@@ -285,6 +285,9 @@ main() {
       #   env $(bash scripts/with-postgres-service.sh --print-exports) pytest ...
       # `--ensure` additionally writes the identical lines to $SOYMUTDB_PG_ENV_FILE
       # (still NOT shell `export` statements: `source` does not exist in dash).
+      # That file is a convenience copy for a bash caller that wants to source
+      # it; scripts/verify-backend-tests.sh -- the only gate -- consumes the
+      # printed lines, so neither form is silently ignored.
       # The container is left running; the caller owns its lifetime.
       if [[ "${command}" == "--ensure" ]]; then
         SOYMUTDB_PG_ENV_FILE="${SOYMUTDB_PG_ENV_FILE:-${TMPDIR:-/tmp}/soymutdb-pg-test.env}"

@@ -234,10 +234,30 @@ api_tests_run() {
 # -----------------------------------------------------------------------------
 # dependency-governance — graphs + fail-closed audits
 # -----------------------------------------------------------------------------
+# Knip loads `apps/web/vite.config.ts` to resolve the Vitest project graph, and
+# that config *validates its own deployment origins at import time*: an unset
+# VITE_API_BASE_URL throws
+#
+#   Error: API origin is required for production deployment
+#     at requireDeploymentOrigin (apps/web/src/lib/deployment.ts:87)
+#     at /workspace/apps/web/vite.config.ts:91
+#
+# before Knip analyses a single file. The gate then dies with a bare Node stack
+# trace and `knip: failed (analyzer_exit_nonzero)`, which reads as an unused-code
+# finding but is a missing environment variable. The values mirror
+# `frontend_build_demo` (and the GitHub mirror's dependency-governance job): the
+# demo fixture origins the offline verification build already uses.
+dependency_governance_env() {
+  export VITE_DEPLOYMENT_MODE="${SOYMUTDB_CI_DEMO_MODE}"
+  export VITE_API_BASE_URL="${SOYMUTDB_CI_DEMO_API_URL}"
+  export VITE_JBROWSE_BASE_URL="${SOYMUTDB_CI_DEMO_JBROWSE_URL}"
+}
+
 dependency_governance_step() {
   # `pnpm deps:*` needs an installed workspace, and this is a different container
   # from the frontend job: bootstrap instead of assuming.
   ensure_workspace
+  dependency_governance_env
 
   local rc=0
   pnpm deps:graphs || rc=$?

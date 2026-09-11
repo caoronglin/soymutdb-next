@@ -39,6 +39,7 @@ Run: python3 scripts/check_worker_test_package.py
 from __future__ import annotations
 
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -47,6 +48,15 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKER_TESTS = ROOT / "apps" / "worker" / "tests"
 PACKAGE_MARKER = WORKER_TESTS / "__init__.py"
 CROSS_IMPORT = re.compile(r"^\s*from\s+tests\.([\w.]+)\s+import", re.M)
+
+
+def git_available() -> bool:
+    """Whether a `git` executable can be resolved at all.
+
+    A missing prerequisite must never read as a pass, so the caller reports the
+    skipped tracked-state check instead of letting `subprocess.run` raise.
+    """
+    return shutil.which("git") is not None
 
 
 def fail(message: str) -> int:
@@ -61,16 +71,30 @@ def main() -> int:
             "import ...` cannot resolve and collection aborts"
         )
 
-    tracked = subprocess.run(
-        ["git", "ls-files", "--cached", "--error-unmatch", str(PACKAGE_MARKER)],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-    )
-    if tracked.returncode != 0:
-        return fail(
-            f"{PACKAGE_MARKER.relative_to(ROOT)} exists but is not tracked by git; "
-            "a CI checkout would not have it"
+    if git_available():
+        tracked = subprocess.run(
+            ["git", "ls-files", "--cached", "--error-unmatch", str(PACKAGE_MARKER)],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+        )
+        if tracked.returncode != 0:
+            return fail(
+                f"{PACKAGE_MARKER.relative_to(ROOT)} exists but is not tracked by git; "
+                "a CI checkout would not have it"
+            )
+    else:
+        # No git in this environment (a tarball checkout, or a minimal runner
+        # image). The tracked-state claim cannot be made here, but it must not
+        # be reported as a pass either: a swallowed FileNotFoundError would turn
+        # a missing prerequisite into a green gate, which is exactly the failure
+        # mode this check exists to prevent. Say so and keep checking what can
+        # still be checked.
+        print(
+            "worker test package check: git is unavailable, so the "
+            f"{PACKAGE_MARKER.relative_to(ROOT)} tracked-state check is SKIPPED "
+            "for this run",
+            file=sys.stderr,
         )
 
     imported: set[str] = set()

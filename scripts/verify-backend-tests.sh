@@ -39,11 +39,21 @@ step() { printf '\n==> %s\n' "$*"; }
 # of 116 per-test docker stack traces. The resolver is fail-closed: it exits
 # non-zero rather than letting the privacy/identity/assembly matrix skip green.
 step "Resolve the disposable PostgreSQL test backend"
-# A child process cannot export into this shell, so the resolver prints
-# `KEY=VALUE` lines that are re-exported here. This is deliberately not
-# `source`-based: a CNB stage script is run with `sh` (dash), where `source`
-# does not exist. Exits non-zero when no database is available, so a missing
-# prerequisite fails here instead of skipping the identity matrix.
+# The resolver runs in a child process, so it cannot export into this shell.
+# Two consumption paths exist and BOTH must work:
+#
+#   * `--print-exports` returns `KEY=VALUE` lines this shell re-exports.
+#     `source` is deliberately not used at the call site: a CNB stage script is
+#     executed with `sh` (dash), where `source` does not exist.
+#   * `--ensure` additionally writes the same lines to $SOYMUTDB_PG_ENV_FILE for
+#     callers that prefer a file. This script is the contract its own test
+#     suite pins ("The gate consumes the resolver's output"), so it owns
+#     keeping that file load-bearing: a remediation step that exports through
+#     `--ensure` and is then ignored here would report success while the suite
+#     still ran against Testcontainers.
+#
+# Exits non-zero when no database is available, so a missing prerequisite fails
+# here instead of skipping the identity matrix.
 PG_ENV="$("${REPO_ROOT}/scripts/with-postgres-service.sh" --print-exports)"
 while IFS='=' read -r key value; do
   [[ -n "${key}" ]] || continue
