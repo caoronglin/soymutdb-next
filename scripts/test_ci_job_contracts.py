@@ -887,6 +887,70 @@ class DeliveryArchitectureTests(unittest.TestCase):
             self.assertIn("export const stableT", text)
             self.assertIn("mockTranslation", text)
 
+    def test_shared_test_setup_restores_stubbed_globals(self) -> None:
+        """The shared teardown must undo `vi.stubGlobal`, not just `vi.spyOn`.
+
+        Real CNB failure, after the i18n double was fixed:
+
+            ReferenceError: window is not defined
+              at resolveUpdatePriority (react-dom/cjs/react-dom-client...:1308)
+              at requestUpdateLane
+              at dispatchSetState
+              at Timeout._onTimeout (@rc-component/util/lib/hooks/useDelayState.js:39)
+            This error originated in "src/components/file-upload.test.tsx"
+            Test Files 47 passed (47) | Tests 119 passed (119) | Errors 1 error
+
+        A completely green suite that still exits non-zero, blamed on a file
+        whose own assertions all passed. `vi.stubGlobal` records the replacement
+        it installs and only a walk back over that registry undoes it;
+        `vi.restoreAllMocks()` walks back `vi.spyOn` and deliberately leaves the
+        globals alone. `apps/admin/src/test/setup.ts` called only the latter, so
+        each stub outlived its own test -- including a
+        `stubGlobal("crypto", undefined)` that removed the property rather than
+        restoring it. react-dom then hit the hole from a later file.
+
+        The assertion is on the setup's observable contract, and the sibling
+        `apps/admin/src/test/setup.test.ts` proves the contract behaviourally:
+        that suite declares no `afterEach` of its own, so it fails when this call
+        disappears.
+        """
+        setup = (ROOT / "apps/admin/src/test/setup.ts").read_text(encoding="utf-8")
+        self.assertIn(
+            "vi.unstubAllGlobals()",
+            setup,
+            "apps/admin/src/test/setup.ts must undo vi.stubGlobal in afterEach",
+        )
+        # `restoreAllMocks` is not a substitute: vitest documents it as spying
+        # only, and the failure above is precisely the difference.
+        self.assertIn("vi.restoreAllMocks()", setup)
+
+        # The teardown must be ordered so the globals are sound before the tree
+        # is unmounted; a detached antd/rc tree rendering against a torn-down
+        # scope is the crash this guards.
+        teardown = setup[setup.index("afterEach((") :]
+        stubs_restored = teardown.index("vi.unstubAllGlobals()")
+        tree_unmounted = teardown.rindex("cleanup()")
+        self.assertLess(
+            stubs_restored,
+            tree_unmounted,
+            "the stubs must be restored before cleanup() unmounts the tree",
+        )
+
+        # And a behavioural specimen must exist for the next reviewer, not just
+        # this textual check.
+        behaviour = ROOT / "apps/admin/src/test/setup.test.ts"
+        self.assertTrue(
+            behaviour.is_file(),
+            "apps/admin/src/test/setup.test.ts must pin the teardown behaviourally",
+        )
+        behaviour_text = behaviour.read_text(encoding="utf-8")
+        self.assertNotIn(
+            "afterEach(",
+            behaviour_text,
+            "apps/admin/src/test/setup.test.ts must rely on the shared setup's "
+            "afterEach; redeclaring one would test a copy instead of the contract",
+        )
+
     def test_js_unit_tests_do_not_inherit_the_build_environment(self) -> None:
         """`turbo run test` must not see the demo build's VITE_* variables.
 
