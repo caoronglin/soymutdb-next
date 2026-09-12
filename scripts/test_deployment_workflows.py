@@ -413,7 +413,7 @@ def test_pages_deploys_an_explicit_public_demo() -> None:
     publisher = (ROOT / "scripts/build-pages-artifact.sh").read_text(encoding="utf-8")
     verifier = (ROOT / "scripts/verify-pages-artifact.sh").read_text(encoding="utf-8")
     ci = _cnb_pipeline("verify")
-    publish_pipeline = _cnb_pipeline("publish", branch="$")
+    publish_pipeline = _cnb_pipeline("publish")
 
     assert "VITE_DEPLOYMENT_MODE=demo" in publisher
     assert "VITE_BASE_URL" in publisher
@@ -454,7 +454,7 @@ def test_web_vite_entry_is_not_prefixed_by_deployment_base() -> None:
 
 
 def test_pages_accepts_publication_dispatch_inputs() -> None:
-    publish_pipeline = _cnb_pipeline("publish", branch="$")
+    publish_pipeline = _cnb_pipeline("publish")
     verifier = (ROOT / "scripts/verify-pages-artifact.sh").read_text(encoding="utf-8")
 
     for variable in ("PUBLICATION_ID", "ARTIFACT_URL", "MANIFEST_DIGEST"):
@@ -471,7 +471,7 @@ def test_pages_accepts_publication_dispatch_inputs() -> None:
 
 
 def test_pages_verifies_digest_before_ref_update() -> None:
-    pipeline = _cnb_pipeline("publish", branch="$")
+    pipeline = _cnb_pipeline("publish")
     verifier = (ROOT / "scripts/verify-pages-artifact.sh").read_text(encoding="utf-8")
 
     assert "MANIFEST_DIGEST" in verifier
@@ -492,7 +492,7 @@ def test_pages_publishes_the_exact_verified_static_tree_without_rebuilding() -> 
     verifier = (ROOT / "scripts/verify-pages-artifact.sh").read_text(encoding="utf-8")
     pages = (ROOT / "scripts/build-pages-artifact.sh").read_text(encoding="utf-8")
     pipeline = _cnb_pipeline("verify")
-    publisher = _cnb_pipeline("publish", branch="$")
+    publisher = _cnb_pipeline("publish")
 
     assert "pages-dist" in pages
     assert "SHA256SUMS" in pages

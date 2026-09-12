@@ -267,22 +267,40 @@ expression such as `Apache-2.0 AND MIT`. On the pinned interpreter
 license UNKNOWN not in allow-only licenses was found for package fastapi:0.137.1
 ```
 
-So each check declares `"normalize": "license-expressions"` and an
-`"allow_file"`, and `scripts/dependency_governance.py` re-applies the policy to
-the analyzer's JSON report:
+`--from=mixed` does **not** fix this, which build cnb-fng-1k29s324u proved by
+still reporting the same package as `UNKNOWN` with the flag in place. The
+analyzer's two readers both funnel into its `License` column, and in `mixed`
+mode the fallback chain is `classifiers or {license metadata}` where the
+`license` extraction reads only the legacy `License` field. A wheel that
+publishes `License-Expression: MIT` and nothing else therefore produces the
+string `"UNKNOWN"` -- indistinguishable, in the report, from a package with no
+licence at all. `--with-licenses` cannot smuggle the authoritative value in
+either: piplicenses 5.0.0 declares that flag as `--with-license-file`, and
+argparse's unambiguous-prefix matching makes `--with-licenses` set it, so the
+report would silently start carrying every package's licence TEXT.
 
-* `pip-licenses --from=mixed` makes the analyzer read the authoritative
-  `License-Expression` when a package declares one;
+So each check declares `"normalize": "license-expressions"` and an
+`"allow_file"`, and `scripts/dependency_governance.py` gathers the metadata the
+analyzer cannot express, then re-applies the policy to the analyzer's JSON
+report:
+
+* a probe replays the check's own `uv run --project <app>` selector with
+  `python -c` in place of the analyzer, so it reads every installed
+  distribution's `License-Expression` **and** its legacy `License` field in the
+  same environment the report describes;
 * `license_grant_alternatives()` projects the value into alternatives -- `;` and
   `OR` are choices, `AND` requires all of its options, and `WITH` is an
   exception that binds to its right operand;
 * a package is flagged only when **no** alternative is acceptable in full, so
   `MIT OR GPL-3.0-only` grants a choice and passes while
   `MIT AND GPL-3.0-only` does not;
-* the allow-list itself lives in `dependency-licenses.json` so the three
-  projections cannot drift apart, and free text is never guessed: a package
-  that declares neither a `License-Expression` nor a recognised classifier
-  stays `UNKNOWN` and keeps failing closed.
+* a package the probe could not describe keeps the analyzer's value, and free
+  text is never guessed: a package that declares neither a
+  `License-Expression` nor a recognised classifier stays `UNKNOWN` and keeps
+  failing closed. The allow-list lives in `dependency-licenses.json` so the
+  three projections cannot drift apart.
 
-The normalized result is recorded per check in `summary.json` (`findings`) and
-in `<check>.findings.log`, so the artifact explains a failure by package.
+The normalized result is recorded per check in `summary.json` (`findings`), in
+`<check>.findings.log`, and -- when the probe ran -- in
+`<check>.declared-licenses.json`, so the artifact explains a failure by package
+and by what each package actually declared.

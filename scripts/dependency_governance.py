@@ -535,6 +535,104 @@ def _report_is_available(path: Path, report_format: str) -> bool:
     return True
 
 
+# The interpreter the license checks must be read back through. The check's own
+# `uv run --project <app>` is the environment the distribution metadata lives in,
+# so the probe replays exactly that selection instead of guessing a path.
+PROBE_SCRIPT = """
+import importlib.metadata as metadata
+import json
+import sys
+
+# `importlib.metadata.distributions()` defaults to the interpreter's own search
+# path only when it can resolve the package context; passing `sys.path`
+# explicitly is the portable spelling and is what makes the probe describe the
+# same distribution set the analyzer's report does.
+declared = {}
+for distribution in metadata.distributions(path=sys.path):
+    name = distribution.metadata["Name"]
+    if not name:
+        continue
+    declared[name.lower()] = {
+        "license": distribution.metadata.get("License"),
+        "license_expression": distribution.metadata.get("License-Expression"),
+    }
+print(json.dumps(declared, sort_keys=True))
+"""
+
+
+def _probe_declared_licenses(command: list[str]) -> dict[str, Any]:
+    """Read every installed distribution's declared licence, in-process.
+
+    This is the reader that `pip-licenses` cannot provide: it reads the PEP 639
+    `License-Expression` field directly, and it does so in the SAME environment
+    the analyzer's report describes, so the two cannot disagree about which
+    packages exist. `uv run --project <app>` accepts a trailing command, so the
+    probe replaces the analyzer's own command tail instead of re-deriving it.
+    """
+    probe_command = _rewrite_for_probe(command)
+    if probe_command is None:
+        return {}
+    completed = subprocess.run(
+        probe_command,
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+        env=os.environ.copy(),
+    )
+    if completed.returncode != 0:
+        return {}
+    try:
+        probed = json.loads(completed.stdout.strip().splitlines()[-1])
+    except (json.JSONDecodeError, IndexError):
+        return {}
+    return probed if isinstance(probed, dict) else {}
+
+
+def _rewrite_for_probe(command: list[str]) -> list[str] | None:
+    """Turn `uv run … pip-licenses …` into `uv run … python -c <probe>`.
+
+    Returns `None` for any check that is not a recognizable `uv run` invocation,
+    so an unknown shape degrades to "no probe data" and the report is used
+    exactly as before, rather than silently probing the wrong environment.
+    """
+    if "uv" not in command or "run" not in command:
+        return None
+    try:
+        run_index = command.index("run")
+    except ValueError:  # pragma: no cover - guarded by the membership check
+        return None
+    if run_index + 1 >= len(command):
+        return None
+    # Everything up to (but excluding) the analyzer entry point is the `uv run`
+    # selector: `--locked --no-dev --project <app> --with pip-licenses==5.0.0`.
+    tail = command[run_index + 1 :]
+    entry = next(
+        (
+            index
+            for index, argument in enumerate(tail)
+            if argument in ("pip-licenses", "piplicenses")
+        ),
+        None,
+    )
+    if entry is None:
+        return None
+    selector: list[str] = []
+    index = 0
+    while index < entry:
+        argument = tail[index]
+        if argument.startswith("-"):
+            selector.append(argument)
+            # A `--flag value` pair keeps its value; `--flag=value` does not.
+            if "=" not in argument and index + 1 < entry:
+                index += 1
+                selector.append(tail[index])
+        else:
+            selector.append(argument)
+        index += 1
+    return ["uv", "run", *selector, "python", "-c", PROBE_SCRIPT]
+
+
 def _run_check(check: dict[str, Any], output: Path) -> dict[str, Any]:
     name = str(check["name"])
     category = str(check["category"])
@@ -622,7 +720,12 @@ def _run_check(check: dict[str, Any], output: Path) -> dict[str, Any]:
     #    non-zero exit without a usable report stays a failure.
     normalization = check.get("normalize")
     if report_available and normalization == "license-expressions":
-        passed, findings = evaluate_license_report(report_path, check)
+        declared = _probe_declared_licenses(command)
+        if declared:
+            _write_json(output / f"{name}.declared-licenses.json", declared)
+        passed, findings = evaluate_license_report(
+            report_path, check, declared=declared
+        )
         detail_path = output / f"{name}.findings.log"
         if findings:
             detail_path.write_text("\n".join(findings) + "\n", encoding="utf-8")
@@ -898,6 +1001,64 @@ def normalize_license_options(value: Any) -> list[str]:
     return options
 
 
+# The column the allow-list is applied to. `pip-licenses --from=mixed` labels a
+# PEP 639 `License-Expression` and falls back to the legacy `License` field,
+# which is exactly what the projection wants: the authoritative declaration
+# when there is one, the legacy one otherwise.
+LICENSE_FIELD = "License"
+
+
+def _declared_license(
+    entry: dict[str, Any],
+    declared: dict[str, Any] | None = None,
+) -> Any:
+    """Read the declared licence out of one pip-licenses JSON row.
+
+    Two readers exist because the analyzer itself cannot be made to read a PEP
+    639 `License-Expression` through its allowed-only path, and the failure it
+    produces is not detectable in its JSON output:
+
+      * build cnb-a2o-1k29qhq06 reported `fastapi:0.137.1` as `UNKNOWN` under
+        `--from=classifier` (it declares no Trove classifier);
+      * build cnb-fng-1k29s324u -- the build that added `--from=mixed` -- still
+        reports `UNKNOWN` for the very same package, because piplicenses'
+        fallback chain is `classifiers or {license metadata}`, and its
+        `license` extraction reads only the legacy `License` field: a wheel
+        that publishes `License-Expression: MIT` and nothing else yields the
+        string `"UNKNOWN"`, indistinguishable from a package with no licence at
+        all;
+      * and `--with-licenses` cannot be appended to the check to smuggle the
+        authoritative value into the report, because piplicenses 5.0.0 declares
+        the option as `--with-license-file` (its own destination is
+        `with_license_file`) and argparse's unambiguous-prefix matching
+        accepts `--with-licenses`; both spellings set the flag, so the report
+        would silently start carrying every package's licence TEXT.
+
+    So the analyzer's exit code is not the authority for these checks -- the
+    policy declares that the normalized projection is -- and the projection
+    reads the field itself, falling back to `License-Metadata` when the check
+    runs with `--from=all`.
+    """
+    name = str(entry.get("Name", "")).strip().casefold()
+    probed = (declared or {}).get(name)
+    if isinstance(probed, dict):
+        # PEP 639 first: it is the authoritative declaration, and it is the one
+        # pip-licenses cannot read back through the `License` column both of its
+        # readers funnel into.
+        # `License-Expression` holds the bare expression; `License` is free text
+        # that sometimes arrives already prefixed with a `Name: value` label
+        # (piplicenses does that when it echoes the legacy field). Both go
+        # through the same projection, which unwraps that label.
+        for field in ("license_expression", "license"):
+            value = probed.get(field)
+            if value:
+                return value
+    value = entry.get(LICENSE_FIELD)
+    if value is None:
+        value = entry.get("License-Metadata")
+    return value
+
+
 def _load_allowed_licenses(path: Path) -> set[str]:
     allowed: set[str] = set()
     for line in path.read_text(encoding="utf-8").splitlines():
@@ -910,11 +1071,21 @@ def _load_allowed_licenses(path: Path) -> set[str]:
 def evaluate_license_report(
     report_path: Path,
     policy: dict[str, Any],
+    declared: dict[str, Any] | None = None,
 ) -> tuple[bool, list[str]]:
     """Re-apply the allow-list to a `python-licenses-*` report, normalised.
 
     Returns `(passed, findings)`; `findings` is empty when the projection agrees
     with the analyzer's exit code.
+
+    `declared` is the probed per-distribution metadata (see
+    `_probe_declared_licenses`). When the probe ran, the authoritative PEP 639
+    declaration it read is what the allow-list is applied to; the report is only
+    the list of packages the analyzer saw, and its `UNKNOWN` -- which
+    piplicenses emits both for "no licence found" and for "the only declaration
+    is a `License-Expression`" -- is never taken at face value. A package the
+    probe could not describe keeps whatever the report says, so this stays
+    fail-closed.
     """
     allow_path = ROOT / str(policy["allow_file"])
     allowed = _load_allowed_licenses(allow_path)
@@ -925,7 +1096,9 @@ def evaluate_license_report(
     for entry in entries:
         name = str(entry.get("Name", "<unnamed>"))
         version = str(entry.get("Version", "?"))
-        alternatives = license_grant_alternatives(entry.get("License"))
+        alternatives = license_grant_alternatives(
+            _declared_license(entry, declared)
+        )
         if not alternatives:
             findings.append(f"{name}:{version} declares no license")
             continue

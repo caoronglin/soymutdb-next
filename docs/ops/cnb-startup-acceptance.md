@@ -162,12 +162,68 @@ license UNKNOWN not in allow-only licenses was found for package fastapi:0.137.1
 `License-Expression`**，没有一个是真正未知的许可证——即门禁在报噪音，而不是
 在报发现。
 
+第一次修复给三个 check 都加了 `--from=mixed`，**这不够**：下一个构建
+`cnb-fng-1k29s324u` 在同一个包上仍然报 `UNKNOWN`。原因是 piplicenses 的两个
+读取分支最终都汇进它的 `License` 列，`mixed` 模式的回退链是
+`classifiers or {license metadata}`，而 `license` 只读旧的 `License` 字段；一个
+只声明 `License-Expression` 的 wheel，产出的字符串与"完全没有许可证"的包**逐字
+相同**。`--with-licenses` 也塞不进权威值：piplicenses 5.0.0 该选项名是
+`--with-license-file`，argparse 的前缀匹配会让 `--with-licenses` 命中它，报告会
+悄悄开始携带每个包的许可证**全文**。
+
 处理方式见 [`../design/dependency-graphs.md`](../design/dependency-graphs.md) §8：
-把"原始字符串比较"换成显式的 license 表达式投影，三个 Python 门共用
-`dependency-licenses.json`，规范化结果写进 `summary.json` 与
-`<check>.findings.log`。锁定它的测试在
-`scripts/test_dependency_governance_contracts.py`（表达式形态、fail-closed、
-三处策略不漂移）。
+探针用 check 自己的 `uv run --project <app>` 选择器把 `pip-licenses` 换成
+`python -c`，在同一个环境里直接读每个发行版的 `License-Expression`；投影再按
+license 表达式（`;`/`OR` 是选择、`AND` 要全满足、`WITH` 绑右操作数）应用
+`dependency-licenses.json`；探针描述不了的包沿用分析器的值，继续 fail-closed。
+规范化结果写进 `summary.json`、`<check>.findings.log` 和
+`<check>.declared-licenses.json`。锁定它的测试在
+`scripts/test_dependency_governance_contracts.py`（表达式形态、探针改写、
+fail-closed、三处策略不漂移）。
+
+### 2.2.4 为什么发布流水线必须挂在 `main` 而不是 `$`（第三次构建失败）
+
+`cnb-fng-1k29s324u` 的两个流水线都失败在**发布侧**，而且根因相同：
+
+```
+Wait for the verified amd64 image package:
+  Deadlock detected: cnb:await key "validated-runtime-images-amd64"
+  cannot be resolved. Awaiting pipeline: "release"
+  Cause: No pipeline contains a cnb:resolve job for this key.
+
+Verify and stage the CI-built artifact before publication:
+  [stage-pages-publication] pages artifact pages-dist missing;
+  the verify pipeline must run first
+```
+
+`release` / `publish` 原本声明在 `$` -> `push` 下。`$` 是**兜底分支**：凡是
+有 glob 规则匹配的分支，其流水线**整体替换**兜底（文档
+[触发规则](https://docs.cnb.cool/zh/build/trigger-rule.md)，"匹配策略"）。于是
+`auto/*` 分支的一次 push 也会启动一个 `release`，而那个事件里根本不存在
+`docker-images (amd64)`，也就没有任何 `cnb:resolve`——`cnb:await` /
+`cnb:resolve` 只在**同一个事件**的流水线之间配对（文档
+[内置任务](https://docs.cnb.cool/zh/build/internal-steps.md)，"使用限制"），
+等待因此变成死锁。`publish` 同理：`pages-dist` 由该事件的 `verify` 产出，
+在别的分支上它永远不会被构建。
+
+原来的配置试图用一个 pipeline 级 `resources:` 字段表达这个启动依赖，但 **CNB 没有
+这个字段**：pipeline 的合法键是
+`name / runner / docker / git / services / env / imports / allowFailure /
+stages / failStages / endStages / ifNewBranch / ifModify / breakIfModify /
+label / retry / lock / sandbox`。写上去既不生效，又读起来像个门禁——这正是问题
+被掩盖到第三次构建的原因（三项目标校验现在都能过：
+`validate.js .cnb.yml` 的 YAML / 语义 / Schema 全绿，此前 Schema 一直报
+`不允许的字段 "resources"`）。
+
+修法是**把两个发布流水线挪到 `main:` 下**：`main` 是 glob 键，它匹配的分支
+push 会用它替换 `$`，于是 `verify`、`docker-images (amd64)`、`release`、
+`publish` 处在**同一个事件**里，`cnb:await` 才能配对上 `cnb:resolve`；而在其他
+分支上仍然是 `$` 兜底，发布流水线**不会启动**，也就不可能启动一个没有上游的发布。
+`tag_push` / `vscode` / `web_trigger_*` / `issue.*` 这些仓库级或按钮级事件仍留在
+`$` 下（它们只能声明在兜底分支）。
+
+`scripts/test_ci_job_contracts.py` 现在锁定这条不变量：`release` 属于
+`main` -> `push`，且任何分支下都不得出现 pipeline 级 `resources` 键。
 
 ### 2.3 预览模式
 
@@ -271,6 +327,10 @@ web_artifact_digest=sha256:…   # 有构建产物时
 
 | 触发 | 流水线 | 作用 |
 | --- | --- | --- |
+| `main` -> `push` | `verify` | 前端 + API/Worker + 依赖治理 + 静态制品 |
+| `main` -> `push` | `docker-images (amd64/arm64)` | 原生架构构建、冒烟、扫描、SBOM、导出 |
+| `main` -> `push` | `release` | `cnb:await` 镜像包后签名发布（见 §2.2.4） |
+| `main` -> `push` | `publish` | 字节级复制已验证静态制品（见 §2.2.4） |
 | `vscode`（分支页按钮） | `soy-mut-db-development` | 准备环境 + 门户预览 |
 | `web_trigger_workspace-preview` | `workspace-preview` | 同上（手动入口） |
 | `web_trigger_acceptance` | `acceptance-manual` | contracts → backend → static，上传验收清单 |

@@ -312,9 +312,17 @@ class DeliveryArchitectureTests(unittest.TestCase):
             },
             push,
         )
-        # Release and publication live in the fallback branch: they run on main
-        # pushes, tags and manual buttons, never on pull requests.
-        self.assertLessEqual({"release", "publish"}, _pipeline_names("$", "push"))
+        # Release and publication run on main pushes, tags and manual buttons,
+        # never on pull requests. They sit under `main` -> `push` (not `$`)
+        # because their `cnb:await` has to pair with the image pipelines'
+        # `cnb:resolve`, and await/resolve pair within one event only.
+        self.assertLessEqual({"release", "publish"}, _pipeline_names("main", "push"))
+        self.assertNotIn(
+            "release",
+            _pipeline_names("$", "push"),
+            "a publisher under `$` starts on every branch push; only `main` "
+            "pushes build the packages it consumes",
+        )
         self.assertLessEqual(
             {
                 "verify",
@@ -2576,9 +2584,12 @@ class ArchivedPipelineMirrorTests(unittest.TestCase):
     """
 
     def _release_documents(self) -> tuple[dict, dict]:
+        # The publisher is declared under the `main` GLOB key, not under `$`:
+        # `cnb:await` only pairs with a `cnb:resolve` of the SAME event, and the
+        # image pipelines that resolve the key are started by `main` -> `push`.
         root = next(
             pipeline
-            for pipeline in _cnb_pipelines("$", "push")
+            for pipeline in _cnb_pipelines("main", "push")
             if pipeline["name"] == "release"
         )
         archived = yaml.safe_load(
@@ -2664,9 +2675,11 @@ class ReleasePublisherTests(unittest.TestCase):
     """
 
     def _release_pipeline(self) -> dict:
+        # Declared under `main`, the branch whose `push` also starts the image
+        # pipelines this one awaits; see `_release_documents`.
         pipelines = [
             pipeline
-            for pipeline in _cnb_pipelines("$", "push")
+            for pipeline in _cnb_pipelines("main", "push")
             if pipeline["name"] == "release"
         ]
         self.assertEqual(1, len(pipelines), "expected exactly one release pipeline")
@@ -2762,19 +2775,34 @@ class ReleasePublisherTests(unittest.TestCase):
         self.assertIs(resolves[0], verify["stages"][-1])
 
         # `cnb:await` / `cnb:resolve` only pair between pipelines of the SAME
-        # event, so the release must name the image pipeline as a resource of
-        # the event it runs in.
-        resources = _flatten(release.get("resources", {}))
-        self.assertIn("docker-images (amd64)", resources)
+        # event, so the publisher must be declared in the branch key that also
+        # starts the image pipelines -- `main`, to which `docker-images (amd64)`
+        # belongs. Declaring the pairing as a pipeline `resources:` key does not
+        # work: CNB's pipeline schema has no such field, so it is rejected in
+        # Prepare rather than honoured.
+        self.assertIn(
+            "release",
+            _pipeline_names("main", "push"),
+            "the publisher must share the image pipelines' event",
+        )
+        # A pipeline-level `resources:` field is not part of the CNB grammar.
+        for branch, event in (("main", "push"), ("$", "push"), ("$", "tag_push")):
+            for pipeline in _cnb_pipelines(branch, event):
+                self.assertNotIn(
+                    "resources",
+                    pipeline,
+                    f"{pipeline['name']}: CNB has no pipeline-level `resources` key",
+                )
         # Neither of these jobs may run outside `stages`.
-        for pipeline in _cnb_pipelines("$", "push"):
-            for key in ("endStages", "failStages"):
-                for stage in pipeline.get(key, []) or []:
-                    self.assertNotIn(
-                        stage.get("type"),
-                        {"cnb:await", "cnb:resolve"},
-                        f"{pipeline['name']}: {key} cannot hold {stage.get('type')}",
-                    )
+        for branch, event in (("main", "push"), ("$", "push")):
+            for pipeline in _cnb_pipelines(branch, event):
+                for key in ("endStages", "failStages"):
+                    for stage in pipeline.get(key, []) or []:
+                        self.assertNotIn(
+                            stage.get("type"),
+                            {"cnb:await", "cnb:resolve"},
+                            f"{pipeline['name']}: {key} cannot hold {stage.get('type')}",
+                        )
 
 
 class CnbVolumeGrammarTests(unittest.TestCase):

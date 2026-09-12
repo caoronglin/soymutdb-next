@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import os
 import re
 import subprocess
 import sys
@@ -432,6 +433,195 @@ def test_license_report_normalization_agrees_with_the_analyzer_exit_code() -> No
 
     allowed = governance._load_allowed_licenses(ROOT / check["allow_file"])
     assert "mit" in allowed and "unknown" not in allowed
+
+
+def test_license_projection_reads_the_pep639_field_the_analyzer_cannot() -> None:
+    """`--from=mixed` is not enough: the analyzer's own `License` column lies.
+
+    Build cnb-fng-1k29s324u added `--from=mixed` and still reported
+    `fastapi:0.137.1` as `UNKNOWN`, because piplicenses' fallback chain is
+    `classifiers or {license metadata}` and its `license` extraction reads only
+    the legacy `License` field. A wheel that publishes `License-Expression: MIT`
+    and nothing else therefore produces the literal string `"UNKNOWN"` -- the
+    same string a package with no licence at all produces. Nothing in the
+    analyzer's JSON output can tell the two apart, so the projection cannot use
+    that column for a package the probe can describe.
+    """
+    governance = _governance_module()
+    check = next(
+        entry
+        for entry in json.loads(CONFIG.read_text(encoding="utf-8"))["checks"]
+        if entry["name"] == "python-licenses-api"
+    )
+    command = [
+        argument.replace("{root}", str(ROOT)).replace("{output_dir}", "/tmp/x")
+        for argument in check["command"]
+    ]
+    probe = governance._rewrite_for_probe(command)
+    assert probe is not None, "the analyzer must stay a recognizable `uv run` call"
+    # The selector is preserved and the analyzer tail is replaced by the probe.
+    assert probe[:2] == ["uv", "run"]
+    assert "--project" in probe and "pip-licenses==5.0.0" in probe
+    assert "pip-licenses" not in probe
+    assert probe[-3:-1] == ["python", "-c"]
+    # An unknown command shape degrades to the previous behaviour, never to a
+    # probe of the wrong environment.
+    assert governance._rewrite_for_probe(["python3", "scripts/x.py"]) is None
+
+    # A `License-Expression` is preferred over the legacy field, and both are
+    # normalized by the same projection.
+    declared = {
+        "pep639": {"license": None, "license_expression": "MIT"},
+        "legacy": {"license": "MIT License", "license_expression": None},
+    }
+    expression = governance._declared_license(
+        {"Name": "pep639", "License": "UNKNOWN"}, declared
+    )
+    assert expression == "MIT"
+    assert governance.normalize_license_options(expression) == ["MIT"]
+    legacy = governance._declared_license(
+        {"Name": "legacy", "License": "UNKNOWN"}, declared
+    )
+    assert legacy == "MIT License"
+
+    # A package the probe could not describe keeps the analyzer's value, so the
+    # projection can never become weaker than the analyzer it replaces.
+    assert (
+        governance._declared_license({"Name": "absent", "License": "UNKNOWN"}, declared)
+        == "UNKNOWN"
+    )
+    assert (
+        governance._declared_license({"Name": "x", "License": "UNKNOWN"}, None)
+        == "UNKNOWN"
+    )
+
+
+def test_license_gate_accepts_pep639_only_metadata_and_stays_fail_closed(
+    tmp_path: Path,
+) -> None:
+    """The end-to-end judgement: what the probe sees is what the gate applies."""
+    governance = _governance_module()
+    report = tmp_path / "python-licenses.json"
+    report.write_text(
+        json.dumps(
+            [
+                {"Name": "fastapi", "Version": "0.137.1", "License": "UNKNOWN"},
+                {"Name": "aiohttp", "Version": "3.13.0", "License": "UNKNOWN"},
+                {"Name": "mystery", "Version": "1.0", "License": "UNKNOWN"},
+                {"Name": "copyleft", "Version": "1.0", "License": "UNKNOWN"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    declared = {
+        "fastapi": {"license": None, "license_expression": "MIT"},
+        "aiohttp": {"license": None, "license_expression": "Apache-2.0 AND MIT"},
+        # `mystery` is deliberately absent from the probe: it must keep failing.
+        "copyleft": {"license": None, "license_expression": "MIT AND GPL-3.0-only"},
+    }
+    passed, findings = governance.evaluate_license_report(
+        report, {"allow_file": "dependency-licenses.json"}, declared
+    )
+    assert not passed
+    flagged = {finding.split(":")[0] for finding in findings}
+    # The two real declarations are resolved; the undescribable one and the
+    # copyleft conjunction stay findings.
+    assert flagged == {"mystery", "copyleft"}
+
+
+def test_license_check_runner_probes_and_records_the_declaration(
+    tmp_path: Path,
+) -> None:
+    """The whole runner path: probe -> projection -> evidence.
+
+    `--from=mixed` is the flag the checks carry because the probe replays their
+    `uv run` selector; the runner is what makes the probe read the environment
+    the report describes, and what turns a nonzero analyzer into a pass only
+    when the projection agrees. A stand-in `uv` answers both halves so neither
+    pip-licenses nor a package environment is needed to assert the wiring.
+    """
+    governance = _governance_module()
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    site = tmp_path / "site"
+    (site / "pep639only-1.0.dist-info").mkdir(parents=True)
+    (site / "pep639only-1.0.dist-info" / "METADATA").write_text(
+        "Metadata-Version: 2.5\n"
+        "Name: pep639only\n"
+        "Version: 1.0\n"
+        "License-Expression: MIT\n",
+        encoding="utf-8",
+    )
+    # The analyzer reports UNKNOWN (the bug) and exits nonzero; the probe answers
+    # with the real metadata.
+    # The analyzer half writes the UNKNOWN report and exits nonzero; the probe
+    # half answers with the real metadata. Both live in one stand-in `uv`.
+    analyzer_half = "\n".join(
+        [
+            "  report=",
+            '  for candidate in "$@"; do',
+            '    [[ "$candidate" == --output-file=* ]] '
+            '&& report="${candidate#--output-file=}"',
+            "  done",
+            "  printf '%s' "
+            "\u0027[{\"Name\":\"pep639only\",\"Version\":\"1.0\","
+            "\"License\":\"UNKNOWN\"}]\u0027 > \"$report\"",
+            "  exit 1",
+        ]
+    )
+    (fake_bin / "uv").write_text(
+        "#!/usr/bin/env bash\n"
+        'for argument in "$@"; do [[ "$argument" == *pip-licenses* ]] && {\n'
+        + analyzer_half
+        + "\n}; done\n"
+        f"PYTHONPATH={site} exec {sys.executable} -c \"$(cat <<'PROBE'\n"
+        + governance.PROBE_SCRIPT
+        + "PROBE\n)\"\n",
+        encoding="utf-8",
+    )
+    (fake_bin / "uv").chmod(0o755)
+
+    check = {
+        "name": "python-licenses-api",
+        "category": "licenses",
+        "command": [
+            "uv",
+            "run",
+            "--project",
+            "{root}/apps/api",
+            "pip-licenses",
+            "--from=mixed",
+            "--format=json",
+            "--output-file={output_dir}/python-licenses-api.json",
+        ],
+        "report": {
+            "mode": "file",
+            "path": "python-licenses-api.json",
+            "format": "json",
+        },
+        "normalize": "license-expressions",
+        "allow_file": "dependency-licenses.json",
+    }
+
+    original_path = os.environ.get("PATH", "")
+    os.environ["PATH"] = f"{fake_bin}{os.pathsep}{original_path}"
+    try:
+        row = governance._run_check(check, tmp_path / "out")
+    finally:
+        os.environ["PATH"] = original_path
+
+    # A nonzero analyzer is re-evaluated only through the probe, and the probe
+    # here resolves the declaration the allow-list already accepts.
+    assert row["exit_code"] == 1
+    assert row["status"] == "passed", row
+    assert row["findings"] == []
+    # The probe's own reading is kept as evidence next to the report.
+    declared = json.loads(
+        (tmp_path / "out" / "python-licenses-api.declared-licenses.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert declared["pep639only"]["license_expression"] == "MIT"
 
 
 def test_root_scripts_and_knip_configuration_are_executable_contracts() -> None:
