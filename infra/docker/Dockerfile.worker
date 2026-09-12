@@ -27,14 +27,29 @@ WORKDIR /app
 COPY apps/worker/pyproject.toml apps/worker/uv.lock ./apps/worker/
 COPY packages/jobs-py ./packages/jobs-py
 
+# ONE resolution for the whole third-party dependency graph. The layer order is
+# what makes that true: only the manifests are copied yet, so a source-only
+# change reuses this layer instead of resolving Celery, psycopg, the analyses
+# stack, htslib bindings and the rest all over again.
+#
+# `--no-install-project` is deliberate: the local `soymutdb-worker` project is
+# not resolvable until its source arrives below, and installing it here would
+# also put the site-packages copy of the application ahead of the checkout in
+# the runtime image.
+#
+# There used to be a SECOND, byte-identical `uv sync` after the source COPY
+# whose stated purpose was to install the entry point too. It did not (the flag
+# is a no-op until the project metadata is resolvable, and neither copy shipped
+# an entry point for it to install) -- while costing a full re-resolution of the
+# dependency graph on every build. The application is now imported the same way
+# the API image does it, through the PYTHONPATH roots below, so nothing about
+# the dependency set changes and a large chunk of build time goes away.
 RUN UV_PROJECT_ENVIRONMENT=/opt/venv uv sync --frozen --no-dev --no-install-project --project apps/worker
 
 COPY apps/worker ./apps/worker
 COPY deploy/scripts/migrate-clickhouse.sh /opt/soymutdb/migrate-clickhouse.sh
 COPY deploy/scripts/migrate_clickhouse_lib.py /opt/soymutdb/migrate_clickhouse_lib.py
 COPY infra/clickhouse/upgrade_variant_facts_schema.sql /opt/soymutdb/upgrade_variant_facts_schema.sql
-
-RUN UV_PROJECT_ENVIRONMENT=/opt/venv uv sync --frozen --no-dev --no-install-project --project apps/worker
 
 # ---------- Stage 2: Runtime ----------
 FROM python:3.14.6-slim AS runtime

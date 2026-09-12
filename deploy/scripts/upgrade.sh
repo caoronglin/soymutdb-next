@@ -45,8 +45,6 @@ if [[ -f "${INSTALL_DIR}/docker-compose.yml" ]]; then
 else
     COMPOSE_DIR="${PROJECT_ROOT}"
 fi
-COMPOSE=(docker compose --project-directory "${COMPOSE_DIR}" -f "${COMPOSE_DIR}/docker-compose.yml")
-
 API_HOST="${API_HOST:-127.0.0.1}"
 API_PORT="${API_PORT:-8080}"
 READY_URL="http://${API_HOST}:${API_PORT}/api/v1/health/ready"
@@ -88,6 +86,23 @@ restart_pre_upgrade_services() {
     APPLICATION_SERVICES_QUIESCED=0
 }
 
+# ---------------------------------------------------------------------
+# 加载 .env —— 必须在任何 compose 调用之前
+# ---------------------------------------------------------------------
+# `docker compose` 会插值整个 compose 文件，而插值发生在命令行解析阶段：一旦
+# 命令跑起来，之后再 source .env 已经太晚。`docker-compose.yml` 里全是
+# `${POSTGRES_PASSWORD:?…}` 这类必需引用（生产 fail-fast，刻意如此），所以
+# "先建 COMPOSE 数组、后 source .env" 的顺序会让 **每一个** compose 调用都死在：
+#
+#   error while interpolating services.postgres.environment.POSTGRES_PASSWORD:
+#   required variable POSTGRES_PASSWORD is missing a value
+#
+# 而 `docker compose config -q` 是 Step 1 自己做的配置校验——它会先失败，
+# 把「缺少 .env」误报成「compose 配置错误」，让人去改一个没有问题的文件。
+#
+# 因此：先 source，再构造 COMPOSE 数组，最后才允许出现第一个 compose 调用。
+# 数组里显式带上 --env-file，这样 compose 与本次 shell 读的是同一份 .env，
+# 不受调用者当前目录或已导出的同名变量影响。
 if [[ -f "${COMPOSE_DIR}/.env" ]]; then
     set -a
     # shellcheck disable=SC1091
@@ -96,6 +111,8 @@ if [[ -f "${COMPOSE_DIR}/.env" ]]; then
 else
     fail "missing ${COMPOSE_DIR}/.env - copy deploy/.env.example and fill it first"
 fi
+
+COMPOSE=(docker compose --project-directory "${COMPOSE_DIR}" --env-file "${COMPOSE_DIR}/.env" -f "${COMPOSE_DIR}/docker-compose.yml")
 
 echo -e "${CYAN}========================================${NC}"
 echo -e "${CYAN}  SoyMutDB Upgrade (compose)${NC}"
@@ -232,7 +249,26 @@ rollback() {
         "${COMPOSE[@]}" logs --no-color "${APP_SERVICES[@]}" >&2 || true
         return 1
     fi
-    API_IMAGE_REF="${OLD_API_REF}" WORKER_IMAGE_REF="${OLD_WORKER_REF}" MCP_IMAGE_REF="${OLD_MCP_REF}" JBROWSE_IMAGE_REF="${OLD_JBROWSE_REF}" \
+    # 回滚要换的是**镜像**，不是"整屏环境"。compose 会重新插值整个文件，
+    # 而这里只传了 4 个 IMAGE_REF：其余 `${…:?…}` 引用依赖调用者环境里仍然
+    # 存在的变量。本脚本里 .env 已经 source 过，所以这次 `up -d` 能成功——
+    # 但这是隐式依赖，一旦回滚路径被别的入口调用（或 .env 在回滚期间被改动），
+    # 失败信息会是"required variable POSTGRES_PASSWORD is missing"，与真正
+    # 的原因（回滚本身）毫无关系。因此显式复用已加载的值。
+    #
+    # 这里刻意不传 MINIO_ROOT_USER / MINIO_ROOT_PASSWORD / SOYMUTDB_* 等
+    # 应用变量：它们不随镜像版本变化，且 compose 会从当前环境取值——回滚
+    # 不该把上次发布时的应用配置一并写回。
+    API_IMAGE_REF="${OLD_API_REF}" \
+    WORKER_IMAGE_REF="${OLD_WORKER_REF}" \
+    MCP_IMAGE_REF="${OLD_MCP_REF}" \
+    JBROWSE_IMAGE_REF="${OLD_JBROWSE_REF}" \
+    POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \
+    CLICKHOUSE_PASSWORD="${CLICKHOUSE_PASSWORD}" \
+    REDIS_PASSWORD="${REDIS_PASSWORD}" \
+    GRAFANA_PASSWORD="${GRAFANA_PASSWORD}" \
+    MINIO_ROOT_USER="${MINIO_ROOT_USER}" \
+    MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD}" \
         "${COMPOSE[@]}" up -d || true
     for _ in $(seq 1 "${READY_RETRIES}"); do
         if curl -sf "${READY_URL}" >/dev/null 2>&1 && \
