@@ -21,6 +21,7 @@ workspace:
       description: >-
         拉起依赖并准备开发环境；启动后在终端运行 pnpm dev:web / uvicorn，
         或用「预览 SoyMutDB 门户」按钮直接打开门户预览。
+        门户预览会自动放行 CNB 生成的 *.cnb.space / *.cnb.run 主机名。
     # 4 cores / 8 GB is enough for pnpm install + Vite + uvicorn. The platform
     # default (8 cores / 16 GB) is sized for the delivery pipelines, which build
     # and scan container images.

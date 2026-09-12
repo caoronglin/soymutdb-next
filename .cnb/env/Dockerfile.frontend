@@ -60,6 +60,9 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 ARG NODE_VERSION=24.19.0
 ARG NODE_SHA256_X64=14b342e71204f811bde6153be8e04b62aef63c236fef92b55f9c83154b409647
 ARG NODE_SHA256_ARM64=01443c1e1a29e531ccad5a46fefa6df490d2189c49f7955904aecdbb0fe86fdc
+# Must match PNPM_VERSION in scripts/{setup-workspace,ci-job-steps}.sh and
+# package.json's packageManager; scripts/check-toolchain-pins.py enforces it.
+ARG PNPM_VERSION=11.21.0
 
 # coreutils    sha256sum for the Node tarball verification
 # ca-certs     pnpm and the OpenAPI export both reach HTTPS endpoints
@@ -104,5 +107,39 @@ RUN node --version \
  && python3 -m venv /tmp/venv-check \
  && /tmp/venv-check/bin/python -c "import ssl, sqlite3, lzma, bz2, ctypes, uuid" \
  && rm -rf /tmp/venv-check
+
+# ---------------------------------------------------------------------------
+# Pre-warm the pnpm store into the IMAGE
+# ---------------------------------------------------------------------------
+# CNB shares a path declared with the Docker `VOLUME` instruction between the
+# pipeline container and every later container of the same pipeline
+# (docs.cnb.cool/zh/build/build-env.md, "Volume 共享"). That is the only
+# supported way to ship a warm dependency store with a build environment — the
+# image filesystem is not what a pipeline's `docker.volumes` mount carries, so a
+# store written below /cache would otherwise be discarded by the very mount that
+# is supposed to make it persistent.
+#
+# Why it matters: `.cnb.yml` links `pnpm install` to `/cache/pnpm-store`. If the
+# node mounts that path for the first time, the store starts EMPTY, and
+# `--frozen-lockfile` re-resolves and re-downloads every tarball on the first
+# run of every environment — the exact cost the store mount exists to remove.
+# Baking the registry metadata here is cheap and makes that first run a link pass.
+#
+# Only METADATA is fetched (`--lockfile-only`). No package tarball is
+# downloaded and no dependency is installed, so the image stays small, the
+# install can never disagree with the checked-out `pnpm-lock.yaml`, and the
+# `--frozen-lockfile` gate in scripts/setup-workspace.sh keeps its meaning.
+RUN set -eux; \
+    mkdir -p /cache/pnpm-store; \
+    corepack enable; \
+    corepack prepare "pnpm@${PNPM_VERSION}" --activate; \
+    pnpm config set store-dir /cache/pnpm-store; \
+    pnpm fetch --lockfile-only --ignore-scripts; \
+    du -sh /cache/pnpm-store
+
+# Declared AFTER the warm-up above: declaring a volume on a path that does not
+# exist yet makes the runtime/engine copy whatever it finds there when the
+# pipeline container starts.
+VOLUME /cache/pnpm-store
 
 WORKDIR /workspace

@@ -306,6 +306,7 @@ CNB 文档明确"任务级仅支持 `image` 配置，不支持 `dockerfile`"。�
 | 文件 | 用途 | 内容边界 |
 | --- | --- | --- |
 | `.cnb/env/Dockerfile.build-tools` | 镜像构建/扫描/SBOM/签名 stage 的构建环境 | 基础镜像为 `docker:<pin>-cli` + bash/curl/jq/python3；**不含任何密钥** |
+| `.cnb/env/Dockerfile.frontend` | 前端/依赖治理/契约门禁的构建环境 | `python:3.14` + 官方 Node tarball（校验和固定）+ **预热好的 pnpm store**（`VOLUME /cache/pnpm-store`）；**不含任何密钥** |
 | `.cnb/env/release.yml` | 发布流水线/手动按钮导入的**非密钥**配置 | 只有 `SOYMUTDB_OIDC_ISSUER`：`cosign verify` 要 pin 的 OIDC trust root。keyless 签名没有长期私钥；真实凭据仍只在平台 secret store |
 
 两点容易误判：
@@ -319,6 +320,30 @@ CNB 文档明确"任务级仅支持 `image` 配置，不支持 `dockerfile`"。�
 * `trivy` 与 `cosign` **故意不预装**：它们的版本由共享脚本固定
   （`aquasecurity/trivy:0.61.0`，cosign 由 `release-contract.golden.sh` 自行安装并
   校验和），装一份浮动副本会让 CNB 与 GitHub 用不同工具扫同一个镜像。
+
+### 环境镜像的缓存预热：`VOLUME` 是唯一的共享通道
+
+`.cnb.yml` 给每个前端门禁挂了 `docker.volumes: [/cache/pnpm-store]`，但**镜像文件
+系统本身不会被这个挂载带过来**：节点第一次挂载该路径时 store 是空的，
+`pnpm install --frozen-lockfile` 于是把整个 lockfile 重新解析、重新下载——正是这个
+挂载想省掉的开销。
+
+CNB 文档（build-env.md「Volume 共享」）给的通道是 Dockerfile 的 `VOLUME` 指令：
+镜像声明的卷会在后续容器之间共享。因此 `.cnb/env/Dockerfile.frontend`：
+
+1. 在 `/cache/pnpm-store` 里 `pnpm fetch --lockfile-only` —— **只取元数据**，不下载
+   任何 tarball、不安装任何依赖，所以镜像不会变大、也永远不会与
+   `pnpm-lock.yaml` 不一致（`--frozen-lockfile` 门禁的含义不变）；
+2. **之后**才声明 `VOLUME /cache/pnpm-store`（顺序有意义：先声明会让引擎把还没创建
+   的目录复制进共享）；
+3. `PNPM_VERSION` 是 build arg，预热用的 pnpm 与 stage 里激活的必须同版本。
+
+对应地，`docker.build.by` 现在列出 `pnpm-lock.yaml` / `package.json` /
+`pnpm-workspace.yaml`：缓存键由这些文件的并集算出，lockfile 变了就必须重建 store，
+否则一个过期但"命中"的 store 会被永远发出去。
+
+契约测试：
+`test_cloud_development_frontend_image_prewarms_the_pnpm_store`。
 
 ## 3. 流水线拓扑
 
