@@ -38,7 +38,7 @@ pnpm --filter @soymutdb/web build
 pnpm --filter @soymutdb/admin build:web
 pnpm --filter @soymutdb/jbrowse build
 python3 -m pytest -q scripts/test_development_compose_contract.py  # Docker-free dev Compose contract
-docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile core config
+docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.dev.yml --profile core config
 ```
 
 开发时以 OpenAPI、后端状态机和审计为权威；UI 不应自行推断发布状态或绕过校验。

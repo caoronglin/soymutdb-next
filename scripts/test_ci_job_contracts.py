@@ -2155,15 +2155,43 @@ class DeliveryArchitectureTests(unittest.TestCase):
                 f"docker-compose.yml must keep ${variable} required",
             )
 
-        # 2. The dev overlay assigns container environment and cannot satisfy
-        #    interpolation; assert the distinction explicitly so a future
-        #    "fix" that only touches the overlay fails here.
+        # 2. The overlay is where the fix has to live, because
+        #    `start-cloud-dev.sh` runs this script as a CHILD PROCESS: an
+        #    `export` below never reaches the data-layer `docker compose` call in
+        #    the parent. Measured on the fix that only touched this script
+        #    (PR #14), the compose call still saw all five variables unset.
         overlay = (ROOT / "docker-compose.dev.yml").read_text(encoding="utf-8")
-        self.assertIn("MINIO_ROOT_USER: minioadmin", overlay)
+        # `!reset` is the only form that takes the base file's `${…:?…}`
+        # references off the merge's default branch; an anchor merge leaves them
+        # there and Compose interpolates them anyway.
+        self.assertIn("x-app-env: !reset", overlay)
+        # The base healthcheck reads `${REDIS_PASSWORD:?…}`, and a service-level
+        # `environment:` entry is not visible to interpolation, so the overlay
+        # has to replace the healthcheck itself.
+        redis_section = overlay.split("\n  redis:\n", 1)[1].split("\n  redis-celery:\n", 1)[0]
+        effective = "\n".join(
+            line for line in redis_section.splitlines() if not line.lstrip().startswith("#")
+        )
+        self.assertNotIn("${REDIS_PASSWORD:?", effective)
+        self.assertIn("redis-cli -a soymutdb_dev_password ping", overlay)
+
+        # The parent-process check: the data layer must NOT be reachable only
+        # through a subprocess `export`.
+        start_script = (ROOT / "scripts/start-cloud-dev.sh").read_text(encoding="utf-8")
+        self.assertIn("--env-file /dev/null", start_script)
+        self.assertRegex(
+            start_script,
+            r"set_default POSTGRES_PASSWORD",
+            "start-cloud-dev.sh must default the compose variables in its OWN "
+            "process; a subprocess `export` cannot reach the data-layer compose "
+            "call",
+        )
 
         # 3. The bootstrap declares every one of them, and only when unset, so a
         #    caller-provided value (the GitHub mirror's ci-compose-* secrets, an
-        #    operator's real ones) stays authoritative.
+        #    operator's real ones) stays authoritative. This is a convenience
+        #    for the other callers of the workspace, NOT the preview's fix --
+        #    point 2 above is.
         script = (ROOT / "scripts/setup-workspace.sh").read_text(encoding="utf-8")
         for variable in required:
             self.assertRegex(
@@ -2184,7 +2212,7 @@ class DeliveryArchitectureTests(unittest.TestCase):
         # 4. It must NOT run for an image build. Those pipelines are the release
         #    path, where the daemon is never started and defaulting a production
         #    secret is the opposite of fail-fast; they declare no data volume.
-        guard = script.index("if [[ -n \"${POSTGRES_PASSWORD:-}\" ]]; then")
+        guard = script.index('if [[ -z "${POSTGRES_PASSWORD:-}" ]]')
         self.assertLess(
             guard,
             script.index(': "${POSTGRES_PASSWORD:='),

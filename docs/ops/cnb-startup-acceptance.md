@@ -50,10 +50,13 @@ workspace:
 3. 调 `scripts/setup-workspace.sh`：`corepack enable` + 校验 `pnpm` 在 PATH 上 +
    `pnpm install --frozen-lockfile`。**每个 stage 都是新容器**，所以这步必须在
    本容器内做，不能指望上一个 stage 留下的 shim。
-4. （`preview` / `api-preview`）按需拉起数据层：`docker compose … up -d
-   postgres clickhouse redis minio`，并把 `SOYMUTDB_DATABASE_URL` 指向它。没有
-   PostgreSQL 时 API 无法解析 active release，数据页全部显示"不可用"。compose
-   插值所需的变量由 `scripts/setup-workspace.sh` 补默认值（见 §2.2.2）。
+4. （`preview` / `api-preview`）按需拉起数据层：`docker compose … up -d postgres
+   clickhouse redis minio`，并把 `SOYMUTDB_DATABASE_URL` 指向它。没有
+   PostgreSQL 时 API 无法解析 active release，数据页全部显示"不可用"。
+   调用前脚本会补齐 `POSTGRES_PASSWORD` / `CLICKHOUSE_PASSWORD` /
+   `REDIS_PASSWORD` / `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` 的开发默认值
+   （已导出的值优先，空值视为未设置），并统一加 `--env-file /dev/null`，
+   理由见 §2.2.2。
 5. 打印原始命令（`pnpm dev:web`、`uvicorn`、`docker compose …`），需要更多面时直接
    在终端里起。
 
@@ -92,53 +95,55 @@ Vite 6 默认只接受 `localhost` / 显式配置的 `Host`。CNB 的预览代�
 `cnb-38o-1k28dm5ta-001.cnb.space` 通过、`evil.example.com` / `cnb.space.evil.com`
 被拒；对应的单元测试在 `apps/web/src/lib/__tests__/deployment.test.ts`。
 
-### 2.2.2 为什么 compose 变量要在引导阶段补默认值（本次构建失败）
+### 2.2.2 为什么数据层不需要先 export 任何变量（Issue #12）
 
-打开门户预览曾经在 **Prepare** 阶段直接失败，日志尾部是：
+`docker-compose.yml` 里每个 `${NAME:?message}` 都是生产 fail-fast 的一部分。
+Compose 对**每个文件分别插值**，且在**合并 overlay 之前**完成，所以一个开发环境
+曾直接死在 `start-cloud-dev.sh`：
 
 ```
-[start-cloud-dev] starting the data layer (postgres clickhouse redis minio)
 error while interpolating x-app-env.SOYMUTDB_S3_ACCESS_KEY:
-  required variable MINIO_ROOT_USER is missing a value: MINIO_ROOT_USER is required
-Pipeline prepare error: Preview launch script execution failed
+required variable MINIO_ROOT_USER is missing a value: MINIO_ROOT_USER is required
 ```
 
-根因不是 minio，而是 **compose 的插值时机**：
+这一行不是"少了 `.env`"，而是 overlay 没有真正覆盖到那个 key。四个坑：
 
-* `docker compose` 在**选择服务之前**对**整个文件**做变量插值，所以一个必填变量
-  缺失就足以让**任何** compose 调用失败——哪怕命令行只写了 `up -d postgres`；
-* `docker-compose.yml` 是**生产**拓扑，刻意 fail-fast：`${POSTGRES_PASSWORD:?…}`、
-  `${CLICKHOUSE_PASSWORD:?…}`、`${REDIS_PASSWORD:?…}`、`${MINIO_ROOT_USER:?…}`、
-  `${MINIO_ROOT_PASSWORD:?…}` 都**没有默认值**；
-* `docker-compose.dev.yml` 里那句 `minio: environment: MINIO_ROOT_USER: minioadmin`
-  只是**给容器**赋环境变量，**不定义**插值变量，所以两处都没有兜底；
-* 云原生开发环境里没有发布用的 `.env`，插值必然失败。而 `start-cloud-dev.sh`
-  的**第一次** compose 调用就会撞上它，于是 preview 流水线在 Prepare 就报错。
+1. **`minio: environment:` 不够。** 报错来自 `x-app-env` 这个顶层扩展块（被
+   `*app-env` 锚点复用），跟 MinIO 服务本身是不是覆盖了没关系。overlay 里
+   `minio: environment: MINIO_ROOT_USER: minioadmin` 只给**容器**赋值，不定义
+   插值变量。
+2. **`x-app-env: {<<: *dev-app-env}` 也不够。** Compose 对映射做的是**合并**而
+   不是替换，`<<:` 的锚点侧仍然会被插值——写在下面的字面量只是"合并后取胜"，
+   早于它发生的插值照样报错。只有 `!reset` 能让这个 key 彻底不带默认分支，
+   因此 `docker-compose.dev.yml` 用的是 `x-app-env: !reset`。
+3. **服务级 `healthcheck` 也要覆盖。** 基础文件里
+   `redis` / `redis-celery` 的健康检查是
+   `redis-cli -a "${REDIS_PASSWORD:?…}" ping`；`REDIS_PASSWORD` 必须能被插值
+   解析（服务自己的 `environment:` 对插值不可见），所以 overlay 直接写死开发
+   密码的健康检查。
+4. **在 `scripts/setup-workspace.sh` 里 `export` 解决不了问题。**
+   `start-cloud-dev.sh` 是用 `bash scripts/setup-workspace.sh` **子进程**调它的
+   （第 191 行），子进程的 `export` 不会回到父进程，所以数据层那次
+   `docker compose` 拿到的仍是空环境。修在 overlay 里而不是在引导脚本里，
+   这一点才成立。
 
-处理方式：默认值集中放在 `scripts/setup-workspace.sh`（两个 CNB 入口与本地运行都会
-经过它，且都在第一次 compose 调用之前）：
+`scripts/test_development_compose_contract.py` 用节点级模型锁住这三条：它按文件
+分别模拟插值、映射合并与 `<<:` 默认分支，断言"开发栈从空环境启动时不再要求任何
+变量"，同时断言生产文件本身仍然 fail-closed（避免有人用"给基础文件加默认值"的方式
+把测试改绿）。`scripts/start-cloud-dev.sh` 另外显式补齐开发默认值，
+不依赖调用者先 `export`，也不依赖任何 `.env`。
 
-* 只在变量**未设置**时赋值，调用方传进来的值（GitHub 镜像的 `ci-compose-*`、
-  运维的真实口令）始终优先；
-* 只用 `127.0.0.1` 的开发口令，且**不**在 `docker.build` 镜像构建阶段生效——
-  发布路径必须继续 fail-fast；
-* 生产文件里**不**加默认值，由
-  `test_development_data_layer_environment_satisfies_compose` 锁定这条边界。
-
-该步骤随后又踩了一个自己造出来的坑，已一并修掉：它被插在脚本**开头**，而脚本原来把
-`log()` 声明在它**下面**，于是第一次调用就得到
+附带修掉同类的一个坑（PR #14）：若把补默认值的步骤放在脚本开头，而 `log()` 仍声明在
+它**下面**，第一次调用就会
 
 ```
 scripts/setup-workspace.sh: line 122: log: command not found   (exit 127)
 ```
 
-`set -euo pipefail` 抓不到「命令不存在」之外的东西——bash 不会在启动时预解析函数，
-`set -u` 也只管变量——所以整条脚本在 0.1 秒内退出，所有依赖引导的 stage（Frontend /
-API + Worker / Dependency governance）连锁失败，而错误信息只指向一行日志。
+`set -euo pipefail` 抓不到「未定义命令」，所以整条脚本在 0.1 秒内退出。因此
+`scripts/setup-workspace.sh` 里的函数一律**先声明后使用**，由
+`test_setup_workspace_declares_helpers_before_it_calls_them` 静态锁定。
 
-处理方式：`log()` 上移到第一次 `log` 调用之前，并由
-`test_setup_workspace_declares_helpers_before_it_calls_them` 静态锁定「先声明后使用」。
-脚本内的函数不再允许声明在调用点之后。
 
 ### 2.3 预览模式
 
@@ -273,8 +278,10 @@ scripts/acceptance.sh --profile full
 
 - `vscode` 流水线在平台上的真实启动与 8686 端口预览（含数据层真正 Up）；
   Issue #12 的 compose 插值失败就是在这一步暴露的，修复后仍需平台验证；
-- `docker compose config` 在本机不可执行（无 Docker daemon），因此"插值变量齐全"
-  由 `scripts/test_ci_job_contracts.py` 的静态契约断言，而不是本机实跑；
+- `docker compose config` 在本机不可执行（无 Docker daemon），因此"开发 overlay
+  不再要求任何插值变量"由 `scripts/test_development_compose_contract.py` 的
+  节点级静态契约断言，而不是本机实跑；`start-cloud-dev.sh` 交给 compose 的环境与
+  命令已用桩验证（`docker` 替换为记录环境的脚本）；
 - `web_trigger_acceptance` 的 backend / static 两层（需要平台 Runner 与真实
   PostgreSQL）；
 - `.cnb/settings.yml` 的按钮文案在分支页的实际呈现。

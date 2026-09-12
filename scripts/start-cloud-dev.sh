@@ -204,8 +204,16 @@ fi
 #
 # `off` is never implied: the switch reports what it did, so a reviewer can tell
 # "no database because I asked for none" from "no database because it failed".
+# `--env-file /dev/null` is deliberate. Without it Compose also reads a `.env`
+# file next to the top-level `-f` file (`docker-compose.yml`, i.e. the repo
+# root), so a developer's leftover `.env` silently changes the development data
+# layer — and the preview would depend on a file that is not in the repository.
+# The development defaults live in `docker-compose.dev.yml` and in
+# `data_layer_start`, nowhere else.
 compose_cmd() {
-  docker compose -f "${REPO_ROOT}/docker-compose.yml" -f "${REPO_ROOT}/docker-compose.dev.yml" "$@"
+  docker compose --env-file /dev/null \
+    -f "${REPO_ROOT}/docker-compose.yml" \
+    -f "${REPO_ROOT}/docker-compose.dev.yml" "$@"
 }
 
 data_layer_start() {
@@ -232,6 +240,39 @@ data_layer_start() {
   fi
 
   log "starting the data layer (postgres clickhouse redis minio)"
+
+  # Compose interpolates the base file's `${NAME:?message}` references before it
+  # merges in docker-compose.dev.yml, and a reference it cannot satisfy aborts
+  # the whole command:
+  #
+  #   error while interpolating x-app-env.SOYMUTDB_S3_ACCESS_KEY:
+  #   required variable MINIO_ROOT_USER is missing a value: MINIO_ROOT_USER is
+  #   required
+  #
+  # `docker-compose.dev.yml` supplies development defaults for the four services
+  # below (asserted by scripts/test_development_compose_contract.py), so this
+  # call needs nothing exported. The defaults are applied here anyway, because
+  # `--env-file /dev/null` above makes this script the only thing that can put a
+  # value in the environment, and the base file's `${POSTGRES_PASSWORD:?…}`-style
+  # references sit on services the operator will start by hand from the same
+  # shell once the preview is up.
+  #
+  # An operator-provided value still wins: a real credential in the environment
+  # is authoritative and is never overwritten. Empty counts as unset, because an
+  # empty credential is exactly what the data layer must not run with
+  # (`config.py` refuses a default MinIO credential, the release preflight
+  # refuses an empty password).
+  set_default() {
+    local name="$1" fallback="$2"
+    if [[ -z "${!name:-}" ]]; then
+      export "${name}=${fallback}"
+    fi
+  }
+  set_default POSTGRES_PASSWORD soymutdb_dev_password
+  set_default CLICKHOUSE_PASSWORD soymutdb_dev_password
+  set_default REDIS_PASSWORD soymutdb_dev_password
+  set_default MINIO_ROOT_USER soymutdb_dev
+  set_default MINIO_ROOT_PASSWORD soymutdb_dev_password
   # Only the services a portal actually needs. The workers, Celery and the full
   # extended profile stay opt-in from the terminal, so bringing up a preview
   # cannot pull half the stack.
@@ -293,7 +334,8 @@ SoyMutDB cloud development environment is ready (mode: ${MODE}).
   public portal     pnpm dev:web
   admin console     pnpm dev:admin
   api (FastAPI)     cd apps/api && uvicorn app.main:app --reload --port ${API_PORT}
-  data layer        docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile core up -d postgres clickhouse redis minio
+  data layer        docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.dev.yml \\
+                    --profile core up -d postgres clickhouse redis minio
   delivery jobs     pnpm ci:jobs
   acceptance        bash scripts/acceptance.sh
 
@@ -396,7 +438,7 @@ case "${MODE}" in
     # environment, so fail with an actionable message instead of a stack trace.
     if [[ -z "${SOYMUTDB_DATABASE_URL:-}" ]]; then
       log "SOYMUTDB_DATABASE_URL is required for api-preview; start the data layer first:"
-      log "  docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile core up -d postgres clickhouse redis minio"
+      log "  docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.dev.yml --profile core up -d postgres clickhouse redis minio"
       exit 1
     fi
     launch_background api "${API_PORT}" \

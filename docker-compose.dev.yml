@@ -12,6 +12,21 @@
 # production image references are needed for local development.
 # =====================================================================
 
+# `minioadmin` is the image's own well-known default, so a stack that starts with
+# it is exposed to anyone who can reach the port. The development stack uses its
+# own disposable credential instead, defined once here and reused by both the
+# MinIO server and the apps that talk to it (`*dev-minio-user` /
+# `*dev-minio-password`), so the two sides cannot drift apart. It is still a
+# throwaway credential for a local-only stack: point `SOYMUTDB_S3_ENDPOINT` at a
+# real MinIO and both names must be overridden together.
+x-dev-minio-credentials: &dev-minio-credentials
+  MINIO_ROOT_USER: soymutdb_dev
+  MINIO_ROOT_PASSWORD: soymutdb_dev_password
+
+# Scalar views of the same values, for the places that take a plain string.
+x-dev-minio-user: &dev-minio-user soymutdb_dev
+x-dev-minio-password: &dev-minio-password soymutdb_dev_password
+
 x-dev-app-env: &dev-app-env
   SOYMUTDB_APP_ENV: dev
   SOYMUTDB_DEBUG: "true"
@@ -25,12 +40,51 @@ x-dev-app-env: &dev-app-env
   SOYMUTDB_CELERY_BROKER_URL: redis://:soymutdb_dev_password@redis-celery:6379/0
   SOYMUTDB_CELERY_RESULT_BACKEND: redis://:soymutdb_dev_password@redis-celery:6379/1
   SOYMUTDB_S3_ENDPOINT: http://minio:9000
-  SOYMUTDB_S3_ACCESS_KEY: minioadmin
-  SOYMUTDB_S3_SECRET_KEY: minioadmin
+  SOYMUTDB_S3_ACCESS_KEY: *dev-minio-user
+  SOYMUTDB_S3_SECRET_KEY: *dev-minio-password
   SOYMUTDB_S3_GWAS_BUCKET: gwas
   SOYMUTDB_S3_ANALYSES_BUCKET: analyses
   SOYMUTDB_JWT_SECRET: dev_jwt_secret_change_in_production
   SOYMUTDB_ANALYTICS_IP_SALT: dev_analytics_ip_salt_change_in_production
+
+# =====================================================================
+# Override the base file's data-layer credentials
+# =====================================================================
+# The production base carries `${POSTGRES_PASSWORD:?…}`-style references for
+# every store it talks to. Compose interpolates those where they are WRITTEN,
+# i.e. in `x-app-env` (docker-compose.yml), and the development credentials
+# below are deliberately literal — so without these two blocks the pre-flight
+# interpolation aborts before any container exists:
+#
+#   error while interpolating x-app-env.SOYMUTDB_S3_ACCESS_KEY:
+#   required variable MINIO_ROOT_USER is missing a value: MINIO_ROOT_USER is
+#   required
+#
+# which is exactly how the CNB only-preview environment died
+# (build cnb-178-1k29qb0vn). Two traps make the fix narrower than it looks:
+#
+#   * `minio: environment:` alone does NOT drop the requirement — the failure
+#     comes from interpolating the anchor, not from a missing service value;
+#   * anchoring `x-app-env` to `*dev-app-env` is NOT enough either, because
+#     Compose MERGES the override into the base mapping instead of replacing
+#     it. `<<: *dev-app-env` therefore leaves the `${…:?…}` reference on the
+#     default branch of the `<<` merge, and the default side is evaluated too,
+#     so the abort happens before the literal link wins.
+#
+# `!reset` discards the base mapping outright, which is the semantic intended
+# here: in development `x-app-env` is exactly the dev values, and nothing may
+# keep demanding a production secret. `docker-compose.dev.yml` is only ever
+# loaded under a `dev` entry point (the development overlay always runs with
+# `-f docker-compose.yml -f docker-compose.dev.yml`), so this cannot weaken a
+# release: the production path loads the base file alone.
+#
+# The interpolation happens at `docker compose config` time, i.e. before the
+# 45-attempt readiness poll in scripts/start-cloud-dev.sh, so a regression here
+# fails the preview in ~1s with the message above rather than a timeout.
+x-app-env: !reset
+  <<: *dev-app-env
+  SOYMUTDB_S3_ACCESS_KEY: *dev-minio-user
+  SOYMUTDB_S3_SECRET_KEY: *dev-minio-password
 
 services:
   postgres:
@@ -41,20 +95,39 @@ services:
     environment:
       CLICKHOUSE_PASSWORD: soymutdb_dev_password
 
+  # The `healthcheck` override is load-bearing, not cosmetic. The base file's
+  # healthcheck is
+  #
+  #   test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:?…}", "ping"]
+  #
+  # and Compose interpolates that while loading `docker-compose.yml` -- before
+  # this overlay is merged in, and from the OPERATOR's environment rather than
+  # from the service's `environment:`. Supplying `REDIS_PASSWORD` as a service
+  # variable therefore does not satisfy it; replacing the healthcheck with the
+  # literal dev password does. Both instances get the same treatment.
   redis:
     command: >
       redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
       --requirepass soymutdb_dev_password
+    healthcheck:
+      test: [ "CMD-SHELL", "redis-cli -a soymutdb_dev_password ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   redis-celery:
     command: >
       redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy noeviction
       --requirepass soymutdb_dev_password
+    healthcheck:
+      test: [ "CMD-SHELL", "redis-cli -a soymutdb_dev_password ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   minio:
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      <<: *dev-minio-credentials
 
   api:
     image: null
