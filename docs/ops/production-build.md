@@ -94,3 +94,44 @@ The **strict** production gate (no `--allow-demo`) runs in the release/deploy
 workflow against the production artifact, which is where
 `VITE_DEPLOYMENT_MODE=production`, a reachable release API and a real
 `SOYMUTDB_RELEASE_ID` are available.
+
+## Release images and the local-build path
+
+The release image set — and therefore the set of artifacts this production gate
+has to be coherent with — is declared once, in `scripts/list-images.sh`:
+
+```
+<name>|<context>|<dockerfile>
+```
+
+`scripts/build-release-image.sh` builds every entry, `scripts/release-contract.golden.sh`
+publishes exactly that set, and `scripts/test_dockerfile_contracts.py` fails if an
+image has no architecture proof, no runtime smoke gate, no Trivy scan or no SBOM.
+
+Two of those images are the one-shot migrations, and they exist as separate
+artifacts for a reason that is *not* cosmetics:
+
+| Service | Variable | Why it is its own image |
+| --- | --- | --- |
+| `migrate` | `MIGRATE_IMAGE_REF` | It used to borrow `API_IMAGE_REF`. The api service runs a release **digest** while the migration step then stayed on the API **tag**, so a publish that updated only the digest references would run the *previous* release's migrations. |
+| `migrate-clickhouse` | `MIGRATE_CLICKHOUSE_IMAGE_REF` | It used to borrow `WORKER_IMAGE_REF`, which pulled in ncbi-blast+, samtools, scanpy and Celery for a script that needs `clickhouse-connect`. |
+
+### Building and running the production topology locally
+
+`docker-compose.yml` requires `image@sha256` references and fails closed without
+them. To run the *same* topology from a checkout — no registry, no release
+artifact — use the wrapper, which builds the same Dockerfiles:
+
+```bash
+bash scripts/compose-local.sh build
+bash scripts/compose-local.sh up -d
+bash scripts/compose-local.sh down
+```
+
+The override is expressed with Compose's `!reset` tag on the `x-service-local-*`
+anchors: `!reset` is what discards the base file's `${…_IMAGE_REF:?…}` value,
+including its hard failure. A YAML merge key cannot do this (the base value stays
+on the merge default branch and Compose interpolates that branch too), and
+`${A:-${B}}` is not valid Compose interpolation. This wrapper is the *only*
+supported local-build entry point; it is not a fallback the release path can
+reach.
