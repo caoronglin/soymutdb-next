@@ -158,8 +158,8 @@
         "--with",
         "pip-licenses==5.0.0",
         "pip-licenses",
+        "--from=mixed",
         "--format=json",
-        "--allow-only=0BSD;Apache Software License;BSD License;BSD-3-Clause;Apache-2.0;Apache License 2.0;ISC License;ISC License (ISCL);BSD;GNU General Public License (GPL);GNU Lesser General Public License v3 (LGPLv3);GNU General Public License v3 or later (GPLv3+);GNU Library or Lesser General Public License (LGPL);MIT;MIT License;MPL-2.0 AND MIT;Mozilla Public License 2.0 (MPL 2.0);Python Software Foundation License;The Unlicense (Unlicense)",
         "--ignore-packages",
         "pynndescent",
         "statsmodels",
@@ -235,7 +235,9 @@
         "mode": "file",
         "path": "python-licenses-api.json",
         "format": "json"
-      }
+      },
+      "normalize": "license-expressions",
+      "allow_file": "dependency-licenses.json"
     },
     {
       "name": "python-licenses-worker",
@@ -250,8 +252,8 @@
         "--with",
         "pip-licenses==5.0.0",
         "pip-licenses",
+        "--from=mixed",
         "--format=json",
-        "--allow-only=0BSD;Apache Software License;BSD License;BSD-3-Clause;Apache-2.0;Apache License 2.0;ISC License;ISC License (ISCL);BSD;GNU General Public License (GPL);GNU Lesser General Public License v3 (LGPLv3);GNU General Public License v3 or later (GPLv3+);GNU Library or Lesser General Public License (LGPL);MIT;MIT License;MPL-2.0 AND MIT;Mozilla Public License 2.0 (MPL 2.0);Python Software Foundation License;The Unlicense (Unlicense)",
         "--ignore-packages",
         "soymutdb-worker",
         "soymutdb-jobs",
@@ -297,7 +299,9 @@
         "mode": "file",
         "path": "python-licenses-worker.json",
         "format": "json"
-      }
+      },
+      "normalize": "license-expressions",
+      "allow_file": "dependency-licenses.json"
     },
     {
       "name": "python-licenses-mcp-server",
@@ -312,8 +316,8 @@
         "--with",
         "pip-licenses==5.0.0",
         "pip-licenses",
+        "--from=mixed",
         "--format=json",
-        "--allow-only=0BSD;Apache Software License;BSD License;BSD-3-Clause;Apache-2.0;Apache License 2.0;ISC License;ISC License (ISCL);BSD;GNU General Public License (GPL);GNU Lesser General Public License v3 (LGPLv3);GNU General Public License v3 or later (GPLv3+);GNU Library or Lesser General Public License (LGPL);MIT;MIT License;MPL-2.0 AND MIT;Mozilla Public License 2.0 (MPL 2.0);Python Software Foundation License;The Unlicense (Unlicense)",
         "--ignore-packages",
         "soymutdb-mcp-server",
         "uvicorn",
@@ -356,7 +360,9 @@
         "mode": "file",
         "path": "python-licenses-mcp-server.json",
         "format": "json"
-      }
+      },
+      "normalize": "license-expressions",
+      "allow_file": "dependency-licenses.json"
     },
     {
       "name": "pnpm-audit",

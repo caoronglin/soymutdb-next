@@ -1,0 +1,49 @@
+# Allowed license options for the Python dependency projections
+# (apps/api, apps/worker, apps/mcp-server).
+#
+# One option per line. Blank lines and `#` comments are ignored; matching is
+# case-insensitive.
+#
+# Two kinds of entry appear here, read from two different metadata sources:
+#
+#   * SPDX identifiers -- what a PEP 639 `License-Expression` declares in the
+#     core metadata. `--from=mixed` (see dependency-governance.json) makes
+#     pip-licenses read that authoritative field, so these entries are the
+#     normal case.
+#   * the free-text strings pip-licenses reports for packages that still only
+#     publish the legacy `License` field or a Trove license classifier
+#     ("BSD License", "Apache Software License", "GNU General Public
+#     License (GPL)", ...). Free text is not authoritative metadata, so the
+#     projections never guess: a package that declares neither a
+#     `License-Expression` nor a recognised classifier stays `UNKNOWN` and
+#     keeps failing closed.
+#
+# Compound expressions (`A AND B`, `A OR B`, `A WITH B`) are split into their
+# options by scripts/dependency_governance.py before this list is applied, so
+# add atoms here, never expressions.
+#
+# Every addition is a reviewable policy decision: it whitelists a license for
+# everything built from these three dependency graphs.
+0BSD
+Apache License 2.0
+Apache Software License
+Apache-2.0
+BSD
+BSD License
+BSD-2-Clause
+BSD-3-Clause
+CC0-1.0
+GNU General Public License (GPL)
+GNU General Public License v3 or later (GPLv3+)
+GNU Lesser General Public License v3 (LGPLv3)
+GNU Library or Lesser General Public License (LGPL)
+ISC License
+ISC License (ISCL)
+MIT
+MIT License
+MIT-0
+Mozilla Public License 2.0 (MPL 2.0)
+PSF-2.0
+Python Software Foundation License
+The Unlicense (Unlicense)
+Zlib

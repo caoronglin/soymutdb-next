@@ -251,3 +251,38 @@ recorded as `unavailable`; a nonzero analyzer is `failed`; a zero exit without
 the declared valid report is also `failed`. The job succeeds only when every
 row is `passed`. An uploaded artifact is therefore evidence, not evidence that
 an unavailable analyzer passed.
+
+## 8. License checks are a projection, not a string comparison
+
+The three `python-licenses-*` gates are the one place where the analyzer's own
+verdict is not the authority. pip-licenses compares the raw `License` field
+against the allow-list, and that comparison cannot see a PEP 639
+`License-Expression` -- the field modern wheels actually publish -- nor an
+expression such as `Apache-2.0 AND MIT`. On the pinned interpreter
+(python:3.14 / pip-licenses 5.0.0) it reports 31 of the 85 API packages as
+`UNKNOWN`, every one of them because its metadata carries only
+`License-Expression: MIT` and no legacy `License:` or license classifier:
+
+```
+license UNKNOWN not in allow-only licenses was found for package fastapi:0.137.1
+```
+
+So each check declares `"normalize": "license-expressions"` and an
+`"allow_file"`, and `scripts/dependency_governance.py` re-applies the policy to
+the analyzer's JSON report:
+
+* `pip-licenses --from=mixed` makes the analyzer read the authoritative
+  `License-Expression` when a package declares one;
+* `license_grant_alternatives()` projects the value into alternatives -- `;` and
+  `OR` are choices, `AND` requires all of its options, and `WITH` is an
+  exception that binds to its right operand;
+* a package is flagged only when **no** alternative is acceptable in full, so
+  `MIT OR GPL-3.0-only` grants a choice and passes while
+  `MIT AND GPL-3.0-only` does not;
+* the allow-list itself lives in `dependency-licenses.json` so the three
+  projections cannot drift apart, and free text is never guessed: a package
+  that declares neither a `License-Expression` nor a recognised classifier
+  stays `UNKNOWN` and keeps failing closed.
+
+The normalized result is recorded per check in `summary.json` (`findings`) and
+in `<check>.findings.log`, so the artifact explains a failure by package.

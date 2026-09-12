@@ -1,3 +1,4 @@
+import importlib.util
 import json
 import re
 import subprocess
@@ -279,6 +280,158 @@ def test_governance_policy_covers_every_required_gate_with_pinned_tools() -> Non
             for tool in ("knip@", "madge@", "deptry==", "pip-audit==", "pip-licenses==")
         ):
             assert re.search(r"(?:@|==)\d+\.\d+\.\d+", serialized), serialized
+
+
+def _governance_module():
+    """Load scripts/dependency_governance.py as a module for unit assertions."""
+    spec = importlib.util.spec_from_file_location("dependency_governance", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_license_projection_normalizes_compound_and_pep639_expressions() -> None:
+    """The allow-list holds options; the metadata carries expressions.
+
+    pip-licenses cannot bridge the two on its own. Reproduced on the pinned
+    interpreter (python:3.14 / pip-licenses 5.0.0), build cnb-a2o-1k29qhq06 died
+    with
+
+      license UNKNOWN not in allow-only licenses was found for package
+      fastapi:0.137.1
+
+    while `fastapi` 0.137.1 declares `License-Expression: MIT`. The projection is
+    what turns that declaration, and `Apache-2.0 AND MIT`-style expressions, back
+    into options the allow-list can be applied to.
+    """
+    governance = _governance_module()
+    normalize = governance.normalize_license_options
+
+    assert normalize("MIT") == ["MIT"]
+    assert normalize("Apache-2.0 AND MIT") == ["Apache-2.0", "MIT"]
+    assert normalize("Apache-2.0;MIT") == ["Apache-2.0", "MIT"]
+    assert normalize("MIT OR Apache-2.0") == ["MIT", "Apache-2.0"]
+    assert normalize("MIT AND (Apache-2.0 OR BSD-3-Clause)") == [
+        "MIT",
+        "Apache-2.0 OR BSD-3-Clause",
+    ]
+    assert normalize(
+        "Apache Software License; MIT License; "
+        "Mozilla Public License 2.0 (MPL 2.0)"
+    ) == [
+        "Apache Software License",
+        "MIT License",
+        "Mozilla Public License 2.0 (MPL 2.0)",
+    ]
+    # Parentheses that belong to the license's own name must survive; only
+    # parentheses wrapping a fragment are the splitter's leftovers.
+    assert normalize("The Unlicense (Unlicense)") == ["The Unlicense (Unlicense)"]
+    assert normalize("GPL-2.0 WITH Linux-syscall-note") == ["GPL-2.0"]
+    # pip-licenses prefixes the legacy free-text field with `License:`; that is
+    # metadata formatting, not part of the license name.
+    assert normalize("License: The Unlicense (Unlicense)") == [
+        "The Unlicense (Unlicense)"
+    ]
+    assert normalize("") == []
+    assert normalize(None) == []
+
+
+def test_license_gate_still_fails_closed_on_an_unknown_declaration() -> None:
+    """Normalization must not become a second, weaker allow-list.
+
+    `--from=mixed` reads the authoritative PEP 639 `License-Expression`, but a
+    package that declares neither that field nor a recognised Trove classifier
+    still reports `UNKNOWN`. Treating `UNKNOWN` as acceptable (piplicenses'
+    `SINGLE` / `MIXED` sources do exactly that) would silently whitelist an
+    unlimited license, so the projection keeps it failing.
+    """
+    governance = _governance_module()
+    allow = governance._load_allowed_licenses(ROOT / "dependency-licenses.json")
+    assert allow, "the allow-list must not be empty"
+
+    def alternatives(raw):
+        """Split a value into the top-level permission alternatives.
+
+        `;` and `OR` are choices; `AND` binds within one alternative.
+        """
+        return [
+            [option for option in part.split(" AND ") if option]
+            for part in str(raw or "").replace(";", " OR ").split(" OR ")
+            if part.strip()
+        ]
+
+    def verdict(raw):
+        """True when the declaration grants an acceptable license.
+
+        An OR is satisfied by one acceptable option; an AND needs every one.
+        This mirrors evaluate_license_report's rule: a package is only flagged
+        when no alternative is acceptable in full.
+        """
+        options = governance.normalize_license_options(raw)
+        if not options:
+            return False
+        groups = alternatives(raw)
+        if any(not group for group in groups):
+            return False
+        return any(
+            all(option.casefold() in allow for option in group)
+            for group in groups
+        )
+
+    for raw in ("UNKNOWN", "", None, "License-Unknown"):
+        assert not verdict(raw), f"{raw!r} must not be accepted"
+    for raw in ("GPL-3.0-only", "AGPL-3.0-only", "SSPL-1.0", "Commons-Clause"):
+        assert not verdict(raw), f"{raw!r} must not be accepted"
+    # Every option of an AND expression has to be allowed.
+    assert not verdict("MIT AND GPL-3.0-only")
+    assert not verdict("MIT AND Business-Source-License-1.1")
+    # An OR expression is a choice, so one allowed option is enough.
+    assert verdict("MIT OR GPL-3.0-only")
+    assert not verdict("GPL-3.0-only OR SSPL-1.0")
+    for raw in ("MIT", "Apache-2.0", "BSD-3-Clause", "MIT AND Apache-2.0"):
+        assert verdict(raw), f"{raw!r} must be accepted"
+
+
+def test_python_license_checks_share_one_normalized_allow_list() -> None:
+    """The three projections must not drift apart.
+
+    Each analyzer used to carry its own 400-character `--allow-only` string with
+    a different set of exceptions, so a policy change had to be made three times
+    and could silently apply to two of them. The allow-list now lives in one
+    file, and each check declares that it is evaluated by the normalized gate.
+    """
+    policy = json.loads(CONFIG.read_text(encoding="utf-8"))
+    checks = [
+        check
+        for check in policy["checks"]
+        if check["name"].startswith("python-licenses-")
+    ]
+    assert checks, "the policy must keep its Python license gates"
+
+    for check in checks:
+        assert check["normalize"] == "license-expressions", check["name"]
+        assert check["allow_file"] == "dependency-licenses.json", check["name"]
+        serialized = " ".join(check["command"])
+        assert "--allow-only=" not in serialized, check["name"]
+        # Normalization needs the PEP 639 field, which only `mixed` reads.
+        assert "--from=mixed" in serialized, check["name"]
+
+    assert (ROOT / "dependency-licenses.json").is_file()
+
+
+def test_license_report_normalization_agrees_with_the_analyzer_exit_code() -> None:
+    """A report the analyzer passes must not be failed again, and vice versa."""
+    governance = _governance_module()
+    policy = json.loads(CONFIG.read_text(encoding="utf-8"))
+    check = next(
+        entry
+        for entry in policy["checks"]
+        if entry["name"] == "python-licenses-api"
+    )
+
+    allowed = governance._load_allowed_licenses(ROOT / check["allow_file"])
+    assert "mit" in allowed and "unknown" not in allowed
 
 
 def test_root_scripts_and_knip_configuration_are_executable_contracts() -> None:

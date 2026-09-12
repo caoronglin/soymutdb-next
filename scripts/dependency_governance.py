@@ -612,6 +612,30 @@ def _run_check(check: dict[str, Any], output: Path) -> dict[str, Any]:
     )
     if completed.returncode == 0 and not report_available:
         result_row["reason"] = "missing_or_invalid_report"
+
+    # 2. Optional normalized re-evaluation of the analyzer's own report. The
+    #    analyzer's raw comparison is the process exit code; when the policy
+    #    declares `normalize: license-expressions` the report is the authority
+    #    instead, because the raw comparison cannot see a PEP 639 declaration
+    #    and the gate would be failing on packages whose licence the allow-list
+    #    already accepts. The analyzer's crash is never re-interpreted: a
+    #    non-zero exit without a usable report stays a failure.
+    normalization = check.get("normalize")
+    if report_available and normalization == "license-expressions":
+        passed, findings = evaluate_license_report(report_path, check)
+        detail_path = output / f"{name}.findings.log"
+        if findings:
+            detail_path.write_text("\n".join(findings) + "\n", encoding="utf-8")
+        else:
+            detail_path.unlink(missing_ok=True)
+        result_row["findings"] = findings
+        result_row["status"] = "passed" if passed else "failed"
+        result_row["reason"] = (
+            "passed" if passed else f"{len(findings)} license findings"
+        )
+    elif normalization is not None:
+        result_row["status"] = "failed"
+        result_row["reason"] = f"normalization_unavailable:{normalization}"
     return result_row
 
 
@@ -623,6 +647,18 @@ def run_audits(config_path: Path, output: Path) -> int:
     checks = policy.get("checks")
     if not isinstance(checks, list) or not checks:
         raise ValueError("dependency governance policy must contain checks")
+    for check in checks:
+        if check.get("normalize") == "license-expressions":
+            allow_file = check.get("allow_file")
+            if not isinstance(allow_file, str) or not allow_file:
+                raise ValueError(
+                    f"{check.get('name')}: normalize=license-expressions "
+                    "requires an allow_file"
+                )
+            if not (ROOT / allow_file).is_file():
+                raise ValueError(
+                    f"{check.get('name')}: missing allow_file {allow_file}"
+                )
 
     rows: list[dict[str, Any]] = []
     for check in checks:
@@ -652,6 +688,265 @@ def run_audits(config_path: Path, output: Path) -> int:
         print(f"{row['name']}: {row['status']} ({row['reason']})")
     print(f"dependency governance: {status} ({output})")
     return 0 if status == "passed" else 1
+
+
+# ---------------------------------------------------------------------------
+# License-expression normalization
+# ---------------------------------------------------------------------------
+# `python-licenses-*` must normalise the raw `License` value before it applies
+# the allow-list, and this is not a nicety -- it is the difference between a
+# gate that reports real findings and one that reports noise.
+#
+# Until build cnb-a2o-1k29qhq06 the analyzers compared the raw value with a
+# case-insensitive, whitespace-trimmed set membership test, which disagrees with
+# the allow-list in three ways. Reproduced on the pinned interpreter
+# (python:3.14 / pip-licenses 5.0.0), `python-licenses-api` fails with:
+#
+#   license UNKNOWN not in allow-only licenses was found for package
+#   fastapi:0.137.1
+#
+# even though the allow-list carries `MIT`, and the dependency graph is
+# unchanged: 32 of the 85 packages are reported, none of them for a reason a
+# human can act on.
+#
+#   1. PEP 639. A modern wheel declares its licence only in the core metadata
+#      `License-Expression` field (`License-Expression: MIT`) and carries no
+#      `Classifier: License :: OSI Approved :: MIT License` and no legacy
+#      `License:` field. pip-licenses 5.0.0 reads neither the former nor the
+#      latter two (see its `METADATA_KEYS`), so it reports `UNKNOWN`.
+#      Packages: fastapi, pydantic, Mako, MarkupSafe, anyio, ...
+#   2. Compound expressions. SPDX allows `A AND B` / `A OR B` / `A WITH B`. The
+#      allow-list contains atom identifiers, so the raw string never matches:
+#      `aiohttp` reports `Apache-2.0 AND MIT`, which no entry spells out.
+#   3. A fragment that needs normalisation before it can be compared, while
+#      its neighbours make the whole string match anyway: the pair
+#      `Apache Software License; MIT License` passes as a whole, which is
+#      exactly what concealed this for as long as only pypi.org's
+#      classifier-based metadata was in play.
+#
+# The projection is deliberately fail-closed: it is a two-valued judgement on a
+# *complete* permission grant, so preserving AND/OR as a tree would be wrong --
+# `MIT OR GPL-3.0-only` grants a choice and is therefore acceptable, while
+# `MIT AND GPL-3.0-only` requires both and is not. Asking "is every alternative
+# acceptable on its own" is the conservative reading of an OR, and it is the
+# only reading that needs no licence-tree model here.
+#
+# Every substitution lives in this table and nowhere else, so the policy stays
+# auditable: a PEP 639 declaration is authoritative metadata, while the legacy
+# free-text `License` field is not, so `UNKNOWN` deliberately stays unknown and
+# keeps failing closed.
+
+# Compiler/toolchain exceptions that a free-text field appends to an otherwise
+# already-allowed licence ("GPL-2.0 WITH Linux-syscall-note"). They add nothing
+# to the permission grant, so they normalise away.
+LICENSE_OPTION_SUFFIXES = (
+    "linux-syscall-note",
+)
+
+
+def _strip_wrapping_parentheses(fragment: str) -> str:
+    """Drop only the parentheses that wrap the whole fragment.
+
+    `The Unlicense (Unlicense)` must survive intact -- the trailing parentheses
+    belong to the licence's own name -- while `(MIT OR Apache-2.0)` must not
+    leave a stray `(MIT`.
+    """
+    fragment = fragment.strip()
+    while fragment.startswith("(") and fragment.endswith(")"):
+        inner = fragment[1:-1]
+        depth = 0
+        balanced = True
+        for character in inner:
+            if character == "(":
+                depth += 1
+            elif character == ")":
+                depth -= 1
+                if depth < 0:
+                    balanced = False
+                    break
+        if depth > 0:
+            balanced = False
+        if not balanced:
+            break
+        fragment = inner.strip()
+    return fragment
+
+
+def _without_option_suffix(fragment: str) -> str:
+    """`GPL-2.0 WITH Linux-syscall-note` is `GPL-2.0` plus an exception.
+
+    `WITH` binds to its own operand, so it is not an operator of the grant and
+    the exception adds nothing to the permission, which is why it normalises
+    away instead of becoming an option of its own.
+    """
+    lowered = fragment.casefold()
+    for suffix in LICENSE_OPTION_SUFFIXES:
+        marker = f" with {suffix}"
+        if lowered.endswith(marker):
+            return fragment[: -len(marker)].strip()
+    return fragment
+
+
+_LICENSE_OPERATORS = frozenset({"and", "or", "with"})
+
+
+def _canonical_option(fragment: str) -> str:
+    return _without_option_suffix(_strip_wrapping_parentheses(fragment))
+
+
+def _split_on_operators(value: str, operators: tuple[str, ...]) -> list[str]:
+    """Split on `operators` at parenthesis depth 0, preserving the split text.
+
+    The result keeps whichever operator was between two terms, so a caller can
+    tell `A AND B` from `A OR B` rather than receiving a flat option list that
+    has lost the structure.
+    """
+    parts: list[str] = []
+    current: list[str] = []
+    depth = 0
+    index = 0
+    pattern = re.compile(r"\b(?:" + "|".join(operators) + r")\b")
+    while index < len(value):
+        character = value[index]
+        if character == "(":
+            depth += 1
+        elif character == ")":
+            depth = max(depth - 1, 0)
+        if depth == 0:
+            match = pattern.match(value, index)
+            if match is not None:
+                parts.append("".join(current))
+                parts.append(match.group(0))
+                current = []
+                index = match.end()
+                continue
+        current.append(character)
+        index += 1
+    parts.append("".join(current))
+    return [part for part in parts if part.strip()]
+
+
+def _options_of(expression: str) -> list[str]:
+    """Normalise a single `AND`-joined expression into its options.
+
+    `WITH` is not an operator of the grant: it binds to its right operand, so
+    `GPL-2.0 WITH Linux-syscall-note` is one option that `_canonical_option`
+    later reduces to `GPL-2.0`.
+    """
+    options: list[str] = []
+    for fragment in _split_on_operators(expression, ("AND",)):
+        # The splitter returns the operators too, so they can be told apart
+        # rather than flattened; they are not options of the grant.
+        if fragment.strip().casefold() in _LICENSE_OPERATORS:
+            continue
+        canonical = _canonical_option(fragment)
+        if canonical and canonical.casefold() not in {
+            option.casefold() for option in options
+        }:
+            options.append(canonical)
+    return options
+
+
+def license_grant_alternatives(value: Any) -> list[list[str]]:
+    """Project a raw `License` value into its granted alternatives.
+
+    The value is a *grant*, so the return type is a list of alternatives and
+    each alternative is the list of options it requires:
+
+      * `;` and `OR` produce alternatives -- any one of them is enough;
+      * `AND` requires every option inside one alternative;
+      * `WITH` is not an operator of the grant at all.
+
+    A flat option list would silently lose that structure and accept
+    `MIT AND GPL-3.0-only` because `MIT` is allowed. `Apache-2.0 AND MIT`,
+    `Apache-2.0;MIT` and `Apache-2.0; MIT License` all project to two
+    single-option alternatives.
+    """
+    if value is None:
+        return []
+    raw = str(value).strip()
+    if not raw:
+        return []
+    # `--from=mixed` labels a PEP 639 `License-Expression`; the value is the
+    # expression itself, so it needs no unwrapping. The legacy free-text field
+    # arrives with a `Name: value` prefix that is metadata formatting, not part
+    # of the licence name, and would otherwise never match an allow-list entry.
+    if ":" in raw and raw.split(":", 1)[0].strip().isidentifier():
+        raw = raw.split(":", 1)[1].strip()
+    if not raw:
+        return []
+    alternatives: list[list[str]] = []
+    # `;` is the historical separator for independent declarations; treat it as
+    # a choice so a value that lists several options is not read as an AND.
+    for declaration in raw.split(";"):
+        for alternatives_text in _split_on_operators(declaration, ("OR",)):
+            if alternatives_text.strip().casefold() in _LICENSE_OPERATORS:
+                continue
+            options = _options_of(alternatives_text)
+            if options:
+                alternatives.append(options)
+    return alternatives
+
+
+def normalize_license_options(value: Any) -> list[str]:
+    """Flat view of `license_grant_alternatives`, for reporting and assertions."""
+    options: list[str] = []
+    for alternative in license_grant_alternatives(value):
+        for option in alternative:
+            if option.casefold() not in {entry.casefold() for entry in options}:
+                options.append(option)
+    return options
+
+
+def _load_allowed_licenses(path: Path) -> set[str]:
+    allowed: set[str] = set()
+    for line in path.read_text(encoding="utf-8").splitlines():
+        entry = line.strip()
+        if entry and not entry.startswith("#"):
+            allowed.add(entry.casefold())
+    return allowed
+
+
+def evaluate_license_report(
+    report_path: Path,
+    policy: dict[str, Any],
+) -> tuple[bool, list[str]]:
+    """Re-apply the allow-list to a `python-licenses-*` report, normalised.
+
+    Returns `(passed, findings)`; `findings` is empty when the projection agrees
+    with the analyzer's exit code.
+    """
+    allow_path = ROOT / str(policy["allow_file"])
+    allowed = _load_allowed_licenses(allow_path)
+    entries = json.loads(report_path.read_text(encoding="utf-8"))
+    if not isinstance(entries, list):
+        raise TypeError(f"{report_path.name}: expected a JSON list of packages")
+    findings: list[str] = []
+    for entry in entries:
+        name = str(entry.get("Name", "<unnamed>"))
+        version = str(entry.get("Version", "?"))
+        alternatives = license_grant_alternatives(entry.get("License"))
+        if not alternatives:
+            findings.append(f"{name}:{version} declares no license")
+            continue
+        # The declaration is a grant: an OR is satisfied by ONE acceptable
+        # alternative, while an AND needs EVERY option in its alternative.
+        # `MIT OR GPL-3.0-only` grants a choice and is acceptable;
+        # `MIT AND GPL-3.0-only` also requires the GPL and is not. A package is
+        # only flagged when no alternative is acceptable in full.
+        acceptable = [
+            alternative
+            for alternative in alternatives
+            if all(option.casefold() in allowed for option in alternative)
+        ]
+        if not acceptable:
+            offending = sorted(
+                {option for alternative in alternatives for option in alternative}
+            )
+            findings.append(
+                f"{name}:{version} is {'; '.join(offending)}"
+            )
+    return (not findings), findings
 
 
 def _parser() -> argparse.ArgumentParser:

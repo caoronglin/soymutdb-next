@@ -145,6 +145,30 @@ scripts/setup-workspace.sh: line 122: log: command not found   (exit 127)
 `test_setup_workspace_declares_helpers_before_it_calls_them` 静态锁定。
 
 
+### 2.2.3 为什么 license 门要自己做规范化（第二次构建失败）
+
+上一节修好后，`log: command not found` 不再出现，流水线跑到了真正的门禁，
+Dependency governance 又失败在 **python-licenses-api**：
+
+```
+python-licenses-api: failed (analyzer_exit_nonzero)
+license UNKNOWN not in allow-only licenses was found for package fastapi:0.137.1
+```
+
+`fastapi` 0.137.1 的元数据是 `License-Expression: MIT`（PEP 639），但
+`pip-licenses` 只读旧的 `License` 字段和 Trove 分类器，两者都没有，于是报
+`UNKNOWN`。在固定的解释器（python:3.14 / pip-licenses 5.0.0）上复现：API 的
+85 个包里 **31 个**被判为 `UNKNOWN`，逐个核对后**每一个都带合法的
+`License-Expression`**，没有一个是真正未知的许可证——即门禁在报噪音，而不是
+在报发现。
+
+处理方式见 [`../design/dependency-graphs.md`](../design/dependency-graphs.md) §8：
+把"原始字符串比较"换成显式的 license 表达式投影，三个 Python 门共用
+`dependency-licenses.json`，规范化结果写进 `summary.json` 与
+`<check>.findings.log`。锁定它的测试在
+`scripts/test_dependency_governance_contracts.py`（表达式形态、fail-closed、
+三处策略不漂移）。
+
 ### 2.3 预览模式
 
 `onlyPreview` 模式下业务服务必须监听 **8686** 端口（平台固定要求，不是本项目的
