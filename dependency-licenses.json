@@ -4,19 +4,20 @@
 # One option per line. Blank lines and `#` comments are ignored; matching is
 # case-insensitive.
 #
-# Two kinds of entry appear here, read from two different metadata sources:
+# Three kinds of entry appear here, read from three different metadata sources:
 #
 #   * SPDX identifiers -- what a PEP 639 `License-Expression` declares in the
-#     core metadata. `--from=mixed` (see dependency-governance.json) makes
-#     pip-licenses read that authoritative field, so these entries are the
-#     normal case.
-#   * the free-text strings pip-licenses reports for packages that still only
-#     publish the legacy `License` field or a Trove license classifier
+#     core metadata, and the normal case for a modern wheel (the probe in
+#     scripts/dependency_governance.py reads that field first);
+#   * the free-text strings the probe reports for packages that still only
+#     publish a legacy `License` field or a Trove license classifier
 #     ("BSD License", "Apache Software License", "GNU General Public
 #     License (GPL)", ...). Free text is not authoritative metadata, so the
-#     projections never guess: a package that declares neither a
-#     `License-Expression` nor a recognised classifier stays `UNKNOWN` and
-#     keeps failing closed.
+#     projections never guess: a package that declares none of the three
+#     sources stays `UNKNOWN` and keeps failing closed;
+#   * a `LicenseRef-*` identifier, which is only ever an entry here when the
+#     policy explicitly accepts that non-standard reference -- it is never
+#     matched by name similarity to another license.
 #
 # Compound expressions (`A AND B`, `A OR B`, `A WITH B`) are split into their
 # options by scripts/dependency_governance.py before this list is applied, so
@@ -37,13 +38,43 @@ GNU General Public License (GPL)
 GNU General Public License v3 or later (GPLv3+)
 GNU Lesser General Public License v3 (LGPLv3)
 GNU Library or Lesser General Public License (LGPL)
+ISC
 ISC License
 ISC License (ISCL)
+LicenseRef-Biopython-License-Agreement
 MIT
 MIT License
 MIT-0
+MIT-CMU
+MPL-2.0
 Mozilla Public License 2.0 (MPL 2.0)
 PSF-2.0
 Python Software Foundation License
 The Unlicense (Unlicense)
 Zlib
+
+# ---------------------------------------------------------------------------
+# Declared-unknown fixups
+# ---------------------------------------------------------------------------
+# A package that publishes none of the three metadata sources is `UNKNOWN` and
+# fails closed -- that rule is what makes the gate meaningful, so it is not
+# relaxed for a whole graph. A small number of transitive dependencies,
+# however, ship a wheel that genuinely omits the license metadata even though
+# the project's own repository declares an allowed license:
+#
+#   * google-crc32c 1.8.0 -- no `License-Expression`, no `License`, no
+#     license classifier in the wheel; upstream is Apache-2.0
+#     (https://github.com/googleapis/python-crc32c/blob/main/LICENSE).
+#   * scverse-misc 0.1.3 -- only pastes the BSD-3-Clause text into the legacy
+#     `License` field, which is a license *text* rather than a machine-readable
+#     declaration.
+#
+# The syntax is `@allow-undeclared <name>=<license>`: the named package is
+# accepted only when its declaration is `UNKNOWN`, and only with the license
+# stated here. It is per-package and per-license, so it can never blanket a
+# graph, and it is a reviewable policy decision like every other line in this
+# file -- the license must be in the allow-list above.
+#
+# Do not add an entry without a link to the upstream license in the commit.
+@allow-undeclared google-crc32c=Apache-2.0
+@allow-undeclared scverse-misc=BSD-3-Clause

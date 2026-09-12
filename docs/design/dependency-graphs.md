@@ -286,19 +286,49 @@ report:
 
 * a probe replays the check's own `uv run --project <app>` selector with
   `python -c` in place of the analyzer, so it reads every installed
-  distribution's `License-Expression` **and** its legacy `License` field in the
-  same environment the report describes;
-* `license_grant_alternatives()` projects the value into alternatives -- `;` and
-  `OR` are choices, `AND` requires all of its options, and `WITH` is an
-  exception that binds to its right operand;
+  distribution's declaration in the same environment the report describes. It
+  applies the same precedence the policy wants: the authoritative PEP 639
+  `License-Expression` first, then the leaf of a real Trove `License ::`
+  classifier (a bare `License :: OSI Approved` is a category, not a grant), and
+  only then the legacy `License` field -- and only when it is a short
+  single-line value, because a distribution that pastes a whole licence *text*
+  into that field (scipy, python-dateutil, scverse-misc) is not making a
+  machine-readable declaration;
+* `license_grant_alternatives()` parses the declaration into disjunctive normal
+  form: `;` and uppercase `OR` are choices, `AND` requires all of its options,
+  and a nested `OR` inside an `AND` is distributed, so
+  `MPL-2.0 AND (Apache-2.0 OR MIT)` (orjson) is the two complete grants
+  `MPL-2.0 AND Apache-2.0` and `MPL-2.0 AND MIT` rather than the unmatchable
+  atom `Apache-2.0 OR MIT`. Only uppercase operators are operators: a free-text
+  name legitimately contains the English word ("GNU General Public License v3
+  or later (GPLv3+)"). `WITH` is not an operator of the grant -- the
+  compiler/toolchain exceptions in `LICENSE_OPTION_SUFFIXES` bind to their right
+  operand and normalise away;
 * a package is flagged only when **no** alternative is acceptable in full, so
   `MIT OR GPL-3.0-only` grants a choice and passes while
   `MIT AND GPL-3.0-only` does not;
 * a package the probe could not describe keeps the analyzer's value, and free
-  text is never guessed: a package that declares neither a
-  `License-Expression` nor a recognised classifier stays `UNKNOWN` and keeps
-  failing closed. The allow-list lives in `dependency-licenses.json` so the
-  three projections cannot drift apart.
+  text is never guessed: a package that declares none of the three sources stays
+  `UNKNOWN` and keeps failing closed. The allow-list lives in
+  `dependency-licenses.json` so the three projections cannot drift apart.
+
+### 8.1 No per-graph ignore lists
+
+`823a966` made the gate green by adding ~30 package names to
+`pip-licenses --ignore-packages`, so the analyzer never saw those
+distributions. The list had to be regenerated whenever the resolved graph
+changed, and when it drifted by two packages the gate failed with
+
+```
+python-licenses-api: failed (2 license findings)
+```
+
+for packages it had been told to skip. The ignore lists are gone. A real
+metadata gap is instead an explicit, per-package
+`@allow-undeclared <name>=<license>` line in `dependency-licenses.json`: it only
+ever replaces an `UNKNOWN` declaration, only for the package it names, and only
+at a license the allow-list already carries -- so it can never blanket a graph,
+and a directive naming an unlisted license is a hard error rather than a pass.
 
 The normalized result is recorded per check in `summary.json` (`findings`), in
 `<check>.findings.log`, and -- when the probe ran -- in

@@ -171,15 +171,30 @@ license UNKNOWN not in allow-only licenses was found for package fastapi:0.137.1
 `--with-license-file`，argparse 的前缀匹配会让 `--with-licenses` 命中它，报告会
 悄悄开始携带每个包的许可证**全文**。
 
+换成探针之后还有第二个坑：`823a966` 为了让门禁变绿，曾用
+`pip-licenses --ignore-packages` 把约 30 个包名塞进跳过列表——分析器根本看不到
+这些发行版。这份列表必须随解析出的依赖图重新生成，一旦漂移两个包，门禁就以
+
+```
+python-licenses-api: failed (2 license findings)
+```
+
+失败，而那两个包正是它被交代过要跳过的。**跳过列表已全部删除**。
+
 处理方式见 [`../design/dependency-graphs.md`](../design/dependency-graphs.md) §8：
 探针用 check 自己的 `uv run --project <app>` 选择器把 `pip-licenses` 换成
-`python -c`，在同一个环境里直接读每个发行版的 `License-Expression`；投影再按
-license 表达式（`;`/`OR` 是选择、`AND` 要全满足、`WITH` 绑右操作数）应用
-`dependency-licenses.json`；探针描述不了的包沿用分析器的值，继续 fail-closed。
-规范化结果写进 `summary.json`、`<check>.findings.log` 和
+`python -c`，在同一个环境里按优先级读取每个发行版的声明——权威的
+`License-Expression`、真实的 Trove 分类器叶（裸 `License :: OSI Approved` 是类别
+不是许可证）、以及单行的旧 `License` 字段（整段粘贴进来的许可证**全文**不算声明）；
+投影把声明解析成析取范式（`;`/大写 `OR` 是选择、`AND` 要全满足、`AND` 内的嵌套
+`OR` 会分配展开，`WITH` 绑右操作数并归一化掉）后应用 `dependency-licenses.json`；
+探针描述不了的包一律 `UNKNOWN` 并继续 fail-closed，元数据确实缺失的包用逐包、
+逐许可证的 `@allow-undeclared <name>=<license>` 显式登记（许可证必须已在允许列表
+内，否则是硬错误）。规范化结果写进 `summary.json`、`<check>.findings.log` 和
 `<check>.declared-licenses.json`。锁定它的测试在
-`scripts/test_dependency_governance_contracts.py`（表达式形态、探针改写、
-fail-closed、三处策略不漂移）。
+`scripts/test_dependency_governance_contracts.py`（表达式形态与嵌套 OR 分配、
+探针三种来源的优先级、探针改写、fail-closed、无忽略列表、fixup 的窄范围、
+三处策略不漂移）。
 
 ### 2.2.4 为什么发布流水线必须挂在 `main` 而不是 `$`（第三次构建失败）
 

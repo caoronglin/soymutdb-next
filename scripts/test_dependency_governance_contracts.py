@@ -313,9 +313,12 @@ def test_license_projection_normalizes_compound_and_pep639_expressions() -> None
     assert normalize("Apache-2.0 AND MIT") == ["Apache-2.0", "MIT"]
     assert normalize("Apache-2.0;MIT") == ["Apache-2.0", "MIT"]
     assert normalize("MIT OR Apache-2.0") == ["MIT", "Apache-2.0"]
+    # A nested OR distributes: the flat view is the union of both complete
+    # grants, which is what the allow-list is compared against.
     assert normalize("MIT AND (Apache-2.0 OR BSD-3-Clause)") == [
         "MIT",
-        "Apache-2.0 OR BSD-3-Clause",
+        "Apache-2.0",
+        "BSD-3-Clause",
     ]
     assert normalize(
         "Apache Software License; MIT License; "
@@ -415,10 +418,171 @@ def test_python_license_checks_share_one_normalized_allow_list() -> None:
         assert check["allow_file"] == "dependency-licenses.json", check["name"]
         serialized = " ".join(check["command"])
         assert "--allow-only=" not in serialized, check["name"]
-        # Normalization needs the PEP 639 field, which only `mixed` reads.
-        assert "--from=mixed" in serialized, check["name"]
+        # The probe reads the PEP 639 field through the check's own `uv run`
+        # selector, so no analyzer flag can silently opt out of it.
+        assert "pip-licenses" in serialized, check["name"]
+        # A per-graph ignore list is what silently disabled the gate for ~30
+        # packages: the analyzer cannot report a finding for a distribution it
+        # was told to skip.
+        assert "--ignore-packages" not in serialized, check["name"]
 
     assert (ROOT / "dependency-licenses.json").is_file()
+
+
+def test_license_gate_does_not_ignore_packages_per_graph() -> None:
+    """No license analyzer may carry a hand-maintained ignore list.
+
+    `823a966` made the gate green by adding ~30 package names to
+    `pip-licenses --ignore-packages`, so the analyzer never saw those
+    distributions. The list had to be regenerated every time the resolved graph
+    changed, and when it drifted by two packages the gate failed with
+
+      python-licenses-api: failed (2 license findings)
+
+    for packages it had been told to skip. The policy is the allow-list, and a
+    genuine metadata gap is an explicit `@allow-undeclared` line, not a name
+    smuggled past the analyzer.
+    """
+    policy = json.loads(CONFIG.read_text(encoding="utf-8"))
+    for check in policy["checks"]:
+        assert "--ignore-packages" not in " ".join(check["command"]), check["name"]
+
+
+def test_license_projection_distributes_nested_alternatives() -> None:
+    """`A AND (B OR C)` is two complete grants, not one unmatchable fragment.
+
+    `orjson` declares `MPL-2.0 AND (Apache-2.0 OR MIT)`. Collapsing the nested
+    OR into the atom `Apache-2.0 OR MIT` would never match the allow-list, so
+    the package would be flagged even though both complete grants it offers are
+    acceptable.
+    """
+    governance = _governance_module()
+    assert governance.license_grant_alternatives(
+        "MPL-2.0 AND (Apache-2.0 OR MIT)"
+    ) == [["MPL-2.0", "Apache-2.0"], ["MPL-2.0", "MIT"]]
+    assert governance.license_grant_alternatives(
+        "MIT AND (Apache-2.0 OR BSD-3-Clause)"
+    ) == [["MIT", "Apache-2.0"], ["MIT", "BSD-3-Clause"]]
+    # Only the uppercase SPDX operators are operators: a free-text license name
+    # legitimately contains the English word, and must stay intact.
+    assert governance.license_grant_alternatives(
+        "GNU General Public License v3 or later (GPLv3+)"
+    ) == [["GNU General Public License v3 or later (GPLv3+)"]]
+    assert governance.license_grant_alternatives("The Unlicense (Unlicense)") == [
+        ["The Unlicense (Unlicense)"]
+    ]
+    assert governance.license_grant_alternatives(
+        "Mozilla Public License 2.0 (MPL 2.0)"
+    ) == [["Mozilla Public License 2.0 (MPL 2.0)"]]
+    # A `WITH` exception binds to its right operand and adds nothing to the
+    # grant, so it normalises away instead of becoming its own option.
+    assert governance.license_grant_alternatives(
+        "Apache-2.0 WITH LLVM-exception"
+    ) == [["Apache-2.0"]]
+
+
+def test_license_probe_reads_the_three_metadata_sources(tmp_path: Path) -> None:
+    """The probe's precedence, executed as the probe itself runs it.
+
+    Asserted against a synthesized distribution rather than an installed one, so
+    it cannot drift with the resolved graph. `pip-licenses` reads only the last
+    two sources, which is why a PEP 639-only wheel was reported `UNKNOWN`.
+    """
+    governance = _governance_module()
+    site = tmp_path / "site"
+    site.mkdir()
+    distributions = {
+        # 1. PEP 639 is authoritative, even without a classifier.
+        "pep639only-1.0": "License-Expression: MIT\n",
+        # 2. A pre-PEP-639 wheel falls back to the classifier leaf.
+        "classified-1.0": "Classifier: License :: OSI Approved :: BSD License\n",
+        # 3. A bare `OSI Approved` classifier is a category, not a license.
+        "category-1.0": "Classifier: License :: OSI Approved\nLicense: BSD\n",
+        # 4. A pasted licence text is not a machine-readable declaration.
+        "pasted-1.0": "License: BSD-3-Clause\n Copyright (c) 2026\n",
+        # 5. Nothing to read at all.
+        "bare-1.0": "Classifier: Programming Language :: Python\n",
+    }
+    for name, extra in distributions.items():
+        metadata = site / f"{name}.dist-info"
+        metadata.mkdir()
+        (metadata / "METADATA").write_text(
+            f"Metadata-Version: 2.5\nName: {name.split('-')[0]}\n"
+            f"Version: {name.split('-')[1]}\n{extra}",
+            encoding="utf-8",
+        )
+
+    environment = dict(os.environ)
+    environment["PYTHONPATH"] = str(site)
+    completed = subprocess.run(
+        [sys.executable, "-c", governance.PROBE_SCRIPT],
+        capture_output=True,
+        text=True,
+        env=environment,
+        check=True,
+    )
+    declared = json.loads(completed.stdout.strip().splitlines()[-1])
+    assert declared["pep639only"]["declared"] == "MIT"
+    assert declared["classified"]["declared"] == "BSD License"
+    assert declared["category"]["declared"] == "BSD"
+    assert declared["pasted"]["declared"] is None
+    assert declared["bare"]["declared"] is None
+
+
+def test_undeclared_fixups_are_narrow_and_reviewable(tmp_path: Path) -> None:
+    """`@allow-undeclared` admits one package, and only at an allowed license."""
+    governance = _governance_module()
+    allow_path = ROOT / "dependency-licenses.json"
+    fixups = governance._load_undeclared_fixups(allow_path)
+    allowed = governance._load_allowed_licenses(allow_path)
+
+    assert fixups == {
+        "google-crc32c": "Apache-2.0",
+        "scverse-misc": "BSD-3-Clause",
+    }
+    for license_value in fixups.values():
+        for option in governance.normalize_license_options(license_value):
+            assert option.casefold() in allowed, option
+
+    # A directive naming an unlisted license is a policy error, not a pass.
+    broken = tmp_path / "dependency-licenses.json"
+    broken.write_text("MIT\n@allow-undeclared pkg=SSPL-1.0\n", encoding="utf-8")
+    report = tmp_path / "report.json"
+    report.write_text(
+        json.dumps([{"Name": "pkg", "Version": "1", "License": "UNKNOWN"}]),
+        encoding="utf-8",
+    )
+    try:
+        governance.evaluate_license_report(report, {"allow_file": str(broken)})
+    except ValueError as error:
+        assert "SSPL-1.0" in str(error)
+    else:  # pragma: no cover - the assertion below is the contract
+        raise AssertionError("an unlisted fixup license must be rejected")
+
+
+def test_license_fixup_only_applies_to_an_unknown_declaration(
+    tmp_path: Path,
+) -> None:
+    """A fixup never overrides a declaration the package actually published."""
+    governance = _governance_module()
+    allow = tmp_path / "dependency-licenses.json"
+    allow.write_text("MIT\n@allow-undeclared pkg=MIT\n", encoding="utf-8")
+    report = tmp_path / "report.json"
+    report.write_text(
+        json.dumps(
+            [
+                {"Name": "pkg", "Version": "1", "License": "GPL-3.0-only"},
+                {"Name": "pkg", "Version": "2", "License": "UNKNOWN"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    passed, findings = governance.evaluate_license_report(
+        report, {"allow_file": str(allow)}
+    )
+    assert not passed
+    assert any("GPL-3.0-only" in finding for finding in findings)
+    assert not any("pkg:2" in finding for finding in findings), findings
 
 
 def test_license_report_normalization_agrees_with_the_analyzer_exit_code() -> None:
@@ -468,21 +632,55 @@ def test_license_projection_reads_the_pep639_field_the_analyzer_cannot() -> None
     # probe of the wrong environment.
     assert governance._rewrite_for_probe(["python3", "scripts/x.py"]) is None
 
-    # A `License-Expression` is preferred over the legacy field, and both are
-    # normalized by the same projection.
+    # The probe's own reading is the authority, so a `License-Expression` is
+    # normalized by the same projection the analyzer's value goes through.
     declared = {
-        "pep639": {"license": None, "license_expression": "MIT"},
-        "legacy": {"license": "MIT License", "license_expression": None},
+        "pep639": {
+            "license": None,
+            "license_expression": "MIT",
+            "declared": "MIT",
+        },
+        # The probe read this wheel and declined its legacy `License` field,
+        # because the field holds a pasted licence TEXT rather than a
+        # declaration. The projection must not fall back to that text.
+        "pasted": {
+            "license": "BSD 3-Clause License\n\nCopyright (c)",
+            "license_expression": None,
+            "declared": None,
+        },
     }
     expression = governance._declared_license(
         {"Name": "pep639", "License": "UNKNOWN"}, declared
     )
     assert expression == "MIT"
     assert governance.normalize_license_options(expression) == ["MIT"]
-    legacy = governance._declared_license(
-        {"Name": "legacy", "License": "UNKNOWN"}, declared
+    # An empty probe reading means "no machine-readable declaration": it becomes
+    # `UNKNOWN` and the gate fails closed instead of comparing prose.
+    assert (
+        governance._declared_license(
+            {"Name": "pasted", "License": "BSD 3-Clause License"}, declared
+        )
+        == "UNKNOWN"
     )
-    assert legacy == "MIT License"
+
+    # An older probe that carries only the raw fields is still read: the
+    # `License-Expression` is authoritative, and an empty reading is UNKNOWN.
+    legacy_probe = {
+        "old": {"license": None, "license_expression": "MIT"},
+        "blank": {"license": "MIT License", "license_expression": None},
+    }
+    assert (
+        governance._declared_license(
+            {"Name": "old", "License": "UNKNOWN"}, legacy_probe
+        )
+        == "MIT"
+    )
+    assert (
+        governance._declared_license(
+            {"Name": "blank", "License": "UNKNOWN"}, legacy_probe
+        )
+        == "UNKNOWN"
+    )
 
     # A package the probe could not describe keeps the analyzer's value, so the
     # projection can never become weaker than the analyzer it replaces.
@@ -569,9 +767,13 @@ def test_license_check_runner_probes_and_records_the_declaration(
             "  exit 1",
         ]
     )
+    # The analyzer is identified by the bare `pip-licenses` argument, not by a
+    # `*pip-licenses*` substring: the probe's selector still carries
+    # `--with pip-licenses==5.0.0`, so a substring match would run the analyzer
+    # half for the probe invocation as well.
     (fake_bin / "uv").write_text(
         "#!/usr/bin/env bash\n"
-        'for argument in "$@"; do [[ "$argument" == *pip-licenses* ]] && {\n'
+        'for argument in "$@"; do [[ "$argument" == "pip-licenses" ]] && {\n'
         + analyzer_half
         + "\n}; done\n"
         f"PYTHONPATH={site} exec {sys.executable} -c \"$(cat <<'PROBE'\n"

@@ -3,6 +3,11 @@ name = "soymutdb-mcp-server"
 version = "0.1.0"
 description = "SoyMutDB MCP server (FastMCP, Streamable HTTP) - tool stubs calling the internal REST API"
 readme = "README.md"
+# Every workspace package declares the same license, so the dependency
+# governance license projection reports `MIT` instead of `UNKNOWN` for this
+# first-party distribution (apps/api, apps/worker and packages/jobs-py already
+# carry it).
+license = { text = "MIT" }
 requires-python = ">=3.11"
 dependencies = [
     "fastmcp>=3.2.0,<4",
