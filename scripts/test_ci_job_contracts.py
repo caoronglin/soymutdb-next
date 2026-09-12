@@ -312,9 +312,17 @@ class DeliveryArchitectureTests(unittest.TestCase):
             },
             push,
         )
-        # Release and publication live in the fallback branch: they run on main
-        # pushes, tags and manual buttons, never on pull requests.
-        self.assertLessEqual({"release", "publish"}, _pipeline_names("$", "push"))
+        # Release and publication run on main pushes, tags and manual buttons,
+        # never on pull requests. They sit under `main` -> `push` (not `$`)
+        # because their `cnb:await` has to pair with the image pipelines'
+        # `cnb:resolve`, and await/resolve pair within one event only.
+        self.assertLessEqual({"release", "publish"}, _pipeline_names("main", "push"))
+        self.assertNotIn(
+            "release",
+            _pipeline_names("$", "push"),
+            "a publisher under `$` starts on every branch push; only `main` "
+            "pushes build the packages it consumes",
+        )
         self.assertLessEqual(
             {
                 "verify",
@@ -878,6 +886,70 @@ class DeliveryArchitectureTests(unittest.TestCase):
             text = mock.read_text(encoding="utf-8")
             self.assertIn("export const stableT", text)
             self.assertIn("mockTranslation", text)
+
+    def test_shared_test_setup_restores_stubbed_globals(self) -> None:
+        """The shared teardown must undo `vi.stubGlobal`, not just `vi.spyOn`.
+
+        Real CNB failure, after the i18n double was fixed:
+
+            ReferenceError: window is not defined
+              at resolveUpdatePriority (react-dom/cjs/react-dom-client...:1308)
+              at requestUpdateLane
+              at dispatchSetState
+              at Timeout._onTimeout (@rc-component/util/lib/hooks/useDelayState.js:39)
+            This error originated in "src/components/file-upload.test.tsx"
+            Test Files 47 passed (47) | Tests 119 passed (119) | Errors 1 error
+
+        A completely green suite that still exits non-zero, blamed on a file
+        whose own assertions all passed. `vi.stubGlobal` records the replacement
+        it installs and only a walk back over that registry undoes it;
+        `vi.restoreAllMocks()` walks back `vi.spyOn` and deliberately leaves the
+        globals alone. `apps/admin/src/test/setup.ts` called only the latter, so
+        each stub outlived its own test -- including a
+        `stubGlobal("crypto", undefined)` that removed the property rather than
+        restoring it. react-dom then hit the hole from a later file.
+
+        The assertion is on the setup's observable contract, and the sibling
+        `apps/admin/src/test/setup.test.ts` proves the contract behaviourally:
+        that suite declares no `afterEach` of its own, so it fails when this call
+        disappears.
+        """
+        setup = (ROOT / "apps/admin/src/test/setup.ts").read_text(encoding="utf-8")
+        self.assertIn(
+            "vi.unstubAllGlobals()",
+            setup,
+            "apps/admin/src/test/setup.ts must undo vi.stubGlobal in afterEach",
+        )
+        # `restoreAllMocks` is not a substitute: vitest documents it as spying
+        # only, and the failure above is precisely the difference.
+        self.assertIn("vi.restoreAllMocks()", setup)
+
+        # The teardown must be ordered so the globals are sound before the tree
+        # is unmounted; a detached antd/rc tree rendering against a torn-down
+        # scope is the crash this guards.
+        teardown = setup[setup.index("afterEach((") :]
+        stubs_restored = teardown.index("vi.unstubAllGlobals()")
+        tree_unmounted = teardown.rindex("cleanup()")
+        self.assertLess(
+            stubs_restored,
+            tree_unmounted,
+            "the stubs must be restored before cleanup() unmounts the tree",
+        )
+
+        # And a behavioural specimen must exist for the next reviewer, not just
+        # this textual check.
+        behaviour = ROOT / "apps/admin/src/test/setup.test.ts"
+        self.assertTrue(
+            behaviour.is_file(),
+            "apps/admin/src/test/setup.test.ts must pin the teardown behaviourally",
+        )
+        behaviour_text = behaviour.read_text(encoding="utf-8")
+        self.assertNotIn(
+            "afterEach(",
+            behaviour_text,
+            "apps/admin/src/test/setup.test.ts must rely on the shared setup's "
+            "afterEach; redeclaring one would test a copy instead of the contract",
+        )
 
     def test_js_unit_tests_do_not_inherit_the_build_environment(self) -> None:
         """`turbo run test` must not see the demo build's VITE_* variables.
@@ -2117,6 +2189,152 @@ class DeliveryArchitectureTests(unittest.TestCase):
             [stage["script"] for stage in vscode_pipeline["stages"]],
         )
 
+    def test_development_data_layer_environment_satisfies_compose(self) -> None:
+        """`docker compose` interpolates the whole file, not the services named.
+
+        `docker-compose.yml` is the production topology and fails fast on
+        `${POSTGRES_PASSWORD:?…}` / `${CLICKHOUSE_PASSWORD:?…}` /
+        `${REDIS_PASSWORD:?…}` / `${MINIO_ROOT_USER:?…}` /
+        `${MINIO_ROOT_PASSWORD:?…}`. Compose resolves those before it selects
+        services, so on a cloud-development environment -- which has no release
+        `.env` -- even `up -d postgres` aborts during interpolation:
+
+          error while interpolating x-app-env.SOYMUTDB_S3_ACCESS_KEY:
+            required variable MINIO_ROOT_USER is missing a value
+
+        `start-cloud-dev.sh` reaches that state on its FIRST compose call, which
+        makes the whole preview pipeline fail in Prepare ("Preview launch script
+        execution failed"). The variables therefore have to exist before any
+        compose invocation, and there is exactly one place both CNB entry points
+        and a local run pass through: scripts/setup-workspace.sh.
+        """
+        required = (
+            "POSTGRES_PASSWORD",
+            "CLICKHOUSE_PASSWORD",
+            "REDIS_PASSWORD",
+            "MINIO_ROOT_USER",
+            "MINIO_ROOT_PASSWORD",
+        )
+
+        # 1. The base compose file keeps its fail-fast posture. A default here
+        #    would silently weaken production; the defaults belong in the
+        #    development bootstrap instead.
+        compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+        for variable in required:
+            self.assertIn(
+                f"${{{variable}:?",
+                compose,
+                f"docker-compose.yml must keep ${variable} required",
+            )
+
+        # 2. The overlay is where the fix has to live, because
+        #    `start-cloud-dev.sh` runs this script as a CHILD PROCESS: an
+        #    `export` below never reaches the data-layer `docker compose` call in
+        #    the parent. Measured on the fix that only touched this script
+        #    (PR #14), the compose call still saw all five variables unset.
+        overlay = (ROOT / "docker-compose.dev.yml").read_text(encoding="utf-8")
+        # `!reset` is the only form that takes the base file's `${…:?…}`
+        # references off the merge's default branch; an anchor merge leaves them
+        # there and Compose interpolates them anyway.
+        self.assertIn("x-app-env: !reset", overlay)
+        # The base healthcheck reads `${REDIS_PASSWORD:?…}`, and a service-level
+        # `environment:` entry is not visible to interpolation, so the overlay
+        # has to replace the healthcheck itself.
+        redis_section = overlay.split("\n  redis:\n", 1)[1].split("\n  redis-celery:\n", 1)[0]
+        effective = "\n".join(
+            line for line in redis_section.splitlines() if not line.lstrip().startswith("#")
+        )
+        self.assertNotIn("${REDIS_PASSWORD:?", effective)
+        self.assertIn("redis-cli -a soymutdb_dev_password ping", overlay)
+
+        # The parent-process check: the data layer must NOT be reachable only
+        # through a subprocess `export`.
+        start_script = (ROOT / "scripts/start-cloud-dev.sh").read_text(encoding="utf-8")
+        self.assertIn("--env-file /dev/null", start_script)
+        self.assertRegex(
+            start_script,
+            r"set_default POSTGRES_PASSWORD",
+            "start-cloud-dev.sh must default the compose variables in its OWN "
+            "process; a subprocess `export` cannot reach the data-layer compose "
+            "call",
+        )
+
+        # 3. The bootstrap declares every one of them, and only when unset, so a
+        #    caller-provided value (the GitHub mirror's ci-compose-* secrets, an
+        #    operator's real ones) stays authoritative. This is a convenience
+        #    for the other callers of the workspace, NOT the preview's fix --
+        #    point 2 above is.
+        script = (ROOT / "scripts/setup-workspace.sh").read_text(encoding="utf-8")
+        for variable in required:
+            self.assertRegex(
+                script,
+                rf': "\$\{{{variable}:=[^}}]+\}}"',
+                f"setup-workspace.sh must default {variable} for the data layer",
+            )
+        # A plain assignment would override a caller's value and silently pin a
+        # development password onto a real deployment.
+        for variable in required:
+            self.assertNotRegex(
+                script,
+                rf"^\s*{variable}=",
+                f"setup-workspace.sh must not override an exported {variable}",
+            )
+        self.assertIn('export POSTGRES_PASSWORD', script)
+
+        # 4. It must NOT run for an image build. Those pipelines are the release
+        #    path, where the daemon is never started and defaulting a production
+        #    secret is the opposite of fail-fast; they declare no data volume.
+        guard = script.index('if [[ -z "${POSTGRES_PASSWORD:-}" ]]')
+        self.assertLess(
+            guard,
+            script.index(': "${POSTGRES_PASSWORD:='),
+            "the caller-provided check must come first",
+        )
+        self.assertIn("POSTGRES_PASSWORD", script[guard:])
+
+        # 5. `start-cloud-dev.sh` must reach the bootstrap before its first
+        #    compose call, for every mode that touches the data layer.
+        start = (ROOT / "scripts/start-cloud-dev.sh").read_text(encoding="utf-8")
+        self.assertLess(
+            start.index("setup-workspace.sh"),
+            start.index("compose_cmd()"),
+            "the compose variables must exist before the first compose call",
+        )
+
+    def test_setup_workspace_declares_helpers_before_it_calls_them(self) -> None:
+        """Step 0 runs before any helper declared below it.
+
+        The compose-variable step above was added at the top of the script, but
+        `log()` was still declared further down. `set -u` does not catch an
+        undefined *command*, so bash reported:
+
+          scripts/setup-workspace.sh: line 122: log: command not found  (exit 127)
+
+        and every stage that bootstraps the workspace died in its first
+        millisecond -- the whole Frontend/API/Worker fan-out. Assert the
+        ordering statically so the next helper moved above its definition is
+        caught by `python3 -m unittest` instead of by a red build.
+        """
+        script = (ROOT / "scripts/setup-workspace.sh").read_text(encoding="utf-8")
+        definition = script.index('log() {')
+        first_call = script.index('log "compose interpolation variables')
+        self.assertLess(
+            definition,
+            first_call,
+            "log() must be declared before step 0 calls it",
+        )
+
+        # Same rule for every other locally declared function: its definition
+        # must precede its first invocation.
+        for name in ("log",):
+            call = re.search(rf"(?m)^\s*(?!#).*(?<!\w){name} \"", script)
+            if call is not None:
+                self.assertLess(
+                    definition,
+                    call.start(),
+                    f"{name}() is called before it is defined",
+                )
+
     def test_start_cloud_dev_binds_services_to_all_interfaces(self) -> None:
         """A service on localhost is unreachable from CNB's preview proxy.
 
@@ -2430,9 +2648,12 @@ class ArchivedPipelineMirrorTests(unittest.TestCase):
     """
 
     def _release_documents(self) -> tuple[dict, dict]:
+        # The publisher is declared under the `main` GLOB key, not under `$`:
+        # `cnb:await` only pairs with a `cnb:resolve` of the SAME event, and the
+        # image pipelines that resolve the key are started by `main` -> `push`.
         root = next(
             pipeline
-            for pipeline in _cnb_pipelines("$", "push")
+            for pipeline in _cnb_pipelines("main", "push")
             if pipeline["name"] == "release"
         )
         archived = yaml.safe_load(
@@ -2518,9 +2739,11 @@ class ReleasePublisherTests(unittest.TestCase):
     """
 
     def _release_pipeline(self) -> dict:
+        # Declared under `main`, the branch whose `push` also starts the image
+        # pipelines this one awaits; see `_release_documents`.
         pipelines = [
             pipeline
-            for pipeline in _cnb_pipelines("$", "push")
+            for pipeline in _cnb_pipelines("main", "push")
             if pipeline["name"] == "release"
         ]
         self.assertEqual(1, len(pipelines), "expected exactly one release pipeline")
@@ -2616,19 +2839,34 @@ class ReleasePublisherTests(unittest.TestCase):
         self.assertIs(resolves[0], verify["stages"][-1])
 
         # `cnb:await` / `cnb:resolve` only pair between pipelines of the SAME
-        # event, so the release must name the image pipeline as a resource of
-        # the event it runs in.
-        resources = _flatten(release.get("resources", {}))
-        self.assertIn("docker-images (amd64)", resources)
+        # event, so the publisher must be declared in the branch key that also
+        # starts the image pipelines -- `main`, to which `docker-images (amd64)`
+        # belongs. Declaring the pairing as a pipeline `resources:` key does not
+        # work: CNB's pipeline schema has no such field, so it is rejected in
+        # Prepare rather than honoured.
+        self.assertIn(
+            "release",
+            _pipeline_names("main", "push"),
+            "the publisher must share the image pipelines' event",
+        )
+        # A pipeline-level `resources:` field is not part of the CNB grammar.
+        for branch, event in (("main", "push"), ("$", "push"), ("$", "tag_push")):
+            for pipeline in _cnb_pipelines(branch, event):
+                self.assertNotIn(
+                    "resources",
+                    pipeline,
+                    f"{pipeline['name']}: CNB has no pipeline-level `resources` key",
+                )
         # Neither of these jobs may run outside `stages`.
-        for pipeline in _cnb_pipelines("$", "push"):
-            for key in ("endStages", "failStages"):
-                for stage in pipeline.get(key, []) or []:
-                    self.assertNotIn(
-                        stage.get("type"),
-                        {"cnb:await", "cnb:resolve"},
-                        f"{pipeline['name']}: {key} cannot hold {stage.get('type')}",
-                    )
+        for branch, event in (("main", "push"), ("$", "push")):
+            for pipeline in _cnb_pipelines(branch, event):
+                for key in ("endStages", "failStages"):
+                    for stage in pipeline.get(key, []) or []:
+                        self.assertNotIn(
+                            stage.get("type"),
+                            {"cnb:await", "cnb:resolve"},
+                            f"{pipeline['name']}: {key} cannot hold {stage.get('type')}",
+                        )
 
 
 class CnbVolumeGrammarTests(unittest.TestCase):

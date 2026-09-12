@@ -89,7 +89,7 @@ def test_node_and_pnpm_toolchain_is_exact_in_jobs_that_build_assets() -> None:
     # non-identical build.
     pages = yaml.safe_load(_pipeline_source())
     deploy_job = _plain(
-        next(p for p in pages["$"]["push"] if p["name"] == "publish")
+        next(p for p in pages["main"]["push"] if p["name"] == "publish")
     )
     assert "pnpm install" not in deploy_job
     assert "pnpm --filter" not in deploy_job

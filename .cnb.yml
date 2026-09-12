@@ -353,66 +353,38 @@ main:
             name: validated-runtime-images-arm64
 
   # ---------------------------------------------------------------------------
-  # Nightly — online smoke test against the deployed public site
+  # Publication — consumes the verified packages, never rebuilds
   # ---------------------------------------------------------------------------
-  "crontab: 0 2 * * *":
-    - name: smoke
-      runner:
-        cpus: 8
-      env:
-        SMOKE_BASE_URL: https://soymutdb.example.com
-      stages:
-        - name: Install Playwright browsers
-          image: node:24.19.0
-          script: bash -c 'cd e2e && npm ci && npx playwright install --with-deps chromium'
-        - name: Run online smoke tests
-          image: node:24.19.0
-          script: bash -c 'cd e2e && CI=1 npx playwright test'
-      failStages:
-        - name: Upload smoke failure artifacts
-          image: cnbcool/artifact
-          settings:
-            path: e2e/playwright-report
-            name: e2e-smoke-failure
-
-# =============================================================================
-# Repository-level events
-# =============================================================================
-# `tag_push` and `issue.*` may only be declared under the `$` fallback branch.
-# Release and publication live here too: they consume artifacts produced by the
-# `main` pipelines but are triggered by main pushes, tags or manual buttons.
-# =============================================================================
-$:
-  push:
-    # Publication consumes the two verified packages; it never rebuilds.
+  # These live under `main` rather than `$` on purpose. A branch key that
+  # matches the pushed branch REPLACES `$` for that event
+  # (docs.cnb.cool/zh/build/trigger-rule.md, "匹配策略"), so declaring them
+  # here is what puts them in the SAME event as the `docker-images` pipelines
+  # above -- and `cnb:await` / `cnb:resolve` pair within ONE event only
+  # (docs.cnb.cool/zh/build/internal-steps.md, "使用限制"). On any other
+  # branch the `$` fallback applies and neither publisher starts, so a branch
+  # push can no longer start a publisher that nothing feeds. That exact
+  # mis-scoping is build cnb-fng-1k29s324u:
+  #
+  #   Deadlock detected: cnb:await key "validated-runtime-images-amd64"
+  #   cannot be resolved. Awaiting pipeline: "release"
+  #   Cause: No pipeline contains a cnb:resolve job for this key.
+  #
+  # The gate itself is still needed: every pipeline of one `main` push event
+  # starts at the same moment, so without the `cnb:await` stage the release
+  # races the two native-architecture image pipelines and
+  # scripts/release-contract.golden.sh dies with
+  #
+  #   ==> Verify and load both platform packages
+  #   missing validated package for amd64: validated-platforms/validated-runtime-images-amd64
+  #
+  # on a run where those packages were about to be produced.
+  #
+  # The start gate used to be a pipeline-level `resources:` key. CNB has no
+  # such key (the pipeline schema is name/runner/docker/git/services/env/
+  # imports/allowFailure/stages/failStages/endStages/ifNewBranch/ifModify/
+  # breakIfModify/label/retry/lock/sandbox), so it declared nothing while
+  # reading like a gate -- which is how the mis-scoping above went unnoticed.
     - name: release
-      # `resources` is the event-level start gate: the pipelines named here are
-      # the ones this event is guaranteed to have started. Declaring the image
-      # verifiers is what makes the `docker-images` pipelines part of the `$` ->
-      # `push` event at all, and therefore what lets `cnb:await` below pair with
-      # their resolves ("await and resolve only work between pipelines of the
-      # SAME event"). `main` -> `push` also starts a `docker-images (amd64)`, so
-      # it is listed as well; the resource declaration is per event, and the two
-      # are the same pipeline body.
-      #
-      # The publisher runs on main pushes, tags and manual buttons, but it may
-      # only start once the artifacts it consumes exist. Every pipeline of a
-      # `main` push event starts at the same moment, so without a start gate the
-      # release races the two native-architecture image pipelines and
-      # scripts/release-contract.golden.sh dies with
-      #
-      #   ==> Verify and load both platform packages
-      #   missing validated package for amd64: validated-platforms/validated-runtime-images-amd64
-      #
-      # on a run where those packages were about to be produced.
-      #
-      # `cnb:await` is the platform's ordered start: it holds this pipeline until
-      # the `docker-images (amd64)` pipeline of the same event resolves the key,
-      # and the resolve is that pipeline's last job -- after the artifact upload.
-      # A failed resolve is reported as a dead lock rather than waiting forever.
-      resources:
-        pipelines:
-          - name: docker-images (amd64)
       runner:
         cpus: 8
       imports:
@@ -446,6 +418,9 @@ $:
             name: oci-release-contract-$CNB_COMMIT_SHORT
 
     # Static-site publication: byte copy of the verified artifact, no rebuild.
+    # It consumes `pages-dist`, produced by the `verify` pipeline of this very
+    # event, so it needs no await gate -- `verify` is what the other pipelines of
+    # this event wait behind, and a failure there fails the event.
     - name: publish
       runner:
         cpus: 4
@@ -479,6 +454,41 @@ $:
             path: pages-dist
             name: pages-verified-tree-$CNB_COMMIT_SHORT
 
+  # ---------------------------------------------------------------------------
+  # Nightly — online smoke test against the deployed public site
+  # ---------------------------------------------------------------------------
+  # A crontab event must be declared under a concrete branch key, and `main` is
+  # the branch whose configuration the schedule should run.
+  "crontab: 0 2 * * *":
+    - name: smoke
+      runner:
+        cpus: 8
+      env:
+        SMOKE_BASE_URL: https://soymutdb.example.com
+      stages:
+        - name: Install Playwright browsers
+          image: node:24.19.0
+          script: bash -c 'cd e2e && npm ci && npx playwright install --with-deps chromium'
+        - name: Run online smoke tests
+          image: node:24.19.0
+          script: bash -c 'cd e2e && CI=1 npx playwright test'
+      failStages:
+        - name: Upload smoke failure artifacts
+          image: cnbcool/artifact
+          settings:
+            path: e2e/playwright-report
+            name: e2e-smoke-failure
+
+# =============================================================================
+# Repository-level events
+# =============================================================================
+# `tag_push`, `vscode`, `issue.*` and the `web_trigger_*` buttons are
+# repository-level or button-driven; `$` is the only branch key that accepts
+# them. `$` is matched only by branches no glob above matched
+# (docs.cnb.cool/zh/build/trigger-rule.md, "匹配策略"), which is exactly the set
+# of branch pushes that must not start the `main`-scoped publishers above.
+# =============================================================================
+$:
   # ---------------------------------------------------------------------------
   # Tags — release images for an explicit version
   # ---------------------------------------------------------------------------

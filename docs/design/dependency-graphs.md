@@ -251,3 +251,86 @@ recorded as `unavailable`; a nonzero analyzer is `failed`; a zero exit without
 the declared valid report is also `failed`. The job succeeds only when every
 row is `passed`. An uploaded artifact is therefore evidence, not evidence that
 an unavailable analyzer passed.
+
+## 8. License checks are a projection, not a string comparison
+
+The three `python-licenses-*` gates are the one place where the analyzer's own
+verdict is not the authority. pip-licenses compares the raw `License` field
+against the allow-list, and that comparison cannot see a PEP 639
+`License-Expression` -- the field modern wheels actually publish -- nor an
+expression such as `Apache-2.0 AND MIT`. On the pinned interpreter
+(python:3.14 / pip-licenses 5.0.0) it reports 31 of the 85 API packages as
+`UNKNOWN`, every one of them because its metadata carries only
+`License-Expression: MIT` and no legacy `License:` or license classifier:
+
+```
+license UNKNOWN not in allow-only licenses was found for package fastapi:0.137.1
+```
+
+`--from=mixed` does **not** fix this, which build cnb-fng-1k29s324u proved by
+still reporting the same package as `UNKNOWN` with the flag in place. The
+analyzer's two readers both funnel into its `License` column, and in `mixed`
+mode the fallback chain is `classifiers or {license metadata}` where the
+`license` extraction reads only the legacy `License` field. A wheel that
+publishes `License-Expression: MIT` and nothing else therefore produces the
+string `"UNKNOWN"` -- indistinguishable, in the report, from a package with no
+licence at all. `--with-licenses` cannot smuggle the authoritative value in
+either: piplicenses 5.0.0 declares that flag as `--with-license-file`, and
+argparse's unambiguous-prefix matching makes `--with-licenses` set it, so the
+report would silently start carrying every package's licence TEXT.
+
+So each check declares `"normalize": "license-expressions"` and an
+`"allow_file"`, and `scripts/dependency_governance.py` gathers the metadata the
+analyzer cannot express, then re-applies the policy to the analyzer's JSON
+report:
+
+* a probe replays the check's own `uv run --project <app>` selector with
+  `python -c` in place of the analyzer, so it reads every installed
+  distribution's declaration in the same environment the report describes. It
+  applies the same precedence the policy wants: the authoritative PEP 639
+  `License-Expression` first, then the leaf of a real Trove `License ::`
+  classifier (a bare `License :: OSI Approved` is a category, not a grant), and
+  only then the legacy `License` field -- and only when it is a short
+  single-line value, because a distribution that pastes a whole licence *text*
+  into that field (scipy, python-dateutil, scverse-misc) is not making a
+  machine-readable declaration;
+* `license_grant_alternatives()` parses the declaration into disjunctive normal
+  form: `;` and uppercase `OR` are choices, `AND` requires all of its options,
+  and a nested `OR` inside an `AND` is distributed, so
+  `MPL-2.0 AND (Apache-2.0 OR MIT)` (orjson) is the two complete grants
+  `MPL-2.0 AND Apache-2.0` and `MPL-2.0 AND MIT` rather than the unmatchable
+  atom `Apache-2.0 OR MIT`. Only uppercase operators are operators: a free-text
+  name legitimately contains the English word ("GNU General Public License v3
+  or later (GPLv3+)"). `WITH` is not an operator of the grant -- the
+  compiler/toolchain exceptions in `LICENSE_OPTION_SUFFIXES` bind to their right
+  operand and normalise away;
+* a package is flagged only when **no** alternative is acceptable in full, so
+  `MIT OR GPL-3.0-only` grants a choice and passes while
+  `MIT AND GPL-3.0-only` does not;
+* a package the probe could not describe keeps the analyzer's value, and free
+  text is never guessed: a package that declares none of the three sources stays
+  `UNKNOWN` and keeps failing closed. The allow-list lives in
+  `dependency-licenses.json` so the three projections cannot drift apart.
+
+### 8.1 No per-graph ignore lists
+
+`823a966` made the gate green by adding ~30 package names to
+`pip-licenses --ignore-packages`, so the analyzer never saw those
+distributions. The list had to be regenerated whenever the resolved graph
+changed, and when it drifted by two packages the gate failed with
+
+```
+python-licenses-api: failed (2 license findings)
+```
+
+for packages it had been told to skip. The ignore lists are gone. A real
+metadata gap is instead an explicit, per-package
+`@allow-undeclared <name>=<license>` line in `dependency-licenses.json`: it only
+ever replaces an `UNKNOWN` declaration, only for the package it names, and only
+at a license the allow-list already carries -- so it can never blanket a graph,
+and a directive naming an unlisted license is a hard error rather than a pass.
+
+The normalized result is recorded per check in `summary.json` (`findings`), in
+`<check>.findings.log`, and -- when the probe ran -- in
+`<check>.declared-licenses.json`, so the artifact explains a failure by package
+and by what each package actually declared.
