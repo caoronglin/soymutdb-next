@@ -50,9 +50,10 @@ workspace:
 3. 调 `scripts/setup-workspace.sh`：`corepack enable` + 校验 `pnpm` 在 PATH 上 +
    `pnpm install --frozen-lockfile`。**每个 stage 都是新容器**，所以这步必须在
    本容器内做，不能指望上一个 stage 留下的 shim。
-4. （`preview` / `api-preview`）按需拉起数据层：`docker compose … up -d --wait
+4. （`preview` / `api-preview`）按需拉起数据层：`docker compose … up -d
    postgres clickhouse redis minio`，并把 `SOYMUTDB_DATABASE_URL` 指向它。没有
-   PostgreSQL 时 API 无法解析 active release，数据页全部显示"不可用"。
+   PostgreSQL 时 API 无法解析 active release，数据页全部显示"不可用"。compose
+   插值所需的变量由 `scripts/setup-workspace.sh` 补默认值（见 §2.2.2）。
 5. 打印原始命令（`pnpm dev:web`、`uvicorn`、`docker compose …`），需要更多面时直接
    在终端里起。
 
@@ -91,6 +92,39 @@ Vite 6 默认只接受 `localhost` / 显式配置的 `Host`。CNB 的预览代�
 `cnb-38o-1k28dm5ta-001.cnb.space` 通过、`evil.example.com` / `cnb.space.evil.com`
 被拒；对应的单元测试在 `apps/web/src/lib/__tests__/deployment.test.ts`。
 
+### 2.2.2 为什么 compose 变量要在引导阶段补默认值（本次构建失败）
+
+打开门户预览曾经在 **Prepare** 阶段直接失败，日志尾部是：
+
+```
+[start-cloud-dev] starting the data layer (postgres clickhouse redis minio)
+error while interpolating x-app-env.SOYMUTDB_S3_ACCESS_KEY:
+  required variable MINIO_ROOT_USER is missing a value: MINIO_ROOT_USER is required
+Pipeline prepare error: Preview launch script execution failed
+```
+
+根因不是 minio，而是 **compose 的插值时机**：
+
+* `docker compose` 在**选择服务之前**对**整个文件**做变量插值，所以一个必填变量
+  缺失就足以让**任何** compose 调用失败——哪怕命令行只写了 `up -d postgres`；
+* `docker-compose.yml` 是**生产**拓扑，刻意 fail-fast：`${POSTGRES_PASSWORD:?…}`、
+  `${CLICKHOUSE_PASSWORD:?…}`、`${REDIS_PASSWORD:?…}`、`${MINIO_ROOT_USER:?…}`、
+  `${MINIO_ROOT_PASSWORD:?…}` 都**没有默认值**；
+* `docker-compose.dev.yml` 里那句 `minio: environment: MINIO_ROOT_USER: minioadmin`
+  只是**给容器**赋环境变量，**不定义**插值变量，所以两处都没有兜底；
+* 云原生开发环境里没有发布用的 `.env`，插值必然失败。而 `start-cloud-dev.sh`
+  的**第一次** compose 调用就会撞上它，于是 preview 流水线在 Prepare 就报错。
+
+处理方式：默认值集中放在 `scripts/setup-workspace.sh`（两个 CNB 入口与本地运行都会
+经过它，且都在第一次 compose 调用之前）：
+
+* 只在变量**未设置**时赋值，调用方传进来的值（GitHub 镜像的 `ci-compose-*`、
+  运维的真实口令）始终优先；
+* 只用 `127.0.0.1` 的开发口令，且**不**在 `docker.build` 镜像构建阶段生效——
+  发布路径必须继续 fail-fast；
+* 生产文件里**不**加默认值，由
+  `test_development_data_layer_environment_satisfies_compose` 锁定这条边界。
+
 ### 2.3 预览模式
 
 `onlyPreview` 模式下业务服务必须监听 **8686** 端口（平台固定要求，不是本项目的
@@ -111,7 +145,10 @@ env:
   （`vite preview` 服务已构建的 `apps/web/dist`，启动只需一秒左右，适合看已有的
   制品并避开 HMR 的首次预构建）；`off` 表示只准备环境不起前端。
 - `preview` 模式还会按需拉起数据层；`SOYMUTDB_DEV_DATA_LAYER=off` 可显式跳过，
-  `on` 则在拿不到 Docker 时报错而不是静默降级。
+  `on` 则在拿不到 Docker 时报错而不是静默降级。数据层的 compose 插值变量
+  （`POSTGRES_PASSWORD` / `CLICKHOUSE_PASSWORD` / `REDIS_PASSWORD` /
+  `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD`）由 `scripts/setup-workspace.sh`
+  在未设置时补开发默认值，否则 compose 会在插值阶段直接失败（§2.2.2）。
 
 想用 WebIDE 而不是预览页，进入环境后从「头像 → 我的云原生开发」切换即可——两种模式
 是同一个环境，不存在两套准备逻辑。
@@ -219,7 +256,10 @@ scripts/acceptance.sh --profile full
 诚实声明：本文描述的两个入口，其**脚本逻辑**已在本机真实执行（`contracts` 层通过、
 `start-cloud-dev.sh` 语法与分支自检通过），但以下几点必须在 CNB 上跑过才能判定：
 
-- `vscode` 流水线在平台上的真实启动与 8686 端口预览；
+- `vscode` 流水线在平台上的真实启动与 8686 端口预览（含数据层真正 Up）；
+  Issue #12 的 compose 插值失败就是在这一步暴露的，修复后仍需平台验证；
+- `docker compose config` 在本机不可执行（无 Docker daemon），因此"插值变量齐全"
+  由 `scripts/test_ci_job_contracts.py` 的静态契约断言，而不是本机实跑；
 - `web_trigger_acceptance` 的 backend / static 两层（需要平台 Runner 与真实
   PostgreSQL）；
 - `.cnb/settings.yml` 的按钮文案在分支页的实际呈现。

@@ -2117,6 +2117,90 @@ class DeliveryArchitectureTests(unittest.TestCase):
             [stage["script"] for stage in vscode_pipeline["stages"]],
         )
 
+    def test_development_data_layer_environment_satisfies_compose(self) -> None:
+        """`docker compose` interpolates the whole file, not the services named.
+
+        `docker-compose.yml` is the production topology and fails fast on
+        `${POSTGRES_PASSWORD:?…}` / `${CLICKHOUSE_PASSWORD:?…}` /
+        `${REDIS_PASSWORD:?…}` / `${MINIO_ROOT_USER:?…}` /
+        `${MINIO_ROOT_PASSWORD:?…}`. Compose resolves those before it selects
+        services, so on a cloud-development environment -- which has no release
+        `.env` -- even `up -d postgres` aborts during interpolation:
+
+          error while interpolating x-app-env.SOYMUTDB_S3_ACCESS_KEY:
+            required variable MINIO_ROOT_USER is missing a value
+
+        `start-cloud-dev.sh` reaches that state on its FIRST compose call, which
+        makes the whole preview pipeline fail in Prepare ("Preview launch script
+        execution failed"). The variables therefore have to exist before any
+        compose invocation, and there is exactly one place both CNB entry points
+        and a local run pass through: scripts/setup-workspace.sh.
+        """
+        required = (
+            "POSTGRES_PASSWORD",
+            "CLICKHOUSE_PASSWORD",
+            "REDIS_PASSWORD",
+            "MINIO_ROOT_USER",
+            "MINIO_ROOT_PASSWORD",
+        )
+
+        # 1. The base compose file keeps its fail-fast posture. A default here
+        #    would silently weaken production; the defaults belong in the
+        #    development bootstrap instead.
+        compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+        for variable in required:
+            self.assertIn(
+                f"${{{variable}:?",
+                compose,
+                f"docker-compose.yml must keep ${variable} required",
+            )
+
+        # 2. The dev overlay assigns container environment and cannot satisfy
+        #    interpolation; assert the distinction explicitly so a future
+        #    "fix" that only touches the overlay fails here.
+        overlay = (ROOT / "docker-compose.dev.yml").read_text(encoding="utf-8")
+        self.assertIn("MINIO_ROOT_USER: minioadmin", overlay)
+
+        # 3. The bootstrap declares every one of them, and only when unset, so a
+        #    caller-provided value (the GitHub mirror's ci-compose-* secrets, an
+        #    operator's real ones) stays authoritative.
+        script = (ROOT / "scripts/setup-workspace.sh").read_text(encoding="utf-8")
+        for variable in required:
+            self.assertRegex(
+                script,
+                rf': "\$\{{{variable}:=[^}}]+\}}"',
+                f"setup-workspace.sh must default {variable} for the data layer",
+            )
+        # A plain assignment would override a caller's value and silently pin a
+        # development password onto a real deployment.
+        for variable in required:
+            self.assertNotRegex(
+                script,
+                rf"^\s*{variable}=",
+                f"setup-workspace.sh must not override an exported {variable}",
+            )
+        self.assertIn('export POSTGRES_PASSWORD', script)
+
+        # 4. It must NOT run for an image build. Those pipelines are the release
+        #    path, where the daemon is never started and defaulting a production
+        #    secret is the opposite of fail-fast; they declare no data volume.
+        guard = script.index("if [[ -n \"${POSTGRES_PASSWORD:-}\" ]]; then")
+        self.assertLess(
+            guard,
+            script.index(': "${POSTGRES_PASSWORD:='),
+            "the caller-provided check must come first",
+        )
+        self.assertIn("POSTGRES_PASSWORD", script[guard:])
+
+        # 5. `start-cloud-dev.sh` must reach the bootstrap before its first
+        #    compose call, for every mode that touches the data layer.
+        start = (ROOT / "scripts/start-cloud-dev.sh").read_text(encoding="utf-8")
+        self.assertLess(
+            start.index("setup-workspace.sh"),
+            start.index("compose_cmd()"),
+            "the compose variables must exist before the first compose call",
+        )
+
     def test_start_cloud_dev_binds_services_to_all_interfaces(self) -> None:
         """A service on localhost is unreachable from CNB's preview proxy.
 

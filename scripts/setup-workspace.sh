@@ -67,6 +67,61 @@ if [[ "${SOYMUTDB_CI_SKIP_INSTALL:-0}" == "1" ]]; then
   ENABLE_ONLY=1
 fi
 
+# -----------------------------------------------------------------------------
+# 0. Define the Compose interpolation variables the data layer requires
+# -----------------------------------------------------------------------------
+# `docker compose` interpolates the WHOLE file before it selects services, so a
+# single required variable is enough to abort EVERY compose invocation -- even
+# one that only names `postgres`.
+#
+# `docker-compose.yml` is the production topology and is deliberately fail-fast:
+# `${POSTGRES_PASSWORD:?…}`, `${CLICKHOUSE_PASSWORD:?…}`, `${REDIS_PASSWORD:?…}`,
+# `${MINIO_ROOT_USER:?…}`, `${MINIO_ROOT_PASSWORD:?…}` (and
+# `${API_IMAGE_REF:?…}`) have no defaults. That is the right posture for a
+# release, and it was a real build breaker for a cloud-development environment
+# that has no release `.env`:
+#
+#   $ bash scripts/start-cloud-dev.sh preview
+#   [start-cloud-dev] starting the data layer (postgres clickhouse redis minio)
+#   error while interpolating x-app-env.SOYMUTDB_S3_ACCESS_KEY:
+#     required variable MINIO_ROOT_USER is missing a value:
+#     MINIO_ROOT_USER is required                            (compose exit 1)
+#   Pipeline prepare error: Preview launch script execution failed
+#
+# The dev overlay (`docker-compose.dev.yml`) *looks* like it solves this -- it
+# sets `MINIO_ROOT_USER: minioadmin` under `services.minio.environment` -- but
+# that assigns the value inside the container, it does not define the
+# interpolation variable Compose reads. Nothing in either file defines one.
+#
+# The values are therefore declared here, and only here, so there is exactly one
+# definition of "development data-layer credentials"; the overlay's container
+# environment and `start-cloud-dev.sh`'s `SOYMUTDB_DATABASE_URL` both have to
+# agree with them.
+#
+# Rules:
+#   * only set when unset (`: "${VAR:=…}"`), so a caller-provided value -- the
+#     GitHub mirror passes ci-compose-* secrets, an operator passes real ones --
+#     stays authoritative;
+#   * never set for a `docker.build` (image) stage: that is the release pipeline,
+#     where the daemon is not even started, and defaulting a production secret
+#     there would be the opposite of fail-fast. Gate on the volumes that only a
+#     Compose-capable job declares.
+#   * safe to make defaults because these are loopback-only development
+#     credentials: postgres/clickhouse/redis each publish on 127.0.0.1, and the
+#     production overlay replaces all of them in real deployments.
+if [[ -n "${POSTGRES_PASSWORD:-}" ]]; then
+  log "compose interpolation variables already set; leaving them alone"
+else
+  : "${POSTGRES_PASSWORD:=soymutdb_dev_password}"
+  : "${CLICKHOUSE_PASSWORD:=soymutdb_dev_password}"
+  : "${REDIS_PASSWORD:=soymutdb_dev_password}"
+  : "${MINIO_ROOT_USER:=minioadmin}"
+  : "${MINIO_ROOT_PASSWORD:=minioadmin}"
+  export POSTGRES_PASSWORD CLICKHOUSE_PASSWORD REDIS_PASSWORD
+  export MINIO_ROOT_USER MINIO_ROOT_PASSWORD
+  log "compose interpolation variables defaulted for the development data layer"
+fi
+
 log() { printf '[setup-workspace] %s\n' "$*" >&2; }
 
 # -----------------------------------------------------------------------------
