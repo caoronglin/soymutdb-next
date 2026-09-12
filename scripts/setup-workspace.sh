@@ -67,6 +67,11 @@ if [[ "${SOYMUTDB_CI_SKIP_INSTALL:-0}" == "1" ]]; then
   ENABLE_ONLY=1
 fi
 
+# The logger is defined before the first `log` call site, not after it: step 0
+# runs before the function used to be declared, so an unset `log` aborted every
+# stage with `line 122: log: command not found` (exit 127).
+log() { printf '[setup-workspace] %s\n' "$*" >&2; }
+
 # -----------------------------------------------------------------------------
 # 0. Define the Compose interpolation variables the data layer requires
 # -----------------------------------------------------------------------------
@@ -121,8 +126,6 @@ else
   export MINIO_ROOT_USER MINIO_ROOT_PASSWORD
   log "compose interpolation variables defaulted for the development data layer"
 fi
-
-log() { printf '[setup-workspace] %s\n' "$*" >&2; }
 
 # -----------------------------------------------------------------------------
 # 1. Make pnpm available in THIS container

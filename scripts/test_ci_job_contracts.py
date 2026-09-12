@@ -2201,6 +2201,40 @@ class DeliveryArchitectureTests(unittest.TestCase):
             "the compose variables must exist before the first compose call",
         )
 
+    def test_setup_workspace_declares_helpers_before_it_calls_them(self) -> None:
+        """Step 0 runs before any helper declared below it.
+
+        The compose-variable step above was added at the top of the script, but
+        `log()` was still declared further down. `set -u` does not catch an
+        undefined *command*, so bash reported:
+
+          scripts/setup-workspace.sh: line 122: log: command not found  (exit 127)
+
+        and every stage that bootstraps the workspace died in its first
+        millisecond -- the whole Frontend/API/Worker fan-out. Assert the
+        ordering statically so the next helper moved above its definition is
+        caught by `python3 -m unittest` instead of by a red build.
+        """
+        script = (ROOT / "scripts/setup-workspace.sh").read_text(encoding="utf-8")
+        definition = script.index('log() {')
+        first_call = script.index('log "compose interpolation variables')
+        self.assertLess(
+            definition,
+            first_call,
+            "log() must be declared before step 0 calls it",
+        )
+
+        # Same rule for every other locally declared function: its definition
+        # must precede its first invocation.
+        for name in ("log",):
+            call = re.search(rf"(?m)^\s*(?!#).*(?<!\w){name} \"", script)
+            if call is not None:
+                self.assertLess(
+                    definition,
+                    call.start(),
+                    f"{name}() is called before it is defined",
+                )
+
     def test_start_cloud_dev_binds_services_to_all_interfaces(self) -> None:
         """A service on localhost is unreachable from CNB's preview proxy.
 

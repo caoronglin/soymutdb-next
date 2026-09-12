@@ -125,6 +125,21 @@ Pipeline prepare error: Preview launch script execution failed
 * 生产文件里**不**加默认值，由
   `test_development_data_layer_environment_satisfies_compose` 锁定这条边界。
 
+该步骤随后又踩了一个自己造出来的坑，已一并修掉：它被插在脚本**开头**，而脚本原来把
+`log()` 声明在它**下面**，于是第一次调用就得到
+
+```
+scripts/setup-workspace.sh: line 122: log: command not found   (exit 127)
+```
+
+`set -euo pipefail` 抓不到「命令不存在」之外的东西——bash 不会在启动时预解析函数，
+`set -u` 也只管变量——所以整条脚本在 0.1 秒内退出，所有依赖引导的 stage（Frontend /
+API + Worker / Dependency governance）连锁失败，而错误信息只指向一行日志。
+
+处理方式：`log()` 上移到第一次 `log` 调用之前，并由
+`test_setup_workspace_declares_helpers_before_it_calls_them` 静态锁定「先声明后使用」。
+脚本内的函数不再允许声明在调用点之后。
+
 ### 2.3 预览模式
 
 `onlyPreview` 模式下业务服务必须监听 **8686** 端口（平台固定要求，不是本项目的
