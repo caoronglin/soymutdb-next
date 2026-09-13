@@ -118,6 +118,14 @@ cd apps/worker && celery -A soymutdb_worker.main:celery_app worker --loglevel=in
 
 Docker 开发拓扑使用生产基础文件加开发 overlay：`docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile core up --build`。它会启动 API、workers、PostgreSQL、ClickHouse、Redis、MinIO，以及 Vite web/admin（端口 5173/5174）。只需数据层时可在同一命令后指定 `postgres clickhouse redis redis-celery minio minio-init`。
 
+只想用「当前 checkout」构建并运行**生产编排**（不需要 release 制品、不需要 registry）：
+
+```bash
+bash scripts/compose-local.sh build   # 按 scripts/list-images.sh 构建 8 个 release 镜像
+bash scripts/compose-local.sh up -d   # 用这些镜像启动生产拓扑
+bash scripts/compose-local.sh down
+```
+
 ### Build
 
 ```bash
@@ -145,7 +153,7 @@ pnpm --filter @soymutdb/jbrowse build
 
 ```bash
 sudo bash deploy/linux/install.sh             # 安装布局 /opt/soymutdb + .env 模板
-# 编辑 /opt/soymutdb/.env（模板：deploy/.env.example；必填镜像 tag/JWT/CORS/凭据）
+# 编辑 /opt/soymutdb/.env（模板：deploy/.env.example；必填 6 个镜像 digest/JWT/CORS/凭据）
 sudo bash deploy/scripts/upgrade.sh           # 预检 → 拉镜像 → 迁移 → 启动 → 健康检查
 bash deploy/scripts/healthcheck.sh            # 服务健康检查
 bash deploy/scripts/backup.sh                 # 数据备份（PG+CH+S3，upgrade 前自动执行）

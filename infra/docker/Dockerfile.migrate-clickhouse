@@ -1,0 +1,92 @@
+# =====================================================================
+# SoyMutDB migrate-clickhouse Dockerfile — the one-shot ClickHouse migrator
+# =====================================================================
+# Why a dedicated image
+#   The Compose `migrate-clickhouse` service used to be resolved through
+#   `WORKER_IMAGE_REF`, which dragged the entire worker runtime behind a bash
+#   script:
+#
+#     * ~2 GB of ncbi-blast+, samtools, bcftools, bedtools, pigz, zstd;
+#     * the whole analyses stack (scanpy, leidenalg, igraph, matplotlib);
+#     * a Celery worker entrypoint that is never used here.
+#
+#   This image carries exactly what deploy/scripts/migrate-clickhouse.sh and
+#   deploy/scripts/migrate_clickhouse_lib.py touch:
+#
+#     bash + python3.14 + clickhouse-connect (the library's only import at run
+#     time) + the .sql payload.
+#
+#   Ordering guarantee unchanged: the Compose service still depends on a healthy
+#   ClickHouse and runs the same script, so an upgrade cannot start the API
+#   before the schema is upgraded.
+#
+# Contract (asserted by scripts/test_dockerfile_contracts.py)
+#   * No bioinformatics toolchain and no worker project: the image must not grow
+#     back into a copy of the worker.
+#   * The copy layout under /opt/soymutdb matches what migrate-clickhouse.sh
+#     looks for (`CLICKHOUSE_MIGRATION_ROOT=/opt/soymutdb`), which is also what
+#     the worker image uses — the script is shared verbatim, never forked.
+#   * `migrate-clickhouse.sh` defaults to `${ROOT}/../venv/bin/python`, i.e.
+#     `/opt/venv/bin/python` when `ROOT=/opt/soymutdb`. That virtualenv is built
+#     here, so the Compose service does NOT need to override
+#     `CLICKHOUSE_MIGRATION_PYTHON`; the worker image had to point it at its own
+#     `/opt/venv`, and a per-image override is exactly the coupling this image
+#     removes. /opt/soymutdb/venv is kept as a compatibility symlink for callers
+#     that already set the old path.
+#
+# uv is installed from the same pinned release as every other image; here it is
+# what materialises clickhouse-connect at build time, so a production migration
+# never needs PyPI.
+# =====================================================================
+
+FROM python:3.14.6-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    UV_LINK_MODE=copy \
+    SOYMUTDB_APP_ENV=prod \
+    # The migration payload root the shared script resolves by default.
+    CLICKHOUSE_MIGRATION_ROOT=/opt/soymutdb \
+    UV_CACHE_DIR=/tmp/uv-cache
+
+COPY --from=ghcr.io/astral-sh/uv:0.11.33 /uv /usr/local/bin/uv
+
+# bash: migrate-clickhouse.sh carries a `#!/usr/bin/env bash` shebang.
+# ca-certificates and a reachable ClickHouse are the only other runtime inputs.
+RUN apt-get update \
+    && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends \
+      bash \
+      ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid 1000 soymutdb \
+    && useradd --uid 1000 --gid soymutdb --shell /bin/bash --create-home soymutdb \
+    && mkdir -p /opt/soymutdb
+
+# clickhouse-connect into a plain virtualenv. The migration library has no PEP
+# 723 header, so `uv run --with` would build an ephemeral environment on every
+# invocation; a real venv keeps the image offline-reproducible and gives
+# `migrate-clickhouse.sh` an interpreter at its default path.
+RUN uv venv --python python3 /opt/venv \
+    && uv pip install --python /opt/venv/bin/python --no-cache "clickhouse-connect>=0.8.0" \
+    && /opt/venv/bin/python -c "import clickhouse_connect; print('clickhouse-connect ready')" \
+    && ln -sfn /opt/venv /opt/soymutdb/venv \
+    && chown -R soymutdb:soymutdb /opt/venv
+
+# The same three files the worker image ships, at the same paths, so the script
+# and the .sql payload are shared verbatim instead of duplicated per image.
+COPY --chown=soymutdb:soymutdb deploy/scripts/migrate-clickhouse.sh /opt/soymutdb/migrate-clickhouse.sh
+COPY --chown=soymutdb:soymutdb deploy/scripts/migrate_clickhouse_lib.py /opt/soymutdb/migrate_clickhouse_lib.py
+COPY --chown=soymutdb:soymutdb infra/clickhouse/upgrade_variant_facts_schema.sql /opt/soymutdb/upgrade_variant_facts_schema.sql
+
+RUN chmod +x /opt/soymutdb/migrate-clickhouse.sh
+
+WORKDIR /opt/soymutdb
+
+USER soymutdb
+
+# One-shot job: the Compose service provides the environment and the platform
+# waits for `service_completed_successfully`. No HEALTHCHECK — a migration that
+# is still running is not "unhealthy", it is working.
+CMD ["bash", "/opt/soymutdb/migrate-clickhouse.sh"]

@@ -13,15 +13,24 @@
 set -u
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DOCKERFILES=(
-  "$REPO_ROOT/infra/docker/Dockerfile.api"
-  "$REPO_ROOT/infra/docker/Dockerfile.worker"
-  "$REPO_ROOT/apps/jbrowse/Dockerfile"
-)
+
+# Every Dockerfile the release pipeline builds, from the single image list.
+# A Dockerfile that is built but not guarded is exactly the case this script
+# exists for: its COPY source can be gitignored and the failure only appears in
+# a real image build.
+# shellcheck source=scripts/list-images.sh
+source "${REPO_ROOT}/scripts/list-images.sh"
 
 fail=0
 
-for df in "${DOCKERFILES[@]}"; do
+# Walk `name|context|dockerfile` entries rather than bare paths: a COPY source is
+# resolved against the BUILD CONTEXT, and apps/mcp-server builds from its own
+# directory (`context: apps/mcp-server`) rather than the repo root. Checking it
+# against the repo root reported `MISSING COPY source: pyproject.toml` for a
+# Dockerfile that builds fine.
+while IFS='|' read -r image_name image_context image_dockerfile; do
+  df="$REPO_ROOT/${image_dockerfile}"
+  context_dir="$REPO_ROOT/${image_context}"
   [ -f "$df" ] || { echo "MISSING Dockerfile: $df"; fail=1; continue; }
 
   # Walk COPY lines, joining backslash continuations.
@@ -61,13 +70,13 @@ for df in "${DOCKERFILES[@]}"; do
     # Strip `--from=` isn't a source path; ignore wildcard and `./`.
     [[ "$src" == .* || "$src" == *"*"* ]] && continue
 
-    # Source may be `dir/` (dir exists) or a file.
-    if [ ! -e "$REPO_ROOT/$src" ]; then
-      echo "MISSING COPY source: $df -> $src"
+    # Source may be `dir/` (dir exists) or a file, resolved against the context.
+    if [ ! -e "${context_dir}/$src" ]; then
+      echo "MISSING COPY source: ${image_dockerfile} (context ${image_context}) -> $src"
       fail=1
     fi
   done < "$df"
-done
+done < <(soymutdb_image_entry)
 
 if [ "$fail" -eq 0 ]; then
   echo "OK: all Dockerfile COPY sources exist."

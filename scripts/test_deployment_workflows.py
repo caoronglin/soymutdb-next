@@ -76,13 +76,20 @@ def test_publish_keeps_local_to_registry_image_name_mapping() -> None:
     verification = (ROOT / "scripts/build-release-image.sh").read_text(encoding="utf-8")
     golden = (ROOT / "scripts/release-contract.golden.sh").read_text(encoding="utf-8")
 
-    assert "soymutdb-mcp:ci-${ARCH}" in verification
-    # The local names are the single source of the image set: the package
-    # verifier reads the same list, so "the four images" cannot be edited in one
-    # place and silently skipped in the other.
-    assert "RUNTIME_IMAGES=(api worker mcp jbrowse)" in golden
-    assert "local_names=(\"${RUNTIME_IMAGES[@]}\")" in golden
-    assert "remote_names=(api worker mcp-server jbrowse)" in golden
+    image_list = (ROOT / "scripts/list-images.sh").read_text(encoding="utf-8")
+
+    # The local names are the single source of the image set: the publisher, the
+    # verifier, the COPY guard and the contract tests all resolve it from
+    # scripts/list-images.sh, so the set cannot be edited in one place and
+    # silently skipped in another.
+    assert 'source "${REPO_ROOT}/scripts/list-images.sh"' in golden
+    assert "while IFS= read -r image_name; do" in golden
+    assert "soymutdb_image_names" in golden
+    # The one local/remote divergence is declared next to the list, not inline in
+    # the publisher.
+    assert "mcp) printf 'mcp-server" in image_list
+    assert 'RUNTIME_REMOTE_NAMES+=("$(soymutdb_remote_image_name "${image_name}")")' in golden
+    assert 'remote_names=("${RUNTIME_REMOTE_NAMES[@]}")' in golden
     assert 'docker tag "soymutdb-${local_names[$index]}:ci-${arch}" "${image}"' in golden
 
 
@@ -118,40 +125,66 @@ def test_runtime_dockerfiles_install_jobs_package_from_the_build_context() -> No
 
 def test_ci_builds_then_smokes_then_scans_before_exporting_exact_images() -> None:
     docker_job = (ROOT / "scripts/build-release-image.sh").read_text(encoding="utf-8")
+    image_list = (ROOT / "scripts/list-images.sh").read_text(encoding="utf-8")
 
-    # The build step is one scripted sequence; its per-image build commands are
-    # the ordered evidence that each image is produced before any smoke test.
-    build_steps = [
-        'docker build -f infra/docker/Dockerfile.api -t "soymutdb-api:ci-${ARCH}" .',
-        'docker build -f infra/docker/Dockerfile.worker -t "soymutdb-worker:ci-${ARCH}" .',
-        'docker build -f apps/mcp-server/Dockerfile -t "soymutdb-mcp:ci-${ARCH}" apps/mcp-server',
-        'docker build -f apps/jbrowse/Dockerfile -t "soymutdb-jbrowse:ci-${ARCH}" .',
-    ]
+    # The image set is enumerated once, in scripts/list-images.sh, and the verify
+    # pipeline iterates it. Assert the enumeration itself, then the ordering of
+    # the phases that consume it — a build command per image is no longer the
+    # right thing to look for, because there is exactly one `docker build`
+    # invocation in the script.
+    assert 'SOYMUTDB_IMAGES=(' in image_list
+    for entry in (
+        '"api|.|infra/docker/Dockerfile.api"',
+        '"worker|.|infra/docker/Dockerfile.worker"',
+        '"migrate|.|infra/docker/Dockerfile.migrate"',
+        '"migrate-clickhouse|.|infra/docker/Dockerfile.migrate-clickhouse"',
+        '"mcp|apps/mcp-server|apps/mcp-server/Dockerfile"',
+        '"jbrowse|.|apps/jbrowse/Dockerfile"',
+        '"web|.|infra/docker/Dockerfile.web"',
+        '"admin|.|infra/docker/Dockerfile.admin"',
+    ):
+        assert entry in image_list, entry
+
+    assert 'source "${REPO_ROOT}/scripts/list-images.sh"' in docker_job
+    assert "soymutdb_image_entry" in docker_job, (
+        "the verify pipeline must iterate the shared image list rather than "
+        "repeat the build commands"
+    )
+    assert 'docker build -f "${dockerfile}" -t "soymutdb-${name}:ci-${ARCH}"' in docker_job
+
     smoke_steps = [
         "Smoke test API runtime image (hard gate)",
         "Smoke test Worker task registry (hard gate)",
         "Smoke test MCP runtime image (hard gate)",
         "Smoke test JBrowse runtime image (hard gate)",
+        "Smoke test web runtime image (hard gate)",
+        "Smoke test admin runtime image (hard gate)",
+        "Smoke test migrate runtime image (hard gate)",
+        "Smoke test migrate-clickhouse runtime image (hard gate)",
     ]
     scan_steps = [
-        "Trivy scan API image (hard gate)",
-        "Trivy scan Worker image (hard gate)",
-        "Trivy scan MCP image (hard gate)",
-        "Trivy scan JBrowse image (hard gate)",
+        'step "Trivy scan ${image_name} image (hard gate)"',
+        'step "Generate ${image_name} SPDX SBOM"',
     ]
 
-    build_positions = [docker_job.index(step) for step in build_steps]
+    build_position = docker_job.index("Build release images (${PLATFORM})")
     smoke_positions = [docker_job.index(step) for step in smoke_steps]
     scan_positions = [docker_job.index(step) for step in scan_steps]
     export_position = docker_job.index("Export validated runtime images")
     checksum_position = docker_job.index('step "validate-runtime-images', export_position)
 
-    assert max(build_positions) < min(smoke_positions)
+    assert build_position < min(smoke_positions)
     assert max(smoke_positions) < min(scan_positions)
     assert max(scan_positions) < export_position < checksum_position
-    for image_name in ("api", "worker", "mcp", "jbrowse"):
-        assert f'soymutdb-{image_name}:ci-${{ARCH}}' in docker_job
-        assert f"soymutdb-{image_name}:ci-" in docker_job[export_position:]
+    # Export and architecture proof both iterate the shared list, so a new image
+    # cannot be built, smoke-tested and then forgotten at export time.
+    export_section = docker_job[export_position:]
+    assert 'validated_images+=("soymutdb-${image_name}:ci-${ARCH}")' in export_section
+    assert 'for image_name in "${IMAGE_NAMES[@]}"; do' in docker_job
+    assert "docker save \"${validated_images[@]}\"" in export_section
+    # Every smoke gate names the tag the shared builder produces.
+    for image_name in ("api", "worker", "mcp", "jbrowse", "web", "admin", "migrate"):
+        assert f'"soymutdb-{image_name}:ci-${{ARCH}}"' in docker_job, image_name
 
     assert "docker save" in docker_job[export_position:]
     assert "docker image inspect" in docker_job[export_position:]
@@ -309,7 +342,16 @@ def test_publish_is_the_only_registry_writer_and_loads_verified_artifacts() -> N
         < push_position
     )
     assert workflow.count("docker push") == 0
-    assert golden.count("docker push") == 1
+    # Exactly one push SITE (the loop body). The publisher may mention the
+    # command in comments, so assert on the executing line, not on a bare count:
+    # a comment explaining the push must not be able to mask a second push.
+    push_lines = [
+        line.strip()
+        for line in golden.splitlines()
+        if line.strip().startswith("docker push")
+    ]
+    assert push_lines == ['docker push "${image}"'], push_lines
+    assert golden.count("docker push") >= 1
     merge_position = golden.index("Merge manifests, attest evidence, and write release manifest")
     contract_upload_position = golden.index("Upload signed OCI release contract")
     assert push_position < merge_position < contract_upload_position
@@ -325,9 +367,13 @@ def test_trivy_blocks_unfixed_high_and_critical_findings() -> None:
     assert "ignore-unfixed=false" in verification
     assert "ignore-unfixed=true" not in verification
     assert verification.count("--severity CRITICAL,HIGH") == 2
-    for image_name in ("api", "worker", "mcp", "jbrowse"):
-        assert f'trivy_scan "soymutdb-{image_name}:ci-${{ARCH}}"' in verification
-    assert verification.count('trivy_scan "soymutdb-') == 4
+    # The scan policy lives in one script and is applied by one loop over the
+    # shared image list, so an image cannot be built and then skipped by the
+    # scanner because somebody forgot to add a line.
+    assert "for image_name in \"${IMAGE_NAMES[@]}\"; do" in verification
+    assert 'trivy_scan "soymutdb-${image_name}:ci-${ARCH}" "trivy-${image_name}.sarif"' in verification
+    assert verification.count('trivy_scan "soymutdb-') == 1
+    assert 'trivy_sbom "soymutdb-${image_name}:ci-${ARCH}"' in verification
     assert '--ignorefile .trivyignore' in verification
     assert "--exit-code 1" in verification
 
