@@ -5,7 +5,7 @@
 # pipeline into one signed multi-architecture release, using the same script the
 # GitHub mirror calls (scripts/release-contract.golden.sh).
 #
-# Source of truth: `.cnb.yml` (`$` -> `push` -> `release`). This file exists so
+# Source of truth: `.cnb.yml` (`main` -> `push` -> `release`). This file exists so
 # the release definition can be reviewed and unit-tested in isolation.
 #
 # Secrets (configure in the CNB UI, never in the repository):
@@ -15,10 +15,11 @@
 # Ordering
 #   The packages this pipeline consumes are artifacts of two other pipelines
 #   (`docker-images (amd64)` and `(arm64)`), so the release must not start until
-#   they exist. `cnb:await` / `cnb:resolve` provide that ordered start: the
-#   image pipeline ends with the matching `resolve`, and this pipeline opens
-#   with the `await`. `cnb:await` may only run in `stages`, which is why the
-#   wait is a stage here rather than an `endStages`/`failStages` entry.
+#   both exist. `cnb:await` / `cnb:resolve` provide that ordered start: each
+#   image pipeline ends with its independently keyed `resolve`, and this
+#   pipeline opens with both matching `await` stages. `cnb:await` may only run
+#   in `stages`, which is why the waits are stages here rather than
+#   `endStages`/`failStages` entries.
 #
 #   The wait is not sufficient on its own: the packages themselves travel as
 #   uploaded artifacts, and `scripts/release-contract.golden.sh` fetches them
@@ -48,12 +49,19 @@ env:
 
 stages:
   - name: Wait for the verified amd64 image package
-    # Blocks until `docker-images (amd64)` resolves the same key, which is its
-    # last job. A pipeline that never resolves is reported as a dead lock rather
-    # than waiting forever.
+    # Blocks until `docker-images (amd64)` resolves its key, which is its last
+    # normal stage. A pipeline that never resolves is reported as a dead lock
+    # rather than waiting forever.
     type: cnb:await
     options:
       key: validated-runtime-images-amd64
+
+  - name: Wait for the verified arm64 image package
+    # The second independent gate prevents a release made from only the first
+    # architecture from racing the arm64 verifier.
+    type: cnb:await
+    options:
+      key: validated-runtime-images-arm64
 
   - name: Publish signed multi-architecture release
     # A CNB stage body is executed with `sh`, which rejects bash-only syntax.

@@ -152,6 +152,38 @@ def test_0021_creates_import_studio_version_chain() -> None:
     assert "CREATE TYPE import_draft_status_enum" in sql
 
 
+def test_0036_enforces_one_import_draft_per_dataset_version_and_downgrades() -> None:
+    path = MIGRATIONS_ROOT / "versions" / "0036_unique_import_draft_per_dataset_version.py"
+    assert path.exists(), "0036 import-draft uniqueness migration is required"
+    revision = _load_revision(path.name)
+    operations = _RecordingOperations()
+    revision.op = operations
+
+    revision.upgrade()
+    created = [
+        (args, kwargs)
+        for name, args, kwargs in operations.calls
+        if name == "create_unique_constraint"
+    ]
+    assert created == [
+        (("uq_import_drafts_dataset_version", "import_drafts", ["dataset_version_id"]), {})
+    ]
+
+    operations.calls.clear()
+    revision.downgrade()
+    dropped = [
+        (args, kwargs)
+        for name, args, kwargs in operations.calls
+        if name == "drop_constraint"
+    ]
+    assert dropped == [
+        (
+            ("uq_import_drafts_dataset_version", "import_drafts"),
+            {"type_": "unique"},
+        )
+    ]
+
+
 class _EmptyResult:
     def scalar_one_or_none(self) -> None:
         return None

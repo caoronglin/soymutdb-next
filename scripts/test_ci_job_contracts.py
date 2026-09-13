@@ -255,14 +255,28 @@ def _load_dev_allowlist(value: str | None = None) -> _DevAllowlist:
         "import fs from 'node:fs';\n"
         "import os from 'node:os';\n"
         "import path from 'node:path';\n"
+        "import vm from 'node:vm';\n"
+        "import { stripTypeScriptTypes } from 'node:module';\n"
         "import { spawnSync } from 'node:child_process';\n"
         "const helper = fs.readFileSync(0, 'utf8');\n"
         "const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'allowed-hosts-'));\n"
         "const file = path.join(dir, 'helper.ts');\n"
         "fs.writeFileSync(file, helper + \"\\nprocess.stdout.write(JSON.stringify("
         "resolveDevAllowedHosts(process.env.PROBE_VALUE)));\\n\");\n"
-        "const result = spawnSync(process.execPath, [file], { encoding: 'utf8' });\n"
-        "if (result.status !== 0) { process.stderr.write(result.stderr); process.exit(1); }\n"
+        "const result = spawnSync(process.env.PROBE_NODE || process.execPath, [file], { encoding: 'utf8' });\n"
+        "if (result.error) {\n"
+        "  try {\n"
+        "    const source = stripTypeScriptTypes(helper + `\\nJSON.stringify(resolveDevAllowedHosts(process.env.PROBE_VALUE))`, { mode: 'strip' });\n"
+        "    const output = vm.runInThisContext(source);\n"
+        "    if (typeof output !== 'string' || output.length === 0) throw new Error('inline helper produced no JSON output');\n"
+        "    process.stdout.write(output);\n"
+        "    process.exit(0);\n"
+        "  } catch (error) {\n"
+        "    process.stderr.write(`spawnSync failed and inline evaluation failed: ${error.message}\\n`); process.exit(1);\n"
+        "  }\n"
+        "}\n"
+        "if (result.status !== 0) { process.stderr.write(result.stderr ?? `child exited with status ${result.status}\\n`); process.exit(1); }\n"
+        "if (typeof result.stdout !== 'string' || result.stdout.length === 0) { process.stderr.write('child produced no JSON output\\n'); process.exit(1); }\n"
         "process.stdout.write(result.stdout);\n"
     )
     completed = subprocess.run(
@@ -271,7 +285,17 @@ def _load_dev_allowlist(value: str | None = None) -> _DevAllowlist:
         cwd=ROOT,
         capture_output=True,
         text=True,
-        env={**os.environ, "PROBE_VALUE": value or ""},
+        env={
+            **os.environ,
+            "PROBE_VALUE": value or "",
+            # Some development checkouts run Node from a mounted filesystem
+            # where child exec is denied even though the parent is runnable.
+            # Prefer a native system Node when present; CI images fall back to
+            # the pinned interpreter that launched this helper.
+            "PROBE_NODE": "/usr/bin/node"
+            if Path("/usr/bin/node").is_file()
+            else node,
+        },
     )
     if completed.returncode != 0:
         raise AssertionError(
@@ -334,7 +358,14 @@ class DeliveryArchitectureTests(unittest.TestCase):
             _pipeline_names("main", "push"),
         )
         self.assertIn("verify", _pipeline_names("main", "pull_request"))
-        self.assertEqual({"release-tagged"}, _pipeline_names("$", "tag_push"))
+        self.assertLessEqual(
+            {
+                "docker-images (amd64)",
+                "docker-images (arm64)",
+                "release-tagged",
+            },
+            _pipeline_names("$", "tag_push"),
+        )
 
     def test_every_cnb_pipeline_calls_the_shared_job_entrypoint(self) -> None:
         text = _cnb_text()
@@ -587,7 +618,12 @@ class DeliveryArchitectureTests(unittest.TestCase):
     def test_image_verification_and_publication_are_separate_pipelines(self) -> None:
         verify_names = {"docker-images (amd64)", "docker-images (arm64)"}
         publish_names = {"release"}
-        for pipeline in _cnb_pipelines("$", "push") + _cnb_pipelines("main", "push"):
+        for pipeline in (
+            _cnb_pipelines("$", "push")
+            + _cnb_pipelines("main", "push")
+            + _cnb_pipelines("$", "tag_push")
+            + _cnb_pipelines("$", "web_trigger_release")
+        ):
             text = _flatten(pipeline)
             if pipeline["name"] in verify_names:
                 self.assertNotIn("docker push", text)
@@ -607,19 +643,58 @@ class DeliveryArchitectureTests(unittest.TestCase):
         self.assertNotIn("tags", amd64.get("runner", {}))
         self.assertEqual(arm64["runner"]["tags"], "cnb:arch:arm64:v8")
 
+    def test_image_pipelines_resolve_independent_architecture_keys(self) -> None:
+        """Each native image pipeline hands off only after its own export."""
+        for branch, event in (
+            ("main", "push"),
+            ("$", "tag_push"),
+            ("$", "web_trigger_release"),
+        ):
+            pipelines = {
+                pipeline["name"]: pipeline
+                for pipeline in _cnb_pipelines(branch, event)
+                if pipeline["name"] in {"docker-images (amd64)", "docker-images (arm64)"}
+            }
+            self.assertEqual(
+                {"docker-images (amd64)", "docker-images (arm64)"},
+                set(pipelines),
+                f"{branch}/{event} must verify both native architectures",
+            )
+            for arch, pipeline in (("amd64", pipelines["docker-images (amd64)"]), ("arm64", pipelines["docker-images (arm64)"])):
+                resolves = [
+                    stage for stage in pipeline.get("stages", [])
+                    if stage.get("type") == "cnb:resolve"
+                ]
+                self.assertEqual(1, len(resolves), f"{branch}/{event}/{arch}")
+                self.assertEqual(
+                    f"validated-runtime-images-{arch}", resolves[0]["options"]["key"]
+                )
+                self.assertIs(resolves[0], pipeline["stages"][-1])
+                uploads = [
+                    (index, stage)
+                    for index, stage in enumerate(pipeline.get("stages", []))
+                    if stage.get("image") == "cnbcool/artifact"
+                ]
+                self.assertEqual(1, len(uploads), f"{branch}/{event}/{arch} upload")
+                self.assertLess(uploads[0][0], pipeline["stages"].index(resolves[0]))
+                self.assertFalse(
+                    any(
+                        stage.get("type") == "cnb:resolve"
+                        for stage in pipeline.get("endStages", []) or []
+                    ),
+                    f"{branch}/{event}/{arch} resolve cannot be in endStages",
+                )
+                self.assertEqual("$CNB_COMMIT", pipeline["env"]["SOURCE_REVISION"])
+                self.assertEqual("$CNB_EVENT", pipeline["env"]["SOURCE_EVENT"])
+
     # -------------------------------------------------------------------------
     # Stage shell
     # -------------------------------------------------------------------------
-    # Regression guard. A CNB stage body is executed with `sh`; on the platform
-    # base images that is dash, which rejects `set -o pipefail`:
-    #
-    #   sh: 1: set: Illegal option -o pipefail   → exit 2, stage error
-    #
-    # The very first real CNB build of this pipeline died in "Setup workspace
-    # with cache" for exactly that reason. `python3 -m compileall` does not
-    # catch it, `yaml.safe_load` does not catch it, and the CNB validator does
-    # not catch it: the only place it surfaces is a paid, remote build. These
-    # tests make it surface locally instead.
+    # Regression guard. A CNB stage body is executed with `sh`; shell options
+    # and other bashisms can fail only when the body runs. The very first real
+    # CNB build died during workspace setup for exactly that reason. Syntax
+    # compilation and YAML parsing do not catch runtime shell incompatibility,
+    # so the stage bodies are checked statically instead.
 
     def test_stage_scripts_never_rely_on_the_platform_shell(self) -> None:
         """Every CNB stage body must pin its interpreter to bash."""
@@ -663,16 +738,12 @@ class DeliveryArchitectureTests(unittest.TestCase):
                                 break
         self.assertEqual(offenders, [], "stage bodies must pin bash:\n" + "\n".join(offenders))
 
-    def test_sh_does_not_catch_the_original_bug_so_we_parse_instead(self) -> None:
-        """Document why the guard above is a static check, not `sh -n`.
-
-        `sh -n` (syntax-only) accepts `set -euo pipefail`: the option is only
-        rejected at *runtime*, because dash resolves `set -o <name>` when the
-        builtin executes. Relying on `sh -n` would therefore have shipped the
-        exact failure that took down the first real CNB build. This test pins
-        that knowledge so nobody "simplifies" the guard into a no-op.
-        """
-        body = "set -euo pipefail\ncorepack enable\n"
+    def test_sh_syntax_only_does_not_prove_runtime_success(self) -> None:
+        """Keep the runtime-vs-syntax distinction without shell-specific text."""
+        # `sh -n` validates grammar only. A portable command that fails when
+        # executed demonstrates why syntax-only validation cannot replace the
+        # static interpreter guard above, regardless of which `sh` is installed.
+        body = "set -e\nfalse\n"
 
         syntax_only = subprocess.run(
             ["sh", "-n"], input=body, capture_output=True, text=True
@@ -680,12 +751,11 @@ class DeliveryArchitectureTests(unittest.TestCase):
         self.assertEqual(
             syntax_only.returncode,
             0,
-            "`sh -n` unexpectedly rejects pipefail; the static guard could be simplified",
+            "`sh -n` unexpectedly rejected a portable shell body",
         )
 
         executed = subprocess.run(["sh"], input=body, capture_output=True, text=True)
         self.assertNotEqual(executed.returncode, 0)
-        self.assertIn("Illegal option", executed.stderr)
 
     def test_no_stage_depends_on_another_stages_container_state(self) -> None:
         """CNB gives every stage a fresh container.
@@ -2124,12 +2194,11 @@ class DeliveryArchitectureTests(unittest.TestCase):
         dockerfile = (ROOT / ".cnb/env/Dockerfile.frontend").read_text(encoding="utf-8")
         self.assertIn("VOLUME /cache/pnpm-store", dockerfile)
         self.assertIn("pnpm config set store-dir /cache/pnpm-store", dockerfile)
-        # Metadata only: no package tarball, no installation, so the store can
-        # never disagree with the lockfile gate.
-        self.assertIn("pnpm fetch --lockfile-only", dockerfile)
-        # Metadata only. Comments may mention the install; no RUN instruction
-        # may perform one, because a store baked from a resolved install can
-        # disagree with the lockfile the gate checks against.
+        # Fetch the exact package tarballs selected by the lockfile; no
+        # installation or node_modules tree is created in the image.
+        self.assertIn("pnpm fetch --ignore-scripts", dockerfile)
+        # No RUN instruction may perform an install, because the warm store is
+        # prepared from the lockfile while setup-workspace owns installation.
         run_lines = "\n".join(
             line for line in dockerfile.splitlines() if line.startswith("RUN ")
         )
@@ -2137,7 +2206,7 @@ class DeliveryArchitectureTests(unittest.TestCase):
         # The VOLUME must be declared AFTER the warm-up, or the engine copies an
         # empty (not yet created) directory into the share.
         self.assertLess(
-            dockerfile.index("pnpm fetch --lockfile-only"),
+            dockerfile.index("pnpm fetch --ignore-scripts"),
             dockerfile.index("VOLUME /cache/pnpm-store"),
             "VOLUME must be declared after the store is populated",
         )
@@ -2706,13 +2775,17 @@ class ArchivedPipelineMirrorTests(unittest.TestCase):
                 expected, actual, f"archived release stage {name!r} is stale"
             )
 
-        # The start gate is the part most likely to be dropped when someone
-        # edits one copy: the wait must be present in BOTH, and first.
+        # The start gates are the part most likely to be dropped when someone
+        # edits one copy: both architecture waits must be present and first.
         for pipeline in (root, archived):
             stages = pipeline["stages"]
-            self.assertEqual("cnb:await", stages[0].get("type"))
             self.assertEqual(
-                "validated-runtime-images-amd64", stages[0]["options"]["key"]
+                ["cnb:await", "cnb:await"],
+                [stage.get("type") for stage in stages[:2]],
+            )
+            self.assertEqual(
+                ["validated-runtime-images-amd64", "validated-runtime-images-arm64"],
+                [stage["options"]["key"] for stage in stages[:2]],
             )
 
         # The pipeline holding the registry credentials is the one that fetches
@@ -2779,17 +2852,22 @@ class ReleasePublisherTests(unittest.TestCase):
 
         # The verify pipeline records the revision it built from...
         self.assertIn("revision.txt", verification)
+        self.assertIn("source-event.txt", verification)
         self.assertIn("SOURCE_REVISION", verification)
+        self.assertIn("SOURCE_EVENT", verification)
         # ...and checksums it with the rest of the package.
         export_step = verification[verification.index("Export validated runtime images") :]
         self.assertIn("revision.txt", export_step[export_step.index("sha256sum") :])
+        self.assertIn("source-event.txt", export_step[export_step.index("sha256sum") :])
 
         # The publisher compares both packages against each other and against
         # the revision the contract records: verified bytes from two different
         # builds would describe no single revision, so the provenance the
         # release signs would be false.
         self.assertIn("revision.txt", golden)
+        self.assertIn("source-event.txt", golden)
         self.assertIn("platform packages disagree on the revision", golden)
+        self.assertIn("platform packages disagree on the source event", golden)
         self.assertIn("but this release records", golden)
 
         # Both verify pipelines stamp the same variable the publisher reads.
@@ -2800,6 +2878,7 @@ class ReleasePublisherTests(unittest.TestCase):
                 if pipeline["name"] == name
             )
             self.assertIn("SOURCE_REVISION", pipeline.get("env", {}), name)
+            self.assertIn("SOURCE_EVENT", pipeline.get("env", {}), name)
 
     def test_release_starts_only_after_the_verified_packages_exist(self) -> None:
         """Every pipeline of a `main` push starts at once; the release must not.
@@ -2815,28 +2894,30 @@ class ReleasePublisherTests(unittest.TestCase):
             for stage in release["stages"]
             if stage.get("type") == "cnb:await"
         ]
-        self.assertEqual(1, len(await_jobs), "the release must await the image pipeline")
+        self.assertEqual(2, len(await_jobs), "the release must await both image pipelines")
         self.assertEqual(
-            "validated-runtime-images-amd64", await_jobs[0]["options"]["key"]
+            ["validated-runtime-images-amd64", "validated-runtime-images-arm64"],
+            [stage["options"]["key"] for stage in await_jobs],
         )
-        # The gate must be the FIRST stage: waiting after publishing is useless.
-        self.assertIs(await_jobs[0], release["stages"][0])
+        # Both gates must precede publishing: waiting after publishing is useless.
+        self.assertEqual(await_jobs, release["stages"][:2])
 
-        # The matching resolve is the verify pipeline's LAST job, so it fires
-        # only once the images exist and are exported.
-        verify = next(
-            pipeline
-            for pipeline in _cnb_pipelines("main", "push")
-            if pipeline["name"] == "docker-images (amd64)"
-        )
-        resolves = [
-            stage for stage in verify["stages"] if stage.get("type") == "cnb:resolve"
-        ]
-        self.assertEqual(1, len(resolves), "the image pipeline must hand off")
-        self.assertEqual(
-            await_jobs[0]["options"]["key"], resolves[0]["options"]["key"]
-        )
-        self.assertIs(resolves[0], verify["stages"][-1])
+        # Each matching resolve is its verify pipeline's LAST job, so it fires
+        # only once that architecture's images exist and are exported.
+        for arch in ("amd64", "arm64"):
+            verify = next(
+                pipeline
+                for pipeline in _cnb_pipelines("main", "push")
+                if pipeline["name"] == f"docker-images ({arch})"
+            )
+            resolves = [
+                stage for stage in verify["stages"] if stage.get("type") == "cnb:resolve"
+            ]
+            self.assertEqual(1, len(resolves), f"the {arch} image pipeline must hand off")
+            self.assertEqual(
+                f"validated-runtime-images-{arch}", resolves[0]["options"]["key"]
+            )
+            self.assertIs(resolves[0], verify["stages"][-1])
 
         # `cnb:await` / `cnb:resolve` only pair between pipelines of the SAME
         # event, so the publisher must be declared in the branch key that also
@@ -2850,7 +2931,12 @@ class ReleasePublisherTests(unittest.TestCase):
             "the publisher must share the image pipelines' event",
         )
         # A pipeline-level `resources:` field is not part of the CNB grammar.
-        for branch, event in (("main", "push"), ("$", "push"), ("$", "tag_push")):
+        for branch, event in (
+            ("main", "push"),
+            ("$", "push"),
+            ("$", "tag_push"),
+            ("$", "web_trigger_release"),
+        ):
             for pipeline in _cnb_pipelines(branch, event):
                 self.assertNotIn(
                     "resources",
@@ -2858,7 +2944,12 @@ class ReleasePublisherTests(unittest.TestCase):
                     f"{pipeline['name']}: CNB has no pipeline-level `resources` key",
                 )
         # Neither of these jobs may run outside `stages`.
-        for branch, event in (("main", "push"), ("$", "push")):
+        for branch, event in (
+            ("main", "push"),
+            ("$", "push"),
+            ("$", "tag_push"),
+            ("$", "web_trigger_release"),
+        ):
             for pipeline in _cnb_pipelines(branch, event):
                 for key in ("endStages", "failStages"):
                     for stage in pipeline.get(key, []) or []:
@@ -2867,6 +2958,51 @@ class ReleasePublisherTests(unittest.TestCase):
                             {"cnb:await", "cnb:resolve"},
                             f"{pipeline['name']}: {key} cannot hold {stage.get('type')}",
                         )
+
+    def test_tag_and_manual_release_are_closed_same_event_architecture_graphs(self) -> None:
+        """Tag/button releases build, resolve, await, then publish in one event."""
+        for event, publisher_name in (
+            ("tag_push", "release-tagged"),
+            ("web_trigger_release", "release-manual"),
+        ):
+            pipelines = _cnb_pipelines("$", event)
+            names = {pipeline["name"] for pipeline in pipelines}
+            self.assertLessEqual(
+                {"docker-images (amd64)", "docker-images (arm64)", publisher_name},
+                names,
+                event,
+            )
+            publisher = next(
+                pipeline for pipeline in pipelines if pipeline["name"] == publisher_name
+            )
+            awaits = [
+                stage for stage in publisher.get("stages", [])
+                if stage.get("type") == "cnb:await"
+            ]
+            self.assertEqual(2, len(awaits), f"{event} publisher must await both packages")
+            self.assertEqual(
+                ["validated-runtime-images-amd64", "validated-runtime-images-arm64"],
+                [stage["options"]["key"] for stage in awaits],
+            )
+            self.assertEqual(awaits, publisher["stages"][:2])
+            self.assertIn(
+                "scripts/ci-job-steps.sh run release",
+                _flatten(publisher),
+            )
+            for arch in ("amd64", "arm64"):
+                image_pipeline = next(
+                    pipeline
+                    for pipeline in pipelines
+                    if pipeline["name"] == f"docker-images ({arch})"
+                )
+                self.assertEqual(
+                    f"validated-runtime-images-{arch}",
+                    image_pipeline["stages"][-1]["options"]["key"],
+                )
+                self.assertEqual("$CNB_COMMIT", image_pipeline["env"]["SOURCE_REVISION"])
+                self.assertEqual("$CNB_EVENT", image_pipeline["env"]["SOURCE_EVENT"])
+                self.assertNotIn("imports", image_pipeline)
+                self.assertNotIn("cnbcool/attachments", _flatten(image_pipeline))
 
 
 class CnbVolumeGrammarTests(unittest.TestCase):

@@ -25,11 +25,22 @@ stages:
   env:
     SOYMUTDB_CI_ARCH: amd64
     SOYMUTDB_CI_OUTPUT_DIR: validate-runtime-images-amd64
+    SOURCE_REVISION: $CNB_COMMIT
+    SOURCE_EVENT: $CNB_EVENT
   services:
   - docker
   stages:
   - name: Verify images for linux/amd64
     script: bash scripts/ci-job-steps.sh run image-build
+  - name: Upload validated runtime images (amd64)
+    image: cnbcool/artifact
+    settings:
+      path: validate-runtime-images-amd64
+      name: validated-runtime-images-amd64
+  - name: Hand the amd64 package to the release pipeline
+    type: cnb:resolve
+    options:
+      key: validated-runtime-images-amd64
 - name: docker-images (arm64)
   runner:
     cpus: 16
@@ -37,8 +48,19 @@ stages:
   env:
     SOYMUTDB_CI_ARCH: arm64
     SOYMUTDB_CI_OUTPUT_DIR: validate-runtime-images-arm64
+    SOURCE_REVISION: $CNB_COMMIT
+    SOURCE_EVENT: $CNB_EVENT
   services:
   - docker
   stages:
   - name: Verify images for linux/arm64
     script: bash scripts/ci-job-steps.sh run image-build
+  - name: Upload validated runtime images (arm64)
+    image: cnbcool/artifact
+    settings:
+      path: validate-runtime-images-arm64
+      name: validated-runtime-images-arm64
+  - name: Hand the arm64 package to the release pipeline
+    type: cnb:resolve
+    options:
+      key: validated-runtime-images-arm64

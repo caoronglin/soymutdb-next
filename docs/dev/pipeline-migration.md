@@ -27,7 +27,7 @@
 | `ci.yml` dependency-governance | `verify` → 依赖治理阶段 | `ci-job-steps.sh run dependency-governance` |
 | `ci.yml` docker-build（amd64/arm64） | `docker-images (amd64)` / `(arm64)` | `build-release-image.sh` |
 | `ci.yml` kubernetes-kind | **未迁移**（见下） | — |
-| `ci.yml` publish-images | `release`（`$` 兜底分支） | `release-contract.golden.sh` |
+| `ci.yml` publish-images | `release`（`main` push；tag/manual release 也各自闭环） | `release-contract.golden.sh` |
 | `ci.yml` clickhouse-migration | `clickhouse-migration` | `ci-job-steps.sh run clickhouse-migration` |
 | `ci.yml` mcp-e2e | `mcp-e2e` | `mcp-transport-smoke.sh` |
 | `ci.yml` Pages 构建 | `verify` → Pages 制品阶段 | `build-pages-artifact.sh` |
@@ -51,7 +51,10 @@
 1. **统一冒烟入口** `scripts/smoke.sh`：5 个 layer，缺失前置条件时明确 `SKIPPED`
    而不是静默通过。
 2. **发布契约脚本复用**：`.cnb/pipelines/release.yml` 与 GitHub publish job 调用同一
-   脚本，registry 命名空间/源码身份来自环境变量。
+   脚本，registry 命名空间/源码身份来自环境变量。main push、tag push 和
+   `web_trigger_release` 各自在同一事件内完成 amd64/arm64 verify→resolve，再由
+   独立 publisher 双 await；架构包先在 stages 上传再 resolve，发布器不重建，也不
+   跨事件类型取旧包（`CNB_EVENT` 仅是事件类型，revision 才绑定源码）。
 3. **专用构建环境镜像** `.cnb/env/Dockerfile.build-tools`：docker CLI + bash/curl/jq/
    python3 预装，消除每次 `apk add` 的时间与不确定性。
 4. **手动触发按钮** `.cnb/web_trigger.yml`：验证 / 镜像构建 / 发布 / 站点发布。

@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 
 from app.api.v1.import_studio import (
     add_patches,
@@ -15,7 +16,7 @@ from app.api.v1.import_studio import (
     create_draft,
     list_drafts,
 )
-from app.core.exceptions import ConflictError
+from app.core.exceptions import AuthorizationError, ConflictError
 from app.models.import_studio import ImportDraftStatus
 from app.schemas.import_studio import (
     DataPatchCreateRequest,
@@ -72,6 +73,42 @@ class _FakeDB:
                 setattr(row, field, value)
 
 
+def _version_row() -> SimpleNamespace:
+    return SimpleNamespace(
+        id=uuid.uuid4(),
+        filename="genes.tsv",
+        object_key="s3://bucket/genes.tsv",
+        checksum_sha256="a" * 64,
+        source="NCBI RefSeq",
+        license="CC0",
+        mime_type="text/tab-separated-values",
+        row_count=10,
+        column_count=5,
+    )
+
+
+def _draft_row(version_id: uuid.UUID) -> SimpleNamespace:
+    return SimpleNamespace(
+        id=uuid.uuid4(),
+        dataset_version_id=version_id,
+        module_key=None,
+        filename="genes.tsv",
+        object_key="s3://bucket/genes.tsv",
+        checksum_sha256="a" * 64,
+        source="NCBI RefSeq",
+        license="CC0",
+        mime_type="text/tab-separated-values",
+        row_count=10,
+        column_count=5,
+        field_mapping=[],
+        validation={},
+        status=ImportDraftStatus.DRAFT.value,
+        committed_at=None,
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+
+
 def _admin() -> object:
     return SimpleNamespace(
         id=uuid.uuid4(),
@@ -117,6 +154,164 @@ async def test_create_dataset_version_and_draft_offline() -> None:
     assert draft.module_key is None
     assert draft.row_count == 10
     assert db.committed == 2
+
+
+class _ExistingDraftDB:
+    def __init__(
+        self,
+        *,
+        fail_insert: bool = False,
+        integrity_constraint: str = "uq_import_drafts_dataset_version",
+    ) -> None:
+        self.version = _version_row()
+        self.existing = _draft_row(self.version.id)
+        self.fail_insert = fail_insert
+        self.integrity_constraint = integrity_constraint
+        self.lookup_count = 0
+        self.added: list[object] = []
+        self.committed = 0
+        self.rolled_back = 0
+
+    async def get(self, model: object, _value: object) -> object:
+        # create_draft loads the immutable DatasetVersion first.
+        return self.version if model.__name__ == "DatasetVersion" else self.existing
+
+    async def scalar(self, _statement: object) -> object:
+        self.lookup_count += 1
+        # The first lookup is deliberately empty to model a concurrent insert;
+        # the second sees the winner after the failed transaction is rolled back.
+        return None if self.fail_insert and self.lookup_count == 1 else self.existing
+
+    def add(self, row: object) -> None:
+        self.added.append(row)
+
+    async def commit(self) -> None:
+        self.committed += 1
+        if self.fail_insert:
+            raise IntegrityError(
+                "insert",
+                {},
+                SimpleNamespace(constraint_name=self.integrity_constraint),
+            )
+
+    async def rollback(self) -> None:
+        self.rolled_back += 1
+
+
+def _draft_request(version_id: uuid.UUID) -> ImportDraftCreateRequest:
+    return ImportDraftCreateRequest(
+        dataset_version_id=version_id,
+        module_key=None,
+        row_count=10,
+        column_count=5,
+    )
+
+
+@pytest.mark.asyncio
+async def test_duplicate_create_draft_resumes_existing_row_without_insert() -> None:
+    db = _ExistingDraftDB()
+
+    result = await create_draft(
+        _draft_request(db.version.id),
+        db=db,  # type: ignore[arg-type]
+        current_user=_admin(),  # type: ignore[arg-type]
+    )
+
+    assert result.id == db.existing.id
+    assert db.added == []
+    assert db.committed == 0
+
+
+@pytest.mark.asyncio
+async def test_concurrent_create_draft_recovers_unique_constraint_winner() -> None:
+    db = _ExistingDraftDB(fail_insert=True)
+
+    result = await create_draft(
+        _draft_request(db.version.id),
+        db=db,  # type: ignore[arg-type]
+        current_user=_admin(),  # type: ignore[arg-type]
+    )
+
+    assert result.id == db.existing.id
+    assert db.committed == 1
+    assert db.rolled_back == 1
+    assert db.lookup_count == 2
+
+
+@pytest.mark.asyncio
+async def test_unrelated_integrity_error_is_not_treated_as_concurrent_draft() -> None:
+    db = _ExistingDraftDB(
+        fail_insert=True,
+        integrity_constraint="fk_import_drafts_dataset_version_id",
+    )
+
+    with pytest.raises(IntegrityError):
+        await create_draft(
+            _draft_request(db.version.id),
+            db=db,  # type: ignore[arg-type]
+            current_user=_admin(),  # type: ignore[arg-type]
+        )
+
+    assert db.rolled_back == 0
+    assert db.lookup_count == 1
+
+
+@pytest.mark.asyncio
+async def test_duplicate_create_draft_rejects_different_inspected_shape() -> None:
+    db = _ExistingDraftDB()
+
+    with pytest.raises(ConflictError, match="match inspected DatasetVersion"):
+        await create_draft(
+            ImportDraftCreateRequest(
+                dataset_version_id=db.version.id,
+                module_key=None,
+                row_count=9,
+                column_count=5,
+            ),
+            db=db,  # type: ignore[arg-type]
+            current_user=_admin(),  # type: ignore[arg-type]
+        )
+
+    assert db.added == []
+    assert db.committed == 0
+
+
+@pytest.mark.asyncio
+async def test_committed_dataset_version_draft_is_not_reopened() -> None:
+    db = _ExistingDraftDB()
+    db.existing.status = ImportDraftStatus.COMMITTED.value
+
+    with pytest.raises(ConflictError, match="already committed"):
+        await create_draft(
+            _draft_request(db.version.id),
+            db=db,  # type: ignore[arg-type]
+            current_user=_admin(),  # type: ignore[arg-type]
+        )
+
+    assert db.added == []
+    assert db.committed == 0
+
+
+@pytest.mark.asyncio
+async def test_import_studio_create_requires_administrator_role() -> None:
+    db = _FakeDB()
+    viewer = SimpleNamespace(
+        id=uuid.uuid4(),
+        is_superuser=False,
+        is_active=True,
+        is_deleted=False,
+        role_rel=SimpleNamespace(name="viewer"),
+    )
+
+    with pytest.raises(AuthorizationError, match="Administrator"):
+        await create_draft(
+            _draft_request(uuid.uuid4()),
+            db=db,  # type: ignore[arg-type]
+            current_user=viewer,  # type: ignore[arg-type]
+        )
+
+    assert db.added == []
+    assert db.committed == 0
 
 
 class _Result:

@@ -12,12 +12,15 @@ Contract highlights (database-core-contract):
 
 from __future__ import annotations
 
-from typing import Any
+import hashlib
+import unicodedata
+from typing import Any, Mapping
 from urllib.parse import quote, urlencode
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, case, desc, func, literal, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..core.exceptions import ValidationError
 from ..core.public_ids import normalize_public_id
 from ..core.site_variant import SiteVariant
 from ..models.content import Publication
@@ -35,7 +38,218 @@ from ..schemas.search import (
     SearchSuggestion,
 )
 from .cache import get_or_set
-from .release_context import resolve_release_context
+from .release_context import (
+    ReleaseContext,
+    decode_bound_cursor,
+    encode_bound_cursor,
+    resolve_release_context,
+)
+
+
+_GLOBAL_CURSOR_VERSION = 1
+_MAX_GLOBAL_CURSOR_LENGTH = 8192
+_CURSOR_SOURCES = (
+    SearchResultType.GENE,
+    SearchResultType.MUTANT_LINE,
+    SearchResultType.PUBLICATION,
+)
+
+
+def _normalize_search_query(query: str) -> str:
+    """Return the canonical query representation used for cursor binding."""
+    return unicodedata.normalize("NFKC", query).strip().casefold()
+
+
+def _query_fingerprint(query: str) -> str:
+    return hashlib.sha256(_normalize_search_query(query).encode("utf-8")).hexdigest()
+
+
+def _cursor_filters(
+    *,
+    query: str,
+    active_types: list[SearchResultType],
+    site_variant: SiteVariant,
+    assembly_id: int | None,
+) -> dict[str, Any]:
+    """Return non-secret context bound by the existing cursor primitive."""
+    return {
+        "query": _query_fingerprint(query),
+        "types": [item.value for item in active_types],
+        "site_variant": site_variant.value,
+        "assembly_id": assembly_id,
+    }
+
+
+def _encode_global_cursor(payload: Mapping[str, Any]) -> str:
+    """Sign a v1 cursor with the repository's release-bound primitive.
+
+    The repository primitive authenticates both release context and filters.
+    """
+    context = ReleaseContext(
+        release_id=int(payload["release_id"]),
+        assembly_id=payload.get("assembly_id"),
+    )
+    filters = {
+        "query": payload["q"],
+        "types": payload["types"],
+        "site_variant": payload["site_variant"],
+        "assembly_id": payload.get("assembly_id"),
+    }
+    signed = encode_bound_cursor(
+        kind="global-search",
+        sort_key={"v": _GLOBAL_CURSOR_VERSION, "positions": payload["positions"]},
+        release_context=context,
+        filters=filters,
+    )
+    return signed
+
+
+def _normalize_active_types(types: list[SearchResultType] | None) -> list[SearchResultType]:
+    """Deduplicate types in enum order so cursor bindings are deterministic."""
+    supplied = types or list(SearchResultType)
+    try:
+        values = {SearchResultType(item) for item in supplied}
+    except (TypeError, ValueError) as exc:
+        raise ValidationError("Invalid search result type") from exc
+    return [result_type for result_type in SearchResultType if result_type in values]
+
+
+def _validate_position(
+    source: SearchResultType,
+    value: Any,
+    *,
+    site_variant: SiteVariant,
+) -> dict[str, Any]:
+    """Validate one source position without accepting ambiguous extra fields."""
+    if not isinstance(value, dict):
+        raise ValidationError(f"Invalid {source.value} cursor position")
+    expected = {
+        SearchResultType.GENE: (
+            {"rank", "score", "accession", "gene_pk", "exhausted"}
+            if site_variant == SiteVariant.INTERNAL
+            else {"rank", "score", "accession", "assembly_id", "exhausted"}
+        ),
+        SearchResultType.PUBLICATION: {"rank", "score", "id", "exhausted"},
+        SearchResultType.MUTANT_LINE: {
+            "rank", "score", "public_id", "exhausted"
+        }
+        if site_variant == SiteVariant.EXTERNAL
+        else {
+            "rank", "score", "name", "id", "exhausted"
+        },
+    }[source]
+    if set(value) != expected:
+        raise ValidationError(f"Invalid {source.value} cursor position")
+    exhausted = value["exhausted"]
+    if not isinstance(exhausted, bool):
+        raise ValidationError(f"Invalid {source.value} cursor exhausted flag")
+    if (
+        isinstance(value["rank"], bool)
+        or not isinstance(value["rank"], int)
+        or value["rank"] not in {1, 2, 3}
+        or isinstance(value["score"], bool)
+        or not isinstance(value["score"], (int, float))
+        or float(value["score"]) != float(value["rank"])
+    ):
+        raise ValidationError(f"Invalid {source.value} cursor score")
+    if source == SearchResultType.GENE:
+        tie_key = "gene_pk" if site_variant == SiteVariant.INTERNAL else "assembly_id"
+        if value["accession"] is None:
+            if value[tie_key] is not None or not exhausted:
+                if value[tie_key] is not None:
+                    raise ValidationError("Invalid empty gene cursor position")
+                return value
+            return value
+        if not isinstance(value["accession"], str) or not value["accession"]:
+            raise ValidationError("Invalid gene cursor accession")
+        if (
+            isinstance(value[tie_key], bool)
+            or not isinstance(value[tie_key], int)
+            or value[tie_key] < 1
+        ):
+            raise ValidationError("Invalid gene cursor tie-breaker")
+    elif source == SearchResultType.PUBLICATION:
+        if value["id"] is None:
+            return value
+        if isinstance(value["id"], bool) or not isinstance(value["id"], int) or value["id"] < 1:
+            raise ValidationError("Invalid publication cursor tie-breaker")
+    else:
+        key_name = "public_id" if site_variant == SiteVariant.EXTERNAL else "name"
+        if value[key_name] is None:
+            if site_variant == SiteVariant.EXTERNAL:
+                return value
+            if value["id"] is not None or not exhausted:
+                if value["id"] is not None:
+                    raise ValidationError("Invalid empty mutant-line cursor position")
+                return value
+            return value
+        if not isinstance(value[key_name], str) or not value[key_name]:
+            raise ValidationError("Invalid mutant-line cursor name")
+        if site_variant == SiteVariant.EXTERNAL:
+            return value
+        if isinstance(value["id"], bool) or not isinstance(value["id"], int) or value["id"] < 1:
+            raise ValidationError("Invalid mutant-line cursor tie-breaker")
+    return value
+
+
+def _decode_global_cursor(
+    cursor: str,
+    *,
+    query: str,
+    active_types: list[SearchResultType],
+    site_variant: SiteVariant,
+    release_id: int,
+    assembly_id: int | None,
+) -> int | dict[str, Any]:
+    """Decode a legacy offset or validate a bound opaque cursor.
+
+    Decimal-only values intentionally retain the pre-A-04 offset behavior.
+    Every other malformed value is rejected before source SQL is constructed.
+    """
+    if not isinstance(cursor, str) or not cursor:
+        raise ValidationError("Invalid global search cursor")
+    if cursor.isascii() and cursor.isdecimal():
+        return int(cursor)
+    if len(cursor) > _MAX_GLOBAL_CURSOR_LENGTH:
+        raise ValidationError("Global search cursor is too large")
+    context = ReleaseContext(release_id=release_id, assembly_id=assembly_id)
+    try:
+        sort_key = decode_bound_cursor(
+            cursor,
+            kind="global-search",
+            release_context=context,
+            filters=_cursor_filters(
+                query=query,
+                active_types=active_types,
+                site_variant=site_variant,
+                assembly_id=assembly_id,
+            ),
+        )
+    except ValidationError:
+        raise
+    except Exception as exc:
+        raise ValidationError("Invalid global search cursor") from exc
+    if set(sort_key) != {"v", "positions"}:
+        raise ValidationError("Invalid global search cursor payload")
+    if (
+        isinstance(sort_key["v"], bool)
+        or not isinstance(sort_key["v"], int)
+        or sort_key["v"] != _GLOBAL_CURSOR_VERSION
+    ):
+        raise ValidationError("Unknown global search cursor version")
+    positions = sort_key["positions"]
+    if not isinstance(positions, dict):
+        raise ValidationError("Invalid global search cursor positions")
+    expected_sources = {source.value for source in active_types if source in _CURSOR_SOURCES}
+    if set(positions) != expected_sources:
+        raise ValidationError("Global search cursor sources do not match")
+    checked: dict[str, Any] = {}
+    for source in _CURSOR_SOURCES:
+        if source.value in positions:
+            checked[source.value] = _validate_position(
+                source, positions[source.value], site_variant=site_variant
+            )
+    return {"positions": checked}
 
 
 def _literal_like_fragment(query: str) -> str:
@@ -74,16 +288,28 @@ class SearchService:
         authorized rows can never be served to a different scope.
         """
         limit = max(1, min(int(limit), 100))
-        active_types = types or list(SearchResultType)
+        active_types = _normalize_active_types(types)
         context = await resolve_release_context(db)
         release_id = context.release_id
         # NOTE: an absent assembly_id deliberately searches every assembly
         # of the release; hits are labelled per assembly and the response
         # reports ambiguity. It is never defaulted behind the caller's back.
-        try:
-            page_offset = max(0, int(cursor or "0"))
-        except ValueError:
-            page_offset = 0
+        cursor_state: dict[str, Any] | None = None
+        legacy_cursor = cursor is not None and cursor.isascii() and cursor.isdecimal()
+        page_offset = 0
+        if cursor is not None:
+            decoded_cursor = _decode_global_cursor(
+                cursor,
+                query=query,
+                active_types=active_types,
+                site_variant=site_variant,
+                release_id=release_id,
+                assembly_id=assembly_id,
+            )
+            if isinstance(decoded_cursor, int):
+                page_offset = decoded_cursor
+            else:
+                cursor_state = decoded_cursor["positions"]
         cache_params = {
             "query": query,
             "types": [result_type.value for result_type in active_types],
@@ -98,34 +324,158 @@ class SearchService:
             pattern = _contains_pattern(query)
             hits: list[SearchHit] = []
             per_type = max(1, limit // max(1, len(active_types)))
+            # New cursors need enough rows from every source to perform a
+            # true global merge. Legacy decimal cursors retain their former
+            # per-source offset behavior for mixed-version clients.
+            source_limit = per_type + 1 if legacy_cursor else limit + 1
+            page_limit = per_type if legacy_cursor else limit
 
             # AsyncSession is intentionally used sequentially here. Running
             # multiple statements concurrently on one session is unsupported.
             has_more = False
+            source_positions: dict[str, dict[str, Any]] = {}
+            source_pages: dict[
+                str, tuple[list[SearchHit], bool]
+            ] = {}
+
+            def previous_position(source: SearchResultType) -> dict[str, Any] | None:
+                if cursor_state is None:
+                    return None
+                position = cursor_state.get(source.value)
+                if not isinstance(position, dict):
+                    return None
+                key_name = (
+                    "accession"
+                    if source == SearchResultType.GENE
+                    else "public_id"
+                    if source == SearchResultType.MUTANT_LINE
+                    and site_variant == SiteVariant.EXTERNAL
+                    else "name"
+                    if source == SearchResultType.MUTANT_LINE
+                    else "id"
+                )
+                return position if position.get(key_name) is not None else None
+
+            def source_exhausted(source: SearchResultType) -> bool:
+                if cursor_state is None:
+                    return False
+                position = cursor_state.get(source.value)
+                return isinstance(position, dict) and position.get("exhausted") is True
+
+            def finish_source(
+                source: SearchResultType,
+                page_hits: list[SearchHit],
+                source_has_more: bool,
+                visible_hits: list[SearchHit],
+            ) -> None:
+                """Record only the terminal row actually returned to callers."""
+                previous = previous_position(source)
+                if visible_hits:
+                    key = visible_hits[-1].metadata.get("_cursor")
+                    if not isinstance(key, dict):
+                        raise RuntimeError(f"{source.value} result did not provide a cursor key")
+                    source_positions[source.value] = {
+                        **key,
+                        "exhausted": not (source_has_more or len(visible_hits) < len(page_hits)),
+                    }
+                elif previous is not None:
+                    # A non-empty page can be omitted by the global limit; in
+                    # that case do not advance this source at all.
+                    source_positions[source.value] = {
+                        **previous,
+                        "exhausted": True if not page_hits else previous["exhausted"],
+                    }
+                elif source == SearchResultType.GENE:
+                    source_positions[source.value] = {
+                        "rank": 1,
+                        "score": 1.0,
+                        "accession": None,
+                        "assembly_id": None,
+                        "exhausted": not page_hits,
+                    }
+                elif source == SearchResultType.PUBLICATION:
+                    source_positions[source.value] = {
+                        "rank": 1,
+                        "score": 1.0,
+                        "id": None,
+                        "exhausted": not page_hits,
+                    }
+                elif site_variant == SiteVariant.EXTERNAL:
+                    source_positions[source.value] = {
+                        "rank": 1,
+                        "score": 1.0,
+                        "public_id": None,
+                        "exhausted": not page_hits,
+                    }
+                else:
+                    source_positions[source.value] = {
+                        "rank": 1,
+                        "score": 1.0,
+                        "name": None,
+                        "id": None,
+                        "exhausted": not page_hits,
+                    }
+
             if SearchResultType.GENE in active_types:
-                gene_hits = await self._search_genes(
-                    db, query, pattern, per_type + 1, page_offset,
-                    release_id=release_id, assembly_id=assembly_id,
-                )
-                has_more = has_more or len(gene_hits) > per_type
-                hits.extend(gene_hits[:per_type])
+                previous = previous_position(SearchResultType.GENE)
+                if source_exhausted(SearchResultType.GENE):
+                    gene_hits = []
+                else:
+                    gene_hits = await self._search_genes(
+                        db, query, pattern, source_limit,
+                        page_offset if legacy_cursor else 0,
+                        cursor_key=previous if cursor_state is not None else None,
+                        release_id=release_id,
+                        assembly_id=assembly_id,
+                        site_variant=site_variant,
+                    )
+                source_has_more = len(gene_hits) > page_limit
+                page_hits = gene_hits[:page_limit]
+                has_more = has_more or source_has_more
+                source_pages[SearchResultType.GENE.value] = (page_hits, source_has_more)
+                hits.extend(page_hits)
             if SearchResultType.MUTANT_LINE in active_types:
-                mutant_hits = await self._search_mutant_lines(
-                    db, query, pattern, per_type + 1, page_offset,
-                    release_id=release_id,
-                    site_variant=site_variant,
-                )
-                has_more = has_more or len(mutant_hits) > per_type
-                hits.extend(mutant_hits[:per_type])
+                previous = previous_position(SearchResultType.MUTANT_LINE)
+                if source_exhausted(SearchResultType.MUTANT_LINE):
+                    mutant_hits = []
+                else:
+                    mutant_hits = await self._search_mutant_lines(
+                        db, query, pattern, source_limit,
+                        page_offset if legacy_cursor else 0,
+                        cursor_key=previous if cursor_state is not None else None,
+                        release_id=release_id,
+                        site_variant=site_variant,
+                    )
+                source_has_more = len(mutant_hits) > page_limit
+                page_hits = mutant_hits[:page_limit]
+                has_more = has_more or source_has_more
+                source_pages[SearchResultType.MUTANT_LINE.value] = (page_hits, source_has_more)
+                hits.extend(page_hits)
             if SearchResultType.PUBLICATION in active_types:
-                publication_hits = await self._search_publications(
-                    db, pattern, per_type + 1, page_offset
-                )
-                has_more = has_more or len(publication_hits) > per_type
-                hits.extend(publication_hits[:per_type])
+                previous = previous_position(SearchResultType.PUBLICATION)
+                if source_exhausted(SearchResultType.PUBLICATION):
+                    publication_hits = []
+                else:
+                    publication_hits = await self._search_publications(
+                        db, pattern, source_limit,
+                        page_offset if legacy_cursor else 0,
+                        cursor_key=previous if cursor_state is not None else None,
+                    )
+                source_has_more = len(publication_hits) > page_limit
+                page_hits = publication_hits[:page_limit]
+                has_more = has_more or source_has_more
+                source_pages[SearchResultType.PUBLICATION.value] = (page_hits, source_has_more)
+                hits.extend(page_hits)
 
             hits.sort(key=lambda hit: hit.score, reverse=True)
             hits = hits[:limit]
+            visible_ids = {id(hit) for hit in hits}
+            has_more = False
+            for source_name, (page_hits, source_has_more) in source_pages.items():
+                source = SearchResultType(source_name)
+                visible_hits = [hit for hit in page_hits if id(hit) in visible_ids]
+                finish_source(source, page_hits, source_has_more, visible_hits)
+                has_more = has_more or source_has_more or len(visible_hits) < len(page_hits)
             by_assembly: dict[str, int] = {}
             for hit in hits:
                 assembly = hit.metadata.get("assembly_id")
@@ -162,7 +512,23 @@ class SearchService:
                 by_assembly=by_assembly,
                 ambiguous=len(by_assembly) > 1,
                 cursor=cursor,
-                next_cursor=str(page_offset + per_type) if has_more else None,
+                next_cursor=(
+                    str(page_offset + per_type)
+                    if legacy_cursor and has_more
+                    else _encode_global_cursor(
+                        {
+                            "v": _GLOBAL_CURSOR_VERSION,
+                            "q": _query_fingerprint(query),
+                            "types": [item.value for item in active_types],
+                            "site_variant": site_variant.value,
+                            "release_id": release_id,
+                            "assembly_id": assembly_id,
+                            "positions": source_positions,
+                        }
+                    )
+                    if has_more
+                    else None
+                ),
                 has_more=has_more,
                 total_count=len(hits),
             )
@@ -241,8 +607,10 @@ class SearchService:
         limit: int,
         offset: int = 0,
         *,
+        cursor_key: Mapping[str, Any] | None = None,
         release_id: int,
         assembly_id: int | None,
+        site_variant: SiteVariant = SiteVariant.EXTERNAL,
     ) -> list[SearchHit]:
         """Search genes with exact > alias > text match typing."""
         text_match = or_(
@@ -264,9 +632,49 @@ class SearchService:
                 .exists()
             )
             conditions = [or_(text_match, alias_match)]
+        exact_match = (
+            func.lower(Gene.accession) == func.lower(query.strip())
+            if _is_exact_accession(query)
+            else literal(False)
+        )
+        alias_match = (
+            select(GeneAlias.gene_id)
+            .where(
+                GeneAlias.gene_id == Gene.gene_pk,
+                func.lower(GeneAlias.alias) == func.lower(query.strip()),
+            )
+            .exists()
+            if _is_exact_accession(query)
+            else literal(False)
+        )
+        rank_expr = case(
+            (exact_match, 3),
+            (alias_match, 2),
+            else_=1,
+        )
         conditions.append(Assembly.release_id == release_id)
         if assembly_id is not None:
             conditions.append(Gene.assembly_id == assembly_id)
+        if cursor_key is not None:
+            conditions.append(
+                or_(
+                    rank_expr < cursor_key["rank"],
+                    and_(
+                        rank_expr == cursor_key["rank"],
+                        or_(
+                            Gene.accession > cursor_key["accession"],
+                            and_(
+                                Gene.accession == cursor_key["accession"],
+                                (
+                                    Gene.gene_pk > cursor_key["gene_pk"]
+                                    if site_variant == SiteVariant.INTERNAL
+                                    else Gene.assembly_id > cursor_key["assembly_id"]
+                                ),
+                            ),
+                        ),
+                    ),
+                )
+            )
         stmt = (
             select(
                 Gene.gene_pk,
@@ -275,10 +683,15 @@ class SearchService:
                 Gene.description,
                 Gene.biotype,
                 Gene.assembly_id,
+                rank_expr.label("match_rank"),
             )
             .join(Assembly, Assembly.id == Gene.assembly_id)
             .where(and_(*conditions))
-            .order_by(Gene.accession, Gene.gene_pk)
+            .order_by(
+                desc(rank_expr),
+                Gene.accession,
+                Gene.gene_pk if site_variant == SiteVariant.INTERNAL else Gene.assembly_id,
+            )
             .limit(limit)
             .offset(offset)
         )
@@ -286,33 +699,12 @@ class SearchService:
         rows = result.all()
 
         # Alias equality (curated data only, never string similarity).
-        alias_map: dict[int, str] = {}
-        exact_map: set[int] = set()
-        if rows and _is_exact_accession(query):
-            pks = [row.gene_pk for row in rows]
-            needle = query.strip()
-            alias_rows = await db.execute(
-                select(GeneAlias.gene_id, GeneAlias.alias).where(
-                    and_(
-                        GeneAlias.gene_id.in_(pks),
-                        func.lower(GeneAlias.alias) == func.lower(needle),
-                    )
-                )
-            )
-            for gene_pk, alias in alias_rows.all():
-                alias_map[gene_pk] = alias
-            exact_map = {
-                row.gene_pk
-                for row in rows
-                if row.accession.lower() == needle.lower()
-            }
-
         hits: list[SearchHit] = []
         for row in rows:
-            if row.gene_pk in exact_map:
+            if row.match_rank == 3:
                 match_type = MatchType.EXACT
                 score = 3.0
-            elif row.gene_pk in alias_map:
+            elif row.match_rank == 2:
                 match_type = MatchType.ALIAS
                 score = 2.0
             else:
@@ -332,6 +724,21 @@ class SearchService:
                         "biotype": row.biotype,
                         "release_id": release_id,
                         "assembly_id": row.assembly_id,
+                        "_cursor": (
+                            {
+                                "rank": int(row.match_rank),
+                                "score": float(row.match_rank),
+                                "accession": row.accession,
+                                "gene_pk": int(row.gene_pk),
+                            }
+                            if site_variant == SiteVariant.INTERNAL
+                            else {
+                                "rank": int(row.match_rank),
+                                "score": float(row.match_rank),
+                                "accession": row.accession,
+                                "assembly_id": int(row.assembly_id),
+                            }
+                        ),
                     },
                 )
             )
@@ -345,6 +752,7 @@ class SearchService:
         limit: int,
         offset: int = 0,
         *,
+        cursor_key: Mapping[str, Any] | None = None,
         release_id: int,
         site_variant: SiteVariant,
     ) -> list[SearchHit]:
@@ -360,8 +768,15 @@ class SearchService:
                 MutantLine.is_public.is_(True),
                 MutantLine.is_deleted.is_(False),
                 MutantLine.public_id.is_not(None),
+                MutantLine.release_id == release_id,
                 MutantLine.public_id.ilike(pattern, escape="\\"),
             ]
+            exact_match = (
+                func.upper(MutantLine.public_id) == normalize_public_id(query.strip())
+                if _is_exact_accession(query)
+                else literal(False)
+            )
+            rank_expr = case((exact_match, 3), else_=1)
             stmt = (
                 select(
                     MutantLine.public_id,
@@ -371,15 +786,25 @@ class SearchService:
                     MutantLine.cultivar,
                 )
                 .where(and_(*conditions))
-                .order_by(MutantLine.public_id, MutantLine.id)
-                .limit(limit)
-                .offset(offset)
             )
+            if cursor_key is not None:
+                stmt = stmt.where(
+                    or_(
+                        rank_expr < cursor_key["rank"],
+                        and_(
+                            rank_expr == cursor_key["rank"],
+                            MutantLine.public_id > cursor_key["public_id"],
+                        ),
+                    )
+                )
+            stmt = stmt.order_by(desc(rank_expr), MutantLine.public_id).limit(limit).offset(offset)
             result = await db.execute(stmt)
             hits: list[SearchHit] = []
             for ml in result.all():
                 public_id = ml.public_id or ""
-                exact = _is_exact_accession(query) and public_id.upper() == normalize_public_id(query.strip())
+                exact = _is_exact_accession(query) and public_id.upper() == normalize_public_id(
+                    query.strip()
+                )
                 hits.append(
                     SearchHit(
                         id=public_id,
@@ -394,6 +819,11 @@ class SearchService:
                             "cultivar": ml.cultivar,
                             "release_id": release_id,
                             "display_name": ml.name,
+                            "_cursor": {
+                                "rank": 3 if exact else 1,
+                                "score": 3.0 if exact else 1.0,
+                                "public_id": public_id,
+                            },
                         },
                     )
                 )
@@ -404,6 +834,7 @@ class SearchService:
         stmt = (
             select(
                 MutantLine.public_id,
+                MutantLine.id,
                 MutantLine.name,
                 MutantLine.description,
                 MutantLine.mutagen,
@@ -421,7 +852,26 @@ class SearchService:
                     ),
                 )
             )
-            .order_by(MutantLine.name, MutantLine.id)
+        )
+        rank_expr = literal(1)
+        if cursor_key is not None:
+            stmt = stmt.where(
+                or_(
+                    rank_expr < cursor_key["rank"],
+                    and_(
+                        rank_expr == cursor_key["rank"],
+                        or_(
+                            MutantLine.name > cursor_key["name"],
+                            and_(
+                                MutantLine.name == cursor_key["name"],
+                                MutantLine.id > cursor_key["id"],
+                            ),
+                        ),
+                    ),
+                )
+            )
+        stmt = (
+            stmt.order_by(desc(rank_expr), MutantLine.name, MutantLine.id)
             .limit(limit)
             .offset(offset)
         )
@@ -441,6 +891,12 @@ class SearchService:
                         "mutagen": ml.mutagen,
                         "cultivar": ml.cultivar,
                         "release_id": release_id,
+                        "_cursor": {
+                            "rank": 1,
+                            "score": 1.0,
+                            "name": ml.name,
+                            "id": int(ml.id),
+                        },
                     },
                 )
             )
@@ -566,27 +1022,39 @@ class SearchService:
         return items
 
     async def _search_publications(
-        self, db: AsyncSession, pattern: str, limit: int, offset: int = 0
+        self,
+        db: AsyncSession,
+        pattern: str,
+        limit: int,
+        offset: int = 0,
+        *,
+        cursor_key: Mapping[str, Any] | None = None,
     ) -> list[SearchHit]:
-        stmt = (
-            select(
-                Publication.id,
-                Publication.title,
-                Publication.journal,
-                Publication.year,
-                Publication.doi,
+        stmt = select(
+            Publication.id,
+            Publication.title,
+            Publication.journal,
+            Publication.year,
+            Publication.doi,
+        ).where(
+            or_(
+                Publication.title.ilike(pattern, escape="\\"),
+                Publication.authors.ilike(pattern, escape="\\"),
+                Publication.abstract.ilike(pattern, escape="\\"),
             )
-            .where(
+        )
+        rank_expr = literal(1)
+        if cursor_key is not None:
+            stmt = stmt.where(
                 or_(
-                    Publication.title.ilike(pattern, escape="\\"),
-                    Publication.authors.ilike(pattern, escape="\\"),
-                    Publication.abstract.ilike(pattern, escape="\\"),
+                    rank_expr < cursor_key["rank"],
+                    and_(
+                        rank_expr == cursor_key["rank"],
+                        Publication.id > cursor_key["id"],
+                    ),
                 )
             )
-            .order_by(Publication.id)
-            .limit(limit)
-            .offset(offset)
-        )
+        stmt = stmt.order_by(desc(rank_expr), Publication.id).limit(limit).offset(offset)
         result = await db.execute(stmt)
         hits: list[SearchHit] = []
         for pub in result.all():
@@ -598,7 +1066,15 @@ class SearchService:
                     subtitle=pub.journal,
                     score=1.0,
                     url=f"/api/v1/content/publications/{pub.id}",
-                    metadata={"year": pub.year, "doi": pub.doi},
+                    metadata={
+                        "year": pub.year,
+                        "doi": pub.doi,
+                        "_cursor": {
+                            "rank": 1,
+                            "score": 1.0,
+                            "id": int(pub.id),
+                        },
+                    },
                 )
             )
         return hits
@@ -623,7 +1099,10 @@ class SearchService:
             if release_id is not None:
                 stmt = stmt.where(Assembly.release_id == release_id)
             stmt = stmt.where(
-                or_(Gene.accession.ilike(pattern, escape="\\"), Gene.name.ilike(pattern, escape="\\"))
+                or_(
+                    Gene.accession.ilike(pattern, escape="\\"),
+                    Gene.name.ilike(pattern, escape="\\"),
+                )
             ).limit(limit)
             result = await db.execute(stmt)
             suggestions = [
