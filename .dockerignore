@@ -1,33 +1,73 @@
+# =====================================================================
+# SoyMutDB — Docker build context exclusions
+# =====================================================================
+# The build context is the repository root. It carries several generated
+# `dist/` trees (apps/web/dist, apps/admin/dist, apps/jbrowse/dist); none of
+# them belongs in the context, because a stale tree would be silently copied
+# over the freshly built one and the context would grow by hundreds of MB.
+#
+# They are listed per app instead of as one `**/dist` because a broad glob is
+# exactly how this file has broken builds before: an exclusion silently wins
+# over a `COPY`, and the failure reads as a missing file rather than a
+# context-policy mistake --
+#
+#   COPY failed: file not found in build context or excluded by .dockerignore
+#
+# `**/<name>` also matches at any depth, so a pattern written for one app's
+# output can remove another app's SOURCE directory. Naming the paths keeps the
+# rule auditable: `scripts/test_production_compose_contract.py` asserts both
+# halves -- generated trees stay out, every Dockerfile COPY source stays in.
+# =====================================================================
+
+# --- dependencies / caches -------------------------------------------------
 node_modules
 **/node_modules
-.venv
-**/dist
-.trash
-.slim
-artifacts
-reports
+.pnpm-store
+.tmp-store
 **/.cache
-**/coverage
-*.log
-.env
-.env.*
+.turbo
+.venv
+.pip
 .ruff_cache
+.mypy_cache
 __pycache__
 .pytest_cache
-.pip
+
+# --- generated app output --------------------------------------------------
+# Explicit, not `**/dist`: see the header. Keep this list in sync with the
+# `outDir` of each Vite config.
+apps/web/dist
+apps/admin/dist
+apps/jbrowse/dist
+apps/mcp-server/dist
+**/coverage/**
+**/playwright-report
+**/test-results
+**/.vite
+
+# --- artifacts / reports / local scratch -----------------------------------
+artifacts
+reports
+.trash
+.slim
+*.log
+.dev-logs
+
+# --- secrets / local config ------------------------------------------------
+.env
+.env.*
+!.env.example
+
+# --- VCS, editors, agents, docs, tests -------------------------------------
 .git
 .github
 .agent-teams
 .ai-memory
 .opencode
 .codex
-.turbo
 docs
 e2e
 tests
-.mypy_cache
-.pnpm-store
-.tmp-store
 ui-r
 recreations
 knip.json

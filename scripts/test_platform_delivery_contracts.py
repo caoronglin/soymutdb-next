@@ -688,3 +688,144 @@ def test_platform_delivery_adr_records_decisions_and_rollback() -> None:
     assert "core,jbrowse,blast,analyses,mcp,cloudflare-tunnel" in adr
     assert "Docker acceptance runs in CI" in adr
     assert "Rollback" in adr
+
+
+# ---------------------------------------------------------------------------
+# deploy/scripts/upgrade.sh — the compose invocation contract
+# ---------------------------------------------------------------------------
+# `docker compose` interpolates the WHOLE compose file when the command line is
+# parsed, so anything the file declares as required (`${NAME:?message}`) must
+# already be in the environment of the process that runs compose. Two ordering
+# mistakes are easy to make and both were present, which is why they are pinned
+# here instead of left to a reviewer's memory.
+def _upgrade_source() -> str:
+    return UPGRADE.read_text(encoding="utf-8")
+
+
+def _compose_variable_names(compose: dict) -> set[str]:
+    """Every `${NAME:?…}` reference in the production Compose file.
+
+    Compose demands these during interpolation, i.e. before it selects a
+    service. They are the exact set `upgrade.sh` must have exported by the time
+    its first `docker compose` call runs.
+    """
+    text = json.dumps(compose, ensure_ascii=False)
+    return set(re.findall(r"\$\{([A-Za-z_][A-Za-z0-9_]*):\?", text))
+
+
+def test_upgrade_loads_env_before_the_first_compose_command() -> None:
+    """`.env` must be sourced before the COMPOSE array is built and used.
+
+    Regression the ordering produces. `docker compose config -q` is step 1 of
+    the release, and it interpolates `docker-compose.yml`, which deliberately
+    fails closed on `${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}` and
+    friends. With the array constructed first, that first validation died with
+
+        error while interpolating services.postgres.environment.POSTGRES_PASSWORD:
+        required variable POSTGRES_PASSWORD is missing a value
+
+    and the operator saw "compose config failed" instead of "missing .env" --
+    pointing at a compose file that was fine.
+
+    Three properties are asserted, in the order bash evaluates them:
+      1. `.env` is sourced before the COMPOSE array is assigned;
+      2. no compose invocation precedes either;
+      3. the array carries `--env-file`, so compose and the script read the same
+         file regardless of the caller's cwd or already-exported variables.
+    """
+    source = _upgrade_source()
+
+    source_env = source.index('if [[ -f "${COMPOSE_DIR}/.env" ]]')
+    build_array = source.index("COMPOSE=(docker compose")
+
+    assert source_env < build_array, (
+        "upgrade.sh must source .env before building the COMPOSE array; "
+        "compose interpolates ${NAME:?…} while parsing the command line"
+    )
+    # The FIRST use of the array is inside the helper functions above the .env
+    # load, so anchor the ordering on the first *statement that runs* the array
+    # at the top level -- a call site, not a function body. Anchoring on
+    # `"${COMPOSE[@]}"` alone would compare against a definition that has not
+    # executed yet and would fail on a correct file.
+    first_invocation = source.index('"${COMPOSE[@]}"', build_array)
+    assert build_array < first_invocation, (
+        "the COMPOSE array must be constructed before it is used"
+    )
+
+    array_line = source[build_array : source.index("\n", build_array)]
+    assert "--env-file" in array_line, (
+        "the COMPOSE array must pass --env-file so compose and the script read "
+        f"the same .env: {array_line}"
+    )
+
+    # And the variables the file requires are exactly the ones .env provides for.
+    required = _compose_variable_names(_compose())
+    assert required, "docker-compose.yml must keep its fail-fast references"
+    env_example = (ROOT / "deploy/.env.example").read_text(encoding="utf-8")
+    for name in sorted(required):
+        assert f"{name}=" in env_example, (
+            f"{name} is required by docker-compose.yml but missing from "
+            "deploy/.env.example; a fresh install would have nothing to fill in"
+        )
+
+
+def test_upgrade_rollback_survives_a_stale_or_incomplete_environment() -> None:
+    """Rolling back must swap images, not re-demand the caller's environment.
+
+    `rollback()` re-runs `docker compose up -d` to bring the previous release
+    back. It passed only the four `*_IMAGE_REF` variables, which is enough when
+    the caller happens to still hold every other `${NAME:?…}` -- and the failure
+    when it does not is
+
+        required variable POSTGRES_PASSWORD is missing a value
+
+    during a rollback, i.e. an error message that names neither the rollback nor
+    the real cause. The data-layer credentials are therefore re-exported
+    explicitly, while the *application* configuration (`SOYMUTDB_*`) is
+    deliberately left to the current environment: a rollback restores the code,
+    it does not reintroduce last release's secrets.
+    """
+    source = _upgrade_source()
+    rollback = source[source.index("rollback() {") : source.index("# Step 7:")]
+
+    for name in (
+        "POSTGRES_PASSWORD",
+        "CLICKHOUSE_PASSWORD",
+        "REDIS_PASSWORD",
+        "GRAFANA_PASSWORD",
+        "MINIO_ROOT_USER",
+        "MINIO_ROOT_PASSWORD",
+    ):
+        assert name in rollback, (
+            f"rollback() must re-export {name}; compose interpolates it before "
+            "selecting a service, and its absence aborts the rollback"
+        )
+
+    # Every required variable is either re-exported or deliberately an
+    # application setting that must NOT be rolled back. Anything else means a
+    # new required reference can be added to compose without rollback noticing.
+    application_prefixes = ("SOYMUTDB_",)
+    reexported = set(re.findall(r"^\s*([A-Z_]+)=\"", rollback, re.MULTILINE))
+    uncovered = {
+        name
+        for name in _compose_variable_names(_compose())
+        if name not in reexported and not name.startswith(application_prefixes)
+    }
+    assert not uncovered, (
+        "these required compose variables are neither re-exported by rollback() "
+        f"nor intentionally application-scoped: {sorted(uncovered)}"
+    )
+
+    # The image swap itself must stay: an in-place restart is not a rollback.
+    # Each recorded ref has to appear on both sides -- read from the state file
+    # and assigned onto the compose invocation.
+    for recorded, applied in (
+        ("OLD_API_REF", "API_IMAGE_REF"),
+        ("OLD_WORKER_REF", "WORKER_IMAGE_REF"),
+        ("OLD_MCP_REF", "MCP_IMAGE_REF"),
+        ("OLD_JBROWSE_REF", "JBROWSE_IMAGE_REF"),
+    ):
+        assert f"{applied}=\"${{{recorded}}}\"" in rollback, (
+            f"rollback() must run compose with {applied} set to the recorded "
+            f"{recorded}; a restart on the new images is not a rollback"
+        )
