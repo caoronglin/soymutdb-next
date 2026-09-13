@@ -63,10 +63,15 @@ only `image@sha256` references. Its checksum is recorded in
 `OCI_SHA256SUMS`; the SHA-256 of the signed `release-manifest.json` is exposed
 as the `release-contract-sha256` job output and in the workflow run summary.
 
-Production accepts `API_IMAGE_REF`, `WORKER_IMAGE_REF`, `MCP_IMAGE_REF`, and
-`JBROWSE_IMAGE_REF`. `deploy/scripts/upgrade.sh` rejects tags, validates every
+Production accepts `API_IMAGE_REF`, `WORKER_IMAGE_REF`, `MIGRATE_IMAGE_REF`,
+`MIGRATE_CLICKHOUSE_IMAGE_REF`, `MCP_IMAGE_REF`, and `JBROWSE_IMAGE_REF` — one
+reference per release image, including the two one-shot migration services
+(which used to borrow the API/Worker references and could therefore migrate with
+the wrong release). `deploy/scripts/upgrade.sh` rejects tags, validates every
 remote manifest, and records the exact references in `.release-state.json`.
-Production Compose contains no build fallback for those release services.
+Production Compose contains no build fallback that a release can reach: the
+`build:` blocks are discarded by the `x-service-local-*` `!reset` anchors and
+only apply through `scripts/compose-local.sh`.
 
 Docker acceptance runs in CI. CI validates every supported profile with
 `docker compose config`, then uses independent native amd64 and arm64 jobs.

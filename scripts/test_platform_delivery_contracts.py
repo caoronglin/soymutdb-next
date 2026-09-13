@@ -4,6 +4,7 @@ from pathlib import Path
 
 import yaml
 
+from compose_loader import load_compose
 
 ROOT = Path(__file__).resolve().parents[1]
 NODE_VERSION = "24.19.0"
@@ -18,6 +19,20 @@ CONDA_DEPLOY = ROOT / "deploy/scripts/conda-deploy.sh"
 CONDA_SERVICES = ROOT / "deploy/scripts/conda-services.sh"
 CONDA_NO_DOCKER = ROOT / "deploy/conda/no-docker-data-layer.md"
 DEPLOYMENT_ARCHITECTURE = ROOT / "docs/design/deployment-architecture.md"
+# Release services that also carry a local-build definition (merged away unless
+# the `x-service-local-*` override applies). jbrowse is not one of them: it runs
+# upstream nginx with the static bundle, which the pages artifact publishes.
+BUILDABLE_RELEASE_SERVICES = {
+    "api",
+    "worker-default",
+    "worker-blast",
+    "worker-ingest",
+    "worker-analyses",
+    "beat",
+    "mcp-server",
+    "migrate",
+    "migrate-clickhouse",
+}
 PLATFORM_CATALOG = {
     "react": "19.2.0",
     "react-dom": "19.2.0",
@@ -32,7 +47,8 @@ def _json(path: str) -> dict:
 
 
 def _compose() -> dict:
-    return yaml.safe_load((ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
+    # Compose-specific tags (`!reset`) are understood by the shared loader.
+    return load_compose(ROOT / "docker-compose.yml")
 
 
 def _example_env() -> dict[str, str]:
@@ -237,10 +253,15 @@ def test_production_compose_has_explicit_capability_profiles() -> None:
 
 def test_release_services_use_digest_refs_without_compose_build_fallbacks() -> None:
     services = _compose()["services"]
+    # Every release service has its OWN digest reference. The migration services
+    # used to borrow API_IMAGE_REF / WORKER_IMAGE_REF, which pinned the migration
+    # step to the API's tag while api itself moved to a digest — an upgrade that
+    # updated only the digest references would then run the previous release's
+    # migrations.
     service_refs = {
-        "migrate": "API_IMAGE_REF",
+        "migrate": "MIGRATE_IMAGE_REF",
         "api": "API_IMAGE_REF",
-        "migrate-clickhouse": "WORKER_IMAGE_REF",
+        "migrate-clickhouse": "MIGRATE_CLICKHOUSE_IMAGE_REF",
         "worker-default": "WORKER_IMAGE_REF",
         "worker-blast": "WORKER_IMAGE_REF",
         "worker-ingest": "WORKER_IMAGE_REF",
@@ -249,18 +270,36 @@ def test_release_services_use_digest_refs_without_compose_build_fallbacks() -> N
         "mcp-server": "MCP_IMAGE_REF",
         "jbrowse": "JBROWSE_IMAGE_REF",
     }
+    assert len(set(service_refs.values())) == len(
+        {"MIGRATE_IMAGE_REF", "API_IMAGE_REF", "MIGRATE_CLICKHOUSE_IMAGE_REF",
+         "WORKER_IMAGE_REF", "MCP_IMAGE_REF", "JBROWSE_IMAGE_REF"}
+    )
 
     for service_name, variable_name in service_refs.items():
         service = services[service_name]
         assert service["image"].startswith(f"${{{variable_name}:?")
         assert "image@sha256" in service["image"]
-        assert "build" not in service
+        # `build:` is present on the release services ON PURPOSE, gated behind the
+        # `x-service-local-*` anchors' `!reset`: it never applies unless the local
+        # build override is merged in, and the anchor discards it otherwise. What
+        # must NOT be silently reintroduced is a build that the RELEASE path can
+        # fall back to, i.e. a build reachable without the override.
+        if service_name in BUILDABLE_RELEASE_SERVICES:
+            assert isinstance(service.get("build"), dict), service_name
+            assert service["build"].get("dockerfile"), service_name
 
     env = _example_env()
     digest_ref = re.compile(r"^ghcr\.io/[a-z0-9_.-]+/[a-z0-9_.-]+@sha256:[0-9a-f]{64}$")
     for variable_name in set(service_refs.values()):
         assert digest_ref.fullmatch(env[variable_name]), (variable_name, env[variable_name])
     assert set(env["COMPOSE_PROFILES"].split(",")) == {"core", "blast", "analyses", "mcp"}
+
+    # The local-build overrides exist and discard BOTH the digest requirement and
+    # the per-service build, so exactly one image name reaches `docker run`.
+    base_text = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    assert "x-service-local-api: &service-local-api" in base_text
+    assert 'image: !reset "${API_IMAGE:-soymutdb-api:local}"' in base_text
+    assert "build: !reset null" in base_text
 
 
 def test_upgrade_path_rejects_tags_and_records_digest_refs() -> None:
@@ -414,7 +453,11 @@ def test_ci_builds_release_images_on_independent_native_platforms() -> None:
     # script derives every image tag from it.
     assert "SOYMUTDB_CI_ARCH: ${{ matrix.arch }}" in docker_job
     verification = (ROOT / "scripts/build-release-image.sh").read_text(encoding="utf-8")
-    assert 'soymutdb-api:ci-${ARCH}' in verification
+    # Every tag is derived from SOYMUTDB_CI_ARCH through the shared image list,
+    # so a platform build cannot tag an image for the other architecture.
+    assert 'soymutdb-${name}:ci-${ARCH}' in verification
+    image_list = (ROOT / "scripts/list-images.sh").read_text(encoding="utf-8")
+    assert '"api|.|infra/docker/Dockerfile.api"' in image_list
 
     # CNB builds the same two native architectures with the same script.
     cnb = yaml.safe_load(_pipeline_source())
@@ -438,8 +481,8 @@ def test_ci_builds_release_images_on_independent_native_platforms() -> None:
     build = verification.index("Build release images (${PLATFORM})")
     smoke = verification.index("Smoke test API runtime image (hard gate)")
     architecture = verification.index("Assert actual native image architecture (hard gate)")
-    scan = verification.index("Trivy scan API image (hard gate)")
-    sbom = verification.index("Generate API SPDX SBOM")
+    scan = verification.index('step "Trivy scan ${image_name} image (hard gate)"')
+    sbom = verification.index('step "Generate ${image_name} SPDX SBOM"')
     export = verification.index("Export validated runtime images")
     assert build < smoke < architecture < scan < sbom < export
 
@@ -455,15 +498,21 @@ def test_ci_asserts_built_image_architecture_before_security_scan() -> None:
     scan_start = verification.index("trivy_scan() {")
     gate = verification[gate_start:scan_start]
 
-    assert "docker image inspect --format '{{.Architecture}}'" in gate
+    # The architecture proof reads the image the shared builder tagged and, for
+    # every image of the set, asserts the image's OWN architecture rather than
+    # the tag it was pushed under.
+    assert "docker image inspect --format '{{.Architecture}}'" in verification
     assert 'image="soymutdb-${image_name}:ci-${ARCH}"' in gate
-    assert "for image_name in api worker mcp jbrowse" in gate
+    assert 'actual="$(image_arch "${image_name}")"' in gate
+    # The loop iterates the shared image list, so an image cannot be built and
+    # then left out of the architecture proof by a stale hard-coded name.
+    assert 'for image_name in "${IMAGE_NAMES[@]}"; do' in gate
     assert 'test "${actual}" = "${ARCH}"' in gate
     assert (
-        verification.index("Smoke test JBrowse runtime image (hard gate)")
+        verification.index("Smoke test migrate-clickhouse runtime image (hard gate)")
         < gate_start
         < scan_start
-        < verification.index("Trivy scan API image (hard gate)")
+        < verification.index('step "Trivy scan ${image_name} image (hard gate)"')
     )
 
 
@@ -568,10 +617,15 @@ def test_release_contract_carries_sbom_provenance_and_source_identity() -> None:
     assert "scripts/build-release-image.sh" in docker_job
     verification = (ROOT / "scripts/build-release-image.sh").read_text(encoding="utf-8")
     assert verification.count("--format spdx-json") == 2
-    assert verification.count('step "Generate') == 4
-    for image_name in ("api", "worker", "mcp", "jbrowse"):
-        assert f"sbom-{image_name}-" in verification
-        assert f"provenance-{image_name}.json" in golden
+    # One SBOM step, one loop. The per-image names come from the shared list, and
+    # the provenance files are generated from the same list in the publisher, so
+    # "add an image" cannot leave the SBOMs and the manifest out of step.
+    assert verification.count('step "Generate ${image_name} SPDX SBOM"') == 1
+    assert 'sbom-${image_name}-${ARCH}.spdx.json' in verification
+    assert 'expected_provenance+=("${RELEASE_OUTPUT_DIR}/provenance-${image_name}.json")' in golden
+    image_list = (ROOT / "scripts/list-images.sh").read_text(encoding="utf-8")
+    for image_name in ("api", "worker", "mcp", "jbrowse", "migrate", "migrate-clickhouse"):
+        assert f'"{image_name}|' in image_list, image_name
     assert "release-manifest.json" in golden
     assert "schema_version" in golden
     # Source identity comes from the pipeline's own revision and repository

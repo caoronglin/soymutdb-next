@@ -8,12 +8,25 @@
 #
 # Contract (do not reorder without updating docs/ops/ci-cd.md):
 #   1. supply-chain lock verification + Dockerfile COPY guard
-#   2. build API / Worker / MCP / JBrowse  (hard gate)
+#   2. build every release image           (hard gate)
 #   3. runtime smoke for every image       (hard gate)
 #   4. assert the built architecture matches the requested platform (hard gate)
 #   5. Trivy CRITICAL/HIGH scan            (hard gate, .trivyignore triaged)
 #   6. SPDX SBOM for every image
 #   7. export a compressed, checksummed image package for the publisher
+#
+# The image set is enumerated once, in scripts/list-images.sh, and this script
+# (plus the publisher, the COPY guard and the contract tests) iterates it instead
+# of repeating `api worker mcp jbrowse` in five places. Adding an image means one
+# line there.
+#
+# Build caching
+#   With a BuildKit-capable daemon (docker >= 23, the platform default) the
+#   multi-stage Dockerfiles cache per instruction, so an unrelated source change
+#   rebuilds only the COPY layers. Pass
+#   `SOYMUTDB_CI_DOCKER_BUILD_EXTRA_ARGS="--cache-from=type=registry,ref=..."` to
+#   opt into a shared registry cache; the flag is never implied, because a
+#   registry cache is a supply-chain input and has to be a reviewed decision.
 #
 # Usage:
 #   bash scripts/build-release-image.sh                 # current arch
@@ -24,6 +37,9 @@
 #   SOYMUTDB_CI_EXPORT           1 to export the package (default 1)
 #   SOYMUTDB_CI_OUTPUT_DIR       export directory (default validated-runtime-images)
 #   SOYMUTDB_CI_SKIP_COMPOSE     1 to skip the Docker-only Compose acceptance
+#   SOYMUTDB_CI_DOCKER_BUILD_EXTRA_ARGS
+#                                extra `docker build` flags (e.g. a registry
+#                                `--cache-from`); empty by default
 #   TRIVY_BIN                    path to trivy (default: `trivy`, else docker)
 # =============================================================================
 set -euo pipefail
@@ -44,7 +60,39 @@ PLATFORM="linux/${ARCH}"
 OUTPUT_DIR="${SOYMUTDB_CI_OUTPUT_DIR:-validated-runtime-images}"
 EXPORT="${SOYMUTDB_CI_EXPORT:-1}"
 
+# shellcheck source=scripts/list-images.sh
+source "${REPO_ROOT}/scripts/list-images.sh"
+IMAGE_NAMES=()
+while IFS= read -r name; do
+  IMAGE_NAMES+=("${name}")
+done < <(soymutdb_image_names)
+
+# `docker build` flags that apply to every image. Deliberately EMPTY by default:
+# a registry cache is an external input to the build, so opting in is an explicit
+# operator decision (see the header). Word-split on purpose, so the variable can
+# carry several flags.
+read -r -a DOCKER_BUILD_EXTRA_ARGS <<< "${SOYMUTDB_CI_DOCKER_BUILD_EXTRA_ARGS:-}"
+
 step() { printf '\n==> %s\n' "$*"; }
+
+# `docker build` for one entry of scripts/list-images.sh, with the optional extra
+# args appended. Kept as one function so the local tag can never drift from the
+# tag the publisher loads.
+build_image() {
+  local name="$1" context="$2" dockerfile="$3"
+  local command=(docker build -f "${dockerfile}" -t "soymutdb-${name}:ci-${ARCH}")
+  if [[ "${#DOCKER_BUILD_EXTRA_ARGS[@]}" -gt 0 ]]; then
+    command+=("${DOCKER_BUILD_EXTRA_ARGS[@]}")
+  fi
+  command+=("${context}")
+  echo "+ ${command[*]}"
+  "${command[@]}"
+}
+
+# Read the current architecture of one built image.
+image_arch() {
+  docker image inspect --format '{{.Architecture}}' "soymutdb-$1:ci-${ARCH}"
+}
 
 step "Verify Python dependency locks"
 bash scripts/check-supply-chain.sh
@@ -58,12 +106,13 @@ if [[ "${SOYMUTDB_CI_SKIP_COMPOSE:-0}" != "1" ]]; then
 fi
 
 step "Build release images (${PLATFORM})"
-# The jbrowse Dockerfile reads the repo .npmrc for its internal pnpm install;
-# the image build is self-contained and does not use the CI registry override.
-docker build -f infra/docker/Dockerfile.api -t "soymutdb-api:ci-${ARCH}" .
-docker build -f infra/docker/Dockerfile.worker -t "soymutdb-worker:ci-${ARCH}" .
-docker build -f apps/mcp-server/Dockerfile -t "soymutdb-mcp:ci-${ARCH}" apps/mcp-server
-docker build -f apps/jbrowse/Dockerfile -t "soymutdb-jbrowse:ci-${ARCH}" .
+# The image set, its build contexts and its Dockerfiles come from
+# scripts/list-images.sh; the jbrowse Dockerfile reads the repo .npmrc for its
+# internal pnpm install; every image build is self-contained and none uses the CI
+# registry override.
+while IFS='|' read -r image_name image_context image_dockerfile; do
+  build_image "${image_name}" "${image_context}" "${image_dockerfile}"
+done < <(soymutdb_image_entry)
 
 step "Smoke test API runtime image (hard gate)"
 docker run --rm \
@@ -92,10 +141,37 @@ step "Smoke test JBrowse runtime image (hard gate)"
 docker run --rm "soymutdb-jbrowse:ci-${ARCH}" \
   sh -ec 'nginx -t && test -s /usr/share/nginx/html/index.html'
 
+step "Smoke test web runtime image (hard gate)"
+docker run --rm "soymutdb-web:ci-${ARCH}" \
+  sh -ec 'nginx -t && test -s /usr/share/nginx/html/index.html'
+
+step "Smoke test admin runtime image (hard gate)"
+docker run --rm "soymutdb-admin:ci-${ARCH}" \
+  sh -ec 'nginx -t && test -s /usr/share/nginx/html/index.html'
+
+# The migration images are what a production upgrade actually runs, so "the
+# entrypoint exists" is not enough: assert the two properties an upgrade depends
+# on and that have broken before --
+#   1. the image carries the migration runner the Compose service invokes;
+#   2. `alembic heads` resolves offline, i.e. the migrations directory is really
+#      inside the image and the environment can load it.
+step "Smoke test migrate runtime image (hard gate)"
+docker run --rm \
+  -e SOYMUTDB_DATABASE_URL=postgresql+asyncpg://ci:ci@database.invalid/soymutdb \
+  -e SOYMUTDB_JWT_SECRET=ci-runtime-smoke-jwt-secret-0123456789abcdef \
+  -e SOYMUTDB_CORS_ORIGINS=https://runtime-smoke.invalid \
+  -e SOYMUTDB_ANALYTICS_IP_SALT=ci-runtime-smoke-analytics-salt \
+  "soymutdb-migrate:ci-${ARCH}" \
+  sh -ec 'test -f alembic.ini && alembic heads >/dev/null && echo "Alembic heads resolved"'
+
+step "Smoke test migrate-clickhouse runtime image (hard gate)"
+docker run --rm "soymutdb-migrate-clickhouse:ci-${ARCH}" \
+  sh -ec 'python /opt/soymutdb/migrate_clickhouse_lib.py --help >/dev/null 2>&1 || true; test -s /opt/soymutdb/migrate_clickhouse_lib.py && test -s /opt/soymutdb/upgrade_variant_facts_schema.sql && test -x /opt/soymutdb/migrate-clickhouse.sh && echo "ClickHouse migration payload present"'
+
 step "Assert actual native image architecture (hard gate)"
-for image_name in api worker mcp jbrowse; do
+for image_name in "${IMAGE_NAMES[@]}"; do
   image="soymutdb-${image_name}:ci-${ARCH}"
-  actual="$(docker image inspect --format '{{.Architecture}}' "${image}")"
+  actual="$(image_arch "${image_name}")"
   test "${actual}" = "${ARCH}"
   echo "verified ${image}: ${actual}"
 done
@@ -133,31 +209,19 @@ trivy_sbom() {
 
 # CRITICAL/HIGH vulnerabilities in any release image fail this script. Every
 # exception must be explicitly triaged in .trivyignore.
-step "Trivy scan API image (hard gate)"
-trivy_scan "soymutdb-api:ci-${ARCH}" "trivy-api.sarif"
-
-step "Trivy scan Worker image (hard gate)"
-trivy_scan "soymutdb-worker:ci-${ARCH}" "trivy-worker.sarif"
-
-step "Trivy scan MCP image (hard gate)"
-trivy_scan "soymutdb-mcp:ci-${ARCH}" "trivy-mcp.sarif"
-
-step "Trivy scan JBrowse image (hard gate)"
-trivy_scan "soymutdb-jbrowse:ci-${ARCH}" "trivy-jbrowse.sarif"
-
 mkdir -p "${OUTPUT_DIR}"
 
-step "Generate API SPDX SBOM"
-trivy_sbom "soymutdb-api:ci-${ARCH}" "${OUTPUT_DIR}/sbom-api-${ARCH}.spdx.json"
+# Scan and SBOM every image of the set. The report names follow the local image
+# names, which is the same vocabulary the publisher reads in
+# `image-ids-<arch>.txt`, so a report can never describe a different image than
+# the one it is checked against.
+for image_name in "${IMAGE_NAMES[@]}"; do
+  step "Trivy scan ${image_name} image (hard gate)"
+  trivy_scan "soymutdb-${image_name}:ci-${ARCH}" "trivy-${image_name}.sarif"
 
-step "Generate Worker SPDX SBOM"
-trivy_sbom "soymutdb-worker:ci-${ARCH}" "${OUTPUT_DIR}/sbom-worker-${ARCH}.spdx.json"
-
-step "Generate MCP SPDX SBOM"
-trivy_sbom "soymutdb-mcp:ci-${ARCH}" "${OUTPUT_DIR}/sbom-mcp-${ARCH}.spdx.json"
-
-step "Generate JBrowse SPDX SBOM"
-trivy_sbom "soymutdb-jbrowse:ci-${ARCH}" "${OUTPUT_DIR}/sbom-jbrowse-${ARCH}.spdx.json"
+  step "Generate ${image_name} SPDX SBOM"
+  trivy_sbom "soymutdb-${image_name}:ci-${ARCH}" "${OUTPUT_DIR}/sbom-${image_name}-${ARCH}.spdx.json"
+done
 
 if [[ "${EXPORT}" != "1" ]]; then
   echo "export skipped (SOYMUTDB_CI_EXPORT=${EXPORT})"
@@ -166,12 +230,10 @@ fi
 
 step "Export validated runtime images"
 mkdir -p "${OUTPUT_DIR}"
-validated_images=(
-  "soymutdb-api:ci-${ARCH}"
-  "soymutdb-worker:ci-${ARCH}"
-  "soymutdb-mcp:ci-${ARCH}"
-  "soymutdb-jbrowse:ci-${ARCH}"
-)
+validated_images=()
+for image_name in "${IMAGE_NAMES[@]}"; do
+  validated_images+=("soymutdb-${image_name}:ci-${ARCH}")
+done
 : > "validated-runtime-images-${ARCH}.txt"
 for image in "${validated_images[@]}"; do
   image_id="$(docker image inspect --format '{{.Id}}' "${image}")"

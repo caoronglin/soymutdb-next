@@ -131,10 +131,14 @@ echo -e "${GREEN}  Compose config OK.${NC}"
 # Step 2: 发布前预检（与 apps/api/app/core/config.py prod 校验对齐）
 # ---------------------------------------------------------------------
 echo -e "${CYAN}[2/10] Pre-flight checks...${NC}"
-[[ -n "${API_IMAGE_REF:-}" ]] || fail "API_IMAGE_REF is required (image@sha256)"
-[[ -n "${WORKER_IMAGE_REF:-}" ]] || fail "WORKER_IMAGE_REF is required (image@sha256)"
-[[ -n "${MCP_IMAGE_REF:-}" ]] || fail "MCP_IMAGE_REF is required (image@sha256)"
-[[ -n "${JBROWSE_IMAGE_REF:-}" ]] || fail "JBROWSE_IMAGE_REF is required (image@sha256)"
+# Every release service has its own immutable reference. The migration services
+# used to borrow API_IMAGE_REF / WORKER_IMAGE_REF, which is why the list below is
+# explicit: a release that updates only the digests of the *running* services must
+# not leave the migrations on an older image.
+for rl_required_ref in API_IMAGE_REF WORKER_IMAGE_REF MIGRATE_IMAGE_REF \
+    MIGRATE_CLICKHOUSE_IMAGE_REF MCP_IMAGE_REF JBROWSE_IMAGE_REF; do
+    [[ -n "${!rl_required_ref:-}" ]] || fail "${rl_required_ref} is required (image@sha256)"
+done
 
 if [[ -z "${SOYMUTDB_JWT_SECRET:-}" || "${#SOYMUTDB_JWT_SECRET}" -lt 32 ]]; then
     fail "SOYMUTDB_JWT_SECRET must be >= 32 characters (API will refuse to start otherwise)"
@@ -178,9 +182,14 @@ echo -e "${GREEN}  Pre-flight checks passed.${NC}"
 # Step 3: 镜像 manifest 预检
 # ---------------------------------------------------------------------
 echo -e "${CYAN}[3/10] Checking image manifests...${NC}"
-for rl_image in "${API_IMAGE_REF}" "${WORKER_IMAGE_REF}" "${MCP_IMAGE_REF}" "${JBROWSE_IMAGE_REF}"; do
+for rl_image in "${API_IMAGE_REF}" "${WORKER_IMAGE_REF}" "${MIGRATE_IMAGE_REF}" \
+    "${MIGRATE_CLICKHOUSE_IMAGE_REF}" "${MCP_IMAGE_REF}" "${JBROWSE_IMAGE_REF}"; do
     [[ "${rl_image}" =~ @sha256:[0-9a-f]{64}$ ]] || \
         fail "image reference must be immutable image@sha256: ${rl_image}"
+    # One `docker manifest inspect` per DISTINCT repository: the four service
+    # families are different artifacts, but an operator who reuses one reference
+    # for two services (a mistake this check should surface, not amplify) would
+    # otherwise pay for the same registry round trip twice.
     docker manifest inspect "${rl_image}" >/dev/null || fail "image manifest unavailable: ${rl_image}"
 done
 echo -e "${GREEN}  Image manifests OK.${NC}"
@@ -231,15 +240,27 @@ echo -e "${CYAN}  Running ClickHouse schema migration with validation gates...${
 # ---------------------------------------------------------------------
 OLD_API_REF=""
 OLD_WORKER_REF=""
+OLD_MIGRATE_REF=""
+OLD_MIGRATE_CH_REF=""
 OLD_MCP_REF=""
 OLD_JBROWSE_REF=""
+# Read one `"<key>": "<value>"` out of the recorded release state.
+state_ref() {
+    sed -n "s/.*\"$1\": *\"\([^\"]*\)\".*/\1/p" "${STATE_FILE}" | awk 'NR==1{print; exit}'
+}
 if [[ -f "${STATE_FILE}" ]]; then
-    OLD_API_REF="$(sed -n 's/.*"api_image_ref": *"\([^"]*\)".*/\1/p' "${STATE_FILE}" | awk 'NR==1{print; exit}')"
-    OLD_WORKER_REF="$(sed -n 's/.*"worker_image_ref": *"\([^"]*\)".*/\1/p' "${STATE_FILE}" | awk 'NR==1{print; exit}')"
-    OLD_MCP_REF="$(sed -n 's/.*"mcp_image_ref": *"\([^"]*\)".*/\1/p' "${STATE_FILE}" | awk 'NR==1{print; exit}')"
-    OLD_JBROWSE_REF="$(sed -n 's/.*"jbrowse_image_ref": *"\([^"]*\)".*/\1/p' "${STATE_FILE}" | awk 'NR==1{print; exit}')"
+    OLD_API_REF="$(state_ref api_image_ref)"
+    OLD_WORKER_REF="$(state_ref worker_image_ref)"
+    # Absent from a state file written before the migration images existed: the
+    # rollback then keeps the CURRENT reference for them, which is correct —
+    # those services are one-shot and their previous incarnation was the API or
+    # worker image anyway.
+    OLD_MIGRATE_REF="$(state_ref migrate_image_ref)"
+    OLD_MIGRATE_CH_REF="$(state_ref migrate_clickhouse_image_ref)"
+    OLD_MCP_REF="$(state_ref mcp_image_ref)"
+    OLD_JBROWSE_REF="$(state_ref jbrowse_image_ref)"
 fi
-echo -e "  Previous release recorded: api=${OLD_API_REF:-none} worker=${OLD_WORKER_REF:-none} mcp=${OLD_MCP_REF:-none} jbrowse=${OLD_JBROWSE_REF:-none}"
+echo -e "  Previous release recorded: api=${OLD_API_REF:-none} worker=${OLD_WORKER_REF:-none} migrate=${OLD_MIGRATE_REF:-none} migrate-ch=${OLD_MIGRATE_CH_REF:-none} mcp=${OLD_MCP_REF:-none} jbrowse=${OLD_JBROWSE_REF:-none}"
 
 rollback() {
     # ClickHouse migration may be irreversible; restore the pre-upgrade backup
@@ -250,11 +271,15 @@ rollback() {
         return 1
     fi
     # 回滚要换的是**镜像**，不是"整屏环境"。compose 会重新插值整个文件，
-    # 而这里只传了 4 个 IMAGE_REF：其余 `${…:?…}` 引用依赖调用者环境里仍然
-    # 存在的变量。本脚本里 .env 已经 source 过，所以这次 `up -d` 能成功——
-    # 但这是隐式依赖，一旦回滚路径被别的入口调用（或 .env 在回滚期间被改动），
-    # 失败信息会是"required variable POSTGRES_PASSWORD is missing"，与真正
-    # 的原因（回滚本身）毫无关系。因此显式复用已加载的值。
+    # 而这里只传了 IMAGE_REF：其余 `${…:?…}` 引用依赖调用者环境里仍然存在的
+    # 变量。本脚本里 .env 已经 source 过，所以这次 `up -d` 能成功——但这是
+    # 隐式依赖，一旦回滚路径被别的入口调用（或 .env 在回滚期间被改动），失败
+    # 信息会是"required variable POSTGRES_PASSWORD is missing"，与真正的原因
+    # （回滚本身）毫无关系。因此显式复用已加载的值。
+    #
+    # migrate / migrate-clickhouse 的旧引用来自 .release-state.json：写入过该
+    # 字段的版本才换得回去，缺失时保持当前引用（这两个服务是一次性的，上一代
+    # 就是 api/worker 镜像本身，没有"更旧的迁移镜像"可回）。
     #
     # 这里刻意不传 MINIO_ROOT_USER / MINIO_ROOT_PASSWORD / SOYMUTDB_* 等
     # 应用变量：它们不随镜像版本变化，且 compose 会从当前环境取值——回滚
@@ -263,6 +288,8 @@ rollback() {
     WORKER_IMAGE_REF="${OLD_WORKER_REF}" \
     MCP_IMAGE_REF="${OLD_MCP_REF}" \
     JBROWSE_IMAGE_REF="${OLD_JBROWSE_REF}" \
+    MIGRATE_IMAGE_REF="${OLD_MIGRATE_REF:-${MIGRATE_IMAGE_REF}}" \
+    MIGRATE_CLICKHOUSE_IMAGE_REF="${OLD_MIGRATE_CH_REF:-${MIGRATE_CLICKHOUSE_IMAGE_REF}}" \
     POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \
     CLICKHOUSE_PASSWORD="${CLICKHOUSE_PASSWORD}" \
     REDIS_PASSWORD="${REDIS_PASSWORD}" \
@@ -328,6 +355,8 @@ cat > "${STATE_FILE}" <<EOF
 {
   "api_image_ref": "${API_IMAGE_REF}",
   "worker_image_ref": "${WORKER_IMAGE_REF}",
+  "migrate_image_ref": "${MIGRATE_IMAGE_REF}",
+  "migrate_clickhouse_image_ref": "${MIGRATE_CLICKHOUSE_IMAGE_REF}",
   "mcp_image_ref": "${MCP_IMAGE_REF}",
   "jbrowse_image_ref": "${JBROWSE_IMAGE_REF}",
   "api_digest": "${api_digest}",
@@ -339,6 +368,8 @@ EOF
 echo -e "${GREEN}  Release recorded: ${STATE_FILE}${NC}"
 echo "    api_image_ref:     ${API_IMAGE_REF}"
 echo "    worker_image_ref:  ${WORKER_IMAGE_REF}"
+echo "    migrate_image_ref: ${MIGRATE_IMAGE_REF}"
+echo "    migrate_ch_ref:    ${MIGRATE_CLICKHOUSE_IMAGE_REF}"
 echo "    api_digest:        ${api_digest}"
 echo "    migration_version: ${migration_version}"
 echo "    released_at:       ${released_at}"

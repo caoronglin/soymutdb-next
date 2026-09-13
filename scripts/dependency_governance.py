@@ -16,6 +16,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -24,6 +25,12 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_VERSION = 1
+
+# `scripts/compose_loader.py` is a sibling module, not an installed package: the
+# suite is collected by path (`pytest scripts/…`), which does not put `scripts/`
+# on `sys.path`.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from compose_loader import load_compose  # noqa: E402  (needs the path above)
 
 
 def _write_json(path: Path, value: object) -> None:
@@ -256,7 +263,11 @@ def _uv_graph() -> dict[str, Any]:
 
 def _compose_graph() -> dict[str, Any]:
     compose_path = ROOT / "docker-compose.yml"
-    compose = yaml.safe_load(compose_path.read_text(encoding="utf-8"))
+    # The production topology uses the Compose-only `!reset` tag to discard the
+    # values the `x-service-local-*` anchors override (see scripts/compose_loader.py).
+    # A plain `yaml.safe_load` refuses the whole document, which is how a
+    # Compose-valid file broke the governance graph generator.
+    compose = load_compose(compose_path)
     nodes: dict[str, dict[str, Any]] = {}
     edges: list[dict[str, Any]] = []
     declared_networks = set((compose.get("networks") or {}).keys())

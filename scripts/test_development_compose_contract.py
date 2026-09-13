@@ -6,6 +6,8 @@ from pathlib import Path
 import yaml
 from yaml.resolver import BaseResolver
 
+from compose_loader import ComposeLoader
+
 ROOT = Path(__file__).resolve().parents[1]
 BASE = ROOT / "docker-compose.yml"
 DEV = ROOT / "docker-compose.dev.yml"
@@ -16,28 +18,10 @@ DEV = ROOT / "docker-compose.dev.yml"
 DEV_DATA_LAYER_SERVICES = ("postgres", "clickhouse", "redis", "redis-celery", "minio")
 
 
-class _ComposeLoader(yaml.SafeLoader):
-    """SafeLoader that understands the Compose `!reset` / `!override` tags.
-
-    This file is parsed by the plain test process as well, which has no Compose
-    tag support: without these constructors `docker-compose.dev.yml` (which uses
-    `!reset` on `x-app-env`) cannot be loaded at all.
-    """
-
-    def _unknown(self, node: yaml.Node) -> object:
-        if isinstance(node, yaml.ScalarNode):
-            return self.construct_scalar(node)
-        if isinstance(node, yaml.SequenceNode):
-            return self.construct_sequence(node)
-        return self.construct_mapping(node)
-
-
-_ComposeLoader.add_constructor("!reset", _ComposeLoader._unknown)
-_ComposeLoader.add_constructor("!override", _ComposeLoader._unknown)
-
-
 def _load(path: Path) -> dict:
-    return yaml.load(path.read_text(encoding="utf-8"), Loader=_ComposeLoader)
+    # One loader for every Compose document in the repository; it knows the
+    # Compose-only `!reset` / `!override` tags (scripts/compose_loader.py).
+    return yaml.load(path.read_text(encoding="utf-8"), Loader=ComposeLoader)
 
 
 def _required_variables(value: object) -> set[str]:
@@ -353,7 +337,30 @@ def test_development_stack_demands_nothing_from_the_environment() -> None:
 
     # 1. The production topology stays fail-closed.
     assert _required_variables(base), "the production file must require credentials"
-    assert "!reset" not in BASE.read_text(encoding="utf-8")
+    # The base file uses `!reset` only for the local-build override anchors, and
+    # those tags sit on an x- key the production stack never merges: every
+    # `${…:?…}` requirement is still present and still fires. Assert against the
+    # requirements themselves rather than the presence of the tag — the previous
+    # form ("no !reset anywhere in the base file") was a proxy that would have
+    # failed here without any production behaviour changing.
+    assert _required_variables(base) >= {
+        "POSTGRES_PASSWORD",
+        "CLICKHOUSE_PASSWORD",
+        "REDIS_PASSWORD",
+        "MINIO_ROOT_USER",
+        "MINIO_ROOT_PASSWORD",
+    }
+    for local_anchor in (
+        "x-service-local-api",
+        "x-service-local-worker",
+        "x-service-local-mcp",
+        "x-service-local-migrate",
+        "x-service-local-migrate-clickhouse",
+    ):
+        assert local_anchor not in DEV.read_text(encoding="utf-8"), (
+            "the development overlay must not merge the production local-build "
+            "anchors: it replaces `image`/`build` per service instead"
+        )
 
     # 2. The overlay carries no requirement of its own.
     assert not _demanded_variables(yaml.compose(DEV.read_text(encoding="utf-8"))), (

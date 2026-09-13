@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import yaml
+from compose_loader import load_compose
 
 ROOT = Path(__file__).resolve().parents[1]
 COMPOSE_PATH = ROOT / "docker-compose.yml"
@@ -43,7 +43,9 @@ EXPECTED_MEMORY_VARIABLES = {
 
 
 def _compose() -> dict:
-    return yaml.safe_load(COMPOSE_PATH.read_text(encoding="utf-8"))
+    # Compose-specific tags (`!reset`) are understood by the shared loader; see
+    # scripts/compose_loader.py.
+    return load_compose(COMPOSE_PATH)
 
 
 def _default_int(value: str) -> int:
