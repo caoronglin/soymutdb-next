@@ -408,7 +408,14 @@ jobs:
           test "$(cat "${artifact_dir}/platform.txt")" = "linux/amd64"
           (cd "${artifact_dir}" && sha256sum -c SHA256SUMS)
           gzip -dc "${artifact_dir}/soymutdb-runtime-images-amd64.tar.gz" | docker load
-          for image_name in api worker mcp jbrowse; do
+          # The expected image set comes from the shared list, and the package
+          # must DESCRIBE exactly that set: a per-image "is it present" loop
+          # accepts a package that also carries an image nobody expects.
+          # shellcheck source=scripts/list-images.sh
+          source scripts/list-images.sh
+          expected="$(soymutdb_image_names | sed 's|$|:ci-amd64|')"
+          test "$(cat "${artifact_dir}/image-ids-amd64.txt")" = "${expected}"
+          for image_name in $(soymutdb_image_names); do
             image="soymutdb-${image_name}:ci-amd64"
             expected_id="$(awk -v image="${image}" '$1 == image {print $2}' "${artifact_dir}/image-ids-amd64.txt")"
             test -n "${expected_id}"

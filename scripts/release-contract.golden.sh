@@ -63,7 +63,18 @@ RELEASE_REGISTRY_OWNER="$(printf '%s' "${RELEASE_REGISTRY_OWNER}" | tr '[:upper:
 RELEASE_TAG="${RELEASE_TAG:-$(date -u +%Y.%m.%d)-$(printf '%s' "${SOURCE_REVISION}" | cut -c1-7)}"
 VALIDATED_ROOT="${VALIDATED_ROOT:-validated-platforms}"
 RELEASE_OUTPUT_DIR="${RELEASE_OUTPUT_DIR:-release-contract}"
-RUNTIME_IMAGES=(api worker mcp jbrowse)
+
+# The image set lives in scripts/list-images.sh, which is also what the verify
+# pipeline builds and what the contract tests enumerate. Keeping a second copy
+# here is how "add an image" turned into a release that shipped the old set.
+# shellcheck source=scripts/list-images.sh
+source "${REPO_ROOT}/scripts/list-images.sh"
+RUNTIME_IMAGES=()
+RUNTIME_REMOTE_NAMES=()
+while IFS= read -r image_name; do
+  RUNTIME_IMAGES+=("${image_name}")
+  RUNTIME_REMOTE_NAMES+=("$(soymutdb_remote_image_name "${image_name}")")
+done < <(soymutdb_image_names)
 
 step() { printf '\n==> %s\n' "$*"; }
 
@@ -224,10 +235,38 @@ for arch in amd64 arm64; do
     exit 1
   }
   expected_images=("${RUNTIME_IMAGES[@]}")
-  test "$(wc -l < "${artifact_dir}/image-ids-${arch}.txt")" -eq "${#expected_images[@]}"
+  contract="${artifact_dir}/image-ids-${arch}.txt"
+
+  # The package must DESCRIBE exactly the expected set — the same names, in the
+  # same order, one line each.
+  #
+  # The per-image loop below is not enough on its own, and the failure it misses
+  # is the expensive one: `verify_platform_image_ids` matches by NAME and the
+  # loop only asks "is the image I expect present". A package that ALSO carries a
+  # line for an image nobody expects — the state left behind by an image that was
+  # removed from scripts/list-images.sh while an old tar was still around — would
+  # sit in the exported package, get loaded into the daemon, and only fail later
+  # at `docker push`... as a silently skipped push, because the loop never
+  # iterates it either. Compare the whole list, not the intersection.
+  test -f "${contract}" || {
+    echo "package for ${arch} has no image-ids-${arch}.txt: ${contract}" >&2
+    exit 1
+  }
+  expected_contract=""
+  for image_name in "${expected_images[@]}"; do
+    expected_contract+="soymutdb-${image_name}:ci-${arch}"
+    expected_contract+=$'\n'
+  done
+  actual_contract="$(cat "${contract}")"
+  if [[ "${actual_contract}" != "${expected_contract%$'\n'}" ]]; then
+    echo "the ${arch} package does not describe exactly the expected image set" >&2
+    diff <(printf '%s\n' "${expected_contract%$'\n'}") <(printf '%s\n' "${actual_contract}") >&2 || true
+    exit 1
+  fi
+
   for image_name in "${expected_images[@]}"; do
     image="soymutdb-${image_name}:ci-${arch}"
-    expected_id="$(awk -v image="${image}" '$1 == image {print $2}' "${artifact_dir}/image-ids-${arch}.txt")"
+    expected_id="$(awk -v image="${image}" '$1 == image {print $2}' "${contract}")"
     test -n "${expected_id}"
     actual_id="$(docker image inspect --format '{{.Id}}' "${image}")"
     test "${actual_id}" = "${expected_id}"
@@ -271,7 +310,7 @@ fi
 # --- 3. push per-platform images --------------------------------------------
 step "Tag and push validated platform images"
 local_names=("${RUNTIME_IMAGES[@]}")
-remote_names=(api worker mcp-server jbrowse)
+remote_names=("${RUNTIME_REMOTE_NAMES[@]}")
 for arch in amd64 arm64; do
   for index in "${!local_names[@]}"; do
     image="${RELEASE_REGISTRY}/${RELEASE_REGISTRY_OWNER}/${remote_names[$index]}:${RELEASE_TAG}-${arch}"
@@ -412,25 +451,28 @@ for index in "${!local_names[@]}"; do
   mv "${RELEASE_OUTPUT_DIR}/release-manifest.tmp" "${RELEASE_OUTPUT_DIR}/release-manifest.json"
 done
 
-expected_provenance=(
-  "${RELEASE_OUTPUT_DIR}/provenance-api.json"
-  "${RELEASE_OUTPUT_DIR}/provenance-worker.json"
-  "${RELEASE_OUTPUT_DIR}/provenance-mcp.json"
-  "${RELEASE_OUTPUT_DIR}/provenance-jbrowse.json"
-)
+expected_provenance=()
+for image_name in "${RUNTIME_IMAGES[@]}"; do
+  expected_provenance+=("${RELEASE_OUTPUT_DIR}/provenance-${image_name}.json")
+done
 for provenance_file in "${expected_provenance[@]}"; do
   test -s "${provenance_file}"
 done
 jq -r '.images[].digest_ref' "${RELEASE_OUTPUT_DIR}/release-manifest.json" | sort \
   > "${RELEASE_OUTPUT_DIR}/oci-image-refs.txt"
 
+# The expected image names are generated from the shared list and passed to jq,
+# so the manifest validator cannot accept a manifest that dropped an image the
+# verify pipeline built (or one that appeared from nowhere).
+expected_image_names_json="$(printf '%s\n' "${RUNTIME_IMAGES[@]}" | jq -R . | jq -s 'sort')"
+
 (
   cd "${RELEASE_OUTPUT_DIR}"
-  jq -e '
+  jq -e --argjson expected "${expected_image_names_json}" '
     .schema_version == 1 and
     .platforms == ["linux/amd64", "linux/arm64"] and
-    (.images | length == 4) and
-    ([.images[].name] | sort) == ["api", "jbrowse", "mcp", "worker"] and
+    (.images | length == ($expected | length)) and
+    ([.images[].name] | sort) == $expected and
     all(.images[];
       (.digest_ref | test("@sha256:[0-9a-f]{64}$")) and
       (.provenance_sha256 | test("^[0-9a-f]{64}$")) and

@@ -17,8 +17,7 @@ apps/worker/
 │       ├── ingest.py    # VCF/GFF3 ingestion (cyvcf2, idempotent, SnpEff ANN)
 │       ├── stats.py     # Statistics (release stats, density, gene burden)
 │       └── cleanup.py   # Cleanup (expired BLAST results, temp files)
-├── pyproject.toml
-└── Dockerfile
+└── pyproject.toml      # image definition: infra/docker/Dockerfile.worker
 ```
 
 ## Queues
@@ -35,7 +34,9 @@ apps/worker/
 
 ## Key Design Decisions
 
-- **Python 3.13** for bioinformatics library compatibility (cyvcf2, pysam).
+- **Python 3.14** (pinned in `pyproject.toml` and the image tag), matching the
+  API service and `packages/jobs-py` so the shared job contract cannot be
+  resolved by two different interpreters.
 - **Idempotent ingestion**: variant IDs are deterministic SHA-256 hashes of
   `release_id + file_key + chromosome + position + ref + alt`, not in-memory
   counters.
@@ -48,20 +49,37 @@ apps/worker/
 
 ## Running
 
+The workspace is managed by the locked project (`uv.lock`), not by an ad-hoc
+`pip install`. Rebuilding that graph outside the lockfile is how a machine ends
+up running different Celery/psycopg/pysam versions than the image does.
+
 ```bash
-# Install dependencies
-uv pip install -e .
+# From apps/worker: resolve the locked dependency set into .venv
+uv sync --frozen
 
 # Start worker
-celery -A soymutdb_worker.main worker --loglevel=info
+uv run celery -A soymutdb_worker.main:celery_app worker --loglevel=info
 
 # Start beat scheduler
-celery -A soymutdb_worker.main beat --loglevel=info
+uv run celery -A soymutdb_worker.main:celery_app beat --loglevel=info
 ```
+
+Both commands name the app as `soymutdb_worker.main:celery_app`, which is
+exactly what `docker-compose.yml` and `infra/docker/Dockerfile.worker` pass to
+`celery -A`. The image puts the source roots on `PYTHONPATH`
+(`/app/packages/jobs-py/src:/app/apps/worker/src`) instead of installing the
+project into `/opt/venv`, so the same import works in both places.
 
 ## Docker
 
 ```bash
-docker build -t soymutdb-worker .
-docker run soymutdb-worker
+# Root-context build (the Dockerfile COPYs apps/worker and packages/jobs-py)
+docker build -f infra/docker/Dockerfile.worker -t soymutdb-worker .
+
+# Or bring it up with its dependencies from the repository root
+docker compose --profile core up -d worker-default
 ```
+
+`docker build -t soymutdb-worker .` without `-f` looks for a `Dockerfile` in
+`apps/worker/`, which does not exist — the image definition lives in
+`infra/docker/Dockerfile.worker` and its build context is the repository root.

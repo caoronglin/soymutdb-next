@@ -23,8 +23,8 @@
 **关键约束（compose 内已固化，运维需知晓）：**
 
 - 所有传给 api/worker/beat/migrate 的变量使用 `SOYMUTDB_` 前缀，字段与 `apps/api/app/core/config.py` 的 pydantic-settings 对齐；`APP_ENV` 仅 `dev|staging|prod`，生产用 `prod`。
-- 应用镜像必须注入 `API_IMAGE_REF` / `WORKER_IMAGE_REF` / `MCP_IMAGE_REF` / `JBROWSE_IMAGE_REF`，且值为 CI 发布合同中的 `image@sha256`；tag 和本地 build 不能作为生产回退。
-- 一次性迁移由 `migrate` 服务负责（alembic upgrade head）；api/worker 依赖其 `service_completed_successfully` 才启动。
+- 应用镜像必须注入 `API_IMAGE_REF` / `WORKER_IMAGE_REF` / `MIGRATE_IMAGE_REF` / `MIGRATE_CLICKHOUSE_IMAGE_REF` / `MCP_IMAGE_REF` / `JBROWSE_IMAGE_REF`，且值为 CI 发布合同中的 `image@sha256`；tag 不能作为生产回退。本地构建必须走 `scripts/compose-local.sh`（同一批 Dockerfile），它是显式的开发/自建入口，不是发布路径的回退。
+- 一次性迁移由 `migrate` 服务负责（alembic upgrade head），ClickHouse schema 由 `migrate-clickhouse` 负责；api/worker 依赖其 `service_completed_successfully` 才启动。两者有各自的镜像，不再复用 API/Worker 引用——否则「只更新 digest 的发布」会跑上一个 release 的迁移。
 - 前端静态站点以 Pages 为主；可选 `jbrowse` profile 提供 loopback 自托管 JBrowse。nginx 仍仅反代 API / MinIO / MCP，既有 `web/admin/jbrowse` 占位上游不自动切换到可选容器。
 - `cloudflare-tunnel` 是可选 profile：`cloudflared` 不接入默认业务网络，只能经 `tunnel-origin` 到达 API 与公开 MinIO bucket；管理 API、MCP、监控与数据存储均不暴露。
 - 数据存储镜像全部固定版本（无 `:latest`）。
@@ -175,8 +175,10 @@ minio-init ──► minio(healthy)（一次性建 6 个 bucket + genomic-data �
 
 | 变量 | 示例 | 说明 |
 | --- | --- | --- |
-| `API_IMAGE_REF` | `ghcr.io/soymutdb/api@sha256:<64-hex>` | api / migrate；非 digest 时 upgrade 拒绝 |
-| `WORKER_IMAGE_REF` | `ghcr.io/soymutdb/worker@sha256:<64-hex>` | 全部 worker / beat / ClickHouse migration |
+| `API_IMAGE_REF` | `ghcr.io/soymutdb/api@sha256:<64-hex>` | api；非 digest 时 upgrade 拒绝 |
+| `WORKER_IMAGE_REF` | `ghcr.io/soymutdb/worker@sha256:<64-hex>` | 全部 worker / beat |
+| `MIGRATE_IMAGE_REF` | `ghcr.io/soymutdb/migrate@sha256:<64-hex>` | 一次性 alembic 迁移 |
+| `MIGRATE_CLICKHOUSE_IMAGE_REF` | `ghcr.io/soymutdb/migrate-clickhouse@sha256:<64-hex>` | 一次性 ClickHouse schema 迁移 |
 | `MCP_IMAGE_REF` | `ghcr.io/soymutdb/mcp-server@sha256:<64-hex>` | MCP adapter |
 | `JBROWSE_IMAGE_REF` | `ghcr.io/soymutdb/jbrowse@sha256:<64-hex>` | 可选 `jbrowse` profile |
 | `COMPOSE_PROFILES` | `core,blast,analyses,mcp` | 默认生产能力；JBrowse/Tunnel 显式追加 |

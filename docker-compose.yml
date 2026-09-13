@@ -28,6 +28,62 @@ x-app-runtime: &app-runtime
   security_opt:
     - no-new-privileges:true
 
+# ------------------------------------------------------------------
+# 本地构建开关（x-app-build / x-service-build）
+# ------------------------------------------------------------------
+# 生产永远使用 digest 引用；开发/自建镜像时需要的是同一个 release 的四个镜像
+# 一次构建、一次启动，而不是先 `docker compose build` 再手动 tag。
+#
+# 用法（脚本见 scripts/compose-local.sh）：
+#   bash scripts/compose-local.sh build          # 构建 8 个 release 镜像
+#   bash scripts/compose-local.sh up -d          # 用上述镜像启动生产拓扑
+#
+# 实现方式：`SOYMUTDB_LOCAL_BUILD=1` 时把 `build:` 指向仓库根上下文 +
+# scripts/list-images.sh 里的 Dockerfile；`image:` 换成 API_IMAGE/... 这些普通
+# 变量并默认指向本地 tag。这与 docker-compose.dev.yml 的做法一致（它把每个服务
+# 的 `image` 置空 `!reset` 后改用 `build:`），因此"生产拓扑"与"开发 overlay"
+# 共用同一套 Dockerfile，不会各自漂移出一份。
+#
+# 为什么用两个变量而不是在 `image:` 里塞 `${VAR:-${FALLBACK}}`：Compose 的
+# 插值不支持嵌套默认值，所以"生产必填 digest / 开发本地 tag"必须由变量本身
+# 表达——生产用 `${API_IMAGE_REF:?…}`（缺失即失败），开发用 `API_IMAGE`。
+
+x-service-build: &service-build
+  context: .
+  target: runtime
+
+
+# Local build ON: discard every `build:` above and take the image from the
+# `<NAME>_IMAGE` variable instead of the release digest.
+#
+# Both keys need `!reset`:
+#   * `image: !reset ${API_IMAGE:-…}` drops the base's `${API_IMAGE_REF:?…}`
+#     reference — including its `:?` hard failure, which must NOT fire when the
+#     image comes from a local build. A YAML merge would leave the base value on
+#     the merge default branch and Compose interpolates that branch too, so the
+#     requirement would survive (the same trap documented in
+#     docker-compose.dev.yml for `x-app-env`).
+#   * `build: !reset null` removes the per-service build definition so the whole
+#     set is built by scripts/compose-local.sh with explicit tags and every
+#     service references exactly one image name.
+# One alias per image name: a merge key cannot parameterise its own override,
+# and `${A:-${B}}` is not valid Compose interpolation (no nested defaults).
+x-service-local-api: &service-local-api
+  image: !reset "${API_IMAGE:-soymutdb-api:local}"
+  build: !reset null
+x-service-local-worker: &service-local-worker
+  image: !reset "${WORKER_IMAGE:-soymutdb-worker:local}"
+  build: !reset null
+x-service-local-mcp: &service-local-mcp
+  image: !reset "${MCP_IMAGE:-soymutdb-mcp:local}"
+  build: !reset null
+x-service-local-migrate: &service-local-migrate
+  image: !reset "${MIGRATE_IMAGE:-soymutdb-migrate:local}"
+  build: !reset null
+x-service-local-migrate-clickhouse: &service-local-migrate-clickhouse
+  image: !reset "${MIGRATE_CLICKHOUSE_IMAGE:-soymutdb-migrate-clickhouse:local}"
+  build: !reset null
+
 x-app-env: &app-env
   SOYMUTDB_APP_ENV: prod
   SOYMUTDB_CLICKHOUSE_HOST: clickhouse
@@ -207,8 +263,16 @@ services:
   # 因此 migrate 必须注入与 api 相同的完整 SOYMUTDB_* 环境。
   # ------------------------------------------------------------------
   migrate:
+    <<: *service-local-migrate
     profiles: [ "core" ]
-    image: ${API_IMAGE_REF:?API_IMAGE_REF is required as image@sha256 - see deploy/.env.example}
+    build:
+      <<: *service-build
+      dockerfile: infra/docker/Dockerfile.migrate
+    # 独立镜像：与 api/worker 一样使用 digest 引用（见 deploy/.env.example）。
+    # 此前复用 API_IMAGE_REF，导致"迁移步骤"绑定在 API 的 tag 上，而 api 服务
+    # 已经切到 release digest——一次只更新 digest 的发布会让 Docker 继续跑上
+    # 一个 release 的迁移。三个引用各自独立后，migrate = 「当前 release 的迁移」。
+    image: ${MIGRATE_IMAGE_REF:?MIGRATE_IMAGE_REF is required as image@sha256 - see deploy/.env.example}
     depends_on:
       postgres:
         condition: service_healthy
@@ -221,15 +285,21 @@ services:
   # 一次性 ClickHouse schema 迁移；由 deploy/scripts/upgrade.sh 显式调用。
   # 运行容器与 clickhouse 共享 Compose 网络，因此可直接解析服务名 clickhouse。
   migrate-clickhouse:
+    <<: *service-local-migrate-clickhouse
     profiles: [ "core" ]
-    image: ${WORKER_IMAGE_REF:?WORKER_IMAGE_REF is required as image@sha256 - see deploy/.env.example}
+    build:
+      <<: *service-build
+      dockerfile: infra/docker/Dockerfile.migrate-clickhouse
+    # 独立镜像：只含 bash + python3.14 + clickhouse-connect，不再把
+    # ncbi-blast+/samtools/scanpy/leidenalg 与 Celery 入口一起拉下来。
+    # 脚本路径、环境变量与执行顺序保持不变（同一份 migrate-clickhouse.sh）。
+    image: ${MIGRATE_CLICKHOUSE_IMAGE_REF:?MIGRATE_CLICKHOUSE_IMAGE_REF is required as image@sha256 - see deploy/.env.example}
     depends_on:
       clickhouse:
         condition: service_healthy
     environment:
       <<: *app-env
-      CH_MIGRATION_SQL: /upgrade_variant_facts_schema.sql
-      CLICKHOUSE_MIGRATION_PYTHON: /opt/venv/bin/python
+      CH_MIGRATION_SQL: /opt/soymutdb/upgrade_variant_facts_schema.sql
     command: [ "bash", "/opt/soymutdb/migrate-clickhouse.sh" ]
     restart: "no"
 
@@ -237,9 +307,15 @@ services:
   # Application services
   # ------------------------------------------------------------------
   api:
+    <<: *service-local-api
     <<: *app-runtime
     profiles: [ "core" ]
+    # 生产：CI 发布的 digest 引用，缺失即拒绝启动。
+    # 本地：SOYMUTDB_LOCAL_BUILD=1 时改用普通变量 `API_IMAGE`（默认本地 tag）。
     image: ${API_IMAGE_REF:?API_IMAGE_REF is required as image@sha256 - see deploy/.env.example}
+    build:
+      <<: *service-build
+      dockerfile: infra/docker/Dockerfile.api
     depends_on:
       postgres:
         condition: service_healthy
@@ -297,9 +373,13 @@ services:
   # Celery workers. Each service listens on a subset of queues.
   # ------------------------------------------------------------------
   worker-default:
+    <<: *service-local-worker
     <<: *app-runtime
     profiles: [ "core" ]
     image: ${WORKER_IMAGE_REF:?WORKER_IMAGE_REF is required as image@sha256 - see deploy/.env.example}
+    build:
+      <<: *service-build
+      dockerfile: infra/docker/Dockerfile.worker
     depends_on:
       postgres:
         condition: service_healthy
@@ -332,9 +412,13 @@ services:
     restart: unless-stopped
 
   worker-blast:
+    <<: *service-local-worker
     <<: *app-runtime
     profiles: [ "blast" ]
     image: ${WORKER_IMAGE_REF:?WORKER_IMAGE_REF is required as image@sha256 - see deploy/.env.example}
+    build:
+      <<: *service-build
+      dockerfile: infra/docker/Dockerfile.worker
     depends_on:
       postgres:
         condition: service_healthy
@@ -367,9 +451,13 @@ services:
     restart: unless-stopped
 
   worker-ingest:
+    <<: *service-local-worker
     <<: *app-runtime
     profiles: [ "core" ]
     image: ${WORKER_IMAGE_REF:?WORKER_IMAGE_REF is required as image@sha256 - see deploy/.env.example}
+    build:
+      <<: *service-build
+      dockerfile: infra/docker/Dockerfile.worker
     depends_on:
       postgres:
         condition: service_healthy
@@ -402,9 +490,13 @@ services:
     restart: unless-stopped
 
   worker-analyses:
+    <<: *service-local-worker
     <<: *app-runtime
     profiles: [ "analyses" ]
     image: ${WORKER_IMAGE_REF:?WORKER_IMAGE_REF is required as image@sha256 - see deploy/.env.example}
+    build:
+      <<: *service-build
+      dockerfile: infra/docker/Dockerfile.worker
     depends_on:
       postgres:
         condition: service_healthy
@@ -438,9 +530,13 @@ services:
     restart: unless-stopped
 
   beat:
+    <<: *service-local-worker
     <<: *app-runtime
     profiles: [ "core" ]
     image: ${WORKER_IMAGE_REF:?WORKER_IMAGE_REF is required as image@sha256 - see deploy/.env.example}
+    build:
+      <<: *service-build
+      dockerfile: infra/docker/Dockerfile.worker
     depends_on:
       redis-celery:
         condition: service_healthy
@@ -476,9 +572,16 @@ services:
   # infra/nginx/conf.d/default.conf）。
   # ------------------------------------------------------------------
   mcp-server:
+    <<: *service-local-mcp
     <<: *app-runtime
     profiles: [ "mcp" ]
     image: ${MCP_IMAGE_REF:?MCP_IMAGE_REF is required as image@sha256 - see deploy/.env.example}
+    build:
+      # The MCP build context is its own directory (pyproject/uv.lock live
+      # there), so the context is the app directory while the Dockerfile path is
+      # resolved from the project directory like every other entry.
+      context: apps/mcp-server
+      dockerfile: apps/mcp-server/Dockerfile
     depends_on:
       api:
         condition: service_healthy

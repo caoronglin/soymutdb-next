@@ -23,16 +23,20 @@
 .cnb/web_trigger.yml             手动按钮
 .cnb/env/                        构建环境镜像 + 凭据引用
 scripts/setup-workspace.sh       单容器引导（corepack + pnpm install），每个 stage 自调
+scripts/list-images.sh           release 镜像集合（name|context|dockerfile），唯一定义
+scripts/compose_loader.py        Compose 文档解析（理解 `!reset` / `!override`）
+scripts/compose-local.sh         本地构建 + 运行生产拓扑（无 registry）
 scripts/ci-job-steps.sh          任务体：list / run <job>
 scripts/verify-frontend-artifacts.sh
 scripts/verify-backend-tests.sh
 scripts/with-postgres-service.sh 一次性 PostgreSQL（dind 起容器 + 驱动级就绪探针）
 scripts/build-static-apps.sh
-scripts/build-release-image.sh   构建 → 冒烟 → 扫描 → SBOM → 导出
+scripts/build-release-image.sh   构建 → 冒烟 → 扫描 → SBOM → 导出（按 list-images.sh 迭代）
 scripts/release-contract.golden.sh 合并 → 签名 → attestation → 发布
 scripts/build-pages-artifact.sh  静态站点构建
 scripts/verify-pages-artifact.sh 发布前字节级校验
 scripts/stage-pages-publication.sh 校验 + 暂存待发布静态树
+scripts/test_dockerfile_contracts.py 镜像集合 / Dockerfile / 本地构建覆盖的契约
 scripts/mcp-transport-smoke.sh   MCP 鉴权传输冒烟
 scripts/assert-clickhouse-migration.py
 scripts/check-toolchain-pins.py  工具链固定版本一致性守门
@@ -367,13 +371,60 @@ CNB 文档（build-env.md「Volume 共享」）给的通道是 Dockerfile 的 `V
 **构建/校验**（`scripts/build-release-image.sh`，两种 CI 都调用）：
 
 1. `check-supply-chain.sh` + `check-dockerfile-copy.sh`
-2. 构建 API / Worker / MCP / JBrowse
-3. 逐镜像运行时冒烟（真实 import / 任务注册表 / nginx `-t`）
+2. 按镜像清单构建 8 个镜像（见下"镜像清单只有一份"）
+3. 逐镜像运行时冒烟（真实 import / 任务注册表 / `nginx -t` / `alembic heads`）
 4. 断言 `docker image inspect .Architecture` 等于目标平台（原生，非仿真）
 5. Trivy CRITICAL/HIGH 硬门禁（`.trivyignore` 为可审计例外）
 6. 逐镜像 SPDX SBOM
 7. 导出 `validate-runtime-images-<arch>/`：压缩 tar + image ID 清单 +
    `platform.txt`、`revision.txt`、`source-event.txt` + `SHA256SUMS`
+
+### 镜像清单只有一份：`scripts/list-images.sh`
+
+镜像集合此前在 5 处各写一遍（构建命令、导出数组、COPY 守卫、发布脚本的
+`RUNTIME_IMAGES`、契约测试），"加一个镜像"要同时改对 5 个地方，漏一个的后果是
+**发布出去 7 个镜像而没有任何东西报错**。
+
+现在它是 `scripts/list-images.sh` 里的 `SOYMUTDB_IMAGES`：
+
+```
+<name>|<context>|<dockerfile>
+```
+
+* `name` 决定本地 tag `soymutdb-<name>:ci-<arch>`，也是 SBOM / 扫描报告 / manifest
+  的键；
+* `context` 是 `docker build` 的上下文（`apps/mcp-server` 用它自己的目录）；
+* `dockerfile` 相对仓库根，`-f` 与 COPY 守卫共用。
+
+远端名与本地名的唯一差异（`mcp` → `mcp-server`）由同一个文件里的
+`soymutdb_remote_image_name()` 给出——它以前是发布脚本里的一行数组字面量。
+
+`build-release-image.sh` / `release-contract.golden.sh` / `check-dockerfile-copy.sh`
+都 `source` 它。契约测试 `scripts/test_dockerfile_contracts.py` 反向校验：
+**每个镜像都必须同时有架构断言、冒烟门禁、Trivy 扫描与 SBOM**，而发布方的
+manifest 校验用同一份清单生成期望值，因此"多一个 / 少一个镜像"都会失败。
+
+### 迁移也必须是独立镜像
+
+`migrate` 此前复用 `API_IMAGE_REF`，`migrate-clickhouse` 复用
+`WORKER_IMAGE_REF`。两个后果：
+
+1. **发布语义错误**：api 服务用 release **digest**，而迁移步骤绑定在 API 的
+   **tag** 上；一次只更新 digest 引用的发布会继续跑上一个 release 的迁移。
+2. **镜像膨胀**：ClickHouse 迁移脚本只需要 `clickhouse-connect`，却把
+   ncbi-blast+ / samtools / scanpy / leidenalg 和 Celery 入口一起拉了下来。
+
+现在：
+
+| 镜像 | Dockerfile | 内容 | 冒烟门禁 |
+| --- | --- | --- | --- |
+| `migrate` | `infra/docker/Dockerfile.migrate` | python:3.14-slim + 锁定的 API 依赖（alembic 需要 ORM 元数据与 asyncpg） | `test -f alembic.ini && alembic heads`（离线解析迁移图） |
+| `migrate-clickhouse` | `infra/docker/Dockerfile.migrate-clickhouse` | python:3.14-slim + bash + `clickhouse-connect` | 三个 payload 文件到位（`migrate-clickhouse.sh` / lib / SQL） |
+
+`migrate-clickhouse` 里建 `/opt/venv` 并软链 `/opt/soymutdb/venv`，因为
+`migrate-clickhouse.sh` 默认取 `${ROOT}/../venv/bin/python`；这样 Compose 服务不再
+需要 `CLICKHOUSE_MIGRATION_PYTHON` 这个逐镜像覆盖（worker 镜像必填，正是要消除的
+耦合）。脚本与 SQL 与 worker 镜像用**同一份文件**，不 fork。
 
 **打包发布**（`scripts/release-contract.golden.sh`，provider 无关）：
 
@@ -389,6 +440,44 @@ CNB 文档（build-env.md「Volume 共享」）给的通道是 Dockerfile 的 `V
 registry 命名空间、源码身份、pipeline id 全部来自环境变量
 （`RELEASE_REGISTRY_OWNER` / `SOURCE_REPOSITORY` / `SOURCE_REVISION`），
 因此 GitHub 与 CNB 产出结构完全一致。
+
+### 本地构建并运行「生产拓扑」：`scripts/compose-local.sh`
+
+生产 Compose 文件只接受 release digest：
+
+```yaml
+image: ${API_IMAGE_REF:?API_IMAGE_REF is required as image@sha256 - …}
+```
+
+这个 fail-closed 约束对发布是正确的，但另外三件事做不了：用当前 checkout 构建
+镜像并把整套拓扑跑起来、完全不碰 registry、在本地复现生产的服务图（不带开发
+overlay 的 bind mount 与 `--reload`）。缺的那一半现在是
+`scripts/compose-local.sh`：
+
+```bash
+bash scripts/compose-local.sh build              # 用 list-images.sh 构建 8 个镜像
+bash scripts/compose-local.sh up -d              # 用这些镜像启动整套拓扑
+bash scripts/compose-local.sh up -d postgres clickhouse redis redis-cli
+bash scripts/compose-local.sh --tag 2026.09.12 up -d
+bash scripts/compose-local.sh down
+```
+
+它用的是**同一批 Dockerfile**，所以"本地能起来"与"release 能构出来"不会分叉。
+
+实现方式是 Compose 的两个标签，两者都必要：
+
+* `image: !reset "${API_IMAGE:-soymutdb-api:local}"`——丢弃基线的
+  `${API_IMAGE_REF:?…}`，**包括它的 `:?` 硬失败**。用 YAML merge 不行：基线值留在
+  merge 的 default 分支上，而 Compose 会插值那个分支（这正是
+  `docker-compose.dev.yml` 里 `x-app-env` 必须用 `!reset` 的同一个坑）。
+* `build: !reset null`——base 里每个服务都带 `build:`（供本地覆盖合并），`!reset`
+  把整套落到 null，由脚本用显式 tag 一次性构建，避免"某个服务偷偷 build 了另一个
+  tag"。
+
+为什么不在 `image:` 里写 `${API_IMAGE_REF:-${API_IMAGE:-…}}`：**Compose 插值不支持
+嵌套默认值**，所以"生产必填 digest / 开发本地 tag"必须由变量本身表达。两个变量
+都由脚本导出，且脚本强制 `--env-file`（默认 `/dev/null`），残留 `.env` 无法在背后
+改变这套栈。
 
 ### 制品必须被显式取回，发布必须被显式排序
 
@@ -527,6 +616,20 @@ pnpm ci:verify                        # 前端门禁
 pnpm ci:api                           # 后端门禁（需 PostgreSQL）
 SOYMUTDB_CI_ARCH=amd64 pnpm ci:images # 镜像构建/校验（不发布）
 bash scripts/smoke.sh                 # 统一冒烟
+
+# 只用当前 checkout 构建并运行生产编排（不依赖 registry / release 制品）
+bash scripts/compose-local.sh build
+bash scripts/compose-local.sh up -d
+bash scripts/compose-local.sh down
+```
+
+镜像构建缓存：`docker build` 默认走 BuildKit，多阶段 Dockerfile 按指令缓存，因此
+改一段源码只会重建 COPY 层。需要共享缓存时显式开启（绝不隐式启用——registry
+cache 是构建的外部输入）：
+
+```bash
+SOYMUTDB_CI_DOCKER_BUILD_EXTRA_ARGS="--cache-from=type=registry,ref=<registry>/cache" \
+  pnpm ci:images
 ```
 
 ## 9. 回滚
