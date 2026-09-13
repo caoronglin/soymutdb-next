@@ -185,13 +185,18 @@ printf '%s\n' "${PLATFORM}" > "${OUTPUT_DIR}/platform.txt"
 # The x86 build resolves it from the checkout, which is the tree it just built.
 REVISION="${SOURCE_REVISION:-${CNB_COMMIT:-$(git rev-parse HEAD)}}"
 printf '%s\n' "${REVISION}" > "${OUTPUT_DIR}/revision.txt"
+# Keep the CNB event *type* alongside this package's revision. CNB_EVENT is a
+# type such as push/tag_push, not a unique run identifier; the revision and the
+# same-event await/resolve graph provide run-level provenance.
+EVENT_TYPE="${SOURCE_EVENT:-${CNB_EVENT:-local}}"
+printf '%s\n' "${EVENT_TYPE}" > "${OUTPUT_DIR}/source-event.txt"
 docker save "${validated_images[@]}" | gzip -1 > "${OUTPUT_DIR}/soymutdb-runtime-images-${ARCH}.tar.gz"
 
 step "validate-runtime-images (checksums)"
 (
   cd "${OUTPUT_DIR}"
   sha256sum "soymutdb-runtime-images-${ARCH}.tar.gz" \
-    "image-ids-${ARCH}.txt" platform.txt revision.txt sbom-*-"${ARCH}".spdx.json > SHA256SUMS
+    "image-ids-${ARCH}.txt" platform.txt revision.txt source-event.txt sbom-*-"${ARCH}".spdx.json > SHA256SUMS
   sha256sum -c SHA256SUMS
 )
 

@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.database import get_db
@@ -48,6 +49,8 @@ from .deps import get_current_user, get_user_roles
 
 router = APIRouter(prefix="/admin/imports/studio", tags=["admin-import-studio"])
 
+_DRAFT_DATASET_VERSION_UNIQUE_CONSTRAINT = "uq_import_drafts_dataset_version"
+
 
 def _require_admin(current_user: User) -> None:
     if not has_role(get_user_roles(current_user), RoleName.ADMINISTRATOR):
@@ -56,6 +59,26 @@ def _require_admin(current_user: User) -> None:
 
 def _status_value(value: object) -> str:
     return str(getattr(value, "value", value))
+
+
+def _is_dataset_version_unique_violation(error: IntegrityError) -> bool:
+    """Return whether *error* is the PostgreSQL draft uniqueness violation.
+
+    SQLAlchemy wraps the driver exception, while asyncpg exposes the
+    constraint as ``orig.constraint_name`` and psycopg exposes it through
+    ``orig.diag.constraint_name``.  We deliberately require the exact
+    constraint name before recovering a concurrent winner; unrelated
+    integrity failures must retain their original error semantics.
+    """
+    original = getattr(error, "orig", None)
+    direct_name = getattr(original, "constraint_name", None)
+    diagnostic_name = getattr(
+        getattr(original, "diag", None), "constraint_name", None
+    )
+    return (
+        direct_name == _DRAFT_DATASET_VERSION_UNIQUE_CONSTRAINT
+        or diagnostic_name == _DRAFT_DATASET_VERSION_UNIQUE_CONSTRAINT
+    )
 
 
 async def _load_draft_for_update(
@@ -131,6 +154,44 @@ def _draft_response(row: ImportDraft) -> ImportDraftResponse:
     )
 
 
+async def _find_draft_for_version(
+    db: AsyncSession, dataset_version_id: uuid.UUID
+) -> ImportDraft | None:
+    """Return the one resumable draft protected by the database constraint."""
+    return await db.scalar(
+        select(ImportDraft)
+        .where(ImportDraft.dataset_version_id == dataset_version_id)
+        .limit(1)
+    )
+
+
+def _resume_existing_draft(
+    row: ImportDraft, payload: ImportDraftCreateRequest
+) -> ImportDraftResponse:
+    """Apply the create/resume contract to an already persisted draft.
+
+    A DatasetVersion is immutable, so a retry must carry the same shape and
+    module schema as the original request.  Returning a different edit source
+    here would make a browser retry silently operate on the wrong metadata.
+    """
+    current_status = _status_value(row.status)
+    if current_status == ImportDraftStatus.COMMITTED.value:
+        raise ConflictError(
+            f"Import draft {row.id} is already committed and cannot be resumed"
+        )
+    if row.module_key != payload.module_key:
+        raise ConflictError(
+            f"A draft already exists for dataset version {row.dataset_version_id} "
+            "with a different module schema"
+        )
+    if row.row_count != payload.row_count or row.column_count != payload.column_count:
+        raise ConflictError(
+            f"A draft already exists for dataset version {row.dataset_version_id} "
+            "with different inspected shape"
+        )
+    return _draft_response(row)
+
+
 def _manifest_response(row: PublicationManifest) -> PublicationManifestResponse:
     return PublicationManifestResponse(
         id=row.id,
@@ -204,6 +265,10 @@ async def create_draft(
     version = await db.get(DatasetVersion, payload.dataset_version_id)
     if version is None:
         raise NotFoundError(f"Dataset version {payload.dataset_version_id} not found")
+    # Keep the identity in a local scalar: a failed commit expires ORM
+    # instances on rollback, so reading ``version.id`` after the race would
+    # otherwise attempt an implicit async refresh.
+    version_id = payload.dataset_version_id
     if payload.module_key is not None and get_schema(payload.module_key) is None:
         raise NotFoundError(f"Unknown module schema '{payload.module_key}'")
     validate_import_shape(
@@ -211,8 +276,29 @@ async def create_draft(
         column_count=payload.column_count,
         module_key=payload.module_key,
     )
+    # The inspected shape is frozen in DatasetVersion.  Keep the historical
+    # request fields for client compatibility, but never allow a retry to
+    # replace trusted inspection metadata with caller-provided values.
+    version_row_count = getattr(version, "row_count", None)
+    version_column_count = getattr(version, "column_count", None)
+    if (
+        version_row_count is not None
+        and version_column_count is not None
+        and (
+            version_row_count != payload.row_count
+            or version_column_count != payload.column_count
+        )
+    ):
+        raise ConflictError(
+            f"Draft shape must match inspected DatasetVersion {version.id}"
+        )
+
+    existing = await _find_draft_for_version(db, version_id)
+    if existing is not None:
+        return _resume_existing_draft(existing, payload)
+
     row = ImportDraft(
-        dataset_version_id=version.id,
+        dataset_version_id=version_id,
         module_key=payload.module_key,
         filename=version.filename,
         object_key=version.object_key,
@@ -229,7 +315,21 @@ async def create_draft(
         updated_by=current_user.id,
     )
     db.add(row)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        if not _is_dataset_version_unique_violation(exc):
+            raise
+        # Two requests can both observe no row above.  The unique constraint
+        # serializes the insert; the loser rolls back its failed transaction,
+        # then resumes the winner's committed draft instead of surfacing a
+        # race-dependent 500.  If no row is visible after rollback, preserve
+        # the original database error because it was not this constraint.
+        await db.rollback()
+        existing = await _find_draft_for_version(db, version_id)
+        if existing is None:
+            raise
+        return _resume_existing_draft(existing, payload)
     await db.refresh(row)
     return _draft_response(row)
 

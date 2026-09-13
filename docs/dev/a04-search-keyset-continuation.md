@@ -10,9 +10,9 @@ Only sources actually queried by the service participate in a keyset cursor:
 
 | Source | Stable ordering | Keyset terminal position |
 | --- | --- | --- |
-| genes | `Gene.id` | last integer id |
-| publications | `Publication.id` | last integer id |
-| mutant lines | `MutantLine.name, MutantLine.id` | last name and id pair |
+| genes | external: `(match_rank DESC, Gene.accession, Gene.assembly_id)`; internal: `(match_rank DESC, Gene.accession, Gene.gene_pk)` | last rank/score and public accession/assembly or signed internal tie-breaker |
+| publications | `(score DESC, Publication.id)` | last rank/score and integer id |
+| mutant lines | external: `(match_rank DESC, MutantLine.public_id)`; internal: `(score DESC, MutantLine.name, MutantLine.id)` | last rank/score and public ID or signed name/id pair |
 
 `variant` and `phenotype` are public enum values but are not currently queried by `global_search()`. They must not be assigned fictional keyset positions.
 
@@ -25,18 +25,27 @@ New cursors should be URL-safe base64 encoded JSON, versioned and strictly valid
   "v": 1,
   "q": "normalized query fingerprint",
   "types": ["gene", "publication", "mutant_line"],
+  "site_variant": "external",
+  "release_id": 7,
+  "assembly_id": 11,
   "positions": {
-    "gene": {"id": 123},
-    "publication": {"id": 44},
-    "mutant_line": {"name": "L-12", "id": 8}
+    "gene": {"rank": 1, "score": 1.0, "accession": "Glyma.01G000100", "assembly_id": 11, "exhausted": false},
+    "publication": {"rank": 1, "score": 1.0, "id": 44, "exhausted": false},
+    "mutant_line": {"rank": 1, "score": 1.0, "public_id": "SM000044", "exhausted": false}
   }
 }
 ```
 
+The JSON above is the authenticated cursor payload; the API emits an opaque
+URL-safe representation using the repository's existing release-bound signing
+primitive. External payloads use only public accession/assembly and `public_id`
+keys; they never include a persistence primary key. Internal mutant cursors use
+`name,id` and are accepted only through that same signed binding primitive.
+
 Validation requirements:
 
-- reject malformed base64/JSON, unknown versions, unexpected keys, invalid scalar types, and query/type fingerprint mismatches before reaching SQL;
-- use source-specific predicates (`id > :id`, or `(name, id) > (:name, :id)`);
+- reject malformed encoding/payload, unknown versions, unexpected keys, invalid scalar types, and query/type fingerprint mismatches before reaching SQL;
+- use score-first source-specific predicates, followed by the stable tie-breaker (for example `rank < :rank OR (rank = :rank AND accession > :accession ...)`);
 - only advance a source position if that source returned an item in the preceding page;
 - emit no cursor when every active source is exhausted.
 
@@ -61,4 +70,7 @@ This prevents a mixed deploy from silently changing pagination semantics.
 
 ## Current boundary
 
-No keyset query implementation is introduced by this design. The current offset continuation remains the stable public behavior until the API/client compatibility decision and the acceptance tests above are implemented.
+The API accepts legacy pure-decimal cursors with their original offset
+semantics. New searches emit sealed v1 cursors and consume each source's own
+keyset position; `variant` and `phenotype` remain unsupported sources and are
+never assigned fictional positions.

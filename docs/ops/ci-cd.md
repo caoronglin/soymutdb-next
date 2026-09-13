@@ -43,15 +43,9 @@ scripts/acceptance.sh            平台验收入口（分层判定 + 验收清�
 
 ### Stage shell：CNB 用 `sh` 执行 stage 脚本
 
-CNB stage 的 `script` 由 `sh` 执行（Debian 系为 dash）。dash **在运行期**拒绝
-`set -o pipefail`：
-
-```
-sh: 1: set: Illegal option -o pipefail     # 退出码 2，stage 直接失败
-```
-
-注意 `sh -n`（仅语法检查）**不会**报错——所以这条路径靠"本地先跑一遍"是发现不了
-的。规则只有两条：
+CNB stage 的 `script` 由平台默认的 `sh` 执行。不同镜像的 `sh` 对扩展选项和
+bashism 的支持并不一致，而且这类问题通常只在运行期出现，`sh -n`（仅语法检查）
+也不能证明脚本能成功执行。规则只有两条：
 
 1. **配置里不写 shell 逻辑**。stage 体一律是 `bash scripts/<name>.sh [args]`
    的单行调用，解释器由脚本 shebang 决定，与平台默认 shell 无关。
@@ -331,9 +325,9 @@ CNB 文档明确"任务级仅支持 `image` 配置，不支持 `dockerfile`"。�
 CNB 文档（build-env.md「Volume 共享」）给的通道是 Dockerfile 的 `VOLUME` 指令：
 镜像声明的卷会在后续容器之间共享。因此 `.cnb/env/Dockerfile.frontend`：
 
-1. 在 `/cache/pnpm-store` 里 `pnpm fetch --lockfile-only` —— **只取元数据**，不下载
-   任何 tarball、不安装任何依赖，所以镜像不会变大、也永远不会与
-   `pnpm-lock.yaml` 不一致（`--frozen-lockfile` 门禁的含义不变）；
+1. 在 `/cache/pnpm-store` 里运行 `pnpm fetch --ignore-scripts`，预取
+   `pnpm-lock.yaml` 选中的 tarball，但不安装依赖或创建 `node_modules`。`fetch`
+   没有 `--lockfile-only` 选项（该选项属于 `pnpm install`）；
 2. **之后**才声明 `VOLUME /cache/pnpm-store`（顺序有意义：先声明会让引擎把还没创建
    的目录复制进共享）；
 3. `PNPM_VERSION` 是 build arg，预热用的 pnpm 与 stage 里激活的必须同版本。
@@ -357,7 +351,9 @@ CNB 文档（build-env.md「Volume 共享」）给的通道是 Dockerfile 的 `V
 | main push | `clickhouse-migration` | 真实 ClickHouse 遗留迁移 + 幂等复跑 |
 | main push | `mcp-e2e` | nginx 后的 MCP 鉴权契约 |
 | main push | `docker-images (amd64)` / `(arm64)` | 原生架构构建 → 冒烟 → Trivy → SPDX → 导出 |
-| main push / tag / 手动 | `release` | 取回双架构包 → 校验同源 → 合并 manifest、keyless 签名、SLSA+SPDX attestation |
+| main push | `release` | 同事件 await 双架构包 → 取回并校验 → 合并 manifest、keyless 签名、SLSA+SPDX attestation |
+| tag push | `release-tagged` | 同事件 amd64/arm64 verify+resolve → publisher 双 await → 签名发布 |
+| `web_trigger_release` | `release-manual` | 同事件 amd64/arm64 verify+resolve → publisher 双 await → 签名发布 |
 | main push / 手动 | `publish` | 字节级复制已验证静态树（**不重新构建**） |
 | 每日 02:00 | `smoke` | 线上站点 Playwright 冒烟 |
 
@@ -377,7 +373,7 @@ CNB 文档（build-env.md「Volume 共享」）给的通道是 Dockerfile 的 `V
 5. Trivy CRITICAL/HIGH 硬门禁（`.trivyignore` 为可审计例外）
 6. 逐镜像 SPDX SBOM
 7. 导出 `validate-runtime-images-<arch>/`：压缩 tar + image ID 清单 +
-   `platform.txt`、`revision.txt` + `SHA256SUMS`
+   `platform.txt`、`revision.txt`、`source-event.txt` + `SHA256SUMS`
 
 **打包发布**（`scripts/release-contract.golden.sh`，provider 无关）：
 
@@ -420,16 +416,23 @@ missing validated package for amd64: validated-platforms/validated-runtime-image
 `${VALIDATED_ROOT}` 下"，此时**仍然**要求两个架构都在。
 
 **排序**：一次 `main` push 会同时启动该事件下的所有流水线，发布因此会和两条
-原生架构镜像流水线**抢跑**。`docker-images (amd64)` 在 `stages` 的**最后**放一个
-`cnb:resolve`（该位置有意义：`stages` 顺序执行，resolve 时镜像已经构建、冒烟、
-扫描、SBOM、导出完毕），`release` 的**第一个** stage 放对应的 `cnb:await`。
-未 resolve 会被死锁检测报出来，而不是无限等待。
+原生架构镜像流水线**抢跑**。两个 `docker-images` pipeline 都在 `stages` 的**最后**
+分别在 `stages` 中先上传 `cnbcool/artifact`，再以独立 key 执行最后的
+`cnb:resolve`；`release` 的前两个 stage 按同样顺序放两个 `cnb:await`。上传不能
+放到 `endStages`，否则 resolve 可能先唤醒发布器。未 resolve 会被死锁检测报出来，
+而不是无限等待。
 
-两条约束缺一不可：只 await 而不取回，目录依然是空的；只取回而不 await，发布
+三条约束缺一不可：只 await 而不取回，目录依然是空的；只取回而不 await，发布
 会与构建抢跑。`cnb:await`/`cnb:resolve` 只能用于**同一事件**的流水线之间，因此
-release 用 `resources.pipelines` 声明它等待的那个事件内流水线。`await` 也只能
+release 必须和两个架构 pipeline 声明在同一个事件下；不能用另一个事件的旧制品。
+`await` 也只能
 出现在 `stages`（不能在 `endStages`/`failStages`），所以它是一条 stage 而不是
 结束阶段。
+
+tag push 和 `web_trigger_release` 遵循完全相同的闭环：同一事件内各自启动 amd64/
+arm64 verify+resolve，再由独立 publisher 依次 await 两个 key 后执行发布脚本。
+发布 pipeline 只下载并校验已验证包，不重建镜像；架构包由 revision 和校验和绑定到
+当前事件的源码。
 
 ### 两个架构包必须描述同一个 revision
 
@@ -442,7 +445,9 @@ release 用 `resources.pipelines` 声明它等待的那个事件内流水线。`
 `SHA256SUMS`），发布方在加载后做两道比较：
 
 * 两个包互相比较：不同源 → 失败；
-* 与 `SOURCE_REVISION` 比较：不一致 → **拒绝签名**，并打印两个 revision。
+* 与 `SOURCE_REVISION` 比较：不一致 → **拒绝签名**，并打印两个 revision；
+* 与 `SOURCE_EVENT`（CNB 事件**类型**）比较：不一致 → **拒绝签名**，阻止同
+  revision 的其他事件类型旧包混入；它不是唯一运行实例 ID。
 
 `SOYMUTDB_VALIDATED_ARCHES` 可覆盖参与校验的架构集合（默认 `amd64 arm64`）。
 

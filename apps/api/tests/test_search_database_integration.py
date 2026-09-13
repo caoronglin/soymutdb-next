@@ -133,7 +133,9 @@ async def test_global_search_returns_a_continuation_cursor_for_truncated_results
         db_session, "cursor integration match", types=[SearchResultType.GENE], limit=1
     )
     assert first.has_more is True
-    assert first.next_cursor == "1"
+    # New pages emit a sealed per-source cursor rather than a shared offset.
+    assert first.next_cursor is not None
+    assert first.next_cursor != "1"
 
     second = await service.global_search(
         db_session,
@@ -143,7 +145,19 @@ async def test_global_search_returns_a_continuation_cursor_for_truncated_results
         limit=1,
     )
     assert second.results[0].id != first.results[0].id
-    assert second.next_cursor == "2"
+    assert second.next_cursor is not None
+    assert second.next_cursor != "2"
+
+    # Decimal cursors remain accepted for mixed-version clients and retain
+    # their original offset semantics.
+    legacy_second = await service.global_search(
+        db_session,
+        "cursor integration match",
+        types=[SearchResultType.GENE],
+        cursor="1",
+        limit=1,
+    )
+    assert legacy_second.results[0].id == second.results[0].id
 
 
 @pytest.mark.asyncio
@@ -296,16 +310,36 @@ async def test_crosswalk_data_is_explicit_and_linked(db_session):
 @pytest.mark.asyncio
 async def test_external_mutant_search_uses_public_id_only(db_session):
     """ID-01/ID-02: public_id hits externally; internal keys stay hidden."""
-    await _create_active_assembly(db_session, "mutant-search-db")
+    _assembly, release = await _create_active_assembly(db_session, "mutant-search-db")
     line = MutantLine(
         name="lab-1",
         public_id="SMPUB00001",
         is_public=True,
+        release_id=release.id,
     )
     embargoed = MutantLine(
-        name="lab-secret", public_id="SMSECRET01", is_public=False
+        name="lab-secret", public_id="SMSECRET01", is_public=False, release_id=release.id
     )
-    db_session.add_all([line, embargoed])
+    other_release = Release(
+        version="mutant-search-other",
+        name="mutant search other",
+        status=ReleaseStatus.PUBLISHED,
+    )
+    db_session.add(other_release)
+    await db_session.flush()
+    other_release_line = MutantLine(
+        name="lab-other-release",
+        public_id="SMOTHER01",
+        is_public=True,
+        release_id=other_release.id,
+    )
+    null_release_line = MutantLine(
+        name="lab-null-release",
+        public_id="SMNULL01",
+        is_public=True,
+        release_id=None,
+    )
+    db_session.add_all([line, embargoed, other_release_line, null_release_line])
     await db_session.commit()
 
     service = SearchService()
@@ -338,6 +372,23 @@ async def test_external_mutant_search_uses_public_id_only(db_session):
         types=[SearchResultType.MUTANT_LINE],
     )
     assert unpublished_query.results == []
+
+    # A public mutant is also release-scoped: rows from another release and
+    # rows without a release must not leak into the active public surface.
+    other_release_query = await service.global_search(
+        db_session,
+        "SMOTHER01",
+        types=[SearchResultType.MUTANT_LINE],
+        site_variant=SiteVariant.EXTERNAL,
+    )
+    null_release_query = await service.global_search(
+        db_session,
+        "SMNULL01",
+        types=[SearchResultType.MUTANT_LINE],
+        site_variant=SiteVariant.EXTERNAL,
+    )
+    assert other_release_query.results == []
+    assert null_release_query.results == []
 
 
 @pytest.mark.asyncio

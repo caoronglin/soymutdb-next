@@ -84,6 +84,12 @@ class ImportDraft(Base, TimestampMixin, AuditMixin):
     """A user-created editing session over one immutable dataset version."""
 
     __tablename__ = "import_drafts"
+    __table_args__ = (
+        UniqueConstraint(
+            "dataset_version_id",
+            name="uq_import_drafts_dataset_version",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4

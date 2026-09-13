@@ -51,6 +51,10 @@ cd "${REPO_ROOT}"
 
 SOURCE_REPOSITORY="${SOURCE_REPOSITORY:-${CNB_REPO_SLUG:-$(git config --get remote.origin.url || echo unknown)}}"
 SOURCE_REVISION="${SOURCE_REVISION:-${CNB_COMMIT:-$(git rev-parse HEAD)}}"
+# CNB_EVENT/SOURCE_EVENT identify the event type, not a unique event instance.
+# The current revision plus the same-event await/resolve gates provide the
+# instance-level binding; this value only rejects a package from another type.
+SOURCE_EVENT="${SOURCE_EVENT:-${CNB_EVENT:-local}}"
 SOURCE_PIPELINE="${SOURCE_PIPELINE:-${CNB_BUILD_ID:-local}}"
 RELEASE_REGISTRY="${RELEASE_REGISTRY:-${CNB_DOCKER_REGISTRY:-ghcr.io}}"
 RELEASE_REGISTRY_OWNER="${RELEASE_REGISTRY_OWNER:-${CNB_REPO_SLUG%%/*}}"
@@ -80,10 +84,11 @@ step() { printf '\n==> %s\n' "$*"; }
 #   * the per-platform verification below still refuses a package whose
 #     checksums, image IDs or architecture disagree with what was recorded.
 #
-# Ordering is not this script's business: `docker-images (amd64)` ends with a
-# `cnb:resolve` and this pipeline starts with the matching `cnb:await`, so the
-# packages exist by the time this runs. Reaching here without them means that
-# gate was removed, which is precisely the race this script cannot absorb.
+# Ordering is not this script's business: each native `docker-images` pipeline
+# ends with its own `cnb:resolve`, and this pipeline starts with matching
+# `cnb:await` stages for both keys, so the packages exist by the time this runs.
+# Reaching here without them means a gate was removed, which is precisely the
+# race this script cannot absorb.
 #
 # Env:
 #   SOYMUTDB_ARTIFACT_FETCH_CMD
@@ -208,6 +213,16 @@ for arch in amd64 arm64; do
     echo "  release: ${release_package_revision}" >&2
     exit 1
   }
+  package_event_type="$(cat "${artifact_dir}/source-event.txt")"
+  if [[ -z "${release_package_event_type:-}" ]]; then
+    release_package_event_type="${package_event_type}"
+  fi
+  test "${package_event_type}" = "${release_package_event_type}" || {
+    echo "platform packages disagree on the source event type:" >&2
+    echo "  ${arch}: ${package_event_type}" >&2
+    echo "  release: ${release_package_event_type}" >&2
+    exit 1
+  }
   expected_images=("${RUNTIME_IMAGES[@]}")
   test "$(wc -l < "${artifact_dir}/image-ids-${arch}.txt")" -eq "${#expected_images[@]}"
   for image_name in "${expected_images[@]}"; do
@@ -225,9 +240,15 @@ done
 # resolved an older (or newer) verify build, so the provenance it is about to
 # sign would be false -- refuse rather than sign it.
 test -n "${release_package_revision}"
+test -n "${release_package_event_type}"
 if [[ -n "${SOURCE_REVISION}" && "${release_package_revision}" != "${SOURCE_REVISION}" ]]; then
   echo "verified packages were built from ${release_package_revision}," >&2
   echo "but this release records ${SOURCE_REVISION}" >&2
+  exit 1
+fi
+if [[ "${release_package_event_type}" != "${SOURCE_EVENT}" ]]; then
+  echo "verified packages came from event type ${release_package_event_type}," >&2
+  echo "but this release runs in event type ${SOURCE_EVENT}" >&2
   exit 1
 fi
 

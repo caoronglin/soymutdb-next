@@ -20,8 +20,9 @@
 #
 # Structure
 #   main  → pull_request / push / nightly: the full verification suite
-#   $     → release, publication, cloud development and manual triggers: main
-#           pushes, tags, the develop button and the web-trigger buttons.
+#   main  → release/publication on main pushes; $ → tag, cloud-development and
+#           manual-trigger events (each release event contains its own image
+#           verify/resolve pair and publisher awaits).
 #           `tag_push`, `vscode` and `issue.*` are repository-level events and may
 #           only be declared under the `$` fallback branch.
 #
@@ -285,6 +286,7 @@ main:
         # packages disagree or that does not match the revision it records.
         # CNB_COMMIT is this build's commit, which is the checkout below.
         SOURCE_REVISION: $CNB_COMMIT
+        SOURCE_EVENT: $CNB_EVENT
       # CNB accepts a Dockerfile only in `docker.build`, and `docker.build`
       # is pipeline-scoped: the platform's runner passes a stage-level
       # `image:` straight to `docker pull`, so a repository path in it fails
@@ -301,23 +303,21 @@ main:
       stages:
         - name: Verify images for linux/amd64
           script: bash scripts/ci-job-steps.sh run image-build
-        # Release the `release` pipeline's start gate. This job is LAST in the
-        # pipeline on purpose: `stages` run in order, so by the time it resolves,
-        # the images have been built, smoke-tested, scanned, SBOM'd and exported.
+        # Upload before releasing the gate. This job is LAST in `stages` on
+        # purpose: the publisher must not wake until the artifact exists.
         # Resolving earlier would let the publisher start against a package that
         # does not exist yet -- the exact race the gate exists to close.
         #
         # Do not add a job after this one.
-        - name: Hand the amd64 package to the release pipeline
-          type: cnb:resolve
-          options:
-            key: validated-runtime-images-amd64
-      endStages:
         - name: Upload validated runtime images (amd64)
           image: cnbcool/artifact
           settings:
             path: validate-runtime-images-amd64
             name: validated-runtime-images-amd64
+        - name: Hand the amd64 package to the release pipeline
+          type: cnb:resolve
+          options:
+            key: validated-runtime-images-amd64
 
     - name: docker-images (arm64)
       runner:
@@ -329,6 +329,7 @@ main:
         # Same stamp as the amd64 pipeline: both packages must name one revision
         # for the publisher to accept the pair.
         SOURCE_REVISION: $CNB_COMMIT
+        SOURCE_EVENT: $CNB_EVENT
       # CNB accepts a Dockerfile only in `docker.build`, and `docker.build`
       # is pipeline-scoped: the platform's runner passes a stage-level
       # `image:` straight to `docker pull`, so a repository path in it fails
@@ -345,12 +346,17 @@ main:
       stages:
         - name: Verify images for linux/arm64
           script: bash scripts/ci-job-steps.sh run image-build
-      endStages:
+        # Upload before the final resolve, independently keyed from amd64. The
+        # release publisher waits for both keys before it can fetch or publish.
         - name: Upload validated runtime images (arm64)
           image: cnbcool/artifact
           settings:
             path: validate-runtime-images-arm64
             name: validated-runtime-images-arm64
+        - name: Hand the arm64 package to the release pipeline
+          type: cnb:resolve
+          options:
+            key: validated-runtime-images-arm64
 
   # ---------------------------------------------------------------------------
   # Publication — consumes the verified packages, never rebuilds
@@ -365,9 +371,8 @@ main:
   # push can no longer start a publisher that nothing feeds. That exact
   # mis-scoping is build cnb-fng-1k29s324u:
   #
-  #   Deadlock detected: cnb:await key "validated-runtime-images-amd64"
-  #   cannot be resolved. Awaiting pipeline: "release"
-  #   Cause: No pipeline contains a cnb:resolve job for this key.
+  #   Deadlock detected: one of the cnb:await keys cannot be resolved.
+  #   Cause: no matching cnb:resolve exists in this event.
   #
   # The gate itself is still needed: every pipeline of one `main` push event
   # starts at the same moment, so without the `cnb:await` stage the release
@@ -408,6 +413,10 @@ main:
           type: cnb:await
           options:
             key: validated-runtime-images-amd64
+        - name: Wait for the verified arm64 image package
+          type: cnb:await
+          options:
+            key: validated-runtime-images-arm64
         - name: Publish signed multi-architecture release
           script: bash scripts/ci-job-steps.sh run release
       endStages:
@@ -493,12 +502,17 @@ $:
   # Tags — release images for an explicit version
   # ---------------------------------------------------------------------------
   tag_push:
-    - name: release-tagged
+    # A tag is one event, so both native verification pipelines and the
+    # publisher live here. The publisher awaits both resolves below; it never
+    # rebuilds and cannot consume a package from a different event.
+    - name: docker-images (amd64)
       runner:
         cpus: 16
       env:
         SOYMUTDB_CI_ARCH: amd64
         SOYMUTDB_CI_OUTPUT_DIR: validate-runtime-images-amd64
+        SOURCE_REVISION: $CNB_COMMIT
+        SOURCE_EVENT: $CNB_EVENT
       # CNB accepts a Dockerfile only in `docker.build`, and `docker.build`
       # is pipeline-scoped: the platform's runner passes a stage-level
       # `image:` straight to `docker pull`, so a repository path in it fails
@@ -515,11 +529,70 @@ $:
       stages:
         - name: Verify images for this tag
           script: bash scripts/ci-job-steps.sh run image-build
+        - name: Upload validated runtime images (amd64)
+          image: cnbcool/artifact
+          settings:
+            path: validate-runtime-images-amd64
+            name: validated-runtime-images-amd64
+        - name: Hand the amd64 tag package to the release pipeline
+          type: cnb:resolve
+          options:
+            key: validated-runtime-images-amd64
+
+    - name: docker-images (arm64)
+      runner:
+        cpus: 16
+        tags: cnb:arch:arm64:v8
+      env:
+        SOYMUTDB_CI_ARCH: arm64
+        SOYMUTDB_CI_OUTPUT_DIR: validate-runtime-images-arm64
+        SOURCE_REVISION: $CNB_COMMIT
+        SOURCE_EVENT: $CNB_EVENT
+      docker:
+        build:
+          dockerfile: .cnb/env/Dockerfile.build-tools
+          by:
+          - .cnb/env/Dockerfile.build-tools
+      services:
+        - docker
+      stages:
+        - name: Verify images for this tag
+          script: bash scripts/ci-job-steps.sh run image-build
+        - name: Upload validated runtime images (arm64)
+          image: cnbcool/artifact
+          settings:
+            path: validate-runtime-images-arm64
+            name: validated-runtime-images-arm64
+        - name: Hand the arm64 tag package to the release pipeline
+          type: cnb:resolve
+          options:
+            key: validated-runtime-images-arm64
+
+    - name: release-tagged
+      runner:
+        cpus: 8
+      imports:
+        - https://cnb.cool/crl-code/mutlidb/-/blob/main/.cnb/env/release.yml
+      docker:
+        build:
+          dockerfile: .cnb/env/Dockerfile.build-tools
+          by:
+          - .cnb/env/Dockerfile.build-tools
+      services:
+        - docker
+      stages:
+        - name: Wait for the verified amd64 tag image package
+          type: cnb:await
+          options:
+            key: validated-runtime-images-amd64
+        - name: Wait for the verified arm64 tag image package
+          type: cnb:await
+          options:
+            key: validated-runtime-images-arm64
         - name: Publish the signed tagged release
           # RELEASE_TAG is injected through the stage environment rather than
           # prefixed inline, so the stage body stays a plain `bash <script>`
           # invocation that cannot pick up the platform's default shell.
-          # On tag_push, CNB_BRANCH holds the tag name.
           env:
             RELEASE_TAG: $CNB_BRANCH
           script: bash scripts/ci-job-steps.sh run release
@@ -731,6 +804,8 @@ $:
       env:
         SOYMUTDB_CI_ARCH: amd64
         SOYMUTDB_CI_OUTPUT_DIR: validate-runtime-images-amd64
+        SOURCE_REVISION: $CNB_COMMIT
+        SOURCE_EVENT: $CNB_EVENT
       # CNB accepts a Dockerfile only in `docker.build`, and `docker.build`
       # is pipeline-scoped: the platform's runner passes a stage-level
       # `image:` straight to `docker pull`, so a repository path in it fails
@@ -754,6 +829,8 @@ $:
       env:
         SOYMUTDB_CI_ARCH: arm64
         SOYMUTDB_CI_OUTPUT_DIR: validate-runtime-images-arm64
+        SOURCE_REVISION: $CNB_COMMIT
+        SOURCE_EVENT: $CNB_EVENT
       # CNB accepts a Dockerfile only in `docker.build`, and `docker.build`
       # is pipeline-scoped: the platform's runner passes a stage-level
       # `image:` straight to `docker pull`, so a repository path in it fails
@@ -772,6 +849,66 @@ $:
           script: bash scripts/ci-job-steps.sh run image-build
 
   web_trigger_release:
+    # The release button is self-contained: its two native image pipelines are
+    # part of this same event, so the publisher cannot await or download an
+    # artifact produced by the separate image-only button or an earlier event.
+    - name: docker-images (amd64)
+      runner:
+        cpus: 16
+      env:
+        SOYMUTDB_CI_ARCH: amd64
+        SOYMUTDB_CI_OUTPUT_DIR: validate-runtime-images-amd64
+        SOURCE_REVISION: $CNB_COMMIT
+        SOURCE_EVENT: $CNB_EVENT
+      docker:
+        build:
+          dockerfile: .cnb/env/Dockerfile.build-tools
+          by:
+          - .cnb/env/Dockerfile.build-tools
+      services:
+        - docker
+      stages:
+        - name: Verify images for manual release (amd64)
+          script: bash scripts/ci-job-steps.sh run image-build
+        - name: Upload validated runtime images (amd64)
+          image: cnbcool/artifact
+          settings:
+            path: validate-runtime-images-amd64
+            name: validated-runtime-images-amd64
+        - name: Hand the amd64 manual-release package to the publisher
+          type: cnb:resolve
+          options:
+            key: validated-runtime-images-amd64
+
+    - name: docker-images (arm64)
+      runner:
+        cpus: 16
+        tags: cnb:arch:arm64:v8
+      env:
+        SOYMUTDB_CI_ARCH: arm64
+        SOYMUTDB_CI_OUTPUT_DIR: validate-runtime-images-arm64
+        SOURCE_REVISION: $CNB_COMMIT
+        SOURCE_EVENT: $CNB_EVENT
+      docker:
+        build:
+          dockerfile: .cnb/env/Dockerfile.build-tools
+          by:
+          - .cnb/env/Dockerfile.build-tools
+      services:
+        - docker
+      stages:
+        - name: Verify images for manual release (arm64)
+          script: bash scripts/ci-job-steps.sh run image-build
+        - name: Upload validated runtime images (arm64)
+          image: cnbcool/artifact
+          settings:
+            path: validate-runtime-images-arm64
+            name: validated-runtime-images-arm64
+        - name: Hand the arm64 manual-release package to the publisher
+          type: cnb:resolve
+          options:
+            key: validated-runtime-images-arm64
+
     - name: release-manual
       runner:
         cpus: 8
@@ -791,6 +928,14 @@ $:
       services:
         - docker
       stages:
+        - name: Wait for the verified amd64 manual-release image package
+          type: cnb:await
+          options:
+            key: validated-runtime-images-amd64
+        - name: Wait for the verified arm64 manual-release image package
+          type: cnb:await
+          options:
+            key: validated-runtime-images-arm64
         - name: Publish the signed release
           script: bash scripts/ci-job-steps.sh run release
       endStages:

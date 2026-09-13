@@ -123,18 +123,20 @@ RUN node --version \
 # node mounts that path for the first time, the store starts EMPTY, and
 # `--frozen-lockfile` re-resolves and re-downloads every tarball on the first
 # run of every environment — the exact cost the store mount exists to remove.
-# Baking the registry metadata here is cheap and makes that first run a link pass.
+# Baking the lockfile-selected package tarballs here makes the first run a
+# store-link operation instead of a full network download.
 #
-# Only METADATA is fetched (`--lockfile-only`). No package tarball is
-# downloaded and no dependency is installed, so the image stays small, the
-# install can never disagree with the checked-out `pnpm-lock.yaml`, and the
-# `--frozen-lockfile` gate in scripts/setup-workspace.sh keeps its meaning.
+# `pnpm fetch` preloads the package tarballs selected by the checked-out
+# lockfile; it does not install dependencies or create a node_modules tree.
+# `fetch` has no `--lockfile-only` option (that option belongs to `pnpm
+# install`), so keeping the command to the official fetch interface makes the
+# warm store real rather than a command that fails before the image is built.
 RUN set -eux; \
     mkdir -p /cache/pnpm-store; \
     corepack enable; \
     corepack prepare "pnpm@${PNPM_VERSION}" --activate; \
     pnpm config set store-dir /cache/pnpm-store; \
-    pnpm fetch --lockfile-only --ignore-scripts; \
+    pnpm fetch --ignore-scripts; \
     du -sh /cache/pnpm-store
 
 # Declared AFTER the warm-up above: declaring a volume on a path that does not

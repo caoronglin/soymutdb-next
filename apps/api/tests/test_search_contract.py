@@ -181,8 +181,7 @@ async def test_mutant_search_sql_excludes_private_deleted_and_other_release_rows
     sql = _postgresql_sql(db.statement)
     assert "mutant_lines.is_public is true" in sql
     assert "mutant_lines.is_deleted is false" in sql
-    # External mutant search spans releases (public_id is stable and
-    # release-independent), so release_id is not part of the filter.
+    assert "mutant_lines.release_id = 7" in sql
 
 
 @pytest.mark.asyncio
