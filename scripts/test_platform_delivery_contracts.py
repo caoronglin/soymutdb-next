@@ -1,5 +1,8 @@
 import json
+import os
 import re
+import subprocess
+import tempfile
 from pathlib import Path
 
 import yaml
@@ -19,10 +22,13 @@ CONDA_DEPLOY = ROOT / "deploy/scripts/conda-deploy.sh"
 CONDA_SERVICES = ROOT / "deploy/scripts/conda-services.sh"
 CONDA_NO_DOCKER = ROOT / "deploy/conda/no-docker-data-layer.md"
 DEPLOYMENT_ARCHITECTURE = ROOT / "docs/design/deployment-architecture.md"
-# Release services that also carry a local-build definition (merged away unless
-# the `x-service-local-*` override applies). jbrowse is not one of them: it runs
-# upstream nginx with the static bundle, which the pages artifact publishes.
-BUILDABLE_RELEASE_SERVICES = {
+DATA_SERVICES = ("postgres", "clickhouse", "redis", "minio")
+# Release services that the local wrapper rebuilds from the checkout. The
+# production file declares no `build:` for any of them: a release host pulls a
+# signed digest and must never build from source. scripts/compose-local.sh is
+# the only builder, sourcing scripts/list-images.sh and running `docker build`
+# directly before Compose starts.
+RELEASE_SERVICES = {
     "api",
     "worker-default",
     "worker-blast",
@@ -49,6 +55,26 @@ def _json(path: str) -> dict:
 def _compose() -> dict:
     # Compose-specific tags (`!reset`) are understood by the shared loader.
     return load_compose(ROOT / "docker-compose.yml")
+
+
+def _compose_tags(path: Path) -> set[str]:
+    """All YAML node tags in a Compose document.
+
+    Walking parsed nodes, rather than searching raw text, means a comment that
+    merely mentions `!reset` can neither satisfy nor defeat the assertion.
+    """
+    tags: set[str] = set()
+    stack = [yaml.compose(path.read_text(encoding="utf-8"))]
+    while stack:
+        node = stack.pop()
+        assert node is not None
+        tags.add(node.tag)
+        if isinstance(node, yaml.MappingNode):
+            for key, value in node.value:
+                stack.extend((key, value))
+        elif isinstance(node, yaml.SequenceNode):
+            stack.extend(node.value)
+    return tags
 
 
 def _example_env() -> dict[str, str]:
@@ -279,14 +305,13 @@ def test_release_services_use_digest_refs_without_compose_build_fallbacks() -> N
         service = services[service_name]
         assert service["image"].startswith(f"${{{variable_name}:?")
         assert "image@sha256" in service["image"]
-        # `build:` is present on the release services ON PURPOSE, gated behind the
-        # `x-service-local-*` anchors' `!reset`: it never applies unless the local
-        # build override is merged in, and the anchor discards it otherwise. What
-        # must NOT be silently reintroduced is a build that the RELEASE path can
-        # fall back to, i.e. a build reachable without the override.
-        if service_name in BUILDABLE_RELEASE_SERVICES:
-            assert isinstance(service.get("build"), dict), service_name
-            assert service["build"].get("dockerfile"), service_name
+        # No release service may declare a `build:`. The production file is
+        # release-only: a host that can build from a checkout is a host that can
+        # run unsigned code. Local builds belong to scripts/compose-local.sh,
+        # which runs `docker build` for the images scripts/list-images.sh names.
+        assert "build" not in service, (
+            f"{service_name} must not carry a Compose build definition"
+        )
 
     env = _example_env()
     digest_ref = re.compile(r"^ghcr\.io/[a-z0-9_.-]+/[a-z0-9_.-]+@sha256:[0-9a-f]{64}$")
@@ -294,12 +319,318 @@ def test_release_services_use_digest_refs_without_compose_build_fallbacks() -> N
         assert digest_ref.fullmatch(env[variable_name]), (variable_name, env[variable_name])
     assert set(env["COMPOSE_PROFILES"].split(",")) == {"core", "blast", "analyses", "mcp"}
 
-    # The local-build overrides exist and discard BOTH the digest requirement and
-    # the per-service build, so exactly one image name reaches `docker run`.
+    # The local-build override is a separate post-merge file. It cannot prevent
+    # base interpolation, so the wrapper also supplies safe local values for all
+    # production required references before Compose reads either file.
     base_text = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
-    assert "x-service-local-api: &service-local-api" in base_text
-    assert 'image: !reset "${API_IMAGE:-soymutdb-api:local}"' in base_text
-    assert "build: !reset null" in base_text
+    assert "x-service-local-" not in base_text
+    assert "x-service-build" not in base_text
+    for service_name in RELEASE_SERVICES:
+        assert "build" not in services[service_name], service_name
+
+def test_local_compose_wrapper_uses_a_post_merge_override() -> None:
+    """Local image names must actually replace release refs in Compose.
+
+    The production file carries no `build:` to reset, so docker-compose.local.yml
+    only rewrites `image:` scalars. Building is the wrapper's job: it sources
+    scripts/list-images.sh and calls `docker build` per entry.
+    """
+    local = (ROOT / "docker-compose.local.yml").read_text(encoding="utf-8")
+    wrapper = (ROOT / "scripts/compose-local.sh").read_text(encoding="utf-8")
+
+    assert "docker-compose.local.yml" in wrapper
+    assert "-f \"${REPO_ROOT}/docker-compose.yml\"" in wrapper
+    assert "-f \"${REPO_ROOT}/docker-compose.local.yml\"" in wrapper
+    # Local builds are direct `docker build` invocations driven by the shared
+    # image list, not Compose build definitions.
+    assert "scripts/list-images.sh" in wrapper
+    assert "docker build" in wrapper
+    assert "soymutdb_image_entry" in wrapper
+    for variable in (
+        "API_IMAGE",
+        "WORKER_IMAGE",
+        "MCP_IMAGE",
+        "MIGRATE_IMAGE",
+        "MIGRATE_CLICKHOUSE_IMAGE",
+    ):
+        assert f'image: "${{{variable}:-' in local
+    # The local file must not carry a build definition for any service (or a
+    # `!reset`); the production base declares none to remove either. The build
+    # check runs against parsed service definitions; `!reset` is a parsed YAML
+    # node tag, so a comment that merely mentions it cannot satisfy the check.
+    local_path = ROOT / "docker-compose.local.yml"
+    local_services = load_compose(local_path)["services"]
+    for service_name, service in local_services.items():
+        assert "build" not in service, service_name
+    assert "!reset" not in _compose_tags(local_path)
+    assert "!override" not in _compose_tags(local_path)
+
+    required = (
+        "API_IMAGE_REF",
+        "WORKER_IMAGE_REF",
+        "MIGRATE_IMAGE_REF",
+        "MIGRATE_CLICKHOUSE_IMAGE_REF",
+        "MCP_IMAGE_REF",
+        "JBROWSE_IMAGE_REF",
+        "POSTGRES_PASSWORD",
+        "CLICKHOUSE_PASSWORD",
+        "REDIS_PASSWORD",
+        "MINIO_ROOT_USER",
+        "MINIO_ROOT_PASSWORD",
+        "GRAFANA_PASSWORD",
+        "SOYMUTDB_MCP_API_TOKEN",
+    )
+    for variable in required:
+        assert f"set_compose_default {variable} " in wrapper
+
+    # Model the resolved service slots after the overlay: image is a normal
+    # scalar replacement, and neither file contributes a build definition.
+    base = _compose()["services"]
+    overlay = load_compose(ROOT / "docker-compose.local.yml")["services"]
+    for service_name in RELEASE_SERVICES:
+        assert overlay[service_name]["image"] != base[service_name]["image"]
+        assert "build" not in base[service_name], service_name
+        assert "build" not in overlay[service_name], service_name
+
+
+# ---------------------------------------------------------------------------
+# Local compose wrapper: empty env-file values and profile precedence
+# ---------------------------------------------------------------------------
+_STUB_DOCKER_COMPOSE_LOCAL = """#!/usr/bin/env bash
+echo "DOCKER_ARGS=$*"
+echo "POSTGRES_PASSWORD=${POSTGRES_PASSWORD-<unset>}"
+"""
+
+
+def _run_compose_local_with_stub(
+    env_file_text: str | None,
+    *,
+    shell_env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """Run the real wrapper with a stub `docker`, so no daemon is needed.
+
+    The stub echoes the resolved arguments and the POSTGRES_PASSWORD it
+    inherited. `--env-file` values are Compose's, not the wrapper's, so a
+    non-empty file value must show up as `<unset>` in the child (the wrapper
+    must not shadow it with the development fallback).
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        docker = bin_dir / "docker"
+        docker.write_text(_STUB_DOCKER_COMPOSE_LOCAL, encoding="utf-8")
+        docker.chmod(0o755)
+        env = os.environ.copy()
+        env["PATH"] = f"{bin_dir}:{env['PATH']}"
+        env["SOYMUTDB_LOCAL_ENV_FILE"] = "/dev/null"
+        for name in (
+            "SOYMUTDB_LOCAL_PROFILES",
+            "COMPOSE_PROFILES",
+            "POSTGRES_PASSWORD",
+            "CLICKHOUSE_PASSWORD",
+            "REDIS_PASSWORD",
+            "MINIO_ROOT_USER",
+            "MINIO_ROOT_PASSWORD",
+            "GRAFANA_PASSWORD",
+            "SOYMUTDB_MCP_API_TOKEN",
+        ):
+            env.pop(name, None)
+        if env_file_text is not None:
+            env_file = tmp_path / "soymutdb.env"
+            env_file.write_text(env_file_text, encoding="utf-8")
+            env["SOYMUTDB_LOCAL_ENV_FILE"] = str(env_file)
+        if shell_env:
+            env.update(shell_env)
+        return subprocess.run(
+            ["bash", "scripts/compose-local.sh", "config"],
+            cwd=ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+
+def test_compose_local_treats_empty_env_file_values_as_unset() -> None:
+    """`${NAME:?}` fails on an empty value, so an empty entry must fall back.
+
+    A `.env` line `POSTGRES_PASSWORD=` satisfies neither Compose's `:?` check
+    nor the apps. The wrapper has to treat it as unset and export the
+    development default, while a real file value is left to Compose (not
+    shadowed by that default).
+    """
+    empty = _run_compose_local_with_stub("POSTGRES_PASSWORD=\n")
+    assert empty.returncode == 0, empty.stderr
+    assert "POSTGRES_PASSWORD=soymutdb_dev_password" in empty.stdout
+
+    for quoted in ('POSTGRES_PASSWORD=""\n', "POSTGRES_PASSWORD=''\n"):
+        result = _run_compose_local_with_stub(quoted)
+        assert result.returncode == 0, result.stderr
+        assert "POSTGRES_PASSWORD=soymutdb_dev_password" in result.stdout, result.stdout
+
+    real = _run_compose_local_with_stub("POSTGRES_PASSWORD=operator_pw\n")
+    assert real.returncode == 0, real.stderr
+    # The wrapper must not export the fallback over the file's value; Compose
+    # reads the file itself.
+    assert "POSTGRES_PASSWORD=<unset>" in real.stdout, real.stdout
+
+
+def test_compose_local_profiles_honor_the_env_file_with_shell_precedence() -> None:
+    """COMPOSE_PROFILES is a value, not a flag; the wrapper must resolve it.
+
+    Compose reads COMPOSE_PROFILES from the selected env file, so `--profile`
+    flags computed without it would start a different set than a direct
+    `docker compose` run. Precedence stays SOYMUTDB_LOCAL_PROFILES > shell
+    COMPOSE_PROFILES > env-file COMPOSE_PROFILES > `core`.
+    """
+    from_file = _run_compose_local_with_stub("COMPOSE_PROFILES=core,blast\n")
+    assert from_file.returncode == 0, from_file.stderr
+    assert "--profile core --profile blast" in from_file.stdout + from_file.stderr
+
+    shell_wins = _run_compose_local_with_stub(
+        "COMPOSE_PROFILES=core,blast\n",
+        shell_env={"COMPOSE_PROFILES": "analyses"},
+    )
+    assert "--profile analyses" in shell_wins.stdout + shell_wins.stderr
+    assert "--profile blast" not in shell_wins.stdout + shell_wins.stderr
+
+    wrapper_wins = _run_compose_local_with_stub(
+        "COMPOSE_PROFILES=core,blast\n",
+        shell_env={"SOYMUTDB_LOCAL_PROFILES": "mcp", "COMPOSE_PROFILES": "analyses"},
+    )
+    assert "--profile mcp" in wrapper_wins.stdout + wrapper_wins.stderr
+    assert "--profile analyses" not in wrapper_wins.stdout + wrapper_wins.stderr
+
+
+# ---------------------------------------------------------------------------
+# Cloud preview data layer: all four services, encoded password
+# ---------------------------------------------------------------------------
+_STUB_DOCKER_DATA_LAYER_OK = """#!/usr/bin/env bash
+if [[ "${1:-}" == "info" ]]; then
+  exit 0
+fi
+if [[ "${1:-}" == "compose" ]]; then
+  shift
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --project-directory|--env-file|-f|--profile) shift 2 ;;
+      -*) shift ;;
+      *) break ;;
+    esac
+  done
+  case "${1:-}" in
+    ps)
+      if [[ -n "${STUB_POLL_LOG:-}" ]]; then
+        echo "${@: -1}" >> "${STUB_POLL_LOG}"
+      fi
+      echo healthy
+      exit 0
+      ;;
+    up|logs) exit 0 ;;
+  esac
+fi
+exit 0
+"""
+
+_STUB_DOCKER_DATA_LAYER_UP_FAILS = """#!/usr/bin/env bash
+if [[ "${1:-}" == "info" ]]; then
+  exit 0
+fi
+if [[ "${1:-}" == "compose" ]]; then
+  shift
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --project-directory|--env-file|-f|--profile) shift 2 ;;
+      -*) shift ;;
+      *) break ;;
+    esac
+  done
+  case "${1:-}" in
+    ps)
+      echo healthy
+      exit 0
+      ;;
+    up) exit 1 ;;
+    logs) exit 0 ;;
+  esac
+fi
+exit 0
+"""
+
+
+def _run_data_layer(
+    password: str, *, docker_body: str
+) -> tuple[subprocess.CompletedProcess[str], list[str]]:
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        docker = bin_dir / "docker"
+        docker.write_text(docker_body, encoding="utf-8")
+        docker.chmod(0o755)
+        poll_log = tmp_path / "poll.log"
+        poll_log.write_text("", encoding="utf-8")
+        harness = tmp_path / "harness.sh"
+        harness.write_text(
+            f"set -uo pipefail\n"
+            "export SOYMUTDB_DEV_MODE=full\n"
+            "export SOYMUTDB_DEV_INSTALL=0\n"
+            "export SOYMUTDB_DEV_DATA_LAYER=on\n"
+            "export SOYMUTDB_DEV_FRONTEND=off\n"
+            "export SOYMUTDB_DEV_LOG_DIR='" + str(tmp_path / "logs") + "'\n"
+            "source scripts/start-cloud-dev.sh\n"
+            "if data_layer_start; then rc=0; else rc=$?; fi\n"
+            'echo "RC=$rc"\n'
+            'echo "DATABASE_URL=${SOYMUTDB_DATABASE_URL-}"\n',
+            encoding="utf-8",
+        )
+        env = os.environ.copy()
+        env["PATH"] = f"{bin_dir}:{env['PATH']}"
+        env["STUB_POLL_LOG"] = str(poll_log)
+        env["POSTGRES_PASSWORD"] = password
+        env.pop("SOYMUTDB_DATABASE_URL", None)
+        completed = subprocess.run(
+            ["bash", str(harness)],
+            cwd=ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        polled = [
+            line for line in poll_log.read_text(encoding="utf-8").splitlines() if line
+        ]
+        return completed, polled
+
+
+def test_start_cloud_dev_waits_for_all_four_data_services() -> None:
+    result, polled = _run_data_layer("secret", docker_body=_STUB_DOCKER_DATA_LAYER_OK)
+    assert result.returncode == 0, result.stderr
+    assert "RC=0" in result.stdout
+    assert sorted(set(polled)) == sorted(DATA_SERVICES), polled
+
+
+def test_start_cloud_dev_url_encodes_the_compose_password() -> None:
+    password = "p@ss:w/rd?#[]"
+    result, _ = _run_data_layer(password, docker_body=_STUB_DOCKER_DATA_LAYER_OK)
+    assert result.returncode == 0, result.stderr
+    assert (
+        "DATABASE_URL=postgresql+asyncpg://soymutdb:"
+        "p%40ss%3Aw%2Frd%3F%23%5B%5D@127.0.0.1:5432/soymutdb"
+    ) in result.stdout, result.stdout + result.stderr
+
+
+def test_start_cloud_dev_reports_per_service_state_and_logs_on_failure() -> None:
+    result, _ = _run_data_layer(
+        "secret", docker_body=_STUB_DOCKER_DATA_LAYER_UP_FAILS
+    )
+    assert result.returncode == 0, result.stderr
+    assert "RC=1" in result.stdout
+    assert "DATABASE_URL=\n" in result.stdout
+    assert "per-service state follows" in result.stderr
+    for service in DATA_SERVICES:
+        assert f"logs for {service} (tail 40):" in result.stderr, result.stderr
 
 
 def test_upgrade_path_rejects_tags_and_records_digest_refs() -> None:

@@ -106,6 +106,13 @@ error while interpolating x-app-env.SOYMUTDB_S3_ACCESS_KEY:
 required variable MINIO_ROOT_USER is missing a value: MINIO_ROOT_USER is required
 ```
 
+> 现状（P0 冻结规格）：CNB preview 路径已改为只加载 data-only 的
+> `docker-compose.preview.yml`，完全不加载生产 `docker-compose.yml`，因此预览
+> 根本不会插值任何生产必填变量；下面的 `docker-compose.dev.yml` `!reset` 修复
+> 仍然适用于**本地开发** overlay（它确实加载生产基座）。契约见
+> `scripts/test_development_compose_contract.py` 的
+> `test_cloud_preview_data_layer_is_standalone_and_data_only`。
+
 这一行不是"少了 `.env`"，而是 overlay 没有真正覆盖到那个 key。四个坑：
 
 1. **`minio: environment:` 不够。** 报错来自 `x-app-env` 这个顶层扩展块（被

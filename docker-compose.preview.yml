@@ -1,0 +1,129 @@
+# =====================================================================
+# SoyMutDB - CNB preview data layer
+# =====================================================================
+# This is a deliberately data-only topology.  It must not include
+# docker-compose.yml: Compose interpolates each file before applying any
+# overlay, so loading the production file would require release credentials
+# even when the command starts only PostgreSQL or MinIO.
+#
+# Credentials are disposable development defaults.  The launch script passes
+# --env-file /dev/null and supplies the same values in its own environment;
+# explicit process values still win over these defaults.
+# =====================================================================
+
+services:
+  postgres:
+    image: postgres:18.4-alpine
+    # Migration 0025 runs `CREATE EXTENSION pg_stat_statements`, which fails
+    # unless the library is preloaded. The production topology sets the same
+    # option; the preview must too, or `alembic upgrade head` cannot reach head.
+    command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements", "-c", "pg_stat_statements.track=all", "-c", "pg_stat_statements.max=10000"]
+    environment:
+      POSTGRES_DB: soymutdb
+      POSTGRES_USER: soymutdb
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-soymutdb_dev_password}"
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      # PostgreSQL 18's declared VOLUME/PGDATA is /var/lib/postgresql
+      # (`ENV PGDATA /var/lib/postgresql/18/docker`), not the pre-18 /data
+      # suffix. See the matching note in docker-compose.yml.
+      - preview-pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U soymutdb -d soymutdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8-alpine
+    environment:
+      CLICKHOUSE_DB: soymutdb
+      CLICKHOUSE_USER: soymutdb
+      CLICKHOUSE_PASSWORD: "${CLICKHOUSE_PASSWORD:-soymutdb_dev_password}"
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    ports:
+      - "127.0.0.1:8123:8123"
+      - "127.0.0.1:9000:9000"
+    volumes:
+      - preview-chdata:/var/lib/clickhouse
+      - preview-chbackups:/var/lib/clickhouse-backups
+      - ./infra/clickhouse/config.xml:/etc/clickhouse-server/config.d/custom.xml:ro
+      - ./infra/clickhouse/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.4-alpine
+    command: >-
+      redis-server --appendonly yes --maxmemory ${REDIS_CACHE_MAXMEMORY:-512mb}
+      --maxmemory-policy allkeys-lru --requirepass ${REDIS_PASSWORD:-soymutdb_dev_password}
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - preview-redisdata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD:-soymutdb_dev_password} ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis-celery:
+    image: redis:7.4-alpine
+    command: >-
+      redis-server --appendonly yes --maxmemory ${REDIS_CELERY_MAXMEMORY:-512mb}
+      --maxmemory-policy noeviction --requirepass ${REDIS_PASSWORD:-soymutdb_dev_password}
+    ports:
+      - "127.0.0.1:6380:6379"
+    volumes:
+      - preview-redis-celerydata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD:-soymutdb_dev_password} ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  minio:
+    # Docker Hub's `minio/minio` repository is gone (404), so the preview uses
+    # the same official upstream quay.io image as docker-compose.yml. The tag
+    # was verified by the primary agent against the quay.io registry (HEAD HTTP
+    # 200, index digest beginning sha256:1dce27c); see docker-compose.yml and
+    # scripts/test_development_compose_contract.py for the full provenance.
+    image: quay.io/minio/minio:RELEASE.2024-12-18T13-15-44Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: "${MINIO_ROOT_USER:-soymutdb_dev}"
+      MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD:-soymutdb_dev_password}"
+    ports:
+      - "127.0.0.1:9001:9000"
+      - "127.0.0.1:9002:9001"
+    volumes:
+      - preview-miniodata:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  preview-pgdata:
+  preview-chdata:
+  preview-chbackups:
+  preview-redisdata:
+  preview-redis-celerydata:
+  preview-miniodata:

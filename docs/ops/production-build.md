@@ -128,10 +128,15 @@ bash scripts/compose-local.sh up -d
 bash scripts/compose-local.sh down
 ```
 
-The override is expressed with Compose's `!reset` tag on the `x-service-local-*`
-anchors: `!reset` is what discards the base file's `${…_IMAGE_REF:?…}` value,
-including its hard failure. A YAML merge key cannot do this (the base value stays
-on the merge default branch and Compose interpolates that branch too), and
-`${A:-${B}}` is not valid Compose interpolation. This wrapper is the *only*
+The wrapper loads `docker-compose.local.yml` after the production file. Because
+Compose interpolates each file before merging, the wrapper first supplies safe
+local values for every production `${…:?…}` reference (`*_IMAGE_REF`, store
+credentials, the MCP token, and the Grafana password). The production file
+itself defines no `build:` at all — only the wrapper builds, with direct
+`docker build` calls for the images declared in `scripts/list-images.sh` — so the
+local file only overrides `image:` with ordinary `${API_IMAGE:-…}` scalars.
+`!reset` is deliberately not used on `image`: Compose uses it to discard the
+value rather than to set the supplied scalar. The production file itself remains
+fail-closed (and build-free) when invoked directly. This wrapper is the *only*
 supported local-build entry point; it is not a fallback the release path can
 reach.

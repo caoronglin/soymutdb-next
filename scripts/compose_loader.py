@@ -1,8 +1,10 @@
 """Load a Compose file with the platform's own tags understood.
 
-`docker-compose.yml` uses the Compose-specific `!reset` tag to discard a value
-that an anchor would otherwise supply (`image: !reset null`). Plain
-`yaml.safe_load` refuses it:
+Compose files use the Compose-specific `!reset` tag to discard a value
+(`build: !reset null`) when applying an explicit local override. The production
+topology no longer needs it (release services carry no `build:` and the local
+override only rewrites `image:` scalars), but the tag stays supported so the
+development/local overlays can keep using it. Plain `yaml.safe_load` refuses it:
 
     could not determine a constructor for the tag '!reset'
 

@@ -69,9 +69,13 @@ reference per release image, including the two one-shot migration services
 (which used to borrow the API/Worker references and could therefore migrate with
 the wrong release). `deploy/scripts/upgrade.sh` rejects tags, validates every
 remote manifest, and records the exact references in `.release-state.json`.
-Production Compose contains no build fallback that a release can reach: the
-`build:` blocks are discarded by the `x-service-local-*` `!reset` anchors and
-only apply through `scripts/compose-local.sh`.
+Production Compose contains no build fallback that a release can reach, and now
+no `build:` block at all: a release host pulls the digest refs and can never
+build unsigned code from a checkout. Local builds are the explicit
+`scripts/compose-local.sh` path, which sources `scripts/list-images.sh` and runs
+`docker build` directly (the same Dockerfiles the release pipeline builds)
+before loading `docker-compose.local.yml`, which only rewrites `image:` scalars.
+The production file contains no local image fallback.
 
 Docker acceptance runs in CI. CI validates every supported profile with
 `docker compose config`, then uses independent native amd64 and arm64 jobs.

@@ -230,6 +230,38 @@ class _DevAllowlist:
         return any(hostname == suffix or hostname.endswith("." + suffix) for suffix in self._suffixes)
 
 
+def _node_major_version(executable: str) -> int | None:
+    """Major version reported by `executable`, or None when it cannot run."""
+    try:
+        completed = subprocess.run(
+            [executable, "--version"], capture_output=True, text=True, timeout=30
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if completed.returncode != 0:
+        return None
+    match = re.match(r"v?(\d+)\.", completed.stdout.strip())
+    return int(match.group(1)) if match else None
+
+
+def _capable_node_executables() -> list[str]:
+    """Return Node 24+ interpreters, PATH first, then native system paths.
+
+    The shipped helper uses TypeScript syntax (``as const``) and the parent
+    program uses ``stripTypeScriptTypes``, both of which need Node 24+. A
+    mounted-filesystem Node can be runnable as a parent while denying child
+    exec, so native ``/usr/bin`` and ``/usr/local/bin`` candidates are kept.
+    """
+    candidates: list[str] = []
+    for candidate in (shutil.which("node"), "/usr/bin/node", "/usr/local/bin/node"):
+        if candidate is None:
+            continue
+        resolved = str(Path(candidate).resolve())
+        if resolved not in candidates:
+            candidates.append(resolved)
+    return [candidate for candidate in candidates if (_node_major_version(candidate) or 0) >= 24]
+
+
 def _load_dev_allowlist(value: str | None = None) -> _DevAllowlist:
     """Evaluate the SHIPPED `resolveDevAllowedHosts` and expose its matcher.
 
@@ -247,9 +279,25 @@ def _load_dev_allowlist(value: str | None = None) -> _DevAllowlist:
     start = source.index("const CNB_DEV_HOST_SUFFIXES")
     body = source[start:].replace("export function", "function")
 
-    node = shutil.which("node")
-    if node is None:  # pragma: no cover - all CI images carry Node 24
-        raise unittest.SkipTest("node is required to evaluate the allowlist helper")
+    candidates = _capable_node_executables()
+    if not candidates:
+        searched = shutil.which("node") or "none on PATH"
+        raise AssertionError(
+            "resolveDevAllowedHosts needs Node 24+ (the helper is TypeScript and "
+            "the loader uses `stripTypeScriptTypes`), but no capable interpreter "
+            f"was found; PATH node: {searched}; also checked /usr/bin/node and "
+            "/usr/local/bin/node"
+        )
+    # The parent runs the extraction program; PATH Node is normally the pinned
+    # CI interpreter, so prefer it and only fall back to a native system Node if
+    # PATH is too old.
+    node = candidates[0]
+    # Prefer a native system Node for the child probe: a checkout may run Node
+    # from a mounted filesystem where child exec is denied even though the parent
+    # is runnable. If that exec is denied anyway, the program's inline vm
+    # fallback still evaluates the helper.
+    native = [candidate for candidate in candidates if candidate.startswith("/usr/")]
+    probe_node = native[0] if native else node
 
     program = (
         "import fs from 'node:fs';\n"
@@ -292,9 +340,7 @@ def _load_dev_allowlist(value: str | None = None) -> _DevAllowlist:
             # where child exec is denied even though the parent is runnable.
             # Prefer a native system Node when present; CI images fall back to
             # the pinned interpreter that launched this helper.
-            "PROBE_NODE": "/usr/bin/node"
-            if Path("/usr/bin/node").is_file()
-            else node,
+            "PROBE_NODE": probe_node,
         },
     )
     if completed.returncode != 0:

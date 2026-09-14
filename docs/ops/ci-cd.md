@@ -464,15 +464,16 @@ bash scripts/compose-local.sh down
 
 它用的是**同一批 Dockerfile**，所以"本地能起来"与"release 能构出来"不会分叉。
 
-实现方式是 Compose 的两个标签，两者都必要：
+实现方式是后置的 `docker-compose.local.yml`：
 
-* `image: !reset "${API_IMAGE:-soymutdb-api:local}"`——丢弃基线的
-  `${API_IMAGE_REF:?…}`，**包括它的 `:?` 硬失败**。用 YAML merge 不行：基线值留在
-  merge 的 default 分支上，而 Compose 会插值那个分支（这正是
-  `docker-compose.dev.yml` 里 `x-app-env` 必须用 `!reset` 的同一个坑）。
-* `build: !reset null`——base 里每个服务都带 `build:`（供本地覆盖合并），`!reset`
-  把整套落到 null，由脚本用显式 tag 一次性构建，避免"某个服务偷偷 build 了另一个
-  tag"。
+* Compose 会先插值生产文件，再应用 override，所以脚本在调用 Compose 前为所有
+  `${…:?…}` 引用提供安全的本地镜像 tag 和开发凭据；生产文件直接调用时仍然
+  fail-fast。
+* override 用普通 `image: "${API_IMAGE:-soymutdb-api:local}"` 覆盖镜像；不能在
+  `image` 上使用 `!reset`——该标签会丢弃值而不是设置给定标量。镜像构建是脚本的
+  职责：它 source `scripts/list-images.sh` 后直接 `docker build`，因此 override
+  里不含任何 `build`，生产文件本身也不声明 `build:`，避免某个服务偷偷 build
+  另一个 tag，也避免生产主机从源码构建未签名镜像。
 
 为什么不在 `image:` 里写 `${API_IMAGE_REF:-${API_IMAGE:-…}}`：**Compose 插值不支持
 嵌套默认值**，所以"生产必填 digest / 开发本地 tag"必须由变量本身表达。两个变量

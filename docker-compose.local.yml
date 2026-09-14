@@ -1,0 +1,46 @@
+# =====================================================================
+# SoyMutDB - local production-image override
+# =====================================================================
+# This file is intentionally loaded AFTER docker-compose.yml by
+# scripts/compose-local.sh. The base file is release-only: it references
+# release image digests and carries no `build:` definition at all, so a
+# production host can never build an unsigned image from a checkout. The local
+# wrapper is the only thing that builds, and it does so directly
+# (`docker build`), sourcing scripts/list-images.sh, before Compose runs.
+#
+# The base image slots are ordinary scalars here (and only here): a plain
+# `${NAME:-local-tag}` override wins over the base `${NAME_REF:?…}` digest
+# requirement, while `scripts/compose-local.sh` supplies safe local values for
+# every production `:?` reference before Compose reads the base file, because
+# Compose interpolates each file before applying this override.
+#
+# `build` is not reset here: the base file declares no `build:` to remove.
+# =====================================================================
+
+services:
+  migrate:
+    image: "${MIGRATE_IMAGE:-soymutdb-migrate:local}"
+
+  migrate-clickhouse:
+    image: "${MIGRATE_CLICKHOUSE_IMAGE:-soymutdb-migrate-clickhouse:local}"
+
+  api:
+    image: "${API_IMAGE:-soymutdb-api:local}"
+
+  worker-default:
+    image: "${WORKER_IMAGE:-soymutdb-worker:local}"
+
+  worker-blast:
+    image: "${WORKER_IMAGE:-soymutdb-worker:local}"
+
+  worker-ingest:
+    image: "${WORKER_IMAGE:-soymutdb-worker:local}"
+
+  worker-analyses:
+    image: "${WORKER_IMAGE:-soymutdb-worker:local}"
+
+  beat:
+    image: "${WORKER_IMAGE:-soymutdb-worker:local}"
+
+  mcp-server:
+    image: "${MCP_IMAGE:-soymutdb-mcp:local}"

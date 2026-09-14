@@ -19,8 +19,8 @@
 #   * builds every release image with the names scripts/list-images.sh declares,
 #     using the SAME Dockerfiles the release pipeline builds, so a local stack
 #     cannot pass while the release build fails;
-#   * exports `<NAME>_IMAGE` for each service, which the `x-service-local-*`
-#     anchors in docker-compose.yml use to discard the digest requirement;
+#   * exports `<NAME>_IMAGE` for each service, which
+#     docker-compose.local.yml uses to discard the digest requirement;
 #   * runs `docker compose` with the caller's arguments plus an explicit
 #     `--env-file`, so a stale `.env` cannot silently change the stack.
 #
@@ -35,12 +35,15 @@
 # Env
 #   SOYMUTDB_LOCAL_IMAGE_TAG   tag for the locally built images (default: local)
 #   SOYMUTDB_LOCAL_ENV_FILE    env file for compose (default: <repo>/.env if it
-#                              exists, else /dev/null). Pass an explicit path to
-#                              inject real credentials; /dev/null means the
-#                              development defaults inside the compose file are
-#                              used and no `.env` is read.
+#                              exists, else /dev/null). A non-empty value there
+#                              (like a non-empty value exported in the shell)
+#                              satisfies the production `${…:?…}` references; an
+#                              empty `NAME=` does not, so the local development
+#                              default is used instead. /dev/null reads no `.env`
+#                              at all.
 #   SOYMUTDB_LOCAL_PROFILES    comma-separated Compose profiles (default: the
-#                              value of COMPOSE_PROFILES, else `core`)
+#                              shell COMPOSE_PROFILES, else the env file's
+#                              COMPOSE_PROFILES, else `core`)
 #   SOYMUTDB_CI_DOCKER_BUILD_EXTRA_ARGS
 #                              extra `docker build` flags (e.g. --cache-from)
 # =============================================================================
@@ -75,7 +78,7 @@ env_file() {
   fi
 }
 
-# Compose variables for the `x-service-local-*` anchors. `MIGRATE_IMAGE` and
+# Compose variables consumed by docker-compose.local.yml. `MIGRATE_IMAGE` and
 # friends are the local-build counterparts of the `*_IMAGE_REF` digests.
 export_api_images() {
   export API_IMAGE="soymutdb-api:${IMAGE_TAG}"
@@ -85,16 +88,119 @@ export_api_images() {
   export MIGRATE_CLICKHOUSE_IMAGE="soymutdb-migrate-clickhouse:${IMAGE_TAG}"
 }
 
+# Names with a NON-EMPTY value in the Compose env file. An empty entry
+# (`POSTGRES_PASSWORD=` or `POSTGRES_PASSWORD=""`) is not a value Compose can
+# interpolate: `${NAME:?…}` fails on an empty string exactly as it does on an
+# unset one, so the wrapper must fall back to the development default rather
+# than treat the name as satisfied. COMPOSE_PROFILES is read as a value (a
+# comma-separated list, not a flag) and exposed separately.
+declare -A COMPOSE_ENV_FILE_VARIABLES=()
+COMPOSE_ENV_FILE_COMPOSE_PROFILES=""
+load_env_file_variables() {
+  local file="$1" line name value
+  COMPOSE_ENV_FILE_VARIABLES=()
+  COMPOSE_ENV_FILE_COMPOSE_PROFILES=""
+  [[ -f "${file}" ]] || return 0
+  # `|| [[ -n ... ]]` keeps a final assignment line without a trailing newline;
+  # that is legal Compose env-file syntax and must not be dropped.
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    if [[ "${line}" =~ ^[[:space:]]*(export[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+      name="${BASH_REMATCH[2]}"
+      value="${BASH_REMATCH[3]}"
+      # Compose's dotenv format: a ` # comment` after whitespace is not part of
+      # an unquoted value, and one layer of matching quotes is removed.
+      value="${value%$'\r'}"
+      if [[ "${value}" =~ ^(.*[^[:space:]])?[[:space:]]+#.*$ ]]; then
+        value="${BASH_REMATCH[1]}"
+      fi
+      value="${value#"${value%%[![:space:]]*}"}"
+      value="${value%"${value##*[![:space:]]}"}"
+      if [[ ${#value} -ge 2 && "${value:0:1}" == "${value: -1}" &&
+            ( "${value:0:1}" == '"' || "${value:0:1}" == "'" ) ]]; then
+        value="${value:1:${#value}-2}"
+      fi
+      [[ -n "${value}" ]] || continue
+      COMPOSE_ENV_FILE_VARIABLES["${name}"]=1
+      if [[ "${name}" == "COMPOSE_PROFILES" ]]; then
+        COMPOSE_ENV_FILE_COMPOSE_PROFILES="${value}"
+      fi
+    fi
+  done < "${file}"
+}
+
+# Compose interpolates every input file before it applies docker-compose.local.yml.
+# Supply safe local values for every production `:?` reference so the release
+# file can be parsed without weakening its fail-fast behaviour when invoked
+# directly. A non-empty caller value, or a non-empty value in the env file
+# Compose reads, remains authoritative. Empty never satisfies a `:?` reference.
+set_compose_default() {
+  local name="$1" fallback="$2"
+  # A non-empty shell value wins outright.
+  if [[ -n "${!name:-}" ]]; then
+    return 0
+  fi
+  # The env file has a usable value, but Compose gives the shell environment
+  # precedence, so a leftover empty shell entry (`POSTGRES_PASSWORD=`) would
+  # mask it and re-trigger `${NAME:?…}`. Drop the empty entry so the file value
+  # applies; the value itself is never copied into this process' environment.
+  if [[ -n "${COMPOSE_ENV_FILE_VARIABLES[${name}]:-}" ]]; then
+    unset "${name}" 2>/dev/null || true
+    return 0
+  fi
+  export "${name}=${fallback}"
+}
+
+set_local_compose_defaults() {
+  load_env_file_variables "$1"
+  set_compose_default API_IMAGE_REF "${API_IMAGE}"
+  set_compose_default WORKER_IMAGE_REF "${WORKER_IMAGE}"
+  set_compose_default MIGRATE_IMAGE_REF "${MIGRATE_IMAGE}"
+  set_compose_default MIGRATE_CLICKHOUSE_IMAGE_REF "${MIGRATE_CLICKHOUSE_IMAGE}"
+  set_compose_default MCP_IMAGE_REF "${MCP_IMAGE}"
+  set_compose_default JBROWSE_IMAGE_REF "soymutdb-jbrowse:${IMAGE_TAG}"
+  set_compose_default POSTGRES_PASSWORD soymutdb_dev_password
+  set_compose_default CLICKHOUSE_PASSWORD soymutdb_dev_password
+  set_compose_default REDIS_PASSWORD soymutdb_dev_password
+  set_compose_default MINIO_ROOT_USER soymutdb_dev
+  set_compose_default MINIO_ROOT_PASSWORD soymutdb_dev_password
+  set_compose_default GRAFANA_PASSWORD soymutdb_dev_password
+  set_compose_default SOYMUTDB_MCP_API_TOKEN soymutdb_dev_mcp_token
+}
+
+# Resolve the explicit `--profile` flags. Precedence, highest first:
+#   1. SOYMUTDB_LOCAL_PROFILES (the wrapper's own switch)
+#   2. a non-empty shell COMPOSE_PROFILES
+#   3. a non-empty COMPOSE_PROFILES from the selected env file
+#   4. `core`
+# Compose also reads COMPOSE_PROFILES from the selected env file and unions it
+# with any `--profile` flags, so the resolved value is also exported into the
+# child environment (the shell overrides the env file). That keeps the explicit
+# flags and the stack Compose actually starts in agreement, and drops the env
+# file's list whenever SOYMUTDB_LOCAL_PROFILES overrides it.
+resolve_profiles() {
+  local profiles="${SOYMUTDB_LOCAL_PROFILES:-${COMPOSE_PROFILES:-}}"
+  if [[ -z "${profiles}" ]]; then
+    profiles="${COMPOSE_ENV_FILE_COMPOSE_PROFILES:-core}"
+  fi
+  printf '%s\n' "${profiles}"
+}
+
 compose() {
   local file
   file="$(env_file)"
-  local profiles="${SOYMUTDB_LOCAL_PROFILES:-${COMPOSE_PROFILES:-core}}"
+  set_local_compose_defaults "${file}"
+  local profiles
+  profiles="$(resolve_profiles)"
+  # Mask any COMPOSE_PROFILES in the env file: the shell environment wins, so
+  # Compose enables exactly the list resolved above (see resolve_profiles).
+  export COMPOSE_PROFILES="${profiles}"
   # `--profile` takes one profile per flag, so a comma list is split.
   local args=(
     docker compose
     --project-directory "${REPO_ROOT}"
     --env-file "${file}"
     -f "${REPO_ROOT}/docker-compose.yml"
+    -f "${REPO_ROOT}/docker-compose.local.yml"
   )
   local profile
   IFS=',' read -r -a profile_list <<< "${profiles}"

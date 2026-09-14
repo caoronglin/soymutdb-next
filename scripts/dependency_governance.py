@@ -263,10 +263,10 @@ def _uv_graph() -> dict[str, Any]:
 
 def _compose_graph() -> dict[str, Any]:
     compose_path = ROOT / "docker-compose.yml"
-    # The production topology uses the Compose-only `!reset` tag to discard the
-    # values the `x-service-local-*` anchors override (see scripts/compose_loader.py).
-    # A plain `yaml.safe_load` refuses the whole document, which is how a
-    # Compose-valid file broke the governance graph generator.
+    # Parsed with the shared Compose loader rather than `yaml.safe_load`: the
+    # explicit docker-compose.local.yml override uses the Compose-only `!reset`
+    # tag, and a plain loader refuses any document that carries one. Keeping the
+    # single loader means a tag reintroduced here cannot break the graph again.
     compose = load_compose(compose_path)
     nodes: dict[str, dict[str, Any]] = {}
     edges: list[dict[str, Any]] = []

@@ -247,15 +247,21 @@ def test_local_build_override_discards_the_release_image_requirement() -> None:
         "migrate-clickhouse": "soymutdb-migrate-clickhouse:local",
     }
     for service_name, local_tag in local_buildable.items():
-        service = services[service_name]
-        assert isinstance(service.get("build"), dict), (
-            f"{service_name} has no local build definition; the production "
-            "topology could then only run from a registry"
+        # Release services reference signed digests and declare no build, so a
+        # production host can never build from a checkout.
+        assert "build" not in services[service_name], (
+            f"{service_name} must not carry a Compose build definition; the "
+            "local wrapper builds with `docker build` instead"
         )
-        assert service["build"].get("dockerfile"), service_name
         assert local_tag.split(":", 1)[0] in local_tag
 
-    base_text = COMPOSE.read_text(encoding="utf-8")
+    # Local image selection belongs to the explicit post-merge override. The
+    # production file must remain release-only and fail closed.
+    local_override = (ROOT / "docker-compose.local.yml").read_text(encoding="utf-8")
+    local_services = load_compose(ROOT / "docker-compose.local.yml")["services"]
+    for service_name, service in local_services.items():
+        assert "build" not in service, service_name
+    assert "!reset" not in local_override
     for variable in (
         "API_IMAGE",
         "WORKER_IMAGE",
@@ -263,14 +269,17 @@ def test_local_build_override_discards_the_release_image_requirement() -> None:
         "MIGRATE_IMAGE",
         "MIGRATE_CLICKHOUSE_IMAGE",
     ):
-        assert f"${{{variable}:-" in base_text, variable
+        assert f"${{{variable}:-" in local_override, variable
 
-    # The wrappers exist and are wired to the same list.
+    # The wrappers exist and are wired to the same list. Local builds are direct
+    # `docker build` invocations sourced from scripts/list-images.sh.
     for script in ("scripts/compose-local.sh", "scripts/list-images.sh"):
         assert (ROOT / script).is_file(), script
     compose_local = (ROOT / "scripts/compose-local.sh").read_text(encoding="utf-8")
     assert "soymutdb_image_entry" in compose_local
+    assert "docker build" in compose_local
     assert "docker-compose.yml" in compose_local
+    assert "docker-compose.local.yml" in compose_local
 
 
 def test_compose_migration_services_use_their_own_digest_references() -> None:

@@ -86,9 +86,11 @@ log() { printf '[setup-workspace] %s\n' "$*" >&2; }
 #     MINIO_ROOT_USER is required                            (compose exit 1)
 #   Pipeline prepare error: Preview launch script execution failed
 #
-# The FIX for that is in `docker-compose.dev.yml`, not here: the overlay
-# satisfies every reference the four data-layer services need, via
-# `x-app-env: !reset` and the redis healthcheck override. See
+# The CNB preview fix is not here either: the preview path loads the standalone
+# `docker-compose.preview.yml` (data-only, production file never loaded), so no
+# production `${…:?…}` reference is ever interpolated. The
+# `docker-compose.dev.yml` `!reset` overlay is the equivalent fix for the local
+# development path, which does load the production base. See
 # `docs/ops/cnb-startup-acceptance.md` §2.2.2 and
 # `scripts/test_development_compose_contract.py`.
 #
@@ -100,7 +102,8 @@ log() { printf '[setup-workspace] %s\n' "$*" >&2; }
 #   (`bash scripts/setup-workspace.sh`), so an `export` here never reaches the
 #   data-layer `docker compose` call in the parent. A preview that relied on
 #   these exports would still fail exactly as the log above shows -- which is
-#   why the contract test asserts on the overlay rather than on this block.
+#   why the contract test asserts on the preview/dev Compose files rather than
+#   on this block.
 #
 # Rules:
 #   * only set when unset, so a caller-provided value -- the GitHub mirror

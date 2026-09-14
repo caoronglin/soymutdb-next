@@ -205,15 +205,16 @@ fi
 # `off` is never implied: the switch reports what it did, so a reviewer can tell
 # "no database because I asked for none" from "no database because it failed".
 # `--env-file /dev/null` is deliberate. Without it Compose also reads a `.env`
-# file next to the top-level `-f` file (`docker-compose.yml`, i.e. the repo
-# root), so a developer's leftover `.env` silently changes the development data
-# layer — and the preview would depend on a file that is not in the repository.
-# The development defaults live in `docker-compose.dev.yml` and in
-# `data_layer_start`, nowhere else.
+# file next to the top-level `-f` file (`docker-compose.preview.yml`, i.e. the
+# repo root), so a developer's leftover `.env` silently changes the data layer
+# — and the preview would depend on a file that is not in the repository.
+# The preview defaults live in `docker-compose.preview.yml` and in
+# `data_layer_start`, nowhere else.  This is data-only on purpose: loading the
+# production compose file first would interpolate its release-only required
+# variables before any development override could take effect.
 compose_cmd() {
-  docker compose --env-file /dev/null \
-    -f "${REPO_ROOT}/docker-compose.yml" \
-    -f "${REPO_ROOT}/docker-compose.dev.yml" "$@"
+  docker compose --project-directory "${REPO_ROOT}" --env-file /dev/null \
+    -f "${REPO_ROOT}/docker-compose.preview.yml" "$@"
 }
 
 data_layer_start() {
@@ -241,21 +242,23 @@ data_layer_start() {
 
   log "starting the data layer (postgres clickhouse redis minio)"
 
-  # Compose interpolates the base file's `${NAME:?message}` references before it
-  # merges in docker-compose.dev.yml, and a reference it cannot satisfy aborts
-  # the whole command:
+  # The production compose file contains `${NAME:?message}` references for
+  # release credentials. It is intentionally not loaded here: Compose
+  # interpolates files before applying overlays, so a reference it cannot
+  # satisfy would abort the whole command before any container exists:
   #
   #   error while interpolating x-app-env.SOYMUTDB_S3_ACCESS_KEY:
   #   required variable MINIO_ROOT_USER is missing a value: MINIO_ROOT_USER is
   #   required
   #
-  # `docker-compose.dev.yml` supplies development defaults for the four services
-  # below (asserted by scripts/test_development_compose_contract.py), so this
-  # call needs nothing exported. The defaults are applied here anyway, because
+  # `docker-compose.preview.yml` supplies development defaults for the data
+  # services (asserted by scripts/test_development_compose_contract.py), so this
+  # call needs no production credentials. The defaults are applied here anyway:
   # `--env-file /dev/null` above makes this script the only thing that can put a
-  # value in the environment, and the base file's `${POSTGRES_PASSWORD:?…}`-style
-  # references sit on services the operator will start by hand from the same
-  # shell once the preview is up.
+  # value in the environment, and the operator who re-runs the printed
+  # `docker compose ... -f docker-compose.preview.yml` command from the same
+  # shell later must resolve the same `POSTGRES_PASSWORD`-style defaults rather
+  # than a second, drifting value.
   #
   # An operator-provided value still wins: a real credential in the environment
   # is authoritative and is never overwritten. Empty counts as unset, because an
@@ -273,42 +276,87 @@ data_layer_start() {
   set_default REDIS_PASSWORD soymutdb_dev_password
   set_default MINIO_ROOT_USER soymutdb_dev
   set_default MINIO_ROOT_PASSWORD soymutdb_dev_password
+
+  # Build the connection string from the SAME POSTGRES_PASSWORD the Compose
+  # process just received. The preview file interpolates
+  # `${POSTGRES_PASSWORD:-soymutdb_dev_password}`, so hardcoding the fallback
+  # here would point the API at a different password whenever the operator
+  # supplied one, and every request would fail authentication.
+  #
+  # The userinfo component of a URL reserves `: / ? # [ ] @`, so a password
+  # containing any of them must be percent-encoded or the URL parses into the
+  # wrong host/port. Encode every byte outside the RFC 3986 unreserved set;
+  # `LC_ALL=C` makes the loop walk bytes, so a multi-byte password is encoded
+  # once instead of being indexed as characters.
+  urlencode() {
+    local value="$1" i char encoded=""
+    for (( i = 0; i < ${#value}; i++ )); do
+      char="${value:i:1}"
+      case "${char}" in
+        [A-Za-z0-9._~-]) encoded+="${char}" ;;
+        *)
+          printf -v char '%%%02X' "'${char}"
+          encoded+="${char}"
+          ;;
+      esac
+    done
+    printf '%s' "${encoded}"
+  }
+  local postgres_password_encoded
+  postgres_password_encoded="$(LC_ALL=C urlencode "${POSTGRES_PASSWORD}")"
+
+  local data_services=(postgres clickhouse redis minio)
+
+  # Print the state and the tail of the logs for every service the preview was
+  # asked to start. Reporting only "did not become healthy" hides which of the
+  # four stores is actually broken.
+  report_data_layer_failure() {
+    local service
+    log "the data layer did not become ready; per-service state follows"
+    compose_cmd ps >&2 || true
+    for service in "${data_services[@]}"; do
+      log "logs for ${service} (tail 40):"
+      compose_cmd logs --tail 40 "${service}" >&2 || true
+    done
+  }
+
   # Only the services a portal actually needs. The workers, Celery and the full
   # extended profile stay opt-in from the terminal, so bringing up a preview
   # cannot pull half the stack.
   #
-  # `--wait` is NOT used. It waits on every started container, and
-  # `minio-init` -- a one-shot bucket creator required by `--profile core` --
-  # exits 0 by design, which is the classic "dependency failed to start:
-  # container ... exited (0)" that would make every preview report failure on a
-  # healthy stack. Readiness is therefore asserted on the port that matters,
-  # with a bounded retry, exactly the way the frontend wait works.
-  if ! compose_cmd --profile core up -d postgres clickhouse redis minio; then
-    log "the data layer did not start; container state follows"
-    compose_cmd ps >&2 || true
+  # `--wait` is NOT used. Its exit-0 one-shot-container trap (`minio-init` in the
+  # production topology) does not exist in the data-only preview file, but this
+  # script still asserts readiness on the service healthchecks, with a bounded
+  # retry, exactly the way the frontend wait works.
+  if ! compose_cmd --profile core up -d "${data_services[@]}"; then
+    report_data_layer_failure
     return 1
   fi
 
-  local attempt
+  # Every store the API talks to must be healthy, not just PostgreSQL: a portal
+  # whose ClickHouse/Redis/MinIO is still starting answers liveness and then
+  # fails every data-backed request. Poll the four together so "ready" has one
+  # definition. Bounded to 45 attempts x 2s = 90s.
+  local attempt service health all_healthy
   for attempt in $(seq 1 45); do
-    if (exec 3<>"/dev/tcp/127.0.0.1/5432") 2>/dev/null; then
-      # The TCP accept proves the listener; the compose healthcheck proves the
-      # server. A container that is up but unwell would let the API start and
-      # then fail on its first query, so require both.
-      if compose_cmd ps --format '{{.Health}}' postgres 2>/dev/null | grep -qx healthy; then
-        # The compose file is the single source of the development credentials,
-        # so no second, drifting copy of the connection string is needed here.
-        export SOYMUTDB_DATABASE_URL="postgresql+asyncpg://soymutdb:soymutdb_dev_password@127.0.0.1:5432/soymutdb"
-        log "data layer ready; SOYMUTDB_DATABASE_URL points at the local PostgreSQL"
-        return 0
+    all_healthy=1
+    for service in "${data_services[@]}"; do
+      health="$(compose_cmd ps --format '{{.Health}}' "${service}" 2>/dev/null | tr -d '[:space:]')"
+      if [[ "${health}" != "healthy" ]]; then
+        all_healthy=0
+        break
       fi
+    done
+    if [[ "${all_healthy}" == "1" ]]; then
+      export SOYMUTDB_DATABASE_URL="postgresql+asyncpg://soymutdb:${postgres_password_encoded}@127.0.0.1:5432/soymutdb"
+      log "data layer ready (postgres clickhouse redis minio healthy); SOYMUTDB_DATABASE_URL points at the local PostgreSQL"
+      return 0
     fi
     sleep 2
   done
 
-  log "PostgreSQL did not become healthy within 90s; container state follows"
-  compose_cmd ps >&2 || true
-  compose_cmd logs --tail 40 postgres >&2 || true
+  log "the data layer did not become healthy within 90s"
+  report_data_layer_failure
   return 1
 }
 
@@ -334,7 +382,7 @@ SoyMutDB cloud development environment is ready (mode: ${MODE}).
   public portal     pnpm dev:web
   admin console     pnpm dev:admin
   api (FastAPI)     cd apps/api && uvicorn app.main:app --reload --port ${API_PORT}
-  data layer        docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.dev.yml \\
+  data layer        docker compose --project-directory ${REPO_ROOT} --env-file /dev/null -f docker-compose.preview.yml \\
                     --profile core up -d postgres clickhouse redis minio
   delivery jobs     pnpm ci:jobs
   acceptance        bash scripts/acceptance.sh
@@ -438,7 +486,7 @@ case "${MODE}" in
     # environment, so fail with an actionable message instead of a stack trace.
     if [[ -z "${SOYMUTDB_DATABASE_URL:-}" ]]; then
       log "SOYMUTDB_DATABASE_URL is required for api-preview; start the data layer first:"
-      log "  docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.dev.yml --profile core up -d postgres clickhouse redis minio"
+      log "  docker compose --project-directory ${REPO_ROOT} --env-file /dev/null -f docker-compose.preview.yml --profile core up -d postgres clickhouse redis minio"
       exit 1
     fi
     launch_background api "${API_PORT}" \

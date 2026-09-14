@@ -11,6 +11,26 @@ from compose_loader import ComposeLoader
 ROOT = Path(__file__).resolve().parents[1]
 BASE = ROOT / "docker-compose.yml"
 DEV = ROOT / "docker-compose.dev.yml"
+PREVIEW = ROOT / "docker-compose.preview.yml"
+
+# The official upstream MinIO images are published on quay.io. Docker Hub's
+# `minio/minio` and `minio/mc` repositories return 404, and the obsolete
+# `RELEASE.2024-01-01T00-00-00Z` tag must not be reintroduced. The pinned
+# official quay.io tags were verified by the primary agent against the quay.io
+# registry with HEAD requests:
+#   * server: registry HEAD HTTP 200, index digest beginning sha256:1dce27c
+#     (ENTRYPOINT /usr/bin/docker-entrypoint.sh, CMD ["minio"], VOLUME /data,
+#     and a bundled curl for the healthcheck).
+#   * client: registry HEAD HTTP 200, index digest beginning sha256:993e8c
+#     (ENTRYPOINT /usr/bin/mc, the binary path the init job invokes).
+# The assertions below are static and never make network calls.
+MINIO_SERVER_TAG = "RELEASE.2024-12-18T13-15-44Z"
+MINIO_CLIENT_TAG = "RELEASE.2024-11-21T17-21-54Z"
+MINIO_SERVER_IMAGE = f"quay.io/minio/minio:{MINIO_SERVER_TAG}"
+MINIO_CLIENT_IMAGE = f"quay.io/minio/mc:{MINIO_CLIENT_TAG}"
+OBSOLETE_MINIO_TAG = "RELEASE.2024-01-01T00-00-00Z"
+COMMUNITY_FORK_REPOSITORIES = ("pgsty/minio", "pgsty/mc")
+POSTGRES_18_VOLUME_TARGET = "/var/lib/postgresql"
 
 # The data layer `scripts/start-cloud-dev.sh preview` actually starts. `services:`
 # is additive in Compose, so a service outside this set keeps the production
@@ -22,6 +42,25 @@ def _load(path: Path) -> dict:
     # One loader for every Compose document in the repository; it knows the
     # Compose-only `!reset` / `!override` tags (scripts/compose_loader.py).
     return yaml.load(path.read_text(encoding="utf-8"), Loader=ComposeLoader)
+
+
+def _volume_targets(service: dict) -> list[str]:
+    """Container mount targets declared by a service's `volumes:` list.
+
+    Reads the parsed Compose structure, so explanatory comments that mention a
+    mount path are never mistaken for an actual mount. Both the short string
+    form (`name:/target[:mode]`) and the long mapping form (`{target: ...}`)
+    are understood.
+    """
+    targets: list[str] = []
+    for volume in service.get("volumes") or []:
+        if isinstance(volume, str):
+            parts = volume.split(":")
+            if len(parts) >= 2:
+                targets.append(parts[1])
+        elif isinstance(volume, dict) and "target" in volume:
+            targets.append(volume["target"])
+    return targets
 
 
 def _required_variables(value: object) -> set[str]:
@@ -259,6 +298,137 @@ def test_development_compose_is_an_overlay_for_the_production_topology() -> None
     assert set(dev["services"]) - set(base["services"]) == {"web", "admin"}
 
 
+def test_cloud_preview_data_layer_is_standalone_and_data_only() -> None:
+    """CNB preview must never interpolate the production release topology.
+
+    Compose interpolates every input file separately, before it merges them, so
+    loading `docker-compose.yml` (even with an overlay that discards the
+    `image:` slots) would demand `API_IMAGE_REF`, `SOYMUTDB_MCP_API_TOKEN`,
+    `GRAFANA_PASSWORD` and the store credentials for a command that starts only
+    PostgreSQL. The preview file must therefore be a standalone data-only
+    topology, and `start-cloud-dev.sh preview` must load it alone.
+    """
+    preview = _load(PREVIEW)
+    preview_text = PREVIEW.read_text(encoding="utf-8")
+
+    assert set(preview["services"]) == {
+        "postgres",
+        "clickhouse",
+        "redis",
+        "redis-celery",
+        "minio",
+    }
+    # 1. No `${NAME:?…}` anywhere in the preview document, so a bare shell with
+    #    `--env-file /dev/null` can interpolate it.
+    assert not _demanded_variables(yaml.compose(preview_text))
+    # 2. Data-only: nothing references a release image, and nothing builds a
+    #    local one.
+    assert "_IMAGE_REF" not in preview_text
+    for service_name, service in preview["services"].items():
+        assert "build" not in service, service_name
+    # 3. The disposable development defaults live in this file (a `${NAME:-…}`
+    #    fallback), so the preview does not need production credentials at all.
+    for variable in (
+        "POSTGRES_PASSWORD",
+        "CLICKHOUSE_PASSWORD",
+        "REDIS_PASSWORD",
+        "MINIO_ROOT_USER",
+        "MINIO_ROOT_PASSWORD",
+    ):
+        assert f"${{{variable}:-" in preview_text, variable
+
+    # 4. The command the preview actually runs loads exactly this file.
+    start_script = (ROOT / "scripts/start-cloud-dev.sh").read_text(encoding="utf-8")
+    match = re.search(
+        r"^compose_cmd\(\) \{(?P<body>.*?)^\}",
+        start_script,
+        flags=re.DOTALL | re.MULTILINE,
+    )
+    assert match is not None, "start-cloud-dev.sh no longer defines compose_cmd()"
+    body = match.group("body")
+    assert '-f "${REPO_ROOT}/docker-compose.preview.yml"' in body
+    assert "--project-directory" in body
+    assert "--env-file /dev/null" in body
+    assert "docker-compose.yml" not in body
+    assert "docker-compose.dev.yml" not in body
+
+
+def test_compose_pins_the_confirmed_quayio_minio_images() -> None:
+    """Both compose files must pin the exact official quay.io MinIO images.
+
+    Docker Hub's `minio/minio` and `minio/mc` repositories return 404, so the
+    topology pulls the official upstream images from quay.io instead. The
+    obsolete `RELEASE.2024-01-01T00-00-00Z` tag and the Docker Hub community
+    forks must not reappear. The pinned tags were verified by the primary agent
+    against the quay.io registry (server index digest sha256:1dce27c, client
+    index digest sha256:993e8c); these assertions are static and never make
+    network calls.
+    """
+    base_text = BASE.read_text(encoding="utf-8")
+    preview_text = PREVIEW.read_text(encoding="utf-8")
+    for name, text in (("docker-compose.yml", base_text), (PREVIEW.name, preview_text)):
+        assert OBSOLETE_MINIO_TAG not in text, name
+        assert MINIO_SERVER_IMAGE in text, name
+        for fork in COMMUNITY_FORK_REPOSITORIES:
+            assert fork not in text, (name, fork)
+    assert MINIO_CLIENT_IMAGE in base_text, "docker-compose.yml"
+
+    base_services = _load(BASE)["services"]
+    assert base_services["minio"]["image"] == MINIO_SERVER_IMAGE
+    assert base_services["minio-init"]["image"] == MINIO_CLIENT_IMAGE
+
+    preview_services = _load(PREVIEW)["services"]
+    assert preview_services["minio"]["image"] == MINIO_SERVER_IMAGE
+
+
+def test_postgres_images_mount_the_postgresql_18_volume_root() -> None:
+    """PostgreSQL 18 declares its VOLUME at /var/lib/postgresql, not .../data.
+
+    The official image sets `ENV PGDATA /var/lib/postgresql/18/docker` and
+    `VOLUME /var/lib/postgresql` (docker-library/postgres, 18/alpine). Mounting
+    the pre-18 `/var/lib/postgresql/data` leaves the real PGDATA on the
+    anonymous container layer, so `docker compose down`/recreate loses the
+    database while `psql` inside the container looks untouched.
+    """
+    for path in (BASE, PREVIEW):
+        service = _load(path)["services"]["postgres"]
+        targets = _volume_targets(service)
+        assert POSTGRES_18_VOLUME_TARGET in targets, (path.name, targets)
+        assert f"{POSTGRES_18_VOLUME_TARGET}/data" not in targets, (
+            path.name,
+            targets,
+        )
+
+
+def test_production_compose_has_no_duplicate_mapping_keys() -> None:
+    """Docker Compose rejects duplicate YAML keys even when PyYAML accepts them.
+
+    Every application service used to carry two `<<:` merge keys: the deleted
+    in-file `*service-local-*` local-build anchor plus `*app-runtime`. A
+    permissive parser merges both, so the base `image:` silently acquired the
+    anchor's `!reset` value, while Compose's own parser rejects the document.
+    There must now be exactly one merge key per mapping, and the production file
+    must carry no `!reset` / `!override` (those belong to the explicit local
+    override).
+    """
+    document = yaml.compose(BASE.read_text(encoding="utf-8"))
+    assert isinstance(document, yaml.MappingNode)
+
+    def walk(node: yaml.Node) -> None:
+        assert node.tag not in {"!reset", "!override"}, node.tag
+        if isinstance(node, yaml.MappingNode):
+            keys = [key.value for key, _ in node.value]
+            assert len(keys) == len(set(keys)), f"duplicate YAML keys: {keys}"
+            for key, value in node.value:
+                walk(key)
+                walk(value)
+        elif isinstance(node, yaml.SequenceNode):
+            for item in node.value:
+                walk(item)
+
+    walk(document)
+
+
 def test_development_overlay_replaces_production_image_requirements() -> None:
     dev_services = _load(DEV)["services"]
 
@@ -337,12 +507,11 @@ def test_development_stack_demands_nothing_from_the_environment() -> None:
 
     # 1. The production topology stays fail-closed.
     assert _required_variables(base), "the production file must require credentials"
-    # The base file uses `!reset` only for the local-build override anchors, and
-    # those tags sit on an x- key the production stack never merges: every
-    # `${…:?…}` requirement is still present and still fires. Assert against the
-    # requirements themselves rather than the presence of the tag — the previous
-    # form ("no !reset anywhere in the base file") was a proxy that would have
-    # failed here without any production behaviour changing.
+    # The base file no longer carries a local-build override (that moved to
+    # docker-compose.local.yml), so every `${…:?…}` requirement is present and
+    # still fires. Assert against the requirements themselves rather than the
+    # absence of a tag: "no !reset anywhere in the base file" was a proxy that
+    # could fail without any production behaviour changing.
     assert _required_variables(base) >= {
         "POSTGRES_PASSWORD",
         "CLICKHOUSE_PASSWORD",
@@ -350,18 +519,6 @@ def test_development_stack_demands_nothing_from_the_environment() -> None:
         "MINIO_ROOT_USER",
         "MINIO_ROOT_PASSWORD",
     }
-    for local_anchor in (
-        "x-service-local-api",
-        "x-service-local-worker",
-        "x-service-local-mcp",
-        "x-service-local-migrate",
-        "x-service-local-migrate-clickhouse",
-    ):
-        assert local_anchor not in DEV.read_text(encoding="utf-8"), (
-            "the development overlay must not merge the production local-build "
-            "anchors: it replaces `image`/`build` per service instead"
-        )
-
     # 2. The overlay carries no requirement of its own.
     assert not _demanded_variables(yaml.compose(DEV.read_text(encoding="utf-8"))), (
         "docker-compose.dev.yml demands variables of its own; a development "
