@@ -1,6 +1,11 @@
 @import "tailwindcss";
-@import "@fontsource/jetbrains-mono/latin-400.css";
-@import "@fontsource/jetbrains-mono/latin-500.css";
+
+/* NOTE: @fontsource/* 字体 CSS 已移至 src/main.tsx 以 JS import 方式引入。
+   Tailwind v4 postcss 内联 node_modules CSS 时会错误改写其内部
+   url(./files/...) 相对路径：产物 CSS 仍写 `./files/jetbrains-mono-*.woff2`，
+   而 assets/files/ 从未被 emit → 管理端等宽字体 404。
+   改为 JS import 后由 Vite 按各 CSS 模块自身路径解析，字体正常打包。
+   （web 端同一问题、同一修法，见 apps/web/src/index.css 的同名注释。） */
 
 /* AntD 6 layer order (docs/design/upgrade-plan.md §二, oracle R1) — antd
    styles sit below Tailwind's theme/design/base/components/utilities layers
