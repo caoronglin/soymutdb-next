@@ -56,6 +56,13 @@ def _split_statements(text):
                 current = []
             else:
                 current.append(char)
+        # Preserve the line boundary. Concatenating only the characters fused
+        # the last token of a line to the first token of the next one, which is
+        # how `TTL timestamp + INTERVAL 2 YEAR` followed by `SETTINGS …` reached
+        # ClickHouse as the identifier `YEARSETTINGS`: the server then failed at
+        # the token after it (`index_granularity`) with "Expected one of:
+        # NANOSECOND, …, end of query", which points at the wrong place.
+        current.append("\n")
     statement = "".join(current).strip()
     if statement:
         statements.append(statement)
