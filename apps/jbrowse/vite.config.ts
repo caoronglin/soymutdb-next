@@ -2,6 +2,7 @@ import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { jbrowseDeploymentHeaders } from "./scripts/inject-headers-origins";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
@@ -36,9 +37,26 @@ export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, __dirname, "");
     const apiProxyTarget = env.VITE_API_BASE_URL?.trim() || "http://localhost:8000";
 
+    // `_headers` ships literal placeholder origins, so the built artifact is
+    // only usable after this plugin substitutes the real ones. Production must
+    // name every origin; demo/standard builds may use the same `.test`/
+    // `.invalid` origins the other frontend gates use, so the shared
+    // verification script keeps working without network access.
+    const deploymentMode = (env.VITE_DEPLOYMENT_MODE?.trim().toLowerCase() || "standard");
+    const allowPlaceholderOrigins = deploymentMode !== "production";
+
     return {
         base: env.VITE_BASE_URL?.trim() || "/",
-        plugins: [react()],
+        plugins: [
+            react(),
+            jbrowseDeploymentHeaders({
+                apiBaseUrl: env.VITE_API_BASE_URL,
+                dataUrl: env.VITE_JBROWSE_DATA_URL,
+                portalOrigin: env.SOYMUTDB_PORTAL_ORIGIN,
+                adminOrigin: env.SOYMUTDB_ADMIN_ORIGIN,
+                allowPlaceholderOrigins,
+            }),
+        ],
         resolve: {
             alias: {
                 "@": resolve(__dirname, "src"),

@@ -12,17 +12,28 @@
 # Security headers — applied to every response (browsers ignore CSP on
 # non-HTML responses, so applying it to assets is harmless).
 # HSTS: Cloudflare Pages always serves HTTPS; max-age without
-# includeSubDomains so the header never forces HTTPS on sibling subdomains
-# (e.g. api.example.com, staging) that are not Cloudflare-fronted.
-# frame-ancestors: this app is designed to be embedded by the portal and the
-# admin console, so those origins are allowed (REPLACE the placeholders).
+# includeSubDomains so the header never forces HTTPS on sibling subdomains that
+# are not Cloudflare-fronted.
+#
+# The CSP below is the PRE-BUILD value and is same-origin only. The build
+# rewrites it (apps/jbrowse/scripts/inject-headers-origins.ts, run from
+# vite.config.ts) with:
+#
+#   connect-src     + VITE_API_BASE_URL  (and VITE_JBROWSE_DATA_URL when it is a
+#                                        different origin)
+#   frame-ancestors + SOYMUTDB_PORTAL_ORIGIN (+ SOYMUTDB_ADMIN_ORIGIN)
+#
+# It is written as a valid policy rather than as placeholder domains, because a
+# partial build must never publish a placeholder host into a live artifact.
+# scripts/check_artifact_headers.py fails any tree that still carries one, or
+# that lacks a real connect-src origin.
 # ---------------------------------------------------------------------------
 /*
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
-  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
   Strict-Transport-Security: max-age=31536000
-  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://api.example.com; worker-src 'self' blob:; base-uri 'self'; form-action 'self'; object-src 'none'; frame-ancestors 'self' https://portal.example.com https://admin.example.com
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; base-uri 'self'; form-action 'self'; object-src 'none'; frame-ancestors 'self'
 
 # ---------------------------------------------------------------------------
 # Hashed build assets (Vite emits everything under /assets/ with a content
@@ -41,9 +52,6 @@
   Cache-Control: public, max-age=0, must-revalidate
 
 # ---------------------------------------------------------------------------
-# Placeholder domains to replace before going live (see deploy/cloudflare.md):
-#   https://api.example.com      -> production API origin (auth + data plane)
-#   https://portal.example.com   -> portal origin allowed to embed this app
-#   https://admin.example.com    -> admin console origin allowed to embed
-# Preview deployments: replace with the STAGING origins.
+# Origins are injected at build time; see the header block above and
+# deploy/cloudflare.md. Nothing to replace by hand in this file.
 # ---------------------------------------------------------------------------
