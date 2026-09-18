@@ -14,6 +14,14 @@ node_modules/
 # ---------------------------------------------------------------------------
 dist/
 build/
+# `build/` above matches at any depth, so it silently swallowed
+# packages/shared/src/build/ — the shared CSP composer and inline-script hasher
+# that apps/web/scripts/finalize-csp.ts, apps/jbrowse/scripts/inject-headers-origins.ts
+# and apps/web/src/lib/deployment.ts all import. The files existed on the
+# authoring machine, so every local build passed, while a clean clone had no
+# source for @soymutdb/shared/build/* and could not build either app. Same
+# failure class as .cnb/env/ below; re-include the tracked source directory.
+!packages/shared/src/build/
 .turbo/
 target/
 *.tsbuildinfo

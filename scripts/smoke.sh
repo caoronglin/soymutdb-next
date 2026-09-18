@@ -139,6 +139,11 @@ smoke_contracts() {
   # mismatch produces a build that differs between two machines on the same
   # commit, which is exactly what a contract layer exists to catch.
   "${PYTHON_BIN}" scripts/check-toolchain-pins.py || rc=$?
+  # Workspace exports are checked the same way, and for the same reason: a
+  # gitignore pattern that swallows an imported source directory (the `build/`
+  # rule did exactly that to packages/shared/src/build/) leaves every local
+  # build green while a clean clone has no source for the import at all.
+  "${PYTHON_BIN}" scripts/check_workspace_exports.py || rc=$?
   "${PYTHON_BIN}" -m pytest "${tests[@]}" -q || rc=$?
   echo
   echo "-- environment-bound contract suites (reported, not gating here) --"
