@@ -30,6 +30,9 @@ FROM nginx:1.27-alpine AS runtime
 RUN apk upgrade --no-cache
 COPY --from=build /app/apps/jbrowse/dist /usr/share/nginx/html
 COPY apps/jbrowse/nginx.conf /etc/nginx/conf.d/default.conf
+# Shared security-header fragment; the config includes it at server and
+# location level, so it must be present in the image.
+COPY infra/nginx/conf.d/security-headers.inc /etc/nginx/conf.d/security-headers.inc
 EXPOSE 80
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
     CMD wget --spider -q http://localhost:80/ || exit 1

@@ -12,9 +12,12 @@ These checks need no Docker daemon: they read the Dockerfiles and the list.
 
 from __future__ import annotations
 
+import gzip
+import os
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -355,3 +358,58 @@ def test_compose_loader_understands_platform_tags() -> None:
     ):
         text = (ROOT / relative).read_text(encoding="utf-8")
         assert "compose_loader import" in text, relative
+
+
+def test_precompress_refreshes_stale_archives(tmp_path: Path) -> None:
+    """`precompress.sh` must refresh a stale .gz and stay safe to re-run.
+
+    `gzip -k` refuses to overwrite an existing .gz ("already exists; not
+    overwritten") and leaves the OLD body in place, so a changed source kept its
+    previous compressed payload — which nginx gzip_static then served. Fonts are
+    the case that matters most, because .woff/.woff2/.ttf are compressed only
+    here, never by the build chain.
+
+    Note on severity: this is a staleness bug, not a build breaker. The script
+    uses `-exec … \;`, and only `-exec … +` propagates a command failure, so a
+    refusal here could not abort an image build. An earlier revision of this
+    plan claimed otherwise; the probe that "proved" it had used `+`.
+
+    No Docker daemon is needed: the script is plain POSIX sh.
+    """
+    script = ROOT / "infra" / "docker" / "precompress.sh"
+    assert script.is_file()
+
+    payload = b"console.log('x');\n" * 200
+    source = tmp_path / "app.js"
+    archive = tmp_path / "app.js.gz"
+    source.write_bytes(payload)
+
+    def run() -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["sh", str(script), str(tmp_path)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    first = run()
+    assert first.returncode == 0, first.stderr
+    assert archive.is_file()
+    assert gzip.decompress(archive.read_bytes()) == payload
+
+    # Re-running on an up-to-date tree must be a no-op, not a warning storm.
+    second = run()
+    assert second.returncode == 0, second.stderr
+    assert gzip.decompress(archive.read_bytes()) == payload
+
+    # The regression: a .gz older than its source must be replaced, not left
+    # stale (`gzip -k` alone would keep the old body and print a warning).
+    os.utime(archive, (1_000_000, 1_000_000))
+    updated = payload + b"// changed\n"
+    source.write_bytes(updated)
+    now = time.time()
+    os.utime(source, (now, now))
+
+    third = run()
+    assert third.returncode == 0, third.stderr
+    assert gzip.decompress(archive.read_bytes()) == updated

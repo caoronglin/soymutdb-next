@@ -35,10 +35,15 @@ COPY . .
 
 ENV NODE_ENV=production
 
+# Container path only: nginx gzip_static serves the .gz siblings.
+ENV SOYMUTDB_EMIT_GZ=1
+
 RUN pnpm --filter @soymutdb/admin build
 
 # Pre-compress static assets with gzip for gzip_static support.
 # Shared script (infra/docker/precompress.sh) is used by both web and admin.
+# Idempotent; the admin build chain emits no .gz of its own, so this pass is
+# what produces them.
 COPY infra/docker/precompress.sh /tmp/precompress.sh
 RUN sh /tmp/precompress.sh apps/admin/dist
 
@@ -49,6 +54,9 @@ RUN rm /etc/nginx/conf.d/default.conf
 
 COPY --from=builder /app/apps/admin/dist /usr/share/nginx/html
 COPY infra/docker/admin-nginx.conf /etc/nginx/conf.d/default.conf
+# Admin uses its own stricter fragment (DENY framing, no-referrer,
+# script-src 'self'); see infra/nginx/conf.d/security-headers-admin.inc.
+COPY infra/nginx/conf.d/security-headers-admin.inc /etc/nginx/conf.d/security-headers-admin.inc
 
 # NOTE: No port mapping to host in docker-compose.yml.
 # Admin is only accessible via the nginx reverse proxy at /admin/
