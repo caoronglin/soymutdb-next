@@ -27,8 +27,17 @@ def _production_values() -> dict[str, object]:
 
 @pytest.mark.parametrize(
     "missing_field",
-    ["database_url", "jwt_secret", "analytics_ip_salt", "redis_url", "s3_endpoint", "s3_access_key", "s3_secret_key",
-     "admin_password", "admin_email"],
+    [
+        "database_url",
+        "jwt_secret",
+        "analytics_ip_salt",
+        "redis_url",
+        "s3_endpoint",
+        "s3_access_key",
+        "s3_secret_key",
+        "admin_password",
+        "admin_email",
+    ],
 )
 def test_prod_rejects_missing_required_infrastructure(missing_field: str) -> None:
     """Production settings fail closed when any required value is blank."""
