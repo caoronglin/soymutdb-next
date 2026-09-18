@@ -74,6 +74,17 @@ def _variant_ddl_columns() -> set[str]:
     return set(re.findall(r"^\s{4}([a-z_]+)\s+", body.group(1), re.M))
 
 
+def _strip_line_comments(sql: str) -> str:
+    """Drop `--` line comments so prose cannot delimit a statement.
+
+    `init.sql` documents `ip_hash` as "-- salted SHA-256; raw IP never stored";
+    that semicolon is inside a comment but ends a naive statement match anyway.
+    The production splitter in `deploy/scripts/migrate_clickhouse_lib.py` strips
+    line comments for the same reason, so the guard here agrees with it.
+    """
+    return "\n".join(line.split("--", 1)[0] for line in sql.splitlines())
+
+
 def _table_columns(sql: str, table: str) -> dict[str, str]:
     body = re.search(
         rf"CREATE TABLE(?: IF NOT EXISTS)? {table} \((.*?)\) ENGINE",
@@ -181,3 +192,44 @@ def test_upgrade_declares_the_same_canonical_target_columns() -> None:
         assert re.search(rf"CREATE TABLE {table}\b", upgrade)
         assert upgrade.index(f"DROP TABLE IF EXISTS {table}") < upgrade.index(f"INSERT INTO {table}")
     assert "DROP TABLE IF EXISTS variant_facts_legacy" not in upgrade
+
+
+def test_ttl_expressions_are_date_time_typed() -> None:
+    """A TTL expression must resolve to Date/DateTime, never to DateTime64.
+
+    ClickHouse rejects the table with a server-side error rather than a syntax
+    error, so nothing that only parses the DDL catches it:
+
+        Code: 450. DB::Exception: TTL expression result column should have
+        DateTime or Date type, but has DateTime64(3, 'UTC').
+        (BAD_TTL_EXPRESSION)
+
+    Both tables in this schema store ``timestamp`` as ``DateTime64(3, 'UTC')``
+    for millisecond precision, so their TTLs wrap it in ``toDateTime()``: the
+    stored column keeps its precision and the TTL expression has the type the
+    server requires. Asserted on the DDL text because the failure only appears
+    against a live server, which the fast contract layer does not have.
+    """
+    for name, path in (("init.sql", DDL), ("upgrade", UPGRADE)):
+        # Comments are stripped before any statement is delimited: `init.sql`
+        # documents `ip_hash` as "-- salted SHA-256; raw IP never stored", and
+        # that semicolon in prose otherwise ends the statement eleven lines
+        # before its TTL. The production splitter strips line comments for the
+        # same reason.
+        sql = _strip_line_comments(path.read_text())
+        declared = _table_columns(path.read_text(), "analytics_events")
+        assert declared.get("timestamp", "").startswith("DateTime64"), (
+            f"{name}: analytics_events.timestamp is expected to stay DateTime64; "
+            "if it changed to DateTime this guard needs revisiting"
+        )
+        for table in ("analytics_events", "web_vitals"):
+            statement = re.search(rf"CREATE TABLE IF NOT EXISTS {table}\b(.*?);", sql, re.S)
+            assert statement, f"{name}: {table} DDL is missing"
+            ttl = re.search(r"^TTL\s+(.+)$", statement.group(1), re.M)
+            assert ttl, f"{name}: {table} declares no TTL"
+            expression = ttl.group(1)
+            assert expression.startswith("toDateTime("), (
+                f"{name}: {table} TTL expression {expression!r} must wrap the "
+                "DateTime64 column in toDateTime(); ClickHouse rejects a bare "
+                "DateTime64 TTL expression with BAD_TTL_EXPRESSION"
+            )

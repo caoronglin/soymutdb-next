@@ -145,7 +145,7 @@ CREATE TABLE IF NOT EXISTS analytics_events (
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(timestamp)
 ORDER BY (timestamp, event_type, session_id)
-TTL timestamp + INTERVAL 2 YEAR
+TTL toDateTime(timestamp) + INTERVAL 2 YEAR
 SETTINGS index_granularity = 8192;
 
 CREATE TABLE IF NOT EXISTS web_vitals (
@@ -160,5 +160,5 @@ CREATE TABLE IF NOT EXISTS web_vitals (
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(timestamp)
 ORDER BY (metric_name, toDate(timestamp), session_id)
-TTL timestamp + INTERVAL 90 DAY
+TTL toDateTime(timestamp) + INTERVAL 90 DAY
 SETTINGS index_granularity = 8192;
