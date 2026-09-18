@@ -46,8 +46,14 @@ echo "1) build web application"
 pnpm --filter @soymutdb/web build
 
 echo "2) build JBrowse application"
+# The JBrowse `_headers` injector needs the API origin, the data origin, and the
+# portal/admin origins that are allowed to embed the app. Without them the
+# rewritten CSP would be same-origin only and every API call and embed on the
+# published site would be blocked by the app's own policy.
 VITE_BASE_URL="${PAGES_BASE_PATH}soymutdb-jbrowse/" \
   VITE_JBROWSE_DATA_URL="${PAGES_BASE_PATH}jbrowse-data" \
+  SOYMUTDB_PORTAL_ORIGIN="${SOYMUTDB_PORTAL_ORIGIN:-${SITE_ORIGIN}}" \
+  SOYMUTDB_ADMIN_ORIGIN="${SOYMUTDB_ADMIN_ORIGIN:-${SITE_ORIGIN}${PAGES_BASE_PATH}admin/}" \
   pnpm --filter @soymutdb/jbrowse build
 
 echo "3) assemble ${PAGES_OUTPUT_DIR}"

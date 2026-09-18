@@ -7,7 +7,8 @@
  *   2. CACHE_VERSION = 构建时间戳 + 清单内容 hash（产物内容变化 → 版本号轮换）
  *   3. 读取 public/sw.js 模板，替换 __PRECACHE_MANIFEST__ / __CACHE_VERSION__
  *   4. 输出 dist/sw.js，并同步刷新 dist/sw.js.gz（gzip-compress 在更早步骤运行，
- *      它压缩的是未替换占位符的模板版本，这里必须覆盖，避免部署 stale 的 .gz）
+ *      它压缩的是未替换占位符的模板版本，这里必须覆盖，避免部署 stale 的 .gz）。
+ *      .gz 仅在 SOYMUTDB_EMIT_GZ=1（容器路径）时生成；其它路径只删除遗留 .gz。
  *
  * 路径约定：清单使用相对路径（assets/...），SW 运行时以 registration.scope 为
  * 基准解析，因此 gh-pages 子路径部署（/soymutdb-next/）无需 vite base 配置。
@@ -31,6 +32,8 @@ const DIST_DIR = resolve(ROOT, process.env.SOYMUTDB_DIST_DIR ?? "dist");
 const ASSETS_DIR = join(DIST_DIR, "assets");
 const OUT_FILE = join(DIST_DIR, "sw.js");
 const OUT_GZ = `${OUT_FILE}.gz`;
+// 仅容器路径产出 .gz（nginx gzip_static）；Pages/gh-pages 不读取 .gz。
+const EMIT_GZ = process.env.SOYMUTDB_EMIT_GZ === "1";
 
 /* ------------------------------------------------------------------ */
 /*  Main                                                              */
@@ -66,8 +69,10 @@ function main() {
 
     // 4) 输出 dist/sw.js + 同步 .gz（与 gzip-compress 相同规则：≥1KB 且压缩变小）
     writeFileSync(OUT_FILE, sw, "utf8");
-    rmSync(OUT_GZ, { force: true }); // 旧 .gz 是模板版本，必须删除/重生成
-    if (Buffer.byteLength(sw) >= 1024) {
+    // 旧 .gz 是模板版本，必须删除/重生成；不产出 .gz 时也必须删除，
+    // 否则 gzip_static 会把上一次容器构建的 sw.js.gz 当成当前 SW 发出去。
+    rmSync(OUT_GZ, { force: true });
+    if (EMIT_GZ && Buffer.byteLength(sw) >= 1024) {
         const gz = gzipSync(sw, { level: 9 });
         if (gz.length < Buffer.byteLength(sw)) {
             writeFileSync(OUT_GZ, gz);

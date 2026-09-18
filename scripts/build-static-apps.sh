@@ -23,6 +23,12 @@ export VITE_BASE_URL="${VITE_BASE_URL:-/}"
 export VITE_API_BASE_URL="${VITE_API_BASE_URL:-https://api.soymutdb.test}"
 export VITE_JBROWSE_BASE_URL="${VITE_JBROWSE_BASE_URL:-https://jbrowse.soymutdb.test}"
 
+# This script stands in for the container build path (it produces the tree the
+# Dockerfile.web/admin stages consume), so it opts into .gz siblings for nginx
+# gzip_static. The published Pages/gh-pages path is scripts/build-sites.ts,
+# which leaves this unset.
+export SOYMUTDB_EMIT_GZ="${SOYMUTDB_EMIT_GZ:-1}"
+
 pnpm build:web
 pnpm build:admin
 

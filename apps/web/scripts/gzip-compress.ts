@@ -12,7 +12,7 @@
  * at level 9 (maximum) since build time is not latency-sensitive.
  */
 
-import { readdirSync, statSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { readdirSync, statSync, readFileSync, writeFileSync, existsSync, rmSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { gzipSync } from "node:zlib";
 
@@ -21,6 +21,15 @@ import { gzipSync } from "node:zlib";
 /* ------------------------------------------------------------------ */
 
 const DIST_DIR = resolve(process.cwd(), process.env.SOYMUTDB_DIST_DIR ?? "dist");
+/**
+ * `.gz` siblings are only produced for the container path.
+ *
+ * They exist for nginx `gzip_static` (infra/docker/Dockerfile.{web,admin}); the
+ * Cloudflare Pages / gh-pages path does not read them and would otherwise ship
+ * a second copy of every asset. `build:sites` therefore leaves this unset and
+ * the container builds set `SOYMUTDB_EMIT_GZ=1`.
+ */
+const EMIT_GZ = process.env.SOYMUTDB_EMIT_GZ === "1";
 const COMPRESS_EXTENSIONS = new Set([
     ".html",
     ".css",
@@ -65,6 +74,19 @@ function* walk(dir: string): Generator<string> {
 function compress() {
     if (!existsSync(DIST_DIR)) {
         console.warn(`[ssg:compress] ${DIST_DIR} does not exist — nothing to compress.`);
+        return;
+    }
+
+    if (!EMIT_GZ) {
+        // Fail-safe for the Pages/gh-pages path: an artifact built earlier on the
+        // container path must not leak its .gz copies into a published tree, and
+        // a stale sw.js.gz would otherwise be picked up by gzip_static later.
+        const stale = walk(DIST_DIR).filter((filePath) => filePath.endsWith(".gz"));
+        for (const filePath of stale) rmSync(filePath, { force: true });
+        console.log(
+            `[ssg:compress] SOYMUTDB_EMIT_GZ is not 1 — skipping pre-compression` +
+                (stale.length > 0 ? ` and removed ${stale.length} stale .gz file(s).` : "."),
+        );
         return;
     }
 
