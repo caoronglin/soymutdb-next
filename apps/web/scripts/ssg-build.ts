@@ -205,11 +205,6 @@ function writeLegacyRedirect(from: string, to: string): void {
 /*  i18n data injection                                               */
 /* ------------------------------------------------------------------ */
 
-function buildI18nScript(): string {
-    // Embed minimal i18n init data so server-rendered pages show correct language.
-    // The full i18n module is loaded by the SPA bundle.
-    return `<script>window.__soymutdb = window.__soymutdb || {}; window.__soymutdb.i18nReady = true;</script>`;
-}
 
 /* ------------------------------------------------------------------ */
 /*  Main build                                                        */
@@ -259,8 +254,6 @@ async function build() {
         console.log(`[ssg-build] API is available — fetching live widget data.`);
     }
 
-    const i18nScript = buildI18nScript();
-
     for (const pageName of PAGES) {
         console.log(`[ssg-build] Building page: ${pageName}`);
 
@@ -279,7 +272,6 @@ async function build() {
             description: layout.description,
             lang: "en",
             widgetsHtml,
-            bodyScripts: i18nScript,
             canonical:
                 pageName === "index"
                     ? `${SITE_URL}/`
@@ -306,7 +298,6 @@ async function build() {
         description: indexLayout.description,
         lang: "en",
         widgetsHtml: indexWidgetHtmls.join("\n    "),
-        bodyScripts: i18nScript,
         canonical: `${SITE_URL}/`,
         robots: ROBOTS_POLICY,
         assets,

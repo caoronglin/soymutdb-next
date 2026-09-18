@@ -1,3 +1,13 @@
+/**
+ * Deployment-origin and CSP helpers shared by the Vite config, the SSG template
+ * and the release gates.
+ *
+ * The CSP is composed through `@soymutdb/shared/build/csp` so every emitter
+ * produces the same directive order and separators; see that module's header for
+ * why hand-agreement between copies was not good enough.
+ */
+import { composeCsp } from "@soymutdb/shared/build/csp";
+
 export interface DeploymentOrigins {
   apiOrigin: string;
   /** Omitted for the web-only minimal deployment, which ships no iframe app. */
@@ -100,16 +110,32 @@ export function requireDeploymentOrigin(
 }
 
 export function buildCsp(origins: DeploymentOrigins, analytics = false): string {
-  return [
-    "default-src 'self'",
-    `script-src 'self' 'unsafe-inline'${analytics ? " https://static.cloudflareinsights.com" : ""}`,
-    "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: https:",
-    "font-src 'self' data:",
-    `connect-src 'self' ${origins.apiOrigin}${analytics ? " https://cloudflareinsights.com" : ""}`,
-    `frame-src 'self'${origins.jbrowseOrigin ? ` ${origins.jbrowseOrigin}` : ""}`,
-    "base-uri 'self'", "form-action 'self'", "frame-ancestors 'self'", "object-src 'none'", "worker-src 'self' blob:",
-  ].join("; ");
+  // Composed through the shared builder so this policy, the SSG template and the
+  // `_headers` writer cannot drift in directive order or separators. The output
+  // is byte-identical to the previous hand-built array (asserted by
+  // deployment.test.ts) — the refactor is structural only.
+  return composeCsp({
+    "default-src": ["'self'"],
+    "script-src": [
+      "'self'",
+      "'unsafe-inline'",
+      ...(analytics ? ["https://static.cloudflareinsights.com"] : []),
+    ],
+    "style-src": ["'self'", "'unsafe-inline'"],
+    "img-src": ["'self'", "data:", "https:"],
+    "font-src": ["'self'", "data:"],
+    "connect-src": [
+      "'self'",
+      origins.apiOrigin,
+      ...(analytics ? ["https://cloudflareinsights.com"] : []),
+    ],
+    "frame-src": ["'self'", ...(origins.jbrowseOrigin ? [origins.jbrowseOrigin] : [])],
+    "base-uri": ["'self'"],
+    "form-action": ["'self'"],
+    "frame-ancestors": ["'self'"],
+    "object-src": ["'none'"],
+    "worker-src": ["'self'", "blob:"],
+  });
 }
 
 /**

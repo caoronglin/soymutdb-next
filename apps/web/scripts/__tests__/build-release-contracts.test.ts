@@ -145,7 +145,15 @@ describe("SSG-to-SPA ownership contract", () => {
     expect(html).toContain('<div id="ssg-content" data-render-owner="static">');
     expect(html).not.toContain('id="root"');
     expect(html).not.toContain("assets/app.js");
-    expect(html).toContain("<script>\n// Widget loader:");
+
+    // A standalone page carries no SPA entrypoint, and it must not carry the
+    // old inline widget loader either. That snippet duplicated the sanitising
+    // loader in src/lib/widget-loader.ts, which boots from main.tsx and is the
+    // only loader that runs for the supported client matrix (`target: es2022`
+    // guarantees module support). Pinning its absence keeps the inline-script
+    // surface — and therefore the CSP hash list — from growing back.
+    expect(html).not.toContain("// Widget loader:");
+    expect(html).not.toContain("__soymutdb.widgetCache");
   });
 
   it("prevents JSON-LD script breakout and escapes URL attributes", () => {

@@ -1,0 +1,71 @@
+# ============================================================================
+# SoyMutDB public portal (apps/web) — Cloudflare Pages custom headers
+# Docs: https://developers.cloudflare.com/pages/configuration/headers/
+#
+# GitHub Pages does NOT read this file. The gh-pages demo therefore serves no
+# custom headers at all; that gap is documented in
+# docs/ops/static-hosting-security.md and is one of the reasons Cloudflare Pages
+# is the production static host.
+#
+# Rules match per request path and a request inherits headers from ALL matching
+# rules, with duplicate headers comma-joined. `/*` below therefore deliberately
+# carries NO Cache-Control: it would merge with the /assets/* rule.
+# ============================================================================
+
+# ---------------------------------------------------------------------------
+# Security headers — every response.
+#
+# HSTS carries no `includeSubDomains` and no `preload`: sibling staging and API
+# subdomains are not all Cloudflare-fronted, and pinning them would make the
+# browser refuse to connect over plain HTTP to hosts this project does not
+# control. (Same reasoning as apps/admin/public/_headers.)
+#
+# There is no Cross-Origin-Opener-Policy here on purpose. It is not required by
+# any finding, and severing the browsing-context group breaks
+# `window.opener`-based flows (popup sign-in, payment windows) in ways that only
+# show up in a browser. It would need its own tested change, not a drive-by
+# addition to a header block.
+# ---------------------------------------------------------------------------
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: SAMEORIGIN
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=(), microphone=(), camera=()
+  Strict-Transport-Security: max-age=31536000
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'; frame-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; object-src 'none'; worker-src 'self' blob:
+
+# ---------------------------------------------------------------------------
+# Hashed build assets — Vite emits /assets/<name>-<hash>.<ext>.
+# ---------------------------------------------------------------------------
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# ---------------------------------------------------------------------------
+# HTML documents — always revalidate.
+# ---------------------------------------------------------------------------
+/
+  Cache-Control: public, max-age=0, must-revalidate
+/*.html
+  Cache-Control: public, max-age=0, must-revalidate
+
+# ============================================================================
+# BUILD-TIME REPLACEMENT — do not hand-edit the CSP above
+#
+# `apps/web/scripts/finalize-csp.ts` rewrites the CSP line on every build, after
+# every HTML-producing step and before gzip/gen-sw/manifest, using the same
+# `buildCsp()` the pages' <meta> policies are generated from. It substitutes:
+#
+#   * connect-src 'self' <VITE_API_BASE_URL origin>
+#   * frame-src   'self' <VITE_JBROWSE_BASE_URL origin>   (omitted in minimal mode)
+#   * script-src  <per-page sha256 hashes of inline scripts>, with
+#     'unsafe-inline' REMOVED    (see apps/web/scripts/finalize-csp.ts)
+#
+# The policy above is the conservative pre-finalization default: same-origin
+# only, no placeholder origin. It is a REAL policy rather than a sentinel token
+# so that a partial build (for example `build:ui`, which runs only
+# `vite build`) publishes a narrower working policy instead of an invalid header
+# or an empty one. A cross-origin deployment built that way fails loudly at
+# runtime, and scripts/check_artifact_headers.py fails the build that produced
+# it, because the finalized policy must carry the configured origin AND the
+# inline-script hashes, and must no longer equal this default.
+# ============================================================================

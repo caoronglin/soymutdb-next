@@ -75,6 +75,9 @@ function buildVariant(variant: SiteVariant): void {
   run(tsx, ["scripts/fetch-content-snapshot.ts"], env);
   run(tsx, ["scripts/ssg-content.ts"], env);
   run(tsx, ["scripts/embed-page-definitions.ts"], env);
+  // After the last HTML writer, before compression/manifest: the hashes must
+  // cover the final documents, and the bytes hashed must be the final bytes.
+  run(tsx, ["scripts/finalize-csp.ts"], env);
   run(tsx, ["scripts/gzip-compress.ts"], env);
   run(process.execPath, ["scripts/gen-sw.js"], env);
   run(tsx, ["scripts/release-manifest.ts"], env);

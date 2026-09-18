@@ -142,96 +142,6 @@ const THEME_INIT_SCRIPT = `
 })();
 `;
 
-/* ------------------------------------------------------------------ */
-/*  Widget loader bootstrap (inline script)                           */
-/* ------------------------------------------------------------------ */
-const WIDGET_LOADER_SNIPPET = `<script>
-// Widget loader: fetches dynamic widgets from /api/v1/widget/*.
-// Inlined to avoid a blocking network request before the SPA handoff.
-// Server HTML is double-sanitized (Jinja2 autoescape + bleach.clean);
-// this snippet provides additional DOM-based sanitization before insertion.
-(function() {
-  'use strict';
-  // Minimal widget fetcher — the full TypeScript module is imported by main.tsx
-  // and will replace these placeholders once the SPA mounts. This minimal
-  // version provides progressive enhancement for users without JS modules.
-
-  // Trusted Types policy (CSP-compatible)
-  var ttPolicy = (window.trustedTypes && trustedTypes.createPolicy)
-    ? trustedTypes.createPolicy('soymutdb-widget', { createHTML: function(s) { return s; } })
-    : null;
-
-  // DOM-based sanitizer: parse through <template> (scripts don't execute)
-  // and strip dangerous elements/attributes.
-  function sanitizeHtml(html) {
-    var tpl = document.createElement('template');
-    tpl.innerHTML = html;  // template.content parses without executing scripts
-    var doc = tpl.content;
-    var forbidden = { SCRIPT:1, STYLE:1, IFRAME:1, OBJECT:1, EMBED:1, LINK:1, META:1 };
-    var walk = doc.querySelectorAll('*');
-    for (var i = 0; i < walk.length; i++) {
-      var el = walk[i];
-      if (forbidden[el.tagName]) { el.remove(); continue; }
-      var attrs = el.attributes;
-      for (var a = attrs.length - 1; a >= 0; a--) {
-        var name = attrs[a].name.toLowerCase();
-        var value = attrs[a].value;
-        if (name.indexOf('on') === 0 || name === 'style' ||
-            (name === 'href' && /^\\s*javascript:/i.test(value))) {
-          el.removeAttribute(attrs[a].name);
-        }
-      }
-    }
-    return doc.innerHTML
-  };
-  window.__soymutdb = window.__soymutdb || {};
-  window.__soymutdb.widgetCache = window.__soymutdb.widgetCache || {};
-
-  async function loadWidget(el) {
-    var name = el.getAttribute('data-widget');
-    if (!name || el.dataset.widgetLoaded === 'true') return;
-    var params = el.getAttribute('data-widget-params');
-    var cacheKey = name + (params ? '?' + params : '');
-    var insert = function(node, html) {
-      var safe = sanitizeHtml(html);
-      if (ttPolicy) { node.innerHTML = ttPolicy.createHTML(safe); }
-      else { node.innerHTML = safe; }
-    };
-    if (window.__soymutdb.widgetCache[cacheKey]) {
-      insert(el, window.__soymutdb.widgetCache[cacheKey]);
-      el.dataset.widgetLoaded = 'true';
-      return;
-    }
-    try {
-      var url = '/api/v1/widget/' + name + (params ? '?params=' + encodeURIComponent(params) : '');
-      var res = await fetch(url, { headers: { 'Accept': 'text/html' } });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      var html = await res.text();
-      html = sanitizeHtml(html);
-      window.__soymutdb.widgetCache[cacheKey] = html;
-      insert(el, html);
-      el.dataset.widgetLoaded = 'true';
-      el.style.opacity = '1';
-    } catch (err) {
-      el.innerHTML = '<div class="widget-error" role="alert" style="padding:1rem;color:#c0392b;font-size:0.875rem">Widget failed to load.</div>';
-    }
-  }
-
-  function scan(root) {
-    root = root || document;
-    var nodes = root.querySelectorAll('[data-widget]');
-    Array.prototype.forEach.call(nodes, loadWidget);
-  }
-
-  window.__soymutdb.loadDynamicWidgets = scan;
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function() { scan(); });
-  } else {
-    scan();
-  }
-})();
-</script>`;
 
 /* ------------------------------------------------------------------ */
 /*  Cloudflare Web Analytics beacon (C3)                              */
@@ -273,7 +183,17 @@ const MINIMAL_DEPLOYMENT = isMinimalDeploymentMode(process.env.VITE_DEPLOYMENT_M
  * (apps/web/index.html, base-template.ts, deploy/cloudflare.md).
  */
 const CSP_DOC_COMMENT = "";
-const CSP_CONTENT = buildCsp({
+/**
+ * The policy every page's `<meta>` tag is rendered with, and — until
+ * `scripts/finalize-csp.ts` rewrites it with per-page hashes — the policy the
+ * `_headers` file is expected to carry.
+ *
+ * Exported because the finalizer must start from the *same* string the template
+ * used. Recomputing it there would duplicate the origin/deployment-mode
+ * decisions below and reintroduce exactly the drift this single source exists to
+ * prevent.
+ */
+export const CSP_CONTENT = buildCsp({
     apiOrigin: requireDeploymentOrigin(process.env.VITE_API_BASE_URL ?? process.env.SOYMUTDB_API_URL, "API"),
     jbrowseOrigin: MINIMAL_DEPLOYMENT
         ? undefined
@@ -436,7 +356,13 @@ ${ogHtml}
     <script type="module" crossorigin src="${resolveAssetUrl(BASE_PATH, assets.jsEntry)}"></script>
     ${modulePreloadHtml}` : ""}
 
-    ${WIDGET_LOADER_SNIPPET}
+    <!-- No inline widget loader: the build target is es2022, so every supported
+         client has module support and src/lib/widget-loader.ts (DOMPurify-
+         sanitised, booted from main.tsx) is the only loader that runs. The old
+         snippet existed for non-module clients, duplicated the sanitizer, and
+         wrote a widget-cache global on window that nothing ever read. The
+         identifier is intentionally not repeated here so the contract test can
+         assert its total absence from the document. -->
     ${bodyScripts}
   </body>
 </html>`;
@@ -478,8 +404,30 @@ function escapeHtml(s: string): string {
         .replace(/'/g, "&#x27;");
 }
 
-function escapeHtmlAttribute(value: string): string {
+export function escapeHtmlAttribute(value: string): string {
     return escapeHtml(value).replace(/`/g, "&#x60;");
+}
+
+/**
+ * Inverse of {@link escapeHtmlAttribute} for the entity forms `escapeHtml` emits.
+ *
+ * The CSP finalizer has to read a policy back out of an emitted document before
+ * it can rewrite it, and it must reverse exactly the transformation this module
+ * applied. Keeping the pair together is what makes that guarantee checkable:
+ * `decodeHtmlAttribute(escapeHtmlAttribute(x)) === x` is asserted in
+ * `scripts/__tests__/build-release-contracts.test.ts`.
+ *
+ * `&amp;` is decoded last, otherwise an input that literally contains `&amp;`
+ * would be double-decoded.
+ */
+export function decodeHtmlAttribute(value: string): string {
+    return value
+        .replace(/&#x27;/g, "'")
+        .replace(/&#x60;/g, "`")
+        .replace(/&quot;/g, '"')
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&amp;/g, "&");
 }
 
 function serializeJsonLd(value: Record<string, unknown>): string {

@@ -6,7 +6,7 @@
   "description": "SoyMutDB public portal — Awwwards-grade frontend for the multi-species mutant database (soybean as the first/default species)",
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 5173",
-    "build": "vite build && tsx scripts/ssg-build.ts && tsx scripts/generate-samples.ts && tsx scripts/fetch-content-snapshot.ts && tsx scripts/ssg-content.ts && tsx scripts/embed-page-definitions.ts && tsx scripts/gzip-compress.ts && node scripts/gen-sw.js && tsx scripts/release-manifest.ts",
+    "build": "vite build && tsx scripts/ssg-build.ts && tsx scripts/generate-samples.ts && tsx scripts/fetch-content-snapshot.ts && tsx scripts/ssg-content.ts && tsx scripts/embed-page-definitions.ts && tsx scripts/finalize-csp.ts && tsx scripts/gzip-compress.ts && node scripts/gen-sw.js && tsx scripts/release-manifest.ts",
     "preview": "vite preview --host 0.0.0.0 --port 4173",
     "lint": "eslint src",
     "test": "vitest run",

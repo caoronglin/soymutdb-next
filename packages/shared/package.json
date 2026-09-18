@@ -15,9 +15,19 @@
     "./format": {
       "types": "./src/format.ts",
       "import": "./src/format.ts"
+    },
+    "./build/csp": {
+      "types": "./src/build/csp.ts",
+      "import": "./src/build/csp.ts"
+    },
+    "./build/csp-hash": {
+      "types": "./src/build/csp-hash.ts",
+      "import": "./src/build/csp-hash.ts"
     }
   },
   "main": "./src/index.ts",
   "types": "./src/index.ts",
-  "files": ["src"]
+  "files": [
+    "src"
+  ]
 }
