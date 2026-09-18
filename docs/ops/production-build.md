@@ -85,6 +85,37 @@ Notes on false positives:
   deploying under a sub-path, also set `VITE_JBROWSE_DATA_URL` to the matching
   prefix so the embedded data URLs resolve correctly.
 
+## Pre-compressed `.gz` siblings (`SOYMUTDB_EMIT_GZ`)
+
+`.gz` copies of static assets exist for exactly one consumer: nginx
+`gzip_static` inside the release images (`infra/docker/web-nginx.conf`,
+`infra/docker/admin-nginx.conf`). Cloudflare Pages and GitHub Pages do not read
+them, so producing them for a published tree would double its size for nothing.
+
+| Path | `SOYMUTDB_EMIT_GZ` | Result |
+| --- | --- | --- |
+| `scripts/build-sites.ts` (Pages / gh-pages) | unset | no `.gz`; any stale `.gz` in the tree is deleted |
+| `infra/docker/Dockerfile.{web,admin}` | `1` | `.gz` emitted for nginx `gzip_static` |
+| `scripts/build-static-apps.sh` | `1` (default) | matches the container path it stands in for |
+
+Both the build chain (`apps/web/scripts/gzip-compress.ts`,
+`apps/web/scripts/gen-sw.js`) and `infra/docker/precompress.sh` honour the flag.
+`gen-sw.js` always deletes a stale `sw.js.gz`, even when it does not write one —
+a leftover `.gz` from a container build would otherwise be served as the current
+service worker.
+
+Division of labour on the container path: the build chain covers
+`.html/.css/.js/.svg/.json/.xml/.txt`; `precompress.sh` additionally covers
+`.woff/.woff2/.ttf`, which the build chain never touches.
+
+`precompress.sh` rewrites a `.gz` that is missing or older than its source and
+leaves a current one alone. This matters because `gzip -k` *refuses* to
+overwrite an existing `.gz` ("already exists; not overwritten") and would keep
+the previous body, which `gzip_static` would then serve. It was never a build
+breaker: the script uses `find … -exec … \;`, and only `-exec … +` propagates a
+command failure. Regression cover:
+`scripts/test_dockerfile_contracts.py::test_precompress_refreshes_stale_archives`.
+
 ## CI wiring (`.github/workflows/ci.yml`)
 
 The `frontend` job builds the **demo** artifact (`VITE_DEPLOYMENT_MODE=demo`)

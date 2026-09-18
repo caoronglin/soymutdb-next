@@ -15,11 +15,30 @@
 > 安全审查规则被削弱（T28）、对比度修复方向错误（T15）、bundle 门禁 glob 与实际产物不符（T24）、
 > 字体策略方向错误（T26）、验证矩阵命令错误（§5）。
 >
+> **v3（执行中自纠）：** 执行 T14 时实测推翻了 v2 自己的一个结论 —— D-5 被写成
+> 「`precompress.sh` 中断 web 镜像构建」（高），但脚本用的是 `find … -exec … \;`，
+> 而 POSIX 下只有 `-exec … +` 才传播命令失败（实测 `\;` → rc=0，`+` → rc=1）。
+> 真实缺陷是**陈旧 `.gz` 未被刷新**（中），不是构建中断。D-5 已改写、严重度已降级，
+> 代码注释与测试文档字符串同步纠正。**凡结论均以实测为准，不以推理为准。**
+>
+> **v3 执行中又发现并修正的验证命令错误（均已实测）：**
+>
+> | 命令 | 问题 | 实测结果 |
+> |---|---|---|
+> | `STATIC_DIR=… bash scripts/smoke.sh --profile static` | `smoke.sh:51` 把 `STATIC_DIR` 重置为空，环境变量**被忽略** | 用 `STATIC_DIR=/nonexistent` 仍然 `static smoke passed for apps/web/dist` → **假通过**。必须用 `--static-dir <dir>` |
+> | `pnpm --filter @soymutdb/web build:sites` | 需要部署 origin，否则 vite 配置直接报 `API origin is required` | 已补上三个变量（§2.3 约束 3） |
+> | `pnpm --filter @soymutdb/admin build:web` | admin 无此脚本名（`build:web` 只是 `build` 的别名，但 T11 的验证写的是 `build`） | 统一用 `build` |
+> | T13 的 `jsdomWindow.localStorage` 修法 | vitest 把 `window` 别名到 `globalThis`，读回仍是 `undefined`；写入会把 getter 换成 `undefined` 数据属性，**比不改更糟** | 改为动态 `import("jsdom")` 新建 window 取真实 `Storage` |
+> | T2 的 `CSP_CONTENT` 使用方式 | 最终化器不能从 `_headers` 的**静态默认值**推导（那会丢掉 API/JBrowse origin） | 已实测发现并修正：必须从 `CSP_CONTENT` 推导 |
+> | V5 要求 `dist/{external,internal}` 同时存在 | 与 V12 的 `pnpm build` 冲突（实测 `vite build` 会删掉整个 `dist/`，包括两个变体目录） | `check_artifact_headers.py` 默认**与顺序无关**；双变体存在性用 `--require-dual`（仅在双构建之后调用） |
+> | V9 严格扫描 demo 构建 | 实测严格模式在当前 demo 产物上 **exit 1**（`samples/SMDB-*.html` 含演示标记） | demo 必须用 `--allow-demo` |
+>
 > **基线（本计划开始前实测，Node 24.19.0）：**
 > - `bash scripts/verify-frontend-artifacts.sh` → **EXIT=0**
 > - `bash scripts/smoke.sh --profile contracts` → **216 passed**（另有 10 项 environment-bound contract）
 > - `bash scripts/smoke.sh --profile static` → **PASS**
-> - `pnpm --filter @soymutdb/web build:sites` → **EXIT=0**（external + internal 双产物）
+> - `pnpm --filter @soymutdb/web build:sites` → **EXIT=0**（external + internal 双产物；
+>   需 `VITE_DEPLOYMENT_MODE=demo` + `VITE_API_BASE_URL` + `VITE_JBROWSE_BASE_URL`，见 §2.3）
 > - Web 单测 36 files / 180 tests 全通过；API 非数据库单测 39 passed
 > - 24 项 API 测试与 worker 集成测试需 Docker/PostgreSQL（本机 Docker daemon 不可用）
 > - **Node 必须使用 `.nvmrc` 的 24.19.0**；系统 Node 26 会导致 1 项测试假失败（见 T13）
@@ -33,7 +52,7 @@
 1. **安全边界收口**：修复 nginx 安全头静默丢失、门户托管层安全头缺失、CSP 内联脚本弱化、代理信任边界。
 2. **部署加固**：日志轮转、容器加固、资源限制、CORS 收敛，使生产拓扑具备可长期运行的运维属性。
 3. **缺陷修复**：Admin 字体 404、JBrowse `_headers` 占位符、Service Worker 缓存命名、Node 版本韧性、
-   `precompress.sh` 非幂等导致镜像构建中断。
+   `precompress.sh` 不刷新陈旧 `.gz`（并修正了 v2 对此项严重度的误判）。
 4. **UI/UX 优化**：WCAG AA 对比度达标、图表可访问、触摸目标、焦点/键盘、空错加载态一致性、动效规范。
 5. **性能优化**：静态资源长缓存、Bundle 预算扩展（含实际 chunk 命名）、Service Worker 预缓存瘦身、
    双产物资源时序基线、字体负载治理。
@@ -76,7 +95,9 @@
 | D-2 | 中 | `docker-compose.yml:585`（nginx 服务） | 无 `read_only` / `cap_drop` / `no-new-privileges` / `user`，而同文件的 `tunnel-origin`（L620+）三项全有 → 加固标准不一致。加固前必须先解决**只读根文件系统下的可写路径**：`infra/nginx/nginx.conf` 写 `/var/log/nginx/*.log`（无 `/var/log` 挂载 → 只读即启动失败）、默认 `pid /var/run/nginx.pid`、`client_body_temp_path /var/cache/nginx/client_temp`；且 `listen 80` 在 `cap_drop: ALL` + uid 101 下无法绑定（<1024 需 `CAP_NET_BIND_SERVICE`） |
 | D-3 | 低 | `docker-compose.yml:106,132,162,181,198` | 数据服务（postgres/clickhouse/redis/minio）无 `mem_limit`，应用服务有 |
 | D-4 | 低 | `apps/web/dist/**/*.gz` | `.gz` 预压缩文件仅容器 nginx 的 `gzip_static` 使用；Cloudflare Pages / GitHub Pages 路径下不生效，产物体积近乎翻倍 |
-| D-5 | **高** | `infra/docker/precompress.sh` | 脚本用 `find … -exec gzip -k -9 {} +`，而 `Dockerfile.web` 在它之前已跑过 `apps/web` 的完整构建链（含 `scripts/gzip-compress.ts`，会生成 `.gz`）。`gzip -k` 遇到已存在的 `.gz` 返回 **exit 2**（实测 `gzip: a.js.gz already exists; not overwritten`），`find -exec … +` 随之非零，`set -e` 直接中断 **web 镜像构建**。`Dockerfile.admin` 因 admin 构建不产生 `.gz` 而侥幸通过 |
+| D-5 | 中 | `infra/docker/precompress.sh` | `gzip -k` **拒绝覆盖**已存在的 `.gz`（`gzip: a.js.gz already exists; not overwritten`）并保留**旧压缩体** → 源文件变更后 nginx `gzip_static` 仍会送出陈旧的 `.gz`。字体最严重：`.woff`/`.woff2`/`.ttf` **只由本脚本压缩**，构建链不覆盖。
+
+**⚠️ v2 曾把此项误判为「中断镜像构建」（严重度「高」）—— 已实测推翻：** 脚本用的是 `find … -exec … \;`，而 **只有 `-exec … +` 才传播命令失败**（实测：`-exec false \;` → rc=0；`-exec false +` → rc=1）。v2 的探针误用了 `+`，因而把「警告」误读成「构建中断」。真实缺陷是**陈旧产物**，不是构建失败 |
 
 ### 1.3 缺陷（Bugs）
 
@@ -96,7 +117,7 @@
 | P-2 | 中 | `apps/web/public/sw.js:28`、`gen-sw.js:48` | SW 预缓存 `dist/assets` **全部**产物（实测 external 变体 28 个文件 / 约 **6.0 MB 原始 JS**），包含 `echarts-*.js`(1.04 MB)、`antd-*.js`(0.95 MB)、`mammoth.browser-*.js`(0.50 MB)、`cytoscape.esm-*.js`(0.44 MB)、`pdf-*.js`(0.33 MB) → 首访即下载全部懒加载大包，抵消代码分割收益 |
 | P-3 | 中 | `scripts/check-bundle-size.sh` | 仅覆盖 `antd` / `index` / `pro`。且 glob 与实际产物不符：实际为 `cytoscape.esm-*.js`、`mammoth.browser-*.js`、PDF worker 为 `*.mjs`、highlight.js 被打进 `common-*.js` → 任何新增 glob 都会静默走 `SKIP`（假通过） |
 | P-4 | 低 | `e2e/tests/web-artifact-performance.spec.ts`、`playwright-web-performance.config.ts` | 只测单一产物（`apps/web/dist`，且硬编码 `artifactRoot`），未覆盖 external/internal 双产物；配置文件本身也未参数化 |
-| P-5 | 低 | `pnpm --filter @soymutdb/web lint` | **37 warnings / 0 errors，分布在约 20 个文件**（非 v1 所列 2 个文件）：`components/file-viewer/*`、`genome-browser-widget.tsx`、`site-header.tsx`、`soymutdb-widget.ts`、`track-viewer.tsx`、`routes/{blast,browser,genes,mutants,search,search/*,tools/*}`。其中 `browser.tsx:152`「Cannot access refs during render」与 `soymutdb-widget.ts:420` `no-console` 属真实缺陷类 |
+| P-5 | 低 | `pnpm lint`（workspace） | **实测 0 errors / 90 warnings**：`@soymutdb/web` 37、`@soymutdb/admin` 53、`@soymutdb/jbrowse` 0。v1/v2 只算了 web 的 37，把 admin 的 53 条漏在门禁之外 —— 而 V2 要求的是 **workspace** 清零。web 的 37 条分布在约 20 个文件（非 v1 所列 2 个）：`components/file-viewer/*`、`genome-browser-widget.tsx`、`site-header.tsx`、`soymutdb-widget.ts`、`track-viewer.tsx`、`routes/{blast,browser,genes,mutants,search,search/*,tools/*}`。其中 `browser.tsx:152`「Cannot access refs during render」与 `soymutdb-widget.ts:420` `no-console` 属真实缺陷类 |
 | P-6 | 中 | `apps/web/public/fonts/harmonyos/`、`apps/admin/public/fonts/harmonyos/`、`apps/jbrowse/public/fonts/harmonyos/` | 每份 3 个 CJK woff2 共 **12.8 MB**。`apps/web` 的 CSS **已不再引用**该字体（`index.css:861-863` 注释：系统 CJK 栈，避免首屏多兆字节下载），但 `public/` 文件仍被复制进两个产物 → 每个 web 产物白带 12.8 MB 死负载（实测 `dist/external/fonts/harmonyos/*`）。admin/jbrowse 仍引用，其字体在每个页面都是关键链末端 |
 | P-7 | 低 | 文档 | `deploy/cloudflare.md:73,239,344`、`docs/design/deployment-architecture.md:276`、`apps/web/vite.config.ts:29,47`、`base-template.ts:263` 与仓库实际状态漂移 |
 
@@ -145,7 +166,7 @@ P0 安全边界 ─┬─ T1 nginx 安全头继承（4 个 conf + .inc 片段）
              ├─ T4 代理信任边界                        │
              └─ T5 CSP 内联脚本收口（依赖 T2 的最终化器）
 P1 部署加固 ─┬─ T6 日志轮转  T7 nginx 容器加固  T8 CORS 收敛  T9 头收敛  T10 资源限制
-P2 缺陷修复 ─┬─ T11 Admin 字体  T12 SW 隔离  T13 Node 韧性  T14 .gz 策略 + precompress 幂等
+P2 缺陷修复 ─┬─ T11 Admin 字体  T12 SW 隔离  T13 Node 韧性  T14 .gz 策略 + precompress 刷新陈旧件
 P3 UI/UX ────┬─ T15 对比度  T16 图表色板  T17 对比度门禁  T18 触摸目标
              ├─ T19 焦点/键盘  T20 状态一致性  T21 动效  T22 微文案（前端映射）
 P4 性能 ─────┬─ T23 缓存（依赖 T2）  T24 预算扩展（含真实 glob）  T25 双产物基线
@@ -164,7 +185,7 @@ P6 门禁 ─────┴─ T31 门禁脚本接入共享脚本  T32 回归�
   T4 代理信任边界（含功能性负向测试）
   T6 日志轮转 / T10 资源限制（Compose 加固，含契约测试）
   T11 Admin 字体 / T13 Node 韧性
-  T14 .gz 策略 + precompress 幂等（含幂等回归测试；**D-5 阻断镜像构建，优先**）
+  T14 .gz 策略 + precompress 刷新陈旧件（含回归测试）
   T27 lint 清零（分批，每批附行为回归）
   T28 审查规则降噪（先跑基线，再改规则）
   T29 文档同步（其余任务落地后复跑）
@@ -197,13 +218,21 @@ P6 门禁 ─────┴─ T31 门禁脚本接入共享脚本  T32 回归�
 `apps/web` 的构建链是 `vite build → ssg-* → embed-page-definitions → gzip → gen-sw → release-manifest`，
 `build:sites` 只是把同一链在 `dist/external|internal` 下跑两遍。由此产生三条硬约束：
 
-1. **`pnpm build`（turbo）会重建 `apps/web/dist`**，因此「双产物」检查必须排在所有全应用门禁**之后**，
-   否则 `dist/external|internal` 会被后续构建覆盖或删除。
+1. **`vite build`（根 `outDir`）会清空整个 `apps/web/dist/`，包括 `dist/external|internal`。**
+   实测：先跑 `build:sites` 得到双产物，再跑一次 `pnpm --filter @soymutdb/web build`，
+   `dist/external` 与 `dist/internal` **直接消失**。因此双产物检查必须排在所有全应用构建**之后**，
+   否则读到的是不存在或上一次的树。
 2. **`build:sites` 不构建 JBrowse**（只有 `build-pages-artifact.sh` 会）。T3 的验证必须显式构建
    `@soymutdb/jbrowse`，或直接跑 `scripts/build-pages-artifact.sh`。
-3. **`build-sites.ts` 只 `rm -rf dist/<variant>`，不清根 `dist/`** → 根 `dist/` 里可能残留上一次
-   单站点构建的 `index.html`。`smoke.sh --profile static` 默认读 `apps/web/dist`，会**误判为通过**。
-   因此静态检查必须显式指定 `STATIC_DIR`。
+3. **`build:sites` 需要部署 origin 环境变量**（否则 vite 配置直接报
+   `API origin is required for production deployment` 并 exit 1）。实测最小可用调用：
+   ```bash
+   VITE_DEPLOYMENT_MODE=demo VITE_API_BASE_URL=https://api.soymutdb.test \
+   VITE_JBROWSE_BASE_URL=https://jbrowse.soymutdb.test \
+     pnpm --filter @soymutdb/web build:sites
+   ```
+   与 `scripts/verify-frontend-artifacts.sh` 的 `SOYMUTDB_CI_DEMO_*` 默认值一致。
+   （v2 的 V5 与各任务 Verify 漏了这三个变量，直接跑会失败 —— 已修正。）
 
 **标准验证顺序（§5 采用）：**
 
@@ -211,9 +240,11 @@ P6 门禁 ─────┴─ T31 门禁脚本接入共享脚本  T32 回归�
 1  pnpm install --frozen-lockfile
 2  pnpm lint / pnpm typecheck / pnpm test           # workspace 全量
 3  bash scripts/verify-frontend-artifacts.sh        # 内部会重建根 dist 并跑 bundle/artifact 门禁
-4  pnpm --filter @soymutdb/web build:sites          # 干净双产物
-5  STATIC_DIR=apps/web/dist/external bash scripts/smoke.sh --profile static
-   STATIC_DIR=apps/web/dist/internal bash scripts/smoke.sh --profile static
+4  VITE_DEPLOYMENT_MODE=demo VITE_API_BASE_URL=https://api.soymutdb.test \
+     VITE_JBROWSE_BASE_URL=https://jbrowse.soymutdb.test \
+     pnpm --filter @soymutdb/web build:sites          # 干净双产物（需上述三个变量）
+5  bash scripts/smoke.sh --profile static --static-dir apps/web/dist/external
+   bash scripts/smoke.sh --profile static --static-dir apps/web/dist/internal
 6  bash scripts/check-production-artifact.sh apps/web/dist/external --allow-demo   # demo 构建
    （严格模式仅对真实 release API 构建执行，见 T29）
 7  e2e：public / performance（双变体）/ production（需真实部署）
@@ -241,6 +272,7 @@ P6 门禁 ─────┴─ T31 门禁脚本接入共享脚本  T32 回归�
 | 文件 | 用途 |
 |---|---|
 | `infra/nginx/conf.d/security-headers.inc` | 可 `include` 的安全头片段（server 级 + location 级复用），T1 的唯一来源。**必须用 `.inc`**：`nginx.conf` 的 `include /etc/nginx/conf.d/*.conf;` 会自动加载 `.conf`，片段会被当成 server 块解析并导致启动失败（S-10） |
+| `infra/nginx/conf.d/security-headers-admin.inc` | admin 专用片段（`DENY`/`no-referrer`/`script-src 'self'`）。必须是独立文件：nginx 会发出同一层级的**每一个**同名 `add_header`，「include 后覆盖」会送出重复的 XFO/CSP |
 | `packages/shared/src/build/csp.ts` | CSP 组合/解析/比较的共享实现（`composeCsp` / `parseCsp` / `directivesEqual`），供 web 与 jbrowse 的构建期脚本使用，T2/T3/T31 |
 | `apps/web/public/_headers` | 门户 Cloudflare Pages 响应头（安全头 + 缓存 + **保守默认 CSP**，由最终化器替换为精确策略），T2 |
 | `apps/web/scripts/finalize-csp.ts` | **构建链最终化器**：扫描最终 HTML 的内联脚本 → 计算 hash → 重写每页 meta CSP → 重写 `dist/_headers` 的 CSP 行；fail-closed，T2/T5 |
@@ -258,7 +290,7 @@ P6 门禁 ─────┴─ T31 门禁脚本接入共享脚本  T32 回归�
 | `infra/nginx/conf.d/default.conf`、`infra/nginx/nginx.conf` | T1, T7, T8, T9 |
 | `infra/docker/web-nginx.conf`、`infra/docker/admin-nginx.conf`、`apps/jbrowse/nginx.conf` | T1, T9 |
 | `infra/docker/Dockerfile.web`、`infra/docker/Dockerfile.admin`、`apps/jbrowse/Dockerfile` | T1（COPY `.inc`）, T14 |
-| `infra/docker/precompress.sh` | T14（幂等修复，D-5） |
+| `infra/docker/precompress.sh` | T14（刷新陈旧 `.gz`，D-5） |
 | `apps/web/scripts/base-template.ts`、`apps/web/src/lib/deployment.ts`、`apps/web/vite.config.ts`、`apps/web/index.html` | T2, T5, T29 |
 | `apps/web/package.json`、`apps/web/scripts/build-sites.ts` | T2, T5, T14（构建链顺序） |
 | `apps/jbrowse/vite.config.ts`、`apps/jbrowse/public/_headers`、`scripts/build-pages-artifact.sh` | T3 |
@@ -322,7 +354,7 @@ form-action, frame-ancestors, object-src, worker-src`。本计划：
 
 ---
 
-#### T1 · 修复 nginx `add_header` 继承导致的安全头丢失
+#### T1 · 修复 nginx `add_header` 继承导致的安全头丢失  ✅ **已执行**
 
 **根因（systematic-debugging Phase 1–2）：** nginx 规定 `add_header` 仅在当前层级**没有**任何
 `add_header` 时才继承上层；`conf.d/default.conf` 的 6 个 location、`web-nginx.conf` 的 4 个、
@@ -331,10 +363,11 @@ form-action, frame-ancestors, object-src, worker-src`。本计划：
 
 **Files:**
 - Create: `infra/nginx/conf.d/security-headers.inc`
-- Modify: `infra/nginx/conf.d/default.conf`
+- Create: `infra/nginx/conf.d/security-headers-admin.inc`
+- Modify: `infra/nginx/conf.d/default.conf`、`infra/nginx/nginx.conf`、`infra/nginx/cloudflare-tunnel.conf`
 - Modify: `infra/docker/web-nginx.conf`、`infra/docker/admin-nginx.conf`、`apps/jbrowse/nginx.conf`
 - Modify: `infra/docker/Dockerfile.web`、`infra/docker/Dockerfile.admin`、`apps/jbrowse/Dockerfile`
-- Modify: `scripts/test_dockerfile_contracts.py`（新增断言，见第 8 步）
+- Create: `scripts/check_nginx_security_headers.py`（断言在本任务内完成，T31 只接线）
 
 **Steps:**
 
@@ -385,8 +418,22 @@ form-action, frame-ancestors, object-src, worker-src`。本计划：
       COPY infra/nginx/conf.d/security-headers.inc /etc/nginx/conf.d/security-headers.inc
       ```
       （jbrowse 的构建上下文是仓库根，路径同上。）
-- [ ] 8. **同一任务内**在 `scripts/test_dockerfile_contracts.py` 增加断言：每个提供 HTML 的
-      nginx 镜像 Dockerfile 都 COPY 了该片段。
+- [ ] 8. **不重复实现断言：** Dockerfile 是否 COPY 了片段、片段是否全 6 头、变量是否已定义
+      这三类断言统一放在 `scripts/check_nginx_security_headers.py`（本任务内完成），
+      **不**在 `test_dockerfile_contracts.py` 里再写一份（T32 禁止同一断言多处实现）。
+- [ ] 9. **两个片段，而非「include 后覆盖」**（执行中发现，必须如此）：
+      nginx 会发出同一层级里看到的**每一个**同名 `add_header`。admin 需要更严的
+      `DENY`/`no-referrer`/`script-src 'self'`，若先 include 门户片段再覆盖，会送出
+      **两个 X-Frame-Options 和两个 CSP**（重复 CSP 是取交集，重复 XFO 是未定义行为）。
+      因此 admin 用独立的 `security-headers-admin.inc`，两者声明相同的 6 个头名。
+- [ ] 10. **容器配置必须自己定义 `$hsts_header_value`**（执行中发现）：片段引用该变量，
+      而容器用的是镜像自带的 `nginx.conf`，里面**没有**主代理的 `map`。未定义变量不是警告而是
+      `nginx: [emerg] unknown variable` **启动失败**。容器侧以 `$http_x_forwarded_proto` 为键
+      （TLS 在上游终结），取值保持容器原有策略（不带 `preload`）。
+- [ ] 11. **`cloudflare-tunnel.conf` 也属本任务范围**（执行中发现，v2 只把它列入 T8）：
+      它的 `/api/`、`/jbrowse-data/`、`/data/` 三个 location 各自带 `add_header`，
+      把服务级的 nosniff/Referrer-Policy/Permissions-Policy 全部丢掉。因该文件是
+      容器的**整个 nginx.conf**（镜像内无 `conf.d/*.inc`），采用**内联**而非 include。
 - [ ] 9. **本任务内**先实现 `scripts/check_nginx_security_headers.py` 的核心断言（每个含
       `add_header` 的 location 必须 include 片段或内联全部安全头），使本任务可自证；
       T31 只负责把它接入共享脚本。
@@ -399,20 +446,29 @@ docker run --rm \
   -v "$PWD/infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro" \
   -v "$PWD/infra/nginx/conf.d:/etc/nginx/conf.d:ro" \
   nginx:1.27-alpine nginx -t
-# 容器内配置（web/admin/jbrowse）在镜像构建时由 build-release-image.sh 的 nginx -t 冒烟覆盖；
-# Docker 不可用时在 PR 中记录未验证并保留 T33 的补验项
-python3 -m pytest scripts/test_dockerfile_contracts.py -q
+# 容器配置（web/admin/jbrowse）在镜像构建时由 build-release-image.sh 的 nginx -t 冒烟覆盖
+python3 -m pytest scripts/test_dockerfile_contracts.py scripts/test_development_compose_contract.py -q
 bash scripts/smoke.sh --profile contracts
 ```
 
+**⚠️ 本机不可验证项（实测）：** 开发机**既无 nginx 也无 docker**（`command -v nginx` /
+`docker info` 均不可用），所以 `nginx -t` 在本环境**无法执行**。替代证据：
+`scripts/check_nginx_security_headers.py` 对 6 个配置 / 37 个 location 做静态校验，
+并用**9 个变异测试**逐一证明它会变红（丢掉一个 location 的 include、删掉容器的 HSTS map、
+重新加回 `X-XSS-Protection`、恢复反射 Origin、把片段改名为 `.conf`、去掉 `worker-src`、
+删掉 Dockerfile 的 COPY、COPY 到错误目标）。**真实 `nginx -t` 必须在 CI 的镜像构建里补验**，
+并作为 PR 的未验证项声明。
+
 **Accept:**
-- 4 个 nginx conf 中每个含 `add_header` 的 location 都能静态证明安全头来源（include 或内联）。
-- 片段与生成侧在 §4.0 表格「必须逐字一致」的 9 条指令上完全相同。
-- `nginx -t` 通过（Docker 可用时）；三个 Dockerfile 均 COPY 片段。
+- 6 个 nginx conf 中每个含 `add_header` 的 location 都能静态证明安全头来源（include 片段或内联）；
+  `check_nginx_security_headers.py` 通过，且已用 9 个变异测试证明其会变红。
+- 两个片段均声明全 6 个头名；与生成侧在 §4.0 表格「必须逐字一致」的 9 条指令上相同。
+- 每个 nginx 镜像的 Dockerfile 都 COPY 了它所 include 的片段。
+- `nginx -t` 在 CI 镜像构建中补验（本机无 nginx/docker，已声明为未验证项）。
 
 ---
 
-#### T2 · 恢复门户 `_headers` 并建立构建期 CSP 单一来源
+#### T2 · 恢复门户 `_headers` 并建立构建期 CSP 单一来源  ✅ **已执行**
 
 **根因：** `apps/web/public/_headers` 在某次「gh-pages 不解释该格式」的清理中被删除，
 但代码与文档四处仍依赖它，且 `deploy/cloudflare.md` 声明 Cloudflare Pages 为可选生产托管
@@ -475,7 +531,9 @@ bash scripts/smoke.sh --profile contracts
 
 **Verify:**
 ```bash
-pnpm --filter @soymutdb/web build:sites
+VITE_DEPLOYMENT_MODE=demo VITE_API_BASE_URL=https://api.soymutdb.test \
+VITE_JBROWSE_BASE_URL=https://jbrowse.soymutdb.test \
+  pnpm --filter @soymutdb/web build:sites
 
 # 1) 两个变体都有 _headers，且 CSP 行是生成策略（不是保守默认，也不是占位符）
 grep -c "Content-Security-Policy:" apps/web/dist/external/_headers   # ≥1
@@ -503,15 +561,26 @@ python3 -m pytest scripts/test_site_artifact_isolation.py -q
 bash scripts/check-production-artifact.sh apps/web/dist --allow-demo
 ```
 
-**Accept:**
+**执行中发现（v3 补记）：**
+- 最终化器**不能**从 `_headers` 里已有的 CSP 推导新策略。它从 `CSP_CONTENT`（模板同一字符串）
+  推导；`_headers` 只用于定位那一行并证明它存在。第一版从文件值推导，结果 API/JBrowse origin
+  永远进不去（实测 `grep -q https://api.soymutdb.test` 失败）——因为文件里的值是
+  finalize 之前的保守默认（仅同源）。
+- `buildCsp()` 改写为基于 `composeCsp` 后，输出与原实现**逐字一致**（8/8 组合实测）。
+- `node:crypto` 不能出现在 `packages/shared/src/build/csp.ts`：该模块经
+  `src/lib/deployment.ts` 被**浏览器包**引用，Vite 会报
+  `"createHash" is not exported by "__vite-browser-external"`。故拆出 Node-only 的
+  `./build/csp-hash`。
+
+**Accept（已核实）：**
 - 两个变体产物均含 `_headers`，CSP 由 `buildCsp`/`composeCsp` 生成，`connect-src`/`frame-src`
-  为真实构建 origin，无占位符与 `__` 残留。
-- 最终化器在 `_headers` 缺失时**必须失败**（已用临时目录证明）。
-- `buildCsp` 重写后既有测试零改动通过。
+  为真实构建 origin，无占位符残留。
+- 最终化器在 `_headers` 缺失、CSP 行缺失、无 HTML、dist 缺失时**均 exit 1**（四组探针实测）。
+- `buildCsp` 重写后既有测试零改动通过（13 tests），且与旧实现逐字一致。
 
 ---
 
-#### T3 · 修复 JBrowse `_headers` 占位符未注入
+#### T3 · 修复 JBrowse `_headers` 占位符未注入  ✅ **已执行**
 
 **根因：** `apps/jbrowse/public/_headers` 硬编码 `https://api.example.com` /
 `https://portal.example.com` / `https://admin.example.com`，`apps/jbrowse/vite.config.ts`
@@ -553,9 +622,17 @@ bash scripts/verify-pages-artifact.sh pages-dist
 python3 -m pytest scripts/test_site_artifact_isolation.py -q
 ```
 
-**Accept:** `pages-dist/soymutdb-jbrowse/_headers` 无任何 `example.com`；
-`connect-src` 含 API 与数据 origin，`frame-ancestors` 含门户 origin；
-`verify-pages-artifact.sh` 通过。
+**执行中发现（v3 补记）：**
+- `VITE_JBROWSE_DATA_URL` **通常是相对路径**（`build-pages-artifact.sh` 传
+  `${PAGES_BASE_PATH}jbrowse-data`）。把它当 origin 校验会直接报错。正确语义：相对引用 =
+  同源 = `'self'` 已覆盖，**不加任何源**；只有绝对 URL 才注入 `connect-src`。
+- 注入模块**不能带 `#!`**：Vite 用 esbuild 打包 `vite.config.ts` 时会内联其 import，
+  内联模块里的 hashbang 是语法错误（实测 `Syntax error "!"`）。
+- 源 `_headers` 不得出现占位域名（连注释也不行）—— 否则占位符扫描会把**源文件**也判红。
+
+**Accept（已核实）：** `apps/jbrowse/dist/_headers` 无任何占位域名；
+`connect-src` 含 API origin，`frame-ancestors` 含门户 + 管理端 origin；
+原策略中的 `worker-src 'self' blob:`、`img-src … blob:` 被完整保留（按指令映射重建，不套模板）。
 
 ---
 
@@ -609,7 +686,7 @@ cd apps/api && .venv/bin/python -m pytest tests -q -k "client_ip or forwarded"
 
 ---
 
-#### T5 · CSP 内联脚本收口（G-1）
+#### T5 · CSP 内联脚本收口（G-1）  ✅ **已执行**
 
 **根因：** SSG 产物含 4 类内联脚本，因此必须保留 `'unsafe-inline'`。静态托管无法用 nonce，
 **只能走 hash**。本任务把 CSP 从「允许任意内联脚本」收敛为「允许这 N 个已知脚本」。
@@ -662,7 +739,9 @@ cd apps/api && .venv/bin/python -m pytest tests -q -k "client_ip or forwarded"
 
 **Verify:**
 ```bash
-pnpm --filter @soymutdb/web build:sites
+VITE_DEPLOYMENT_MODE=demo VITE_API_BASE_URL=https://api.soymutdb.test \
+VITE_JBROWSE_BASE_URL=https://jbrowse.soymutdb.test \
+  pnpm --filter @soymutdb/web build:sites
 
 # 1) 无 unsafe-inline（script-src）
 ! grep -qE "script-src[^;]*'unsafe-inline'" apps/web/dist/external/_headers
@@ -690,8 +769,17 @@ cd e2e && npx playwright test -c playwright-public.config.ts homepage.spec.ts
 pnpm --filter @soymutdb/web test
 ```
 
-**Accept:** `script-src` 无 `'unsafe-inline'`；`style-src` 保留；首屏、主题初始化、
-widget 加载、语言重定向全部正常；E2E 无 CSP violation；hash 数 ≤ 8。
+**执行中结果（v3 补记）：**
+- 已删除两段内联脚本：`ssg-build.ts` 的 i18n-ready（`window.__soymutdb.i18nReady` 全仓只写不读）
+  与 `base-template.ts` 的 inline widget loader（`build.target=es2022` 保证模块支持；
+  `src/lib/widget-loader.ts` 是唯一会跑的加载器；它写的 `widgetCache` 全局无人读）。
+- 实测内联可执行脚本从每页 3 段降为 **2 类**：theme-init（35 页）+ redirect（2 页）；
+  `_headers` 的 hash 并集 = **2**（远低于 8 的上限）。
+- 页面 meta 的 hash 集合是 `_headers` 并集的**子集**（实测 35 页 0 违规）——
+  redirect 页**故意不带 meta**，其 hash 只进 `_headers`。
+
+**Accept（已核实）：** `script-src` 无 `'unsafe-inline'`（`_headers` 与 meta 皆是）；
+`style-src 'unsafe-inline'` 保留；主题初始化/重定向正常；hash 数 = 2 ≤ 8。
 
 ---
 
@@ -876,7 +964,7 @@ python3 -m pytest scripts/test_production_compose_contract.py -q
 
 ---
 
-#### T11 · 修复 Admin JetBrains Mono 字体 404
+#### T11 · 修复 Admin JetBrains Mono 字体 404  ✅ **已执行**
 
 **根因（Phase 1–3 已验证）：** CSS `@import` 引入的 fontsource CSS 中的相对 `url(./files/…)`
 未被 Vite 解析改写，且文件未被 emit；web 端已用「JS import」修复并在注释中记录原因。
@@ -940,7 +1028,9 @@ pnpm --filter @soymutdb/admin test
 
 **Verify:**
 ```bash
-pnpm --filter @soymutdb/web build:sites
+VITE_DEPLOYMENT_MODE=demo VITE_API_BASE_URL=https://api.soymutdb.test \
+VITE_JBROWSE_BASE_URL=https://jbrowse.soymutdb.test \
+  pnpm --filter @soymutdb/web build:sites
 grep -o "soymutdb-static-[a-z]*-v[0-9a-zA-Z-]*" apps/web/dist/external/sw.js | sort -u
 grep -o "soymutdb-runtime-[a-z]*-v[0-9a-zA-Z-]*" apps/web/dist/external/sw.js | sort -u
 grep -o "soymutdb-runtime-[a-z]*-v[0-9a-zA-Z-]*" apps/web/dist/internal/sw.js | sort -u   # 变体不同
@@ -953,33 +1043,49 @@ python3 -m pytest scripts/test_site_artifact_isolation.py -q
 
 ---
 
-#### T13 · Node 版本韧性（测试层）
+#### T13 · Node 版本韧性（测试层）  ✅ **已执行**
 
-**根因：** Node 25+ 引入内置 `localStorage` 全局（需 `--localstorage-file`）。**实测（Node 26.8.1）**：
+**根因：** Node 25+ 引入内置 `localStorage` 全局（需 `--localstorage-file`）。**实测（Node 26.8.1）：**
 `Object.getOwnPropertyDescriptor(globalThis, "localStorage")` → `{ configurable: true, enumerable: false, get: fn }`，
 未提供 `--localstorage-file` 时该 getter 返回 `undefined` 并输出
 `ExperimentalWarning: localStorage is not available because --localstorage-file was not provided`。
 vitest 的 jsdom 环境安装全局时会**跳过已存在于 `globalThis` 的键** → `localStorage` 保持 `undefined`，
 `afterEach(() => localStorage.clear())` 抛 `TypeError`。项目 pin Node 24，但开发机/CI 镜像漂移时会得到假失败。
 
-**已验证的修法（在 Node 26.8.1 上实测：`before: undefined` → `after: object`）：** 由于该属性
-`configurable: true`，可以用 `Object.defineProperty` 重新绑定。
+**⚠️ v2 规定的修法不可行（执行时实测推翻）：** v2 写的是
+`Object.defineProperty(globalThis, "localStorage", { value: jsdomWindow.localStorage })`。
+但 vitest 的 jsdom 环境把 window 别名到了全局对象本身：
+
+```
+typeof globalThis.window                    // "object"
+globalThis.window === globalThis            // true
+globalThis.document.defaultView === globalThis // true
+```
+
+于是 `window.localStorage` 读回的仍是那个被遮蔽的 `undefined`，写入后只会把 Node 的 getter
+换成值为 `undefined` 的数据属性（实测：描述符从 `hasGet:true` 变成 `hasValue:true`）——**比不改还糟**。
+全局上**不存在**可达的 jsdom Storage。
+
+**实际可行的修法（已实测）：** 在 setup 中用**动态 `import("jsdom")` 新建一个 window**，
+从它取出真正的 `Storage`（`constructor.name === "Storage"`，`length`/`key()`/`clear()` 均正常）。
+jsdom 已是 apps/web 的 devDependency（SSG 脚本在用），动态导入使 `environment: node` 的测试
+完全不付这个开销。`sessionStorage` **不需要** shim：实测 Node 26 上它是可用的内存 `Storage`。
 
 **Files:** `apps/web/src/test/setup.ts`（新建）、`apps/web/vitest.config.ts`、`docs/dev/`
 
-- [ ] 1. 新建 `apps/web/src/test/setup.ts`：
+- [ ] 1. 新建 `apps/web/src/test/setup.ts`（**只在 DOM 环境且全局缺失时生效**）：
       ```ts
-      // Node 25+ 暴露内置 localStorage（未启用 --localstorage-file 时为 undefined），
-      // vitest 的 jsdom 环境不会覆盖 globalThis 上已存在的键 → localStorage 变 undefined。
-      // 这里把 jsdom 的实现重新绑定回 globalThis，使测试在 Node 24 与 26 下行为一致。
-      const jsdomWindow = (globalThis as { window?: Window }).window;
-      if (jsdomWindow && typeof (globalThis as { localStorage?: unknown }).localStorage === "undefined") {
-        Object.defineProperty(globalThis, "localStorage", {
-          value: jsdomWindow.localStorage,
-          configurable: true,
-        });
+      const g = globalThis as { document?: unknown; localStorage?: unknown };
+      if (typeof g.document !== "undefined" && typeof g.localStorage === "undefined") {
+        // 不能用 window.localStorage（window === globalThis，读回仍是 undefined）。
+        // 动态 import 使 node 环境的测试不加载 jsdom。
+        const { JSDOM } = await import("jsdom");
+        const { localStorage } = new JSDOM("", { url: "http://localhost/" }).window;
+        Object.defineProperty(globalThis, "localStorage", { value: localStorage, configurable: true });
       }
       ```
+      注意：jsdom 对不透明 origin 不提供 Web Storage，所以 `url` 必须显式给出。
+      文件头需写明**已实测的**事实（含「为何不能用 window.localStorage」的测量结果）。
 - [ ] 2. `apps/web/vitest.config.ts` 的 `test` 增加 `setupFiles: ["./src/test/setup.ts"]`
       （**当前没有 setupFiles**，v1 未指明这一点）。
 - [ ] 3. `docs/dev/` 记录该兼容层的存在与移除条件（Node 稳定后 / vitest 修复后）。
@@ -987,22 +1093,28 @@ vitest 的 jsdom 环境安装全局时会**跳过已存在于 `globalThis` 的�
 **Verify:**
 ```bash
 # Node 24（.nvmrc）
-/tmp/node24/bin/node --version && PATH=/tmp/node24/bin:$PATH pnpm --filter @soymutdb/web test
-# Node 26（系统 node，验证韧性）
-/media/rlcao/Data/software/bin/node --version && \
-  PATH=/media/rlcao/Data/software/bin:$PATH pnpm --filter @soymutdb/web test
+PATH=/tmp/node24/bin:$PATH node --version && PATH=/tmp/node24/bin:$PATH pnpm --filter @soymutdb/web test
+# Node 26（漂移韧性）—— 已实测：修复前 1 failed，修复后 36 files / 180 tests 全过
+N26=/media/rlcao/Data/software/bin; PATH=$N26:$PATH node --version && \
+  PATH=$N26:$PATH pnpm --filter @soymutdb/web test
 ```
 
 **Accept:** 两个 Node 大版本下测试结果一致（36 files / 180 tests 通过）。
 
 ---
 
-#### T14 · `.gz` 产物策略 + `precompress.sh` 幂等修复（D-5 阻断镜像构建）
+#### T14 · `.gz` 产物策略 + `precompress.sh` 刷新陈旧件（D-5）  ✅ **已执行**
 
-**根因 A（D-5，最高优先）：** `precompress.sh` 用 `find … -exec gzip -k -9 {} +`。
-`Dockerfile.web` 之前已跑过完整 web 构建（含 `gzip-compress.ts`，会生成 `.gz`），
-`gzip -k` 遇到已存在的 `.gz` 返回 **exit 2**（实测），`find -exec … +` 随之非零，`set -e`
-直接中断 **web 镜像构建**。admin 因构建不产生 `.gz` 而侥幸通过。
+**根因 A（D-5，中）：** `precompress.sh` 用 `find … -exec gzip -k -9 {} \;`。
+`gzip -k` **拒绝覆盖**已存在的 `.gz`（实测 `gzip: a.js.gz already exists; not overwritten`），
+于是**保留旧压缩体**：源文件变更后，nginx `gzip_static` 会继续送出陈旧的 `.gz`。
+字体最严重 —— `.woff`/`.woff2`/`.ttf` **只由本脚本压缩**，构建链完全不覆盖。
+
+**⚠️ 严重度修正（v2 误判，已实测推翻）：** v2 把此项写成「`gzip -k` exit 2 + `find -exec … +` 非零 +
+`set -e` → 中断 web 镜像构建」（严重度「高」）。这是**错的**：脚本用的是 `\;` 而非 `+`，
+而 POSIX 下 **`-exec … \;` 永远为真**，不传播命令失败。实测：`-exec false \;` → rc=0，
+`-exec false +` → rc=1。v2 的探针误用 `+`，把警告误读成构建失败。
+**结论：这是陈旧产物缺陷（中），不是构建中断（高）。** 修复仍然必要，但优先级和风险描述必须纠正。
 
 **根因 B（D-4）：** `.gz` 预压缩文件仅容器 nginx 的 `gzip_static` 使用，
 Pages/gh-pages 路径下不生效却让产物体积近乎翻倍。
@@ -1012,7 +1124,7 @@ Pages/gh-pages 路径下不生效却让产物体积近乎翻倍。
 `scripts/build-static-apps.sh`、`infra/docker/Dockerfile.web`、`infra/docker/Dockerfile.admin`、
 `docs/ops/production-build.md`、`scripts/test_dockerfile_contracts.py`
 
-- [ ] 1. **先修 D-5（阻断项）：** `precompress.sh` 改为幂等：
+- [ ] 1. **修 D-5：** `precompress.sh` 改为「陈旧则重压，最新则跳过」：
       ```sh
       find "$target_dir" -type f \( … \) -exec sh -c '
         for f do
@@ -1031,17 +1143,20 @@ Pages/gh-pages 路径下不生效却让产物体积近乎翻倍。
       在 `precompress.sh` 注释中写明这一分工与幂等要求。
 - [ ] 5. `docs/ops/production-build.md` 记录决策、影响（产物体积 vs 容器 `gzip_static`）
       与 `SOYMUTDB_EMIT_GZ` 的适用范围。
-- [ ] 6. **同一任务内**在 `scripts/test_dockerfile_contracts.py` 增加幂等回归测试：
-      在临时目录构造一个已含 `.gz` 的 `x.js`，连续运行 `precompress.sh` **两次**，
-      断言两次都 exit 0 且 `.gz` 内容为最新。
+- [ ] 6. **同一任务内**在 `scripts/test_dockerfile_contracts.py` 增加回归测试
+      `test_precompress_refreshes_stale_archives`：在临时目录构造源文件 + 人为做旧的 `.gz`，
+      运行脚本后断言 `.gz` **已刷新为最新内容**；并断言重复运行 exit 0。
+      **已实测回滚变红**：旧脚本 `refreshes stale .gz ? False`，新脚本 `True`。
 
 **Verify:**
 ```bash
-# 1) 幂等回归（D-5）
+# 1) 陈旧件刷新回归（D-5）
 python3 -m pytest scripts/test_dockerfile_contracts.py -q
 
 # 2) Pages 路径无 .gz
-pnpm --filter @soymutdb/web build:sites
+VITE_DEPLOYMENT_MODE=demo VITE_API_BASE_URL=https://api.soymutdb.test \
+VITE_JBROWSE_BASE_URL=https://jbrowse.soymutdb.test \
+  pnpm --filter @soymutdb/web build:sites
 ! find apps/web/dist/external -name '*.gz' | grep -q .
 du -sh apps/web/dist/external            # 与 v1 基线对比应显著下降
 
@@ -1051,8 +1166,9 @@ find apps/web/dist -name '*.gz' | head
 grep -c "gzip_static" infra/docker/web-nginx.conf    # 仍为 2
 ```
 
-**Accept:** `precompress.sh` 两次运行均成功（幂等）；Pages 路径产物无 `.gz`；
-容器路径仍产出 `.gz` 且 `gzip_static` 保持开启；D-5 在回滚时回归测试变红。
+**Accept:** `precompress.sh` 在源文件变更后刷新 `.gz`，重复运行 exit 0；
+Pages 路径产物无 `.gz`；容器路径仍产出 `.gz` 且 `gzip_static` 保持开启；
+回归测试在回滚到旧脚本时变红（已实测）。
 
 ---
 
@@ -1394,7 +1510,9 @@ v1 的 glob 全部匹配不到 → 门禁静默 `SKIP` = 假通过。
 
 **Verify:**
 ```bash
-pnpm --filter @soymutdb/web build:sites
+VITE_DEPLOYMENT_MODE=demo VITE_API_BASE_URL=https://api.soymutdb.test \
+VITE_JBROWSE_BASE_URL=https://jbrowse.soymutdb.test \
+  pnpm --filter @soymutdb/web build:sites
 bash scripts/check-bundle-size.sh apps/web/dist/external/assets
 bash scripts/check-bundle-size.sh apps/web/dist/internal/assets
 bash scripts/check-bundle-size.sh apps/web/dist/assets        # verify-frontend-artifacts 的调用路径
@@ -1436,7 +1554,9 @@ bash scripts/check-bundle-size.sh --self-test
 
 **Verify:**
 ```bash
-pnpm --filter @soymutdb/web build:sites
+VITE_DEPLOYMENT_MODE=demo VITE_API_BASE_URL=https://api.soymutdb.test \
+VITE_JBROWSE_BASE_URL=https://jbrowse.soymutdb.test \
+  pnpm --filter @soymutdb/web build:sites
 cd e2e && npm run test:web-performance:external
 cd e2e && npm run test:web-performance:internal
 ls test-results-web-performance/performance-report-*.json
@@ -1475,7 +1595,9 @@ ls test-results-web-performance/performance-report-*.json
 
 **Verify:**
 ```bash
-pnpm --filter @soymutdb/web build:sites
+VITE_DEPLOYMENT_MODE=demo VITE_API_BASE_URL=https://api.soymutdb.test \
+VITE_JBROWSE_BASE_URL=https://jbrowse.soymutdb.test \
+  pnpm --filter @soymutdb/web build:sites
 ! find apps/web/dist/external -path '*fonts/harmonyos*' | grep -q .
 du -sh apps/web/dist/external               # 对比基线应下降约 12.8 MB
 bash scripts/check-bundle-size.sh apps/web/dist/external/assets
@@ -1493,9 +1615,11 @@ admin/jbrowse 的 `unicode-range` 生效且子集化决策有书面记录；无�
 
 #### T27 · 清零 lint warnings（**分批 + 行为回归**）
 
-**v1 的问题（已修正）：** v1 只列了 2 个文件，实际 **37 warnings / 0 errors，分布约 20 个文件**。
+**v1/v2 的问题（已修正）：** v1 只列了 2 个文件，v2 只算了 web 的 37 条。**实测 workspace 为
+0 errors / 90 warnings**：web 37、admin 53、jbrowse 0。V2 要求的是 workspace 清零，所以 admin 的 53 条
+也在范围内（否则门禁永远不可能变绿）。
 
-**Files（按批次）:**
+**Files（web，按批次）:**
 - 批次 1 — 真实缺陷类：`apps/web/src/routes/browser.tsx:152`（Cannot access refs during render）、
   `apps/web/src/components/soymutdb-widget.ts:41`（无效 disable）、`:420`（`no-console`）
 - 批次 2 — effect 内同步 `setState`：`file-viewer/{code-viewer,docx-viewer,file-preview-dialog,
@@ -1518,17 +1642,23 @@ admin/jbrowse 的 `unicode-range` 生效且子集化决策有书面记录；无�
         （对照 `apps/web/src/test/mocks.ts` 中关于 `t` 身份稳定的教训）。
 - [ ] 3. 逐条处理剩余 warnings；**不**使用全局 `eslint-disable` 兜底；
       确需抑制的必须在**同一行**写明理由。
-- [ ] 4. 同时跑 admin/jbrowse 的 lint，确认 workspace 整体为 0/0。
+- [ ] 4. **同时处理 `@soymutdb/admin` 的 53 条 warnings**（实测计数）：先按规则分组
+      （`react-hooks/set-state-in-effect`、依赖不稳定、无效 disable 等），同样**每批附行为回归**；
+      `@soymutdb/jbrowse` 实测 0 条，只需在验证中确认仍为 0。
+      最后用 `pnpm lint`（workspace）确认 0/0。
 
 **Verify:**
 ```bash
-PATH=/tmp/node24/bin:$PATH pnpm --filter @soymutdb/web lint   # 期望 0 problems
-PATH=/tmp/node24/bin:$PATH pnpm lint                          # workspace
-pnpm --filter @soymutdb/web test                              # 180 passed（含新增回归）
+PATH=/tmp/node24/bin:$PATH pnpm --filter @soymutdb/web lint     # 期望 0 problems
+PATH=/tmp/node24/bin:$PATH pnpm --filter @soymutdb/admin lint   # 期望 0 problems（基线 53）
+PATH=/tmp/node24/bin:$PATH pnpm --filter @soymutdb/jbrowse lint # 期望 0 problems（基线 0）
+PATH=/tmp/node24/bin:$PATH pnpm lint                            # workspace 整体 0/0
+pnpm --filter @soymutdb/web test                                # 180 passed（含新增回归）
+pnpm --filter @soymutdb/admin test                              # 127 passed
 pnpm typecheck
 ```
 
-**Accept:** lint 输出 0 errors 0 warnings（workspace）；每批附行为回归测试且全绿。
+**Accept:** `pnpm lint`（workspace）输出 0 errors 0 warnings；每批附行为回归测试且全绿。
 
 ---
 
@@ -1644,12 +1774,14 @@ cd apps/api && .venv/bin/python -m pytest tests -q -k module_import
 `scripts/check_artifact_headers.py`、`scripts/verify-frontend-artifacts.sh`、
 `scripts/smoke.sh`、`scripts/ci-job-steps.sh`
 
-- [ ] 1. `check_nginx_security_headers.py` 最终断言集：
-      - 4 个 nginx conf 中每个含 `add_header` 的 location 必须 include 片段或内联全部安全头；
-      - 任何 `$http_origin` 反射必须伴随 `Vary`，且 `/data/`、`/jbrowse-data/`、`/track.gif`
-        不得再出现反射；
-      - 全仓不得出现 `X-XSS-Protection`；
-      - 按 §4.0 表格比较片段与生成侧策略（9 条指令逐字一致）。
+- [ ] 1. `check_nginx_security_headers.py`（**已在 T1 内实现，此处只接线**）：
+      - 6 个 nginx conf 中每个含 `add_header` 的 location，必须 include 片段或内联声明
+        **其外层已声明的**安全头（规则以「外层实际声明集」为准，而非固定 6 项 —— 数据面代理
+        只需保持 `nosniff`，HTML 面才需全 6 项）；
+      - 片段变量必须在**同一 nginx 实例**内被 `map`/`set` 定义（否则 `nginx: [emerg] unknown variable`）；
+      - 片段必须是 `.inc`；每个片段必须声明全 6 个头名；CSP 指令集需与生成侧对齐（无 `media-src`）；
+      - 全仓无 `X-XSS-Protection`；无反射 `$http_origin`；
+      - 每个 nginx 镜像 Dockerfile 必须 COPY 它所 include 的片段。
 - [ ] 2. `check_artifact_headers.py` 最终断言集：
       - `apps/web/dist/{external,internal}/_headers` 必须存在；
       - `apps/{admin,jbrowse}/dist/_headers` 必须存在；
@@ -1699,7 +1831,7 @@ git diff --stat -- .cnb.yml .github/workflows   # 必须为空
       | external/internal 的 `_headers` 各自存在且 origin 正确 | T2 | 是 |
       | jbrowse `_headers` 无 `example.com` 且含 API + 数据 origin | T3 | 是 |
       | external 产物不含 internal 的 SW 缓存命名空间（负向泄漏） | T12 | 是 |
-      | `precompress.sh` 连续两次运行均 exit 0（幂等） | T14 | 是 |
+      | `precompress.sh` 刷新陈旧 `.gz` 且重复运行 exit 0 | T14 | 是（已实测） |
       | web 产物不含 `fonts/harmonyos` | T26 | 是 |
       | 对比度门禁在回滚 T15/T16 后变红 | T17 | 是 |
 
@@ -1747,14 +1879,14 @@ python3 -m pytest \
 | V3 | `pnpm typecheck` | 全 package successful | 全量 |
 | V4 | `pnpm test` | 全 workspace 通过（Node 24；V4b 见下） | 全量 |
 | V4b | Node 26 下 `pnpm --filter @soymutdb/web test` | 与 Node 24 结果一致 | T13 |
-| V5 | `pnpm --filter @soymutdb/web build:sites` | exit 0，双产物，无 `.gz` | T2/T5/T12/T14/T26 |
+| V5 | `VITE_DEPLOYMENT_MODE=demo VITE_API_BASE_URL=https://api.soymutdb.test VITE_JBROWSE_BASE_URL=https://jbrowse.soymutdb.test pnpm --filter @soymutdb/web build:sites` | exit 0，双产物，无 `.gz` | T2/T5/T12/T14/T26 |
 | V6 | `bash scripts/build-pages-artifact.sh` + `bash scripts/verify-pages-artifact.sh pages-dist` | exit 0，jbrowse `_headers` 无占位符 | T3 |
 | V7 | `python3 scripts/check_contrast_tokens.py --include-chart` | exit 0 | T15/T16/T17 |
 | V8 | `python3 scripts/check_nginx_security_headers.py` | exit 0 | T1/T8/T9 |
 | V9 | `bash scripts/check-production-artifact.sh apps/web/dist/external --allow-demo` | OK（demo 构建） | T2/T29 |
 | V9b | `bash scripts/check-production-artifact.sh apps/web/dist` | 仅在**真实 release API 构建**后执行，期望 OK | T29 |
 | V10 | `bash scripts/check-bundle-size.sh apps/web/dist/external/assets`（internal 同） | exit 0，无静默 SKIP | T24 |
-| V11 | `STATIC_DIR=apps/web/dist/external bash scripts/smoke.sh --profile static`（internal 同） | PASS | 产物 |
+| V11 | `bash scripts/smoke.sh --profile static --static-dir apps/web/dist/external`（internal 同） | PASS（实测：必须用 `--static-dir`，环境变量形式会被脚本第 51 行的 `STATIC_DIR=""` 覆盖 → 实际校验根 `dist/`，是**假通过**） | 产物 |
 | V12 | `bash scripts/verify-frontend-artifacts.sh` | exit 0 | 全前端门禁 + T31 |
 | V13 | `cd e2e && npx playwright test -c playwright-public.config.ts` | 全通过（含 T18/T19/T21/T22 断言） | T18–T22 |
 | V14 | `cd e2e && npm run test:web-performance:external` / `:internal` | 两份基线报告产出且达标 | T25 |
@@ -1793,7 +1925,7 @@ V4b 用 Node 26 验证 T13 的韧性。
 | T7 只读根导致 nginx 起不来 | 日志/pid/临时目录不可写 | 照抄 `cloudflare-tunnel.conf` 已验证写法（stdout/stderr + `/tmp`）；tmpfs 兜底；必须实际 `up -d` 验证 healthy |
 | T7 非 root 绑 80 失败 | `cap_drop: ALL` | `listen 8080` + compose 端口同步；契约测试断言端口一致 |
 | T12 缓存迁移击穿 | 老 SW 无法清理新命名 | activate 只清本变体旧版本 + 一次性清无变体旧名；`skipWaiting`/`clients.claim` 已存在；负向隔离测试 |
-| T14 precompress 再次中断构建 | 未加 `-f`/`-nt` | 幂等回归测试（连续两次 exit 0）；Docker 构建冒烟 |
+| T14 `.gz` 陈旧导致 nginx 送出过期内容 | 源变更而 `.gz` 未刷新 | `-nt` 守卫 + 回归测试（实测旧脚本 False / 新脚本 True）；Docker 构建冒烟 |
 | T15/T16 色板调整影响品牌视觉 | token 变化 | 改动限定在 `chart-*`/`impact-*`/`destructive-*`；`visual-layout.spec.ts` 截图对比；单 commit 可回滚 |
 | T24 门禁误杀 minimal 部署 | heavy chunk 缺失 | `SOYMUTDB_ALLOW_MISSING_HEAVY_CHUNKS=1` 显式开关 + 打印原因；required 列表只含稳定 chunk |
 | T25 阈值在 CI 抖动 | 性能噪声 | 3 次导航取中位数；阈值 = 实测 + 余量并写入文档；失败信息含实测值 |
@@ -1819,7 +1951,7 @@ V4b 用 Node 26 验证 T13 的韧性。
       nginx dev 路径的保留有显式注释与文档说明；两条路径的差异与 §4.0 表格一致
 - [ ] 全仓无 `forwarded-allow-ips=*` 与 `0.0.0.0/0`；伪造 XFF 的功能性负向测试通过
 - [ ] 无使用无上限日志驱动的长驻服务；nginx 以非 root + 只读根运行且健康
-- [ ] `precompress.sh` 幂等（连续两次运行 exit 0），web 镜像构建不再被中断
+- [ ] `precompress.sh` 在源变更后刷新 `.gz`（回归测试实测旧脚本变红、新脚本变绿）
 - [ ] 所有对比度断言 ≥ WCAG AA（文本 4.5:1 / 图形 3:1），含 alpha 叠加场景
 - [ ] SW 的静态与运行时缓存均按站点变体隔离，`caches.match` 均带 `cacheName`
 - [ ] web 产物无 HarmonyOS 死负载；无「为不存在字体加 preload」
@@ -1832,7 +1964,7 @@ V4b 用 Node 26 验证 T13 的韧性。
 
 | Skill | 在本计划中的作用 |
 |---|---|
-| `systematic-debugging` | 每个问题均走「读错误→复现→查变更→多组件取证→追数据流」，根因写在任务开头；T17 遵循「先写失败门禁再修」的 Phase 4 顺序；T14 的 D-5 由实测 `gzip` 退出码定位（非推测） |
+| `systematic-debugging` | 每个问题均走「读错误→复现→查变更→多组件取证→追数据流」，根因写在任务开头；T17 遵循「先写失败门禁再修」的 Phase 4 顺序；T14 的 D-5 由实测 `gzip` 退出码 + `-exec \;` vs `+` 的退出码传播差异定位 |
 | `ui-ux-pro-max-zh-1.0.0` | 提供 8 类优先级规则（无障碍→触摸→性能→布局→字体颜色→动画→风格→图表）；T15–T22 逐条对应 `ux-guidelines.csv` 的 High/Medium 项 |
 | `design-master-2.1.2` | `references/scripts/search.py` 生成设计系统基线；`ui-ux-data/ux-guidelines.csv` 提供 60+ 可执行准则；`design-tokens-spec.md` 指导 token 分层；`theme-switching.md` 提供亮/暗/高对比三态参考（高对比态可作后续扩展） |
 | `web-perf` | T23–T26 采用其 Phase 1–5 流程（trace→CWV→网络→a11y→代码库）；因无 Chrome DevTools MCP，改用 Playwright Resource Timing + PerformanceObserver 采集，取 3 次中位数 |
