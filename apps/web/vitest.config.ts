@@ -19,6 +19,10 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    // Rebinds jsdom's localStorage on Node 25+, where Node's own experimental
+    // global shadows it and leaves the value `undefined`. See the file header
+    // for the measured behaviour and the removal condition.
+    setupFiles: ["./src/test/setup.ts"],
     include: [
       "scripts/__tests__/**/*.test.{ts,tsx}",
       "src/**/__tests__/**/*.test.{ts,tsx}",
