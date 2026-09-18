@@ -112,6 +112,61 @@ def test_global_cursor_rejects_context_mismatch() -> None:
         )
 
 
+def test_global_cursor_ignores_selected_type_order() -> None:
+    """The same result types in a different order are the same filter set.
+
+    The bound context is digested with ``json.dumps(sort_keys=True)``, which
+    orders dict keys and leaves list elements alone. A list of type names was
+    therefore order-significant: ``types=gene,publication`` and
+    ``types=publication,gene`` produced different digests, and the second
+    request was rejected with "Cursor context does not match this release or
+    filter set" even though the caller had asked for exactly the same rows.
+    ``_normalize_active_types`` exists to make cursor bindings deterministic and
+    is now applied on both the encoding and the decoding side.
+    """
+    cursor = _encode_global_cursor(_payload())
+    decoded = _decode_global_cursor(
+        cursor,
+        query="Glyma",
+        active_types=[
+            SearchResultType.PUBLICATION,
+            SearchResultType.MUTANT_LINE,
+            SearchResultType.GENE,
+        ],
+        site_variant=SiteVariant.EXTERNAL,
+        release_id=7,
+        assembly_id=11,
+    )
+    assert decoded["positions"]["gene"]["assembly_id"] == 11
+
+
+def test_cursor_rejection_names_the_changed_part_without_echoing_values() -> None:
+    """A rejected cursor says which bound part moved, but not what it holds.
+
+    Without attribution a client cannot tell a stale cursor from one replayed
+    against a different query. The value is deliberately withheld: the filter
+    set carries the caller's own query text, and echoing it into an error
+    response would hand one caller's search terms to another.
+    """
+    cursor = _encode_global_cursor(_payload())
+    with pytest.raises(ValidationError) as error:
+        _decode_global_cursor(
+            cursor,
+            query="other",
+            active_types=[
+                SearchResultType.GENE,
+                SearchResultType.MUTANT_LINE,
+                SearchResultType.PUBLICATION,
+            ],
+            site_variant=SiteVariant.EXTERNAL,
+            release_id=7,
+            assembly_id=11,
+        )
+    message = str(error.value)
+    assert "query" in message
+    assert "other" not in message
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("limit", [1, 2])
 async def test_global_cursor_merges_sources_by_score_without_skipping(

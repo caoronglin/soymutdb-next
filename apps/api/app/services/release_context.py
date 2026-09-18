@@ -119,6 +119,11 @@ def encode_bound_cursor(
         "v": _CURSOR_VERSION,
         "k": kind,
         "c": _context_digest(release_context, filters),
+        # Per-part digests, alongside the combined one, so a rejected cursor can
+        # name what changed instead of only saying that something did. Additive:
+        # a cursor issued before this field existed still validates, and falls
+        # back to the generic message.
+        "p": _context_part_digests(release_context, filters),
         "s": dict(sort_key),
     }
     raw = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -156,7 +161,7 @@ def decode_bound_cursor(
     if payload.get("k") != kind:
         raise ValidationError("Invalid cursor kind")
     if payload.get("c") != _context_digest(release_context, filters):
-        raise ValidationError("Cursor context does not match this release or filter set")
+        raise ValidationError(_context_mismatch_message(payload, release_context, filters))
     sort_key = payload.get("s")
     if not isinstance(sort_key, dict):
         raise ValidationError("Invalid cursor sort key")
@@ -178,6 +183,53 @@ def _context_digest(
         default=str,
     ).encode("utf-8")
     return hashlib.sha256(canonical).hexdigest()
+
+
+def _context_part_digests(
+    release_context: ReleaseContext,
+    filters: Mapping[str, Any] | None,
+) -> dict[str, str]:
+    """Digest each bound part on its own, for attribution when one changes."""
+    parts: dict[str, Any] = {"release": release_context.identity()}
+    parts.update(dict(filters or {}))
+    return {
+        name: hashlib.sha256(
+            json.dumps(
+                {name: value},
+                sort_keys=True,
+                separators=(",", ":"),
+                default=str,
+            ).encode("utf-8")
+        ).hexdigest()
+        for name, value in parts.items()
+    }
+
+
+def _context_mismatch_message(
+    payload: Mapping[str, Any],
+    release_context: ReleaseContext,
+    filters: Mapping[str, Any] | None,
+) -> str:
+    """Name the bound parts that no longer match, without echoing their values.
+
+    A client holding a cursor cannot tell a stale cursor from one replayed
+    against a different query unless the rejection says which part moved, and
+    the combined digest cannot answer that on its own. Only the *names* are
+    reported: a filter set carries the caller's own query text, and echoing it
+    back would put one caller's search terms into another's error response.
+
+    Cursors issued before the per-part digests existed carry no attribution, so
+    this falls back to the original message rather than guessing.
+    """
+    base = "Cursor context does not match this release or filter set"
+    supplied = payload.get("p")
+    if not isinstance(supplied, dict):
+        return base
+    expected = _context_part_digests(release_context, filters)
+    changed = sorted(
+        name for name, digest in expected.items() if supplied.get(name) != digest
+    )
+    return f"{base}: {', '.join(changed)}" if changed else base
 
 
 def _cursor_secret() -> bytes:

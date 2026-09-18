@@ -14,7 +14,8 @@ from __future__ import annotations
 
 import hashlib
 import unicodedata
-from typing import Any, Mapping
+from collections.abc import Iterable, Mapping
+from typing import Any
 from urllib.parse import quote, urlencode
 
 from sqlalchemy import and_, case, desc, func, literal, or_, select
@@ -45,7 +46,6 @@ from .release_context import (
     resolve_release_context,
 )
 
-
 _GLOBAL_CURSOR_VERSION = 1
 _MAX_GLOBAL_CURSOR_LENGTH = 8192
 _CURSOR_SOURCES = (
@@ -74,10 +74,27 @@ def _cursor_filters(
     """Return non-secret context bound by the existing cursor primitive."""
     return {
         "query": _query_fingerprint(query),
-        "types": [item.value for item in active_types],
+        "types": _cursor_type_values(active_types),
         "site_variant": site_variant.value,
         "assembly_id": assembly_id,
     }
+
+
+def _cursor_type_values(types: Iterable[str | SearchResultType]) -> list[str]:
+    """Canonical, de-duplicated type values for cursor binding.
+
+    The bound context is digested with ``json.dumps(sort_keys=True)``, which
+    orders dict keys and leaves list elements alone. A list of type names is
+    therefore order-significant to the digest, so two requests that select the
+    same result types in a different order produced different digests and the
+    second request was rejected with "Cursor context does not match this release
+    or filter set" even though nothing about the filter set had changed.
+
+    ``_normalize_active_types`` already exists to make cursor bindings
+    deterministic and orders by enum declaration; this applies it to both the
+    encoder and the decoder so the ordering can no longer be the caller's.
+    """
+    return [item.value for item in _normalize_active_types(list(types))]
 
 
 def _encode_global_cursor(payload: Mapping[str, Any]) -> str:
@@ -91,7 +108,7 @@ def _encode_global_cursor(payload: Mapping[str, Any]) -> str:
     )
     filters = {
         "query": payload["q"],
-        "types": payload["types"],
+        "types": _cursor_type_values(payload["types"]),
         "site_variant": payload["site_variant"],
         "assembly_id": payload.get("assembly_id"),
     }
