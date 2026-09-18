@@ -23,6 +23,13 @@ cd "${REPO_ROOT}"
 SOYMUTDB_CI_DEMO_MODE="${SOYMUTDB_CI_DEMO_MODE:-demo}"
 SOYMUTDB_CI_DEMO_API_URL="${SOYMUTDB_CI_DEMO_API_URL:-https://api.soymutdb.test}"
 SOYMUTDB_CI_DEMO_JBROWSE_URL="${SOYMUTDB_CI_DEMO_JBROWSE_URL:-https://jbrowse.soymutdb.test}"
+# JBrowse's `_headers` injector refuses to publish a policy whose frame-ancestors
+# cannot name the embedding origins, because `'self'` alone blocks the portal and
+# the admin console on their own hostnames. Production must name the real
+# origins; this offline fixture uses the same `.test` convention as the two
+# origins above so the gate stays runnable without network access.
+SOYMUTDB_CI_DEMO_PORTAL_URL="${SOYMUTDB_CI_DEMO_PORTAL_URL:-https://portal.soymutdb.test}"
+SOYMUTDB_CI_DEMO_ADMIN_URL="${SOYMUTDB_CI_DEMO_ADMIN_URL:-https://admin.soymutdb.test}"
 
 step() { printf '\n==> %s\n' "$*"; }
 
@@ -38,6 +45,8 @@ step "Build all apps (offline demo fixture)"
 VITE_DEPLOYMENT_MODE="${SOYMUTDB_CI_DEMO_MODE}" \
 VITE_API_BASE_URL="${SOYMUTDB_CI_DEMO_API_URL}" \
 VITE_JBROWSE_BASE_URL="${SOYMUTDB_CI_DEMO_JBROWSE_URL}" \
+SOYMUTDB_PORTAL_ORIGIN="${SOYMUTDB_CI_DEMO_PORTAL_URL}" \
+SOYMUTDB_ADMIN_ORIGIN="${SOYMUTDB_CI_DEMO_ADMIN_URL}" \
   pnpm build
 
 step "Scan demo artifact for placeholder origins"
