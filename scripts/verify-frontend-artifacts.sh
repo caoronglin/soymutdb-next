@@ -52,6 +52,18 @@ SOYMUTDB_ADMIN_ORIGIN="${SOYMUTDB_CI_DEMO_ADMIN_URL}" \
 step "Scan demo artifact for placeholder origins"
 bash "${REPO_ROOT}/scripts/check-production-artifact.sh" apps/web/dist --allow-demo
 
+# `_headers` is copied verbatim into `dist/`, so a comment there is published
+# text. Both of these read the emitted trees rather than the sources, and both
+# were written but never called by any shared script — the artifact contract in
+# `.github/workflows/baseline-validation.yml` was the only thing checking the
+# published header files, and it reported a build with no build error to explain
+# it. Run them here, after the build that produces their input.
+step "Artifact header contract (CSP, placeholders, build-variable names)"
+python3 scripts/check_artifact_headers.py
+
+step "nginx security-header fragments"
+python3 scripts/check_nginx_security_headers.py
+
 step "Bundle size budget gate"
 bash "${REPO_ROOT}/scripts/check-bundle-size.sh"
 

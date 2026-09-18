@@ -144,6 +144,10 @@ smoke_contracts() {
   # rule did exactly that to packages/shared/src/build/) leaves every local
   # build green while a clean clone has no source for the import at all.
   "${PYTHON_BIN}" scripts/check_workspace_exports.py || rc=$?
+  # nginx security-header fragments and the locations that must re-include
+  # them. Not part of the frontend gate: the configs cover the API and data
+  # planes too, so a backend-only change can break them.
+  "${PYTHON_BIN}" scripts/check_nginx_security_headers.py || rc=$?
   "${PYTHON_BIN}" -m pytest "${tests[@]}" -q || rc=$?
   echo
   echo "-- environment-bound contract suites (reported, not gating here) --"

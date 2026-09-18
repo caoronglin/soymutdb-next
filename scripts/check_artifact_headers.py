@@ -75,6 +75,27 @@ PLACEHOLDER_RE = re.compile(
     re.I,
 )
 
+# Build-time variable names that must never appear in a published artifact.
+#
+# The build rewrites the origin-bearing CSP directives from these variables, so
+# a literal name in the emitted file means one of two things and nothing can
+# tell them apart from the bytes alone: the substitution silently did not run,
+# or someone wrote the variable name into a comment. The second case is not
+# harmless either — it breaks the artifact contract check in
+# `.github/workflows/baseline-validation.yml`, which greps the built tree for
+# exactly these names, and a gate that has to be narrowed to accommodate a
+# comment is a gate that has stopped working.
+#
+# It happened once: `apps/web/public/_headers` and `apps/admin/public/_headers`
+# documented the variables in comments, which `_headers` copies verbatim into
+# `dist/`, and the contract step failed with no build error to explain it. The
+# operator-facing documentation for these variables lives in
+# `docs/ops/production-build.md` instead.
+BUILD_VARIABLE_RE = re.compile(
+    r"\bVITE_(?:API_BASE_URL|JBROWSE_BASE_URL|JBROWSE_DATA_URL)\b"
+    r"|\bSOYMUTDB_(?:PORTAL_ORIGIN|ADMIN_ORIGIN)\b"
+)
+
 HEADERS_CSP_RE = re.compile(r"^\s*Content-Security-Policy:\s*(\S.*)$", re.M)
 META_CSP_RE = re.compile(
     r'<meta\s+http-equiv="Content-Security-Policy"\s+content="([^"]*)"', re.S | re.I
@@ -131,6 +152,13 @@ def check_no_placeholders(path: Path, report: Report) -> None:
     text = path.read_text(encoding="utf-8")
     for found in sorted({m.group(0) for m in PLACEHOLDER_RE.finditer(text)}):
         report.fail(path, f"contains a placeholder/sentinel token: {found!r}")
+    for found in sorted({m.group(0) for m in BUILD_VARIABLE_RE.finditer(text)}):
+        report.fail(
+            path,
+            f"names the build variable {found!r}; a published artifact must carry "
+            "the substituted origin, and the artifact contract greps for these "
+            "names. Document them in docs/ops/production-build.md instead.",
+        )
 
 
 def check_portal_variant(artifact: Path, report: Report) -> None:

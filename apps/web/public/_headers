@@ -55,8 +55,9 @@
 # every HTML-producing step and before gzip/gen-sw/manifest, using the same
 # `buildCsp()` the pages' <meta> policies are generated from. It substitutes:
 #
-#   * connect-src 'self' <VITE_API_BASE_URL origin>
-#   * frame-src   'self' <VITE_JBROWSE_BASE_URL origin>   (omitted in minimal mode)
+#   * connect-src 'self' <the API origin the build was configured with>
+#   * frame-src   'self' <the JBrowse origin the build was configured with>
+#                        (omitted in minimal mode)
 #   * script-src  <per-page sha256 hashes of inline scripts>, with
 #     'unsafe-inline' REMOVED    (see apps/web/scripts/finalize-csp.ts)
 #

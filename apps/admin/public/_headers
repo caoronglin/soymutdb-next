@@ -40,6 +40,6 @@
 /*.html
   Cache-Control: public, max-age=0, must-revalidate
 
-# The build config replaces the connect-src value with the origin from
-# VITE_API_BASE_URL. Keeping this source policy same-origin-only prevents a
+# The build config replaces the connect-src value with the API origin supplied
+# at build time. Keeping this source policy same-origin-only prevents a
 # placeholder API origin from ever being published when the env is missing.

@@ -19,9 +19,15 @@
 # rewrites it (apps/jbrowse/scripts/inject-headers-origins.ts, run from
 # vite.config.ts) with:
 #
-#   connect-src     + VITE_API_BASE_URL  (and VITE_JBROWSE_DATA_URL when it is a
-#                                        different origin)
-#   frame-ancestors + SOYMUTDB_PORTAL_ORIGIN (+ SOYMUTDB_ADMIN_ORIGIN)
+#   connect-src     + the API origin, and the track-data origin when the data
+#                     plane is served from a different host than the app
+#   frame-ancestors + the portal origin, and the admin origin
+#
+# The variable names the build reads, and which host each one has to be, are in
+# docs/ops/production-build.md. They are deliberately not repeated here: a bare
+# build-variable name inside a published header file cannot be distinguished
+# from a substitution that silently did not happen, and the artifact contract
+# rejects the artefact when it sees one.
 #
 # It is written as a valid policy rather than as placeholder domains, because a
 # partial build must never publish a placeholder host into a live artifact.

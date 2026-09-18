@@ -85,6 +85,31 @@ Notes on false positives:
   deploying under a sub-path, also set `VITE_JBROWSE_DATA_URL` to the matching
   prefix so the embedded data URLs resolve correctly.
 
+## Origins substituted into `_headers` at build time
+
+The shipped `_headers` files state a valid but deliberately narrow policy and
+the build rewrites the origin-bearing directives with the values below. An
+operator setting up a new hostname needs this table; the published artifacts do
+**not** name these variables, because the artifact contract forbids build
+variable names from reaching a published tree (a bare variable name in a
+response header file cannot be told apart from a substitution that silently did
+not happen).
+
+| Variable | Consumed by | Injected into |
+| --- | --- | --- |
+| `VITE_API_BASE_URL` | `apps/web/scripts/finalize-csp.ts`, `apps/jbrowse/scripts/inject-headers-origins.ts` | `connect-src` of the portal and JBrowse policies |
+| `VITE_JBROWSE_BASE_URL` | `apps/web/scripts/finalize-csp.ts` | `frame-src` of the portal policy (omitted in `minimal` mode) |
+| `VITE_JBROWSE_DATA_URL` | `apps/jbrowse/scripts/inject-headers-origins.ts` | `connect-src`, only when the data plane is a different origin |
+| `SOYMUTDB_PORTAL_ORIGIN` | `apps/jbrowse/scripts/inject-headers-origins.ts` | `frame-ancestors` — the public UI embeds this app |
+| `SOYMUTDB_ADMIN_ORIGIN` | `apps/jbrowse/scripts/inject-headers-origins.ts` | `frame-ancestors` — the admin console embeds this app too |
+
+All five reach the build through `turbo.json`: turbo's strict env mode forwards
+only variables declared there, so a new build-time input must be added to
+`globalEnv` (or the task's `env`) or it arrives undefined and the injector fails
+closed. `production` mode rejects placeholder and plain-http origins;
+demo/standard builds accept the `.test`/`.invalid` origins the frontend gates
+use, so they stay runnable offline.
+
 ## Pre-compressed `.gz` siblings (`SOYMUTDB_EMIT_GZ`)
 
 `.gz` copies of static assets exist for exactly one consumer: nginx
