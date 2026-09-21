@@ -1,14 +1,14 @@
-# SoyMutDB 技术审计与优化执行计划（第三轮执行收敛版）
+# SoyMutDB 技术审计、数据协议与 UI/UX 优化执行计划（第四轮研究工作流收敛版）
 
 > **文档类型：** 技术审计 + 执行路线图 + Go/No-Go 门禁
 > **状态：** 计划，不等于实施授权
-> **原始计划日期：** 2026-09-18 ｜ **第一轮审计：** 2026-09-20 ｜ **第二轮审计：** 2026-09-20 ｜ **第三轮执行收敛：** 2026-09-21
+> **原始计划日期：** 2026-09-18 ｜ **第一轮审计：** 2026-09-20 ｜ **第二轮审计：** 2026-09-20 ｜ **第三轮执行收敛：** 2026-09-21 ｜ **第四轮 UI/UX 与竞品复核：** 2026-09-21
 > **原计划声明基线：** `54532ed` / `codex/fix-compose-preview-data-layer`
-> **当前执行基线：** `main@25348e16`（`docs(plan): consolidate execution status and remaining roadmap`）
+> **当前执行基线：** `main@29b416af`（`docs(plan): harden Phase 2 staging and finalize constraints`）
 > **仓库状态：** 已重新核验当前私有仓库、`main`、最近提交、开发分支、ADR 与 Phase 2 代码路径；历史 `文件:行号` 仍只作为 locator hint，当前事实以本文件末尾“执行状态真源”及对应代码/测试证据为准。
 > **选用技能：** `dev-expert`（证据纪律 / 根因 / 威胁建模 / 生产就绪 / 反过度工程）、
 > `systematic-debugging`（先复现后修）、`receiving-code-review`（结论须可核验，不橡皮章）
-> **外部技术复核：** PostgreSQL `pg_trgm` 与 ClickHouse MergeTree/去重语义已按当前官方资料重新校正。
+> **外部技术复核：** PostgreSQL / ClickHouse 数据语义，以及 Ant Design 6 / Ant Design Pro v6 / TanStack Router+Query / JBrowse 2 / ECharts 官方资料已复核；同时对照 SoyBase Fast Neutron Mutant 与 MaizeGDB 的突变体研究入口和信息架构。
 
 ---
 
@@ -639,6 +639,472 @@ SHOW CREATE TABLE variant_facts;
 
 ---
 
+
+# 24. 第四轮：UI/UX、研究工作流与功能深化
+
+> **定位：** W-UI 是 Phase 2 的并行工作流，不取代数据正确性主线。可以先做信息架构、只读查询体验、组件契约和 E2E；任何依赖尚未通过 Gate-2 的写入/发布能力必须显示真实 capability 状态，禁止 UI 先行伪装“可用”。
+
+## 24.1 官方设计与组件依据
+
+本轮以以下官方资料为设计约束，而不是只参考截图：
+
+- Ant Design 首页：<https://ant.design/index-cn>
+- 设计原则：<https://ant.design/docs/spec/introduce-cn>
+- React 使用：<https://ant.design/docs/react/introduce-cn>
+- 组件总览：<https://ant.design/components/overview-cn/>
+- 资源/生态：<https://ant.design/docs/resources-cn>
+- Ant Design CLI：<https://ant.design/docs/react/cli-cn>
+- Ant Design Pro v6 发布说明：<https://github.com/ant-design/ant-design-pro/issues/11734>
+
+Ant Design 的“自然、确定性、意义感、成长性”落到 SoyMutDB 的具体要求：
+
+1. **自然**：科研对象使用用户熟悉的 gene / mutant / variant / phenotype / genomic region 语言，不发明产品内部术语。
+2. **确定性**：release、assembly、筛选条件、数据来源、加载/错误/空状态始终明确；禁止静默回退到 demo 数据。
+3. **意义感**：每个页面围绕科研任务，而不是围绕数据库表；操作后即时反馈，并明确“下一步能做什么”。
+4. **成长性**：复用 AntD token/component + SoyMutDB domain components；新增物种/数据类型时扩展 registry，不复制整套页面。
+
+## 24.2 技术栈结论：不做无收益框架迁移
+
+当前仓库已经具备 Ant Design Pro v6 强调的大部分现代基线：
+
+- React 19.2；
+- Ant Design 6.6.1；
+- Tailwind CSS 4；
+- TanStack Query；
+- TanStack Router；
+- Vite + route code splitting；
+- Web 已启用 `defaultPreload: "intent"`；
+- 全局 ConfigProvider、light/dark、i18n、reduced-motion 已存在。
+
+因此本轮：
+
+- **不迁移到 Umi Max，仅因为 Pro v6 使用 Umi；**
+- **不全量引入 ProComponents，仅因为它存在；**
+- **不为了构建工具宣传切换 utoopack/Turbopack；**
+- **不重做现有 Router / Query / SSG 架构。**
+
+任何此类迁移必须有独立 ADR + bundle/build/runtime benchmark + 回滚方案。
+
+## 24.3 Ant Design 6 设计系统深化
+
+### UI1-1 · CLI 驱动的版本准确审计
+
+针对仓库固定的 AntD `6.6.1`，把官方 CLI 作为开发/审计辅助：
+
+```bash
+npx antd --version 6.6.1 doctor
+npx antd --version 6.6.1 usage ./apps/web/src
+npx antd --version 6.6.1 usage ./apps/admin/src
+npx antd --version 6.6.1 lint ./apps/web/src
+npx antd --version 6.6.1 lint ./apps/admin/src
+```
+
+若实际 CLI 参数与当前版本文档不一致，以 `npx antd --help` 为准，**禁止把示例命令本身当验收事实**。
+
+用途：发现 deprecated API、直接导入、语义/组件误用；先报告，再按风险分批修，不把自动迁移当无审查写入器。
+
+### UI1-2 · 评估 `cssVar` 模式，而不是盲目开启
+
+当前 Web/Admin theme 已有动态主色、暗色和 motion contract，但 ConfigProvider 尚未把 `cssVar` 作为正式契约。
+
+评估项：
+
+- light/dark/custom Admin primary color；
+- SSG → client handoff 是否闪烁；
+- CSP / static artifact；
+- 首屏 CSS 与运行时 style 数量；
+- theme switch re-render；
+- visual regression；
+- bundle/runtime 指标。
+
+只有全部通过才启用。AntD 6 `zeroRuntime` **本轮默认 No-Go**：动态主题、SSG/CSP 与构建静态抽取的收益需单独证明。
+
+### UI1-3 · 表单风格按场景，而不是全站一刀切
+
+Pro v6 使用 global filled variant 只作为参考。SoyMutDB：
+
+- 公共检索：`outlined` / compact，强调参数可读性；
+- Admin 数据录入/导入 wizard：可局部评估 `filled`，降低复杂表单视觉噪声；
+- danger / warning / readonly 状态必须通过语义色 + 文本/图标共同表达，不能只靠颜色。
+
+## 24.4 同类数据库得到的产品信息架构
+
+### SoyBase 借鉴
+
+SoyBase Fast Neutron Mutant 资源的有效模式是**多科研入口**，而不是单一“全局搜索”：按 mutant/sample、trait/phenotype、gene、locus/region、image、sequence/BLAST 等进入；trait 还支持条件组合和范围筛选。
+
+SoyMutDB 应收敛为五条一级研究任务：
+
+```text
+Gene → Mutants → Variants → Genome context
+Phenotype → Mutants → Gene/Variant evidence
+Region → Variants → Mutants/Genes → JBrowse
+Mutant → Phenotype + Variants + Genes + Provenance
+Sequence → BLAST → Gene → Mutant/Variant
+```
+
+### MaizeGDB 借鉴
+
+MaizeGDB 的 variation/mutant 信息强调 phenotype、stock/source、allele/variation 属性、gene/region 关联。SoyMutDB 不照搬视觉，而补齐：
+
+- 可获取性/材料状态（若数据源真实提供）；
+- provenance / source / publication；
+- phenotype 与 genomic evidence 的双向跳转；
+- mutation/variant 的上下文而非孤立 ID。
+
+**硬约束：** 没有真实字段/来源时 UI 不创建“种子库存”“图片”“谱系”等虚构数据，只能先定义可选 schema/empty state。
+
+## 24.5 公共站信息架构：从页面集合升级为研究工作流
+
+### UI2-1 · 首页搜索升级为多实体 Omnibox
+
+保留现有简洁 Hero，不增加大面积装饰动画。增强搜索框：
+
+- AutoComplete 分组：Genes / Mutants / Variants / Phenotypes / Tools；
+- exact ID 优先，再 prefix，再 general search；
+- 每项显示 entity type + primary ID + 一条必要上下文；
+- Enter 进入统一结果页，方向键/键盘可完整使用；
+- 最近搜索仅本地、可清除；默认不存原始敏感查询到 analytics；
+- 搜索 URL 可复制/分享。
+
+首页一级入口保持“突变体 / 基因 / 变异”，增加清晰的“按表型浏览”入口；BLAST/JBrowse/Primer 属于工具，不与数据实体混为一层。
+
+### UI2-2 · 统一搜索结果
+
+统一 `/search` 不做一个无限大表，而采用 entity-grouped result：
+
+- 顶部显示解析后的 query；
+- tabs/segments：All / Genes / Mutants / Variants / Phenotypes；
+- 每组显示真实命中数语义；无 true-total 时明确显示“本页/更多可用”，不伪造总数；
+- URL 保存 entity/filter/sort/context；
+- Empty state 说明“为什么为空”并给出恢复操作：清筛选、换 assembly、尝试 ID/prefix、转 BLAST。
+
+## 24.6 Mutant Explorer：本轮公共 UI 的最高价值页
+
+当前 `/mutants` 只有 mutagen 文本过滤 + 100 条列表，功能明显低于同类数据库。
+
+### UI3-1 · 服务端筛选模型
+
+逐项评估 API/schema 后支持：
+
+- keyword / public_id / line name；
+- cultivar；
+- mutagen；
+- generation；
+- phenotype category；
+- phenotype term / ontology term（数据存在才启用）；
+- numeric phenotype range + unit；
+- linked gene；
+- linked variant / consequence；
+- chromosome/region；
+- image availability（有真实 image asset 才启用）；
+- material/seed availability（有真实 inventory contract 才启用）。
+
+必须服务端 pagination/filter/sort；**禁止把“拉 100 条到浏览器再过滤”扩展成正式方案**。
+
+### UI3-2 · 双视图
+
+- Desktop 默认 Table：适合比较；
+- “Cards / Gallery”只在存在图像或丰富 phenotype summary 时启用；
+- Mobile 优先 compact List/Card，不把 8–12 列表格硬塞进 390px；
+- 筛选区 desktop 可用 sidebar / collapsible panel，mobile 用 Drawer；
+- active filters 用可关闭 Tag，并提供 Reset all。
+
+### UI3-3 · Mutant Detail
+
+将当前“Descriptions + phenotype table + variants link”扩成任务化详情：
+
+1. Overview：public_id、名称、species/cultivar、mutagen、generation、summary；
+2. Phenotypes：trait/category/value/unit/method/source；
+3. Variants：该 line 的变异摘要和高影响位点；
+4. Affected genes：variant/deletion 与 gene 的证据链；
+5. Genome context：JBrowse 深链/嵌入；
+6. Provenance：source dataset、release、assembly、publication；
+7. Downloads：当前 mutant 关联数据的 release-aware export。
+
+可选 Image / Material availability 只有数据契约存在时出现。
+
+页面标题必须同时显示**人类可读名称 + canonical public_id**，避免复制/引用时丢失身份。
+
+## 24.7 Variant Explorer：从过滤表升级为可解释的变异研究台
+
+当前 filters 只有 chromosome/type/impact/mutant_line，下一步按 API 支持扩展：
+
+- region start/end；
+- gene ID/symbol；
+- consequence；
+- allele frequency min/max；
+- quality min；
+- read depth min；
+- filter status；
+- mutant line；
+- release + assembly context（全站统一）。
+
+表格：
+
+- Variant ID、Chr:Pos、Ref/Alt、Type、Impact、Consequence、Gene、AF、Quality；
+- column visibility 允许用户控制；
+- 保留关键 identity 列，不允许全部隐藏；
+- cursor paging 继续用 `placeholderData` 防闪；
+- sticky/header/横向滚动只在实际列宽需要时启用；
+- 大数据依然使用 server-side filter/sort/paging；virtualization 只能优化已加载行，不代替后端分页。
+
+新增 Variant Detail route 或 URL-addressable Drawer：
+
+- canonical ID；
+- Ref/Alt + position；
+- consequence/impact；
+- HGVS；
+- AF / depth / quality / filter；
+- linked mutant line；
+- linked gene；
+- “Open in JBrowse”；
+- source release/assembly/provenance。
+
+## 24.8 Phenotype Explorer：补齐同类数据库最重要的入口
+
+新增 `/phenotypes` 前先确认真实 phenotype schema。
+
+目标功能：
+
+- category tree / ontology（若存在）；
+- keyword；
+- numeric range；
+- unit；
+- mutant count；
+- phenotype → mutant list；
+- image browse（有真实图像资产时）；
+- 可把多个 trait criteria 组合成 AND/OR 查询时，必须先有明确 API contract，不能前端自行拼全量数据。
+
+第一版可以只做 category + keyword + range，避免过度工程。
+
+## 24.9 Gene / Mutant / Variant 三向联动
+
+Gene Detail 在现有 Overview / Expression / Homologs 基础上增加：
+
+- associated mutants；
+- variant summary by impact/type；
+- “View all variants for this gene”；
+- “Open genomic interval in JBrowse”。
+
+所有交叉链接保留 `release/assembly`，禁止跳转后悄悄回默认版本。
+
+## 24.10 JBrowse 2 集成深化
+
+不重做 genome browser；把 JBrowse 2 作为专业 genomic context。
+
+- VariantTrack 按 consequence / impact / AF 提供可解释 colorBy；
+- tooltip/detail 与 SoyMutDB gene/mutant/variant IDs 建双向链接；
+- 若未来有 multi-sample genotype 数据，评估 sample genotype table / matrix；
+- sample metadata（cultivar/phenotype）只有真实元数据时才用于分组/着色；
+- 检查索引格式与最大 chromosome；只有实际需要时由 TBI 切 CSI；
+- Web 侧深链必须显式携带 assembly + region，不能仅传 gene string 猜坐标。
+
+## 24.11 可视化规范
+
+ECharts / Cytoscape 统一遵循：
+
+- chart 有文字 title/summary；
+- ECharts 启用 ARIA 能力并评估 decal，不能只靠红绿区分；
+- tooltip 中保留单位与样本量；
+- zero-data 显示 Empty，不绘制“0 值看似有结果”的图；
+- error 与 no-data 分开；
+- 图下提供表格/下载或可访问替代；
+- 高密度点图默认 progressive/采样策略需 benchmark，不能为了动画牺牲可读性。
+
+## 24.12 Admin：把“一个大导入 Modal”升级为可恢复工作流
+
+当前 imports 已有 capability、template、draft、preview、local/S3、task table，是良好基础；下一步不重写，而分层重构。
+
+### UI5-1 · Import Wizard
+
+使用 AntD `Steps` 表达真实协议：
+
+```text
+1 Source
+→ 2 Bind context (dataset/release/assembly/module)
+→ 3 Validate & Preview
+→ 4 Ingest
+→ 5 Verify
+→ 6 Publish/Complete
+```
+
+状态必须来自后端 manifest/import task，不允许前端自创“完成”。
+
+- local file 评估 `Upload.Dragger`，替代自制视觉壳；
+- S3 URI 保持 Advanced；
+- release/assembly 从可选实体选择，不让用户手输内部 ID，除非明确 Advanced 模式；
+- validation issues 提供 row/field/category、可下载 diagnostics；
+- preview 固定只读并标注截断行数；
+- capability disabled 时展示原因 + 前置条件，不提供可点但必失败的主按钮。
+
+### UI5-2 · Manifest 状态可视化
+
+统一映射：
+
+`CREATED → PARSING → WRITING → VERIFYING → PUBLISHED / FAILED`
+
+每个状态显示：
+
+- 当前动作；
+- processed / expected；
+- elapsed；
+- last update；
+- failure code；
+- Safe retry 是否允许；
+- 数据当前是否 portal-visible。
+
+**禁止用“100% progress”代替 published/verified 语义。**
+
+### UI5-3 · 失败与恢复
+
+- 复杂操作失败使用 AntD `Result` + diagnostics link；
+- retry 仅当后端声明安全；
+- ambiguous ACK 场景 UI 显示“状态确认中”，不要立即建议重复提交；
+- drafts 明确 server-backed，并显示 release/module/context；
+- 发布前提供 summary/diff/provenance/checksum review。
+
+### UI5-4 · Admin 帮助降噪
+
+当前全局 `AdminUsageGuide` 信息量过大。评估改成：
+
+- 首次进入可选 Tour；
+- Header Help / Drawer 按当前路由提供 context help；
+- 高风险动作附近保留短说明；
+- 长篇 workflow 不默认占据每页首屏。
+
+## 24.13 Loading / Empty / Error / Success 状态契约
+
+AntD 组件按语义统一：
+
+| 状态 | 首选 |
+|---|---|
+| 首次加载且布局可预测 | Skeleton |
+| 翻页/筛选保持旧数据 | Query placeholderData + subtle fetching indicator |
+| 无数据 | Empty + 原因 + recovery action |
+| 局部可恢复错误 | Alert |
+| 整页/复杂动作结果 | Result |
+| 首次功能引导 | Tour |
+| 多步骤操作 | Steps |
+
+禁止：
+
+- loading 直接清空整页；
+- error 冒充 empty；
+- disabled capability 冒充 error；
+- Empty 只有“暂无数据”没有下一步。
+
+## 24.14 Responsive 与可访问性
+
+- 390px / 768–1024 / 1440px 三类 viewport 作为固定验收；
+- 保留现有 skip-link、focus-visible、reduced-motion；
+- click/touch target 不小于既有 design-system contract；
+- icon-only button 必须有 accessible name；
+- Table 在移动端应降维展示，不以横向滚动作为唯一方案；
+- 颜色不是状态唯一编码；
+- keyboard 能完成 search → filter → open detail → back；
+- JBrowse iframe/嵌入必须有可理解 title 与外部打开替代。
+
+## 24.15 性能策略：保持已有优势，按证据优化
+
+仓库 Web 已有 `defaultPreload: "intent"`，所以本轮不是“新增路由预取”，而是核验：
+
+- 高频链路（search → gene/mutant/variant detail）是否同时预取必要 query；
+- preload 是否错误带入大 chart/JBrowse chunk；
+- hover prefetch 的网络成本；
+- `staleTime` 与 release-aware queryKey；
+- 返回列表时是否保留 filter/scroll/data。
+
+仅在 profile 证明渲染瓶颈时使用 virtualization / transition/deferred；不要提前把所有表格虚拟化。
+
+## 24.16 W-UI 执行顺序
+
+```text
+UI0  inventory + task-flow baseline + AntD CLI audit
+ ↓
+UI1  design-system contract (cssVar evaluation, state patterns)
+ ↓
+UI2  public IA + omnibox + shareable search state
+ ↓
+UI3  Mutant / Variant / Phenotype explorers
+ ↓
+UI4  Gene cross-links + JBrowse + visualization accessibility
+ ↓
+UI5  Admin import wizard + manifest/recovery UX
+ ↓
+UI6  responsive/a11y/performance pass
+ ↓
+UI7  E2E task acceptance + staging observation
+```
+
+可与 P2 并行：
+
+- UI0/UI1/UI2 的只读设计与测试；
+- UI3 中已有 API 能力的 Mutant/Gene 页面；
+- UI6 的无业务语义改动。
+
+必须等待对应数据 Gate：
+
+- VCF durable import UI 的“启用” → P2-3/P2-5/P2-6；
+- canonical module promotion 可见性 → P2-4；
+- phenotype/image/material inventory → 对应真实 schema/data；
+- multi-sample JBrowse matrix → 真实 genotype dataset。
+
+## 24.17 用户任务级 E2E，而不是页面截图级“看起来不错”
+
+至少固定 7 条主任务：
+
+1. Gene ID → gene detail → associated mutant → variants → JBrowse；
+2. Phenotype → mutant list → mutant detail → genomic evidence；
+3. Region → variants → variant detail → JBrowse；
+4. Mutant public_id → phenotype + affected genes + export；
+5. Sequence → BLAST → gene → mutant/variant；
+6. Admin local file → bind context → validate → preview → submit → verify；
+7. Admin failed import → diagnostics → safe retry / blocked retry。
+
+每条验收：
+
+- 关键 context 不丢失；
+- URL 可复制并恢复核心筛选；
+- loading/error/empty 明确；
+- keyboard 可完成核心路径；
+- 390 / 1024 / 1440 至少一次；
+- 不出现 demo fallback 假装真实数据；
+- disabled capability 不能进入“看似成功”的下一步。
+
+## 24.18 UI/UX Definition of Done
+
+- 研究入口围绕 gene/mutant/variant/phenotype/region/sequence，而不是内部表名；
+- Mutant Explorer 不再只有 mutagen 单筛选 + 固定 100 条；
+- Variant Explorer 有 URL-addressable detail 与 genomic context；
+- Phenotype 至少有真实 schema 驱动的 browse/search 入口；
+- Gene/Mutant/Variant 三向跳转保留 release + assembly；
+- JBrowse 深链可复现；
+- Admin import 是可恢复步骤流，不是“大 Modal + 一次提交”；
+- capability gating 与真实后端一致；
+- Skeleton/Empty/Alert/Result/Steps 语义统一；
+- chart 有 accessibility contract；
+- mobile 不以桌面大表硬缩放作为主要体验；
+- `cssVar` 是否启用有 benchmark/visual evidence，不靠版本潮流决定；
+- ProComponents/Umi/utoopack 不因“官方模板在用”而进入仓库；
+- UI7 主任务 E2E 全绿后，才把本轮 UI 高风险项标 S4/E3。
+
+---
+
+## 附录 D · 第四轮 UI/UX 外部参考摘要
+
+### Ant Design / Pro
+
+- Ant Design 官方原则用于约束语义、反馈、复用与信息层级。
+- Ant Design Pro v6 的 `cssVar`、React Query、route prefetch、Skeleton 等作为**模式参考**；本仓库已具备 React 19 / AntD 6 / Tailwind 4 / Query / intent preload，因此不复制其框架栈。
+- 官方 CLI 用于版本准确的 API/usage/lint 复核。
+
+### 同类数据库
+
+- **SoyBase Fast Neutron Mutants**：借鉴其 sample/trait/gene/locus/image/BLAST 多入口、trait 条件筛选和 phenotype-first discovery。
+- **MaizeGDB**：借鉴其 variation ↔ phenotype ↔ stock/source ↔ gene/region 的证据联动。
+- 只借鉴科研任务模型与信息架构；SoyMutDB 的字段、可用性、图像、材料状态必须来自自身真实数据契约。
+
 ## 附 · 执行状态真源与下一步路线图（2026-09-21）
 
 > **本章是当前唯一的执行状态真源。**
@@ -647,7 +1113,7 @@ SHOW CREATE TABLE variant_facts;
 ### A. 当前仓库基线
 
 - **目标分支：** `main`
-- **基线提交：** `25348e16a3e6e4bc6dd80503d7a1a4eb331a1b9c` — `docs(plan): consolidate execution status and remaining roadmap`
+- **基线提交：** `29b416af58d42754aa9c4cfdaa413d0c58f22ba0` — `docs(plan): harden Phase 2 staging and finalize constraints`
 - **PR：** 当前未检索到 open/closed PR；不得把“无 PR”解释成“无开发历史”。
 - **开发分支：**
   - `codex/fix-compose-preview-data-layer`：ahead 0 / behind 7，当前无独立待合并提交；
@@ -856,17 +1322,26 @@ module_data_rows
 
 ### M. 当前下一步
 
-**第一优先级：P2-3A。**
+**数据主线第一优先级：P2-3A。**
 
 完成共享 import protocol 与 worker manifest seam 后，再进入 P2-3B 的真实 ClickHouse staging/MV 设计。与此同时可独立起草 P2-4A mapping contract，但 **P2-4B canonical writer 不应抢在 contract review 前实现**。
 
+### N. W-UI 并行工作流
+
+UI/UX 不阻塞 P2-3A，但必须服从 capability/data gate：
+
+1. **立即可做：** UI0 AntD CLI/组件/路由审计、UI1 design-system contract、UI2 信息架构/搜索状态、现有 Mutant/Gene 只读页面改造。
+2. **条件可做：** Variant detail/JBrowse 联动仅使用当前已发布数据能力；缺失字段保持 unavailable/empty，不造 mock production facts。
+3. **需等待：** VCF import enable、canonical promotion、phenotype/image/material 高级筛选、multi-sample genotype UI 等，分别等待 P2/真实 schema。
+4. UI PR 不得绕过 P2 capability flags，不得通过前端隐藏错误把未实现后端伪装成完成。
+
 ---
 
-## 第三轮执行结语
+## 第四轮执行结语
 
 当前项目的下一阶段不是“把禁用的导入函数解开”，而是把 **control plane、staging data plane、finalize、canonical promotion、failure recovery** 组成一条可证明正确的发布协议。
 
-本轮四条最高优先级硬约束：
+本轮数据正确性四条最高优先级硬约束继续不变，同时增加一条 UI 硬约束：
 
 > **WRITING 数据不得直接进入 portal 正常读取的最终数据面。**
 >
@@ -875,3 +1350,5 @@ module_data_rows
 > **VCF v1 只写 draft release，不在本轮做已发布数据热替换。**
 >
 > **worker 不依赖 API package；共享的是协议，不是 ORM/服务实现。**
+>
+> **UI 不得提前承诺后端尚未通过 Gate 的能力；所有“可用”状态必须来自真实 capability/data contract。**
