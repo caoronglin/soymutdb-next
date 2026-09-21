@@ -1,10 +1,11 @@
-# SoyMutDB 技术审计与优化执行计划（第二轮审计版）
+# SoyMutDB 技术审计与优化执行计划（第三轮执行收敛版）
 
 > **文档类型：** 技术审计 + 执行路线图 + Go/No-Go 门禁
 > **状态：** 计划，不等于实施授权
-> **原始计划日期：** 2026-09-18 ｜ **第一轮审计：** 2026-09-20 ｜ **第二轮审计：** 2026-09-20
+> **原始计划日期：** 2026-09-18 ｜ **第一轮审计：** 2026-09-20 ｜ **第二轮审计：** 2026-09-20 ｜ **第三轮执行收敛：** 2026-09-21
 > **原计划声明基线：** `54532ed` / `codex/fix-compose-preview-data-layer`
-> **仓库状态：** 本会话未取得可重新核验 SoyMutDB 代码库的可靠仓库上下文；历史 `文件:行号` 仅作为 **E0 定位提示**，不作为当前事实。
+> **当前执行基线：** `main@25348e16`（`docs(plan): consolidate execution status and remaining roadmap`）
+> **仓库状态：** 已重新核验当前私有仓库、`main`、最近提交、开发分支、ADR 与 Phase 2 代码路径；历史 `文件:行号` 仍只作为 locator hint，当前事实以本文件末尾“执行状态真源”及对应代码/测试证据为准。
 > **选用技能：** `dev-expert`（证据纪律 / 根因 / 威胁建模 / 生产就绪 / 反过度工程）、
 > `systematic-debugging`（先复现后修）、`receiving-code-review`（结论须可核验，不橡皮章）
 > **外部技术复核：** PostgreSQL `pg_trgm` 与 ClickHouse MergeTree/去重语义已按当前官方资料重新校正。
@@ -236,6 +237,50 @@ application manifest + deterministic batch_id + CH dedup token（辅助）
 
 若实际使用 ReplacingMergeTree：background merge 不代表即时唯一；普通 SELECT 可能暂时看到重复版本；若依赖 `FINAL`/`argMax`，必须纳入性能基线；ORDER BY key 必须与逻辑唯一键设计一致。
 
+## 9.6 P2-3 硬约束：staging + base/MV 一致性 finalize
+
+当前 `variant_facts` 公共读路径直接按 `release_key/assembly_key` 查询最终表，并不会自动查询 PostgreSQL `import_manifests`。因此：
+
+- **禁止**实现“`WRITING` 时直接写最终 `variant_facts`，验证完成后才把 manifest 标为 `PUBLISHED`”的方案；这会让半写数据提前进入读路径。
+- P2-3 第一版必须使用**不可被 portal 正常查询命中的 staging 数据面**；完成 row-count/checksum/schema/context 验证后才能 finalize。
+- 若 `variant_facts` 存在增量 Materialized View / SummingMergeTree / AggregatingMergeTree 下游，**base table 与所有相关 MV target 必须作为一个一致性单元处理**。仅移动/替换 base partition 不足以证明 summary 正确。
+- ClickHouse 增量 MV 按 source table 的新 INSERT block 触发；partition move/replace 不应被假设会重新触发原 MV。因此候选方案优先为：**base staging + 对应 MV staging/显式 summary rebuild + 验证 + coordinated finalize**。
+- finalize 前必须枚举实际依赖：`system.tables` / `system.dependencies` / `SHOW CREATE TABLE`，不得按旧文档猜测 MV 数量和 target。
+- 若无法证明 base + summary 的一致切换，则 P2-3 保持 fail-closed，**不得以“最终表数据看起来正确”作为 Gate-2 通过条件**。
+
+## 9.7 VCF v1 发布边界：仅 draft release 可写
+
+P2-3 第一版只允许向 **draft release** 导入/重建 VCF 数据：
+
+- worker 在开始写数据前必须锁定并验证 release 状态；
+- 非 draft release 一律 fail-closed；
+- 不在本轮同时实现“已公开 release 的在线热替换/无停机数据切换”；
+- `manifest=PUBLISHED` 表示该 logical import 已完成数据面 finalize，**不等于 release 已对公共门户发布**；release publication 仍由既有 release gate 控制。
+
+这样把 import visibility 与 release visibility 分成两层，避免把 ClickHouse 的局部切换误当成完整发布事务。
+
+## 9.8 Worker/API 边界：共享协议下沉，数据库所有权不混淆
+
+当前 worker 明确采用窄 SQLAlchemy Core table definitions，避免依赖 API ORM。P2-3 不得为了复用 `import_manifest_service.py` 而让 worker 直接 import `apps/api`。
+
+硬约束：
+
+- **禁止** `apps/worker -> apps/api/app/*` 运行时依赖；
+- fingerprint canonicalization、状态枚举、允许迁移等**纯协议**优先下沉到现有共享包（如 `packages/jobs-py`）；
+- PostgreSQL manifest 的 ORM / Alembic migration 仍由 API 侧拥有；
+- worker 只声明执行所需的窄 Core schema，并通过 PostgreSQL 持久化状态；
+- API/worker 对状态机与 fingerprint 的一致性必须由 contract test 锁定，不能复制两套逐渐漂移的规则。
+
+目标边界：
+
+```text
+packages/jobs-py     = import protocol / pure contract
+apps/api             = schema + migration + control-plane owner
+apps/worker          = parser / writer / finalize executor
+PostgreSQL manifest  = durable control-plane source of truth
+ClickHouse           = staged/finalized data plane
+```
+
 ---
 
 # 10. Import Retry / Crash Fixture：必须定义"期望结果"
@@ -260,9 +305,51 @@ application manifest + deterministic batch_id + CH dedup token（辅助）
 
 ---
 
-# 11. `module_data_rows`：先判定责任，不先判死刑
+# 11. `module_data_rows`：ADR 已决，执行 promotion 而不是继续争论角色
 
-必须确定它属于：`raw landing` / `staging` / `audit` / `extension storage` / `canonical domain`。两个关键问题：**谁拥有 schema evolution？数据保留多久？** Decision Gate：`ADR-DATA-01 module_data_rows role`。Phase 2 架构实现必须等待这个决策，除非当前代码已有明确契约。
+ADR-0004 已 Accepted：`module_data_rows` 是 **landing/staging**，不是门户 canonical read source；必须按 `module_key` 显式 promotion 到 `genes` 等 canonical 表。
+
+## 11.1 P2-4 第一版范围
+
+第一版只实现**有明确 schema 契约和 canonical target 的 module_key**。建议先完成一条 `genes` 链路：
+
+```text
+module TSV
+  → strict validation
+  → module_data_rows staging
+  → promotion validation
+  → genes canonical table
+  → /genes public read path
+```
+
+未知/未映射的 `module_key` 必须 fail-closed；**禁止**设计“任意 JSON 自动映射任意数据库表”的通用 promotion engine。
+
+## 11.2 Promotion contract 必须先写清
+
+每个 `module_key` 至少声明：
+
+- canonical target；
+- natural/business key；
+- release binding；
+- assembly binding；
+- chromosome/外键 resolution；
+- insert/update/replace 语义；
+- provenance / import identity；
+- retry / partial failure 语义；
+- staging retention 与 cleanup；
+- schema evolution owner。
+
+尤其 **assembly/chromosome 不允许猜测或从名称模糊推断**。缺少确定绑定时必须拒绝 promotion。
+
+## 11.3 Promotion 原子性
+
+promotion 必须满足：
+
+- canonical write 与 promotion 状态可恢复；
+- retry 不制造第二份 canonical logical fact；
+- 失败时不能留下“部分 canonical 已可见但 staging 状态仍未完成”的不可判定状态；
+- cleanup 只能发生在 canonical verification 完成之后；
+- portal 始终继续读 canonical 表，不得为了省事临时改成直接读 `module_data_rows`。
 
 ---
 
@@ -381,7 +468,7 @@ Phase 6  Staging / Production Observation
 
 - **Phase 0**：每个候选问题有 State + Evidence + locator + reproduction + owner + next action。
 - **Phase 1**：P0 `S3/E2` merge-ready；negative tests green；no skip/xfail。准备发布时 `S4/E3`。
-- **Phase 2**：证明 no partial visibility / retry idempotent / ambiguous ACK safe / fingerprint correct / canonical reader sees only published import。
+- **Phase 2**：证明 no partial visibility / retry idempotent / ambiguous ACK safe / fingerprint correct / canonical reader sees only finalized+published import；ClickHouse base 与全部增量 MV/summary target 一致；VCF v1 仅写 draft release；worker 不依赖 API package。
 - **Phase 3**：每个即将优化的 domain 有可重复 baseline。
 - **Phase 4**：每项优化有 before/after / same workload / same dataset / same environment class / confidence+repeat count / no correctness regression。
 - **Phase 5**：至少 expected load / peak load / cold+warm / dependency failure / pool saturation / recovery。倍率如 `2x peak` 只能在容量目标明确后选，不写死。
@@ -469,6 +556,9 @@ T0-13 Decide Gate A ADRs
 - external/internal negative suite 全绿；
 - import crash/retry/ambiguous ACK 全绿；
 - no partial visibility；
+- ClickHouse finalize 覆盖 base + 相关 MV/summary 一致性，禁止只替换 base partition 后宣称完成；
+- VCF v1 仅允许 draft release 写入，已发布 release 热替换不在本轮范围；
+- worker 不得新增对 API package 的运行时依赖；共享 import protocol 通过共享包/contract tests 保持一致；
 - import fingerprint 覆盖全部语义变换输入；
 - PostgreSQL 优化按 query class 验证；
 - short query 有明确产品策略；
@@ -549,55 +639,239 @@ SHOW CREATE TABLE variant_facts;
 
 ---
 
-## 附 · 执行进度与剩余路线图（2026-09-20）
+## 附 · 执行状态真源与下一步路线图（2026-09-21）
 
-> 本章是当前唯一的"状态真源"。上游各章是路线图判定；已完成/剩余以此章与
-> `docs/ops/phase-0-fact-baseline-2026-09-20.md`、`docs/ops/gate-a-decision-brief-2026-09-20.md` 为准。
+> **本章是当前唯一的执行状态真源。**
+> 上游章节保留审计原则与长期路线图；若上游描述与本章当前状态冲突，以本章、Accepted ADR、当前 `main` 代码和可重复测试证据为准。
 
-### ✅ 已完成（含证据）
+### A. 当前仓库基线
 
-- **环境**：mamba `postgres16`(PG 16.15)+ `node24`(24.19.0)+ `apps/api/.venv`，均 gitignore。
-- **Phase 0 事实发现**：D1–D8 实测分级；**D8 突变体公开身份合规并解除**（误报已纠正）；D1 搜索 E3 实测；T0-5(PG)/T0-6(CH 引擎 DDL)解析。
-- **Gate A**：ADR-0004/0005/0006/0007 Accepted。
-- **Phase 1**：P1-2 导入能力收口（9 tests）；P1-3 身份/assembly 矩阵（69 tests 绿，缺口 E2E-01/02、UI-02 登记）；P1-1 node 门已除、检查器 6 tests 绿（完整制品证据待全栈）。
-- **Phase 2 P2-1/2**：import manifest（模型 + 迁移 `0037` + fingerprint + 控制平面 service），16 tests 绿。
+- **目标分支：** `main`
+- **基线提交：** `25348e16a3e6e4bc6dd80503d7a1a4eb331a1b9c` — `docs(plan): consolidate execution status and remaining roadmap`
+- **PR：** 当前未检索到 open/closed PR；不得把“无 PR”解释成“无开发历史”。
+- **开发分支：**
+  - `codex/fix-compose-preview-data-layer`：ahead 0 / behind 7，当前无独立待合并提交；
+  - `feature/upgrade-antd-mcp-mcp`：ahead 0 / behind 185，视为陈旧分支，不作为新开发基线；
+  - `gh-pages` / `pages`：与 `main` 无共同祖先，按发布分支隔离，不参与 Phase 2 开发。
+- **新工作必须从当前 `main` 创建分支**；禁止从上述陈旧开发分支续写 Phase 2。
 
-提交：`5b103aa 346c772 3f080cb d7b8c9d 64c5a1b cd63a24`。
+### B. 已完成（含证据）
 
-### ⏳ 剩余（按依赖排序；`[需:X]` = 解锁前置）
+- **环境**：mamba `postgres16` (PG 16.15) + `node24` (24.19.0) + `apps/api/.venv`。
+- **Phase 0**：D1–D8 实测分级；D8 mutant public identity 已核实合规；PG/CH DDL 事实已解析。
+- **Gate A**：
+  - ADR-0004：`module_data_rows` = staging + explicit promotion；
+  - ADR-0005：PG manifest + semantic fingerprint + explicit publish visibility；
+  - ADR-0006：`total_count` 语义拆分；
+  - ADR-0007：deployment architecture。
+- **Phase 1**：
+  - P1-2：禁用导入类型 API 422 capability closure，9 tests；
+  - P1-3：identity/assembly matrix，69 tests；
+  - P1-1：node gate 与 isolation checker 已过，完整 artifact/full-stack 证据仍待补。
+- **Phase 2 P2-1/P2-2**：
+  - migration `0037` + `ImportManifest`；
+  - semantic fingerprint；
+  - `start_or_resume` 幂等；
+  - guarded FSM；
+  - `FAILED → CREATED` retry；
+  - manifest 层仅 `PUBLISHED` 可见规则；
+  - 共 16 tests 绿。
 
-**Phase 2 剩余（导入协议闭环）**
-- [ ] **P2-3** variant_facts 幂等写入 + publish 可见性 `[需:ClickHouse 实例]` —— D5/七类导入核心；用 manifest + partition 级 replace finalize（§CH-RESOLVED）。
-- [ ] **P2-4** module_data_rows → canonical promotion `[需:设计 review（assembly 作用域）]` —— 消 D6；按 ADR-0004 按 module_key 映射到 `genes` 等。
-- [ ] **P2-5** retry/crash/ambiguous-ACK 夹具 `[依赖:P2-3/4]`。
-- [ ] **P2-6** 能力重开门 `[依赖:P2-1~5]` —— 之后才能按类型置 true。
+关键提交：`5b103aa 346c772 3f080cb d7b8c9d 64c5a1b cd63a24 25348e16`。
 
-**Phase 3 分域基线** `[需:生产量级种子数据]`
-- [ ] search p50/p95/p99 + query-class EXPLAIN（D1 坐实为 Phase 4 输入）
-- [ ] analytics events/s、insert calls/s、parts/s、merge pressure（D7）
-- [ ] CI 关键路径 median/p90/p95
+### C. 新发现的 P2-3 correctness gap
 
-**Phase 4 针对性优化** `[依赖:Phase 3 基线]`
-- [ ] D1：补 `genes.accession`/`mutant_lines.public_id` trigram；修精确 ID 的 `upper()` 包裹废 btree
-- [ ] D2：搜索 3 RTT 合并/独立 session 并发；cursor 契约补强
-- [ ] D4：`list_genes` COUNT 取舍
-- [ ] D7：analytics batching（按 A0/A1/A2 耐久等级，ADR）
-- [ ] ADR-0006：`total_count` 拆 `page_count` + 兼容评估
+当前 `ClickHouseService` 的门户查询直接读取 `variant_facts`，按 release/assembly 等字段过滤，**并不会因为 PostgreSQL manifest 尚未 PUBLISHED 自动屏蔽已经写入最终表的数据**。
 
-**Phase 5 容量 + 故障验证** `[需:staging 等价数据]` —— expected/peak load、cold/warm、依赖故障、池饱和、恢复。
+因此原“manifest + 直接写 final table + 最后标 PUBLISHED”的实现顺序不足以证明 no-partial-visibility。
 
-**Phase R Rust PoC（可选）** `[需:profile 证明 Python-owned CPU 瓶颈 + 业务 SLO + 部署/架构 gate + crate 审计]` —— 只摄取内核；结果 ADOPT/REJECT/DEFER(带 reopen 条件)。
+同时，`variant_facts` 的增量 Materialized View / summary 若存在，partition move/replace 不会被假设自动重放原 source INSERT 触发逻辑。**P2-3 必须把 base 与相关 MV target/summary 作为一个数据一致性单元。**
 
-**Phase 6 发布观察** —— 高风险项达 E4/S5 才关闭。
+这两条均为 **P0 数据正确性硬约束**，高于性能优化和功能重开。
 
-### 环境前置汇总（解锁剩余项）
-| 前置 | 解锁 |
+### D. Phase 2 执行顺序
+
+```text
+P2-3A  import protocol seam / worker boundary
+   ↓
+P2-3B  enumerate CH base + MV dependencies; staging/finalize design
+   ↓
+P2-3C  VCF writer → staging only
+   ↓
+P2-3D  row-count/checksum/context/schema verification
+   ↓
+P2-3E  coordinated base + summary finalize
+   ├─────────────────────┐
+   ↓                     ↓
+P2-5 failure fixtures   P2-4A promotion contract
+                         ↓
+                       P2-4B genes first promotion
+   └──────────┬──────────┘
+              ↓
+           Gate-2
+              ↓
+        P2-6 capability reopen
+              ↓
+       P1 full-stack E2E
+              ↓
+           Phase 3
+```
+
+### E. P2-3A · 共享 import protocol + worker seam
+
+**目标：** 连接已经完成的 PG manifest 与 worker 执行路径，但不破坏 worker/API 分层。
+
+**必须做：**
+
+1. 把 fingerprint canonicalization、状态枚举/转换规则等纯协议抽到现有共享 package；优先复用 `packages/jobs-py`。
+2. API ORM/Alembic 继续拥有 `import_manifests` schema。
+3. worker `tables.py` 增加执行需要的窄 manifest Core definition。
+4. worker 通过 PG 更新 manifest，不 import `apps/api/app/*`。
+5. 加 contract tests，证明 API 与 worker 使用同一 fingerprint/status 语义。
+
+**禁止：**
+
+- worker 直接 import `app.services.import_manifest_service`；
+- 复制第二套 fingerprint 实现；
+- 为了“代码复用”把 API ORM 带进 worker image。
+
+**Exit：** worker/API dependency boundary 不退化；同一语义输入在 API/worker 得到完全相同 fingerprint 与状态规则。
+
+### F. P2-3B · ClickHouse staging/finalize 设计
+
+先对真实实例/DDL 枚举：
+
+```sql
+SELECT version();
+SHOW CREATE TABLE variant_facts;
+-- 再枚举与 variant_facts 相关的 materialized views / target tables / partition keys
+```
+
+设计必须回答：
+
+- staging base table 的 schema/partition/order；
+- 相关 MV 是否需要 staging clone 或显式 summary rebuild；
+- finalize 的最小一致性单元；
+- retry 时如何定位并清理某一 `import_id` 的 staging 数据；
+- release/chromosome partition 冲突策略；
+- ambiguous ACK 后如何判定“写成功但客户端没收到响应”；
+- finalize 中途失败如何恢复；
+- finalize 前后各自允许 portal 看见什么。
+
+**硬约束：** 未获得真实 CH 证据前，不把某个具体 `REPLACE PARTITION` 命令写成唯一既定实现。
+
+### G. P2-3C/D/E · VCF durable writer
+
+VCF v1：
+
+1. 校验 release 存在且状态为 **draft**；
+2. 计算 semantic fingerprint，`start_or_resume`；
+3. `CREATED → PARSING`；
+4. parse/normalize，稳定 logical identity；
+5. `PARSING → WRITING`；
+6. **仅写 staging**，batch identity deterministic；
+7. `WRITING → VERIFYING`；
+8. 校验 expected/written rows、checksum、release、assembly、schema；
+9. coordinated finalize：base + 相关 summary/MV target；
+10. finalize 后再次核对 canonical counts/checksum；
+11. 仅全部成功后 `VERIFYING → PUBLISHED`；
+12. 任一失败进入 `FAILED`，portal 不得看到 partial dataset。
+
+**不在 v1 范围：** 已发布 release 的在线热替换、跨 release 原子交换、多集群复制切换。
+
+### H. P2-4A/B · canonical promotion
+
+先写显式 mapping contract，再编码。
+
+第一条只做 `genes`（若当前 module schema 名称不同，以实际 registry 为准）：
+
+```text
+module_data_rows
+  → validate mapping/context
+  → resolve assembly + chromosome
+  → idempotent canonical upsert/replace
+  → verify
+  → mark promotion complete
+  → cleanup/retention
+  → /genes read proof
+```
+
+必须先定义：
+
+`module_key → target → business key → assembly binding → chromosome resolution → retry → provenance → retention`。
+
+未知 module_key 继续 fail-closed。
+
+### I. P2-5 · 故障夹具
+
+以下 case 必须逐条有断言，不接受“整体测试绿”代替：
+
+| Case | 必须证明 |
 |---|---|
-| ClickHouse 实例 | P2-3、P2-5、T0-6 live 复核 |
-| 运行中 API + 种子 release 数据 + 未发布哨兵 | P1-1 完整泄漏证据、E2E-01/02、ID-05 |
-| node 24.19.0（已备） | web 构建/泄漏制品扫描 |
-| 生产量级种子数据 | Phase 3 基线 |
-| profile + SLO + 部署 gate | Phase R |
+| same content + same semantic context | 不产生第二份 logical facts |
+| same content + different filename | 仍视为同 logical import |
+| different release | 独立数据 |
+| different assembly | 独立或明确拒绝 |
+| parser/schema/config version changed | fingerprint 按契约变化 |
+| crash before first batch | 可 retry |
+| crash mid-write | final/public read 不可见 partial |
+| crash after staging write before finalize | recovery 可继续或清理重来 |
+| crash during finalize | base/summary 不得留下不可判定分裂状态 |
+| ambiguous ClickHouse ACK | retry 无逻辑重复 |
+| duplicate batch | 幂等 |
+| checksum mismatch | 不 publish |
+| row-count mismatch | 不 publish |
+| invalid record | fail-closed 或按明确 partial policy |
+| retry from FAILED | 同 manifest logical identity 下安全恢复 |
 
-### 下一步建议
-先起 **ClickHouse** → P2-3（导入写入闭环，D5 核心）；并行对 **P2-4** 出 assembly 作用域 promotion 设计供 review。
+### J. P2-6 · 能力重开门
+
+只有 P2-1~P2-5 全部满足 Gate-2 后才允许重开。
+
+第一批最多只考虑 **VCF**：
+
+- VCF writer + fixture + E2E 都有证据 → 可单独评审是否把 VCF flag 置 true；
+- FASTA/GFF3/BLAST/seed/expression/homolog 等仍按各自 writer/protocol 完成度保持 false；
+- **禁止“一次性把七个 flag 全开”**。
+
+### K. P1 full-stack 补证据
+
+与 Phase 2 可并行准备环境，但不得冒充已完成：
+
+- running API；
+- seeded release；
+- unpublished sentinel；
+- external/internal negative E2E；
+- E2E-01/02；
+- ID-05 artifact evidence；
+- UI-02。
+
+### L. 后续阶段门禁
+
+**Phase 3** 仅在生产量级 seed 可用后开始：search p50/p95/p99 + EXPLAIN；analytics ingest/parts；CI critical path。
+
+**Phase 4** 只能优化已有 baseline 的 domain：trigram、exact-ID `upper()`、3 RTT、COUNT、analytics batching、`total_count` compatibility。
+
+**Phase R** 继续保持 Optional/No-Go：没有 SLO + profile 证明 Python-owned CPU 瓶颈，不启动 Rust PoC。
+
+### M. 当前下一步
+
+**第一优先级：P2-3A。**
+
+完成共享 import protocol 与 worker manifest seam 后，再进入 P2-3B 的真实 ClickHouse staging/MV 设计。与此同时可独立起草 P2-4A mapping contract，但 **P2-4B canonical writer 不应抢在 contract review 前实现**。
+
+---
+
+## 第三轮执行结语
+
+当前项目的下一阶段不是“把禁用的导入函数解开”，而是把 **control plane、staging data plane、finalize、canonical promotion、failure recovery** 组成一条可证明正确的发布协议。
+
+本轮四条最高优先级硬约束：
+
+> **WRITING 数据不得直接进入 portal 正常读取的最终数据面。**
+>
+> **ClickHouse base 与增量 MV/summary 必须作为一致性单元验证和 finalize。**
+>
+> **VCF v1 只写 draft release，不在本轮做已发布数据热替换。**
+>
+> **worker 不依赖 API package；共享的是协议，不是 ORM/服务实现。**
