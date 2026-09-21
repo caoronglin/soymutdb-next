@@ -546,21 +546,58 @@ SHOW CREATE TABLE variant_facts;
 
 ---
 
-## 附：执行进度锚点（2026-09-20）
 
-> 本章为执行追踪，不改上文路线图判定。证据与决策材料见对应文件。
+---
 
-- **环境**：mamba PostgreSQL 16.15（`.mamba-root`，gitignore）+ `apps/api/.venv`（uv）就绪；alembic head=0036。
-- **Phase 0（事实发现）完成**：`docs/ops/phase-0-fact-baseline-2026-09-20.md`。
-  - D1（搜索索引）**E3 实测**：既有 trigram 有效；`accession`/`public_id` 缺 trigram；精确 ID 的 `upper()` 废 btree。
-  - **D8（突变体公开身份）核实为合规并解除**（统一 `public_id`，34 测试绿；一度误报 ln，已纠正）。
-  - D2/D3/D4/D5/D6/D7 定级 S1/E1，挂 Phase 3/4 或 Gate A。
-  - 仍 RUNTIME_ONLY：T0-6 ClickHouse（无 CH 实例）、T0-9/10 生产量级基线。
-- **Gate A 已签批 → 4 份正式 ADR（Accepted）**：
-  - `docs/adr/0004-module-data-rows-role.md`（staging + promotion 到 canonical）
-  - `docs/adr/0005-import-idempotency-and-visibility.md`（PG manifest 控制面 + 确定性 id + dedup 辅助 + publish 可见性）
-  - `docs/adr/0006-total-count-semantics.md`（拆 page_count；先兼容评估）
-  - `docs/adr/0007-supported-deployment-architectures.md`（无状态双架构，重服务 amd64 主力）
-- **Phase 1 子计划已生成**：`docs/superpowers/plans/2026-09-20-phase-1-p0-correctness-plan.md`
-  （P1-1 泄漏负向套件 / P1-2 fail-closed 能力收口 / P1-3 身份·assembly 契约回归锁定）。
-- **下一步**：执行 Phase 1（P1-1 需先切 node 24.19.0）；随后 Phase 2（按 ADR-0004/0005 做导入闭环，待 CH 实例补 T0-6）。
+## 附 · 执行进度与剩余路线图（2026-09-20）
+
+> 本章是当前唯一的"状态真源"。上游各章是路线图判定；已完成/剩余以此章与
+> `docs/ops/phase-0-fact-baseline-2026-09-20.md`、`docs/ops/gate-a-decision-brief-2026-09-20.md` 为准。
+
+### ✅ 已完成（含证据）
+
+- **环境**：mamba `postgres16`(PG 16.15)+ `node24`(24.19.0)+ `apps/api/.venv`，均 gitignore。
+- **Phase 0 事实发现**：D1–D8 实测分级；**D8 突变体公开身份合规并解除**（误报已纠正）；D1 搜索 E3 实测；T0-5(PG)/T0-6(CH 引擎 DDL)解析。
+- **Gate A**：ADR-0004/0005/0006/0007 Accepted。
+- **Phase 1**：P1-2 导入能力收口（9 tests）；P1-3 身份/assembly 矩阵（69 tests 绿，缺口 E2E-01/02、UI-02 登记）；P1-1 node 门已除、检查器 6 tests 绿（完整制品证据待全栈）。
+- **Phase 2 P2-1/2**：import manifest（模型 + 迁移 `0037` + fingerprint + 控制平面 service），16 tests 绿。
+
+提交：`5b103aa 346c772 3f080cb d7b8c9d 64c5a1b cd63a24`。
+
+### ⏳ 剩余（按依赖排序；`[需:X]` = 解锁前置）
+
+**Phase 2 剩余（导入协议闭环）**
+- [ ] **P2-3** variant_facts 幂等写入 + publish 可见性 `[需:ClickHouse 实例]` —— D5/七类导入核心；用 manifest + partition 级 replace finalize（§CH-RESOLVED）。
+- [ ] **P2-4** module_data_rows → canonical promotion `[需:设计 review（assembly 作用域）]` —— 消 D6；按 ADR-0004 按 module_key 映射到 `genes` 等。
+- [ ] **P2-5** retry/crash/ambiguous-ACK 夹具 `[依赖:P2-3/4]`。
+- [ ] **P2-6** 能力重开门 `[依赖:P2-1~5]` —— 之后才能按类型置 true。
+
+**Phase 3 分域基线** `[需:生产量级种子数据]`
+- [ ] search p50/p95/p99 + query-class EXPLAIN（D1 坐实为 Phase 4 输入）
+- [ ] analytics events/s、insert calls/s、parts/s、merge pressure（D7）
+- [ ] CI 关键路径 median/p90/p95
+
+**Phase 4 针对性优化** `[依赖:Phase 3 基线]`
+- [ ] D1：补 `genes.accession`/`mutant_lines.public_id` trigram；修精确 ID 的 `upper()` 包裹废 btree
+- [ ] D2：搜索 3 RTT 合并/独立 session 并发；cursor 契约补强
+- [ ] D4：`list_genes` COUNT 取舍
+- [ ] D7：analytics batching（按 A0/A1/A2 耐久等级，ADR）
+- [ ] ADR-0006：`total_count` 拆 `page_count` + 兼容评估
+
+**Phase 5 容量 + 故障验证** `[需:staging 等价数据]` —— expected/peak load、cold/warm、依赖故障、池饱和、恢复。
+
+**Phase R Rust PoC（可选）** `[需:profile 证明 Python-owned CPU 瓶颈 + 业务 SLO + 部署/架构 gate + crate 审计]` —— 只摄取内核；结果 ADOPT/REJECT/DEFER(带 reopen 条件)。
+
+**Phase 6 发布观察** —— 高风险项达 E4/S5 才关闭。
+
+### 环境前置汇总（解锁剩余项）
+| 前置 | 解锁 |
+|---|---|
+| ClickHouse 实例 | P2-3、P2-5、T0-6 live 复核 |
+| 运行中 API + 种子 release 数据 + 未发布哨兵 | P1-1 完整泄漏证据、E2E-01/02、ID-05 |
+| node 24.19.0（已备） | web 构建/泄漏制品扫描 |
+| 生产量级种子数据 | Phase 3 基线 |
+| profile + SLO + 部署 gate | Phase R |
+
+### 下一步建议
+先起 **ClickHouse** → P2-3（导入写入闭环，D5 核心）；并行对 **P2-4** 出 assembly 作用域 promotion 设计供 review。
