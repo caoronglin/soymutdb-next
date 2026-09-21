@@ -1,1354 +1,1119 @@
-# SoyMutDB 技术审计、数据协议与 UI/UX 优化执行计划（第四轮研究工作流收敛版）
+# SoyMutDB Next 一体化现代化执行计划（第五轮 · 2026-09-21）
 
-> **文档类型：** 技术审计 + 执行路线图 + Go/No-Go 门禁
-> **状态：** 计划，不等于实施授权
-> **原始计划日期：** 2026-09-18 ｜ **第一轮审计：** 2026-09-20 ｜ **第二轮审计：** 2026-09-20 ｜ **第三轮执行收敛：** 2026-09-21 ｜ **第四轮 UI/UX 与竞品复核：** 2026-09-21
-> **原计划声明基线：** `54532ed` / `codex/fix-compose-preview-data-layer`
-> **当前执行基线：** `main@29b416af`（`docs(plan): harden Phase 2 staging and finalize constraints`）
-> **仓库状态：** 已重新核验当前私有仓库、`main`、最近提交、开发分支、ADR 与 Phase 2 代码路径；历史 `文件:行号` 仍只作为 locator hint，当前事实以本文件末尾“执行状态真源”及对应代码/测试证据为准。
-> **选用技能：** `dev-expert`（证据纪律 / 根因 / 威胁建模 / 生产就绪 / 反过度工程）、
-> `systematic-debugging`（先复现后修）、`receiving-code-review`（结论须可核验，不橡皮章）
-> **外部技术复核：** PostgreSQL / ClickHouse 数据语义，以及 Ant Design 6 / Ant Design Pro v6 / TanStack Router+Query / JBrowse 2 / ECharts 官方资料已复核；同时对照 SoyBase Fast Neutron Mutant 与 MaizeGDB 的突变体研究入口和信息架构。
+> **文档类型：** 当前唯一主执行计划 / 架构约束 / Release Gate  
+> **状态：** 计划，不等于已实施或已授权重开能力  
+> **当前执行基线：** `main@1009d40a1fb840162c33e8d724f5ce6fa3ade1b3`  
+> **前序数据正确性基线：** ADR-0004~0007、Phase 1 P0 Correctness、Phase 2 Import Protocol  
+> **新增参考实现：** `caoronglin/primer-workbench` 基因预览（`GenomeContextPanel.jsx`、`geneStructure.js`、`GenomeContextPanel.test.jsx`、`gene-preview-merged-tracks-design.md`）  
+> **外部资料复核日期：** 2026-09-21  
+> **核心原则：** build once / verify once / publish exact bytes；external/internal 物理与语义双隔离；数据能力先协议后启用；控制面不因 Rust/企业微信/Cloudflare 改造而旁路。
 
 ---
 
-# 0. 第二轮审计结论
+## 0. 本轮目标
 
-第一轮已修正两个主要误判：
+本轮把过去分散的“数据正确性、UI/UX、部署、CI/CD、安全、依赖、Rust、Cloudflare、企业微信、数据发布”合并为一份可执行路线图，最终交付应具备：
 
-1. 不能仅凭 `ILIKE + ESCAPE` 断言 trigram 索引失效；
-2. ClickHouse `MergeTree` 不能按 PostgreSQL 的"唯一约束 + 普通事务"思维直接设计幂等。
+1. **个人电脑可运行**：Linux/macOS/WSL2 + Docker 可一条入口启动，支持 lite/full 两档，不需要生产密钥。
+2. **公开站 / 内部站严格分离**：独立制品、独立 origin、独立缓存/统计边界，internal 必须有真实访问控制。
+3. **Cloudflare Pages 正式生产静态发布**：复用已验证制品，不在发布端重新 build；PR preview 与生产 promote/rollback 可追溯。
+4. **Gene Preview 加入 SoyMutDB**：借鉴 primer-workbench 的合并轨道与交互正确性，但改造成 SoyMutDB release/assembly-aware 组件。
+5. **Admin 数据发布闭环**：manifest → validate → staging → verify → finalize → publish/rollback；扩展更多格式但不提前开启未完成能力。
+6. **企业微信通知 + 受控发布入口**：Webhook 负责推送；双向命令使用企业微信自建应用回调，不用群机器人 Webhook 冒充命令通道。
+7. **依赖与基础设施基线升级**：语言运行时、前端、数据库、CI action、容器镜像全部进入可审计升级矩阵。
+8. **动画和色彩统一治理**：Ant Design 6 / Tailwind / JBrowse / ECharts 只使用统一语义 token；reduced-motion / low-power / dark mode 一致。
+9. **统计更高效、更隐私**：批量写入、短期明细 + 长期聚合、DNT/GPC、禁止默认记录可识别的原始搜索词。
+10. **仓库瘦身**：生成物、过期方案、重复脚本、死代码和冲突文档有归档/删除证据。
+11. **核心计算组件 Rust 化**：把稳定、可测的 CPU/内存热点迁移为 Rust kernel；不重写 FastAPI/ORM/Celery/授权/发布状态机。
 
-第二轮进一步发现 10 个结构问题：
+---
 
-1. **E0–E4 把"证据强度"和"缺陷生命周期"混在一起。**
-2. `E2=复现已验证` 与 `E2=修复已验证` 语义冲突。
-3. Phase 0 要求"所有高优先级项至少 E1"，但 runtime-only 问题天然不能靠静态代码达到 E1。
-4. "SLO 由性能基线推导"逻辑不完整；SLO 应由业务需求/容量目标定义，基线用于验证可达性。
-5. PostgreSQL 搜索计划仍缺少**查询类型路由**，exact ID、短字符串、substring 不应强行走同一路径。
-6. ClickHouse import identity 缺少 parser/schema/config 等"语义变换版本"。
-7. ClickHouse insert deduplication token 不应被当作永久 exactly-once 保证。
-8. Analytics batching 缺少"事件是否允许丢失"的业务耐久性等级。
-9. Rust "永久排除"过度约束；合理表述应是**本轮计划 No-Go**。
-10. "100% fixture 一致性"应改为 **100% 契约级一致性**，不能要求内部实现/错误文本逐字一致。
+## 1. 不可突破的硬约束
 
-本版执行逻辑改为：
+### H1 · Feature Flag / Release Gate 不得绕过
+
+当前默认关闭的科学导入能力继续关闭。**任何新格式或 writer 只有同时满足以下证据才可单独评审开启：**
 
 ```text
-约束锁定 → 事实发现 → 问题确认 → P0 修复 → 数据协议闭环
-        → 分域性能基线 → 针对性优化 → 容量/故障验证 → 可选 Rust PoC → 发布观察
+protocol frozen
++ parser/validator
++ durable writer
++ idempotency
++ staging visibility isolation
++ checksum/row-count verification
++ finalize
++ retry/ambiguous-ACK/crash recovery
++ rollback/cleanup
++ real PostgreSQL/ClickHouse integration
++ API/Admin/E2E evidence
+= eligible for capability reopen review
 ```
+
+不能因为“前端已支持”“解析器能读”“Rust 版本更快”而启用。
+
+### H2 · external/internal 不是主题切换
+
+- external 与 internal 必须是两棵独立静态制品。
+- 不能靠 hostname/cookie/IP 在同一制品运行时推断站点身份。
+- internal 的 API、缓存、统计、Service Worker、发布项目必须与 external 分域。
+- `noindex` 不是访问控制；internal 必须位于 Cloudflare Access / VPN / SSO / 私有入口之后。
+- external 制品中对 `internal_id`、未发布 release、内部 sentinel **零命中**。
+
+### H3 · Build Once / Publish Exact Bytes
+
+CI 构建一次 → 生成 manifest/checksum → 验证 → Cloudflare/GitHub/local publisher 只复制或上传同一字节树。  
+发布端不得重新运行 Vite/SSG，不允许“发布环境变量不同所以再 build”。
+
+### H4 · Release / Assembly Context 不得丢失
+
+Gene、Mutant、Variant、JBrowse、静态页、导出、统计、Gene Preview 都必须携带明确 release/assembly context。  
+禁止跳转后静默切到 active/default release。
+
+### H5 · Admin 只管理应用，不管理宿主机超级权限
+
+Web Admin 不增加 root/sudo、系统账号、Docker daemon 管理、宿主机防火墙、数据库 superuser 等能力。  
+部署/基础设施操作仍由受控 CI/ops adapter 完成。
+
+### H6 · 企业微信不能成为旁路控制面
+
+企业微信触发的 publish/rollback 必须复用现有 publication service、RBAC、幂等、审批、审计与 release gate。  
+不能写一条“收到消息 → 直接执行 shell/直接改数据库/直接上传 Pages”的快捷路径。
+
+### H7 · 隐私数据最小化
+
+Seed Request 的联系人、内部用户信息、原始搜索词、Webhook secret、token、内部 release 信息不得进入：
+- external artifact；
+- Analytics 明细；
+- 企业微信普通通知；
+- CI log；
+- URL query；
+- 浏览器持久化缓存。
+
+### H8 · Rust 只迁移稳定 kernel
+
+Rust 不接管：
+- FastAPI routers/services；
+- SQLAlchemy ORM/migrations；
+- Celery/Outbox 状态机；
+- RBAC/JWT；
+- release/publication/approval 控制面。
+
+Rust 只做边界清晰、可 bit-for-bit / row-for-row 对照的计算与解析 kernel。
 
 ---
 
-# 1. 两套正交状态：证据等级 + 问题生命周期
+## 2. 当前仓库事实与升级基线
 
-## 1.1 证据等级 Evidence
+### 2.1 当前事实
 
-| 等级 | 定义 | 可支持的声明 |
+| 域 | 当前事实 | 本轮结论 |
 |---|---|---|
-| **E0** | 历史计划/文档/旧行号/未复核记录 | 仅能说"待核验" |
-| **E1** | 当前目标分支静态代码/配置/schema 已核验 | 可说"代码事实存在" |
-| **E2** | 可重复的测试/运行时复现证据 | 可说"行为已确认" |
-| **E3** | 生产等价环境 benchmark / EXPLAIN / 故障注入 | 可说"性能/可靠性结论已验证" |
-| **E4** | staging/production 观察窗口确认 | 可关闭生产风险项 |
+| Node | `24.19.0` | 保持 Node 24 主线，补 current-minor 定期审计 |
+| pnpm | `11.21.0` | 继续固定 exact version |
+| React | `19.2.0` | 保持 |
+| TypeScript | `5.9.3` | 保持当前稳定主线，按兼容测试升级 |
+| Ant Design | catalog `6.6.1` | 先升同主线 patch；当前 npm latest 已到 6.6.5 |
+| Vite | catalog `6.4.3` | 设计 Vite 8 迁移 lane；不能直接跨 major |
+| TanStack Query | `5.101.4` | 可先同 major 升到当前 5.103.x |
+| ECharts | `5.5.1` | 评估 6.1.x 迁移与 a11y/option 差异 |
+| Zod | `3.24.x` | 4.x 为独立 breaking-change lane |
+| Python | `>=3.14` | 保持 3.14 基线，镜像/CI 固定 current patch |
+| PostgreSQL | compose `18.4-alpine` | 先升级 18 当前 minor（官方当前 18.6） |
+| ClickHouse | `24.8-alpine` | P2 writer 稳定后再迁移到当前 LTS；2026-09 当前 26.8 LTS |
+| Redis | `7.4-alpine` | 独立升级到 Redis 8.2 安全修复线，先跑 broker/cache 兼容矩阵 |
+| MinIO | 2024 固定 release | 先做 S3/API/版本化/策略兼容审计，再决定目标 |
+| module import | `.txt/.tsv/.csv/.xlsx` | 扩为 registry-driven formats |
+| scientific imports | 7 类多数默认 OFF | 不重开；先完成 writer/protocol |
+| Cloudflare Pages | 有 adapter + headers + 文档，但 README/架构口径存在冲突 | 本轮统一为“可选/首选生产静态托管”，demo 仍可 GitHub Pages |
+| Analytics | request background task → ClickHouse **单事件单 INSERT** | 改为 bounded batching；隐私 schema v2 |
+| Rust | 历史热路径已移除，现有文档要求 evidence-first | 本轮正式加入 kernel migration roadmap，但生产采用仍受 benchmark gate |
 
-> **Evidence 只说明证据强度，不说明问题当前处于"未修/已修"。**
+### 2.2 版本升级规则
 
-## 1.2 生命周期 State
-
-| 状态 | 定义 |
-|---|---|
-| **S0 SUSPECTED** | 怀疑存在，仅有线索 |
-| **S1 CONFIRMED** | 已确认问题存在 |
-| **S2 FIX_READY** | 根因明确、修复方案与测试已准备 |
-| **S3 FIXED** | 代码已修改，回归测试通过 |
-| **S4 VERIFIED** | 生产等价环境验证通过 |
-| **S5 CLOSED** | 发布观察完成，可关闭 |
-
-示例 `D1: S1 / E2` 表示"已通过运行时证据确认 D1 存在，但尚未修复"，**而不是**"E2 所以已经修好"。
+1. **patch/minor 与 major 分开 PR**。
+2. 每次升级输出：lock diff、bundle diff、OpenAPI diff、migration compatibility、browser E2E、image CVE diff。
+3. 数据库 major/minor 与应用依赖升级不放在同一个不可回滚 PR。
+4. 不用 `:latest`；运行时镜像全部固定具体 tag，发布镜像固定 digest。
+5. 安全修复可提高优先级，但仍需最小 smoke，不允许“安全升级所以跳测试”。
 
 ---
 
-# 2. Merge Gate 与 Release Gate 分离
+## 3. Primer Workbench Gene Preview → SoyMutDB
 
-**Merge Gate（一个修复 PR 可合并至少需要）：** 静态事实 E1；失败复现或回归测试；修复后测试通过；相关契约测试不 skip/xfail；migration / rollback / observability 已说明。
+### 3.1 可复用的真实设计
 
-**Release Gate（P0 进入生产必须额外满足）：** staging / production-equivalent 验证；negative leakage 测试；failure injection（若涉及数据/依赖服务）；回滚或 forward-fix 路径明确；关键指标/告警存在。
+从 `primer-workbench` 读取到的价值点是：
+
+- gene / transcript / exon / CDS / 5′UTR / 3′UTR **共享同一 genomic axis**；
+- 同一 biological entity 不重复画多条大轨道；
+- 不同基因重叠时使用 row packing，不把不同基因合并；
+- 负链显示方向，未知链不伪造方向；
+- 详情 click/focus 后可 pin，Esc 关闭并恢复焦点；
+- 390px 保持可用，必要时横向浏览；
+- 信息状态不能用颜色单独表达；
+- component test 覆盖 a11y、负链、未知链、重叠、分页、focus restoration。
+
+**不直接复制：**
+- primer candidate / off-target 业务语义；
+- shadcn UI 组件；
+- primer-workbench 的坐标假设；
+- 固定色值。
+
+### 3.2 SoyMutDB 目标组件
+
+建议目录：
 
 ```text
-P0 merge:   S3 + E2
-P0 release: 至少 S4 + E3
-P0 close:   S5 + E4
+packages/genome-view-model/         # 纯 TS：区间、row packing、segment、view model
+apps/web/src/components/genome/
+  gene-context-preview.tsx          # AntD + SVG renderer
+  gene-context-detail.tsx
+apps/web/src/components/genome/__tests__/
 ```
 
-不再使用"P0 到 E2 即解除所有阻断"的模糊规则。
+若 Admin/JBrowse 后续也复用 renderer，再抽 `packages/genome-view-react`；第一步不要为“可能复用”过度拆包。
+
+### 3.3 坐标契约
+
+Primer Workbench 内部明确使用 0-based half-open；SoyMutDB 当前数据可能来自 GFF/VCF/DB 的不同坐标语义。  
+因此先定义显式类型：
+
+```ts
+type CoordinateSystem = "zero_based_half_open" | "one_based_inclusive"
+
+interface GenomicInterval {
+  assemblyId: string
+  chromosome: string
+  start: number
+  end: number
+  system: CoordinateSystem
+}
+```
+
+所有 API → viewport 经过一个 adapter；禁止组件内部“猜 +1/-1”。
+
+### 3.4 页面接入
+
+**Gene Detail**
+- Overview 下方始终展示紧凑 Gene Context Preview；
+- gene / transcript / exon / CDS / UTR；
+- linked published variants；
+- selected variant 高亮；
+- “Open in JBrowse”携带 assembly + region + release。
+
+**Variant Detail**
+- 展示当前 variant marker + 所在 gene/transcript；
+- 近邻基因只从当前 release/assembly public projection 获取；
+- external 不请求 internal-only annotation。
+
+**Mutant Detail**
+- 按 linked variant/gene 展示可解释 genomic context；
+- 若关联过多，只展示默认 focus + bounded window，不一次画全染色体。
+
+### 3.5 视觉与 a11y
+
+- gene range：neutral surface；
+- exon/CDS/UTR：语义 token，不写死颜色；
+- variant：shape + label + color；
+- selected entity：outline/marker，而非只换颜色；
+- dark/light/high-contrast/reduced-motion 全覆盖；
+- SVG interactive node 有 accessible name；
+- tooltip 只能做 hover 补充，关键详情支持 keyboard/pinned panel。
+
+### 3.6 Gene Preview Gate
+
+必须通过：
+- coordinate conversion property tests；
+- positive/negative/unknown strand；
+- overlapping genes row packing；
+- multi-transcript 不生成虚假联合转录本；
+- 390/1024/1440 visual test；
+- axe；
+- external unreleased sentinel leakage；
+- release/assembly context preservation；
+- JBrowse deep-link round-trip。
 
 ---
 
-# 3. Phase 0：事实发现，而不是"强行证明所有项"
+## 4. 个人电脑运行与开发体验
 
-> Phase 0 **不修改业务代码**，只建立事实、夹具、测量脚本和待决策清单。
+现有 `scripts/compose-local.sh` 保留为生产拓扑本地构建底层，不再创建第二套 Compose 语义。
 
-## 3.1 锁定目标上下文
+### 4.1 新统一入口
+
+新增薄封装（名称可在实施时定为 `scripts/dev.sh` 或等价 CLI）：
 
 ```bash
-git rev-parse HEAD; git branch --show-current; git status --short; git log -1 --oneline
+pnpm local:doctor
+pnpm local:up         # 默认 lite
+pnpm local:up:full
+pnpm local:down
+pnpm local:logs
+pnpm local:reset      # 明确提示会删除本地数据
+pnpm local:seed       # 仅合成/开发 fixture，明确标注非生产
 ```
 
-记录：`target_branch` / `target_sha` / `dirty_tree` / `database_schema_version` / `clickhouse_version` / `postgres_version` / `python_version` / `node/pnpm_version` / `deployment topology`。
+内部只调现有：
+- `setup-workspace.sh`
+- `compose-local.sh`
+- `docker-compose.dev.yml`
+- migration/seed/smoke
 
-## 3.2 约束文档重新读取
+不得复制 Compose service 定义。
 
-按当前目标分支确认：`AGENTS.md`、`docs/dev/database-core-contract.md`、`docs/dev/pi-agent-hard-constraints.md`、`docs/dev/rust-rewrite-and-architecture-evaluation.md`、`docs/design/full-stack-upgrade-2026-08.md`。旧计划引用的内容全部从 E0 重新升级。
+### 4.2 两档本地拓扑
 
-## 3.3 路径只作为 locator hint
+**lite**
+- PostgreSQL
+- Redis
+- MinIO
+- API
+- Web/Admin dev server
+- 不可用能力明确 disabled/503/empty，不伪造 ClickHouse 数据。
 
-旧路径（`apps/api/app/services/search_service.py`、`apps/worker/src/...`、`migrations/versions/*`）只作 E0 定位提示。若已移动，用**符号和契约**重新定位：
+**full**
+- lite +
+- ClickHouse
+- worker/beat
+- JBrowse
+- analyses/MCP（按 profile）
 
-```bash
-git grep -n "resolve_release_context"; git grep -n "module_data_rows"
-git grep -n "UnsupportedImportError";  git grep -n "total_count"
-git grep -n "gin_trgm_ops";            git grep -n "variant_facts"
-git grep -n "record_event";            git grep -n "public_id"; git grep -n "internal_id"
-```
+### 4.3 本地安全默认
 
-## 3.4 Phase 0 Exit
-
-不是"所有高优先级项 E1"。正确 Exit：每个候选问题必须有 `State` / `Evidence` / `current locator` / `owner-domain` / `reproduction method` / `next gate`。对 runtime-only 问题：**允许仍为 E0/E1，但必须已有可执行的 reproduction/benchmark plan。**
-
----
-
-# 4. D1–D8 重新建模
-
-| 原项 | Phase 0 初始状态 | 核验后可能归类 |
-|---|---|---|
-| D1 搜索索引 | S0/E0 | P1 性能 |
-| D2 3 次 DB RTT | S0/E0 | P1 性能/架构 |
-| D3 `total_count` | S0/E0 | P1 API 契约 |
-| D4 `COUNT(*)` | S0/E0 | P1/P2 性能 |
-| D5 import fail-closed | S0/E0 | P0 数据可用性**或**合法保护机制（见 §5.3） |
-| D6 `module_data_rows` | S0/E0 | P0/P1，取决于其真实角色 |
-| D7 analytics 单行 insert | S0/E0 | P1 成本/吞吐 |
-| D8 mutant public identity | S0/E0 | 若违反上游身份契约则 P0 |
-
-> **严重度必须由当前契约 + 当前行为决定，不由旧计划永久继承。**
+- 端口默认绑定 `127.0.0.1`；
+- 开发 secret 自动生成到 gitignored 文件；
+- 不读取未知父目录 `.env`；
+- 不复用生产 token；
+- `local:doctor` 检查 Docker、Node/pnpm、Python、端口、磁盘、架构；
+- 启动结束打印访问 URL、当前 profile、release fixture、disabled capabilities。
 
 ---
 
-# 5. P0：正确性、身份和边界
+## 5. CI/CD 重构
 
-## 5.1 身份契约
-
-重新核验全链路：`model` / `migration` / `API schema` / `route parameter` / `search hit` / `URL` / `frontend routing` / `cache key` / `analytics` / `logs`。重点字段：`public_id` / `internal_id` / `release_id` / `assembly_id`。
-
-## 5.2 external/internal isolation
-
-扫描范围：`HTTP body` / `HTTP headers` / `error responses` / `redirect Location` / `URL` / `SSR payload` / `HTML` / `JS` / `JSON` / `source maps` / OpenAPI examples / `logs` / analytics payload / `cache key+value` / generated artifacts。
-
-## 5.3 fail-closed 不自动等于缺陷
-
-若某导入能力当前 `feature disabled` + `adapter returns UnsupportedImportError`，先判断：**这是未实现功能，还是为保护数据一致性主动关闭？** 若是主动保护，则"fail-closed"本身不是缺陷；**真正缺陷是缺少安全启用它所需的数据协议/写入协议。**
-
----
-
-# 6. PostgreSQL 搜索：按查询类型路由
-
-当前计划不能把所有输入统一视为 trigram substring search。官方 `pg_trgm` 支持 `LIKE`/`ILIKE` 索引搜索，但效率取决于可提取 trigram 数量；无可提取 trigram 的 pattern 可能退化为全索引扫描。因此首先建立 Query Class：
-
-| Query Class | 示例 | 优先候选 |
-|---|---|---|
-| **Exact ID** | accession / public_id 精确值 | B-tree equality |
-| **Prefix** | `Glyma.01%` | B-tree/pattern ops 或 trigram，实测决定 |
-| **Short** | 1–2 chars | 限制、提示补全或专门策略 |
-| **Substring** | `%kinase%` | trigram |
-| **Natural text** | 多词描述 | FTS / trigram 混合候选 |
-| **Fuzzy typo** | 拼写误差 | trigram similarity |
-
-## 6.1 Search Benchmark Matrix
-
-至少含：`exact identifier` / `prefix` / `1-char` / `2-char` / `3-char` / `middle substring` / `common term` / `rare term` / `literal %` / `literal _` / `mixed case` / `multi-word` / `not found`。记录：query class / pattern / rows / selectivity / plan / estimated vs actual rows / buffers / execution time / result count。
-
-## 6.2 索引验收
-
-**禁止**把 `index scan = 成功` / `seq scan = 失败` 作为判据。高选择率/小表场景 Seq Scan 可能更合理。真正验收：planner estimation 合理、latency 达标、IO 可接受、写/存储无回归。
-
-## 6.3 1–2 字符输入需要产品策略
-
-对 short query 先决定：允许搜索？/ 最小长度？/ exact-only？/ prefix-only？/ autocomplete？**不要为了支持 1 字符 substring 强迫数据库走昂贵路径。**
-
----
-
-# 7. 全局搜索 DB RTT
-
-先 profile：`DB execution` / `network RTT` / `pool wait` / `serialization` / `ranking` / `JSON encoding` / `total endpoint latency`。只有 DB round trip 明显占比时才优化。候选：`A. UNION ALL` / `B. multiple queries + independent sessions` / `C. search projection/document` / `D. FTS + trigram`。
-
-## 7.1 Cursor 契约补强
-
-keyset cursor 必须有：deterministic sort / unique tie-breaker / cursor schema+version / release+assembly+site context / filter fingerprint。否则查询合并后可能产生重复页、漏项、跨 context cursor 复用。
-
----
-
-# 8. `total_count` 与兼容性
-
-先确认：OpenAPI 当前类型 / 前端是否依赖 number / generated client 类型 / 第三方 consumer。合法目标：`total_count: integer`（真总数）/ `total_count: null`（明确隐藏）/ `page_count: integer`（当前页）。禁止继续复用错误语义。但 `number → null` 可能是客户端 breaking change，因此需要：compatibility assessment / API version strategy / generated client update / frontend migration / contract test。
-
----
-
-# 9. ClickHouse 导入幂等：控制面 + 数据面
-
-## 9.1 先确认真实引擎与版本
-
-```sql
-SELECT version();
-SHOW CREATE TABLE variant_facts;
-```
-
-若存在 staging，再 `SHOW CREATE TABLE <actual_staging_table>`——**不要保留不可直接执行的 `<staging>` 占位命令作为正式验收命令。** 确认：engine / replication / partition key / ORDER BY / materialized views / async insert / dedup settings / cluster topology。
-
-## 9.2 Import Fingerprint
-
-原版 `source_sha256 + release_id + assembly_id + importer_version` 还不够。建议：
+### 5.1 分层
 
 ```text
-import_fingerprint =
-  source_sha256 + release_id + assembly_id + importer_version
-  + schema_version + normalization_version + semantic importer config hash
+PR Fast Gate
+  ├─ format/lint/typecheck
+  ├─ unit tests
+  ├─ architecture/dependency/secret contracts
+  ├─ OpenAPI/client contract
+  └─ changed-scope build
+
+Integration Gate
+  ├─ real PostgreSQL
+  ├─ real ClickHouse
+  ├─ MinIO
+  ├─ import/finalize/retry
+  ├─ external/internal leakage
+  └─ browser E2E
+
+Release Gate
+  ├─ full static artifacts
+  ├─ amd64 + arm64 native image build
+  ├─ runtime smoke
+  ├─ Trivy
+  ├─ SBOM
+  ├─ provenance/sign
+  └─ immutable artifact publish
+
+Nightly / scheduled
+  ├─ dependency update rehearsal
+  ├─ perf/capacity
+  ├─ 2M import fixture
+  ├─ accessibility/visual matrix
+  └─ backup/restore rehearsal
 ```
 
-原则：**任何会改变输出事实的配置，都必须进入 fingerprint。** 文件名、上传时间等非语义字段通常不进入。
+### 5.2 原则
 
-## 9.3 PostgreSQL manifest 作为控制面候选
+- `scripts/ci-job-steps.sh` 继续做 GitHub/CNB 共享 job body 真源。
+- changed-path 只能减少**非安全关键**工作，不能跳 external/internal、migration、security contract。
+- pnpm / uv / pip / Cargo cache 都按 lockfile+toolchain key。
+- PR fork 不提供 Cloudflare/WeCom/registry secrets。
+- 失败 job 也上传 evidence manifest/log 摘要。
+- 所有 acceptance 输出 commit SHA、toolchain、test counts、artifact digest。
 
-控制面记录：`import_id` / `fingerprint` / `source_sha256` / `release_id` / `assembly_id` / `schema_version` / `importer_version` / `config_hash` / `status` / `expected_rows` / `written_rows` / `started_at` / `completed_at` / `failure_code`。状态机：`CREATED → PARSING → WRITING → VERIFYING → PUBLISHED ↘ FAILED`。必须定义：哪个状态对 portal 可见 / 谁负责恢复 / FAILED 是否可 retry / 旧 FAILED 如何清理。
+### 5.3 依赖自动化
 
-## 9.4 ClickHouse dedup 不能作为唯一长期保证
+加入版本机器人（GitHub Dependabot 或等价单一方案）：
+- npm/pnpm：每周 grouped PR；
+- Python：按 runtime/dev 分组；
+- Docker：只建议固定 tag，不自动改成 latest；
+- GitHub Actions：更新 SHA + tag comment；
+- Rust crates：Rust lane 启用后再加入。
 
-MergeTree 系列支持 insert-level/block-level dedup 与 token，但导入协议仍不应只依赖服务器 dedup history（dedup window 有生命周期；MV/async insert 依版本配置而异；ReplacingMergeTree 后台合并是 eventual）。推荐：
-
-```text
-application manifest + deterministic batch_id + CH dedup token（辅助）
-+ publish visibility rule + final row-count/checksum verification
-```
-
-而不是只靠 `insert_deduplication_token`。
-
-## 9.5 ReplacingMergeTree 额外约束
-
-若实际使用 ReplacingMergeTree：background merge 不代表即时唯一；普通 SELECT 可能暂时看到重复版本；若依赖 `FINAL`/`argMax`，必须纳入性能基线；ORDER BY key 必须与逻辑唯一键设计一致。
-
-## 9.6 P2-3 硬约束：staging + base/MV 一致性 finalize
-
-当前 `variant_facts` 公共读路径直接按 `release_key/assembly_key` 查询最终表，并不会自动查询 PostgreSQL `import_manifests`。因此：
-
-- **禁止**实现“`WRITING` 时直接写最终 `variant_facts`，验证完成后才把 manifest 标为 `PUBLISHED`”的方案；这会让半写数据提前进入读路径。
-- P2-3 第一版必须使用**不可被 portal 正常查询命中的 staging 数据面**；完成 row-count/checksum/schema/context 验证后才能 finalize。
-- 若 `variant_facts` 存在增量 Materialized View / SummingMergeTree / AggregatingMergeTree 下游，**base table 与所有相关 MV target 必须作为一个一致性单元处理**。仅移动/替换 base partition 不足以证明 summary 正确。
-- ClickHouse 增量 MV 按 source table 的新 INSERT block 触发；partition move/replace 不应被假设会重新触发原 MV。因此候选方案优先为：**base staging + 对应 MV staging/显式 summary rebuild + 验证 + coordinated finalize**。
-- finalize 前必须枚举实际依赖：`system.tables` / `system.dependencies` / `SHOW CREATE TABLE`，不得按旧文档猜测 MV 数量和 target。
-- 若无法证明 base + summary 的一致切换，则 P2-3 保持 fail-closed，**不得以“最终表数据看起来正确”作为 Gate-2 通过条件**。
-
-## 9.7 VCF v1 发布边界：仅 draft release 可写
-
-P2-3 第一版只允许向 **draft release** 导入/重建 VCF 数据：
-
-- worker 在开始写数据前必须锁定并验证 release 状态；
-- 非 draft release 一律 fail-closed；
-- 不在本轮同时实现“已公开 release 的在线热替换/无停机数据切换”；
-- `manifest=PUBLISHED` 表示该 logical import 已完成数据面 finalize，**不等于 release 已对公共门户发布**；release publication 仍由既有 release gate 控制。
-
-这样把 import visibility 与 release visibility 分成两层，避免把 ClickHouse 的局部切换误当成完整发布事务。
-
-## 9.8 Worker/API 边界：共享协议下沉，数据库所有权不混淆
-
-当前 worker 明确采用窄 SQLAlchemy Core table definitions，避免依赖 API ORM。P2-3 不得为了复用 `import_manifest_service.py` 而让 worker 直接 import `apps/api`。
-
-硬约束：
-
-- **禁止** `apps/worker -> apps/api/app/*` 运行时依赖；
-- fingerprint canonicalization、状态枚举、允许迁移等**纯协议**优先下沉到现有共享包（如 `packages/jobs-py`）；
-- PostgreSQL manifest 的 ORM / Alembic migration 仍由 API 侧拥有；
-- worker 只声明执行所需的窄 Core schema，并通过 PostgreSQL 持久化状态；
-- API/worker 对状态机与 fingerprint 的一致性必须由 contract test 锁定，不能复制两套逐渐漂移的规则。
-
-目标边界：
-
-```text
-packages/jobs-py     = import protocol / pure contract
-apps/api             = schema + migration + control-plane owner
-apps/worker          = parser / writer / finalize executor
-PostgreSQL manifest  = durable control-plane source of truth
-ClickHouse           = staged/finalized data plane
-```
+自动 PR 仍需完整 gate，不自动 merge major upgrade。
 
 ---
 
-# 10. Import Retry / Crash Fixture：必须定义"期望结果"
+## 6. 仓库清理与归档
 
-不能只写"fixture 全绿"。
+### 6.1 先做 inventory，不直接 rm
 
-| Case | 期望 |
-|---|---|
-| same file + same release + same assembly + same semantic config | 不产生第二份逻辑事实 |
-| same content + different filename | 与上条相同 |
-| same file + different release | 创建独立 release 数据，不应误去重 |
-| same file + different assembly | 独立数据或明确拒绝，按契约 |
-| parser/config version changed | 由 fingerprint 决定是否允许重新导入 |
-| crash before first batch | 可安全 retry |
-| crash mid-write | portal 不可见 partial dataset；retry 后只有一份逻辑事实 |
-| crash after data write before publish | recovery 能识别并完成/回滚逻辑发布 |
-| ClickHouse timeout after ambiguous ACK | retry 不产生逻辑重复 |
-| invalid record | fail-closed 或明确 partial policy |
-| checksum mismatch | 不 publish |
-| duplicate batch | 幂等 |
-| row count mismatch | 不 publish |
+生成：
+- tracked generated files；
+- zero-import TS/Python modules；
+- 无调用 shell scripts；
+- superseded docs；
+- duplicate deployment docs；
+- stale evidence；
+- 大文件/二进制；
+- generated route/cache/temp。
 
----
+当前已看到 `apps/web/.tanstack/tmp/*` 出现在仓库检索结果，本轮必须确认是否误跟踪；若是生成物则删除并加入 ignore。
 
-# 11. `module_data_rows`：ADR 已决，执行 promotion 而不是继续争论角色
+### 6.2 文档真源清理
 
-ADR-0004 已 Accepted：`module_data_rows` 是 **landing/staging**，不是门户 canonical read source；必须按 `module_key` 显式 promotion 到 `genes` 等 canonical 表。
+当前存在“README 称 Cloudflare Pages 已废弃”与“架构文档称其为可选生产目标”的冲突。  
+本轮统一为：
 
-## 11.1 P2-4 第一版范围
+- GitHub Pages：public demo / mirror；
+- Cloudflare Pages：生产静态托管目标；
+- internal/admin：独立受保护项目/origin；
+- 旧方案移动到 `docs/archive/<yyyy-mm>/`，顶部写 superseded-by。
 
-第一版只实现**有明确 schema 契约和 canonical target 的 module_key**。建议先完成一条 `genes` 链路：
+### 6.3 删除/归档 Gate
 
-```text
-module TSV
-  → strict validation
-  → module_data_rows staging
-  → promotion validation
-  → genes canonical table
-  → /genes public read path
-```
-
-未知/未映射的 `module_key` 必须 fail-closed；**禁止**设计“任意 JSON 自动映射任意数据库表”的通用 promotion engine。
-
-## 11.2 Promotion contract 必须先写清
-
-每个 `module_key` 至少声明：
-
-- canonical target；
-- natural/business key；
-- release binding；
-- assembly binding；
-- chromosome/外键 resolution；
-- insert/update/replace 语义；
-- provenance / import identity；
-- retry / partial failure 语义；
-- staging retention 与 cleanup；
-- schema evolution owner。
-
-尤其 **assembly/chromosome 不允许猜测或从名称模糊推断**。缺少确定绑定时必须拒绝 promotion。
-
-## 11.3 Promotion 原子性
-
-promotion 必须满足：
-
-- canonical write 与 promotion 状态可恢复；
-- retry 不制造第二份 canonical logical fact；
-- 失败时不能留下“部分 canonical 已可见但 staging 状态仍未完成”的不可判定状态；
-- cleanup 只能发生在 canonical verification 完成之后；
-- portal 始终继续读 canonical 表，不得为了省事临时改成直接读 `module_data_rows`。
+文件只有满足以下条件才删：
+- git search/import graph 无生产引用；
+- 测试无引用；
+- CI/deploy 无引用；
+- docs 已有替代入口；
+- 若是历史决策/证据，归档而不是删除；
+- 删除后跑对应 contract + smoke。
 
 ---
 
-# 12. Analytics：先定义耐久性等级
-
-"Python bounded queue + batching"只有在事件允许有限丢失时才合适。先把事件分类：
-
-| 等级 | 例子 | 允许丢失 | 推荐 |
-|---|---|---|---|
-| **A0 Best effort** | Web vitals | 是 | 内存队列 / async insert |
-| **A1 Operational** | 搜索性能事件 | 少量可接受 | bounded queue + retry |
-| **A2 Business critical** | 计费/审计/强业务指标 | 否 | durable queue / outbox |
-
-> 如果 SoyMutDB analytics 只是产品使用分析，不要为了"零丢失"过度工程。
-
-## 12.1 ClickHouse batching 指标
-
-记录：`events/s` / `insert requests/s` / `rows/insert` / `bytes/insert` / `parts/s` / `active parts` / `merge queue` / CPU / memory / network / failure rate / queue depth / flush latency。若当前 ClickHouse 版本/部署支持且合适，可把 async inserts 纳入候选，而不是默认只在 Python 自己造批处理器。
-
----
-
-# 13. 安全审计第二轮补强
-
-## 13.1 控制存在 ≠ 控制正确
-
-重新验证：password hashing params / JWT algorithm+issuer+audience+expiry / RBAC enforcement location / refresh+session revocation / CSRF origin+proxy assumptions / rate-limit key / rate-limit failure policy / CSP actual response / HSTS environment scope / sanitization call sites / secret handling。
-
-## 13.2 fail-closed rate limit 需评估可用性
-
-Redis 故障时 fail-closed：安全性更强，但可能把 Redis 故障扩大成 API 全站拒绝。按 endpoint threat model 定义：auth-sensitive endpoint → fail-closed 可能合理；public read endpoint → 是否需 degraded mode 需决策。**不得把"fail-closed"自动标记成成熟设计。**
-
-## 13.3 Analytics 输入的数据最小化
-
-除注入/高基数外，再检查：`search_query` 是否真的需要原文 / IP+user-agent+referrer retention / `session_id` 可否长期关联 / 日志与 analytics 是否重复保存敏感输入 / TTL+retention。
-
----
-
-# 14. 性能基线：不是一个阶段只测一次
-
-改成：**每个 domain 在第一次修改前必须有 baseline snapshot。**
-
-- **Search**（改动前）：p50/p95/p99、query classes、EXPLAIN、DB RTT、pool wait。
-- **Analytics**（batching 前）：events/s、insert calls/s、parts/s、merge pressure。
-- **CI**（DAG 改动前）：median/p90/p95、queue time、job critical path、cache hit。
-- **Import**（若当前路径不可执行）：不存在有效 before baseline → 明确记录"baseline starts only after correctness path is enabled"，**不要制造假对照。**
-
----
-
-# 15. SLO：由需求定义，由基线验证
-
-删除"SLO 由真实基线推导"，改为：
-
-```text
-SLO      = 用户/业务需求 + 预期峰值 + 成本约束 + 可靠性要求
-baseline = 当前能力
-benchmark = 验证新实现能否满足 SLO
-```
-
-如果当前没有业务 SLO：先定义 Service Target（Search p95 target / p99 guardrail / Import completion target / Max RSS / Peak concurrent users / Analytics max acceptable loss / CI developer feedback target），**需负责人确认，不能由 benchmark 自己生成。**
-
----
-
-# 16. CI 优化
-
-允许：dependency caching / build artifact reuse / DAG parallelization / matrix partition / change-aware execution / main+nightly expensive tests。但 change-aware execution 必须：有依赖映射 / 共享基础文件变化触发全量相关测试 / main 必跑完整关键门 / 定期 full suite。**禁止 path filter 造成"看起来快但漏测"。**
-
----
-
-# 17. Rust：本轮 No-Go 范围，不使用"永久排除"
-
-主路线保持：`correctness → data path → query/write shape → batching → capacity → optional runtime optimization`。
-
-## 17.1 Rust PoC 前置（全部满足）
-
-1. import path 已正确可执行；2. 目标 workload 有业务 SLO；3. Python baseline 存在；4. profile 证明 Python-owned CPU 是主要瓶颈；5. 当前 C/HTSlib/I/O 时间占比已拆清；6. CI 可构建 wheel；7. deployment target 可安装；8. 架构目标（amd64/arm64）明确；9. crate/native dependency 审计通过。
-
-## 17.2 PoC 契约：100% 契约级一致性
-
-比较：logical records / normalized fields / release+assembly binding / error category / contractually required error location / checksum+fingerprint / publish behavior。**不要求**内部对象结构相同、异常文本逐字相同、实现步骤相同。
-
-## 17.3 本轮 No-Go
-
-本轮不立项：`service/router rewrite` / `ORM rewrite` / `Celery/release-state-machine rewrite` / `Rust sidecar` / `microservice decomposition`。未来若要重开：新 workload evidence + 新 profile + 新 ADR + 新 cost model，**而不是"永久禁止"。**
-
----
-
-# 18. 新路线图
-
-```text
-Phase 0  Fact Discovery
-   ↓
-Gate A   Contract / Architecture Decisions
-   ↓
-Phase 1  P0 Correctness & Isolation
-   ↓
-Phase 2  Import Protocol & Canonical Data Path
-   ↓
-Phase 3  Domain Baselines
-   ↓
-Phase 4  Targeted Optimization
-   ↓
-Phase 5  Capacity + Failure Validation
-   ↓
-Phase R  Optional Rust PoC
-   ↓
-Phase 6  Staging / Production Observation
-```
-
-## Gate A 必须完成的决策
-
-至少：`ADR-DATA-01 module_data_rows role` / `ADR-DATA-02 import visibility+idempotency contract` / `ADR-API-01 total_count compatibility semantics` / `ADR-OPS-01 supported deployment architectures`。若已有正式契约，则引用现有 ADR，不重复造文档。
-
----
-
-# 19. Phase Exit Criteria
-
-- **Phase 0**：每个候选问题有 State + Evidence + locator + reproduction + owner + next action。
-- **Phase 1**：P0 `S3/E2` merge-ready；negative tests green；no skip/xfail。准备发布时 `S4/E3`。
-- **Phase 2**：证明 no partial visibility / retry idempotent / ambiguous ACK safe / fingerprint correct / canonical reader sees only finalized+published import；ClickHouse base 与全部增量 MV/summary target 一致；VCF v1 仅写 draft release；worker 不依赖 API package。
-- **Phase 3**：每个即将优化的 domain 有可重复 baseline。
-- **Phase 4**：每项优化有 before/after / same workload / same dataset / same environment class / confidence+repeat count / no correctness regression。
-- **Phase 5**：至少 expected load / peak load / cold+warm / dependency failure / pool saturation / recovery。倍率如 `2x peak` 只能在容量目标明确后选，不写死。
-- **Phase R**：结果只允许 `ADOPT` / `REJECT` / `DEFER(reason + explicit reopen condition)`；DEFER 不能写"继续观察"。
-- **Phase 6**：达到 `E4` / `S5` 才真正关闭高风险项。
-
----
-
-# 20. PR 强制模板（第二轮）
-
-```markdown
-## Requirement / Contract
-## State before
-- Lifecycle:
-- Evidence:
-## Scope
-## Out of scope
-## Reproduction / Baseline
-## Root cause
-## Decision / ADR
-## Change
-## Tests
-## Contract compatibility
-## Performance evidence
-## Security / privacy impact
-## Data migration / backfill impact
-## Failure / recovery behavior
-## Rollback or forward-fix
-## Observability
-## State after
-- Lifecycle:
-- Evidence:
-## Remaining uncertainty
-```
-
----
-
-# 21. 第一批任务（重新排序）
-
-```text
-T0-1  Lock HEAD / branch / versions / topology
-T0-2  Re-read current constraint docs
-T0-3  Relocate D1–D8 by symbols, not historical paths
-T0-4  Build issue register with State + Evidence
-T0-5  Inspect PostgreSQL version/extensions/index definitions
-T0-6  Inspect ClickHouse version + SHOW CREATE TABLE variant_facts
-T0-7  Trace public_id/internal_id end-to-end
-T0-8  Trace module_data_rows writers + readers + lifecycle
-T0-9  Capture pre-change search/analytics/CI baselines where executable
-T0-10 Build search query-class fixture
-T0-11 Build import retry/crash/ambiguous-ACK fixture
-T0-12 Build external/internal negative leakage suite
-T0-13 Decide Gate A ADRs
-```
-
-已展开为可执行子计划：**`docs/superpowers/plans/2026-09-20-phase-0-fact-baseline-plan.md`**（W0）。
-> 该文件内容本身在 Phase 0 执行、连库核验前，对其中每条结论仍应按 Evidence/State 重新定级，不得因"已写成文件"就当事实。
-
----
-
-# 22. 第二轮审计后的优先级
-
-| Priority | 内容 |
-|---|---|
-| **P0** | 身份/站点/release/assembly 契约违规 |
-| **P0** | partial publish、重复事实、错误 context 数据 |
-| **P0** | external/internal 数据泄漏 |
-| **P1** | API 契约语义错误 |
-| **P1** | 搜索/DB 执行路径 |
-| **P1** | ClickHouse ingestion/parts 压力 |
-| **P1** | analytics 成本与背压 |
-| **P1** | observability / capacity evidence |
-| **P2** | CI feedback time |
-| **Optional** | Rust PoC |
-| **Current-program No-Go** | 全面 Rust rewrite / 无证据微服务拆分 |
-
----
-
-# 23. 最终 Definition of Done
-
-本轮计划完成必须满足：
-
-- 当前代码事实均有 E1+，不再引用 E0 当结论；
-- P0 merge 至少 S3/E2；P0 release 至少 S4/E3；
-- external/internal negative suite 全绿；
-- import crash/retry/ambiguous ACK 全绿；
-- no partial visibility；
-- ClickHouse finalize 覆盖 base + 相关 MV/summary 一致性，禁止只替换 base partition 后宣称完成；
-- VCF v1 仅允许 draft release 写入，已发布 release 热替换不在本轮范围；
-- worker 不得新增对 API package 的运行时依赖；共享 import protocol 通过共享包/contract tests 保持一致；
-- import fingerprint 覆盖全部语义变换输入；
-- PostgreSQL 优化按 query class 验证；
-- short query 有明确产品策略；
-- ClickHouse dedup 不作为唯一长期 exactly-once 保证；
-- analytics durability 等级已确定；
-- SLO 来自业务/容量目标，而不是由当前慢速基线反推；
-- 每个优化都有可重放 before/after；
-- 没有用 skip/xfail 伪装通过；
-- Rust 仅在 profile + SLO + deployment gate 全满足后评估；
-- Rust 比较使用 contract-level equivalence；
-- 当前 No-Go 项未来只能通过新证据 + 新 ADR 重开；
-- staging/production 观察达到 E4/S5 后才关闭高风险项。
-
----
-
-## 附录 A · 第二轮重点复核命令
-
-```bash
-# 代码与版本
-git rev-parse HEAD; git branch --show-current; git status --short; git log -1 --oneline
-
-# 重新按符号定位（不依赖旧路径）
-git grep -n "module_data_rows"; git grep -n "UnsupportedImportError"
-git grep -n "total_count";       git grep -n "gin_trgm_ops"
-git grep -n "variant_facts";     git grep -n "record_event"
-git grep -n "public_id";         git grep -n "internal_id"
-```
-
-PostgreSQL：
-
-```sql
-SELECT version();
-SELECT extname, extversion FROM pg_extension WHERE extname IN ('pg_trgm','pg_stat_statements');
-SELECT schemaname, tablename, indexname, indexdef FROM pg_indexes WHERE indexdef ILIKE '%trgm%';
-```
-
-ClickHouse：
-
-```sql
-SELECT version();
-SHOW CREATE TABLE variant_facts;
-```
-
-若定位到真实 staging 表名后，再执行其 `SHOW CREATE TABLE`，不要使用 `<staging>` 占位符直接运行。
-
----
-
-## 附录 B · 外部技术复核结论
-
-**PostgreSQL：** 当前官方文档明确 `pg_trgm` 的 GiST/GIN operator class 可用于 `LIKE`/`ILIKE`；pattern 能提取的 trigram 越多，索引通常越有效；无可提取 trigram 的 pattern 可能退化为 full-index scan。因此本计划不再把 `ILIKE` 或 `ESCAPE` 本身视为索引失效根因。
-
-**ClickHouse：** MergeTree 家族支持 insert deduplication / dedup token；`ReplacingMergeTree` 的 replacement 依赖后台 merge，查询时可能仍存在多个版本；需要即时逻辑去重时可能依赖 `FINAL` 或其他 query pattern；ingestion 正确性不应只依赖一个有限生命周期的数据库 dedup 机制。因此 SoyMutDB 导入协议应优先采用 `application-level manifest + deterministic identity + database dedup assistance + explicit publish visibility + recovery verification`，而不是把数据库内部去重机制当作完整业务事务。
-
----
-
-## 附录 C · 技能选择说明
-
-| 技能 | 用途 | 落到本文 |
-|---|---|---|
-| `dev-expert` | 证据纪律、根因、威胁建模、生产就绪、反过度工程、Plan-Gate | 全篇；§1 双轨状态；§2 门禁分离；§13 威胁模型；§17 Go/No-Go |
-| `systematic-debugging` | 先复现后修、失败测试转回归 | §3.4 Exit 的 reproduction；§10 fixture 期望结果 |
-| `receiving-code-review` | 结论须可核验，不空泛贴标签 | §13.1 控制存在≠控制正确；§20 PR 模板 State before/after |
-
----
-
-## 审计结语
-
-第二轮后，这份计划坚持三个核心原则：
-
-> **证据强度不等于修复状态。**
-> **性能基线不等于业务 SLO。**
-> **数据库提供的去重能力不等于完整的业务 exactly-once 协议。**
-
-这样可以显著降低后续 agent 执行时"看到一个合理方案就直接实施"的概率，减少无证据重构、性能误优化和数据一致性事故。
-
----
-
-
----
-
-
-# 24. 第四轮：UI/UX、研究工作流与功能深化
-
-> **定位：** W-UI 是 Phase 2 的并行工作流，不取代数据正确性主线。可以先做信息架构、只读查询体验、组件契约和 E2E；任何依赖尚未通过 Gate-2 的写入/发布能力必须显示真实 capability 状态，禁止 UI 先行伪装“可用”。
-
-## 24.1 官方设计与组件依据
-
-本轮以以下官方资料为设计约束，而不是只参考截图：
-
-- Ant Design 首页：<https://ant.design/index-cn>
-- 设计原则：<https://ant.design/docs/spec/introduce-cn>
-- React 使用：<https://ant.design/docs/react/introduce-cn>
-- 组件总览：<https://ant.design/components/overview-cn/>
-- 资源/生态：<https://ant.design/docs/resources-cn>
-- Ant Design CLI：<https://ant.design/docs/react/cli-cn>
-- Ant Design Pro v6 发布说明：<https://github.com/ant-design/ant-design-pro/issues/11734>
-
-Ant Design 的“自然、确定性、意义感、成长性”落到 SoyMutDB 的具体要求：
-
-1. **自然**：科研对象使用用户熟悉的 gene / mutant / variant / phenotype / genomic region 语言，不发明产品内部术语。
-2. **确定性**：release、assembly、筛选条件、数据来源、加载/错误/空状态始终明确；禁止静默回退到 demo 数据。
-3. **意义感**：每个页面围绕科研任务，而不是围绕数据库表；操作后即时反馈，并明确“下一步能做什么”。
-4. **成长性**：复用 AntD token/component + SoyMutDB domain components；新增物种/数据类型时扩展 registry，不复制整套页面。
-
-## 24.2 技术栈结论：不做无收益框架迁移
-
-当前仓库已经具备 Ant Design Pro v6 强调的大部分现代基线：
-
-- React 19.2；
-- Ant Design 6.6.1；
-- Tailwind CSS 4；
-- TanStack Query；
-- TanStack Router；
-- Vite + route code splitting；
-- Web 已启用 `defaultPreload: "intent"`；
-- 全局 ConfigProvider、light/dark、i18n、reduced-motion 已存在。
-
-因此本轮：
-
-- **不迁移到 Umi Max，仅因为 Pro v6 使用 Umi；**
-- **不全量引入 ProComponents，仅因为它存在；**
-- **不为了构建工具宣传切换 utoopack/Turbopack；**
-- **不重做现有 Router / Query / SSG 架构。**
-
-任何此类迁移必须有独立 ADR + bundle/build/runtime benchmark + 回滚方案。
-
-## 24.3 Ant Design 6 设计系统深化
-
-### UI1-1 · CLI 驱动的版本准确审计
-
-针对仓库固定的 AntD `6.6.1`，把官方 CLI 作为开发/审计辅助：
-
-```bash
-npx antd --version 6.6.1 doctor
-npx antd --version 6.6.1 usage ./apps/web/src
-npx antd --version 6.6.1 usage ./apps/admin/src
-npx antd --version 6.6.1 lint ./apps/web/src
-npx antd --version 6.6.1 lint ./apps/admin/src
-```
-
-若实际 CLI 参数与当前版本文档不一致，以 `npx antd --help` 为准，**禁止把示例命令本身当验收事实**。
-
-用途：发现 deprecated API、直接导入、语义/组件误用；先报告，再按风险分批修，不把自动迁移当无审查写入器。
-
-### UI1-2 · 评估 `cssVar` 模式，而不是盲目开启
-
-当前 Web/Admin theme 已有动态主色、暗色和 motion contract，但 ConfigProvider 尚未把 `cssVar` 作为正式契约。
-
-评估项：
-
-- light/dark/custom Admin primary color；
-- SSG → client handoff 是否闪烁；
-- CSP / static artifact；
-- 首屏 CSS 与运行时 style 数量；
-- theme switch re-render；
+## 7. 依赖与基础设施升级路线
+
+### D1 · 前端低风险同主线
+
+优先：
+- AntD 6.6.1 → 当前 6.6.x；
+- TanStack Query 5.101 → 当前 5.103.x；
+- patch/minor dev tooling。
+
+### D2 · 前端 breaking lanes
+
+分别独立：
+- Vite 6 → 8；
+- ECharts 5 → 6；
+- Zod 3 → 4。
+
+每条必须附：
+- build time；
+- bundle chunks；
+- CSP；
+- SSG；
+- browser E2E；
+- typecheck；
 - visual regression；
-- bundle/runtime 指标。
-
-只有全部通过才启用。AntD 6 `zeroRuntime` **本轮默认 No-Go**：动态主题、SSG/CSP 与构建静态抽取的收益需单独证明。
-
-### UI1-3 · 表单风格按场景，而不是全站一刀切
-
-Pro v6 使用 global filled variant 只作为参考。SoyMutDB：
-
-- 公共检索：`outlined` / compact，强调参数可读性；
-- Admin 数据录入/导入 wizard：可局部评估 `filled`，降低复杂表单视觉噪声；
-- danger / warning / readonly 状态必须通过语义色 + 文本/图标共同表达，不能只靠颜色。
-
-## 24.4 同类数据库得到的产品信息架构
-
-### SoyBase 借鉴
-
-SoyBase Fast Neutron Mutant 资源的有效模式是**多科研入口**，而不是单一“全局搜索”：按 mutant/sample、trait/phenotype、gene、locus/region、image、sequence/BLAST 等进入；trait 还支持条件组合和范围筛选。
-
-SoyMutDB 应收敛为五条一级研究任务：
-
-```text
-Gene → Mutants → Variants → Genome context
-Phenotype → Mutants → Gene/Variant evidence
-Region → Variants → Mutants/Genes → JBrowse
-Mutant → Phenotype + Variants + Genes + Provenance
-Sequence → BLAST → Gene → Mutant/Variant
-```
-
-### MaizeGDB 借鉴
-
-MaizeGDB 的 variation/mutant 信息强调 phenotype、stock/source、allele/variation 属性、gene/region 关联。SoyMutDB 不照搬视觉，而补齐：
-
-- 可获取性/材料状态（若数据源真实提供）；
-- provenance / source / publication；
-- phenotype 与 genomic evidence 的双向跳转；
-- mutation/variant 的上下文而非孤立 ID。
-
-**硬约束：** 没有真实字段/来源时 UI 不创建“种子库存”“图片”“谱系”等虚构数据，只能先定义可选 schema/empty state。
-
-## 24.5 公共站信息架构：从页面集合升级为研究工作流
-
-### UI2-1 · 首页搜索升级为多实体 Omnibox
-
-保留现有简洁 Hero，不增加大面积装饰动画。增强搜索框：
-
-- AutoComplete 分组：Genes / Mutants / Variants / Phenotypes / Tools；
-- exact ID 优先，再 prefix，再 general search；
-- 每项显示 entity type + primary ID + 一条必要上下文；
-- Enter 进入统一结果页，方向键/键盘可完整使用；
-- 最近搜索仅本地、可清除；默认不存原始敏感查询到 analytics；
-- 搜索 URL 可复制/分享。
-
-首页一级入口保持“突变体 / 基因 / 变异”，增加清晰的“按表型浏览”入口；BLAST/JBrowse/Primer 属于工具，不与数据实体混为一层。
-
-### UI2-2 · 统一搜索结果
-
-统一 `/search` 不做一个无限大表，而采用 entity-grouped result：
-
-- 顶部显示解析后的 query；
-- tabs/segments：All / Genes / Mutants / Variants / Phenotypes；
-- 每组显示真实命中数语义；无 true-total 时明确显示“本页/更多可用”，不伪造总数；
-- URL 保存 entity/filter/sort/context；
-- Empty state 说明“为什么为空”并给出恢复操作：清筛选、换 assembly、尝试 ID/prefix、转 BLAST。
-
-## 24.6 Mutant Explorer：本轮公共 UI 的最高价值页
-
-当前 `/mutants` 只有 mutagen 文本过滤 + 100 条列表，功能明显低于同类数据库。
-
-### UI3-1 · 服务端筛选模型
-
-逐项评估 API/schema 后支持：
-
-- keyword / public_id / line name；
-- cultivar；
-- mutagen；
-- generation；
-- phenotype category；
-- phenotype term / ontology term（数据存在才启用）；
-- numeric phenotype range + unit；
-- linked gene；
-- linked variant / consequence；
-- chromosome/region；
-- image availability（有真实 image asset 才启用）；
-- material/seed availability（有真实 inventory contract 才启用）。
-
-必须服务端 pagination/filter/sort；**禁止把“拉 100 条到浏览器再过滤”扩展成正式方案**。
-
-### UI3-2 · 双视图
-
-- Desktop 默认 Table：适合比较；
-- “Cards / Gallery”只在存在图像或丰富 phenotype summary 时启用；
-- Mobile 优先 compact List/Card，不把 8–12 列表格硬塞进 390px；
-- 筛选区 desktop 可用 sidebar / collapsible panel，mobile 用 Drawer；
-- active filters 用可关闭 Tag，并提供 Reset all。
-
-### UI3-3 · Mutant Detail
-
-将当前“Descriptions + phenotype table + variants link”扩成任务化详情：
-
-1. Overview：public_id、名称、species/cultivar、mutagen、generation、summary；
-2. Phenotypes：trait/category/value/unit/method/source；
-3. Variants：该 line 的变异摘要和高影响位点；
-4. Affected genes：variant/deletion 与 gene 的证据链；
-5. Genome context：JBrowse 深链/嵌入；
-6. Provenance：source dataset、release、assembly、publication；
-7. Downloads：当前 mutant 关联数据的 release-aware export。
-
-可选 Image / Material availability 只有数据契约存在时出现。
-
-页面标题必须同时显示**人类可读名称 + canonical public_id**，避免复制/引用时丢失身份。
-
-## 24.7 Variant Explorer：从过滤表升级为可解释的变异研究台
-
-当前 filters 只有 chromosome/type/impact/mutant_line，下一步按 API 支持扩展：
-
-- region start/end；
-- gene ID/symbol；
-- consequence；
-- allele frequency min/max；
-- quality min；
-- read depth min；
-- filter status；
-- mutant line；
-- release + assembly context（全站统一）。
-
-表格：
-
-- Variant ID、Chr:Pos、Ref/Alt、Type、Impact、Consequence、Gene、AF、Quality；
-- column visibility 允许用户控制；
-- 保留关键 identity 列，不允许全部隐藏；
-- cursor paging 继续用 `placeholderData` 防闪；
-- sticky/header/横向滚动只在实际列宽需要时启用；
-- 大数据依然使用 server-side filter/sort/paging；virtualization 只能优化已加载行，不代替后端分页。
-
-新增 Variant Detail route 或 URL-addressable Drawer：
-
-- canonical ID；
-- Ref/Alt + position；
-- consequence/impact；
-- HGVS；
-- AF / depth / quality / filter；
-- linked mutant line；
-- linked gene；
-- “Open in JBrowse”；
-- source release/assembly/provenance。
-
-## 24.8 Phenotype Explorer：补齐同类数据库最重要的入口
-
-新增 `/phenotypes` 前先确认真实 phenotype schema。
-
-目标功能：
-
-- category tree / ontology（若存在）；
-- keyword；
-- numeric range；
-- unit；
-- mutant count；
-- phenotype → mutant list；
-- image browse（有真实图像资产时）；
-- 可把多个 trait criteria 组合成 AND/OR 查询时，必须先有明确 API contract，不能前端自行拼全量数据。
-
-第一版可以只做 category + keyword + range，避免过度工程。
-
-## 24.9 Gene / Mutant / Variant 三向联动
-
-Gene Detail 在现有 Overview / Expression / Homologs 基础上增加：
-
-- associated mutants；
-- variant summary by impact/type；
-- “View all variants for this gene”；
-- “Open genomic interval in JBrowse”。
-
-所有交叉链接保留 `release/assembly`，禁止跳转后悄悄回默认版本。
-
-## 24.10 JBrowse 2 集成深化
-
-不重做 genome browser；把 JBrowse 2 作为专业 genomic context。
-
-- VariantTrack 按 consequence / impact / AF 提供可解释 colorBy；
-- tooltip/detail 与 SoyMutDB gene/mutant/variant IDs 建双向链接；
-- 若未来有 multi-sample genotype 数据，评估 sample genotype table / matrix；
-- sample metadata（cultivar/phenotype）只有真实元数据时才用于分组/着色；
-- 检查索引格式与最大 chromosome；只有实际需要时由 TBI 切 CSI；
-- Web 侧深链必须显式携带 assembly + region，不能仅传 gene string 猜坐标。
-
-## 24.11 可视化规范
-
-ECharts / Cytoscape 统一遵循：
-
-- chart 有文字 title/summary；
-- ECharts 启用 ARIA 能力并评估 decal，不能只靠红绿区分；
-- tooltip 中保留单位与样本量；
-- zero-data 显示 Empty，不绘制“0 值看似有结果”的图；
-- error 与 no-data 分开；
-- 图下提供表格/下载或可访问替代；
-- 高密度点图默认 progressive/采样策略需 benchmark，不能为了动画牺牲可读性。
-
-## 24.12 Admin：把“一个大导入 Modal”升级为可恢复工作流
-
-当前 imports 已有 capability、template、draft、preview、local/S3、task table，是良好基础；下一步不重写，而分层重构。
-
-### UI5-1 · Import Wizard
-
-使用 AntD `Steps` 表达真实协议：
-
-```text
-1 Source
-→ 2 Bind context (dataset/release/assembly/module)
-→ 3 Validate & Preview
-→ 4 Ingest
-→ 5 Verify
-→ 6 Publish/Complete
-```
-
-状态必须来自后端 manifest/import task，不允许前端自创“完成”。
-
-- local file 评估 `Upload.Dragger`，替代自制视觉壳；
-- S3 URI 保持 Advanced；
-- release/assembly 从可选实体选择，不让用户手输内部 ID，除非明确 Advanced 模式；
-- validation issues 提供 row/field/category、可下载 diagnostics；
-- preview 固定只读并标注截断行数；
-- capability disabled 时展示原因 + 前置条件，不提供可点但必失败的主按钮。
-
-### UI5-2 · Manifest 状态可视化
-
-统一映射：
-
-`CREATED → PARSING → WRITING → VERIFYING → PUBLISHED / FAILED`
-
-每个状态显示：
-
-- 当前动作；
-- processed / expected；
-- elapsed；
-- last update；
-- failure code；
-- Safe retry 是否允许；
-- 数据当前是否 portal-visible。
-
-**禁止用“100% progress”代替 published/verified 语义。**
-
-### UI5-3 · 失败与恢复
-
-- 复杂操作失败使用 AntD `Result` + diagnostics link；
-- retry 仅当后端声明安全；
-- ambiguous ACK 场景 UI 显示“状态确认中”，不要立即建议重复提交；
-- drafts 明确 server-backed，并显示 release/module/context；
-- 发布前提供 summary/diff/provenance/checksum review。
-
-### UI5-4 · Admin 帮助降噪
-
-当前全局 `AdminUsageGuide` 信息量过大。评估改成：
-
-- 首次进入可选 Tour；
-- Header Help / Drawer 按当前路由提供 context help；
-- 高风险动作附近保留短说明；
-- 长篇 workflow 不默认占据每页首屏。
-
-## 24.13 Loading / Empty / Error / Success 状态契约
-
-AntD 组件按语义统一：
-
-| 状态 | 首选 |
-|---|---|
-| 首次加载且布局可预测 | Skeleton |
-| 翻页/筛选保持旧数据 | Query placeholderData + subtle fetching indicator |
-| 无数据 | Empty + 原因 + recovery action |
-| 局部可恢复错误 | Alert |
-| 整页/复杂动作结果 | Result |
-| 首次功能引导 | Tour |
-| 多步骤操作 | Steps |
-
-禁止：
-
-- loading 直接清空整页；
-- error 冒充 empty；
-- disabled capability 冒充 error；
-- Empty 只有“暂无数据”没有下一步。
-
-## 24.14 Responsive 与可访问性
-
-- 390px / 768–1024 / 1440px 三类 viewport 作为固定验收；
-- 保留现有 skip-link、focus-visible、reduced-motion；
-- click/touch target 不小于既有 design-system contract；
-- icon-only button 必须有 accessible name；
-- Table 在移动端应降维展示，不以横向滚动作为唯一方案；
-- 颜色不是状态唯一编码；
-- keyboard 能完成 search → filter → open detail → back；
-- JBrowse iframe/嵌入必须有可理解 title 与外部打开替代。
-
-## 24.15 性能策略：保持已有优势，按证据优化
-
-仓库 Web 已有 `defaultPreload: "intent"`，所以本轮不是“新增路由预取”，而是核验：
-
-- 高频链路（search → gene/mutant/variant detail）是否同时预取必要 query；
-- preload 是否错误带入大 chart/JBrowse chunk；
-- hover prefetch 的网络成本；
-- `staleTime` 与 release-aware queryKey；
-- 返回列表时是否保留 filter/scroll/data。
-
-仅在 profile 证明渲染瓶颈时使用 virtualization / transition/deferred；不要提前把所有表格虚拟化。
-
-## 24.16 W-UI 执行顺序
-
-```text
-UI0  inventory + task-flow baseline + AntD CLI audit
- ↓
-UI1  design-system contract (cssVar evaluation, state patterns)
- ↓
-UI2  public IA + omnibox + shareable search state
- ↓
-UI3  Mutant / Variant / Phenotype explorers
- ↓
-UI4  Gene cross-links + JBrowse + visualization accessibility
- ↓
-UI5  Admin import wizard + manifest/recovery UX
- ↓
-UI6  responsive/a11y/performance pass
- ↓
-UI7  E2E task acceptance + staging observation
-```
-
-可与 P2 并行：
-
-- UI0/UI1/UI2 的只读设计与测试；
-- UI3 中已有 API 能力的 Mutant/Gene 页面；
-- UI6 的无业务语义改动。
-
-必须等待对应数据 Gate：
-
-- VCF durable import UI 的“启用” → P2-3/P2-5/P2-6；
-- canonical module promotion 可见性 → P2-4；
-- phenotype/image/material inventory → 对应真实 schema/data；
-- multi-sample JBrowse matrix → 真实 genotype dataset。
-
-## 24.17 用户任务级 E2E，而不是页面截图级“看起来不错”
-
-至少固定 7 条主任务：
-
-1. Gene ID → gene detail → associated mutant → variants → JBrowse；
-2. Phenotype → mutant list → mutant detail → genomic evidence；
-3. Region → variants → variant detail → JBrowse；
-4. Mutant public_id → phenotype + affected genes + export；
-5. Sequence → BLAST → gene → mutant/variant；
-6. Admin local file → bind context → validate → preview → submit → verify；
-7. Admin failed import → diagnostics → safe retry / blocked retry。
-
-每条验收：
-
-- 关键 context 不丢失；
-- URL 可复制并恢复核心筛选；
-- loading/error/empty 明确；
-- keyboard 可完成核心路径；
-- 390 / 1024 / 1440 至少一次；
-- 不出现 demo fallback 假装真实数据；
-- disabled capability 不能进入“看似成功”的下一步。
-
-## 24.18 UI/UX Definition of Done
-
-- 研究入口围绕 gene/mutant/variant/phenotype/region/sequence，而不是内部表名；
-- Mutant Explorer 不再只有 mutagen 单筛选 + 固定 100 条；
-- Variant Explorer 有 URL-addressable detail 与 genomic context；
-- Phenotype 至少有真实 schema 驱动的 browse/search 入口；
-- Gene/Mutant/Variant 三向跳转保留 release + assembly；
-- JBrowse 深链可复现；
-- Admin import 是可恢复步骤流，不是“大 Modal + 一次提交”；
-- capability gating 与真实后端一致；
-- Skeleton/Empty/Alert/Result/Steps 语义统一；
-- chart 有 accessibility contract；
-- mobile 不以桌面大表硬缩放作为主要体验；
-- `cssVar` 是否启用有 benchmark/visual evidence，不靠版本潮流决定；
-- ProComponents/Umi/utoopack 不因“官方模板在用”而进入仓库；
-- UI7 主任务 E2E 全绿后，才把本轮 UI 高风险项标 S4/E3。
+- rollback commit。
+
+### D3 · 数据层
+
+1. PostgreSQL 18.4 → 18 current minor。
+2. Redis 7.4 → 8.2 security line：
+   - cache；
+   - Celery broker；
+   - result backend；
+   - eviction/noeviction；
+   - persistence/AOF。
+3. ClickHouse 24.8 → 26.8 LTS：
+   - **必须在 P2-3 writer/finalize 语义冻结后**；
+   - 实测 async insert / MV / dedup settings；
+   - migration from 24.8 fixture；
+   - duplicate/finalize semantics 不得依赖未验证默认值。
+4. MinIO：先兼容审计再升级。
 
 ---
 
-## 附录 D · 第四轮 UI/UX 外部参考摘要
+## 8. 动画与色彩治理
 
-### Ant Design / Pro
+当前 Web/Admin 已有 `off / minimal / standard` motion 决策和 AntD token，继续收敛，不重造第三套动画系统。
 
-- Ant Design 官方原则用于约束语义、反馈、复用与信息层级。
-- Ant Design Pro v6 的 `cssVar`、React Query、route prefetch、Skeleton 等作为**模式参考**；本仓库已具备 React 19 / AntD 6 / Tailwind 4 / Query / intent preload，因此不复制其框架栈。
-- 官方 CLI 用于版本准确的 API/usage/lint 复核。
+### 8.1 单一设计 token
 
-### 同类数据库
-
-- **SoyBase Fast Neutron Mutants**：借鉴其 sample/trait/gene/locus/image/BLAST 多入口、trait 条件筛选和 phenotype-first discovery。
-- **MaizeGDB**：借鉴其 variation ↔ phenotype ↔ stock/source ↔ gene/region 的证据联动。
-- 只借鉴科研任务模型与信息架构；SoyMutDB 的字段、可用性、图像、材料状态必须来自自身真实数据契约。
-
-## 附 · 执行状态真源与下一步路线图（2026-09-21）
-
-> **本章是当前唯一的执行状态真源。**
-> 上游章节保留审计原则与长期路线图；若上游描述与本章当前状态冲突，以本章、Accepted ADR、当前 `main` 代码和可重复测试证据为准。
-
-### A. 当前仓库基线
-
-- **目标分支：** `main`
-- **基线提交：** `29b416af58d42754aa9c4cfdaa413d0c58f22ba0` — `docs(plan): harden Phase 2 staging and finalize constraints`
-- **PR：** 当前未检索到 open/closed PR；不得把“无 PR”解释成“无开发历史”。
-- **开发分支：**
-  - `codex/fix-compose-preview-data-layer`：ahead 0 / behind 7，当前无独立待合并提交；
-  - `feature/upgrade-antd-mcp-mcp`：ahead 0 / behind 185，视为陈旧分支，不作为新开发基线；
-  - `gh-pages` / `pages`：与 `main` 无共同祖先，按发布分支隔离，不参与 Phase 2 开发。
-- **新工作必须从当前 `main` 创建分支**；禁止从上述陈旧开发分支续写 Phase 2。
-
-### B. 已完成（含证据）
-
-- **环境**：mamba `postgres16` (PG 16.15) + `node24` (24.19.0) + `apps/api/.venv`。
-- **Phase 0**：D1–D8 实测分级；D8 mutant public identity 已核实合规；PG/CH DDL 事实已解析。
-- **Gate A**：
-  - ADR-0004：`module_data_rows` = staging + explicit promotion；
-  - ADR-0005：PG manifest + semantic fingerprint + explicit publish visibility；
-  - ADR-0006：`total_count` 语义拆分；
-  - ADR-0007：deployment architecture。
-- **Phase 1**：
-  - P1-2：禁用导入类型 API 422 capability closure，9 tests；
-  - P1-3：identity/assembly matrix，69 tests；
-  - P1-1：node gate 与 isolation checker 已过，完整 artifact/full-stack 证据仍待补。
-- **Phase 2 P2-1/P2-2**：
-  - migration `0037` + `ImportManifest`；
-  - semantic fingerprint；
-  - `start_or_resume` 幂等；
-  - guarded FSM；
-  - `FAILED → CREATED` retry；
-  - manifest 层仅 `PUBLISHED` 可见规则；
-  - 共 16 tests 绿。
-
-关键提交：`5b103aa 346c772 3f080cb d7b8c9d 64c5a1b cd63a24 25348e16`。
-
-### C. 新发现的 P2-3 correctness gap
-
-当前 `ClickHouseService` 的门户查询直接读取 `variant_facts`，按 release/assembly 等字段过滤，**并不会因为 PostgreSQL manifest 尚未 PUBLISHED 自动屏蔽已经写入最终表的数据**。
-
-因此原“manifest + 直接写 final table + 最后标 PUBLISHED”的实现顺序不足以证明 no-partial-visibility。
-
-同时，`variant_facts` 的增量 Materialized View / summary 若存在，partition move/replace 不会被假设自动重放原 source INSERT 触发逻辑。**P2-3 必须把 base 与相关 MV target/summary 作为一个数据一致性单元。**
-
-这两条均为 **P0 数据正确性硬约束**，高于性能优化和功能重开。
-
-### D. Phase 2 执行顺序
+新增共享 token 真源（可落 `packages/design-tokens`）：
 
 ```text
-P2-3A  import protocol seam / worker boundary
-   ↓
-P2-3B  enumerate CH base + MV dependencies; staging/finalize design
-   ↓
-P2-3C  VCF writer → staging only
-   ↓
-P2-3D  row-count/checksum/context/schema verification
-   ↓
-P2-3E  coordinated base + summary finalize
-   ├─────────────────────┐
-   ↓                     ↓
-P2-5 failure fixtures   P2-4A promotion contract
-                         ↓
-                       P2-4B genes first promotion
-   └──────────┬──────────┘
-              ↓
-           Gate-2
-              ↓
-        P2-6 capability reopen
-              ↓
-       P1 full-stack E2E
-              ↓
-           Phase 3
+color.surface.*
+color.text.*
+color.border.*
+color.brand.*
+color.semantic.success/warning/error/info
+color.genomics.gene/exon/cds/utr/variant/selection
+motion.duration.fast/mid/slow
+motion.easing.standard/emphasized
+motion.mode.off/minimal/standard
+radius.*
+shadow.*
 ```
 
-### E. P2-3A · 共享 import protocol + worker seam
+Web/Admin/JBrowse/ECharts/Gene Preview 都从此映射。
 
-**目标：** 连接已经完成的 PG manifest 与 worker 执行路径，但不破坏 worker/API 分层。
+### 8.2 规则
 
-**必须做：**
+- 状态不可只靠红/绿；
+- 主色可配置，但危险/成功等 semantic color 不跟随品牌色；
+- dark mode 单独校验，不对亮色值简单反相；
+- `prefers-reduced-motion` → off；
+- Save-Data/低功耗 → minimal；
+- standard 动画只用 transform/opacity 为主；
+- 页面转场不阻塞导航和输入；
+- skeleton/placeholder 不使用无限高频 shimmer；
+- 图表颜色有 text legend / pattern / decal 备选。
 
-1. 把 fingerprint canonicalization、状态枚举/转换规则等纯协议抽到现有共享 package；优先复用 `packages/jobs-py`。
-2. API ORM/Alembic 继续拥有 `import_manifests` schema。
-3. worker `tables.py` 增加执行需要的窄 manifest Core definition。
-4. worker 通过 PG 更新 manifest，不 import `apps/api/app/*`。
-5. 加 contract tests，证明 API 与 worker 使用同一 fingerprint/status 语义。
+### 8.3 Gene Preview 动画
 
-**禁止：**
+- zoom/pan 可平滑，但 reduced-motion 立即跳变；
+- selection 只做短时 outline/opacity；
+- 不做持续闪烁 variant marker；
+- tooltip/pinned detail 无运动依赖。
 
-- worker 直接 import `app.services.import_manifest_service`；
-- 复制第二套 fingerprint 实现；
-- 为了“代码复用”把 API ORM 带进 worker image。
+---
 
-**Exit：** worker/API dependency boundary 不退化；同一语义输入在 API/worker 得到完全相同 fingerprint 与状态规则。
+## 9. 后台数据发布与更多格式
 
-### F. P2-3B · ClickHouse staging/finalize 设计
+### 9.1 统一 Import Format Registry
 
-先对真实实例/DDL 枚举：
-
-```sql
-SELECT version();
-SHOW CREATE TABLE variant_facts;
--- 再枚举与 variant_facts 相关的 materialized views / target tables / partition keys
-```
-
-设计必须回答：
-
-- staging base table 的 schema/partition/order；
-- 相关 MV 是否需要 staging clone 或显式 summary rebuild；
-- finalize 的最小一致性单元；
-- retry 时如何定位并清理某一 `import_id` 的 staging 数据；
-- release/chromosome partition 冲突策略；
-- ambiguous ACK 后如何判定“写成功但客户端没收到响应”；
-- finalize 中途失败如何恢复；
-- finalize 前后各自允许 portal 看见什么。
-
-**硬约束：** 未获得真实 CH 证据前，不把某个具体 `REPLACE PARTITION` 命令写成唯一既定实现。
-
-### G. P2-3C/D/E · VCF durable writer
-
-VCF v1：
-
-1. 校验 release 存在且状态为 **draft**；
-2. 计算 semantic fingerprint，`start_or_resume`；
-3. `CREATED → PARSING`；
-4. parse/normalize，稳定 logical identity；
-5. `PARSING → WRITING`；
-6. **仅写 staging**，batch identity deterministic；
-7. `WRITING → VERIFYING`；
-8. 校验 expected/written rows、checksum、release、assembly、schema；
-9. coordinated finalize：base + 相关 summary/MV target；
-10. finalize 后再次核对 canonical counts/checksum；
-11. 仅全部成功后 `VERIFYING → PUBLISHED`；
-12. 任一失败进入 `FAILED`，portal 不得看到 partial dataset。
-
-**不在 v1 范围：** 已发布 release 的在线热替换、跨 release 原子交换、多集群复制切换。
-
-### H. P2-4A/B · canonical promotion
-
-先写显式 mapping contract，再编码。
-
-第一条只做 `genes`（若当前 module schema 名称不同，以实际 registry 为准）：
+把“文件扩展名判断”升级为 server-owned registry：
 
 ```text
-module_data_rows
-  → validate mapping/context
-  → resolve assembly + chromosome
-  → idempotent canonical upsert/replace
-  → verify
-  → mark promotion complete
-  → cleanup/retention
-  → /genes read proof
+format_key
+extensions
+mime/magic
+streaming_parser
+schema_version
+normalization_version
+max_size
+decompression_policy
+preview_support
+writer_capability
+rollback_capability
+feature_flag
 ```
 
-必须先定义：
+### 9.2 格式分层
 
-`module_key → target → business key → assembly binding → chromosome resolution → retry → provenance → retention`。
+**Module/tabular（优先）**
+- 现有：TXT / TSV / CSV / XLSX
+- 新增候选：JSONL / NDJSON、Parquet
+- ODS 只在明确需求时加入，避免无收益办公格式依赖。
 
-未知 module_key 继续 fail-closed。
+**Genomic canonical**
+- VCF / VCF.GZ
+- BCF
+- GFF3 / GTF
+- FASTA / FASTA.GZ
+- BED/BED.GZ（明确 BED3/6/12 子集）
+- phenotype/expression：TSV/CSV/XLSX/Parquet
 
-### I. P2-5 · 故障夹具
+**Track attachment，而非 canonical DB import**
+- BigWig
+- BigBed
+- BAM/CRAM + index
+- bgzip/tabix assets
 
-以下 case 必须逐条有断言，不接受“整体测试绿”代替：
+这类文件进入 MinIO/JBrowse track registry，不强行转成 PostgreSQL/ClickHouse facts。
 
-| Case | 必须证明 |
-|---|---|
-| same content + same semantic context | 不产生第二份 logical facts |
-| same content + different filename | 仍视为同 logical import |
-| different release | 独立数据 |
-| different assembly | 独立或明确拒绝 |
-| parser/schema/config version changed | fingerprint 按契约变化 |
-| crash before first batch | 可 retry |
-| crash mid-write | final/public read 不可见 partial |
-| crash after staging write before finalize | recovery 可继续或清理重来 |
-| crash during finalize | base/summary 不得留下不可判定分裂状态 |
-| ambiguous ClickHouse ACK | retry 无逻辑重复 |
-| duplicate batch | 幂等 |
-| checksum mismatch | 不 publish |
-| row-count mismatch | 不 publish |
-| invalid record | fail-closed 或按明确 partial policy |
-| retry from FAILED | 同 manifest logical identity 下安全恢复 |
+### 9.3 安全预检
 
-### J. P2-6 · 能力重开门
+所有格式先执行：
+- extension + MIME + magic 一致性；
+- archive/decompression ratio 限制；
+- row/column/record limit；
+- streaming checksum；
+- UTF encoding/delimiter/sheet detection；
+- formula/macro/embedded object 处理策略；
+- schema/context/release/assembly validation；
+- preview bounded rows；
+- diagnostics 不回显敏感内容。
 
-只有 P2-1~P2-5 全部满足 Gate-2 后才允许重开。
+### 9.4 Durable writer 继续执行 P2
 
-第一批最多只考虑 **VCF**：
+必须保留当前 P2 主线：
 
-- VCF writer + fixture + E2E 都有证据 → 可单独评审是否把 VCF flag 置 true；
-- FASTA/GFF3/BLAST/seed/expression/homolog 等仍按各自 writer/protocol 完成度保持 false；
-- **禁止“一次性把七个 flag 全开”**。
+```text
+manifest
+→ fingerprint
+→ PARSING
+→ WRITING(staging only)
+→ VERIFYING
+→ finalize base + dependent summaries
+→ post-finalize verify
+→ PUBLISHED
+```
 
-### K. P1 full-stack 补证据
+FAILED retry 复用同 logical import identity；ambiguous ACK 必须先 reconcile，不能盲目重复写。
 
-与 Phase 2 可并行准备环境，但不得冒充已完成：
+### 9.5 Admin Import Studio
 
+改为 Steps：
+1. Source
+2. Bind release/assembly/module
+3. Inspect
+4. Validate
+5. Preview
+6. Ingest
+7. Verify
+8. Publish/Complete
+
+disabled capability 显示真实原因和前置门，不提供“点了必失败”的主按钮。
+
+---
+
+## 10. 企业微信集成
+
+### 10.1 两种能力必须分开
+
+**A. 群机器人 Webhook：只出站推送**
+- Seed Request 新申请；
+- Seed Request 状态变化；
+- import failed/completed；
+- release validation/publish/rollback；
+- Cloudflare deployment；
+- CI/production health 告警。
+
+Webhook URL 是 secret，只存在服务端 secret store/env；绝不进入前端、数据库普通字段、日志。
+
+**B. 企业微信自建应用 callback：双向命令**
+群机器人 Webhook 不承担收消息/执行命令。  
+若需要“从企业微信发布”，必须使用带 URL/Token/EncodingAESKey 的自建应用回调通道。
+
+### 10.2 Notification Outbox
+
+新增统一 notification outbox/channel adapter：
+
+```text
+domain event
+→ notification_outbox
+→ in-app / email / wecom
+→ retry with backoff
+→ delivery evidence
+```
+
+相同事件有 deterministic dedup key，避免重试刷屏。
+
+### 10.3 隐私
+
+Seed Request 推送默认只发送：
+- request public/reference id；
+- 时间；
+- 当前状态；
+- 管理后台受保护链接。
+
+不在群消息中发送姓名、邮箱、手机号、地址、详细留言。
+
+### 10.4 企业微信命令
+
+第一版仅：
+- `status`
+- `release <id> status`
+- `publication <id> status`
+- `preview publish <id>`
+
+生产动作后续才开放：
+- `publish external <publication_id>`
+- `rollback external <publication_id>`
+
+并必须：
+- callback 签名/加解密校验；
+- timestamp/nonce replay protection；
+- corp/user identity allowlist；
+- WeCom user ↔ SoyMutDB admin identity mapping；
+- RBAC；
+- 二次确认/审批；
+- idempotency key；
+- AuditLog；
+- 不允许 arbitrary shell/SQL/URL 参数。
+
+企业微信发起的 publish 仍调用同一个 `request_publication` / publication state machine。
+
+---
+
+## 11. external / internal 双站点深化
+
+### 11.1 制品
+
+```text
+dist/external/
+dist/internal/
+```
+
+两者分别生成：
+- JS/CSS chunks；
+- HTML/SSG；
+- service worker；
+- manifest/SHA256；
+- robots/meta；
+- CSP；
+- analytics config。
+
+禁止共享一份 SW scope。
+
+### 11.2 API
+
+external：
+- public projection only；
+- cacheable public responses；
+- never return internal identifiers；
+- unpublished release 统一 not-found。
+
+internal：
+- auth required；
+- private/no-store；
+- 可读 internal projection（按角色）；
+- 独立 CORS origin。
+
+### 11.3 Cloudflare
+
+建议三个项目/安全域：
+- `soymutdb-external`：公开；
+- `soymutdb-internal`：Cloudflare Access；
+- `soymutdb-admin`：Cloudflare Access + 更严格 policy。
+
+internal/admin 不和 external 共用 production token scope。
+
+### 11.4 Gate
+
+- anonymous internal request 被边缘阻断；
+- external sentinel leakage scan；
+- external/internal cache key 不重用；
+- source map 不泄漏 internal config；
+- external HTML/JSON/JS/URL/log/analytics 全部 negative leakage。
+
+---
+
+## 12. Cloudflare Pages 发布流程
+
+Cloudflare 官方 2026 文档仍支持 Pages Direct Upload + Wrangler；同时官方说明 Workers 是新应用的主平台。  
+SoyMutDB 当前是静态 artifact-first 架构，本轮**继续使用 Pages**，不因平台宣传迁移 Workers。
+
+### 12.1 生产路径
+
+```text
+CI build
+→ build:sites
+→ artifact checksums
+→ privacy/security scan
+→ upload immutable artifact
+→ Wrangler Pages Direct Upload
+→ verify deployment URL
+→ smoke
+→ mark publication published
+```
+
+优先使用官方 `wrangler pages deploy <verified-dir>`，减少当前自定义 direct-upload HTTP 协议维护面。
+
+### 12.2 不重新构建
+
+Cloudflare stage 只下载 CI artifact，并核对 digest。  
+Wrangler 上传的是已验证目录，不运行 `pnpm build`。
+
+### 12.3 Preview
+
+同仓 PR/branch：
+- external preview 可自动；
+- internal preview 必须 Access protected；
+- fork PR 不注入 token，也不自动发布；
+- preview URL 回写 deployment evidence。
+
+### 12.4 Rollback
+
+保存 Cloudflare deployment id；rollback/promotion 使用已验证历史 deployment，不重新 build 旧 commit。
+
+### 12.5 迁移旧 adapter
+
+`apps/worker/.../cloudflare_pages.py` 当前自定义 upload 路径先保留兼容；  
+Wrangler artifact publisher 验证完成后，再决定：
+- worker 只发 publication request；
+- CI publisher 完成 upload/promote；
+- adapter 退化为状态查询/rollback orchestration。
+
+避免长期维护两套上传协议。
+
+---
+
+## 13. 页面访问统计与隐私
+
+### 13.1 Analytics v2
+
+当前 `record_event` 每次调用单行 INSERT。改为：
+
+```text
+client bounded batch
+→ POST/beacon
+→ in-process bounded queue or analytics worker
+→ batch insert ClickHouse
+```
+
+flush 条件：rows threshold 或 short interval；队列满时 analytics 可丢弃，**不能拖慢主请求**。
+
+### 13.2 数据最小化
+
+默认不长期保存：
+- raw IP；
+- full User-Agent；
+- raw referrer query；
+- raw search query；
+- internal URL parameters。
+
+建议：
+- IP 继续 salted hash，但 salt 定期轮换；
+- session id 改为短期/滚动，减少当前一年 cookie；
+- external search 记录 `query_class`、长度、是否 exact-id、结果数 bucket；原始词默认 OFF；
+- internal analytics 独立表/namespace；
+- DNT + Global Privacy Control 生效；
+- 管理操作用 AuditLog，不用 analytics。
+
+### 13.3 Retention
+
+- raw events：短 TTL（例如 30–90 天，由 policy 配置）；
+- daily aggregates：长期；
+- Web Vitals：短 TTL；
+- privacy policy 中写明用途、保留期、退出方式。
+
+### 13.4 Cloudflare Web Analytics
+
+若使用 Cloudflare Web Analytics，只作为粗粒度站点指标；  
+不得与 first-party analytics 重复当成“唯一访问量”，后台明确来源。
+
+---
+
+## 14. 安全与隐私强化
+
+### S1 · Supply Chain
+- lockfile frozen；
+- lifecycle scripts allowlist；
+- SBOM；
+- Trivy；
+- license gate；
+- secret scanning；
+- GitHub Action SHA pin；
+- OCI digest + Cosign/provenance。
+
+### S2 · API/Auth
+- rate limit；
+- JWT/refresh cookie 安全属性；
+- admin/internal origin 精确 CORS；
+- Cloudflare Access / MFA 优先放在 internal/admin 前；
+- 高风险 publish/rollback 要 fresh auth / second confirmation。
+
+### S3 · Upload
+- content sniffing；
+- decompression bomb 限制；
+- parser timeout；
+- bounded memory；
+- Office 文件不执行宏/公式；
+- uploaded HTML/script/code 继续拒绝；
+- MinIO private bucket 默认 deny。
+
+### S4 · External Fetch
+现有 WeChat/X-MOL preview 的 host allowlist / SSRF 防线继续保留；  
+redirect 每跳重新校验 host，DNS/private-range policy 有专门测试。
+
+### S5 · WeCom
+- secret redaction；
+- callback crypto/signature；
+- replay protection；
+- allowlisted commands；
+- audit；
+- webhook egress timeout/backoff；
+- 不允许消息内容直接成为 shell/SQL。
+
+### S6 · Seed Request PII
+- 独立 retention；
+- admin-only；
+- export/download 审计；
+- 企业微信只发 reference id；
+- 日志结构化 redaction；
+- 删除/匿名化流程有测试。
+
+---
+
+## 15. Rust 核心组件迁移
+
+本轮将 Rust 从“可能 someday”变成**明确工作流**，但生产采用仍由基准和一致性 Gate 决定。
+
+### R0 · 前置
+
+必须先完成：
+- P2 import writer/finalize；
+- 真实 2M 行 Python 基准；
+- amd64/arm64 toolchain；
+- current CI critical path；
+- parser correctness fixtures。
+
+### R1 · Workspace
+
+建议：
+
+```text
+crates/
+  soymutdb-core/        # pure Rust kernels
+  soymutdb-py/          # PyO3/maturin binding
+  soymutdb-wasm/        # 仅在浏览器热点被证实时创建
+```
+
+Cargo lock 纳入依赖治理、license、SBOM、CVE。
+
+### R2 · 第一批迁移 kernel
+
+优先级：
+1. streaming SHA-256 / checksum pipeline；
+2. BGZF block decode；
+3. VCF/BCF record parse + canonical batch assembly；
+4. GFF3/GTF tokenization + bounded validation；
+5. FASTA streaming/index helpers。
+
+Python worker 保留 orchestration，Rust 返回 typed batches/diagnostics。
+
+### R3 · 对照与 fuzz
+
+- 同一 fixture Python/Rust row-for-row；
+- error row/column 一致；
+- property tests；
+- fuzz malformed VCF/GFF/FASTA；
+- crash 不产生 partial published data；
+- no unsafe block 除非有单独 review/理由。
+
+### R4 · Go/No-Go
+
+Production adoption 至少满足现有架构评估的高门槛：
+- 吞吐约 ≥2×；
+- 峰值内存显著下降（目标 ≥3×）；
+- correctness parity 100%；
+- amd64/arm64 CI 可维护；
+- wheel/image 构建时间可接受。
+
+未达门槛：PoC 可保留 benchmark，不把双实现长期上线。
+
+### R5 · 浏览器/WASM
+
+Gene Preview row packing/SVG geometry 只有在真实 profile 显示 JS 主线程成为瓶颈时才做 WASM。  
+普通几十/几百 feature 不为“用了 Rust”而引入 WASM。
+
+---
+
+## 16. 既有 P1 / P2 正确性工作不被新路线覆盖
+
+### P1-1 仍未关闭的门
+
+继续要求真实：
 - running API；
-- seeded release；
-- unpublished sentinel；
-- external/internal negative E2E；
-- E2E-01/02；
-- ID-05 artifact evidence；
-- UI-02。
+- seeded published release；
+- unreleased sentinel；
+- external/internal build；
+- artifact-level ID-05；
+- negative leakage；
+- E2E-01/02。
 
-### L. 后续阶段门禁
+没有 full-stack evidence 就保持 BLOCKED，不用 unit green 替代。
 
-**Phase 3** 仅在生产量级 seed 可用后开始：search p50/p95/p99 + EXPLAIN；analytics ingest/parts；CI critical path。
+### P2-3 仍是数据主线第一优先级
 
-**Phase 4** 只能优化已有 baseline 的 domain：trigram、exact-ID `upper()`、3 RTT、COUNT、analytics batching、`total_count` compatibility。
+当前已完成 P2-1/P2-2 manifest/fingerprint/control-plane 基础。  
+下一步仍为：
 
-**Phase R** 继续保持 Optional/No-Go：没有 SLO + profile 证明 Python-owned CPU 瓶颈，不启动 Rust PoC。
+```text
+P2-3A shared import protocol / worker seam
+P2-3B real ClickHouse 24.8 schema + MV dependency inventory
+P2-3C staging writer
+P2-3D checksum/row/context/schema verify
+P2-3E coordinated finalize + recovery
+P2-5 crash/retry/ambiguous ACK fixtures
+P2-6 per-capability reopen review
+```
 
-### M. 当前下一步
-
-**数据主线第一优先级：P2-3A。**
-
-完成共享 import protocol 与 worker manifest seam 后，再进入 P2-3B 的真实 ClickHouse staging/MV 设计。与此同时可独立起草 P2-4A mapping contract，但 **P2-4B canonical writer 不应抢在 contract review 前实现**。
-
-### N. W-UI 并行工作流
-
-UI/UX 不阻塞 P2-3A，但必须服从 capability/data gate：
-
-1. **立即可做：** UI0 AntD CLI/组件/路由审计、UI1 design-system contract、UI2 信息架构/搜索状态、现有 Mutant/Gene 只读页面改造。
-2. **条件可做：** Variant detail/JBrowse 联动仅使用当前已发布数据能力；缺失字段保持 unavailable/empty，不造 mock production facts。
-3. **需等待：** VCF import enable、canonical promotion、phenotype/image/material 高级筛选、multi-sample genotype UI 等，分别等待 P2/真实 schema。
-4. UI PR 不得绕过 P2 capability flags，不得通过前端隐藏错误把未实现后端伪装成完成。
+本轮“支持更多格式”“Rust parser”全部排在 durable writer/finalize 之后。
 
 ---
 
-## 第四轮执行结语
+## 17. 执行波次
 
-当前项目的下一阶段不是“把禁用的导入函数解开”，而是把 **control plane、staging data plane、finalize、canonical promotion、failure recovery** 组成一条可证明正确的发布协议。
+### Wave 0 · 真源收敛 / Repo Health
 
-本轮数据正确性四条最高优先级硬约束继续不变，同时增加一条 UI 硬约束：
+- 更新本 plan；
+- 生成 dependency baseline；
+- 清生成物/冲突文档 inventory；
+- 修 Cloudflare 文档真源；
+- 建 local doctor；
+- 建 security/privacy register。
 
-> **WRITING 数据不得直接进入 portal 正常读取的最终数据面。**
->
-> **ClickHouse base 与增量 MV/summary 必须作为一致性单元验证和 finalize。**
->
-> **VCF v1 只写 draft release，不在本轮做已发布数据热替换。**
->
-> **worker 不依赖 API package；共享的是协议，不是 ORM/服务实现。**
->
-> **UI 不得提前承诺后端尚未通过 Gate 的能力；所有“可用”状态必须来自真实 capability/data contract。**
+**Gate W0：** 不再有互相冲突的当前架构文档；依赖、部署、feature flag、数据能力均可机器枚举。
+
+### Wave 1 · 数据正确性 + 本地运行 + CI
+
+并行：
+- P2-3A/B；
+- local lite/full；
+- CI fast/integration 分层；
+- secret/SBOM/dependency gate；
+- P1-1 full-stack fixture 入口。
+
+**Gate W1：** 新开发者在个人电脑可起栈；PR 能以一套命令复现关键 gate。
+
+### Wave 2 · Design System + Gene Preview
+
+- shared token；
+- motion/color 收敛；
+- primer-workbench viewport adaptation；
+- Gene/Variant detail 接入；
+- JBrowse deep link；
+- visual/a11y/privacy tests。
+
+**Gate W2：** Gene Preview 在 external 只显示 published public projection，坐标与 assembly/release 有证据。
+
+### Wave 3 · Import Studio / Formats / Publication
+
+- P2 writer/finalize；
+- format registry；
+- JSONL/Parquet module support；
+- scientific format parser/writer 逐个完成；
+- Admin Steps；
+- Cloudflare artifact publisher。
+
+**Gate W3：** 每个 capability 独立 Release Gate；不批量打开七类 imports。
+
+### Wave 4 · 企业微信 + Analytics v2 + 双站 Cloudflare
+
+- WeCom outbox push；
+- analytics batching/privacy schema；
+- external/internal Pages 项目；
+- internal Access；
+- preview/promotion/rollback。
+
+**Gate W4：** 公开站、内部站、Admin 的访问、缓存、统计、发布权限完全分离。
+
+### Wave 5 · 企业微信受控操作
+
+- self-built app callback；
+- identity map；
+- status commands；
+- preview publish；
+- production publish/rollback with approval。
+
+**Gate W5：** 从企业微信触发与从 Admin 触发产生相同 publication state/evidence/audit。
+
+### Wave R · Rust Kernels
+
+- R0 baseline；
+- R1 workspace；
+- R2 import kernels；
+- parity/fuzz/benchmark；
+- production Go/No-Go。
+
+**Gate R：** 性能和维护收益达门槛才替换 Python 热路径。
+
+---
+
+## 18. Release Gate 汇总
+
+| Gate | 必须证据 |
+|---|---|
+| Repo | dead/generated inventory + archive map + docs truth source |
+| Local | clean machine doctor + lite/full startup + smoke |
+| CI | PR fast + real PG/CH integration + artifact evidence |
+| UI | visual/a11y/reduced-motion/dark/390px |
+| Gene Preview | coordinate/strand/row-packing/release/assembly/leakage |
+| Import | manifest/idempotency/staging/verify/finalize/retry/rollback |
+| Format | sniff/schema/stream/memory/malformed fixture |
+| WeCom Push | dedup/retry/redaction/no secret |
+| WeCom Command | callback signature/replay/RBAC/approval/audit |
+| Dual Site | separate artifact/origin/cache/SW/analytics + negative leakage |
+| Cloudflare | exact-byte publish + digest + preview + rollback |
+| Analytics | DNT/GPC + no raw PII/query default + TTL + batching |
+| Security | secret scan/SBOM/CVE/CSP/upload/SSRF/auth |
+| Rust | parity/fuzz/benchmark/native build |
+
+---
+
+## 19. 建议新增/修改的主要文件
+
+```text
+plan.md
+
+packages/
+  design-tokens/
+  genome-view-model/
+
+apps/web/src/components/genome/
+apps/web/src/routes/genes/
+apps/web/src/routes/variants/
+apps/web/src/routes/mutants/
+
+apps/api/app/services/
+  notification_outbox_service.py
+  wecom_service.py
+  analytics_service.py
+  import_* / publication_*
+
+apps/api/app/api/v1/
+  admin_integrations.py
+  wecom_callback.py
+
+apps/worker/src/soymutdb_worker/
+  notifications/wecom.py
+  publication/
+  import/
+
+crates/
+  soymutdb-core/
+  soymutdb-py/
+
+scripts/
+  local-* / dev entry
+  cloudflare-publish.*
+  acceptance.*
+  dependency/security inventory
+
+docs/
+  architecture/
+  ops/
+  privacy/
+  archive/
+```
+
+实际命名以现有目录风格为准；禁止仅为匹配本计划而进行无收益重命名。
+
+---
+
+## 20. 当前立即执行顺序
+
+1. **P2-3A/P2-3B**：继续闭合 import control/data plane，不重开 feature flag。
+2. **Repo truth cleanup**：Cloudflare 口径、tracked generated/temp、superseded docs。
+3. **Local run**：把现有 compose-local/start-cloud-dev/setup-workspace 收到单一开发入口。
+4. **CI split**：fast vs integration vs release/nightly，先缩短反馈再增加能力。
+5. **Dependency low-risk upgrades**：AntD/TanStack patch/minor；同时建立 breaking lanes。
+6. **Design tokens + Gene Preview**：先 pure view-model + tests，再接 Gene/Variant 页面。
+7. **Cloudflare Direct Upload**：使用 verified artifact + Wrangler，不重建。
+8. **WeCom push**：Seed Request / publish / run status；只出站。
+9. **Analytics v2**：batch + privacy。
+10. **Format registry + additional formats**：按 writer gate 逐个启用。
+11. **WeCom inbound publish**：自建应用 callback + approval。
+12. **Rust R0/R1/R2**：在稳定协议上迁移 compute kernels。
+
+---
+
+## 21. Definition of Done
+
+本轮“完成”不是所有 checkbox 写成 implemented，而是以下事实都可复现：
+
+- 一台个人电脑可按文档一条入口启动并跑 smoke；
+- PR 有快速反馈，完整 gate 仍 fail-closed；
+- 生产发布只上传 CI 验证过的字节；
+- external/internal/admin 三个安全域不会相互泄漏；
+- Gene Preview 科学坐标准确、可访问、release-aware；
+- 数据导入没有 partial visible / duplicate facts；
+- 新格式每个都有独立 parser/writer/retry/rollback 证据；
+- 企业微信消息不含敏感信息，命令不能绕过 Admin/publication 权限；
+- Analytics 不以长期 raw 搜索词/IP 为默认；
+- 依赖、数据库和容器版本有机器可读 baseline；
+- 过期代码/文档被删除或归档且有引用证明；
+- Rust 只替换经过 benchmark 证明值得替换的 kernel，并保持 Python/control-plane 契约不变；
+- 所有 feature flag 的开启都有 Release Gate evidence，而不是“功能看起来能用”。
+
+> **最终约束：** 数据正确性、身份/隐私隔离、发布可追溯性优先于功能数量、框架升级和 Rust 化。任何工作流如果让未发布数据更容易暴露、让发布更难回滚、让管理员绕过审计，立即停止并回到上一个已验证状态。
