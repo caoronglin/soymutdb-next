@@ -1,544 +1,566 @@
-# SoyMutDB 第二阶段优化 —— 主计划（Master Roadmap）
-## 前端 · 性能/并发 · 检索 · 公众数据库 · 脏代码清理
+# SoyMutDB 技术审计与优化执行计划（第二轮审计版）
 
-> **面向执行者：** 本文件是**路线图与跨阶段契约**，不含任务细节。任务在五份子计划里：
->
-> | 阶段 | 子计划 | 内容 | Wave |
-> |---|---|---|---|
-> | **Phase 1** | `2026-09-15-phase-1-baseline-security-plan.md` | 收口门 + 安全与部署遗留 | W-1、W0、W1 |
-> | **Phase 1.5** | `2026-09-15-phase-1.5-capacity-baseline-plan.md` | **优化前**容量基线（Gate-0） | W1.5 |
-> | **Phase 2** | `2026-09-15-phase-2-frontend-static-plan.md` | 前端与静态性能 | W2 |
-> | **Phase 3** | `2026-09-15-phase-3-search-public-db-plan.md` | 检索与公众数据库 | W3 |
-> | **Phase 4** | `2026-09-15-phase-4-runtime-capacity-plan.md` | 同参数复测 + Gate-1 + 治理 | W4、W5 |
->
-> （全部位于 `docs/superpowers/plans/`）
->
-> 执行前必须先读 `AGENTS.md` 与 `docs/dev/database-core-contract.md`。
-> **不要**在任务外做无关重构；**不要**提交、暂存或回滚他人已有改动。
->
-> **上一阶段：** `docs/superpowers/plans/2026-09-15-portal-security-ux-perf-optimization.md`
+> **文档类型：** 技术审计 + 执行路线图 + Go/No-Go 门禁
+> **状态：** 计划，不等于实施授权
+> **原始计划日期：** 2026-09-18 ｜ **第一轮审计：** 2026-09-20 ｜ **第二轮审计：** 2026-09-20
+> **原计划声明基线：** `54532ed` / `codex/fix-compose-preview-data-layer`
+> **仓库状态：** 本会话未取得可重新核验 SoyMutDB 代码库的可靠仓库上下文；历史 `文件:行号` 仅作为 **E0 定位提示**，不作为当前事实。
+> **选用技能：** `dev-expert`（证据纪律 / 根因 / 威胁建模 / 生产就绪 / 反过度工程）、
+> `systematic-debugging`（先复现后修）、`receiving-code-review`（结论须可核验，不橡皮章）
+> **外部技术复核：** PostgreSQL `pg_trgm` 与 ClickHouse MergeTree/去重语义已按当前官方资料重新校正。
 
 ---
 
-## 0. 修订记录
+# 0. 第二轮审计结论
 
-### v4（第三次审计后）
+第一轮已修正两个主要误判：
 
-第三轮审计判定 **72/100 · No-Go**，列出 6 项阻塞、12 项严重、6 项一般。本版逐条处置：
+1. 不能仅凭 `ILIKE + ESCAPE` 断言 trigram 索引失效；
+2. ClickHouse `MergeTree` 不能按 PostgreSQL 的"唯一约束 + 普通事务"思维直接设计幂等。
 
-| # | 三轮审计问题 | 处置 |
-|---|---|---|
-| B1 | C13 被自己的负向示例触发 | 负向示例移入脚本单元测试；文档内不再出现字面量 |
-| B2 | Gate-0 时序颠倒（P1/P2 在 Phase 4，优化已先做完） | **新增 Phase 1.5**，P1/P2 移出 Phase 4，形成真正的优化前基线；Phase 4 只做同参数复测 |
-| B3 | 应用层 60/min 与边缘 100 r/s 冲突；`benchmark_mode` 变量不一致 | S-2 拆配置（`public_read_*` / `write_*` / `login_*`），应用匿名读上限 ≥ 边缘；冻结 `benchmark_mode` + `rate_limit_enabled` 两开关 |
-| B4 | F5/F7 循环依赖（F5 用 F7 才创建的脚本） | **F7 并入 F5**，门禁与修复同任务（先红后绿） |
-| B5 | P3 只优化回环 nginx，默认公网路径（Tunnel）未覆盖 | FZ-14 改为 **`tunnel-origin` 与自建 nginx 共用缓存片段**，覆盖真实生产入口 |
-| B6 | Phase 2 DoD 要求 lint 0/0，但 C2 在 Phase 4 | Phase 2 DoD 改为「不高于基线 94 且不增长」 |
-| S7 | S-0 镜像引用数量错误、CI 未接线 | 明确 **6 个 Compose 引用**；fixture helper 内聚到 `compose_acceptance_run()` |
-| S8 | C4 用 `HEAD:` 验证暂存区 LFS 指针 | 改用 `git show :path` |
-| S9 | S-7 负向测试端口全错、未处理 `gaierror` | 新增 `scripts/check_mcp_network_isolation.py`，按真实端口表逐一断言 |
-| S10 | F0 未参数化，无法分别测双产物 | 增加 `PERF_ARTIFACT_ROOT` / `PERF_PORT`；定义 INP 交互动作 |
-| S11 | F5 的 `--unicodes='*'` 抵消子集化；工具未钉版本 | 删除该参数；`fonttools` 钉版本 |
-| S12 | F8 未覆盖 admin/jbrowse 的 `_headers` 与 nginx | F8 Files 补齐三个 `_headers` + 三份 nginx 配置 |
-| S13 | R1 的 UNIQUE 索引忽略 assembly 作用域（违反数据契约） | 冻结为 `(assembly_id, upper(accession))`；别名同查 assembly 作用域 |
-| S14 | R4 超时后重跑全部 adapter，等待翻倍；Files 缺 models.py | 改为「取消未完成 + 收集已完成」，禁止重发；补 Files；wall-clock 断言 |
-| S15 | D9 现有 MV 无法产出 `uniqExact` 口径 | 新增 AggregateFunction 状态列 MV，或保留独立查询 + 缓存；Summing 表必须 `sum(cnt) GROUP BY` |
-| S16 | P1 实为优化后基线 | 同 B2 |
-| S17 | Gate-1 的 300ms/60% 是无依据魔法值（生产告警是 1s） | 改为**按端点类别的 SLO**，SLO 由 Phase 1.5 基线推导并登记 |
-| S18 | P6 的 `py-spy` 在 API 镜像不可用（无 py-spy + `cap_drop: ALL`） | 专用 profiling override：临时镜像 + 仅基准环境加 `SYS_PTRACE`，不进生产拓扑 |
+第二轮进一步发现 10 个结构问题：
 
-**一般问题处置：**
+1. **E0–E4 把"证据强度"和"缺陷生命周期"混在一起。**
+2. `E2=复现已验证` 与 `E2=修复已验证` 语义冲突。
+3. Phase 0 要求"所有高优先级项至少 E1"，但 runtime-only 问题天然不能靠静态代码达到 E1。
+4. "SLO 由性能基线推导"逻辑不完整；SLO 应由业务需求/容量目标定义，基线用于验证可达性。
+5. PostgreSQL 搜索计划仍缺少**查询类型路由**，exact ID、短字符串、substring 不应强行走同一路径。
+6. ClickHouse import identity 缺少 parser/schema/config 等"语义变换版本"。
+7. ClickHouse insert deduplication token 不应被当作永久 exactly-once 保证。
+8. Analytics batching 缺少"事件是否允许丢失"的业务耐久性等级。
+9. Rust "永久排除"过度约束；合理表述应是**本轮计划 No-Go**。
+10. "100% fixture 一致性"应改为 **100% 契约级一致性**，不能要求内部实现/错误文本逐字一致。
 
-| # | 问题 | 处置 |
-|---|---|---|
-| G1 | W-1 产物哈希只覆盖两个 `index.html` | 生成**全树**排序 `SHA256SUMS` |
-| G2 | S-6 「migrate 或 one-shot」未冻结 | 冻结为独立 `bootstrap-admin` one-shot 服务 |
-| G3 | S-10 未用 fixture helper | 改用 `compose-fixture-env.sh` |
-| G4 | D2 把 `stats/*` 归入分页类别（部分无分页参数） | 门禁只枚举**真正的列表端点** |
-| G5 | C3/F8 可能重复改 nginx | F8 定义行为（Phase 2），C3 只做结构去重且输出**字节等价**（Phase 4） |
-| G6 | 文件所有权表把 P4 标成 Phase 3 | 修正为 Phase 4 |
-
-### v3（第二次审计后）
-
-新增 W-1 收口门、S 组前移、压测拆分、删除事实错误的 R6、重写 P3、Rust 降级为 ADR、
-D4 拆五层、冻结全部占位符。详见各子计划的 §0。
-
-### v2（第一次审计后）
-
-修正 v1 的 10 条不可执行命令、Wave 顺序冲突、Rust 无法部署、隐私矩阵层级不足等。详见 Phase 1 §0。
-
-### v1
-
-初版（`docs/superpowers/plans/2026-09-15-portal-security-ux-perf-optimization.md` 的后续）。
-
----
-
-## 1. 阶段目标与非目标
-
-### 目标
-
-1. **前端优化**：首访传输字节从 5.7 MB（raw 预缓存）压到 ≤1.2 MB；删除 13 MB 未引用字体。
-2. **性能与并发**：建立**可比较的优化前基线**；先做索引/缓存/连接层优化；
-   只在数据证明 Python 进程是瓶颈时才讨论 Rust。
-3. **检索优化**：索引先取证后建；排名语义与 `match_type` 一致；检索可观测且不泄露查询内容。
-4. **公众数据库**：匿名读在**真实生产入口**（Tunnel）也可缓存；配额分级；隐私矩阵五层全绿。
-5. **脏代码清理**：死代码、重复配置、仓库垃圾、lint 告警、文档漂移清零。
-
-### 非目标
-
-- **不做全量 Rust 重写**；Rust 实现**不在本阶段范围内**（只产出 ADR）。
-- 不改 `public_id` / `internal_id` 契约，不改 v4/v5 装配体语义，不改发布状态机。
-- 不更换 React / Ant Design / TanStack / ClickHouse / PostgreSQL 技术栈。
-- 不新增业务功能。
-- 不对 `.cnb.yml` / `.github/workflows/*` 增加逻辑。
-- **不削弱任何安全扫描换绿灯**。
-- **不做 Git 历史重写**（破坏性，需单独确认）。
-
----
-
-## 2. 冻结决策登记表
-
-> 任何修改必须在本表登记并附理由。执行期不得重新打开「二选一」。
-
-| ID | 决策 | 冻结值 | 理由 |
-|---|---|---|---|
-| FZ-1 | 迁移编号 | **`0037`**（索引）、**`0038`**（预聚合状态列，若 D9 需要） | 当前 head 为 `0036` |
-| FZ-2 | 限流策略与开关 | 见 §2.1 | 修复 60/min 与 100 r/s 的冲突 |
-| FZ-3 | S-4 安全头权威 | nginx `proxy_hide_header` 隐藏上游同名头，再发唯一规范值；API 保留 Middleware | 真正消除重复，且保留直连 API 纵深 |
-| FZ-4 | S-7 MCP 网络 | `mcp-proxy` / `mcp-api` / `mcp-ratelimit` 三条专用网络 | 移除 `default` 后必须显式给出 Redis 通路 |
-| FZ-5 | S-9 豁免格式 | `.trivyignore.yaml` 结构化（`id` / `statement` / `expired_at`） | 可审计、会过期 |
-| FZ-6 | C4 二进制治理 | Git LFS（`ui-r/*.pdf`、`ui-r/*.pptx`） | 仓外存储在无人值守时不复现 |
-| FZ-7 | 字体路径 | `./assets/fonts/...`（相对 `src/index.css`） | `../assets/fonts/` 指向不存在的 `apps/*/assets/fonts/` |
-| FZ-8 | 字体子集化语料 | GB2312 一级常用字（3755）+ ASCII + 仓库实际 CJK 字符；**禁止 `--unicodes='*'`** | 后者会抵消子集化 |
-| FZ-9 | R2 排名顺序 | `exact > curated alias > prefix > substring`；游标 `rank` 保持 3/2/1 | 与现有 `case()` 和 `MatchType` 一致 |
-| FZ-10 | R4 联邦检索 | 同步单响应 + **6s 硬墙钟**；超时源标 degraded；**禁止重发** | 不改传输协议，且不把 6s 翻倍 |
-| FZ-11 | R8 无 release 的 suggest | **503 `release_context_unavailable`** | 空列表会被误读为「无结果」 |
-| FZ-12 | D2 分页上限 | 仅对**真实列表端点**分类：检索 50 / 实体列表 200 / 内部管理 100；**聚合端点不纳入** | `stats/*` 多数无分页参数 |
-| FZ-13 | D6 区域查询预算 | span ≤10 Mb；`max_results` ≤10000；timeout 10s；**422 `region_query_too_large`** | 数值由 Phase 1.5 复核一次后固化 |
-| FZ-14 | P3 缓存落点 | **`tunnel-origin` 与自建 nginx 共用缓存片段**（覆盖真实生产入口）；Cloudflare Cache Rules 仍不在范围 | 见 §2.2 |
-| FZ-15 | P4 排序契约 | CH 顺序 `(chromosome, position, variant_id)`；游标携带 `chromosome`；API 字典序，UI 用 `Chromosome.order` | 匹配排序键前缀，避免 schema 变更 |
-| FZ-16 | C5 缓存收敛范围 | 只统一 **key builder + 观测口径**，不统一失效语义 | 四处失效语义差异是设计意图 |
-| FZ-17 | Gate-1 判据 | 见 §5：**按端点类别的 SLO**（由 Phase 1.5 推导）+ CPU < 60% + 错误率 < 1% | 300ms 魔法值无依据（生产告警为 1s） |
-| FZ-18 | 字体门禁归属 | `check_font_assets.py` 由 **F5 创建**（合并原 F7），先红后绿同任务 | 消除 F5/F7 循环依赖 |
-| FZ-19 | P6 profiling 环境 | 专用 override：临时镜像 + `SYS_PTRACE`，仅基准环境，不进生产拓扑 | API 镜像无 py-spy 且 `cap_drop: ALL` |
-
-### 2.1 限流配置（FZ-2）
-
-| 配置项 | 默认值 | 作用域 | 后端不可用时 |
-|---|---|---|---|
-| `rate_limit_enabled` | `True` | 总开关 | — |
-| `benchmark_mode` | `False` | 仅 `app_env != prod` 可置 `True` | — |
-| `public_read_rate_limit_per_minute` | **6000**（=100 r/s） | 匿名 GET | **fail-open** |
-| `write_rate_limit_per_minute` | 120 | 写操作 | **fail-closed** |
-| `login_rate_limit_window` / `_max` | 60 / 10 | `/auth/*` | **fail-closed**（复用 `core/ratelimit.py`） |
-
-**不变量：**
-1. `public_read_rate_limit_per_minute` **不得低于**边缘 `limit_req` 的等效速率
-   （边缘 100 r/s × 60 = 6000/min），否则应用层成为实际瓶颈，边缘配置失去意义。
-2. 关闭限流需要 `benchmark_mode=True` **且** `rate_limit_enabled=False` **且** `app_env != "prod"`；
-   生产环境出现任一即 **fail-fast 启动失败**。
-3. `/health`、`/metrics` 豁免。
-4. 限流键使用**可信对端 IP**（与 S-1 同源）。
-
-### 2.2 缓存落点（FZ-14）
-
-**问题：** 默认公网入口是 `cloudflared → tunnel-origin → API`，
-而 v1–v3 的 P3 只在自建 nginx（`infra/nginx/conf.d/default.conf`）启用 `proxy_cache` ——
-真实公网用户完全绕过它。
-
-**冻结方案：**
-
-| 层 | 落点 | 覆盖 |
-|---|---|---|
-| 主 | **`infra/nginx/cloudflare-tunnel.conf`（tunnel-origin）启用 `proxy_cache`** | 默认公网生产路径 |
-| 主 | `infra/nginx/conf.d/default.conf`（自建 nginx）启用同一片段 | 自建/内网路径 |
-| 共用 | 抽 `infra/nginx/conf.d/public-cache.inc`，两处 `include` | 单一来源，与 C3 的结构去重对齐 |
-| 应用 | 低成本 ETag（304 不落库） | 边缘未命中时的兜底 |
-| 明确不做 | Cloudflare Cache Rules / IaC | 无 IaC 且本机不可测；此时不再是唯一手段 |
-
-**约束：** 两处 `proxy_cache_key` 必须一致，含 `site_variant` + 端点级 version token + 规范化查询参数；
-带 `Authorization`/Cookie 永不进共享缓存。
-
----
-
-## 3. 前置门：W-1（未通过则任何阶段不得开始）
-
-| 子任务 | 判据 |
-|---|---|
-| **W-1.1 上一阶段收口** | 工作树干净；上一阶段 DoD 无未解释未勾选项；关键文件已在提交历史中 |
-| **W-1.2 工具链** | Node `v24.19.0`；`pnpm exec turbo --version` 可用；`scripts/check-toolchain-pins.py` 通过；git-lfs 就绪（仅 C4 需要） |
-| **W-1.3 基线固化** | `docs/ops/baseline-2026-09-15-v2.md` 入库；**只跑已存在的命令**；产物**全树** `SHA256SUMS` |
-
-**W-1.3 允许执行的命令集合（白名单）：**
+本版执行逻辑改为：
 
 ```text
-V1  node --version
-V2  pnpm install --frozen-lockfile
-V3  pnpm exec turbo run lint --force
-V4  pnpm typecheck
-V5  pnpm test
-V6  VITE_DEPLOYMENT_MODE=demo VITE_API_BASE_URL=... VITE_JBROWSE_BASE_URL=... pnpm --filter @soymutdb/web build:sites
-V7  bash scripts/check-bundle-size.sh apps/web/dist/external/assets
-V8  du -sh apps/web/dist/external
-V9  SW 预缓存清单解析（内联 node 命令，见 Phase 2 F2）
-V10 python3 scripts/check_nginx_security_headers.py
-V11 python3 scripts/check_artifact_headers.py
-V12 SOYMUTDB_SMOKE_PYTHON=apps/api/.venv/bin/python bash scripts/smoke.sh --profile contracts
-V13 bash scripts/smoke.sh --profile static --static-dir apps/web/dist/external
-V14 bash scripts/smoke.sh --profile static --static-dir apps/web/dist/internal
-V15 bash scripts/verify-frontend-artifacts.sh
-V16 apps/api/.venv/bin/python -m pytest scripts/test_ci_job_contracts.py \
-      scripts/test_dockerfile_contracts.py scripts/test_site_artifact_isolation.py \
-      scripts/test_supply_chain_contracts.py scripts/test_production_compose_contract.py -q
-V17 python3 scripts/check-toolchain-pins.py
-V18 apps/api/.venv/bin/python -m pytest scripts/test_cloudflare_tunnel_contract.py -q
-V19 apps/api/.venv/bin/python -m pytest scripts/test_development_compose_contract.py -q
-V20 产物全树哈希：
-      (cd apps/web/dist/external && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum > /tmp/ext.sums)
-      (cd apps/web/dist/internal && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum > /tmp/int.sums)
-      sha256sum /tmp/ext.sums /tmp/int.sums
+约束锁定 → 事实发现 → 问题确认 → P0 修复 → 数据协议闭环
+        → 分域性能基线 → 针对性优化 → 容量/故障验证 → 可选 Rust PoC → 发布观察
 ```
-
-**不在白名单内的门禁**（`check_font_assets.py` / `check_search_golden.py` /
-`check_pagination_contract.py` / `check_doc_links.py` / `check_plan_commands.py` /
-`perf-baseline.sh`）由各自阶段创建并即时验证，W-1.3 不等待它们。
 
 ---
 
-## 4. 冻结基线
+# 1. 两套正交状态：证据等级 + 问题生命周期
 
-### 4.1 环境
+## 1.1 证据等级 Evidence
 
-| 项 | 要求 |
-|---|---|
-| Node | **v24.19.0**（`.nvmrc`） |
-| pnpm | 11.21.0 |
-| Python | 3.14.6 |
-| turbo | **2.10.11**（经 `pnpm exec turbo`，不在 PATH） |
-| git-lfs | **仅 Phase 1 C4 需要**（一次性）；CI 不读取 `ui-r/`，不得做成常驻 pin |
-| fonttools / brotli | **仅 Phase 2 F5 需要**，版本钉死（见 F5） |
-| py-spy | **仅 Phase 4 P6 需要**，通过专用 profiling override，不进生产拓扑 |
-| Docker / PostgreSQL / 浏览器 | 本机不可用 → CI 补验 |
-
-### 4.2 门禁基线（当前工作树实测，Node 26 临时值）
-
-| # | 命令 | 结果 |
+| 等级 | 定义 | 可支持的声明 |
 |---|---|---|
-| B1 | `python3 scripts/check_nginx_security_headers.py` | OK（6 configs / 37 locations / 2 fragments） |
-| B2 | `python3 scripts/check_artifact_headers.py` | OK（5 files） |
-| B3 | `pnpm exec turbo run lint --force` | exit 0；0 errors / **94 warnings**（admin 53 / web 37 / api-client 4） |
-| B4 | `pnpm typecheck` | 6/6 successful |
-| B5 | `pnpm test` | web 36 files / 180 tests；admin 48 files / 127 tests |
-| B6 | `bash scripts/check-bundle-size.sh apps/web/dist/external/assets` | OK；antd 296/320 KB gz、entry 165/200 KB gz；`pro` → SKIP |
-| B7 | `smoke.sh --profile contracts` | 217 passed（+10 environment-bound） |
-| B8 | `smoke.sh --profile static --static-dir <单变体>`（**须分两次**） | 两变体各 PASS |
-| B9 | 5 个 `scripts/test_*` 套件 | 86 passed |
-| B10 | `smoke.sh --profile runtime` / `e2e` / `images`（**三个独立 profile**） | **未验证** |
+| **E0** | 历史计划/文档/旧行号/未复核记录 | 仅能说"待核验" |
+| **E1** | 当前目标分支静态代码/配置/schema 已核验 | 可说"代码事实存在" |
+| **E2** | 可重复的测试/运行时复现证据 | 可说"行为已确认" |
+| **E3** | 生产等价环境 benchmark / EXPLAIN / 故障注入 | 可说"性能/可靠性结论已验证" |
+| **E4** | staging/production 观察窗口确认 | 可关闭生产风险项 |
 
-**未验证项披露（强制）：** B10 在本机不可执行；相关 Accept 一律标「需 CI 补验」。
+> **Evidence 只说明证据强度，不说明问题当前处于"未修/已修"。**
 
-### 4.3 关键量化事实
+## 1.2 生命周期 State
 
-**前端**：产物 **19 MB**（`fonts/` **13 MB** + `assets/` 5.8 MB）；web `@font-face` **0**；
-HarmonyOS 字体 3 份 × 13 MB = **38 MB 进 git**；SW 预缓存 **30 项 / 5.7 MB raw**。
-
-**SW 预缓存前 8（raw）**：`pdf.worker.min-*.mjs` 1343 KB、`echarts-*.js` 1015 KB、
-`antd-*.js` 924 KB、`index-*.js` 565 KB、`mammoth.browser-*.js` 488 KB、
-`cytoscape.esm-*.js` 433 KB、`pdf-*.js` 326 KB、`react-*.js` 194 KB。
-
-**chunk gzip**：echarts 336、antd 295、index 164、mammoth 122、cytoscape 138、
-pdf 95、react 60、common 53、router 35（KB）。
-
-**检索与查询**
-
-| 项 | 事实 |
+| 状态 | 定义 |
 |---|---|
-| 匹配与排名 | `ILIKE '%term%'`（31 处）+ `case()` 排名 `exact=3 / alias=2 / text=1`（`search_service.py:637-641`） |
-| 别名 | **已在检索中**（`:625-646`）；`tests/test_search_database_integration.py:238` 已断言 `match_type == "alias"` |
-| 已有 trgm 索引 | `0024`：`genes.name`、`mutant_lines.name`、`publications.title`；`0027`：`genes.description`、`mutant_lines.{cultivar,mutagen,description}`、`publications.{authors,abstract}` |
-| 待取证缺口 | `genes.accession`（`ix_gene_accession` **非唯一**）、`mutant_lines.public_id`、`publications.{doi,pmid}` |
-| **assembly 作用域** | `Gene` 注释明确："accessions are only unique per assembly (v4 and v5 are distinct namespaces)"；`GeneAlias` 的 `uq_gene_alias` 也是 `(gene_id, alias)` |
-| CH 排序键 | `(release_key, assembly_key, chromosome, position, gene_surrogate_id, mutant_line_surrogate_id, variant_id)` |
-| CH 查询排序 | `ORDER BY position ASC, variant_id ASC`（`clickhouse_service.py:230`）→ 与排序键前缀不匹配 |
-| **aggregator 超时行为** | `aggregator.py:98-118`：`wait_for` 超时后**重建全部 task 并 `gather`** → 等待时间翻倍 |
-| 聚合缓存 | 仅 `stats` / `content snapshot` 走 Redis cache-aside |
-| 物化视图 | `release_dashboard`（`variant_type/impact/consequence/cnt`）、`gene_impact_summary`、`mutant_line_summary`、`chromosome_summary` |
-| **MV 口径缺口** | `get_dashboard_stats` 需 `uniqExact(gene_id)` 与 `uniqExact(mutant_line_surrogate_id)`；现有 MV 无 `AggregateFunction(uniqExact)` 状态列，无法精确恢复 |
-| 公开读 HTTP 缓存 | 无 `Cache-Control`/`ETag`；两个公网路径均 `proxy_cache off` + `add_header Cache-Control "no-store" always` |
-| 限流配置 | `rate_limit_per_minute = 60`（`config.py:138`）——与边缘 100 r/s 冲突 |
+| **S0 SUSPECTED** | 怀疑存在，仅有线索 |
+| **S1 CONFIRMED** | 已确认问题存在 |
+| **S2 FIX_READY** | 根因明确、修复方案与测试已准备 |
+| **S3 FIXED** | 代码已修改，回归测试通过 |
+| **S4 VERIFIED** | 生产等价环境验证通过 |
+| **S5 CLOSED** | 发布观察完成，可关闭 |
 
-**脏代码与治理**
-
-| 项 | 事实 |
-|---|---|
-| nginx server 重复 | `web-nginx.conf`(90) / `admin-nginx.conf`(76) / `apps/jbrowse/nginx.conf`(72)，90% 相同 |
-| `_headers` 文件 | **三份**：`apps/{web,admin,jbrowse}/public/_headers` |
-| 死代码 | `RateLimitMiddleware`、`TimingMiddleware`（`middleware.py:98,119`） |
-| 缓存实现 | `services/cache.py` / `search/cache.py` / `widgets/cache.py` / `content_snapshot_cache.py` |
-| 仓库二进制 | `ui-r/网页-查询V2.pdf`(2.5 MB) + `.pptx`(328 KB) |
-| 本机垃圾 | `.validation/` **284 MB**、`.turbo/` **44 MB** |
-| 镜像集合 | `scripts/list-images.sh` **8 个**（api/worker/migrate/migrate-clickhouse/mcp/jbrowse/web/admin） |
-| **Compose 镜像引用** | **6 个** `*_IMAGE_REF`（api/worker/migrate/migrate-clickhouse/mcp/jbrowse）；web/admin 不在 Compose 内 |
-| **CI 现状缺口** | `.github/workflows/ci.yml` 的 compose-acceptance 只注入 **4 个**引用，缺 `MIGRATE_IMAGE_REF` 与 `MIGRATE_CLICKHOUSE_IMAGE_REF` |
-| 超大源文件 | `settings_registry.py` 2311、`admin/routes/settings.tsx` 1200、`admin/routes/imports.tsx` 1187、`search_service.py` 1126 |
-| 语言分布（非测试 LOC） | api 41530 / web 24026 / admin 16801 / worker 9870 / mcp 1246 / shared 425 |
+示例 `D1: S1 / E2` 表示"已通过运行时证据确认 D1 存在，但尚未修复"，**而不是**"E2 所以已经修好"。
 
 ---
 
-## 5. Rust 决策门（Phase 4 判定）
+# 2. Merge Gate 与 Release Gate 分离
 
-```
-Phase 1.5 P1（优化前基线）─► Phase 2/3 优化 ─► Phase 4 P6（同参数复测）─► Gate-1
-                                                                            │
-                                                              达标 ────────┴── 关闭 Rust 议题
-                                                                │
-                                                             未达标 → P7 ADR（仅设计）→ 后续独立计划
+**Merge Gate（一个修复 PR 可合并至少需要）：** 静态事实 E1；失败复现或回归测试；修复后测试通过；相关契约测试不 skip/xfail；migration / rollback / observability 已说明。
+
+**Release Gate（P0 进入生产必须额外满足）：** staging / production-equivalent 验证；negative leakage 测试；failure injection（若涉及数据/依赖服务）；回滚或 forward-fix 路径明确；关键指标/告警存在。
+
+```text
+P0 merge:   S3 + E2
+P0 release: 至少 S4 + E3
+P0 close:   S5 + E4
 ```
 
-| 门 | 准入 | 动作 | 通过判据 |
-|---|---|---|---|
-| **Gate-0** | Phase 1 完成 | **Phase 1.5** P1（后端容量）+ P2a（公网防滥用） | 两份基线入库；P1 的 429 = 0；数字可追溯 |
-| **Gate-1** | Gate-0 + Phase 2/3 完成 | Phase 4 P6 同参数复测 + 火焰图 | 见下方**按类别 SLO** 全部达标 **且** CPU < 60% **且** 错误率 < 1% |
-| **Gate-2** | Gate-1 未达标，且 (a)(b)(c)(d) 全满足 | P7 产出 ADR（附录 A） | (a) ≥50% 时间在 Python 进程内；(b) 瓶颈在 ≤3 个无状态只读端点；(c) 契约可由 OpenAPI 生成；(d) 不涉写路径/编排 |
-| **Gate-3** | 后续独立计划 | 试点→灰度→对比 | p95 ↓≥40% **且** CPU ↓≥30% **且** 双跑一致性 100% |
-
-### Gate-1 的 SLO 判据（FZ-17）
-
-三轮审计指出 `p95 < 300ms` 与生产告警 `> 1s` 从未对齐，是无依据的魔法值。改为：
-
-**SLO 由 Phase 1.5 的基线推导并登记，初值如下（首次执行时填入实际值）：**
-
-| 端点类别 | 代表端点 | SLO 上限（p95） | 依据 |
-|---|---|---|---|
-| 详情/列表（PostgreSQL） | `/api/v1/genes` | **300 ms** | 简单索引查询，远低于生产告警 1s |
-| 变体列表（ClickHouse） | `/api/v1/variants`、`/region` | **500 ms** | 分析投影，允许高于 PG 路径 |
-| 聚合（缓存后） | `/api/v1/stats/*` | **300 ms** | 命中缓存时不应触及 DB/CH |
-| 检索（含联邦外部源） | `/api/v1/search` | **2000 ms** | 外部源不可控；R4 的 6s 为硬墙钟而非目标 |
-
-**登记规则：** Phase 1.5 报告必须为每类填入实测 p95；若实测 p95 **已低于**上表上限，
-则 SLO 取 `max(实测 × 0.7, 上表下限)`；若实测高于上限，先按上表判定，不因基线差而放宽。
-
-**明确不做 Rust（满足任一即否决）：** 瓶颈在 DB/CH/网络；需要写路径或事务编排；
-需要 Celery/outbox 语义；无 Rust 运维与值班能力；Gate-1 已达标。
+不再使用"P0 到 E2 即解除所有阻断"的模糊规则。
 
 ---
 
-## 6. 依赖与 Wave 总览
+# 3. Phase 0：事实发现，而不是"强行证明所有项"
 
-| Wave | 阶段 | 内容 | 退出判据 |
-|---|---|---|---|
-| **W-1** | 1 | 收口门（W-1.1 → W-1.2 → W-1.3） | §3 白名单全绿 + 基线报告 + 全树哈希 |
-| **W0** | 1 | C11（垃圾）、C4（LFS）、C13（计划门禁） | 三项通过；C13 对当前计划 exit 0 |
-| **W1** | 1 | S-0…S-10 | 安全回退防线三命令通过 |
-| **W1.5** | 1.5 | **P1（后端容量）、P2a（Tunnel 限流）** | 零 429 证明 + 429>0 证明；基线报告入库 |
-| **W2** | 2 | F0 → F1 → F2 → F3 → F4 → F5（**含原 F7**）→ F6 → F8；D1、D2；C1 | 体积/预缓存达标；字体门禁红→绿；lint 不增长 |
-| **W3** | 3 | R3 → R2、R1；R4、R5、R7、R8；D3…D9 | 黄金集绿；五层隐私矩阵**无 skip** |
-| **W4** | 4 | P0（优先级判定）→ P3 → P4 → P5 → P2b（配额验证）→ P6（同参数复测）→ P7（条件） | Gate-1 按类别 SLO 成文 |
-| **W5** | 4 | C2、C5、C7、C8、C9、C10、C12；P8、P9；**C3 最后**（字节等价） | 结构治理门禁通过 |
+> Phase 0 **不修改业务代码**，只建立事实、夹具、测量脚本和待决策清单。
 
-**硬依赖（违反则后续验证无效）**
-
-1. W-1 必须先于所有 Wave；W-1.3 只跑白名单命令。
-2. **W1（S 组）必须早于 W1.5** —— S-2 的 `benchmark_mode` / `rate_limit_enabled` 是 P1 的前提。
-3. **W1.5 必须早于 W2 与 W3** —— 否则基线是「优化后」，Gate-1 无参照。
-4. **C1 必须在 S-2 之后**（`RateLimitMiddleware` 的去留由 S-2 定）。
-5. **D1 必须在 P2b 之前** —— P2b 验证的正是 D1 配置的配额。
-6. F0 必须在 F1/F2/F6 之前 —— 否则「不劣化」无参照。
-7. **F5 内部先红后绿**：先建门禁（红）→ 再改字体与路径（绿）；不得跳过红态。
-8. **R3 必须在 R2 之前** —— 黄金集先锁住 v4/v5 不混淆与 `match_type` 契约。
-9. R1 的索引必须晚于 EXPLAIN 取证；且**必须含 assembly 作用域**（FZ-13/R1）。
-10. D2/D3 契约测试必须早于 P4 的游标改动；D5 必须先于 P4。
-11. **F8 必须早于 C3** —— F8 定义缓存行为，C3 只做结构去重且输出字节等价。
-12. P3 必须在 W1.5 之后（需基线判定缓存收益）；P4 的目标由 W1.5 的 `read_rows` 推导。
-
----
-
-## 7. 文件所有权映射
-
-| 区域 | 主责阶段 | 高风险文件 |
-|---|---|---|
-| `apps/web/**` | Phase 2 | `apps/web/scripts/*`、`apps/web/public/_headers`、`apps/web/public/sw.js` |
-| `apps/admin/**`、`apps/jbrowse/**` | Phase 2 | `src/index.css`、`src/assets/fonts/**`、`public/_headers`、`apps/jbrowse/nginx.conf` |
-| `infra/nginx/**`、`infra/docker/*-nginx.conf` | Phase 1（S-3/S-4）、Phase 2（F8）、Phase 4（C3、P3） | 头片段、`public-cache.inc`、server 块合并 |
-| `infra/docker/Dockerfile.{web,admin}`、`apps/jbrowse/Dockerfile` | Phase 4（C3） | 片段 COPY |
-| `apps/api/app/core/**` | Phase 1（S-2/S-4）、Phase 2（C1） | `middleware.py`、`main.py`、`config.py` |
-| `apps/api/app/services/search_service.py`、`apps/api/migrations/versions/0037_*.py` | Phase 3 | 迁移需 upgrade/downgrade 双向 |
-| `apps/api/app/search/**` | Phase 3（R4） | `aggregator.py`、`models.py` |
-| `apps/api/app/services/clickhouse_service.py`、`apps/api/migrations/versions/0038_*.py` | **Phase 3（D9）、Phase 4（P4）** | CH 排序与公开游标契约 |
-| `apps/web/src/routes/variants/index.tsx` | **Phase 4（P4）** | 按染色体分片浏览 |
-| `docker-compose.yml`、`deploy/**` | Phase 1（S 组）、Phase 4（P5） | 生产拓扑 |
-| `scripts/**` | 全体 | 所有门禁的单一来源 |
-
----
-
-## 8. 跨计划通用规则
-
-1. **提交粒度**：每任务独立 commit；回归断言与其修复同 commit。
-2. **门禁位置**：新门禁一律落入 `scripts/ci-job-steps.sh` / `scripts/verify-frontend-artifacts.sh` /
-   `scripts/smoke.sh`；`.cnb.yml` 与 `.github/workflows/*` 不得增加逻辑。
-3. **未验证披露（强制）**：需 Docker / PostgreSQL / 浏览器 / release 数据的项一律标「未验证」，
-   给出 CI 补验路径，**不得计入已完成**。
-4. **占位符禁令**：计划内 **fenced code block** 不得出现 `00XX`、`YYYY-MM-DD`、裸 `<...>`；
-   运行期参数一律 `$VAR`。**负向测试用例不得以字面量写进计划**（否则 C13 自触发），
-   一律放在脚本的单元测试里。
-5. **命令可复现**：所有命令必须能在仓库根直接执行；`turbo` 一律 `pnpm exec turbo`，
-   `knip` 一律 `pnpm exec knip`。
-6. **冻结决策**：§2 登记表的决策不得在执行期重新打开；变更需登记理由。
-7. **门禁不得放宽换绿灯**。
-
----
-
-## 9. 全局验证矩阵
-
-> **A 已实测**（当前工作树跑过）／**B 目标命令**（脚本尚未创建）／**C 需环境**。
-> 每条命令必须在 PR 附一次性证据（命令 + 退出码 + 计数）。
-
-| # | 命令 | 期望 | 状态 | 归属 |
-|---|---|---|---|---|
-| V1 | `node --version` | `v24.19.0` | C | W-1.2 |
-| V2 | `pnpm install --frozen-lockfile` | exit 0 | A | 全局 |
-| V3 | `pnpm exec turbo run lint --force` | 0 errors **0 warnings** | A（当前 94 warnings） | Phase 4 C2 |
-| V4 | `pnpm typecheck` | 6/6 successful | A | 全局 |
-| V5 | `pnpm test` | web ≥180、admin ≥127 全绿 | A | 全局 |
-| V6 | `VITE_DEPLOYMENT_MODE=demo … pnpm --filter @soymutdb/web build:sites` | exit 0，双产物 | A | Phase 2 |
-| V7 | `bash scripts/check-bundle-size.sh apps/web/dist/external/assets` **和** `…/internal/assets` | 均 exit 0，无未声明 SKIP | A | Phase 2 F3 |
-| V8 | `du -sh apps/web/dist/external` | ≤7 MB | A（当前 19 MB） | Phase 2 F1 |
-| V9 | SW 预缓存清单解析（Phase 2 F2 内联命令） | ≤1228 KB raw，不含 echarts/mammoth/cytoscape/pdf | A（当前 5.7 MB） | Phase 2 F2 |
-| V10 | `python3 scripts/check_nginx_security_headers.py` | exit 0（含 Tunnel 限流与缓存断言） | A | Phase 1 S-3 |
-| V11 | `python3 scripts/check_artifact_headers.py` | exit 0 | A | Phase 2 F8 |
-| V12 | `python3 scripts/check_font_assets.py apps/{admin,jbrowse}/dist` 与 `--assert-charset` | 均 exit 0 | B | **Phase 2 F5**（含原 F7） |
-| V13 | `python3 scripts/check_search_golden.py` | exit 0 | B | Phase 3 R3 |
-| V14 | `python3 scripts/check_pagination_contract.py` | exit 0 | B | Phase 2 D2 |
-| V15 | `python3 scripts/check_doc_links.py` | exit 0 | B | Phase 4 C7 |
-| V16 | `python3 scripts/check_plan_commands.py` | exit 0 | B | Phase 1 C13 |
-| V17 | `python3 scripts/check_mcp_network_isolation.py` | exit 0（仅可达 api 与 redis 缓存） | B | Phase 1 S-7 |
-| V18 | `SOYMUTDB_SMOKE_PYTHON=apps/api/.venv/bin/python bash scripts/smoke.sh --profile contracts` | ≥217 passed | A | 全局 |
-| V19 | `bash scripts/smoke.sh --profile static --static-dir apps/web/dist/{external,internal}`（两次独立） | 均 PASS | A | Phase 2 |
-| V20 | `bash scripts/verify-frontend-artifacts.sh` | exit 0 | A | 全局 |
-| V21 | 5 个 `scripts/test_*` 套件 | 86 passed | A | 全局 |
-| V22 | `bash scripts/perf-baseline.sh backend` | 429 = 0；基线报告 | C | **Phase 1.5 P1** |
-| V23 | `bash scripts/perf-baseline.sh public` | 429 > 0；`/health` 全程 200 | C | **Phase 1.5 P2a** / Phase 4 P2b |
-| V24 | `SOYMUTDB_SMOKE_PYTHON=apps/api/.venv/bin/python bash scripts/smoke.sh --profile runtime` | PASS | C | Phase 3 |
-| V25 | `cd apps/api && .venv/bin/python -m pytest tests -q` | 全绿 | C | Phase 3 |
-| V26 | `cd apps/worker && .venv/bin/python -m pytest tests -q` | 全绿 | C | Phase 4 |
-| V27 | `cd e2e && PERF_ARTIFACT_ROOT=… PERF_PORT=… npx playwright test -c playwright-web-performance.config.ts`（双变体各一次） | 两份含 variant 名的报告 | C | Phase 2 F0 |
-| V28 | `cd e2e && npx playwright test -c playwright-public.config.ts` | 全通过 | C | Phase 3 D4 |
-| V29 | `bash scripts/compose-fixture-env.sh -- bash scripts/ci-job-steps.sh run compose-acceptance` | 6 组合 `config -q` 通过 | C | Phase 1 S-0 |
-| V30 | `bash scripts/build-release-image.sh` | 构建+冒烟+扫描+SBOM 全绿 | C | Phase 1 S-9 |
-| V31 | `apps/api/.venv/bin/python -m pytest scripts/test_cloudflare_tunnel_contract.py -q` | 通过 | A | Phase 1 S-3 |
-| V32 | `apps/api/.venv/bin/python -m pytest scripts/test_development_compose_contract.py -q` | 通过 | A | Phase 1 S-10 |
-| V33 | `python3 scripts/check-toolchain-pins.py` | 通过 | A | W-1.2 |
-| V34 | `git lfs ls-files`（**仅 Phase 1 C4 一次性**） | 两份设计稿在列 | B | Phase 1 C4 |
-
-**安全回退防线（Phase 1 结束后立即执行）：**
+## 3.1 锁定目标上下文
 
 ```bash
-! grep -rn "forwarded-allow-ips=\*" deploy/ infra/
-! grep -rn "0\.0\.0\.0/0" deploy/
-python3 scripts/check_nginx_security_headers.py
+git rev-parse HEAD; git branch --show-current; git status --short; git log -1 --oneline
 ```
 
+记录：`target_branch` / `target_sha` / `dirty_tree` / `database_schema_version` / `clickhouse_version` / `postgres_version` / `python_version` / `node/pnpm_version` / `deployment topology`。
+
+## 3.2 约束文档重新读取
+
+按当前目标分支确认：`AGENTS.md`、`docs/dev/database-core-contract.md`、`docs/dev/pi-agent-hard-constraints.md`、`docs/dev/rust-rewrite-and-architecture-evaluation.md`、`docs/design/full-stack-upgrade-2026-08.md`。旧计划引用的内容全部从 E0 重新升级。
+
+## 3.3 路径只作为 locator hint
+
+旧路径（`apps/api/app/services/search_service.py`、`apps/worker/src/...`、`migrations/versions/*`）只作 E0 定位提示。若已移动，用**符号和契约**重新定位：
+
+```bash
+git grep -n "resolve_release_context"; git grep -n "module_data_rows"
+git grep -n "UnsupportedImportError";  git grep -n "total_count"
+git grep -n "gin_trgm_ops";            git grep -n "variant_facts"
+git grep -n "record_event";            git grep -n "public_id"; git grep -n "internal_id"
+```
+
+## 3.4 Phase 0 Exit
+
+不是"所有高优先级项 E1"。正确 Exit：每个候选问题必须有 `State` / `Evidence` / `current locator` / `owner-domain` / `reproduction method` / `next gate`。对 runtime-only 问题：**允许仍为 E0/E1，但必须已有可执行的 reproduction/benchmark plan。**
+
 ---
 
-## 10. 全局风险与回滚
+# 4. D1–D8 重新建模
 
-| 风险 | 触发条件 | 缓解 / 回滚 |
+| 原项 | Phase 0 初始状态 | 核验后可能归类 |
 |---|---|---|
-| W-1 收口拖延 | 上一阶段 DoD 未完成 | 本阶段不启动 |
-| 优化前基线缺失 | W1.5 未执行就进 W2/W3 | §6 硬依赖 3 强制阻断；「提升」不可证 |
-| 冻结决策被重新打开 | 执行者偏好 | §2 登记表 + PR 登记变更理由 |
-| 跨阶段回归 | 后阶段破坏前阶段 | 每阶段退出判据包含前阶段防线命令 |
-| 门禁为绿灯放宽 | 压力 | §8 规则 7；`receiving-code-review` 逐条核验 |
-| 计划门禁自触发 | 负向示例写成字面量 | §8 规则 4：负向用例只放脚本单元测试 |
+| D1 搜索索引 | S0/E0 | P1 性能 |
+| D2 3 次 DB RTT | S0/E0 | P1 性能/架构 |
+| D3 `total_count` | S0/E0 | P1 API 契约 |
+| D4 `COUNT(*)` | S0/E0 | P1/P2 性能 |
+| D5 import fail-closed | S0/E0 | P0 数据可用性**或**合法保护机制（见 §5.3） |
+| D6 `module_data_rows` | S0/E0 | P0/P1，取决于其真实角色 |
+| D7 analytics 单行 insert | S0/E0 | P1 成本/吞吐 |
+| D8 mutant public identity | S0/E0 | 若违反上游身份契约则 P0 |
 
-**分阶段回滚**：每阶段内任务独立 commit；阶段级回滚 = revert 该阶段 commit 序列。
-高风险文件（`infra/nginx/**`、`docker-compose.yml`、`apps/web/public/sw.js`、
-`apps/web/scripts/*`、`apps/api/migrations/versions/003{7,8}_*.py`）必须在 PR 中单列 diff。
-
----
-
-## 11. 总完成定义（DoD）
-
-- [ ] **W-1 通过**：工作树干净、Node 24.19.0、基线报告入库（含**全树** `SHA256SUMS`）
-- [ ] **Phase 1 通过**：S 组 10 项关闭或登记为接受风险；安全防线三命令通过；C13 对当前计划 exit 0
-- [ ] **Phase 1.5 通过**：P1 含零 429 与全量浏览 `read_rows` 基线；P2a 含 429>0；**两类 SLO 已登记**（§5）
-- [ ] **Phase 2 通过**：产物 ≤7 MB；SW 预缓存 ≤1228 KB raw；字体门禁红→绿；
-      **lint warning ≤94 且不增长**（0/0 由 Phase 4 C2 达成）
-- [ ] **Phase 3 通过**：黄金集绿；五层隐私矩阵**无 skip/xfail**；
-      迁移 `0037` 含 assembly 作用域；D9 的 `uniqExact` 口径有证据
-- [ ] **Phase 4 通过**：P6 同参数复测完成；Gate-1 按类别 SLO 判定并成文；
-      Rust 未实现（或 ADR 六项齐全）；P2b 验证配额
-- [ ] §2 冻结决策登记表**无未登记变更**
-- [ ] 计划内 fenced code block 无占位符；负向用例不在计划中以字面量出现
-- [ ] 门禁全部位于共享脚本；`.cnb.yml` 与 `.github/workflows/*` 无逻辑增量
-- [ ] 每个修复的回归断言与修复在**同一 commit**
-- [ ] 每个 PR 含：命令、pass/fail 计数、迁移/环境变量影响、回滚方式、**未验证项与 CI 补验路径**
+> **严重度必须由当前契约 + 当前行为决定，不由旧计划永久继承。**
 
 ---
 
-## 附录 A · Rust 只读旁路 ADR 骨架（Phase 4 P7 输出物）
+# 5. P0：正确性、身份和边界
+
+## 5.1 身份契约
+
+重新核验全链路：`model` / `migration` / `API schema` / `route parameter` / `search hit` / `URL` / `frontend routing` / `cache key` / `analytics` / `logs`。重点字段：`public_id` / `internal_id` / `release_id` / `assembly_id`。
+
+## 5.2 external/internal isolation
+
+扫描范围：`HTTP body` / `HTTP headers` / `error responses` / `redirect Location` / `URL` / `SSR payload` / `HTML` / `JS` / `JSON` / `source maps` / OpenAPI examples / `logs` / analytics payload / `cache key+value` / generated artifacts。
+
+## 5.3 fail-closed 不自动等于缺陷
+
+若某导入能力当前 `feature disabled` + `adapter returns UnsupportedImportError`，先判断：**这是未实现功能，还是为保护数据一致性主动关闭？** 若是主动保护，则"fail-closed"本身不是缺陷；**真正缺陷是缺少安全启用它所需的数据协议/写入协议。**
+
+---
+
+# 6. PostgreSQL 搜索：按查询类型路由
+
+当前计划不能把所有输入统一视为 trigram substring search。官方 `pg_trgm` 支持 `LIKE`/`ILIKE` 索引搜索，但效率取决于可提取 trigram 数量；无可提取 trigram 的 pattern 可能退化为全索引扫描。因此首先建立 Query Class：
+
+| Query Class | 示例 | 优先候选 |
+|---|---|---|
+| **Exact ID** | accession / public_id 精确值 | B-tree equality |
+| **Prefix** | `Glyma.01%` | B-tree/pattern ops 或 trigram，实测决定 |
+| **Short** | 1–2 chars | 限制、提示补全或专门策略 |
+| **Substring** | `%kinase%` | trigram |
+| **Natural text** | 多词描述 | FTS / trigram 混合候选 |
+| **Fuzzy typo** | 拼写误差 | trigram similarity |
+
+## 6.1 Search Benchmark Matrix
+
+至少含：`exact identifier` / `prefix` / `1-char` / `2-char` / `3-char` / `middle substring` / `common term` / `rare term` / `literal %` / `literal _` / `mixed case` / `multi-word` / `not found`。记录：query class / pattern / rows / selectivity / plan / estimated vs actual rows / buffers / execution time / result count。
+
+## 6.2 索引验收
+
+**禁止**把 `index scan = 成功` / `seq scan = 失败` 作为判据。高选择率/小表场景 Seq Scan 可能更合理。真正验收：planner estimation 合理、latency 达标、IO 可接受、写/存储无回归。
+
+## 6.3 1–2 字符输入需要产品策略
+
+对 short query 先决定：允许搜索？/ 最小长度？/ exact-only？/ prefix-only？/ autocomplete？**不要为了支持 1 字符 substring 强迫数据库走昂贵路径。**
+
+---
+
+# 7. 全局搜索 DB RTT
+
+先 profile：`DB execution` / `network RTT` / `pool wait` / `serialization` / `ranking` / `JSON encoding` / `total endpoint latency`。只有 DB round trip 明显占比时才优化。候选：`A. UNION ALL` / `B. multiple queries + independent sessions` / `C. search projection/document` / `D. FTS + trigram`。
+
+## 7.1 Cursor 契约补强
+
+keyset cursor 必须有：deterministic sort / unique tie-breaker / cursor schema+version / release+assembly+site context / filter fingerprint。否则查询合并后可能产生重复页、漏项、跨 context cursor 复用。
+
+---
+
+# 8. `total_count` 与兼容性
+
+先确认：OpenAPI 当前类型 / 前端是否依赖 number / generated client 类型 / 第三方 consumer。合法目标：`total_count: integer`（真总数）/ `total_count: null`（明确隐藏）/ `page_count: integer`（当前页）。禁止继续复用错误语义。但 `number → null` 可能是客户端 breaking change，因此需要：compatibility assessment / API version strategy / generated client update / frontend migration / contract test。
+
+---
+
+# 9. ClickHouse 导入幂等：控制面 + 数据面
+
+## 9.1 先确认真实引擎与版本
+
+```sql
+SELECT version();
+SHOW CREATE TABLE variant_facts;
+```
+
+若存在 staging，再 `SHOW CREATE TABLE <actual_staging_table>`——**不要保留不可直接执行的 `<staging>` 占位命令作为正式验收命令。** 确认：engine / replication / partition key / ORDER BY / materialized views / async insert / dedup settings / cluster topology。
+
+## 9.2 Import Fingerprint
+
+原版 `source_sha256 + release_id + assembly_id + importer_version` 还不够。建议：
+
+```text
+import_fingerprint =
+  source_sha256 + release_id + assembly_id + importer_version
+  + schema_version + normalization_version + semantic importer config hash
+```
+
+原则：**任何会改变输出事实的配置，都必须进入 fingerprint。** 文件名、上传时间等非语义字段通常不进入。
+
+## 9.3 PostgreSQL manifest 作为控制面候选
+
+控制面记录：`import_id` / `fingerprint` / `source_sha256` / `release_id` / `assembly_id` / `schema_version` / `importer_version` / `config_hash` / `status` / `expected_rows` / `written_rows` / `started_at` / `completed_at` / `failure_code`。状态机：`CREATED → PARSING → WRITING → VERIFYING → PUBLISHED ↘ FAILED`。必须定义：哪个状态对 portal 可见 / 谁负责恢复 / FAILED 是否可 retry / 旧 FAILED 如何清理。
+
+## 9.4 ClickHouse dedup 不能作为唯一长期保证
+
+MergeTree 系列支持 insert-level/block-level dedup 与 token，但导入协议仍不应只依赖服务器 dedup history（dedup window 有生命周期；MV/async insert 依版本配置而异；ReplacingMergeTree 后台合并是 eventual）。推荐：
+
+```text
+application manifest + deterministic batch_id + CH dedup token（辅助）
++ publish visibility rule + final row-count/checksum verification
+```
+
+而不是只靠 `insert_deduplication_token`。
+
+## 9.5 ReplacingMergeTree 额外约束
+
+若实际使用 ReplacingMergeTree：background merge 不代表即时唯一；普通 SELECT 可能暂时看到重复版本；若依赖 `FINAL`/`argMax`，必须纳入性能基线；ORDER BY key 必须与逻辑唯一键设计一致。
+
+---
+
+# 10. Import Retry / Crash Fixture：必须定义"期望结果"
+
+不能只写"fixture 全绿"。
+
+| Case | 期望 |
+|---|---|
+| same file + same release + same assembly + same semantic config | 不产生第二份逻辑事实 |
+| same content + different filename | 与上条相同 |
+| same file + different release | 创建独立 release 数据，不应误去重 |
+| same file + different assembly | 独立数据或明确拒绝，按契约 |
+| parser/config version changed | 由 fingerprint 决定是否允许重新导入 |
+| crash before first batch | 可安全 retry |
+| crash mid-write | portal 不可见 partial dataset；retry 后只有一份逻辑事实 |
+| crash after data write before publish | recovery 能识别并完成/回滚逻辑发布 |
+| ClickHouse timeout after ambiguous ACK | retry 不产生逻辑重复 |
+| invalid record | fail-closed 或明确 partial policy |
+| checksum mismatch | 不 publish |
+| duplicate batch | 幂等 |
+| row count mismatch | 不 publish |
+
+---
+
+# 11. `module_data_rows`：先判定责任，不先判死刑
+
+必须确定它属于：`raw landing` / `staging` / `audit` / `extension storage` / `canonical domain`。两个关键问题：**谁拥有 schema evolution？数据保留多久？** Decision Gate：`ADR-DATA-01 module_data_rows role`。Phase 2 架构实现必须等待这个决策，除非当前代码已有明确契约。
+
+---
+
+# 12. Analytics：先定义耐久性等级
+
+"Python bounded queue + batching"只有在事件允许有限丢失时才合适。先把事件分类：
+
+| 等级 | 例子 | 允许丢失 | 推荐 |
+|---|---|---|---|
+| **A0 Best effort** | Web vitals | 是 | 内存队列 / async insert |
+| **A1 Operational** | 搜索性能事件 | 少量可接受 | bounded queue + retry |
+| **A2 Business critical** | 计费/审计/强业务指标 | 否 | durable queue / outbox |
+
+> 如果 SoyMutDB analytics 只是产品使用分析，不要为了"零丢失"过度工程。
+
+## 12.1 ClickHouse batching 指标
+
+记录：`events/s` / `insert requests/s` / `rows/insert` / `bytes/insert` / `parts/s` / `active parts` / `merge queue` / CPU / memory / network / failure rate / queue depth / flush latency。若当前 ClickHouse 版本/部署支持且合适，可把 async inserts 纳入候选，而不是默认只在 Python 自己造批处理器。
+
+---
+
+# 13. 安全审计第二轮补强
+
+## 13.1 控制存在 ≠ 控制正确
+
+重新验证：password hashing params / JWT algorithm+issuer+audience+expiry / RBAC enforcement location / refresh+session revocation / CSRF origin+proxy assumptions / rate-limit key / rate-limit failure policy / CSP actual response / HSTS environment scope / sanitization call sites / secret handling。
+
+## 13.2 fail-closed rate limit 需评估可用性
+
+Redis 故障时 fail-closed：安全性更强，但可能把 Redis 故障扩大成 API 全站拒绝。按 endpoint threat model 定义：auth-sensitive endpoint → fail-closed 可能合理；public read endpoint → 是否需 degraded mode 需决策。**不得把"fail-closed"自动标记成成熟设计。**
+
+## 13.3 Analytics 输入的数据最小化
+
+除注入/高基数外，再检查：`search_query` 是否真的需要原文 / IP+user-agent+referrer retention / `session_id` 可否长期关联 / 日志与 analytics 是否重复保存敏感输入 / TTL+retention。
+
+---
+
+# 14. 性能基线：不是一个阶段只测一次
+
+改成：**每个 domain 在第一次修改前必须有 baseline snapshot。**
+
+- **Search**（改动前）：p50/p95/p99、query classes、EXPLAIN、DB RTT、pool wait。
+- **Analytics**（batching 前）：events/s、insert calls/s、parts/s、merge pressure。
+- **CI**（DAG 改动前）：median/p90/p95、queue time、job critical path、cache hit。
+- **Import**（若当前路径不可执行）：不存在有效 before baseline → 明确记录"baseline starts only after correctness path is enabled"，**不要制造假对照。**
+
+---
+
+# 15. SLO：由需求定义，由基线验证
+
+删除"SLO 由真实基线推导"，改为：
+
+```text
+SLO      = 用户/业务需求 + 预期峰值 + 成本约束 + 可靠性要求
+baseline = 当前能力
+benchmark = 验证新实现能否满足 SLO
+```
+
+如果当前没有业务 SLO：先定义 Service Target（Search p95 target / p99 guardrail / Import completion target / Max RSS / Peak concurrent users / Analytics max acceptable loss / CI developer feedback target），**需负责人确认，不能由 benchmark 自己生成。**
+
+---
+
+# 16. CI 优化
+
+允许：dependency caching / build artifact reuse / DAG parallelization / matrix partition / change-aware execution / main+nightly expensive tests。但 change-aware execution 必须：有依赖映射 / 共享基础文件变化触发全量相关测试 / main 必跑完整关键门 / 定期 full suite。**禁止 path filter 造成"看起来快但漏测"。**
+
+---
+
+# 17. Rust：本轮 No-Go 范围，不使用"永久排除"
+
+主路线保持：`correctness → data path → query/write shape → batching → capacity → optional runtime optimization`。
+
+## 17.1 Rust PoC 前置（全部满足）
+
+1. import path 已正确可执行；2. 目标 workload 有业务 SLO；3. Python baseline 存在；4. profile 证明 Python-owned CPU 是主要瓶颈；5. 当前 C/HTSlib/I/O 时间占比已拆清；6. CI 可构建 wheel；7. deployment target 可安装；8. 架构目标（amd64/arm64）明确；9. crate/native dependency 审计通过。
+
+## 17.2 PoC 契约：100% 契约级一致性
+
+比较：logical records / normalized fields / release+assembly binding / error category / contractually required error location / checksum+fingerprint / publish behavior。**不要求**内部对象结构相同、异常文本逐字相同、实现步骤相同。
+
+## 17.3 本轮 No-Go
+
+本轮不立项：`service/router rewrite` / `ORM rewrite` / `Celery/release-state-machine rewrite` / `Rust sidecar` / `microservice decomposition`。未来若要重开：新 workload evidence + 新 profile + 新 ADR + 新 cost model，**而不是"永久禁止"。**
+
+---
+
+# 18. 新路线图
+
+```text
+Phase 0  Fact Discovery
+   ↓
+Gate A   Contract / Architecture Decisions
+   ↓
+Phase 1  P0 Correctness & Isolation
+   ↓
+Phase 2  Import Protocol & Canonical Data Path
+   ↓
+Phase 3  Domain Baselines
+   ↓
+Phase 4  Targeted Optimization
+   ↓
+Phase 5  Capacity + Failure Validation
+   ↓
+Phase R  Optional Rust PoC
+   ↓
+Phase 6  Staging / Production Observation
+```
+
+## Gate A 必须完成的决策
+
+至少：`ADR-DATA-01 module_data_rows role` / `ADR-DATA-02 import visibility+idempotency contract` / `ADR-API-01 total_count compatibility semantics` / `ADR-OPS-01 supported deployment architectures`。若已有正式契约，则引用现有 ADR，不重复造文档。
+
+---
+
+# 19. Phase Exit Criteria
+
+- **Phase 0**：每个候选问题有 State + Evidence + locator + reproduction + owner + next action。
+- **Phase 1**：P0 `S3/E2` merge-ready；negative tests green；no skip/xfail。准备发布时 `S4/E3`。
+- **Phase 2**：证明 no partial visibility / retry idempotent / ambiguous ACK safe / fingerprint correct / canonical reader sees only published import。
+- **Phase 3**：每个即将优化的 domain 有可重复 baseline。
+- **Phase 4**：每项优化有 before/after / same workload / same dataset / same environment class / confidence+repeat count / no correctness regression。
+- **Phase 5**：至少 expected load / peak load / cold+warm / dependency failure / pool saturation / recovery。倍率如 `2x peak` 只能在容量目标明确后选，不写死。
+- **Phase R**：结果只允许 `ADOPT` / `REJECT` / `DEFER(reason + explicit reopen condition)`；DEFER 不能写"继续观察"。
+- **Phase 6**：达到 `E4` / `S5` 才真正关闭高风险项。
+
+---
+
+# 20. PR 强制模板（第二轮）
 
 ```markdown
-# ADR-0001：Rust 只读旁路服务
-
-## 状态
-Proposed（由 Gate-1 判定触发）
-
-## 上下文
-- Gate-1 按类别实测（填入 §5 的 SLO 表实际值）：
-  | 端点类别 | 实测 p95 | SLO | 是否达标 |
-  - API CPU：$CPU_PCT%（阈值 < 60%）
-  - 火焰图：Python 进程内占比 $PY_SHARE%（阈值 ≥ 50%）
-- 目标端点（≤3 个，无状态只读）：$TARGET_ENDPOINTS
-
-## 决策
-引入 / 不引入 Rust 只读旁路（附理由）
-
-## 后果
-
-### 只读账号与网络
-- 网络：`api-rs`（接 nginx）+ `db-read` + `clickhouse-read`（**不含 default**）
-- PostgreSQL：角色 `soymutdb_read`，仅 SELECT，`default_transaction_read_only=on`
-- ClickHouse：独立用户，仅 SELECT，`readonly=1`
-- Rust 服务**不得**持有写凭据
-
-### 语义同源
-- 唯一语义来源：黄金查询集（Phase 3 R3）+ OpenAPI 契约
-- **禁止复制 Python SQL**；语义变更必须同时更新黄金集
-- 双跑一致性测试为上线前置（逐字段，含错误码与游标）
-
-### 工具链与供应链
-- `rust-toolchain.toml` 钉死版本；`Cargo.lock` 入库
-- 依赖许可证 + 漏洞审查；SBOM 产出
-- 镜像加入 `scripts/list-images.sh`；签名与扫描沿用现有发布合同
-
-### 契约与边界
-- `site_variant`、release、assembly、分页游标必须与 Python 完全一致
-- **assembly 作用域不得放宽**（v4/v5 是不同命名空间）
-- 负向泄露测试（Phase 3 D4 五层）必须覆盖 Rust 端点
-
-### 灰度与回滚
-- nginx `split_clients`：5% → 50% → 100%；回滚 = 改权重（秒级）
-- 放量门禁：按类别 SLO 全部达标 且 CPU ↓≥30% 且双跑一致性 100%
-
-### 未缓解风险
-- 两份实现的长期漂移 → 抑制：黄金集 + 契约测试进 CI，任一失败即阻断发布
-- Rust 运维能力 → 值班/回滚负责人：$OWNER
+## Requirement / Contract
+## State before
+- Lifecycle:
+- Evidence:
+## Scope
+## Out of scope
+## Reproduction / Baseline
+## Root cause
+## Decision / ADR
+## Change
+## Tests
+## Contract compatibility
+## Performance evidence
+## Security / privacy impact
+## Data migration / backfill impact
+## Failure / recovery behavior
+## Rollback or forward-fix
+## Observability
+## State after
+- Lifecycle:
+- Evidence:
+## Remaining uncertainty
 ```
 
 ---
 
-## 附录 B · 技能使用说明
+# 21. 第一批任务（重新排序）
 
-| Skill | 作用 | 备注 |
+```text
+T0-1  Lock HEAD / branch / versions / topology
+T0-2  Re-read current constraint docs
+T0-3  Relocate D1–D8 by symbols, not historical paths
+T0-4  Build issue register with State + Evidence
+T0-5  Inspect PostgreSQL version/extensions/index definitions
+T0-6  Inspect ClickHouse version + SHOW CREATE TABLE variant_facts
+T0-7  Trace public_id/internal_id end-to-end
+T0-8  Trace module_data_rows writers + readers + lifecycle
+T0-9  Capture pre-change search/analytics/CI baselines where executable
+T0-10 Build search query-class fixture
+T0-11 Build import retry/crash/ambiguous-ACK fixture
+T0-12 Build external/internal negative leakage suite
+T0-13 Decide Gate A ADRs
+```
+
+已展开为可执行子计划：**`docs/superpowers/plans/2026-09-20-phase-0-fact-baseline-plan.md`**（W0）。
+> 该文件内容本身在 Phase 0 执行、连库核验前，对其中每条结论仍应按 Evidence/State 重新定级，不得因"已写成文件"就当事实。
+
+---
+
+# 22. 第二轮审计后的优先级
+
+| Priority | 内容 |
+|---|---|
+| **P0** | 身份/站点/release/assembly 契约违规 |
+| **P0** | partial publish、重复事实、错误 context 数据 |
+| **P0** | external/internal 数据泄漏 |
+| **P1** | API 契约语义错误 |
+| **P1** | 搜索/DB 执行路径 |
+| **P1** | ClickHouse ingestion/parts 压力 |
+| **P1** | analytics 成本与背压 |
+| **P1** | observability / capacity evidence |
+| **P2** | CI feedback time |
+| **Optional** | Rust PoC |
+| **Current-program No-Go** | 全面 Rust rewrite / 无证据微服务拆分 |
+
+---
+
+# 23. 最终 Definition of Done
+
+本轮计划完成必须满足：
+
+- 当前代码事实均有 E1+，不再引用 E0 当结论；
+- P0 merge 至少 S3/E2；P0 release 至少 S4/E3；
+- external/internal negative suite 全绿；
+- import crash/retry/ambiguous ACK 全绿；
+- no partial visibility；
+- import fingerprint 覆盖全部语义变换输入；
+- PostgreSQL 优化按 query class 验证；
+- short query 有明确产品策略；
+- ClickHouse dedup 不作为唯一长期 exactly-once 保证；
+- analytics durability 等级已确定；
+- SLO 来自业务/容量目标，而不是由当前慢速基线反推；
+- 每个优化都有可重放 before/after；
+- 没有用 skip/xfail 伪装通过；
+- Rust 仅在 profile + SLO + deployment gate 全满足后评估；
+- Rust 比较使用 contract-level equivalence；
+- 当前 No-Go 项未来只能通过新证据 + 新 ADR 重开；
+- staging/production 观察达到 E4/S5 后才关闭高风险项。
+
+---
+
+## 附录 A · 第二轮重点复核命令
+
+```bash
+# 代码与版本
+git rev-parse HEAD; git branch --show-current; git status --short; git log -1 --oneline
+
+# 重新按符号定位（不依赖旧路径）
+git grep -n "module_data_rows"; git grep -n "UnsupportedImportError"
+git grep -n "total_count";       git grep -n "gin_trgm_ops"
+git grep -n "variant_facts";     git grep -n "record_event"
+git grep -n "public_id";         git grep -n "internal_id"
+```
+
+PostgreSQL：
+
+```sql
+SELECT version();
+SELECT extname, extversion FROM pg_extension WHERE extname IN ('pg_trgm','pg_stat_statements');
+SELECT schemaname, tablename, indexname, indexdef FROM pg_indexes WHERE indexdef ILIKE '%trgm%';
+```
+
+ClickHouse：
+
+```sql
+SELECT version();
+SHOW CREATE TABLE variant_facts;
+```
+
+若定位到真实 staging 表名后，再执行其 `SHOW CREATE TABLE`，不要使用 `<staging>` 占位符直接运行。
+
+---
+
+## 附录 B · 外部技术复核结论
+
+**PostgreSQL：** 当前官方文档明确 `pg_trgm` 的 GiST/GIN operator class 可用于 `LIKE`/`ILIKE`；pattern 能提取的 trigram 越多，索引通常越有效；无可提取 trigram 的 pattern 可能退化为 full-index scan。因此本计划不再把 `ILIKE` 或 `ESCAPE` 本身视为索引失效根因。
+
+**ClickHouse：** MergeTree 家族支持 insert deduplication / dedup token；`ReplacingMergeTree` 的 replacement 依赖后台 merge，查询时可能仍存在多个版本；需要即时逻辑去重时可能依赖 `FINAL` 或其他 query pattern；ingestion 正确性不应只依赖一个有限生命周期的数据库 dedup 机制。因此 SoyMutDB 导入协议应优先采用 `application-level manifest + deterministic identity + database dedup assistance + explicit publish visibility + recovery verification`，而不是把数据库内部去重机制当作完整业务事务。
+
+---
+
+## 附录 C · 技能选择说明
+
+| 技能 | 用途 | 落到本文 |
 |---|---|---|
-| `dev-expert` | 六步闭环总控；规划门禁、失败升级、写后即记 | 可用 |
-| `systematic-debugging` | 性能与检索问题的根因闭环 | 可用 |
-| `receiving-code-review` | 对扫描器输出逐条核验，**拒绝以放宽判定换绿灯** | 可用 |
-| `ui-ux-pro-max-zh` | 前端规则来源（无障碍/触摸/性能/对比度） | 可用 |
-| `brainstorming` | 仅用于 P7 的 ADR 设计 | 可用 |
-| `web-perf` | Phase 2 F0/F2/F6 的方法论 | **替代方法**：该 skill 要求 Chrome DevTools MCP，本机不可用；改用 Playwright Resource Timing + PerformanceObserver，须在 F0 报告标注局限 |
-| ~~`rust`~~ | — | **不存在该 skill**；P7 只产出 ADR |
+| `dev-expert` | 证据纪律、根因、威胁建模、生产就绪、反过度工程、Plan-Gate | 全篇；§1 双轨状态；§2 门禁分离；§13 威胁模型；§17 Go/No-Go |
+| `systematic-debugging` | 先复现后修、失败测试转回归 | §3.4 Exit 的 reproduction；§10 fixture 期望结果 |
+| `receiving-code-review` | 结论须可核验，不空泛贴标签 | §13.1 控制存在≠控制正确；§20 PR 模板 State before/after |
 
-> **设计基线来源：** 仓库内 token 定义（`apps/web/src/index.css` 的 `@theme`、
-> `apps/admin/src/index.css` 对应段落）。**不引用仓外脚本或用户主目录绝对路径。**
+---
+
+## 审计结语
+
+第二轮后，这份计划坚持三个核心原则：
+
+> **证据强度不等于修复状态。**
+> **性能基线不等于业务 SLO。**
+> **数据库提供的去重能力不等于完整的业务 exactly-once 协议。**
+
+这样可以显著降低后续 agent 执行时"看到一个合理方案就直接实施"的概率，减少无证据重构、性能误优化和数据一致性事故。
+
+---
+
+## 附：执行进度锚点（2026-09-20）
+
+> 本章为执行追踪，不改上文路线图判定。证据与决策材料见对应文件。
+
+- **环境**：mamba PostgreSQL 16.15（`.mamba-root`，gitignore）+ `apps/api/.venv`（uv）就绪；alembic head=0036。
+- **Phase 0（事实发现）完成**：`docs/ops/phase-0-fact-baseline-2026-09-20.md`。
+  - D1（搜索索引）**E3 实测**：既有 trigram 有效；`accession`/`public_id` 缺 trigram；精确 ID 的 `upper()` 废 btree。
+  - **D8（突变体公开身份）核实为合规并解除**（统一 `public_id`，34 测试绿；一度误报 ln，已纠正）。
+  - D2/D3/D4/D5/D6/D7 定级 S1/E1，挂 Phase 3/4 或 Gate A。
+  - 仍 RUNTIME_ONLY：T0-6 ClickHouse（无 CH 实例）、T0-9/10 生产量级基线。
+- **Gate A 已签批 → 4 份正式 ADR（Accepted）**：
+  - `docs/adr/0004-module-data-rows-role.md`（staging + promotion 到 canonical）
+  - `docs/adr/0005-import-idempotency-and-visibility.md`（PG manifest 控制面 + 确定性 id + dedup 辅助 + publish 可见性）
+  - `docs/adr/0006-total-count-semantics.md`（拆 page_count；先兼容评估）
+  - `docs/adr/0007-supported-deployment-architectures.md`（无状态双架构，重服务 amd64 主力）
+- **Phase 1 子计划已生成**：`docs/superpowers/plans/2026-09-20-phase-1-p0-correctness-plan.md`
+  （P1-1 泄漏负向套件 / P1-2 fail-closed 能力收口 / P1-3 身份·assembly 契约回归锁定）。
+- **下一步**：执行 Phase 1（P1-1 需先切 node 24.19.0）；随后 Phase 2（按 ADR-0004/0005 做导入闭环，待 CH 实例补 T0-6）。
