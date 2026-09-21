@@ -40,6 +40,7 @@ from .genomic import (
 )
 from .gwas import GwasFileType, GwasJob, GwasJobStatus, GwasMethod
 from .homolog import GeneHomolog
+from .import_manifest import ImportManifest, ImportManifestStatus
 from .import_studio import (
     DataPatch,
     DatasetVersion,
@@ -93,6 +94,8 @@ __all__ = [
     "GwasJob",
     "GwasJobStatus",
     "GwasMethod",
+    "ImportManifest",
+    "ImportManifestStatus",
     "ImportTask",
     "ImportTaskStatus",
     "ImportTaskType",
