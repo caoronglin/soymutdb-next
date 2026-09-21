@@ -393,3 +393,24 @@ test_search 11、test_search_keyset 11），零 skip/xfail。
 - 这些超出 mamba PostgreSQL 验证环境范围（该环境按设计不提供 API 运行时/浏览器，见 `docs/dev/mamba-validation-environment.md` Scope）。
 
 **结论：** P1-1 的**工具与 node 门已就绪**；**完整 artifact 级泄漏证据**阻塞于"运行中的 API + 种子数据 + 未发布哨兵"这一全栈环境，登记为环境门控项，**未冒充完成**。
+
+---
+
+## §CH-RESOLVED（T0-6 解析，2026-09-20，升级此前 RUNTIME_ONLY → E1）
+
+从权威 DDL（`infra/clickhouse/init.sql` + `upgrade_variant_facts_schema.sql`）确认 ClickHouse 引擎形态（conda-forge 无 CH 服务包，故以 canonical schema DDL 为据；live `SHOW CREATE TABLE` 仍可在有 CH 实例时复核）：
+
+| 对象 | 引擎 | 关键 |
+|---|---|---|
+| **`variant_facts`（canonical）** | **`MergeTree()`**（纯，非 Replacing、无 dedup token） | `PARTITION BY (release_key, chromosome)`；`ORDER BY (release_key, assembly_key, chromosome, position, gene_surrogate_id, mutant_line_surrogate_id, variant_id)`；+4 PROJECTION；单节点（无 ON CLUSTER） |
+| dims（release/gene/mutant_line/consequence） | `ReplacingMergeTree` | release_dim 带 version |
+| 汇总表 | `SummingMergeTree` / `AggregatingMergeTree` | 由 MV（mv_gene_impact 等）从 variant_facts 聚合 |
+| analytics_events / web_vitals | `MergeTree` 月分区 | D7 埋点目标表 |
+
+**对 Phase 2 / ADR-0005 的直接结论：**
+1. **`variant_facts` 无 CH 原生去重** → 确认 ADR-0005「PG manifest + 确定性 id + dedup 仅辅助 + publish 可见性 + 终检」是**必需**，不能只靠 CH。
+2. **SummingMergeTree 汇总双倍累计风险**：DDL 注释（`upgrade_...sql:81`）明写重复回填会使汇总翻倍 → 重试/重复插入 variant_facts 会污染汇总 → **幂等是硬约束**，进一步支持 manifest + 发布可见性。
+3. **`PARTITION BY (release_key, chromosome)`** → **partition 级 replace 是自然的 finalize 机制**（按 release  drop+重写分区），是 ADR-0005 的一个具体实现选项。
+4. 既有 backfill 模式（`INSERT INTO summary SELECT ... GROUP BY`）可作终检（row-count/checksum）的参照。
+
+**结论：** T0-6 以 canonical DDL 解析为 **E1**；这为 Phase 2 导入写入器提供了确定的引擎事实。live 复核对结论无预期影响（DDL 即迁移所建）。
