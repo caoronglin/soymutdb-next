@@ -129,3 +129,61 @@ def test_other_release_partition_is_preserved(engine: ChdbEngine) -> None:
 def test_deterministic_batch_id_is_stable() -> None:
     assert vf.deterministic_batch_id("imp", 0) == vf.deterministic_batch_id("imp", 0)
     assert vf.deterministic_batch_id("imp", 0) != vf.deterministic_batch_id("imp", 1)
+
+
+def test_duplicate_staging_batch_publishes_each_fact_once(engine: ChdbEngine) -> None:
+    import_id = "imp-dup"
+    rows = [_base_row(1, "RD", "Chr01", 100), _base_row(2, "RD", "Chr01", 200)]
+    # A retried batch appends the same facts to staging twice.
+    vf.stage_batch(engine, import_id=import_id, batch_index=0, base_rows=rows)
+    vf.stage_batch(engine, import_id=import_id, batch_index=0, base_rows=rows)
+
+    # Distinct count is stable despite the duplicate staging append...
+    assert vf.staged_distinct_count(engine, import_id) == 2
+    # ...and finalize still publishes each logical fact exactly once.
+    partitions = vf.list_partitions(engine, import_id)
+    vf.finalize_release(engine, release_key="RD", import_id=import_id, partitions=partitions)
+    assert engine.scalar("SELECT count() FROM variant_facts") == 2
+    assert _summary_cnt(engine, "RD") == 2
+
+
+def test_row_count_mismatch_blocks_publish(engine: ChdbEngine) -> None:
+    import_id = "imp-short"
+    # Parser claims three facts but only one reached staging (crash/dropped batch).
+    vf.stage_batch(
+        engine, import_id=import_id, batch_index=0, base_rows=[_base_row(1, "RS", "Chr01", 100)]
+    )
+
+    assert vf.verify_against_expected(engine, import_id, expected_rows=3) is False
+    # The verification gate blocks finalize, so nothing is published.
+    assert engine.scalar("SELECT count() FROM variant_facts") == 0
+    assert engine.scalar("SELECT count() FROM gene_impact_summary") == 0
+
+
+def test_verify_passes_and_publishes_when_counts_match(engine: ChdbEngine) -> None:
+    import_id = "imp-ok"
+    rows = [_base_row(1, "RO", "Chr01", 100), _base_row(2, "RO", "Chr01", 200)]
+    vf.stage_batch(engine, import_id=import_id, batch_index=0, base_rows=rows)
+
+    assert vf.verify_against_expected(engine, import_id, expected_rows=2) is True
+    partitions = vf.list_partitions(engine, import_id)
+    vf.finalize_release(engine, release_key="RO", import_id=import_id, partitions=partitions)
+    assert engine.scalar("SELECT count() FROM variant_facts") == 2
+
+
+def test_different_release_for_same_chromosome_coexist(engine: ChdbEngine) -> None:
+    # Assembly/release are independent namespaces: the same chromosome under two
+    # releases must publish side by side without one clobbering the other.
+    vf.stage_batch(
+        engine, import_id="imp-a", batch_index=0, base_rows=[_base_row(1, "RA", "Chr01", 100)]
+    )
+    vf.finalize_release(
+        engine, release_key="RA", import_id="imp-a", partitions=[("RA", "Chr01")]
+    )
+    vf.stage_batch(
+        engine, import_id="imp-b", batch_index=0, base_rows=[_base_row(1, "RB", "Chr01", 100)]
+    )
+    vf.finalize_release(
+        engine, release_key="RB", import_id="imp-b", partitions=[("RB", "Chr01")]
+    )
+    assert engine.scalar("SELECT count() FROM variant_facts") == 2

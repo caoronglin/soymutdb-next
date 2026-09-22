@@ -114,6 +114,14 @@ def staged_distinct_count(engine: ClickHouseEngine, import_id: str) -> int:
     return int(value or 0)
 
 
+def verify_against_expected(engine: ClickHouseEngine, import_id: str, expected_rows: int) -> bool:
+    """Final verification gate (ADR-0005): the distinct staged facts must equal
+    the expected row count before the import may publish. A mismatch (truncated
+    write, dropped batch, checksum mismatch surfaced by the caller) blocks
+    finalize, so the portal never sees a wrong or partial result."""
+    return staged_distinct_count(engine, import_id) == expected_rows
+
+
 def list_partitions(engine: ClickHouseEngine, import_id: str) -> list[tuple[str, str]]:
     """Distinct (release_key, chromosome) partitions present in the staged rows."""
     rows = engine.query_rows(
