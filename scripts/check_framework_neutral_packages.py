@@ -35,6 +35,7 @@ FRAMEWORK_NEUTRAL_PACKAGES: tuple[str, ...] = (
     "@soymutdb/api-client",
     "@soymutdb/query-keys",
     "@soymutdb/i18n-core",
+    "@soymutdb/genome-view-model",
 )
 
 # Packages join this tuple as Phase C extracts them (one reviewed commit each),
