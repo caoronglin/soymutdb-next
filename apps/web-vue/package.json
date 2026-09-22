@@ -14,6 +14,8 @@
     "clean": "rimraf dist .turbo"
   },
   "dependencies": {
+    "@soymutdb/api-client": "workspace:*",
+    "@soymutdb/query-keys": "workspace:*",
     "@soymutdb/shared": "workspace:*",
     "vue": "catalog:",
     "vue-router": "catalog:",

@@ -640,6 +640,12 @@ importers:
 
   apps/web-vue:
     dependencies:
+      '@soymutdb/api-client':
+        specifier: workspace:*
+        version: link:../../packages/api-client
+      '@soymutdb/query-keys':
+        specifier: workspace:*
+        version: link:../../packages/query-keys
       '@soymutdb/shared':
         specifier: workspace:*
         version: link:../../packages/shared
