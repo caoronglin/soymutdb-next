@@ -567,7 +567,7 @@ Next：下一个唯一建议任务。
 - `refactor(import-engine): share a single chdb session across acceptance tests` — 会话级 fixture + 每测试唯一 database；端口加 `query_rows`。
 - `feat(import): add variant staging/verify/finalize protocol` — 只写 staging(无 MV) → `finalize_release`（先 purge 所有 release 维度 summary 一次 → drop 触及的 base 分区 → 从去重 staging 重写）。E2/E3 等价：`pytest tests/test_clickhouse_engine.py tests/test_variant_finalize.py` → 9 passed（真实引擎）。真实引擎还暴露并修复了一个 finalize 逻辑 bug（按分区逐个 purge 会抹掉同 release 其它分区刚写入的 summary）。
 
-> P2-3 状态：**IN PROGRESS**。CH 侧 staging/verify/finalize 语义已在真实嵌入式引擎验证；**未完成**：`import_vcf` 真实入口接线（feature flag 默认 OFF，P1-2 保持 422）、worker 侧 manifest(PG) 生命周期集成、崩溃/重试/ambiguous-ACK 矩阵、能力重开；**CNB 分布式/集群运行验收 T8 BLOCKED**。
+> P2-3 状态：**IN PROGRESS（大部分已实现并真实验证）**。已合并：CH 侧 staging/verify/finalize（真实 chdb 引擎 13 tests）+ `verify_against_expected` 校验门 + 失败矩阵（duplicate dedup / row-count mismatch 阻止发布 / 各 release 分区独立）+ worker 侧同步 manifest 仓库（真实 PG，alembic head，6 tests，含 worker 表与迁移 0037 列级一致性）。**未完成**：`import_vcf` 入口接线（feature flag 默认 OFF，P1-2 保持 422；ON 路径经注入 `ChdbEngine` 可测）+ release/assembly 的 int↔string 解析 + CNB 分布式/集群 T8。**能力重开（P2-6）仍 BLOCKED** 于真实 CH/CNB 验收。
 
 ## BLOCKED（需环境凭据/服务，未冒充通过）
 - **CNB / 分布式 ClickHouse cluster / T8-T10**：本机无 Docker/CNB；chdb 为单节点嵌入式引擎，可证 staging/finalize/汇总结算语义，但**不覆盖**分布式集群、`Atomic` 数据库引擎、副本去重 token 窗口；真实运行验收需 CNB。
