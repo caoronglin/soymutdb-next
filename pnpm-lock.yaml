@@ -325,6 +325,9 @@ importers:
       '@soymutdb/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n
+      '@soymutdb/query-keys':
+        specifier: workspace:*
+        version: link:../../packages/query-keys
       '@soymutdb/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -468,6 +471,9 @@ importers:
 
   packages/i18n:
     dependencies:
+      '@soymutdb/i18n-core':
+        specifier: workspace:*
+        version: link:../i18n-core
       i18next:
         specifier: ^24.2.0
         version: 24.2.0(typescript@5.9.3)
@@ -487,6 +493,15 @@ importers:
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
+
+  packages/i18n-core:
+    devDependencies:
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.0
+        version: 3.2.7(@types/node@22.20.1)(jiti@2.7.0)(jsdom@29.1.1)(lightningcss@1.32.0)(supports-color@10.2.2)(tsx@4.23.12)
 
   packages/motion:
     dependencies:
@@ -512,6 +527,15 @@ importers:
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
+
+  packages/query-keys:
+    devDependencies:
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.0
+        version: 3.2.7(@types/node@22.20.1)(jiti@2.7.0)(jsdom@29.1.1)(lightningcss@1.32.0)(supports-color@10.2.2)(tsx@4.23.12)
 
   packages/shared: {}
 

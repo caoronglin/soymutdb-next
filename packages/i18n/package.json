@@ -8,9 +8,7 @@
     ".": {
       "types": "./src/index.ts",
       "import": "./src/index.ts"
-    },
-    "./locales/en/common.json": "./src/locales/en/common.json",
-    "./locales/zh/common.json": "./src/locales/zh/common.json"
+    }
   },
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -25,6 +23,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@soymutdb/i18n-core": "workspace:*",
     "i18next": "^24.2.0",
     "react": "19.2.0",
     "react-dom": "19.2.0",

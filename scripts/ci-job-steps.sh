@@ -266,6 +266,13 @@ frontend_build_demo() {
 frontend_run() {
   frontend_install
   ensure_api_venv
+  # Phase C framework-neutral seam guard (plan.md §7): fail before the
+  # expensive artifact build if a neutral package (shared/api-client/query-keys)
+  # starts importing a UI framework. Stdlib-only, so it runs on the venv
+  # interpreter this gate already provisions (the node CI image has no system
+  # python). Both CNB and GitHub reach this via the shared job body.
+  "${REPO_ROOT}/apps/api/.venv/bin/python" \
+    "${REPO_ROOT}/scripts/check_framework_neutral_packages.py"
   bash "${REPO_ROOT}/scripts/verify-frontend-artifacts.sh"
 }
 

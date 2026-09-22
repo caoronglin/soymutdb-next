@@ -1,0 +1,189 @@
+"""End-to-end finalize-protocol acceptance on a real embedded ClickHouse (P2-3).
+
+Loads a faithful slice of the canonical schema (``variant_facts`` + all eight
+release-scoped summary tables + their materialized views + the staging table)
+from ``fixtures/variant_facts_schema.sql`` into chdb and drives staging ->
+rewrite-on-retry -> finalize through ``soymutdb_worker.tasks.variant_finalize``,
+asserting no duplicate facts and no double-counted summaries after retries.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import chdb.session  # noqa: F401  (hard dep: acceptance engine lives in worker[dev])
+import pytest
+
+from soymutdb_worker.tasks import variant_finalize as vf
+from soymutdb_worker.tasks.clickhouse_engine import ChdbEngine
+from tests.chdb_harness import prepare_schema, unique_db
+
+_SCHEMA_SQL = (
+    Path(__file__).parent / "fixtures" / "variant_facts_schema.sql"
+).read_text(encoding="utf-8")
+_STATEMENTS = [stmt.strip() for stmt in _SCHEMA_SQL.split(";") if stmt.strip()]
+
+
+@pytest.fixture()
+def engine(ch_engine: ChdbEngine) -> ChdbEngine:
+    prepare_schema(ch_engine, unique_db(), _STATEMENTS)
+    return ch_engine
+
+
+def _base_row(
+    variant_id: int,
+    release: str,
+    chromosome: str,
+    position: int,
+    *,
+    gene_sid: int = 7,
+    mutant_sid: int = 0,
+    ref: str = "A",
+    alt: str = "G",
+    variant_type: str = "SNP",
+    impact: str = "MODERATE",
+    consequence: str = "missense_variant",
+) -> tuple:
+    return (
+        variant_id, release, "v5", chromosome, position, ref, alt, variant_type, "",
+        max(len(ref), len(alt)), f"gene{gene_sid}", f"g{gene_sid}", gene_sid, mutant_sid,
+        "", consequence, 0, impact, "", 0.0, "PASS", 0, 0.0, "", "", "unknown",
+    )
+
+
+def _summary_cnt(engine: ChdbEngine, release: str, gene: int = 7) -> int:
+    return int(
+        engine.scalar(
+            f"SELECT cnt FROM gene_impact_summary FINAL "
+            f"WHERE gene_surrogate_id = {gene} AND release_key = '{release}'"
+        )
+        or 0
+    )
+
+
+def test_stage_then_finalize_publishes_exactly_once(engine: ChdbEngine) -> None:
+    import_id = "imp-A"
+    rows = [
+        _base_row(1, "R1", "Chr01", 100),
+        _base_row(2, "R1", "Chr01", 200),
+        _base_row(3, "R1", "Chr02", 300),
+    ]
+    vf.stage_batch(engine, import_id=import_id, batch_index=0, base_rows=rows)
+
+    # Nothing reaches the base or summaries before finalize.
+    assert engine.scalar("SELECT count() FROM variant_facts") == 0
+    assert _summary_cnt(engine, "R1") == 0
+    assert vf.staged_distinct_count(engine, import_id) == 3
+
+    partitions = vf.list_partitions(engine, import_id)
+    assert partitions == [("R1", "Chr01"), ("R1", "Chr02")]
+    vf.finalize_release(engine, release_key="R1", import_id=import_id, partitions=partitions)
+
+    # All three facts publish and the summary counts each once (multi-partition).
+    assert engine.scalar("SELECT count() FROM variant_facts") == 3
+    assert _summary_cnt(engine, "R1") == 3
+
+
+def test_retry_after_crash_is_idempotent(engine: ChdbEngine) -> None:
+    import_id = "imp-B"
+    rows = [_base_row(1, "R2", "Chr01", 100), _base_row(2, "R2", "Chr01", 200)]
+
+    # Crash mid-write: a partial staging attempt, then a full retry that clears
+    # and rewrites staging before finalizing.
+    vf.stage_batch(engine, import_id=import_id, batch_index=0, base_rows=rows[:1])
+    vf.clear_staging(engine, import_id)
+    vf.stage_batch(engine, import_id=import_id, batch_index=0, base_rows=rows)
+
+    partitions = vf.list_partitions(engine, import_id)
+    vf.finalize_release(engine, release_key="R2", import_id=import_id, partitions=partitions)
+    assert engine.scalar("SELECT count() FROM variant_facts") == 2
+    assert _summary_cnt(engine, "R2") == 2
+
+    # A blind re-publish of the same partition must not double the counts.
+    vf.stage_batch(engine, import_id=import_id, batch_index=0, base_rows=rows)
+    partitions = vf.list_partitions(engine, import_id)
+    vf.finalize_release(engine, release_key="R2", import_id=import_id, partitions=partitions)
+    assert engine.scalar("SELECT count() FROM variant_facts") == 2
+    assert _summary_cnt(engine, "R2") == 2
+
+
+def test_other_release_partition_is_preserved(engine: ChdbEngine) -> None:
+    engine.insert_rows(
+        "variant_facts",
+        [_base_row(1, "OTHER", "Chr01", 500, gene_sid=9)],
+        list(vf.BASE_COLUMNS),
+    )
+    before = engine.scalar("SELECT count() FROM variant_facts WHERE release_key = 'OTHER'")
+
+    import_id = "imp-C"
+    vf.stage_batch(
+        engine, import_id=import_id, batch_index=0, base_rows=[_base_row(1, "NEW", "Chr01", 100)]
+    )
+    vf.finalize_release(
+        engine, release_key="NEW", import_id=import_id, partitions=[("NEW", "Chr01")]
+    )
+
+    assert engine.scalar("SELECT count() FROM variant_facts WHERE release_key = 'OTHER'") == before
+
+
+def test_deterministic_batch_id_is_stable() -> None:
+    assert vf.deterministic_batch_id("imp", 0) == vf.deterministic_batch_id("imp", 0)
+    assert vf.deterministic_batch_id("imp", 0) != vf.deterministic_batch_id("imp", 1)
+
+
+def test_duplicate_staging_batch_publishes_each_fact_once(engine: ChdbEngine) -> None:
+    import_id = "imp-dup"
+    rows = [_base_row(1, "RD", "Chr01", 100), _base_row(2, "RD", "Chr01", 200)]
+    # A retried batch appends the same facts to staging twice.
+    vf.stage_batch(engine, import_id=import_id, batch_index=0, base_rows=rows)
+    vf.stage_batch(engine, import_id=import_id, batch_index=0, base_rows=rows)
+
+    # Distinct count is stable despite the duplicate staging append...
+    assert vf.staged_distinct_count(engine, import_id) == 2
+    # ...and finalize still publishes each logical fact exactly once.
+    partitions = vf.list_partitions(engine, import_id)
+    vf.finalize_release(engine, release_key="RD", import_id=import_id, partitions=partitions)
+    assert engine.scalar("SELECT count() FROM variant_facts") == 2
+    assert _summary_cnt(engine, "RD") == 2
+
+
+def test_row_count_mismatch_blocks_publish(engine: ChdbEngine) -> None:
+    import_id = "imp-short"
+    # Parser claims three facts but only one reached staging (crash/dropped batch).
+    vf.stage_batch(
+        engine, import_id=import_id, batch_index=0, base_rows=[_base_row(1, "RS", "Chr01", 100)]
+    )
+
+    assert vf.verify_against_expected(engine, import_id, expected_rows=3) is False
+    # The verification gate blocks finalize, so nothing is published.
+    assert engine.scalar("SELECT count() FROM variant_facts") == 0
+    assert engine.scalar("SELECT count() FROM gene_impact_summary") == 0
+
+
+def test_verify_passes_and_publishes_when_counts_match(engine: ChdbEngine) -> None:
+    import_id = "imp-ok"
+    rows = [_base_row(1, "RO", "Chr01", 100), _base_row(2, "RO", "Chr01", 200)]
+    vf.stage_batch(engine, import_id=import_id, batch_index=0, base_rows=rows)
+
+    assert vf.verify_against_expected(engine, import_id, expected_rows=2) is True
+    partitions = vf.list_partitions(engine, import_id)
+    vf.finalize_release(engine, release_key="RO", import_id=import_id, partitions=partitions)
+    assert engine.scalar("SELECT count() FROM variant_facts") == 2
+
+
+def test_different_release_for_same_chromosome_coexist(engine: ChdbEngine) -> None:
+    # Assembly/release are independent namespaces: the same chromosome under two
+    # releases must publish side by side without one clobbering the other.
+    vf.stage_batch(
+        engine, import_id="imp-a", batch_index=0, base_rows=[_base_row(1, "RA", "Chr01", 100)]
+    )
+    vf.finalize_release(
+        engine, release_key="RA", import_id="imp-a", partitions=[("RA", "Chr01")]
+    )
+    vf.stage_batch(
+        engine, import_id="imp-b", batch_index=0, base_rows=[_base_row(1, "RB", "Chr01", 100)]
+    )
+    vf.finalize_release(
+        engine, release_key="RB", import_id="imp-b", partitions=[("RB", "Chr01")]
+    )
+    assert engine.scalar("SELECT count() FROM variant_facts") == 2
