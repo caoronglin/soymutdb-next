@@ -569,9 +569,17 @@ Next：下一个唯一建议任务。
 
 > P2-3 状态：**IN PROGRESS（协议实现 + 真实验证完成；待 CNB/能力重开）**。`import_vcf` 已接入协议并默认 OFF（flag 关→422，P1-2 保持）。已全部在**真实引擎**验证：chdb 13 tests（staging 隔离/双计危害/分区级幂等 finalize/校验门/失败矩阵）+ 真 PG manifest 6 tests + **端到端 `test_vcf_import`**（真 PG manifest+release/assembly 解析 + 真 chdb facts）：PUBLISHED、base=2、summary=2、按 fingerprint 幂等。**剩余**：CNB 分布式/集群 T8 运行验收、`SOYMUTDB_ENABLE_VCF_IMPORT` 能力重开（P2-6，Gate 于真实 CH/CNB 全绿）。
 
+### Phase B · pnpm 12 工具链（B1；已本地化实现）
+- `build(pnpm): migrate toolchain to pnpm 12` — 11.21.0 → 12.5.1 全链统一：`package.json` packageManager/engines、`scripts/{ci-job-steps,setup-workspace}.sh`、infra/jbrowse/corepack、`.cnb/env/Dockerfile.frontend`、`.cnb.yml`、`check-toolchain-pins.py`、`test_ci_job_contracts.py`。**pnpm 12 由本机自建（隔离 prefix `/tmp/pnpm12`，非 mamba）**，真实重生成 lockfile。E2（本地 `pnpm@12.5.1 --frozen-lockfile` OK；pins/ci-contracts/dep-governance 三守卫绿）。
+- 兼容修复：pnpm 12 写**双文档 lockfile**（packageManager 依赖单列一档），`dependency_governance._pnpm_graph` 改为多文档加载并选工程档。
+
+### Phase D · Vue shell → foundation → 首个真实读（Checkpoint A/B/C）
+- `feat(vue): bootstrap @soymutdb/web-vue shell + Vue catalog` — catalog pin vue 3.5.43 / plugin-vue / vitest；最小可构建 shell，`define` 注入 `VITE_SITE_VARIANT`（构建期，DB-CORE-5）。可 `pnpm --filter @soymutdb/web-vue dev` 预览。E2。
+- `feat(vue): add router, Pinia context store + TanStack Vue Query` — catalog pin vue-router 5.3.1 / pinia 4.0.3 / @tanstack/vue-query 5.103.2 / @vueuse/core 15.0.0；router + Pinia(release/assembly/site context) + Vue Query；`allowBuilds`(vue-demi) + `minimumReleaseAgeExclude`（pnpm 12 供应链门）。E2（build/typecheck/test 绿，守卫绿）。
+- `feat(vue): migrate home route to a real api-client read` — 首页经中性 seam（query-keys 缓存键按 site-variant 作用域 + api-client `getAssemblies`）渲染 assembly 上下文（DB-CORE-3），证实 React/Vue 共用同一 API/schema/query-key 契约。E2。
+
 ## BLOCKED（需环境凭据/服务，未冒充通过）
 - **CNB / 分布式 ClickHouse cluster / T8-T10**：本机无 Docker/CNB；chdb 为单节点嵌入式引擎，可证 staging/finalize/汇总结算语义，但**不覆盖**分布式集群、`Atomic` 数据库引擎、副本去重 token 窗口；真实运行验收需 CNB。
-- **Phase B pnpm 12**：本机无 pnpm 12 运行时 → BLOCKED。
 
 ## Next（建议）
 1. P2-3 收尾：worker 侧 manifest(PG，sync) 生命周期集成（复用 `soymutdb-import-protocol` 契约，不 import API 运行时）→ `import_vcf` 在 flag OFF 下仍 fail-closed，flag 开启才走协议；补崩溃/重试/ambiguous-ACK/checksum-mismatch 矩阵（manifest 真 PG + CH 真实引擎）。
