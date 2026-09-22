@@ -55,6 +55,10 @@ dev = [
     "pytest-cov>=5.0.0",
     "ruff>=0.8.0",
     "mypy>=1.13.0",
+    # Embedded ClickHouse engine used to give the import finalize/staging
+    # protocol REAL MergeTree/SummingMergeTree acceptance evidence without a
+    # server or Docker (verified in-process). Test-only.
+    "chdb>=4.0",
 ]
 # Optional desktop notification channel (D2): OS-native notifications via
 # plyer, gated at runtime by SOYMUTDB_DESKTOP_NOTIFY=true.  Not required for
