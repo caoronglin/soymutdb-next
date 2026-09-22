@@ -67,6 +67,7 @@ releases = Table(
     "releases",
     metadata,
     Column("id", Integer, primary_key=True),
+    Column("version", String(32)),
     Column("status", release_status_enum, nullable=False),
 )
 
