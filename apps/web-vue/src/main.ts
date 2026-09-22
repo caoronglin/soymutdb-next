@@ -4,6 +4,7 @@ import { createPinia } from "pinia";
 
 import App from "./App.vue";
 import { router } from "./router";
+import "./style.css";
 
 // Phase D Checkpoint B foundation wiring:
 //   Pinia          -> client/deployment context (site variant, release, assembly)

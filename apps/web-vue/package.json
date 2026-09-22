@@ -17,6 +17,7 @@
     "@soymutdb/api-client": "workspace:*",
     "@soymutdb/query-keys": "workspace:*",
     "@soymutdb/shared": "workspace:*",
+    "@soymutdb/ui-vue": "workspace:*",
     "vue": "catalog:",
     "vue-router": "catalog:",
     "pinia": "catalog:",
@@ -24,7 +25,9 @@
     "@vueuse/core": "catalog:"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "catalog:",
     "@vitejs/plugin-vue": "catalog:",
+    "tailwindcss": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:",

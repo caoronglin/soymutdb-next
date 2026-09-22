@@ -1,12 +1,11 @@
+import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
 
-// Empty-shell bootstrap (Phase D, Checkpoint A). The portal variant is selected
-// at build time via VITE_SITE_VARIANT (external/internal), mirroring the React
-// portal — never inferred from host/cookies (DB-CORE-5). Routing, Pinia, Vue
-// Query, the Antdv Next facade and design tokens land in subsequent commits.
+// Phase D Checkpoint D: Vite 6 + Tailwind CSS 4 (@tailwindcss/vite) + the
+// @soymutdb/ui-vue facade. The site variant stays a build-time define (DB-CORE-5).
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [vue(), tailwindcss()],
   define: {
     __SITE_VARIANT__: JSON.stringify(process.env.VITE_SITE_VARIANT ?? "external"),
   },

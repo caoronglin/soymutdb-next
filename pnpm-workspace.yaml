@@ -26,6 +26,12 @@ catalog:
   pinia: 4.0.3
   '@tanstack/vue-query': 5.103.2
   '@vueuse/core': 15.0.0
+  # Vue UI layer (Phase D Checkpoint D): Antdv Next 1.x (via the @soymutdb/ui-vue
+  # facade only), Tailwind CSS 4 + its Vite plugin. Exact-pinned; Antdv Next may
+  # break on minor, so upgrades go through the facade contract test first.
+  antdv-next: 1.5.4
+  tailwindcss: 4.3.3
+  '@tailwindcss/vite': 4.3.3
 
 # pnpm 11: workspace-level settings live here (the root package.json "pnpm"
 # field is no longer read). Overrides force the exact React 19.2.0 build for
