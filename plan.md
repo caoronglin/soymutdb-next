@@ -561,11 +561,18 @@ Next：下一个唯一建议任务。
 ### Phase A · shared import protocol（A1）
 - `refactor(import): extract shared soymutdb-import-protocol` — fingerprint / manifest 状态机 / 可见性规则下沉为无依赖共享包 `packages/import-protocol`（`soymutdb-import-protocol`）；`apps/api` re-export 保持向后兼容；`apps/worker` 声明依赖（为 P2-3 worker 侧消费 manifest 铺路，符合 H4）。fingerprint 字节与 DB enum 名不变，无数据迁移。E2（contract 15 tests；apps/api import tests + migrations 27 passed vs PG；worker adapters 42 passed；ruff clean）。uv.lock 两端 +11 行、无版本漂移。
 
+### Phase A · ClickHouse engine port + variant finalize protocol（P2-3，部分）
+真实 ClickHouse 验收改用 **chdb（嵌入式单节点 ClickHouse 26.7，非 mock）**，作为 `apps/worker[dev]` 依赖；`scripts/verify-backend-tests.sh` 安装该 extra。提交链：
+- `feat(import): add ClickHouse engine port + chdb acceptance engine` — `ClickHouseEngine` 端口 + `HttpClickHouseEngine`(生产 clickhouse-connect) / `ChdbEngine`(验收) 。
+- `refactor(import-engine): share a single chdb session across acceptance tests` — 会话级 fixture + 每测试唯一 database；端口加 `query_rows`。
+- `feat(import): add variant staging/verify/finalize protocol` — 只写 staging(无 MV) → `finalize_release`（先 purge 所有 release 维度 summary 一次 → drop 触及的 base 分区 → 从去重 staging 重写）。E2/E3 等价：`pytest tests/test_clickhouse_engine.py tests/test_variant_finalize.py` → 9 passed（真实引擎）。真实引擎还暴露并修复了一个 finalize 逻辑 bug（按分区逐个 purge 会抹掉同 release 其它分区刚写入的 summary）。
+
+> P2-3 状态：**IN PROGRESS**。CH 侧 staging/verify/finalize 语义已在真实嵌入式引擎验证；**未完成**：`import_vcf` 真实入口接线（feature flag 默认 OFF，P1-2 保持 422）、worker 侧 manifest(PG) 生命周期集成、崩溃/重试/ambiguous-ACK 矩阵、能力重开；**CNB 分布式/集群运行验收 T8 BLOCKED**。
+
 ## BLOCKED（需环境凭据/服务，未冒充通过）
-- **Phase A P2-3/4/5 真实 ClickHouse**：variant_facts 为 MergeTree + 8 个 SummingMergeTree/AggregatingMergeTree 汇总结算；finalize 必须 base 分区 + release 维度 summary 一并处理（H2）。真实 CH / chdb / CNB 未提供 → 写入/终检/崩溃夹具仅能推进到 manifest(PG,已验) + staging-only 结构性隔离，CH 引擎级正确性 **BLOCKED**。
-- **Phase B pnpm 12 / 所有 Docker 镜像 & Compose / CNB T8-T10**：本机无 pnpm 12、无 Docker、无 CNB → BLOCKED。
+- **CNB / 分布式 ClickHouse cluster / T8-T10**：本机无 Docker/CNB；chdb 为单节点嵌入式引擎，可证 staging/finalize/汇总结算语义，但**不覆盖**分布式集群、`Atomic` 数据库引擎、副本去重 token 窗口；真实运行验收需 CNB。
+- **Phase B pnpm 12**：本机无 pnpm 12 运行时 → BLOCKED。
 
 ## Next（建议）
-1. 提供 ClickHouse（server 或可 `pip install chdb`）→ 以 `phase/p2-3-import-finalize` 落地 staging writer + partition 级 finalize + 崩溃/重试/ambACK 矩阵，并开 Gate。
-2. 或提供 pnpm 12 + CNB → 开 Phase B → D。
-3. 在此之前，Phase C 剩余的 §7 包（design-tokens 需 T7 视觉回归、domain/genome-view-model 为 net-new 契约）待产品或设计输入。
+1. P2-3 收尾：worker 侧 manifest(PG，sync) 生命周期集成（复用 `soymutdb-import-protocol` 契约，不 import API 运行时）→ `import_vcf` 在 flag OFF 下仍 fail-closed，flag 开启才走协议；补崩溃/重试/ambiguous-ACK/checksum-mismatch 矩阵（manifest 真 PG + CH 真实引擎）。
+2. P2-4 `module_data_rows → canonical promotion`（纯 PostgreSQL，本机可全验）。
