@@ -9,30 +9,19 @@ guard and the source of publish-visibility for the portal.
 
 from __future__ import annotations
 
-import enum
 from datetime import datetime
 
+from soymutdb_import_protocol import (
+    RESUMABLE_STATES,
+    STATUS_ENUM_NAME,
+    ImportManifestStatus,
+)
 from sqlalchemy import BigInteger, DateTime, Enum, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base, TimestampMixin, enum_values
 
-
-class ImportManifestStatus(enum.StrEnum):
-    """ADR-0005 lifecycle. Only ``PUBLISHED`` is visible to the portal."""
-
-    CREATED = "created"
-    PARSING = "parsing"
-    WRITING = "writing"
-    VERIFYING = "verifying"
-    PUBLISHED = "published"
-    FAILED = "failed"
-
-
-# States from which a retry may resume without creating a second logical import.
-RESUMABLE_STATES = frozenset(
-    {ImportManifestStatus.CREATED, ImportManifestStatus.FAILED}
-)
+__all__ = ["ImportManifest", "ImportManifestStatus", "RESUMABLE_STATES"]
 
 
 class ImportManifest(Base, TimestampMixin):
@@ -55,7 +44,7 @@ class ImportManifest(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(
         Enum(
             ImportManifestStatus,
-            name="import_manifest_status_enum",
+            name=STATUS_ENUM_NAME,
             values_callable=enum_values,
         ),
         nullable=False,

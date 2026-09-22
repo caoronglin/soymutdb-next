@@ -9,6 +9,7 @@ description = "SoyMutDB Celery worker — BLAST, export, ingestion, and statisti
 requires-python = ">=3.14"
 license = { text = "MIT" }
 dependencies = [
+    "soymutdb-import-protocol==0.1.0",
     "soymutdb-jobs==0.1.0",
     "celery[redis]>=5.4.0",
     "redis>=5.2.0",
@@ -45,6 +46,7 @@ dependencies = [
 ]
 
 [tool.uv.sources]
+soymutdb-import-protocol = { path = "../../packages/import-protocol" }
 soymutdb-jobs = { path = "../../packages/jobs-py" }
 
 [project.optional-dependencies]

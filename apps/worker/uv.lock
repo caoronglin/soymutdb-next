@@ -1728,6 +1728,15 @@ wheels = [
 ]
 
 [[package]]
+name = "soymutdb-import-protocol"
+version = "0.1.0"
+source = { directory = "../../packages/import-protocol" }
+
+[package.metadata]
+requires-dist = [{ name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" }]
+provides-extras = ["dev"]
+
+[[package]]
 name = "soymutdb-jobs"
 version = "0.1.0"
 source = { directory = "../../packages/jobs-py" }
@@ -1771,6 +1780,7 @@ dependencies = [
     { name = "python-igraph" },
     { name = "redis" },
     { name = "scanpy" },
+    { name = "soymutdb-import-protocol" },
     { name = "soymutdb-jobs" },
     { name = "sqlalchemy" },
     { name = "structlog" },
@@ -1818,6 +1828,7 @@ requires-dist = [
     { name = "redis", specifier = ">=5.2.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8.0" },
     { name = "scanpy", specifier = ">=1.10,<1.13" },
+    { name = "soymutdb-import-protocol", directory = "../../packages/import-protocol" },
     { name = "soymutdb-jobs", directory = "../../packages/jobs-py" },
     { name = "sqlalchemy", specifier = ">=2.0.36" },
     { name = "structlog", specifier = ">=24.4.0" },
