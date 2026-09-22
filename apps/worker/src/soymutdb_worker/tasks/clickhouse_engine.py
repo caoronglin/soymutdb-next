@@ -38,6 +38,10 @@ class ClickHouseEngine(Protocol):
         """Return the first cell of the first row of ``sql`` (or None)."""
         ...
 
+    def query_rows(self, sql: str, params: dict[str, Any] | None = None) -> list[tuple]:
+        """Return every row of ``sql`` as tuples, in result order."""
+        ...
+
 
 # ---------------------------------------------------------------------------
 # Production adapter (HTTP)
@@ -66,6 +70,10 @@ class HttpClickHouseEngine:
         if not rows or not rows[0]:
             return None
         return rows[0][0]
+
+    def query_rows(self, sql: str, params: dict[str, Any] | None = None) -> list[tuple]:
+        result = self._client.query(sql, parameters=params or {})
+        return [tuple(row) for row in result.result_rows]
 
 
 # ---------------------------------------------------------------------------
@@ -132,6 +140,13 @@ class ChdbEngine:
         cell = first_line.split(",")[0]
         return _parse_csv_scalar(cell)
 
+    def query_rows(self, sql: str, params: dict[str, Any] | None = None) -> list[tuple]:
+        result = self._session.query(sql, "CSV", params=params or {})
+        text = result.bytes().decode("utf-8").strip()
+        if not text:
+            return []
+        return [_parse_csv_row(line) for line in text.splitlines()]
+
 
 def _parse_csv_scalar(cell: str) -> Any:
     if cell == "" or cell == "\\N":
@@ -146,3 +161,10 @@ def _parse_csv_scalar(cell: str) -> Any:
         return float(cell)
     except ValueError:
         return cell
+
+
+def _parse_csv_row(line: str) -> tuple:
+    # Adequate for the acceptance queries (simple LowCardinality tokens without
+    # embedded commas). The embedded engine is test-only; production reads use
+    # clickhouse-connect's typed result parsing.
+    return tuple(_parse_csv_scalar(cell) for cell in line.split(","))

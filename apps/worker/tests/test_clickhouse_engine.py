@@ -7,16 +7,14 @@ genuinely exercised, not mocked. Requires the worker dev extra (``chdb``).
 
 from __future__ import annotations
 
-from pathlib import Path
-
-# Hard dependency: the acceptance engine lives in the worker dev extra
-# (apps/worker[dev]) which the backend gate installs. If chdb is missing the
-# finalize contract is UNVERIFIED, so this fails loudly instead of silently
-# skipping (a skipped correctness gate is a false green).
-import chdb.session  # noqa: F401  (ensures the engine is present)
+# The acceptance engine lives in the worker dev extra (apps/worker[dev]) which
+# the backend gate installs; a missing engine means the finalize contract is
+# UNVERIFIED, so fail loudly instead of silently skipping.
+import chdb.session  # noqa: F401
 import pytest
 
 from soymutdb_worker.tasks.clickhouse_engine import ChdbEngine  # noqa: E402
+from tests.chdb_harness import prepare_schema, unique_db  # noqa: E402
 
 # A faithful, minimal slice of the canonical DDL: the fact table with the real
 # (release_key, chromosome) partition key, one SummingMergeTree summary and the
@@ -56,12 +54,9 @@ STAGING_COLS = [*BASE_COLS, "import_id", "batch_index"]
 
 
 @pytest.fixture()
-def engine(tmp_path: Path) -> ChdbEngine:
-    clickhouse = ChdbEngine.open(str(tmp_path / "accept"))
-    clickhouse.execute("CREATE DATABASE IF NOT EXISTS accept; USE accept")
-    for statement in DDL:
-        clickhouse.execute(statement)
-    return clickhouse
+def engine(ch_engine: ChdbEngine) -> ChdbEngine:
+    prepare_schema(ch_engine, unique_db(), DDL)
+    return ch_engine
 
 
 def _finalize(clickhouse: ChdbEngine, release_key: str, chromosome: str, rows: list[tuple]) -> None:
