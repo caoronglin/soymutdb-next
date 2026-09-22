@@ -541,3 +541,31 @@ Next：下一个唯一建议任务。
 - 所有开启的 feature flag 有 Release Gate evidence。
 
 > 最终优先级：数据正确性 > 隔离与安全 > 可回滚发布 > 可运行性 > 维护性 > 性能 > 新功能数量。任何重构若破坏前四项，立即停止并回滚到最近通过全部 Gate 的 commit。
+
+---
+
+# 24. 执行证据日志（Execution Evidence Log）
+
+> 维护者：主执行代理（PI-agent）。每条 = 一个已合并/可预览单元。证据等级 E0 文档 / E1 代码确认 / E2 可重复测试 / E3 生产等价验证 / E4 staging 观察。未运行的门禁如实标注 BLOCKED，不计为通过。
+>
+> 执行环境限制（本机）：Node 24.19.0 / pnpm 11.21.0 / Python 3.14.6；PostgreSQL :55432 可用；**无 Docker/CNB、无 ClickHouse server、无 pnpm 12**。因此 T8/T9/T10 与真实 CH 集成本环境 BLOCKED。
+
+## 已完成单元
+
+### Phase C · framework-neutral seam
+- `test(contracts): guard the framework-neutral seam` — `scripts/check_framework_neutral_packages.py` + unittest（禁止 react/vue/antd 进入中性包）。E2。
+- `feat(query-keys): extract framework-neutral query key factory` — 新增 `@soymutdb/query-keys`，`apps/web` 以 re-export shim 消费（7 处调用零改动）。E2（web typecheck + 5 tests）。
+- `feat(i18n): extract framework-neutral @soymutdb/i18n-core` — catalog/语言元数据下沉中性包；`@soymutdb/i18n` 变 react-i18next 适配层并 re-export；`check-locale-keys` 保留转发 shim。E2（i18n-core 6 tests、web/admin/jbrowse typecheck、CI locale gate 59 tests、web i18n-runtime）。
+- `ci(frontend): enforce the framework-neutral seam in the shared gate` — seam guard 接入 `frontend` job body（CNB/GitHub 共用）。E2（本地确定性通过；**CNB 运行 BLOCKED**）。
+
+### Phase A · shared import protocol（A1）
+- `refactor(import): extract shared soymutdb-import-protocol` — fingerprint / manifest 状态机 / 可见性规则下沉为无依赖共享包 `packages/import-protocol`（`soymutdb-import-protocol`）；`apps/api` re-export 保持向后兼容；`apps/worker` 声明依赖（为 P2-3 worker 侧消费 manifest 铺路，符合 H4）。fingerprint 字节与 DB enum 名不变，无数据迁移。E2（contract 15 tests；apps/api import tests + migrations 27 passed vs PG；worker adapters 42 passed；ruff clean）。uv.lock 两端 +11 行、无版本漂移。
+
+## BLOCKED（需环境凭据/服务，未冒充通过）
+- **Phase A P2-3/4/5 真实 ClickHouse**：variant_facts 为 MergeTree + 8 个 SummingMergeTree/AggregatingMergeTree 汇总结算；finalize 必须 base 分区 + release 维度 summary 一并处理（H2）。真实 CH / chdb / CNB 未提供 → 写入/终检/崩溃夹具仅能推进到 manifest(PG,已验) + staging-only 结构性隔离，CH 引擎级正确性 **BLOCKED**。
+- **Phase B pnpm 12 / 所有 Docker 镜像 & Compose / CNB T8-T10**：本机无 pnpm 12、无 Docker、无 CNB → BLOCKED。
+
+## Next（建议）
+1. 提供 ClickHouse（server 或可 `pip install chdb`）→ 以 `phase/p2-3-import-finalize` 落地 staging writer + partition 级 finalize + 崩溃/重试/ambACK 矩阵，并开 Gate。
+2. 或提供 pnpm 12 + CNB → 开 Phase B → D。
+3. 在此之前，Phase C 剩余的 §7 包（design-tokens 需 T7 视觉回归、domain/genome-view-model 为 net-new 契约）待产品或设计输入。
