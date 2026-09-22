@@ -50,7 +50,7 @@ export REPO_ROOT
 # copy here plus one in .cnb.yml + one in ci.yml is guarded by
 # scripts/test_ci_job_contracts.py, which fails when the three disagree.
 NODE_VERSION="${SOYMUTDB_CI_NODE_VERSION:-24.19.0}"
-PNPM_VERSION="${SOYMUTDB_CI_PNPM_VERSION:-11.21.0}"
+PNPM_VERSION="${SOYMUTDB_CI_PNPM_VERSION:-12.5.1}"
 PYTHON_VERSION="${SOYMUTDB_CI_PYTHON_VERSION:-3.14}"
 UV_VERSION="${SOYMUTDB_CI_UV_VERSION:-0.11.33}"
 export NODE_VERSION PNPM_VERSION PYTHON_VERSION UV_VERSION

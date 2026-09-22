@@ -34,7 +34,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 # The authoritative pins. Everything else is checked against these.
 EXPECTED_NODE = "24.19.0"
-EXPECTED_PNPM = "11.21.0"
+EXPECTED_PNPM = "12.5.1"
 EXPECTED_PYTHON_MIN = (3, 14)
 
 # Container images referenced by the CNB pipeline. The platform builds them on
