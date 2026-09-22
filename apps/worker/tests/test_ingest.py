@@ -32,13 +32,17 @@ def test_pick_mutant_line_returns_empty_for_missing_or_unknown_samples():
     assert _pick_mutant_line(["unknown"], [3], 0) == ("", 0)
 
 
-def test_vcf_import_fails_closed_before_writing_without_durable_identity(monkeypatch):
+def test_vcf_import_fails_closed_while_flag_is_off(monkeypatch):
+    # Contract update (P2-3): the staging/finalize protocol now exists, so the
+    # disabled state is no longer "no durable identity" but "gated off until
+    # real ClickHouse acceptance". The safety contract is unchanged: with the
+    # flag off, import_vcf raises before any ClickHouse access (P1-2 422).
     def fail_if_clickhouse_is_opened():
         pytest.fail("unsafe VCF import reached ClickHouse")
 
     monkeypatch.setattr(ingest, "get_clickhouse_client", fail_if_clickhouse_is_opened)
 
-    with pytest.raises(RuntimeError, match=r"VCF import is disabled.*MergeTree.*durable"):
+    with pytest.raises(RuntimeError, match=r"VCF import is disabled.*gated off"):
         ingest.import_vcf.run("release-1", "variants.vcf.gz", "assembly-1")
 
 
