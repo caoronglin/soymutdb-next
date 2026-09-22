@@ -33,6 +33,7 @@ from pathlib import Path
 FRAMEWORK_NEUTRAL_PACKAGES: tuple[str, ...] = (
     "@soymutdb/shared",
     "@soymutdb/api-client",
+    "@soymutdb/query-keys",
 )
 
 # Packages join this tuple as Phase C extracts them (one reviewed commit each),

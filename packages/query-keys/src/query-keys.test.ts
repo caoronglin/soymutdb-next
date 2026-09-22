@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { queryKeys } from "../query-keys";
+import { queryKeys } from "./index";
 
 describe("queryKeys", () => {
   it("shares one stable assemblies key across routes", () => {
