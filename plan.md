@@ -51,6 +51,31 @@ GitHub Actions 为当前主 gate）。
 - GitHub：ClickHouse migration fixture（真实 24.8）→ **success**；MCP e2e → success
 - artifact 配额：`soymutdb-next` 19.5GB + 账户其它仓库 939MB 旧 artifact 已清理；等待 GitHub 重算（6–12h）
 
+### 本机测试环境重建（2026-09-23 夜）
+
+从零重建本仓库的本地测试环境并逐层验证：
+
+| 组件 | 做法 | 结果 |
+| --- | --- | --- |
+| JS 依赖 | 删除全部 `node_modules` 后 `pnpm install --frozen-lockfile` | ok（store 复用） |
+| API venv | `scripts/install_python_workspace.py` → api[dev] + worker[dev]（CI 布局） | Python 3.14.6 |
+| Worker venv | 同脚本 → worker[dev]（chdb/cyvcf2/scanpy） | Python 3.14.6 |
+| PostgreSQL | 标准 mamba 实例（`soymutdb`@127.0.0.1:55432），按 `docs/dev/mamba-validation-environment.md` | ok |
+| 后端 gate | `verify-backend-tests.sh`（真实 PG + chdb） | API 1542 + worker 349 passed |
+| 前端 | turbo test/lint/typecheck（`--concurrency=1`） | 10/10、11/11、11/11 |
+| smoke | contracts / static / runtime | 231 passed / PASS / PASS |
+| acceptance | contracts / static / runtime / backend | 4× ACCEPTANCE PASS |
+| 构建 | `build-static-apps.sh`、`build-pages-artifact.sh` + verify | 均 PASS |
+| 双站点 | `build:sites`（demo）+ 隔离检查（noindex 哨兵） | external 0 命中、internal 9 命中 |
+| 本地 E2E | `e2e/playwright-public.config.ts`（同源 mock API） | 27 passed, 2 skipped |
+
+本轮环境搭建顺带修复：
+- `scripts/with-postgres-service.sh`：外部 PG 路径未导出 `SOYMUTDB_DATABASE_URL`，`--print-exports` 在 `set -u` 下直接失败（`dd7616b2c`）。
+- `deploy/cloudflare.md`：双站点本地验证命令缺 API origin 且 standard 模式需真实 API，改为 demo + 显式 origin + 隔离检查（`fc71b5669`）。
+- `docs/dev/mamba-validation-environment.md`：测试解释器更新为 3.14 venv，并补充无 Docker 的完整 gate/acceptance/双站点命令。
+
+沙箱注意：构建需 `GOMAXPROCS=2 RAYON_NUM_THREADS=1`，turbo 需 `--concurrency=1`（否则 esbuild/tailwind-oxide 出现 `os error 11`）；E2E 是独立 npm 项目，需在 `e2e/` 内 `npm ci`。
+
 ### 阻塞 / 未关闭
 
 - GitHub artifact 上传：已压缩 `pages-demo-dist`、移除无消费者的 dist 上传、缩短证据保留期；等待配额重算（6–12h）后应恢复

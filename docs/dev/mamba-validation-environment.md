@@ -7,7 +7,7 @@ This workspace can run PostgreSQL-backed API validation without Docker/Testconta
 - PostgreSQL runtime: `.mamba-root/envs/postgres16` (PostgreSQL 16)
 - Mamba root/package cache: `.mamba-root/`
 - PostgreSQL data and logs: `.validation/postgres16` and `.validation/postgres16.log`
-- Application test interpreter: `/mnt/data02/T25ronglin/.miniforge3/envs/soymutdb-test/bin/python`
+- Application test interpreter: the repository-pinned 3.14 virtualenvs — `apps/api/.venv` (api[dev] + worker[dev], the layout `scripts/verify-backend-tests.sh` expects) and `apps/worker/.venv` (worker[dev]). The historical `soymutdb-test` mamba interpreter is Python 3.13 and predates the 3.14 toolchain pin; do not use it for the gates.
 - Runtime migration database: `soymutdb_validation`
 - Isolated pytest fixture database: `soymutdb_testfixtures`
 
@@ -79,6 +79,59 @@ SOYMUTDB_TEST_DATABASE_URL='postgresql+asyncpg://soymutdb@127.0.0.1:55432/soymut
 ```
 
 `db_session` uses an outer transaction and savepoint mode so application-level `commit()` calls do not leak state into following tests.
+
+## Full local gates without Docker
+
+Every gate the delivery pipeline runs is reachable here; only the container
+(image) and browser layers need more than this environment. Each database role
+is exercised against the same cluster: `soymutdb_testfixtures` is
+created/dropped by the fixtures (keep it empty before a run) and
+`soymutdb_validation` carries the migrated runtime schema.
+
+```bash
+PG_BIN=$PWD/.mamba-root/envs/postgres16/bin
+
+# 1. Backend gate: architecture guard + API pytest + worker pytest
+#    (real PostgreSQL fixtures + embedded ClickHouse via chdb)
+$PG_BIN/dropdb -p 55432 -h 127.0.0.1 -U soymutdb --if-exists soymutdb_testfixtures
+$PG_BIN/createdb -p 55432 -h 127.0.0.1 -U soymutdb soymutdb_testfixtures
+SOYMUTDB_TEST_DATABASE_URL='postgresql+asyncpg://soymutdb@127.0.0.1:55432/soymutdb_testfixtures' \
+  bash scripts/verify-backend-tests.sh
+
+# 2. Runtime smoke: Alembic + real uvicorn + health + public API chain
+SOYMUTDB_DATABASE_URL='postgresql+asyncpg://soymutdb@127.0.0.1:55432/soymutdb_validation' \
+  bash scripts/acceptance.sh --profile runtime
+
+# 3. Acceptance layers
+bash scripts/acceptance.sh --profile contracts
+GOMAXPROCS=2 bash scripts/build-static-apps.sh   # base=/ build for the static layer
+bash scripts/acceptance.sh --profile static
+SOYMUTDB_TEST_DATABASE_URL='postgresql+asyncpg://soymutdb@127.0.0.1:55432/soymutdb_testfixtures' \
+  bash scripts/acceptance.sh --profile backend
+```
+
+Builds in constrained sandboxes must cap the JS/Rust thread pools
+(`GOMAXPROCS=2 RAYON_NUM_THREADS=1`; esbuild/tailwind-oxide otherwise abort with
+EAGAIN) and run turbo task graphs with `--concurrency=1`.
+
+The dual-site artifacts build and verify locally too:
+
+```bash
+CI= VITE_DEPLOYMENT_MODE=demo \
+  VITE_API_BASE_URL=https://api.soymutdb.test \
+  VITE_JBROWSE_BASE_URL=https://jbrowse.soymutdb.test \
+  SOYMUTDB_INTERNAL_SITE_URL=https://internal.soymutdb.invalid \
+  GOMAXPROCS=2 pnpm --filter @soymutdb/web build:sites
+python3 scripts/check_site_artifact_isolation.py \
+  --external-root apps/web/dist/external \
+  --internal-root apps/web/dist/internal \
+  --sentinel 'noindex, nofollow, noarchive'
+```
+
+For the local browser suite use `e2e/README.md`'s dedicated build command
+(base `/soymutdb-next/`, same-origin mocked API) with
+`playwright-public.config.ts`; the default e2e config targets the deployed
+demo site and needs network access.
 
 ## Scope and limits
 
