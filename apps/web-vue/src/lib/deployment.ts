@@ -17,6 +17,11 @@
 
 import { setReleaseId as setClientReleaseId } from "@soymutdb/api-client";
 
+// normalizeBasePath lives in a zero-dependency module so the Vite config can
+// import it without loading the api-client; re-exported here for the views and
+// tests that already read it from the deployment context.
+export { normalizeBasePath } from "./base-path";
+
 export type SiteVariant = "external" | "internal";
 
 export function resolveSiteVariant(value: unknown): SiteVariant {
@@ -42,18 +47,6 @@ export function resolveInitialReleaseId(value: unknown): string | null {
 export function resolveJbrowseBaseUrl(value: unknown): string {
   if (typeof value !== "string" || value.trim() === "") return "/jbrowse";
   return value.trim().replace(/\/+$/, "");
-}
-
-const TRAILING_SLASHES = /^\/+|\/+$/g;
-
-/**
- * Normalize a deployment subpath the way Vite's `base` and the router's history
- * base expect it: `/` or `/subpath/` (leading slash, trailing slash).
- */
-export function normalizeBasePath(value: unknown): string {
-  const trimmed = typeof value === "string" ? value.trim() : "";
-  if (!trimmed || trimmed === "/") return "/";
-  return `/${trimmed.replace(TRAILING_SLASHES, "")}/`;
 }
 
 /**

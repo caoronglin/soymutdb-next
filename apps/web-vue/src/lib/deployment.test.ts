@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  normalizeBasePath,
   resolveInitialReleaseId,
   resolveJbrowseBaseUrl,
   resolveSiteVariant,
@@ -46,15 +45,5 @@ describe("resolveJbrowseBaseUrl", () => {
   it("falls back to the same-origin /jbrowse path", () => {
     expect(resolveJbrowseBaseUrl(undefined)).toBe("/jbrowse");
     expect(resolveJbrowseBaseUrl("   ")).toBe("/jbrowse");
-  });
-});
-
-describe("normalizeBasePath", () => {
-  it("normalizes the deployment subpath for Vite and the router", () => {
-    expect(normalizeBasePath("/")).toBe("/");
-    expect(normalizeBasePath("")).toBe("/");
-    expect(normalizeBasePath("soymutdb-next")).toBe("/soymutdb-next/");
-    expect(normalizeBasePath("/soymutdb-next/")).toBe("/soymutdb-next/");
-    expect(normalizeBasePath("///nested///")).toBe("/nested/");
   });
 });
