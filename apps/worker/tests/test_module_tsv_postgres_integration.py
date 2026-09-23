@@ -161,7 +161,12 @@ def _seed_dataset(session_factory, data_set_id: int, release_id: int) -> None:
         )
 
 
-def _seed_release(session_factory, release_id: int, *, status: str = "draft") -> None:
+def _seed_release(session_factory, release_id: int, *, status: str = "draft") -> int:
+    """Insert a release plus its canonical assembly; returns the assembly id.
+
+    ADR-0004 promotion resolves the release's assembly, so every release
+    fixture needs one; `releases.assembly_id` pins it explicitly.
+    """
     with session_factory.begin() as session:
         session.execute(
             text(
@@ -175,6 +180,22 @@ def _seed_release(session_factory, release_id: int, *, status: str = "draft") ->
                 "status": status,
             },
         )
+        assembly_id = session.execute(
+            text(
+                "INSERT INTO assemblies (name, version, release_id, species) "
+                "VALUES (:name, :version, :release_id, 'Glycine max') RETURNING id"
+            ),
+            {
+                "name": f"Worker assembly {release_id}",
+                "version": f"asm-{release_id}",
+                "release_id": release_id,
+            },
+        ).scalar_one()
+        session.execute(
+            text("UPDATE releases SET assembly_id = :assembly_id WHERE id = :id"),
+            {"assembly_id": assembly_id, "id": release_id},
+        )
+    return int(assembly_id)
 
 
 def _expected_alembic_head() -> str:
@@ -330,3 +351,204 @@ def test_module_tsv_rejects_non_draft_release_without_deleting_existing_rows(
         )
 
     assert _module_row_count(worker_session_factory, release_id=3) == 1
+
+
+def _canonical_genes(session_factory, *, assembly_id: int) -> list[tuple]:
+    with session_factory() as session:
+        return list(
+            session.execute(
+                text(
+                    'SELECT accession, chromosome_id, start, "end", strand, biotype, '
+                    "attributes FROM genes WHERE assembly_id = :assembly_id "
+                    "ORDER BY accession"
+                ),
+                {"assembly_id": assembly_id},
+            ).all()
+        )
+
+
+def _canonical_chromosomes(session_factory, *, assembly_id: int) -> list[tuple]:
+    with session_factory() as session:
+        return list(
+            session.execute(
+                text(
+                    'SELECT name, length, "order" FROM chromosomes '
+                    'WHERE assembly_id = :assembly_id ORDER BY "order", name'
+                ),
+                {"assembly_id": assembly_id},
+            ).all()
+        )
+
+
+def _write_promotion_genes(path, rows: list[tuple[str, str, int, int, str]]) -> None:
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        handle.write("gene_id\tchromosome\tstart\tend\tmutation_feature\n")
+        for gene_id, chromosome, start, end, mutation_feature in rows:
+            handle.write(f"{gene_id}\t{chromosome}\t{start}\t{end}\t{mutation_feature}\n")
+
+
+def test_genes_import_promotes_into_canonical_genes_and_chromosomes(
+    tmp_path, worker_session_factory
+):
+    """ADR-0004: staged module rows reach the canonical read tables."""
+    source = tmp_path / "promote-genes.tsv"
+    _write_promotion_genes(
+        source,
+        [
+            ("G1", "Chr01", 100, 200, "EMS"),
+            ("G2", "Chr01", 300, 500, ""),
+            ("G3", "Chr02", 50, 90, ""),
+        ],
+    )
+    assembly_id = _seed_release(worker_session_factory, release_id=10)
+    _seed_dataset(worker_session_factory, data_set_id=10, release_id=10)
+
+    result = get_adapter("module_tsv").run(
+        ImportContext(
+            import_task_id=10,
+            data_set_id=10,
+            release_id="10",
+            file_key=str(source),
+            module_key="genes",
+            filename=source.name,
+        )
+    )
+
+    assert result.inserted == 3
+    promotion = result.evidence["promotion"]
+    assert promotion["target"] == "genes"
+    assert promotion["promoted_rows"] == 3
+    assert promotion["chromosomes_created"] == 2
+
+    genes = _canonical_genes(worker_session_factory, assembly_id=assembly_id)
+    assert [row[0] for row in genes] == ["G1", "G2", "G3"]
+    first = genes[0]
+    assert first[2] == 100 and first[3] == 200
+    assert first[4] == "+" and first[5] == "protein_coding"
+    assert first[6] == {"mutation_feature": "EMS"}
+    # Provisional chromosome length = the longest observed gene end.
+    assert [(row[0], row[1]) for row in _canonical_chromosomes(
+        worker_session_factory, assembly_id=assembly_id
+    )] == [("Chr01", 500), ("Chr02", 90)]
+
+
+def test_genes_promotion_is_idempotent_and_updates_coordinates(
+    tmp_path, worker_session_factory
+):
+    """A re-import with the same accession upserts; it never duplicates rows."""
+    first_source = tmp_path / "promote-first.tsv"
+    second_source = tmp_path / "promote-second.tsv"
+    _write_promotion_genes(first_source, [("G1", "Chr01", 100, 200, "")])
+    _write_promotion_genes(second_source, [("G1", "Chr01", 150, 400, "")])
+    assembly_id = _seed_release(worker_session_factory, release_id=11)
+    _seed_dataset(worker_session_factory, data_set_id=11, release_id=11)
+
+    for index, source in enumerate((first_source, second_source)):
+        get_adapter("module_tsv").run(
+            ImportContext(
+                import_task_id=11 + index,
+                data_set_id=11,
+                release_id="11",
+                file_key=str(source),
+                module_key="genes",
+                filename=source.name,
+            )
+        )
+
+    genes = _canonical_genes(worker_session_factory, assembly_id=assembly_id)
+    assert len(genes) == 1
+    assert genes[0][2] == 150 and genes[0][3] == 400
+    # Staging is replaced by the retry as well, not appended to.
+    assert _module_row_count(worker_session_factory, release_id=11) == 1
+
+
+def test_genes_import_without_assembly_fails_closed(tmp_path, worker_session_factory):
+    """Promotion cannot guess an assembly; the whole import rolls back."""
+    source = tmp_path / "no-assembly.tsv"
+    _write_promotion_genes(source, [("G1", "Chr01", 100, 200, "")])
+    with worker_session_factory.begin() as session:
+        session.execute(
+            text(
+                "INSERT INTO releases (id, name, version, status) "
+                "VALUES (12, 'release without assembly', 'no-asm-12', "
+                "CAST('draft' AS release_status_enum))"
+            )
+        )
+    _seed_dataset(worker_session_factory, data_set_id=12, release_id=12)
+
+    with pytest.raises(RuntimeError, match="has no assembly"):
+        get_adapter("module_tsv").run(
+            ImportContext(
+                import_task_id=12,
+                data_set_id=12,
+                release_id="12",
+                file_key=str(source),
+                module_key="genes",
+                filename=source.name,
+            )
+        )
+
+    # The staging write rolled back with the promotion failure.
+    assert _module_row_count(worker_session_factory, release_id=12) == 0
+
+
+def test_unmapped_module_key_is_rejected_by_promotion(worker_session_factory) -> None:
+    from soymutdb_worker.tasks.module_promotion import PromotionError, promote_module_rows
+
+    _seed_release(worker_session_factory, release_id=13)
+    with worker_session_factory() as session:
+        with pytest.raises(PromotionError, match="no canonical promotion target"):
+            promote_module_rows(session, module_key="pathways", release_id=13)
+
+
+def test_promoted_genes_follow_portal_release_visibility(
+    tmp_path, worker_session_factory
+):
+    """Promoted genes are joined through assemblies.release_id like the portal.
+
+    `ReleaseContext` resolves only PUBLISHED releases, and `GeneService` joins
+    genes via `Assembly.release_id`. This mirrors both conditions: a draft
+    release's promoted rows are invisible, publishing the release exposes them.
+    """
+    source = tmp_path / "visibility-genes.tsv"
+    _write_promotion_genes(source, [("G1", "Chr01", 100, 200, "")])
+    assembly_id = _seed_release(worker_session_factory, release_id=14)
+    _seed_dataset(worker_session_factory, data_set_id=14, release_id=14)
+    get_adapter("module_tsv").run(
+        ImportContext(
+            import_task_id=14,
+            data_set_id=14,
+            release_id="14",
+            file_key=str(source),
+            module_key="genes",
+            filename=source.name,
+        )
+    )
+
+    def portal_rows(session) -> list[str]:
+        return [
+            str(row[0])
+            for row in session.execute(
+                text(
+                    "SELECT g.accession FROM genes g "
+                    "JOIN assemblies a ON g.assembly_id = a.id "
+                    "JOIN releases r ON a.release_id = r.id "
+                    "WHERE a.release_id = :release_id "
+                    "AND r.status::text = 'published' "
+                    "AND g.accession = 'G1'"
+                ),
+                {"release_id": 14},
+            ).all()
+        ]
+
+    with worker_session_factory() as session:
+        assert portal_rows(session) == []
+        session.execute(
+            text(
+                "UPDATE releases SET status = "
+                "CAST('published' AS release_status_enum) WHERE id = 14"
+            )
+        )
+        session.commit()
+        assert portal_rows(session) == ["G1"]
+    assert _canonical_genes(worker_session_factory, assembly_id=assembly_id)

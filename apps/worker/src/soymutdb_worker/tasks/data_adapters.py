@@ -380,6 +380,15 @@ class ModuleTsvAdapter(_TextAdapter):
                     + (f" (+{len(diagnostics) - 5} more)" if len(diagnostics) > 5 else "")
                 )
 
+            # ADR-0004: promotion runs before the data set is marked ready, in
+            # the same transaction, so "staged but not promoted" cannot be
+            # committed. An unmapped module_key fails the import closed.
+            from .module_promotion import promote_module_rows
+
+            promotion = promote_module_rows(
+                session, module_key=context.module_key, release_id=release_id
+            )
+
             session.execute(
                 data_sets.update()
                 .where(data_sets.c.id == context.data_set_id)
@@ -394,6 +403,7 @@ class ModuleTsvAdapter(_TextAdapter):
                         "rows_seen": rows_seen,
                         "rows_inserted": inserted,
                         "rows_skipped": skipped,
+                        "promotion": promotion.as_evidence(),
                     },
                     manifest={
                         "module_key": context.module_key,
@@ -402,6 +412,7 @@ class ModuleTsvAdapter(_TextAdapter):
                         "checksum": checksum,
                         "checksum_verified": checksum_verified,
                         "row_count": rows_seen,
+                        "promotion": promotion.as_evidence(),
                     },
                 )
             )
@@ -421,6 +432,7 @@ class ModuleTsvAdapter(_TextAdapter):
                 "rows_skipped": skipped,
                 "batch_size": batch_size,
                 "on_conflict": "replace",
+                "promotion": promotion.as_evidence(),
             },
         )
 

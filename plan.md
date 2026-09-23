@@ -76,6 +76,32 @@ GitHub Actions 为当前主 gate）。
 
 沙箱注意：构建需 `GOMAXPROCS=2 RAYON_NUM_THREADS=1`，turbo 需 `--concurrency=1`（否则 esbuild/tailwind-oxide 出现 `os error 11`）；E2E 是独立 npm 项目，需在 `e2e/` 内 `npm ci`。
 
+### Phase 2 起步：genes canonical promotion（2026-09-23）
+
+ADR-0004 要求的 “staging → canonical 显式 promotion” 首次落地（genes 先行）：
+
+- 新增 `apps/worker/src/soymutdb_worker/tasks/module_promotion.py`：在 module_tsv
+  导入事务内（staging 写完、data_set 标 ready 之前）执行 promotion；失败即回滚整个导入，
+  因此“已入 staging 但未 promotion”不可能被提交。
+- 映射表 `PROMOTION_TARGETS = {"genes": "genes"}`；未映射 module_key fail closed。
+- assembly 解析：`releases.assembly_id` pin，否则要求 release 恰好拥有 1 条 assembly；
+  0 或多条 fail closed。
+- chromosome 缺失时用观测到的最大 gene end 作为临时长度，只增不减；
+  genes 按 `(assembly_id, accession)` upsert，`strand='+'`，`mutation_feature` 存入
+  `genes.attributes`。
+- 空 staging 不删除 canonical；重试幂等（staging 先清后写 + upsert）。
+- ADR-0004 追加 implementation amendment（state/consumer/retention/retry/schema 五问）。
+
+证据（真实 PostgreSQL 16，mamba 实例）：
+
+- `apps/worker/tests/test_module_tsv_postgres_integration.py` → **8 passed**：
+  promotion 字段/坐标/attributes、幂等坐标更新、无 assembly fail-closed、
+  未映射模块 fail-closed、draft/published 可见性契约。
+- `test_data_adapters.py` + `test_module_schema_limits.py` → 73 passed, 1 skipped。
+
+Phase 2 未完：其它 scientific modules 的 promotion 映射、retry/crash matrix 扩展、
+P2-6 capability reopen 逐个评审。
+
 ### 阻塞 / 未关闭
 
 - GitHub artifact 上传：已压缩 `pages-demo-dist`、移除无消费者的 dist 上传、缩短证据保留期；等待配额重算（6–12h）后应恢复

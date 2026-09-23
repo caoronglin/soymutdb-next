@@ -400,7 +400,24 @@ def test_module_tsv_run_persists_the_streamed_checksum_not_the_caller_value(
     tmp_path, monkeypatch
 ):
     """The durable evidence written by a module import is source-derived."""
+    from soymutdb_worker.tasks import module_promotion
     from soymutdb_worker.utils import db as worker_db
+
+    # The unit test drives the adapter against a fake session; canonical
+    # promotion is real SQL and is covered by the PostgreSQL integration suite
+    # (test_module_tsv_postgres_integration.py). Stub it here so this test stays
+    # scoped to the checksum evidence it asserts.
+    monkeypatch.setattr(
+        module_promotion,
+        "promote_module_rows",
+        lambda session, *, module_key, release_id: module_promotion.PromotionResult(
+            module_key=module_key,
+            target="genes",
+            promoted_rows=0,
+            chromosomes_created=0,
+            chromosomes_extended=0,
+        ),
+    )
 
     content = b"gene_id\tchromosome\tstart\tend\nG1\tChr01\t1\t9\n"
     source = tmp_path / "genes.tsv"
