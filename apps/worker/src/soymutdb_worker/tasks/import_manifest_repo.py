@@ -12,7 +12,10 @@ the import protocol needs and never creates schema (migrations own the table).
 
 from __future__ import annotations
 
+import hashlib
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 
 from soymutdb_import_protocol import (
@@ -21,7 +24,7 @@ from soymutdb_import_protocol import (
     compute_import_fingerprint,
     is_portal_visible_status,
 )
-from sqlalchemy import select, update
+from sqlalchemy import select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -57,10 +60,6 @@ _FINGERPRINT_FIELDS = (
     "normalization_version",
     "config_hash",
 )
-
-
-def _fingerprint_for(fields: dict) -> str:
-    return compute_import_fingerprint(**{name: fields[name] for name in _FINGERPRINT_FIELDS})
 
 
 def _fingerprint_for(fields: dict) -> str:
@@ -104,6 +103,55 @@ def start_or_resume(
     row = _find_by_fingerprint(session, fingerprint)
     assert row is not None  # just inserted
     return row, True
+
+
+# PostgreSQL advisory-lock namespaces are signed 32-bit integers. The
+# task-level fence in ingest.py owns its own namespace; this one serializes
+# different Celery deliveries that share a SEMANTIC FINGERPRINT (ADR-0005):
+# the same logical import must have at most one active writer/finalizer, and
+# "Celery usually does not redeliver" is not a proof.
+MANIFEST_LOCK_NAMESPACE = 0x494D5032
+
+
+def _manifest_lock_key(fingerprint: str) -> int:
+    digest = hashlib.sha256(fingerprint.encode("utf-8")).digest()
+    return int.from_bytes(digest[:4], "big", signed=False) - 2**31
+
+
+@contextmanager
+def manifest_lock(session: Session, fingerprint: str) -> Iterator[None]:
+    """Hold the per-fingerprint session advisory lock around an import.
+
+    ``pg_advisory_lock`` blocks until the key is free: a second worker waits for
+    the first finalize, then re-reads the manifest and sees PUBLISHED. The lock
+    is held by the PostgreSQL session, so a worker that dies releases it even if
+    it never reaches the unlock (the failure mode is a stuck import only while
+    the connection is alive, never a permanently wedged fingerprint).
+
+    The finally-block rolls back before unlocking: if the critical section left
+    an aborted transaction, executing the unlock statement on it would fail and
+    the lock would outlive the function.
+    """
+    key = _manifest_lock_key(fingerprint)
+    parameters = {"namespace": MANIFEST_LOCK_NAMESPACE, "key": key}
+    session.execute(
+        text("SELECT pg_advisory_lock(:namespace, :key)"), parameters
+    )
+    try:
+        yield
+    finally:
+        try:
+            session.rollback()
+        except Exception:  # noqa: BLE001 - never mask the unlock attempt
+            pass
+        unlocked = session.execute(
+            text("SELECT pg_advisory_unlock(:namespace, :key)"), parameters
+        ).scalar_one()
+        session.commit()
+        if not unlocked:
+            raise RuntimeError(
+                f"advisory lock for fingerprint {fingerprint[:12]}… was not owned at release"
+            )
 
 
 def transition(

@@ -48,6 +48,7 @@ from .import_manifest_repo import (
     get as get_manifest,
 )
 from .import_manifest_repo import (
+    manifest_lock,
     mark_failed,
     record_counts,
     start_or_resume,
@@ -55,6 +56,7 @@ from .import_manifest_repo import (
 )
 from .variant_finalize import (
     BASE_COLUMNS,
+    ConflictingVariantRowsError,
     clear_staging,
     finalize_release,
     list_partitions,
@@ -310,23 +312,24 @@ def get_clickhouse_client() -> Client:
 
 def compute_variant_id(
     release_id: str,
-    file_key: str,
     chromosome: str,
     position: int,
     ref: str,
     alt: str,
 ) -> int:
-    """Compute a deterministic variant ID.
+    """Compute a deterministic variant ID from stable semantic facts.
 
-    The ID is derived from a stable SHA-256 hash of
-    ``release_id + file_key + chromosome + position + ref + alt``.
-    Re-importing the same file produces the same IDs, but the current
-    ``MergeTree`` target does not enforce uniqueness or replace existing rows.
+    The identity is derived from ``release_id + chromosome + position + ref +
+    alt`` only. The uploaded object key is deliberately NOT an input: the
+    manifest fingerprint ignores it so a retry can resume the same logical
+    import (ADR-0005), and the per-variant identity must agree with that —
+    otherwise the same bytes retried under a new object key would mint new
+    variant ids and publish duplicate facts (review R1 / plan §10).
 
     This replaces the non-idempotent ``variant_id_counter`` from the quartz
     reference; durable import idempotency remains a separate requirement.
     """
-    key = f"{release_id}|{file_key}|{chromosome}|{position}|{ref}|{alt}"
+    key = f"{release_id}|{chromosome}|{position}|{ref}|{alt}"
     digest = hashlib.sha256(key.encode("utf-8")).digest()
     # Use the first 8 bytes as a signed 64-bit integer
     return int.from_bytes(digest[:8], byteorder="big", signed=False)
@@ -552,7 +555,12 @@ def _resolve_release_assembly(
 def _iter_vcf_base_rows(
     local_vcf_path: str, release_key: str, assembly_key: str, file_key: str
 ) -> Iterator[tuple]:
-    """Yield canonical ``variant_facts`` rows (BASE_COLUMNS order) from a VCF."""
+    """Yield canonical ``variant_facts`` rows (BASE_COLUMNS order) from a VCF.
+
+    ``file_key`` identifies the import for logging/context only; variant
+    identity is computed from the stable facts (see ``compute_variant_id``), so
+    a retry under a different object key reproduces the same ids.
+    """
     from cyvcf2 import VCF
 
     vcf = VCF(local_vcf_path)
@@ -601,7 +609,7 @@ def _iter_vcf_base_rows(
                 vtype, vsubtype = determine_variant_type(ref, str(alt))
                 row = {
                     "variant_id": compute_variant_id(
-                        release_key, file_key, chrom, pos, ref, str(alt)
+                        release_key, chrom, pos, ref, str(alt)
                     ),
                     "release_key": release_key,
                     "assembly_key": assembly_key,
@@ -651,6 +659,10 @@ def _import_vcf_via_protocol(
     Idempotent by fingerprint: a PUBLISHED import returns without re-writing; a
     FAILED or interrupted import resumes from its manifest and re-run finalize
     is safe. A row-count mismatch marks the import FAILED and publishes nothing.
+
+    Same-fingerprint concurrency is serialized by a PostgreSQL advisory lock
+    (``manifest_lock``): the second delivery waits, re-reads the manifest, and
+    observes PUBLISHED instead of racing the first writer's staging/finalize.
     """
     with get_db() as session:
         manifest, _created = start_or_resume(
@@ -665,61 +677,102 @@ def _import_vcf_via_protocol(
         )
         import_id = manifest.import_id
         if manifest.status == ImportManifestStatus.PUBLISHED.value:
-            written = get_manifest(session, import_id)
+            return _published_result(session, import_id)
+
+        with manifest_lock(session, manifest.fingerprint):
+            # A concurrent delivery may have finished while this one waited for
+            # the lock; re-read before touching staging.
+            current = get_manifest(session, import_id)
+            if current is None:  # pragma: no cover - the row cannot vanish here
+                raise RuntimeError(f"import manifest {import_id} disappeared")
+            manifest = current
+            if manifest.status == ImportManifestStatus.PUBLISHED.value:
+                return _published_result(session, import_id)
+
+            if manifest.status == ImportManifestStatus.FAILED.value:
+                manifest = transition(session, manifest, ImportManifestStatus.CREATED)
+            if manifest.status == ImportManifestStatus.CREATED.value:
+                manifest = transition(session, manifest, ImportManifestStatus.PARSING)
+
+            # Recovery matrix (review R1). Every state a crash can leave behind
+            # resumes without an illegal transition:
+            #   CREATED / PARSING / WRITING / VERIFYING -> restage from scratch
+            #   (staging is private and cleared first), then advance only the
+            #   transitions not yet reached. A crash during finalize leaves
+            #   VERIFYING, which resumes here and goes straight to PUBLISHED —
+            #   never VERIFYING -> VERIFYING (rejected by the shared state machine).
+            clear_staging(engine, import_id)
+            total = 0
+            batch: list[tuple] = []
+            batch_index = 0
+            for row in _iter_vcf_base_rows(
+                local_vcf_path, release_id, assembly_key, file_key
+            ):
+                batch.append(row)
+                total += 1
+                if len(batch) >= batch_size:
+                    stage_batch(
+                        engine, import_id=import_id, batch_index=batch_index, base_rows=batch
+                    )
+                    batch_index += 1
+                    batch = []
+            if batch:
+                stage_batch(engine, import_id=import_id, batch_index=batch_index, base_rows=batch)
+
+            if manifest.status == ImportManifestStatus.PARSING.value:
+                manifest = transition(session, manifest, ImportManifestStatus.WRITING)
+
+            if not verify_against_expected(engine, import_id, total):
+                mark_failed(session, manifest, "row_count_mismatch")
+                return {
+                    "status": "failed",
+                    "reason": "row_count_mismatch",
+                    "import_id": import_id,
+                    "expected_rows": total,
+                }
+
+            record_counts(session, manifest, written_rows=total)
+            if manifest.status == ImportManifestStatus.WRITING.value:
+                manifest = transition(session, manifest, ImportManifestStatus.VERIFYING)
+            try:
+                finalize_release(
+                    engine,
+                    release_key=release_id,
+                    import_id=import_id,
+                    partitions=list_partitions(engine, import_id),
+                )
+            except ConflictingVariantRowsError as error:
+                # Fail closed with diagnostics: one variant_id carrying two
+                # factual payloads is ambiguous, never silently resolved
+                # (review R1 / plan §13).
+                mark_failed(session, manifest, "conflicting_variant_rows")
+                return {
+                    "status": "failed",
+                    "reason": "conflicting_variant_rows",
+                    "import_id": import_id,
+                    "diagnostics": [
+                        {"variant_id": variant_id, "payloads": payloads}
+                        for variant_id, payloads in error.conflicts
+                    ],
+                }
+            manifest = transition(session, manifest, ImportManifestStatus.PUBLISHED)
             return {
                 "status": "published",
                 "import_id": import_id,
-                "written_rows": (written or {})["written_rows"] or 0,
-                "idempotent": True,
-            }
-        if manifest.status == ImportManifestStatus.FAILED.value:
-            manifest = transition(session, manifest, ImportManifestStatus.CREATED)
-        if manifest.status == ImportManifestStatus.CREATED.value:
-            manifest = transition(session, manifest, ImportManifestStatus.PARSING)
-
-        clear_staging(engine, import_id)
-        total = 0
-        batch: list[tuple] = []
-        batch_index = 0
-        for row in _iter_vcf_base_rows(local_vcf_path, release_id, assembly_key, file_key):
-            batch.append(row)
-            total += 1
-            if len(batch) >= batch_size:
-                stage_batch(
-                    engine, import_id=import_id, batch_index=batch_index, base_rows=batch
-                )
-                batch_index += 1
-                batch = []
-        if batch:
-            stage_batch(engine, import_id=import_id, batch_index=batch_index, base_rows=batch)
-
-        if manifest.status == ImportManifestStatus.PARSING.value:
-            manifest = transition(session, manifest, ImportManifestStatus.WRITING)
-
-        if not verify_against_expected(engine, import_id, total):
-            mark_failed(session, manifest, "row_count_mismatch")
-            return {
-                "status": "failed",
-                "reason": "row_count_mismatch",
-                "import_id": import_id,
-                "expected_rows": total,
+                "written_rows": total,
+                "idempotent": False,
             }
 
-        record_counts(session, manifest, written_rows=total)
-        manifest = transition(session, manifest, ImportManifestStatus.VERIFYING)
-        finalize_release(
-            engine,
-            release_key=release_id,
-            import_id=import_id,
-            partitions=list_partitions(engine, import_id),
-        )
-        manifest = transition(session, manifest, ImportManifestStatus.PUBLISHED)
-        return {
-            "status": "published",
-            "import_id": import_id,
-            "written_rows": total,
-            "idempotent": False,
-        }
+
+def _published_result(session, import_id: str) -> dict:
+    """The idempotent response for an already-published logical import."""
+    written = get_manifest(session, import_id)
+    return {
+        "status": "published",
+        "import_id": import_id,
+        "written_rows": (written or {})["written_rows"] or 0,
+        "idempotent": True,
+    }
 
 
 # ---------------------------------------------------------------------------

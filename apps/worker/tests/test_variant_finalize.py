@@ -187,3 +187,127 @@ def test_different_release_for_same_chromosome_coexist(engine: ChdbEngine) -> No
         engine, release_key="RB", import_id="imp-b", partitions=[("RB", "Chr01")]
     )
     assert engine.scalar("SELECT count() FROM variant_facts") == 2
+
+
+def test_incremental_import_preserves_untouched_chromosome_summaries(
+    engine: ChdbEngine,
+) -> None:
+    """A second import touching one chromosome must not erase the others.
+
+    Regression for the review finding on ``finalize_release``: several summaries
+    (gene_impact_summary, release_dashboard, substitution_spectrum) have no
+    chromosome column, so a per-partition summary purge is impossible. Purging
+    the whole release and rebuilding only the touched partition used to delete
+    the untouched chromosome's summaries while its base rows stayed. The
+    release-complete rebuild carries those rows through staging instead.
+    """
+    vf.stage_batch(
+        engine,
+        import_id="imp-inc-1",
+        batch_index=0,
+        base_rows=[_base_row(1, "RINC", "Chr01", 100)],
+    )
+    vf.finalize_release(
+        engine,
+        release_key="RINC",
+        import_id="imp-inc-1",
+        partitions=[("RINC", "Chr01")],
+    )
+    assert _summary_cnt(engine, "RINC") == 1
+
+    vf.stage_batch(
+        engine,
+        import_id="imp-inc-2",
+        batch_index=0,
+        base_rows=[_base_row(2, "RINC", "Chr02", 200)],
+    )
+    vf.finalize_release(
+        engine,
+        release_key="RINC",
+        import_id="imp-inc-2",
+        partitions=[("RINC", "Chr02")],
+    )
+
+    # Both chromosomes are in the base AND both are counted in the summaries.
+    assert (
+        engine.scalar(
+            "SELECT count() FROM variant_facts WHERE release_key = 'RINC'"
+        )
+        == 2
+    )
+    assert _summary_cnt(engine, "RINC") == 2
+    assert engine.scalar(
+        "SELECT count() FROM chromosome_summary FINAL WHERE release_key = 'RINC'"
+    ) == 2
+
+
+def test_conflicting_payload_for_one_variant_fails_closed(engine: ChdbEngine) -> None:
+    import_id = "imp-conflict"
+    vf.stage_batch(
+        engine,
+        import_id=import_id,
+        batch_index=0,
+        base_rows=[
+            _base_row(1, "RC", "Chr01", 100, impact="MODERATE"),
+            _base_row(1, "RC", "Chr01", 100, impact="HIGH"),
+        ],
+    )
+
+    with pytest.raises(vf.ConflictingVariantRowsError) as raised:
+        vf.finalize_release(
+            engine, release_key="RC", import_id=import_id, partitions=[("RC", "Chr01")]
+        )
+    assert raised.value.conflicts == [(1, 2)]
+    # Fail closed: nothing was published.
+    assert engine.scalar("SELECT count() FROM variant_facts") == 0
+    assert engine.scalar("SELECT count() FROM gene_impact_summary") == 0
+
+
+def test_identical_duplicate_rows_are_deterministically_deduplicated(
+    engine: ChdbEngine,
+) -> None:
+    import_id = "imp-identical"
+    row = _base_row(1, "RI", "Chr01", 100)
+    vf.stage_batch(engine, import_id=import_id, batch_index=0, base_rows=[row])
+    vf.stage_batch(engine, import_id=import_id, batch_index=1, base_rows=[row])
+    vf.finalize_release(
+        engine, release_key="RI", import_id=import_id, partitions=[("RI", "Chr01")]
+    )
+    assert engine.scalar("SELECT count() FROM variant_facts") == 1
+    assert _summary_cnt(engine, "RI") == 1
+
+
+def test_upload_derived_values_are_bound_not_interpolated(engine: ChdbEngine) -> None:
+    """A quote/SQL-fragment chromosome must not alter another release's rows."""
+    engine.insert_rows(
+        "variant_facts",
+        [_base_row(1, "SAFE", "Chr01", 100, gene_sid=11)],
+        list(vf.BASE_COLUMNS),
+    )
+    malicious_release = "R' OR '1'='1"
+    malicious_chromosome = "Chr01') OR ('1'='1"
+    vf.stage_batch(
+        engine,
+        import_id="imp-inject",
+        batch_index=0,
+        base_rows=[_base_row(2, malicious_release, malicious_chromosome, 100, gene_sid=12)],
+    )
+    vf.finalize_release(
+        engine,
+        release_key=malicious_release,
+        import_id="imp-inject",
+        partitions=[(malicious_release, malicious_chromosome)],
+    )
+
+    # The safe release is untouched; the malicious strings round-trip as data.
+    assert (
+        engine.scalar("SELECT count() FROM variant_facts WHERE release_key = 'SAFE'")
+        == 1
+    )
+    assert (
+        engine.scalar(
+            "SELECT count() FROM variant_facts WHERE release_key = {rk:String}",
+            params={"rk": malicious_release},
+        )
+        == 1
+    )

@@ -82,8 +82,21 @@ def test_vcf_rows_are_extracted_in_canonical_order(tmp_path: Path) -> None:
         index = BASE_COLUMNS.index
         assert row[index("release_key")] == "REL"
         assert row[index("assembly_key")] == "asm-v5"
-    first_variant_id = compute_variant_id("REL", "fk", "Chr01", 100, "A", "G")
+    first_variant_id = compute_variant_id("REL", "Chr01", 100, "A", "G")
     assert rows[0][BASE_COLUMNS.index("variant_id")] == first_variant_id
+
+
+def test_variant_identity_ignores_the_object_key(tmp_path: Path) -> None:
+    """Same bytes retried under a new object key must keep the same ids.
+
+    The manifest fingerprint omits the object key so a retry resumes the same
+    logical import; if variant ids changed with the key, the resumed import
+    would publish duplicate facts under new ids (review R1 / plan §10).
+    """
+    path = _write_vcf(tmp_path)
+    first = list(ingest._iter_vcf_base_rows(path, "REL", "asm-v5", "key-one"))
+    second = list(ingest._iter_vcf_base_rows(path, "REL", "asm-v5", "key-two"))
+    assert first == second
 
 
 @pytest.fixture(scope="module")
@@ -182,4 +195,85 @@ def test_protocol_driven_import_end_to_end(
     )
     assert again["idempotent"] is True
     assert clickhouse.scalar("SELECT count() FROM variant_facts") == 2
+
+    # Crash-recovery matrix: a worker killed after entering VERIFYING resumes
+    # that row without an illegal VERIFYING -> VERIFYING transition.
+    with factory() as session:
+        session.execute(
+            text(
+                "UPDATE import_manifests SET status = 'verifying' "
+                "WHERE source_sha256 = :sha"
+            ),
+            {"sha": source_sha256},
+        )
+        session.commit()
+    recovered = ingest._import_vcf_via_protocol(
+        clickhouse,
+        release_id=release_version,
+        assembly_key=assembly_name,
+        local_vcf_path=_write_vcf(tmp_path),
+        file_key=f"fk-{run}-retry",
+        batch_size=1000,
+        source_sha256=source_sha256,
+        release_id_int=release_id,
+        assembly_id_int=assembly_id,
+    )
+    assert recovered["status"] == "published"
+    assert recovered["idempotent"] is False
+    assert clickhouse.scalar("SELECT count() FROM variant_facts") == 2
     engine.dispose()
+
+
+def test_vcf_adapter_routes_through_the_adr0005_protocol(monkeypatch) -> None:
+    """The admin/Celery adapter path must reach the real protocol, not a stub.
+
+    Review finding: run_import_adapter dispatched kind=vcf to an adapter whose
+    run() was an unconditional failure, so enabling the capability would not
+    have imported anything. The adapter now delegates to the protocol task.
+    """
+    from soymutdb_worker.tasks import data_adapters
+
+    calls: dict[str, str] = {}
+
+    def fake_import_vcf(release_id, file_key, assembly_key=""):
+        calls.update(release=release_id, key=file_key, assembly=assembly_key)
+        return {
+            "status": "published",
+            "import_id": "imp-adapter",
+            "written_rows": 7,
+            "idempotent": False,
+        }
+
+    monkeypatch.setattr(ingest, "import_vcf", fake_import_vcf)
+    context = data_adapters.ImportContext(1, 2, "rel-1", "bucket/key.vcf", "asm-v5")
+    result = data_adapters.get_adapter("vcf").run(context)
+
+    assert calls == {"release": "rel-1", "key": "bucket/key.vcf", "assembly": "asm-v5"}
+    assert result.inserted == 7
+    assert result.evidence["import_id"] == "imp-adapter"
+
+
+def test_vcf_adapter_fails_closed_while_the_flag_is_off(monkeypatch) -> None:
+    from soymutdb_worker.tasks import data_adapters
+
+    monkeypatch.delenv("SOYMUTDB_ENABLE_VCF_IMPORT", raising=False)
+    context = data_adapters.ImportContext(1, 2, "rel-1", "bucket/key.vcf", "asm-v5")
+    with pytest.raises(UnsupportedImportError):
+        data_adapters.get_adapter("vcf").run(context)
+
+
+def test_vcf_adapter_raises_when_the_protocol_did_not_publish(monkeypatch) -> None:
+    from soymutdb_worker.tasks import data_adapters
+
+    monkeypatch.setattr(
+        ingest,
+        "import_vcf",
+        lambda *args, **kwargs: {
+            "status": "failed",
+            "reason": "row_count_mismatch",
+            "import_id": "imp-adapter",
+        },
+    )
+    context = data_adapters.ImportContext(1, 2, "rel-1", "bucket/key.vcf", "asm-v5")
+    with pytest.raises(UnsupportedImportError, match="row_count_mismatch"):
+        data_adapters.get_adapter("vcf").run(context)

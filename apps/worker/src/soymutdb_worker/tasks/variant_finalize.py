@@ -82,12 +82,32 @@ def deterministic_batch_id(import_id: str, batch_index: int) -> str:
     return hashlib.sha256(f"{import_id}|{batch_index}".encode()).hexdigest()[:32]
 
 
+class ConflictingVariantRowsError(RuntimeError):
+    """One variant_id carries different factual payloads (review R1 / plan §13).
+
+    Identical duplicate rows are deterministic dedup; a variant_id with two
+    different payloads is ambiguous, so publication fails closed with the
+    offending ids instead of silently keeping one of them.
+    """
+
+    def __init__(self, conflicts: list[tuple[int, int]]) -> None:
+        self.conflicts = conflicts
+        detail = ", ".join(
+            f"{variant_id}({payloads} payloads)" for variant_id, payloads in conflicts
+        )
+        super().__init__(f"conflicting variant_id payloads: {detail}")
+
+
 def clear_staging(engine: ClickHouseEngine, import_id: str) -> None:
     """Remove any staged rows for this import before (re)writing it.
 
     Retries after a mid-write crash must not accumulate duplicate staged rows.
     """
-    engine.execute(f"ALTER TABLE {STAGING_TABLE} DELETE WHERE import_id = '{import_id}'")
+    engine.execute(
+        f"ALTER TABLE {STAGING_TABLE} DELETE WHERE import_id = {{import_id:String}} "
+        f"SETTINGS mutations_sync = 1",
+        params={"import_id": import_id},
+    )
 
 
 def stage_batch(
@@ -109,7 +129,9 @@ def stage_batch(
 def staged_distinct_count(engine: ClickHouseEngine, import_id: str) -> int:
     """Number of DISTINCT logical facts staged for this import."""
     value = engine.scalar(
-        f"SELECT count(DISTINCT variant_id) FROM {STAGING_TABLE} WHERE import_id = '{import_id}'"
+        f"SELECT count(DISTINCT variant_id) FROM {STAGING_TABLE} "
+        f"WHERE import_id = {{import_id:String}}",
+        params={"import_id": import_id},
     )
     return int(value or 0)
 
@@ -126,9 +148,116 @@ def list_partitions(engine: ClickHouseEngine, import_id: str) -> list[tuple[str,
     """Distinct (release_key, chromosome) partitions present in the staged rows."""
     rows = engine.query_rows(
         f"SELECT DISTINCT release_key, chromosome FROM {STAGING_TABLE} "
-        f"WHERE import_id = '{import_id}'"
+        f"WHERE import_id = {{import_id:String}}",
+        params={"import_id": import_id},
     )
     return sorted({(str(r[0]), str(r[1])) for r in rows})
+
+
+def conflicting_variant_ids(
+    engine: ClickHouseEngine, import_id: str, limit: int = 10
+) -> list[tuple[int, int]]:
+    """Variant ids whose staged rows carry more than one factual payload.
+
+    ``uniqExact(tuple(all payload columns))`` counts distinct payloads per
+    variant_id: identical duplicates collapse to one, a changed annotation does
+    not. The finalize gate turns a non-empty result into a hard failure.
+    """
+    payload_columns = tuple(column for column in BASE_COLUMNS if column != "variant_id")
+    tuple_expression = "(" + ", ".join(payload_columns) + ")"
+    rows = engine.query_rows(
+        f"SELECT variant_id, uniqExact({tuple_expression}) AS payloads "
+        f"FROM {STAGING_TABLE} WHERE import_id = {{import_id:String}} "
+        f"GROUP BY variant_id HAVING payloads > 1 "
+        f"ORDER BY variant_id LIMIT {int(limit)}",
+        params={"import_id": import_id},
+    )
+    return [(int(row[0]), int(row[1])) for row in rows]
+
+
+def _release_chromosomes(engine: ClickHouseEngine, release_key: str) -> set[str]:
+    """Chromosomes currently present in the base for one release."""
+    rows = engine.query_rows(
+        f"SELECT DISTINCT chromosome FROM {BASE_TABLE} "
+        f"WHERE release_key = {{release_key:String}}",
+        params={"release_key": release_key},
+    )
+    return {str(row[0]) for row in rows}
+
+
+def _carry_untouched_partitions(
+    engine: ClickHouseEngine,
+    *,
+    release_key: str,
+    import_id: str,
+    touched: set[str],
+) -> None:
+    """Copy the release's untouched base rows into staging before the rebuild.
+
+    Several summaries (gene_impact_summary, release_dashboard,
+    substitution_spectrum) carry no chromosome column, so their rows cannot be
+    purged per partition. Purging the whole release and rebuilding only the
+    touched partitions would therefore delete the summaries of untouched
+    chromosomes while their base rows stay. Carrying those rows into staging
+    first makes the rebuild release-complete: summaries are rebuilt from a base
+    that still contains every chromosome of the release.
+    """
+    columns = ", ".join(BASE_COLUMNS)
+    carry_batch = deterministic_batch_id(import_id, -1)
+    for chromosome in sorted(_release_chromosomes(engine, release_key) - touched):
+        engine.execute(
+            f"INSERT INTO {STAGING_TABLE} ({columns}, import_id, batch_id) "
+            f"SELECT {columns}, {{import_id:String}}, {{batch_id:String}} "
+            f"FROM {BASE_TABLE} "
+            f"WHERE release_key = {{release_key:String}} "
+            f"AND chromosome = {{chromosome:String}}",
+            params={
+                "import_id": import_id,
+                "batch_id": carry_batch,
+                "release_key": release_key,
+                "chromosome": chromosome,
+            },
+        )
+
+
+def _purge_release_summaries(engine: ClickHouseEngine, release_key: str) -> None:
+    """Delete every release-scoped summary row, waiting for each mutation.
+
+    ClickHouse mutations are asynchronous by default: without
+    ``mutations_sync = 1`` the following rebuild races the DELETE and the MV
+    can re-insert over rows that are being removed (review R1 / plan §11).
+    """
+    for summary in RELEASE_SCOPED_SUMMARY_TABLES:
+        engine.execute(
+            f"ALTER TABLE {summary} DELETE WHERE release_key = {{release_key:String}} "
+            f"SETTINGS mutations_sync = 1",
+            params={"release_key": release_key},
+        )
+
+
+def _drop_release_partitions(
+    engine: ClickHouseEngine, *, release_key: str, chromosomes: set[str]
+) -> None:
+    for chromosome in sorted(chromosomes):
+        engine.execute(
+            f"ALTER TABLE {BASE_TABLE} DROP PARTITION "
+            f"({{release_key:String}}, {{chromosome:String}})",
+            params={"release_key": release_key, "chromosome": chromosome},
+        )
+
+
+def _rebuild_base_from_staging(engine: ClickHouseEngine, import_id: str) -> None:
+    """Rewrite the release base rows from the complete (carried) staged set."""
+    columns = ", ".join(BASE_COLUMNS)
+    engine.execute(
+        f"INSERT INTO {BASE_TABLE} ({columns}) "
+        f"SELECT {columns} FROM ("
+        f"  SELECT {columns} FROM {STAGING_TABLE} "
+        f"  WHERE import_id = {{import_id:String}} "
+        f"  GROUP BY {columns}"
+        f")",
+        params={"import_id": import_id},
+    )
 
 
 def finalize_release(
@@ -138,32 +267,32 @@ def finalize_release(
     import_id: str,
     partitions: list[tuple[str, str]],
 ) -> None:
-    """Publish staged rows for ``import_id`` into the base table + summaries.
+    """Publish staged rows for ``import_id`` as a release-consistent rebuild.
 
-    The import's staging rows are treated as the authoritative set for the
-    release's touched (chromosome) partitions. Correctness hinges on ORDER:
+    Publication is a FULL-RELEASE rebuild, not a touched-partition patch:
 
-    1. Purge every release-scoped summary ONCE for this release. Doing this
-       per-partition would delete summaries an earlier partition just rebuilt.
-    2. Drop only the base partitions this import touches.
-    3. Rewrite those partitions from the de-duplicated staged rows; the MVs
-       fire exactly once, repopulating the summaries consistently with the base.
+    1. Fail closed when one variant_id carries conflicting payloads.
+    2. Carry the release's untouched base rows into staging.
+    3. Purge every release-scoped summary (``mutations_sync = 1``).
+    4. Drop all of the release's base partitions (touched + existing).
+    5. Rewrite from the complete staged set; the MVs fire exactly once and
+       rebuild the summaries consistently with the base.
 
-    Re-running is idempotent: the drop discards the previous publish for these
-    partitions and the rewrite reproduces the same base + summary state.
+    Re-running is idempotent: the carry and the staged set deduplicate to the
+    same facts, and step 4 discards the previous publish before step 5
+    reproduces it. All upload-derived values are bound parameters (plan §12).
     """
-    for summary in RELEASE_SCOPED_SUMMARY_TABLES:
-        engine.execute(f"ALTER TABLE {summary} DELETE WHERE release_key = '{release_key}'")
-    for _release, chromosome in partitions:
-        engine.execute(
-            f"ALTER TABLE {BASE_TABLE} DROP PARTITION ('{release_key}','{chromosome}')"
-        )
-    columns = ", ".join(BASE_COLUMNS)
-    engine.execute(
-        f"INSERT INTO {BASE_TABLE} ({columns}) "
-        f"SELECT {columns} FROM ("
-        f"  SELECT {columns} FROM {STAGING_TABLE} "
-        f"  WHERE import_id = '{import_id}'"
-        f"  GROUP BY {columns}"
-        f")"
+    conflicts = conflicting_variant_ids(engine, import_id)
+    if conflicts:
+        raise ConflictingVariantRowsError(conflicts)
+
+    touched = {chromosome for _release, chromosome in partitions}
+    existing = _release_chromosomes(engine, release_key)
+    _carry_untouched_partitions(
+        engine, release_key=release_key, import_id=import_id, touched=touched
     )
+    _purge_release_summaries(engine, release_key)
+    _drop_release_partitions(
+        engine, release_key=release_key, chromosomes=touched | existing
+    )
+    _rebuild_base_from_staging(engine, import_id)

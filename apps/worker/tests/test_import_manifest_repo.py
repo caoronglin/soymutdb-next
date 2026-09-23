@@ -16,6 +16,8 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import threading
+import time
 import uuid
 from collections.abc import Iterator
 from pathlib import Path
@@ -30,6 +32,7 @@ from soymutdb_worker.tasks.import_manifest_repo import (
     InvalidManifestTransition,
     get,
     is_published,
+    manifest_lock,
     record_counts,
     start_or_resume,
     transition,
@@ -150,6 +153,38 @@ def test_illegal_transition_is_rejected(session_factory) -> None:
         manifest, _ = start_or_resume(session, import_id=f"{RUN}-w5", **_fields("e"))
         with pytest.raises(InvalidManifestTransition):
             transition(session, manifest, ImportManifestStatus.PUBLISHED)
+
+
+def test_manifest_lock_serializes_same_fingerprint_deliveries(session_factory) -> None:
+    """A second delivery of the same fingerprint waits, then proceeds.
+
+    The lock is what makes "at most one active writer/finalizer per semantic
+    fingerprint" true instead of hoping Celery will not redeliver (review R1 /
+    plan G3.3).
+    """
+    with session_factory() as first:
+        manifest, _ = start_or_resume(first, import_id=f"{RUN}-lock", **_fields("lock"))
+        fingerprint = manifest.fingerprint
+        order: list[str] = []
+        started = threading.Event()
+
+        def contender() -> None:
+            with session_factory() as second:
+                started.set()
+                with manifest_lock(second, fingerprint):
+                    order.append("second")
+
+        with manifest_lock(first, fingerprint):
+            thread = threading.Thread(target=contender)
+            thread.start()
+            assert started.wait(timeout=10), "contender never started"
+            # The contender is now blocked on pg_advisory_lock; releasing the
+            # first holder must let it through afterwards.
+            time.sleep(0.5)
+            order.append("first")
+        thread.join(timeout=10)
+        assert not thread.is_alive(), "contender did not acquire the lock after release"
+        assert order == ["first", "second"]
 
 
 def test_worker_core_table_matches_migrated_schema(session_factory) -> None:

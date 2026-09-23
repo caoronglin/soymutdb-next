@@ -145,8 +145,9 @@ class _FakeClient:
         self.commands: list[str] = []
         self.inserts: list[tuple] = []
 
-    def command(self, sql: str):  # noqa: D401
+    def command(self, sql: str, parameters=None):  # noqa: D401
         self.commands.append(sql)
+        self._command_params = parameters
         return None
 
     def insert(self, table, data, column_names):  # noqa: D401
@@ -167,9 +168,13 @@ def test_http_engine_adapter_maps_the_port() -> None:
 
     client = _FakeClient()
     engine = HttpClickHouseEngine(client)
-    engine.execute("ALTER TABLE t DROP PARTITION ('R1')")
+    engine.execute(
+        "ALTER TABLE t DROP PARTITION ({rk:String})", params={"rk": "R1"}
+    )
     engine.insert_rows("t", [(1, "a"), (2, "b")], ["id", "k"])
     assert engine.scalar("SELECT count() FROM t", {"x": "y"}) == 42
-    assert client.commands == ["ALTER TABLE t DROP PARTITION ('R1')"]
+    assert client.commands == ["ALTER TABLE t DROP PARTITION ({rk:String})"]
+    # The adapter forwards bound parameters instead of interpolating values.
+    assert client._command_params == {"rk": "R1"}
     assert client.inserts == [("t", [(1, "a"), (2, "b")], ["id", "k"])]
     assert client._params == {"x": "y"}

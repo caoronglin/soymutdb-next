@@ -144,10 +144,38 @@ class VcfAdapter:
     def validate(self, context):
         return {"file": context.file_key}
 
-    def run(self, context, *, progress=None):
-        raise UnsupportedImportError(
-            "vcf import is disabled: durable persistence requires an idempotent "
-            "staging writer and atomic release finalize"
+    def run(self, context, *, progress=None) -> AdapterResult:
+        """Drive the ADR-0005 staging/verify/finalize protocol for a VCF.
+
+        The durable writer lives in ingest.py, which imports this module at
+        load time, so the import is deferred to avoid a module cycle. The
+        protocol keeps its own feature gate (SOYMUTDB_ENABLE_VCF_IMPORT,
+        default OFF): while the gate is off the import raises the same
+        UnsupportedImportError it did before, so the capability remains
+        fail-closed (P1-2). With the gate on, this is the real production path
+        — enabling the flag is what requires real-ClickHouse acceptance.
+        """
+        from .ingest import import_vcf
+
+        _progress(progress, progress=5)
+        result = import_vcf(context.release_id, context.file_key, context.assembly or "")
+        if result.get("status") != "published":
+            raise UnsupportedImportError(
+                "vcf import did not publish: "
+                f"{result.get('reason', 'unknown')} "
+                f"(import_id={result.get('import_id')})"
+            )
+        written = int(result.get("written_rows") or 0)
+        _progress(progress, processed=written, total=written, progress=100)
+        return AdapterResult(
+            records=written,
+            inserted=written,
+            skipped=0,
+            evidence={
+                "import_id": result.get("import_id"),
+                "written_rows": written,
+                "idempotent": bool(result.get("idempotent")),
+            },
         )
 
 

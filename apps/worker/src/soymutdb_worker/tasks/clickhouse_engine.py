@@ -24,8 +24,13 @@ from typing import Any, Protocol, runtime_checkable
 class ClickHouseEngine(Protocol):
     """The minimal imperative surface the import finalize protocol relies on."""
 
-    def execute(self, sql: str) -> Any:
-        """Run a DDL/DML statement (CREATE / ALTER / INSERT / DELETE)."""
+    def execute(self, sql: str, params: dict[str, Any] | None = None) -> Any:
+        """Run a DDL/DML statement (CREATE / ALTER / INSERT / DELETE).
+
+        ``params`` binds ClickHouse ``{name:Type}`` placeholders. Input derived
+        from uploads (release keys, chromosomes) MUST go through it: string
+        interpolation into DDL is an injection vector (review R1 / plan §12).
+        """
         ...
 
     def insert_rows(
@@ -54,8 +59,8 @@ class HttpClickHouseEngine:
     def __init__(self, client: Any) -> None:
         self._client = client
 
-    def execute(self, sql: str) -> Any:
-        return self._client.command(sql)
+    def execute(self, sql: str, params: dict[str, Any] | None = None) -> Any:
+        return self._client.command(sql, parameters=params or {})
 
     def insert_rows(
         self, table: str, rows: list[tuple], column_names: list[str]
@@ -110,8 +115,8 @@ class ChdbEngine:
 
         return cls(Session(path=path))
 
-    def execute(self, sql: str) -> Any:
-        self._session.query(sql, "CSV")
+    def execute(self, sql: str, params: dict[str, Any] | None = None) -> Any:
+        self._session.query(sql, "CSV", params=params or {})
         return None
 
     def insert_rows(
