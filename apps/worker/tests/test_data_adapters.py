@@ -119,8 +119,10 @@ def test_registry_contains_only_approved_types():
     )
 
 
-@pytest.mark.parametrize("kind", ["fasta", "gff3", "vcf", "blast_db"])
+@pytest.mark.parametrize("kind", ["fasta", "gff3", "blast_db"])
 def test_adapter_without_durable_writer_fails_closed(kind, tmp_path):
+    # vcf is no longer in this set: it has a durable writer behind the ADR-0005
+    # protocol (flag-gated OFF), covered by test_vcf_import.py.
     path = tmp_path / f"input-{kind}.txt"
     path.write_text(">chr1\nACGT\n")
 
