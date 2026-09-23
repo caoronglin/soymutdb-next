@@ -15,10 +15,11 @@ describe("deriveStaticRouteEntries", () => {
     const entries = deriveStaticRouteEntries(PORTAL_ROUTES, "external");
     const paths = entries.map((entry) => entry.path);
 
-    expect(paths).toEqual(["/", "/downloads", "/mutants", "/search", "/variants"]);
+    expect(paths).toEqual(["/", "/downloads", "/mutants", "/news", "/search", "/variants"]);
     // Dynamic detail routes render from parameters; they never get a document.
     expect(paths).not.toContain("/genes/:geneId");
     expect(paths).not.toContain("/mutants/:publicId");
+    expect(paths).not.toContain("/news/:slug");
   });
 
   it("never lists the internal variant in the sitemap", () => {

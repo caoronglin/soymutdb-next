@@ -19,8 +19,10 @@ import {
   getDownloadFiles,
   getGene,
   getMutantLine,
+  getNewsBySlug,
   globalSearch,
   listMutantLines,
+  listNews,
   searchVariants,
   type SearchResultType,
 } from "@soymutdb/api-client";
@@ -171,6 +173,34 @@ export function downloadsQueryOptions(context: { category?: string }) {
   return queryOptions({
     queryKey: [...DOWNLOADS_QUERY_KEY, context.category ?? null] as const,
     queryFn: () => getDownloadFiles(context.category),
+    staleTime: 60_000,
+  });
+}
+
+/**
+ * News is global public content: the key carries only the filters that change
+ * the result set (category/page/page size), never release or site variant.
+ */
+export function newsListQueryOptions(context: {
+  category?: string;
+  page: number;
+  pageSize: number;
+}) {
+  return queryOptions({
+    queryKey: queryKeys.news.list({
+      category: context.category ?? null,
+      page: context.page,
+      pageSize: context.pageSize,
+    }),
+    queryFn: () => listNews(context.category, context.page, context.pageSize),
+    staleTime: 60_000,
+  });
+}
+
+export function newsDetailQueryOptions(context: { slug: string }) {
+  return queryOptions({
+    queryKey: queryKeys.news.detail(context.slug),
+    queryFn: () => getNewsBySlug(context.slug),
     staleTime: 60_000,
   });
 }

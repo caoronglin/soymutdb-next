@@ -175,6 +175,22 @@ Vue portal 成为 canonical 前的静态托管前置：每条稳定路由获得�
 说明：当前文档是带元数据的 SPA shell（页面内容仍由客户端数据驱动）；
 完整 SSG 预渲染需页面布局数据，属 Phase 3 后续。
 
+### Phase 3 第三步：Vue `/news` 列表 + 详情（2026-09-23）
+
+- `packages/query-keys`：新增 `news.list/detail`（可分类/页/页大小敏感，news 为全局内容不绑 release）。
+- `query-options`：`newsListQueryOptions` / `newsDetailQueryOptions`。
+- `NewsListView.vue`：分类（all/news/update/announcement）与页码走 URL（`?category=&page=`），
+  语言 `?lang=zh` 同样入 URL；含 loading/error/empty 与分页导航。
+- `NewsDetailView.vue`：标题/日期/正文；正文为 CMS HTML，客户端用 DOMPurify 再消毒后
+  `v-html`（与 React 路由一致的纵深防御）；`?lang=zh` 切换中英。
+- 路由元数据：`/news` 预渲染 + sitemap；`/news/:slug` 动态不预渲染。
+
+证据：
+
+- `pnpm --filter @soymutdb/web-vue test` → **14 files / 50 tests passed**（含 XSS 消毒断言）；
+  typecheck/lint 干净。
+- 构建：external 变体生成 6 个文档（新增 `news/index.html`，title 正确）。
+
 ### 阻塞 / 未关闭
 
 - GitHub artifact 上传：已压缩 `pages-demo-dist`、移除无消费者的 dist 上传、缩短证据保留期；等待配额重算（6–12h）后应恢复

@@ -129,4 +129,18 @@ describe("queryKeys", () => {
     expect(queryKeys.variants.list({ ...base, end: 3000 })).not.toEqual(key);
     expect(queryKeys.variants.list({ ...base, impact: "LOW" })).not.toEqual(key);
   });
+
+  it("scopes news caches by category, page and page size", () => {
+    const base = { category: "update", page: 1, pageSize: 10 };
+    const listKey = queryKeys.news.list(base);
+    expect(queryKeys.news.list({ ...base, category: "news" })).not.toEqual(listKey);
+    expect(queryKeys.news.list({ ...base, page: 2 })).not.toEqual(listKey);
+    expect(queryKeys.news.list({ ...base, pageSize: 20 })).not.toEqual(listKey);
+    // An absent category (the "all" tab) is part of the identity.
+    expect(queryKeys.news.list({ ...base, category: null })).not.toEqual(listKey);
+
+    const detail = queryKeys.news.detail("release-2026-09");
+    expect(detail).toContain("release-2026-09");
+    expect(detail[2]).toBe("detail");
+  });
 });

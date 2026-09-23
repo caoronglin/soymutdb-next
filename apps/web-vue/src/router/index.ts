@@ -5,6 +5,8 @@ import GeneView from "../views/GeneView.vue";
 import Home from "../views/HomeView.vue";
 import MutantDetailView from "../views/MutantDetailView.vue";
 import MutantsListView from "../views/MutantsListView.vue";
+import NewsDetailView from "../views/NewsDetailView.vue";
+import NewsListView from "../views/NewsListView.vue";
 import SearchView from "../views/SearchView.vue";
 import VariantsView from "../views/VariantsView.vue";
 import { PORTAL_ROUTES } from "./routes";
@@ -21,6 +23,8 @@ const COMPONENTS = {
   mutant: MutantDetailView,
   variants: VariantsView,
   downloads: DownloadsView,
+  news: NewsListView,
+  "news-detail": NewsDetailView,
 } as const;
 
 export const router = createRouter({

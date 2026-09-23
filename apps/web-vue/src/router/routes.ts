@@ -27,7 +27,16 @@ export interface PortalRouteMeta {
 export interface PortalRouteDefinition {
   path: string;
   name: string;
-  componentKey: "home" | "search" | "gene" | "mutants" | "mutant" | "variants" | "downloads";
+  componentKey:
+    | "home"
+    | "search"
+    | "gene"
+    | "mutants"
+    | "mutant"
+    | "variants"
+    | "downloads"
+    | "news"
+    | "news-detail";
   meta: PortalRouteMeta;
 }
 
@@ -98,5 +107,22 @@ export const PORTAL_ROUTES: readonly PortalRouteDefinition[] = [
       prerender: true,
       sitemap: true,
     },
+  },
+  {
+    path: "/news",
+    name: "news",
+    componentKey: "news",
+    meta: {
+      title: "News — SoyMutDB",
+      description: "Announcements, updates, and news from the SoyMutDB project.",
+      prerender: true,
+      sitemap: true,
+    },
+  },
+  {
+    path: "/news/:slug",
+    name: "news-article",
+    componentKey: "news-detail",
+    meta: { title: "News article — SoyMutDB" },
   },
 ] as const;

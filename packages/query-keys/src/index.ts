@@ -18,6 +18,20 @@ export const queryKeys = {
     chromosomes: (assemblyId: string | number | undefined) =>
       [...queryKeys.assemblies.all(), "chromosomes", assemblyId ?? null] as const,
   },
+  news: {
+    all: () => [...queryKeys.all, "news"] as const,
+    // News is global public content (no release/assembly scoping); the key
+    // carries the filters that change the result set.
+    list: (context: { category: string | null; page: number; pageSize: number }) =>
+      [
+        ...queryKeys.news.all(),
+        "list",
+        context.category ?? null,
+        context.page,
+        context.pageSize,
+      ] as const,
+    detail: (slug: string) => [...queryKeys.news.all(), "detail", slug] as const,
+  },
   genes: {
     all: () => [...queryKeys.all, "genes"] as const,
     // Gene details are release-scoped by the API's ReleaseContext and the
