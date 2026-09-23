@@ -4,16 +4,14 @@ import { computed, ref, toValue, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
 import {
-  getReleaseId,
-  globalSearch,
   type FederatedSearchResponse,
   type SearchResponse,
   type SearchResult,
   type SearchResultType,
 } from "@soymutdb/api-client";
-import { queryKeys } from "@soymutdb/query-keys";
 import { ConfigProvider, Input, Tag, createThemeConfig } from "@soymutdb/ui-vue";
 
+import { globalSearchQueryOptions } from "../lib/query-options";
 import { useSiteContextStore } from "../stores/site-context";
 
 // Public omnibox search (Phase F). Ported from the React route, preserving the
@@ -38,38 +36,27 @@ const external = computed(
   () => route.query.external === "1" || route.query.external === "true",
 );
 const resultLimit = computed(() => (route.query.limit ? Number(route.query.limit) : 20));
-const enabled = computed(() => Boolean(q.value.trim()));
 
 const input = ref(q.value);
 const externalInput = ref(external.value);
 watch(q, (value) => (input.value = value));
 watch(external, (value) => (externalInput.value = value));
 
-const query = useQuery({
-  queryKey: computed(() =>
-    queryKeys.search.global({
+const query = useQuery(
+  computed(() =>
+    globalSearchQueryOptions({
       query: q.value || undefined,
       types: types.value,
       cursor: cursor.value,
       limit: resultLimit.value,
       assemblyId: assembly.value,
-      releaseId: getReleaseId(),
+      releaseId: site.releaseId,
       siteVariant: site.siteVariant,
       federated: external.value,
+      sources: EXTERNAL_SOURCES,
     }),
   ),
-  queryFn: () =>
-    globalSearch({
-      q: q.value!,
-      types: types.value,
-      cursor: cursor.value,
-      limit: resultLimit.value,
-      assembly_id: assembly.value ? Number(assembly.value) : undefined,
-      sources: external.value ? [...EXTERNAL_SOURCES] : undefined,
-    }),
-  enabled,
-  staleTime: 60_000,
-});
+);
 
 // vue-query v5 returns a reactive object whose fields are nested refs; the
 // template does not auto-unwrap those, so expose explicit (top-level) computeds.
@@ -171,7 +158,9 @@ function submit() {
                   :data-testid="hit.url ? 'search-result-row' : 'search-result-disabled'"
                   :data-url="hit.url"
                   :aria-disabled="!hit.url"
+                  :tabindex="hit.url ? undefined : -1"
                   class="flex items-center gap-3 rounded-lg border p-4"
+                  :class="{ 'cursor-not-allowed opacity-60': !hit.url }"
                 >
                   <span class="font-medium">{{ hit.title }}</span>
                 </a>

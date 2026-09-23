@@ -20,8 +20,24 @@ export const queryKeys = {
   },
   genes: {
     all: () => [...queryKeys.all, "genes"] as const,
-    detail: (geneId: string, assemblyId?: string) =>
-      [...queryKeys.genes.all(), "detail", geneId, assemblyId ?? null] as const,
+    // Gene details are release-scoped by the API's ReleaseContext and the
+    // client release header, and the external/internal site is a cache
+    // boundary (DB-CORE-6). Both belong in the key or a release/site switch
+    // can reuse the previous release's cached detail.
+    detail: (
+      geneId: string,
+      assemblyId: string | undefined,
+      releaseId: string | null,
+      siteVariant: "external" | "internal",
+    ) =>
+      [
+        ...queryKeys.genes.all(),
+        "detail",
+        geneId,
+        assemblyId ?? null,
+        releaseId,
+        siteVariant,
+      ] as const,
     expression: (geneId: string, assemblyId?: string) =>
       [...queryKeys.genes.all(), "expression", geneId, assemblyId ?? null] as const,
     homologs: (geneId: string, assemblyId?: string) =>
@@ -85,7 +101,20 @@ export const queryKeys = {
   },
   variants: {
     all: () => [...queryKeys.all, "variants"] as const,
-    list: (context: { assemblyId: string | null; releaseId: string | null; siteVariant: "external" | "internal"; page: number }) =>
+    // Every variable the variant search sends belongs in the key: assembly,
+    // site, release, pagination AND the region/impact filters. Omitting the
+    // filters let a changed chromosome/start/end/impact reuse the previous
+    // filter's cached page.
+    list: (context: {
+      assemblyId: string | null;
+      releaseId: string | null;
+      siteVariant: "external" | "internal";
+      page: number;
+      chromosome?: string | null;
+      start?: number | null;
+      end?: number | null;
+      impact?: string | null;
+    }) =>
       [
         ...queryKeys.variants.all(),
         "list",
@@ -93,6 +122,10 @@ export const queryKeys = {
         context.releaseId,
         context.siteVariant,
         context.page,
+        context.chromosome ?? null,
+        context.start ?? null,
+        context.end ?? null,
+        context.impact ?? null,
       ] as const,
   },
 } as const;

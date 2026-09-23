@@ -27,7 +27,8 @@ import SearchView from "./SearchView.vue";
 const mockedSearch = vi.mocked(globalSearch);
 
 async function mountSearch(query: Record<string, string> = {}) {
-  const url = query.q ? `/search?q=${encodeURIComponent(query.q)}` : "/search";
+  const params = new URLSearchParams(query);
+  const url = params.toString() ? `/search?${params}` : "/search";
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [{ path: "/search", name: "search", component: SearchView }],
@@ -80,6 +81,32 @@ describe("SearchView (Phase F, DB-CORE-1/2/5/6)", () => {
     expect(wrapper.html()).not.toContain("internal_id");
     // A hit without a canonical URL is rendered disabled, never as a "#" link.
     expect(wrapper.find('[data-testid="search-result-disabled"]').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it("makes a URL-less federated hit non-actionable for keyboard users", async () => {
+    mockedSearch.mockResolvedValue({
+      query: "BRCA1",
+      sources: [
+        {
+          source: "ncbi",
+          status: "ok",
+          health: "healthy",
+          error: null,
+          hits: [{ id: "1", title: "no-url hit" }],
+        },
+      ],
+    } as never);
+
+    const { wrapper } = await mountSearch({ q: "BRCA1", external: "1" });
+    await flushPromises();
+    await flushPromises();
+
+    const disabled = wrapper.find('[data-testid="search-result-disabled"]');
+    expect(disabled.exists()).toBe(true);
+    // Mirrors the React route: a disabled result is not a keyboard tab stop.
+    expect(disabled.attributes("tabindex")).toBe("-1");
+    expect(disabled.attributes("aria-disabled")).toBe("true");
     wrapper.unmount();
   });
 

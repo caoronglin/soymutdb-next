@@ -27,21 +27,26 @@ import VariantsView from "./VariantsView.vue";
 const mocked = vi.mocked(searchVariants);
 beforeEach(() => mocked.mockReset());
 
-function mountView() {
+async function mountView(query: Record<string, string> = {}) {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [{ path: "/variants", name: "variants", component: VariantsView }],
   });
-  router.push("/variants");
-  return mount(VariantsView, {
-    global: {
-      plugins: [
-        createPinia(),
-        router,
-        [VueQueryPlugin, { queryClient: new QueryClient({ defaultOptions: { queries: { retry: false } } }) }],
-      ],
-    },
-  });
+  const qs = new URLSearchParams(query).toString();
+  router.push(qs ? `/variants?${qs}` : "/variants");
+  await router.isReady();
+  return {
+    router,
+    wrapper: mount(VariantsView, {
+      global: {
+        plugins: [
+          createPinia(),
+          router,
+          [VueQueryPlugin, { queryClient: new QueryClient({ defaultOptions: { queries: { retry: false } } }) }],
+        ],
+      },
+    }),
+  };
 }
 
 describe("VariantsView (Phase F, DB-CORE-3/4/6 + ADR-0006)", () => {
@@ -65,7 +70,7 @@ describe("VariantsView (Phase F, DB-CORE-3/4/6 + ADR-0006)", () => {
       has_more: false,
       total_count: 1,
     });
-    const wrapper = mountView();
+    const { wrapper } = await mountView();
     await flushPromises();
     await flushPromises();
 
@@ -77,9 +82,65 @@ describe("VariantsView (Phase F, DB-CORE-3/4/6 + ADR-0006)", () => {
     wrapper.unmount();
   });
 
+  it("binds every URL filter into the request and the cache key", async () => {
+    mocked.mockResolvedValue({
+      items: [],
+      cursor: null,
+      next_cursor: null,
+      has_more: false,
+      total_count: 0,
+    });
+    const { wrapper } = await mountView({
+      chromosome: "Chr01",
+      start: "1000",
+      end: "2000",
+      impact: "HIGH",
+      assembly: "5",
+    });
+    await flushPromises();
+    await flushPromises();
+
+    // A shared/reloaded deep link must reproduce the same request, not drop
+    // the region/impact filters.
+    expect(mocked).toHaveBeenCalledWith(
+      expect.objectContaining({
+        assembly: "5",
+        chromosome: "Chr01",
+        start: 1000,
+        end: 2000,
+        impact: "HIGH",
+        limit: 50,
+      }),
+    );
+    wrapper.unmount();
+  });
+
+  it("commits an edited filter to the URL so reload and back/forward restore it", async () => {
+    mocked.mockResolvedValue({
+      items: [],
+      cursor: null,
+      next_cursor: null,
+      has_more: false,
+      total_count: 0,
+    });
+    const { router, wrapper } = await mountView();
+    await flushPromises();
+
+    const input = wrapper.find('[data-testid="chromosome-filter"]');
+    await input.setValue("Chr02");
+    await input.trigger("change");
+    await flushPromises();
+
+    expect(router.currentRoute.value.query.chromosome).toBe("Chr02");
+    expect(mocked).toHaveBeenLastCalledWith(
+      expect.objectContaining({ chromosome: "Chr02" }),
+    );
+    wrapper.unmount();
+  });
+
   it("hides the total when the backend returns a null total_count (ADR-0006)", async () => {
     mocked.mockResolvedValue({ items: [], cursor: null, next_cursor: null, has_more: false, total_count: null });
-    const wrapper = mountView();
+    const { wrapper } = await mountView();
     await flushPromises();
     await flushPromises();
     expect(wrapper.find('[data-testid="variants-total"]').text()).toContain("total hidden");

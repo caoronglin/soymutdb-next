@@ -3,10 +3,9 @@ import { useQuery } from "@tanstack/vue-query";
 import { computed, toValue } from "vue";
 import { useRoute } from "vue-router";
 
-import { getMutantLine, type MutantLineDetail } from "@soymutdb/api-client";
-import { queryKeys } from "@soymutdb/query-keys";
 import { ConfigProvider, Tag, createThemeConfig } from "@soymutdb/ui-vue";
 
+import { mutantLineQueryOptions } from "../lib/query-options";
 import { useSiteContextStore } from "../stores/site-context";
 
 // Public mutant detail (Phase F, DB-CORE-2). The record is addressed + rendered
@@ -18,17 +17,21 @@ const route = useRoute();
 const site = useSiteContextStore();
 const publicId = computed(() => String(route.params.publicId));
 
+const query = useQuery(
+  computed(() =>
+    mutantLineQueryOptions({
+      publicId: publicId.value,
+      // The api-client sends the pinned release as X-SoyMutDB-Release, so the
+      // cache key must carry the same release (never a hard-coded null).
+      releaseId: site.releaseId,
+      siteVariant: site.siteVariant,
+    }),
+  ),
+);
+
 const isLoading = computed(() => toValue(query.isLoading));
 const isError = computed(() => toValue(query.isError));
-const line = computed<MutantLineDetail | undefined>(() => toValue(query.data));
-
-const query = useQuery({
-  queryKey: computed(() =>
-    queryKeys.mutants.detail(publicId.value, null, site.siteVariant),
-  ),
-  queryFn: () => getMutantLine(publicId.value),
-  staleTime: 60_000,
-});
+const line = computed(() => toValue(query.data));
 </script>
 
 <template>

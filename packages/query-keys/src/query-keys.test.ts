@@ -22,13 +22,25 @@ describe("queryKeys", () => {
   });
 
   it("keeps gene details within their domain prefix", () => {
-    expect(queryKeys.genes.detail("Glyma.01G000100")).toEqual([
+    expect(queryKeys.genes.detail("Glyma.01G000100", undefined, null, "external")).toEqual([
       "soymutdb",
       "genes",
       "detail",
       "Glyma.01G000100",
       null,
+      null,
+      "external",
     ]);
+  });
+
+  it("scopes gene detail caches by assembly, release and site variant", () => {
+    const base = { geneId: "Glyma.01G000100", assemblyId: "5", releaseId: "2026.09", siteVariant: "external" as const };
+    const detail = queryKeys.genes.detail(base.geneId, base.assemblyId, base.releaseId, base.siteVariant);
+    expect(detail).toContain("2026.09");
+    expect(detail).toContain("external");
+    expect(queryKeys.genes.detail(base.geneId, "4", base.releaseId, base.siteVariant)).not.toEqual(detail);
+    expect(queryKeys.genes.detail(base.geneId, base.assemblyId, "2026.10", base.siteVariant)).not.toEqual(detail);
+    expect(queryKeys.genes.detail(base.geneId, base.assemblyId, base.releaseId, "internal")).not.toEqual(detail);
   });
 
   it("separates global search caches by biological and deployment context", () => {
@@ -94,10 +106,27 @@ describe("queryKeys", () => {
     expect(detail).not.toContain("internal_id");
   });
 
-  it("scopes variant caches by assembly/release/site", () => {
-    const base = { assemblyId: "5", releaseId: "2026.09", siteVariant: "external" as const, page: 1 };
+  it("scopes variant caches by assembly/release/site and every result-affecting filter", () => {
+    const base = {
+      assemblyId: "5",
+      releaseId: "2026.09",
+      siteVariant: "external" as const,
+      page: 1,
+      chromosome: "Chr01",
+      start: 1000,
+      end: 2000,
+      impact: "HIGH",
+    };
     const key = queryKeys.variants.list(base);
     expect(queryKeys.variants.list({ ...base, assemblyId: "4" })).not.toEqual(key);
+    expect(queryKeys.variants.list({ ...base, releaseId: "2026.10" })).not.toEqual(key);
     expect(queryKeys.variants.list({ ...base, siteVariant: "internal" })).not.toEqual(key);
+    expect(queryKeys.variants.list({ ...base, page: 2 })).not.toEqual(key);
+    // The review found the filters missing from the key: changing any of them
+    // must produce a different cache entry, not reuse the previous page.
+    expect(queryKeys.variants.list({ ...base, chromosome: "Chr02" })).not.toEqual(key);
+    expect(queryKeys.variants.list({ ...base, start: 2000 })).not.toEqual(key);
+    expect(queryKeys.variants.list({ ...base, end: 3000 })).not.toEqual(key);
+    expect(queryKeys.variants.list({ ...base, impact: "LOW" })).not.toEqual(key);
   });
 });

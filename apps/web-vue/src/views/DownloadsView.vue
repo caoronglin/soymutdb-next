@@ -2,25 +2,42 @@
 import { useQuery } from "@tanstack/vue-query";
 import { computed, ref, toValue } from "vue";
 
-import { getDownloadFiles, type DownloadFile } from "@soymutdb/api-client";
+import { getDownloadUrl, type DownloadFile } from "@soymutdb/api-client";
 import { ConfigProvider, Tag, createThemeConfig } from "@soymutdb/ui-vue";
 
+import { downloadsQueryOptions } from "../lib/query-options";
+
 // Data downloads (Phase F). Lists downloadable artifacts via the neutral
-// api-client, scoped by category. file_size/dates are displayed; downloads go
-// through presigned URLs (never a leaked direct bucket link). The cache key is
-// static per category (this endpoint is not per release/assembly, so no
+// api-client, scoped by category. Downloads are fetched on demand through a
+// short-lived presigned URL (never a leaked direct bucket link) with the
+// catalogue URL as an explicit fallback, mirroring the React route. The cache
+// key is scoped by category (this endpoint is not per release/assembly, so no
 // release/assembly scoping is added here — DB-CORE-6 scoping applies to
 // biological search, not the content catalogue).
 const category = ref<string>("");
+const downloadingId = ref<string | null>(null);
+
+const query = useQuery(
+  computed(() => downloadsQueryOptions({ category: category.value || undefined })),
+);
+
 const isLoading = computed(() => toValue(query.isLoading));
 const isError = computed(() => toValue(query.isError));
-const files = computed<DownloadFile[]>(() => toValue(query.data) ?? []);
+const files = computed(() => toValue(query.data) ?? []);
 
-const query = useQuery({
-  queryKey: computed(() => ["downloads", category.value || null] as const),
-  queryFn: () => getDownloadFiles(category.value || undefined),
-  staleTime: 60_000,
-});
+async function download(file: DownloadFile) {
+  downloadingId.value = file.id;
+  try {
+    const { url } = await getDownloadUrl(file.id);
+    window.open(url, "_blank", "noopener,noreferrer");
+  } catch {
+    // A presign outage must not dead-end the page: fall back to the catalogue
+    // URL like the React downloads route does.
+    window.open(file.file_url, "_blank", "noopener,noreferrer");
+  } finally {
+    downloadingId.value = null;
+  }
+}
 
 function formatSize(bytes: number | null): string {
   if (bytes === null) return "—";
@@ -61,6 +78,16 @@ function formatSize(bytes: number | null): string {
           <div class="flex items-center gap-2">
             <Tag v-if="file.category">{{ file.category }}</Tag>
             <span class="font-medium">{{ file.name }}</span>
+            <button
+              type="button"
+              data-testid="download-action"
+              class="ml-auto rounded-md border px-3 py-1 text-sm disabled:opacity-60"
+              :disabled="downloadingId === file.id"
+              :aria-label="`Download ${file.name}`"
+              @click="download(file)"
+            >
+              {{ downloadingId === file.id ? "Preparing…" : "Download" }}
+            </button>
           </div>
           <p v-if="file.description" class="mt-1 text-sm opacity-70">{{ file.description }}</p>
           <p class="mt-1 text-xs opacity-60">

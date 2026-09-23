@@ -3,10 +3,12 @@ import { useQuery } from "@tanstack/vue-query";
 import { computed, toValue } from "vue";
 import { useRoute } from "vue-router";
 
-import { getGene, type GeneDetail } from "@soymutdb/api-client";
 import { normalizeInterval, length as intervalLength } from "@soymutdb/genome-view-model";
-import { queryKeys } from "@soymutdb/query-keys";
 import { ConfigProvider, Tag, createThemeConfig } from "@soymutdb/ui-vue";
+
+import { resolveJbrowseBaseUrl } from "../lib/deployment";
+import { geneQueryOptions } from "../lib/query-options";
+import { useSiteContextStore } from "../stores/site-context";
 
 // Gene detail (Phase F). Surfaces the assembly-scoped genomic-coordinate
 // contract (DB-CORE-3/4/7): the accession carried under an explicit assembly,
@@ -15,20 +17,26 @@ import { ConfigProvider, Tag, createThemeConfig } from "@soymutdb/ui-vue";
 // assembly context. Transcript/homolog/expression sub-sections are follow-up
 // commits; this slice proves the detail contract + the shared view-model.
 const route = useRoute();
+const site = useSiteContextStore();
 const geneId = computed(() => String(route.params.geneId));
 const assembly = computed(() =>
   route.query.assembly ? String(route.query.assembly) : undefined,
 );
 
+const query = useQuery(
+  computed(() =>
+    geneQueryOptions({
+      geneId: geneId.value,
+      assemblyId: assembly.value,
+      releaseId: site.releaseId,
+      siteVariant: site.siteVariant,
+    }),
+  ),
+);
+
 const isLoading = computed(() => toValue(query.isLoading));
 const isError = computed(() => toValue(query.isError));
-const gene = computed<GeneDetail | undefined>(() => toValue(query.data));
-
-const query = useQuery({
-  queryKey: computed(() => queryKeys.genes.detail(geneId.value, assembly.value)),
-  queryFn: () => getGene(geneId.value, { assembly_id: assembly.value }),
-  staleTime: 60_000,
-});
+const gene = computed(() => toValue(query.data));
 
 const interval = computed(() => {
   const g = gene.value;
@@ -50,7 +58,9 @@ const jbrowseHref = computed(() => {
   if (!g) return undefined;
   const params = new URLSearchParams({ loc: `${g.chromosome}:${g.start_pos}..${g.end_pos}` });
   if (g.assembly_id) params.set("assembly", String(g.assembly_id));
-  const base = (import.meta.env.VITE_JBROWSE_URL as string | undefined) ?? "/jbrowse/";
+  // Canonical origin name shared with the api-client / pipeline
+  // (VITE_JBROWSE_BASE_URL), never a localhost fallback.
+  const base = resolveJbrowseBaseUrl(import.meta.env.VITE_JBROWSE_BASE_URL);
   return `${base}?${params.toString()}`;
 });
 </script>

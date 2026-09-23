@@ -13,14 +13,18 @@ vi.mock("@soymutdb/ui-vue", () => ({
 
 vi.mock("@soymutdb/api-client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@soymutdb/api-client")>();
-  return { ...actual, getDownloadFiles: vi.fn() };
+  return { ...actual, getDownloadFiles: vi.fn(), getDownloadUrl: vi.fn() };
 });
 
-import { getDownloadFiles } from "@soymutdb/api-client";
+import { getDownloadFiles, getDownloadUrl } from "@soymutdb/api-client";
 import DownloadsView from "./DownloadsView.vue";
 
 const mocked = vi.mocked(getDownloadFiles);
-beforeEach(() => mocked.mockReset());
+const mockedUrl = vi.mocked(getDownloadUrl);
+beforeEach(() => {
+  mocked.mockReset();
+  mockedUrl.mockReset();
+});
 
 function mountView() {
   const router = createRouter({
@@ -64,6 +68,74 @@ describe("DownloadsView (Phase F)", () => {
     // The presigned/direct object URL must never be rendered into the DOM.
     expect(wrapper.html()).not.toContain("SECRET");
     expect(wrapper.html()).not.toContain("minio.internal");
+    // A real download control exists: metadata alone is not a download page.
+    expect(wrapper.find('[data-testid="download-action"]').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it("resolves a presigned URL on demand and opens it, not the raw object URL", async () => {
+    mocked.mockResolvedValue([
+      {
+        id: "f1",
+        name: "variants-v5.tsv.gz",
+        description: null,
+        file_url: "https://minio.internal/bucket/key?sig=SECRET",
+        file_size: 1024,
+        category: "variants",
+        download_count: 1,
+        created_at: "2026-01-01T00:00:00Z",
+      },
+    ]);
+    mockedUrl.mockResolvedValue({
+      url: "https://minio.internal/bucket/key?sig=PRESIGNED",
+      expires_in: 300,
+    });
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+
+    const wrapper = mountView();
+    await flushPromises();
+    await flushPromises();
+    await wrapper.find('[data-testid="download-action"]').trigger("click");
+    await flushPromises();
+
+    expect(mockedUrl).toHaveBeenCalledWith("f1");
+    expect(open).toHaveBeenCalledWith(
+      "https://minio.internal/bucket/key?sig=PRESIGNED",
+      "_blank",
+      "noopener,noreferrer",
+    );
+    open.mockRestore();
+    wrapper.unmount();
+  });
+
+  it("falls back to the catalogue URL when presigning fails", async () => {
+    mocked.mockResolvedValue([
+      {
+        id: "f1",
+        name: "variants-v5.tsv.gz",
+        description: null,
+        file_url: "https://minio.internal/bucket/key?sig=SECRET",
+        file_size: 1024,
+        category: "variants",
+        download_count: 1,
+        created_at: "2026-01-01T00:00:00Z",
+      },
+    ]);
+    mockedUrl.mockRejectedValue(new Error("presign unavailable"));
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+
+    const wrapper = mountView();
+    await flushPromises();
+    await flushPromises();
+    await wrapper.find('[data-testid="download-action"]').trigger("click");
+    await flushPromises();
+
+    expect(open).toHaveBeenCalledWith(
+      "https://minio.internal/bucket/key?sig=SECRET",
+      "_blank",
+      "noopener,noreferrer",
+    );
+    open.mockRestore();
     wrapper.unmount();
   });
 

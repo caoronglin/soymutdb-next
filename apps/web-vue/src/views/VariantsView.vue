@@ -1,66 +1,86 @@
 <script setup lang="ts">
 import { useQuery } from "@tanstack/vue-query";
-import { computed, reactive, toValue } from "vue";
+import { computed, reactive, toValue, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 
-import {
-  getReleaseId,
-  searchVariants,
-  type VariantSummary,
-} from "@soymutdb/api-client";
 import { normalizeInterval } from "@soymutdb/genome-view-model";
-import { queryKeys } from "@soymutdb/query-keys";
 import { ConfigProvider, Input, Tag, createThemeConfig } from "@soymutdb/ui-vue";
 
+import { variantsQueryOptions } from "../lib/query-options";
 import { useSiteContextStore } from "../stores/site-context";
 
 // Variant explorer (Phase F). Region + filters → searchVariants, with the
-// release/assembly/site-scoped cache key (DB-CORE-6) and public variant rows
-// (variant_id is the public identity; no internal persistence key). Coordinates
-// are validated/normalised through the neutral genome-view-model and scoped to
-// the selected assembly (DB-CORE-3/4). total_count is shown only when the
-// backend returns a real total; null means "hidden" (ADR-0006).
+// release/assembly/site-scoped cache key and every result-affecting filter in
+// the key (DB-CORE-6). The filters are URL-backed state: /variants?chromosome=
+// Chr01&start=... survives reload, back/forward, and sharing (plan.md §17).
+// Coordinates are validated/normalised through the neutral genome-view-model and
+// scoped to the selected assembly (DB-CORE-3/4). total_count is shown only when
+// the backend returns a real total; null means "hidden" (ADR-0006).
+const VARIANT_LIMIT = 50;
+
+const route = useRoute();
+const router = useRouter();
 const site = useSiteContextStore();
 
-const filters = reactive({ assembly: "", chromosome: "", start: "", end: "", impact: "" });
+const filters = computed(() => ({
+  assembly: route.query.assembly ? String(route.query.assembly) : "",
+  chromosome: route.query.chromosome ? String(route.query.chromosome) : "",
+  start: route.query.start ? String(route.query.start) : "",
+  end: route.query.end ? String(route.query.end) : "",
+  impact: route.query.impact ? String(route.query.impact) : "",
+}));
 
-const isLoading = computed(() => toValue(query.isLoading));
-const isError = computed(() => toValue(query.isError));
-const response = computed(() => toValue(query.data));
-const items = computed<VariantSummary[]>(() => response.value?.items ?? []);
-const totalCount = computed<number | null>(() => response.value?.total_count ?? null);
+// Draft inputs are committed to the URL on submit/change, so a half-typed
+// coordinate never becomes cache identity (and back/forward restores it).
+const draft = reactive({ ...filters.value });
+watch(
+  filters,
+  (value) => Object.assign(draft, value),
+  { immediate: true, deep: true },
+);
 
 function parsedRegion(): { start?: number; end?: number } {
-  const start = filters.start ? Number(filters.start) : undefined;
-  const end = filters.end ? Number(filters.end) : undefined;
+  const start = filters.value.start ? Number(filters.value.start) : undefined;
+  const end = filters.value.end ? Number(filters.value.end) : undefined;
   if (start === undefined && end === undefined) return {};
   if (!start || !end || !Number.isInteger(start) || !Number.isInteger(end)) return {};
   try {
-    const norm = normalizeInterval({ assemblyKey: filters.assembly || "?", start, end });
+    const norm = normalizeInterval({ assemblyKey: filters.value.assembly || "?", start, end });
     return { start: norm.start, end: norm.end };
   } catch {
     return {};
   }
 }
 
-const query = useQuery({
-  queryKey: computed(() =>
-    queryKeys.variants.list({
-      assemblyId: filters.assembly || null,
-      releaseId: getReleaseId(),
-      siteVariant: site.siteVariant,
+const query = useQuery(
+  computed(() =>
+    variantsQueryOptions({
+      assemblyId: filters.value.assembly || null,
+      chromosome: filters.value.chromosome || undefined,
+      ...parsedRegion(),
+      impact: filters.value.impact || undefined,
+      limit: VARIANT_LIMIT,
       page: 1,
+      releaseId: site.releaseId,
+      siteVariant: site.siteVariant,
     }),
   ),
-  queryFn: () =>
-    searchVariants({
-      assembly: filters.assembly || undefined,
-      chromosome: filters.chromosome || undefined,
-      ...parsedRegion(),
-      impact: (filters.impact || undefined) as never,
-      limit: 50,
-    }),
-  staleTime: 30_000,
-});
+);
+
+const isLoading = computed(() => toValue(query.isLoading));
+const isError = computed(() => toValue(query.isError));
+const response = computed(() => toValue(query.data));
+const items = computed(() => response.value?.items ?? []);
+const totalCount = computed(() => response.value?.total_count ?? null);
+
+function applyFilters() {
+  const next: Record<string, string> = {};
+  for (const key of ["assembly", "chromosome", "start", "end", "impact"] as const) {
+    const value = draft[key].trim();
+    if (value) next[key] = value;
+  }
+  void router.replace({ path: "/variants", query: next });
+}
 </script>
 
 <template>
@@ -69,21 +89,21 @@ const query = useQuery({
       <p class="text-sm opacity-70"><RouterLink to="/" class="underline">Home</RouterLink></p>
       <h1 class="mt-2 text-2xl font-semibold">Variants</h1>
 
-      <form class="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-5" role="search" @submit.prevent>
+      <form class="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-5" role="search" @submit.prevent="applyFilters">
         <label class="text-sm opacity-70">Assembly
-          <Input v-model="filters.assembly" placeholder="5" data-testid="assembly-filter" />
+          <Input v-model="draft.assembly" placeholder="5" data-testid="assembly-filter" @change="applyFilters" />
         </label>
         <label class="text-sm opacity-70">Chromosome
-          <Input v-model="filters.chromosome" placeholder="Chr01" data-testid="chromosome-filter" />
+          <Input v-model="draft.chromosome" placeholder="Chr01" data-testid="chromosome-filter" @change="applyFilters" />
         </label>
         <label class="text-sm opacity-70">Start
-          <Input v-model="filters.start" placeholder="1" data-testid="start-filter" />
+          <Input v-model="draft.start" placeholder="1" data-testid="start-filter" @change="applyFilters" />
         </label>
         <label class="text-sm opacity-70">End
-          <Input v-model="filters.end" placeholder="1000000" data-testid="end-filter" />
+          <Input v-model="draft.end" placeholder="1000000" data-testid="end-filter" @change="applyFilters" />
         </label>
         <label class="text-sm opacity-70">Impact
-          <Input v-model="filters.impact" placeholder="HIGH" data-testid="impact-filter" />
+          <Input v-model="draft.impact" placeholder="HIGH" data-testid="impact-filter" @change="applyFilters" />
         </label>
       </form>
 

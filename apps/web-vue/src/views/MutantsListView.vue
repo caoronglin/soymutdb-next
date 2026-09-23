@@ -1,40 +1,52 @@
 <script setup lang="ts">
 import { useQuery } from "@tanstack/vue-query";
-import { computed, ref, toValue } from "vue";
+import { computed, ref, toValue, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 
-import {
-  getReleaseId,
-  listMutantLines,
-  type MutantLineResponse,
-} from "@soymutdb/api-client";
-import { queryKeys } from "@soymutdb/query-keys";
 import { ConfigProvider, Input, Tag, createThemeConfig } from "@soymutdb/ui-vue";
 
+import { mutantLinesQueryOptions } from "../lib/query-options";
 import { useSiteContextStore } from "../stores/site-context";
 
 // Public mutant-line browser (Phase F). Lists released mutant lines by public
 // identifier (DB-CORE-2): the response carries ONLY public_id, never an internal
 // persistence key, and the cache key is scoped by release + site variant
-// (DB-CORE-6). The mutagen filter feeds the request + the URL deep link.
+// (DB-CORE-6). The mutagen filter is URL-backed state: /mutants?mutagen=EMS
+// survives reload, back/forward, and sharing (plan.md §17).
+const MUTAGEN_LIMIT = 50;
+
+const route = useRoute();
+const router = useRouter();
 const site = useSiteContextStore();
 
-const mutagen = ref<string>("");
-const isLoading = computed(() => toValue(query.isLoading));
-const isError = computed(() => toValue(query.isError));
-const lines = computed<MutantLineResponse[]>(() => toValue(query.data) ?? []);
+const mutagen = computed(() => (route.query.mutagen ? String(route.query.mutagen) : ""));
+const input = ref(mutagen.value);
+watch(mutagen, (value) => {
+  input.value = value;
+});
 
-const query = useQuery({
-  queryKey: computed(() =>
-    queryKeys.mutants.list({
-      mutagen: mutagen.value || null,
-      limit: 50,
-      releaseId: getReleaseId(),
+const query = useQuery(
+  computed(() =>
+    mutantLinesQueryOptions({
+      mutagen: mutagen.value || undefined,
+      limit: MUTAGEN_LIMIT,
+      releaseId: site.releaseId,
       siteVariant: site.siteVariant,
     }),
   ),
-  queryFn: () => listMutantLines({ mutagen: mutagen.value || undefined, limit: 50 }),
-  staleTime: 60_000,
-});
+);
+
+const isLoading = computed(() => toValue(query.isLoading));
+const isError = computed(() => toValue(query.isError));
+const lines = computed(() => toValue(query.data) ?? []);
+
+function applyFilter() {
+  const next = input.value.trim();
+  void router.replace({
+    path: "/mutants",
+    query: next ? { mutagen: next } : {},
+  });
+}
 </script>
 
 <template>
@@ -43,13 +55,14 @@ const query = useQuery({
       <p class="text-sm opacity-70"><RouterLink to="/" class="underline">Home</RouterLink></p>
       <h1 class="mt-2 text-2xl font-semibold">Mutant Lines</h1>
 
-      <form class="mt-6 flex items-center gap-3" role="search" @submit.prevent>
+      <form class="mt-6 flex items-center gap-3" role="search" @submit.prevent="applyFilter">
         <label class="text-sm opacity-70" for="mutagen">Exact mutagen</label>
         <Input
           id="mutagen"
-          v-model="mutagen"
+          v-model="input"
           placeholder="e.g. EMS"
           data-testid="mutagen-filter"
+          @change="applyFilter"
         />
       </form>
 

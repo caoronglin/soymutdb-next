@@ -44,12 +44,16 @@ beforeEach(() => {
   mockedDetail.mockReset();
 });
 
-function mountComponent(component: unknown, url: string) {
+async function mountComponent(component: unknown, url: string) {
   const router = createRouter({
     history: createMemoryHistory(),
-    routes: [{ path: "/mutants/:publicId", name: "mutant", component: MutantDetailView }],
+    routes: [
+      { path: "/mutants", name: "mutants", component: MutantsListView },
+      { path: "/mutants/:publicId", name: "mutant", component: MutantDetailView },
+    ],
   });
   router.push(url);
+  await router.isReady();
   return { router, wrapper: mount(component as never, {
     global: {
       plugins: [
@@ -67,7 +71,7 @@ describe("Mutant pages (Phase F, DB-CORE-2 public_id)", () => {
     mockedList.mockResolvedValue([
       { public_id: "SM7QF3Z", name: "line-A", mutagen: "EMS", cultivar: "W82", variant_count: 3 },
     ]);
-    const { wrapper } = mountComponent(MutantsListView, "/mutants");
+    const { wrapper } = await mountComponent(MutantsListView, "/mutants");
     await flushPromises();
     await flushPromises();
 
@@ -76,6 +80,34 @@ describe("Mutant pages (Phase F, DB-CORE-2 public_id)", () => {
     expect(row.attributes("data-public-id")).toBe("SM7QF3Z");
     expect(wrapper.html()).toContain("SM7QF3Z"); // public id rendered
     expect(wrapper.html()).not.toContain("internal_id"); // private id absent
+    wrapper.unmount();
+  });
+
+  it("binds the URL mutagen deep link into the request", async () => {
+    mockedList.mockResolvedValue([]);
+    const { wrapper } = await mountComponent(MutantsListView, "/mutants?mutagen=EMS");
+    await flushPromises();
+    await flushPromises();
+
+    // A shared/reloaded deep link must reproduce the same filtered request.
+    expect(mockedList).toHaveBeenCalledWith({ mutagen: "EMS", limit: 50 });
+    const input = wrapper.find('[data-testid="mutagen-filter"]');
+    expect((input.element as HTMLInputElement).value).toBe("EMS");
+    wrapper.unmount();
+  });
+
+  it("commits an edited mutagen to the URL so reload and back/forward restore it", async () => {
+    mockedList.mockResolvedValue([]);
+    const { router, wrapper } = await mountComponent(MutantsListView, "/mutants");
+    await flushPromises();
+
+    const input = wrapper.find('[data-testid="mutagen-filter"]');
+    await input.setValue("gamma");
+    await input.trigger("change");
+    await flushPromises();
+
+    expect(router.currentRoute.value.query.mutagen).toBe("gamma");
+    expect(mockedList).toHaveBeenLastCalledWith({ mutagen: "gamma", limit: 50 });
     wrapper.unmount();
   });
 
@@ -94,7 +126,7 @@ describe("Mutant pages (Phase F, DB-CORE-2 public_id)", () => {
       created_at: "2026-01-01T00:00:00Z",
       updated_at: "2026-01-01T00:00:00Z",
     });
-    const { wrapper } = mountComponent(MutantDetailView, "/mutants/SM7QF3Z");
+    const { wrapper } = await mountComponent(MutantDetailView, "/mutants/SM7QF3Z");
     await flushPromises();
     await flushPromises();
 
@@ -107,7 +139,7 @@ describe("Mutant pages (Phase F, DB-CORE-2 public_id)", () => {
 
   it("shows no detail for an unknown public id", async () => {
     mockedDetail.mockResolvedValue(undefined as never);
-    const { wrapper } = mountComponent(MutantDetailView, "/mutants/DOESNOTEXIST");
+    const { wrapper } = await mountComponent(MutantDetailView, "/mutants/DOESNOTEXIST");
     await flushPromises();
     await flushPromises();
     expect(wrapper.find('[data-testid="mutant-detail"]').exists()).toBe(false);
