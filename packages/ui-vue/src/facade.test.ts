@@ -24,6 +24,7 @@ const FACADE_COMPONENTS = [
     "Button",
     "Card",
     "ConfigProvider",
+    "Input",
     "Layout",
     "Result",
     "Space",

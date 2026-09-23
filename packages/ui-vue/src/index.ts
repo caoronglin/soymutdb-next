@@ -16,6 +16,7 @@ export {
   Button,
   Card,
   ConfigProvider,
+  Input,
   Layout,
   Result,
   Space,

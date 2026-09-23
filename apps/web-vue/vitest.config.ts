@@ -1,10 +1,10 @@
+import vue from "@vitejs/plugin-vue";
 import { defineConfig } from "vitest/config";
 
-// Node 24 breaks vitest's default threaded worker pool on teardown
-// (tinypool "emitter.removeListener is not a function"). The workspace already
-// runs single-forked children in packages/api-client; mirror that here so tests
-// report results and exit cleanly on newer Node runtimes.
+// Single-fork like the rest of the workspace (Node 24 pool teardown issue), and
+// the Vue plugin so component tests can import .vue files.
 export default defineConfig({
+  plugins: [vue()],
   test: {
     environment: "node",
     globals: true,

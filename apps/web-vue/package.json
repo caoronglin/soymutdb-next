@@ -26,13 +26,17 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "catalog:",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/vue": "^8.1.0",
     "@vitejs/plugin-vue": "catalog:",
+    "@vue/test-utils": "^2.5.1",
     "tailwindcss": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:",
     "vue-tsc": "^3.2.0",
     "eslint": "^10.8.0",
+    "jsdom": "^29.1.1",
     "rimraf": "^6.0.0"
   }
 }
