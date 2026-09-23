@@ -176,6 +176,14 @@ wait_for_ready() {
 start_service() {
   if [[ -n "${SOYMUTDB_TEST_DATABASE_URL:-}" ]]; then
     log "using caller-provided SOYMUTDB_TEST_DATABASE_URL; not starting a container"
+    # Pair the caller-provided database the way the container path does: the
+    # worker fixture runs the API's Alembic chain through SOYMUTDB_DATABASE_URL.
+    # Without this, `--print-exports` dies on `SOYMUTDB_DATABASE_URL: unbound
+    # variable` under `set -u` even though the caller supplied a usable URL,
+    # which is exactly how the local/CI external-database path is meant to work.
+    if [[ -z "${SOYMUTDB_DATABASE_URL:-}" ]]; then
+      export SOYMUTDB_DATABASE_URL="${SOYMUTDB_TEST_DATABASE_URL}"
+    fi
     return 0
   fi
 
