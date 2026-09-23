@@ -149,29 +149,18 @@ jobs:
           path: pages-dist
           if-no-files-found: error
           include-hidden-files: true
-          compression-level: 0
+          # Compress: this tree is the Pages deploy input, not a byte-for-byte
+          # upload (GitHub stores the archive and the downloader unpacks it).
+          # Uncompressed it burned ~36 MB of the 500 MB account quota per push.
+          compression-level: 6
+          retention-days: 7
 
-      # --- dist artifacts for deployment ------------------------------------
-      - name: Upload web dist
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: dist-web
-          path: apps/web/dist
-          if-no-files-found: error
-
-      - name: Upload admin dist
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: dist-admin
-          path: apps/admin/dist
-          if-no-files-found: error
-
-      - name: Upload jbrowse dist
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: dist-jbrowse
-          path: apps/jbrowse/dist
-          if-no-files-found: error
+      # The web/admin/jbrowse dist trees were uploaded purely as evidence; no
+      # workflow downloads them (Pages consumes pages-demo-dist, the baseline
+      # job builds its own, and the artifact contract runs before upload).
+      # They cost ~35 MB of the account artifact quota per push, so the
+      # verification stays and the duplicate uploads are gone. Use
+      # `pnpm build` locally or the Pages artifact for inspection.
 
   # ---------------------------------------------------------------------------
   # Job 2 — API: Python venv + pytest (testcontainers on runner docker)
@@ -274,7 +263,7 @@ jobs:
             artifacts/dependency-graphs
             artifacts/dependency-audit
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 7
 
   # ---------------------------------------------------------------------------
   # Job 4 — Build, runtime-smoke, scan, and inventory every platform image
