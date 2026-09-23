@@ -102,6 +102,28 @@ ADR-0004 要求的 “staging → canonical 显式 promotion” 首次落地（g
 Phase 2 未完：其它 scientific modules 的 promotion 映射、retry/crash matrix 扩展、
 P2-6 capability reopen 逐个评审。
 
+### P2-6 capability 评审（2026-09-23，逐项复核）
+
+评审依据：开启需同时满足 parser / validator / manifest / staging / verify / finalize /
+retry / concurrency / crash / real CH / real PG / E2E（不批量开启）。
+
+| capability | 默认 | 实现证据 | 缺口 | 结论 |
+| --- | --- | --- | --- | --- |
+| `imports.module_tsv` | ON | ModuleTsvAdapter：schema 校验（tsv/csv/xlsx）、staging、checksum verify、ADR-0004 promotion | — | 保持 ON |
+| `imports.module_xlsx` | ON | module_schema 的 xlsx 解析（openpyxl、spool 8MiB、worksheet 上限）；worker/api 均有依赖 | —（经复核非虚假 flag） | 保持 ON |
+| `imports.local_upload` | ON | 浏览器直传 + checksum + data set 绑定 | — | 保持 ON |
+| `imports.vcf` | OFF | VcfAdapter → `import_vcf` → ADR-0005 协议（staging/verify/finalize、fingerprint 锁、VERIFYING 恢复、冲突 fail-closed、参数化） | 生产 HTTP ClickHouse finalize 验收（现为 chdb 嵌入引擎）；Admin→导入→发布 E2E；CNB/Docker 全栈 | 保持 OFF（最接近开启） |
+| `imports.fasta` | OFF | FastaAdapter.run 无条件 UnsupportedImportError | writer | 保持 OFF |
+| `imports.gff3` | OFF | Gff3Adapter.run Unsupported；`import_gff3` 仅计数不落库 | writer + 落库 + 全链路 | 保持 OFF |
+| `imports.blast_db` | OFF | BlastDbAdapter Unsupported | writer | 保持 OFF |
+| `imports.seed_data` | OFF | UnsupportedCsvAdapter | writer | 保持 OFF |
+| `imports.expression_csv` | OFF | UnsupportedCsvAdapter | writer | 保持 OFF |
+| `imports.homolog_csv` | OFF | UnsupportedCsvAdapter | writer | 保持 OFF |
+
+结论：本轮**不开启任何 OFF capability**；VCF 是唯一具备完整协议实现的候选，
+但其开启前置（real HTTP ClickHouse + 全栈 E2E + CNB）在外部阻塞下无法完成，
+因此 `imports.vcf` 与 `SOYMUTDB_ENABLE_VCF_IMPORT` 都保持关闭。
+
 ### 阻塞 / 未关闭
 
 - GitHub artifact 上传：已压缩 `pages-demo-dist`、移除无消费者的 dist 上传、缩短证据保留期；等待配额重算（6–12h）后应恢复

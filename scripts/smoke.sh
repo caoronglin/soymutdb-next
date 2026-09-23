@@ -108,6 +108,7 @@ smoke_contracts() {
     scripts/test_dependency_governance_contracts.py
     scripts/test_install_python_workspace.py
     scripts/test_clickhouse_migration_contracts.py
+    scripts/test_import_capability_contracts.py
     scripts/test_site_artifact_isolation.py
     scripts/test_supply_chain_contracts.py
     scripts/test_production_compose_contract.py
