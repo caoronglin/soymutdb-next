@@ -112,10 +112,9 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: Install API and test dependencies
         run: |
-          python -m venv .ci-venv
-          .ci-venv/bin/python -m pip install --upgrade pip
-          .ci-venv/bin/python -m pip install -e packages/jobs-py
-          .ci-venv/bin/python -m pip install -e apps/api pytest pytest-asyncio ruff
+          python scripts/install_python_workspace.py --venv .ci-venv \
+            --upgrade-pip --expect-version "${{ env.PYTHON_VERSION }}" apps/api \
+            --requirement pytest --requirement pytest-asyncio --requirement ruff
       - name: Run migrations and Docker-free baseline tests
         working-directory: apps/api
         run: |
@@ -174,10 +173,9 @@ jobs:
       - name: Install API package
         shell: pwsh
         run: |
-          py -m venv .ci-venv
-          .\\.ci-venv\\Scripts\\python.exe -m pip install --upgrade pip
-          .\\.ci-venv\\Scripts\\python.exe -m pip install -e .\\packages\\jobs-py
-          .\\.ci-venv\\Scripts\\python.exe -m pip install -e .\\apps\\api pytest pytest-asyncio ruff
+          py scripts/install_python_workspace.py --venv .ci-venv --python py `
+            --upgrade-pip --expect-version "${{ env.PYTHON_VERSION }}" apps/api `
+            --requirement pytest --requirement pytest-asyncio --requirement ruff
       - name: Parse PowerShell deployment scripts
         shell: pwsh
         run: |
@@ -245,10 +243,8 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: Install backend and client dependencies
         run: |
-          python -m venv apps/api/.venv
-          apps/api/.venv/bin/python -m pip install --upgrade pip
-          apps/api/.venv/bin/python -m pip install -e packages/jobs-py
-          apps/api/.venv/bin/python -m pip install -e apps/api
+          python scripts/install_python_workspace.py --venv apps/api/.venv \
+            --upgrade-pip --expect-version "${{ env.PYTHON_VERSION }}" apps/api
           pnpm install --frozen-lockfile
       - name: Check OpenAPI generated client contract
         run: pnpm --filter @soymutdb/api-client check:contract

@@ -205,27 +205,27 @@ def test_ci_runtime_smoke_imports_real_api_and_full_worker_registry() -> None:
 
 def test_ci_installs_local_jobs_package_before_api_and_worker_projects() -> None:
     workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-    jobs_install = "pip install --quiet -e packages/jobs-py"
 
+    # Every Python install step goes through the one shared bootstrap. The
+    # editable workspace distributions (packages/jobs-py, and the import
+    # protocol that does not exist on PyPI) are installed inside it, before the
+    # app target, so the ordering rule lives in exactly one place.
+    bootstrap = "scripts/install_python_workspace.py"
     frontend_job = _workflow_job(workflow, "frontend")
-    assert frontend_job.index(jobs_install) < frontend_job.index(
-        "pip install --quiet -e apps/api"
-    )
+    assert bootstrap in frontend_job
+    assert "pip install" not in frontend_job
 
     api_job = _workflow_job(workflow, "api-tests")
-    assert api_job.index(jobs_install) < api_job.index(
-        'pip install -e "apps/api[dev]"'
-    )
-    assert api_job.index(jobs_install) < api_job.index(
+    assert bootstrap in api_job
+    assert api_job.index(bootstrap) < api_job.index(
         "bash scripts/verify-backend-tests.sh"
     )
 
     # The worker deps are installed inside the shared backend verifier, after
     # the API package — one ordering rule, one place to change it.
     backend = (ROOT / "scripts/verify-backend-tests.sh").read_text(encoding="utf-8")
-    assert backend.index("pip install --quiet -e apps/worker") < backend.index(
-        "pytest apps/worker/tests -q"
-    )
+    assert backend.index(bootstrap) < backend.index("pytest apps/worker/tests -q")
+    assert "apps/worker[dev]" in backend
 
     # The CNB verify pipeline installs the same local package first.
     cnb_job = _cnb_pipeline("verify")
@@ -262,12 +262,11 @@ def test_full_worker_pytest_suite_is_a_hard_gate() -> None:
     assert "scripts/verify-backend-tests.sh" in api_job
 
     # The full worker suite is invoked unfiltered, after the analysis deps are
-    # installed; no `-k` narrowing and no skip flag is allowed.
+    # installed through the shared bootstrap; no `-k` narrowing and no skip flag
+    # is allowed.
     assert "pytest apps/worker/tests -q" in backend
     assert "-k " not in backend
-    assert backend.index("pip install --quiet -e apps/worker") < backend.index(
-        "pytest apps/worker/tests -q"
-    )
+    assert backend.index("apps/worker[dev]") < backend.index("pytest apps/worker/tests -q")
 
     # The same verifier is what the CNB pipeline calls.
     cnb_job = _cnb_pipeline("verify")

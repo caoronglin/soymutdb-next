@@ -16,7 +16,8 @@
 # is used as-is, and Testcontainers remains the fallback when neither applies.
 #
 # Requirements: apps/api/.venv with `pip install -e "apps/api[dev]"` and
-#               `pip install -e packages/jobs-py`.
+#               editable workspace distributions (the shared bootstrap
+#               scripts/install_python_workspace.py owns that install plan).
 # Usage: bash scripts/verify-backend-tests.sh
 # Env:   SOYMUTDB_TEST_DATABASE_URL  optional explicit test PostgreSQL
 #        SOYMUTDB_RUN_POSTGRES_INTEGRATION must stay "1"
@@ -84,8 +85,14 @@ step "Worker test package marker (cross-module imports must resolve)"
 step "Worker analysis dependencies"
 # Install the worker dev extra too: the import finalize/staging protocol is
 # accepted against a real embedded ClickHouse (`chdb`), which lives in the
-# worker's dev extra and runs in this shared venv.
-"${VENV_PYTHON}" -m pip install --quiet -e "apps/worker[dev]"
+# worker's dev extra and runs in this shared venv. The shared bootstrap
+# installs the editable workspace distributions (packages/jobs-py,
+# packages/import-protocol) first, because pip cannot fetch the import protocol
+# from PyPI.
+VENV_DIR="$(dirname "$(dirname "${VENV_PYTHON}")")"
+"${VENV_PYTHON}" scripts/install_python_workspace.py \
+  --venv "${VENV_DIR}" \
+  "apps/worker[dev]"
 "${VENV_PYTHON}" -c "import scanpy, anndata, leidenalg, igraph, matplotlib; print('analysis deps OK:', scanpy.__version__)"
 
 step "Worker pytest (PostgreSQL integration required)"

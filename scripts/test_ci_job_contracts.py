@@ -37,6 +37,7 @@ LEGACY_WORKFLOWS = (
 SHARED_SCRIPTS = (
     "scripts/ci-job-steps.sh",
     "scripts/setup-workspace.sh",
+    "scripts/install_python_workspace.py",
     "scripts/stage-pages-publication.sh",
     "scripts/verify-frontend-artifacts.sh",
     "scripts/verify-backend-tests.sh",
@@ -1437,11 +1438,16 @@ class DeliveryArchitectureTests(unittest.TestCase):
 
         venv_body = bodies["ensure_api_venv"]
         self.assertIn("apps/api/.venv", venv_body)
-        self.assertIn("-m venv", venv_body)
-        # The export imports `app.main`, so both the API package and its local
-        # jobs dependency must be installed, matching the API job's install.
-        self.assertIn("packages/jobs-py", venv_body)
+        # The venv and the editable workspace installs are owned by the shared
+        # bootstrap so GitHub, CNB, and local runs cannot drift on the install
+        # order (packages/import-protocol is not publishable to PyPI).
+        self.assertIn("scripts/install_python_workspace.py", venv_body)
         self.assertIn("apps/api", venv_body)
+        bootstrap = (ROOT / "scripts/install_python_workspace.py").read_text(encoding="utf-8")
+        self.assertIn("packages/jobs-py", bootstrap)
+        self.assertIn("packages/import-protocol", bootstrap)
+        # The venv must actually be created by the bootstrap, not assumed.
+        self.assertIn('"-m", "venv"', bootstrap)
 
         # The interpreter must be the PINNED one. The image supplies it, but
         # `command -v python3` succeeding is a weaker claim than "python3 is

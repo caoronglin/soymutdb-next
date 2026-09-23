@@ -247,13 +247,15 @@ ensure_api_venv() {
   fi
 
   log "creating API virtualenv for the OpenAPI contract gate ($("${SOYMUTDB_CI_VENV_PYTHON}" -V 2>&1))"
-  "${SOYMUTDB_CI_VENV_PYTHON}" -m venv "${venv}"
-  "${venv}/bin/pip" install --upgrade pip
-  # Mirror api_install: the contract exports app.main's OpenAPI document, so the
-  # API and its local jobs package must be importable. No [dev] extra here: the
-  # gate imports the app, it does not run the test tree.
-  "${venv}/bin/pip" install --quiet -e "${REPO_ROOT}/packages/jobs-py"
-  "${venv}/bin/pip" install --quiet -e "${REPO_ROOT}/apps/api"
+  # Mirror api_install through the same shared plan. The contract exports
+  # app.main's OpenAPI document, so the API and its local workspace
+  # dependencies must be importable; no [dev] extra is installed because the
+  # gate imports the app instead of running the test tree.
+  "${SOYMUTDB_CI_VENV_PYTHON}" "${REPO_ROOT}/scripts/install_python_workspace.py" \
+    --venv "${venv}" \
+    --upgrade-pip \
+    --expect-version "${PYTHON_VERSION}" \
+    apps/api
 }
 
 frontend_build_demo() {
@@ -297,14 +299,17 @@ api_install() {
     return 1
   fi
 
-  # Absolute paths: this container's cwd is not guaranteed to be the checkout,
-  # and a relative `apps/api/.venv` would create the venv somewhere else while
-  # check-contract.sh keeps looking under the repo root.
-  rm -rf "${venv}"
-  "${interpreter}" -m venv "${venv}"
-  "${venv}/bin/pip" install --upgrade pip
-  "${venv}/bin/pip" install --quiet -e "${REPO_ROOT}/packages/jobs-py"
-  "${venv}/bin/pip" install -e "${REPO_ROOT}/apps/api[dev]"
+  # One shared install plan (shared distributions -> apps/api[dev]) so GitHub,
+  # CNB, and local runs cannot drift on the editable-install order. The
+  # bootstrap resolves the venv path against the repository root, so this
+  # container's cwd cannot move the venv away from where check-contract.sh
+  # looks for it.
+  "${interpreter}" "${REPO_ROOT}/scripts/install_python_workspace.py" \
+    --venv "${venv}" \
+    --recreate \
+    --upgrade-pip \
+    --expect-version "${PYTHON_VERSION}" \
+    "apps/api[dev]"
 }
 
 # The job name in the catalog is `api-tests`, so the dispatcher resolves
