@@ -67,6 +67,34 @@ export const queryKeys = {
       context.federated,
     ] as const,
   },
+  mutants: {
+    all: () => [...queryKeys.all, "mutants"] as const,
+    // Public mutant lines keyed by filter + site/release so caches never cross
+    // site-variant/release boundaries (DB-CORE-6). Keyed by public_id only.
+    list: (context: { mutagen: string | null; limit: number; releaseId: string | null; siteVariant: "external" | "internal" }) =>
+      [
+        ...queryKeys.mutants.all(),
+        "list",
+        context.mutagen ?? null,
+        context.limit,
+        context.releaseId,
+        context.siteVariant,
+      ] as const,
+    detail: (publicId: string, releaseId: string | null, siteVariant: "external" | "internal") =>
+      [...queryKeys.mutants.all(), "detail", publicId, releaseId, siteVariant] as const,
+  },
+  variants: {
+    all: () => [...queryKeys.all, "variants"] as const,
+    list: (context: { assemblyId: string | null; releaseId: string | null; siteVariant: "external" | "internal"; page: number }) =>
+      [
+        ...queryKeys.variants.all(),
+        "list",
+        context.assemblyId ?? null,
+        context.releaseId,
+        context.siteVariant,
+        context.page,
+      ] as const,
+  },
 } as const;
 
 export type QueryKeys = typeof queryKeys;
