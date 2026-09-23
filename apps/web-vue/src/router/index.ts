@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from "vue-router";
 
 import GeneView from "../views/GeneView.vue";
+import DownloadsView from "../views/DownloadsView.vue";
 import Home from "../views/HomeView.vue";
 import MutantDetailView from "../views/MutantDetailView.vue";
 import MutantsListView from "../views/MutantsListView.vue";
@@ -20,6 +21,7 @@ export const router = createRouter({
     { path: "/mutants", name: "mutants", component: MutantsListView },
     { path: "/mutants/:publicId", name: "mutant", component: MutantDetailView },
     { path: "/variants", name: "variants", component: VariantsView },
+    { path: "/downloads", name: "downloads", component: DownloadsView },
     {
       path: "/:pathMatch(.*)*",
       name: "not-found",
