@@ -340,6 +340,13 @@ def compute_variant_id(
 # ---------------------------------------------------------------------------
 
 
+def variant_length(ref: str, alt: str) -> int:
+    """Allele span for ``variant_facts.length``: 1 for a SNP, otherwise the
+    longer allele (INS/DEL/MNV/SV). The seed loader uses the same definition so
+    identical variants cannot disagree across the two write paths."""
+    return max(len(ref), len(alt))
+
+
 def determine_variant_type(ref: str, alt: str) -> tuple[str, str]:
     """Determine variant type and subtype from ref/alt alleles.
 
@@ -627,7 +634,7 @@ def _iter_vcf_base_rows(
                     "alt_allele": str(alt),
                     "variant_type": vtype,
                     "variant_subtype": vsubtype,
-                    "length": max(len(ref), len(str(alt))),
+                    "length": variant_length(ref, str(alt)),
                     "gene_id": gene_id,
                     "gene_symbol": best_ann.get("gene_name", "") if best_ann else "",
                     "gene_surrogate_id": gene_sid,

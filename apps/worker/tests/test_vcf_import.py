@@ -322,3 +322,10 @@ def test_worker_identity_matches_the_route_b_seed_loader() -> None:
         assert ingest.determine_variant_type(ref, alt) == seed.determine_variant_type(
             ref, alt
         ), (ref, alt)
+        assert ingest.variant_length(ref, alt) == seed.variant_length(ref, alt), (ref, alt)
+
+    # The canonical definition: SNP spans 1, INS/DEL/MNV report the longer allele.
+    assert ingest.variant_length("A", "G") == 1
+    assert ingest.variant_length("A", "AT") == 2
+    assert ingest.variant_length("AT", "A") == 2
+    assert ingest.variant_length("AC", "GT") == 2

@@ -52,6 +52,12 @@ def compute_variant_id(release_id: str, chrom: str, pos: int, ref: str, alt: str
     return int.from_bytes(hashlib.sha256(key.encode()).digest()[:8], byteorder="big", signed=False)
 
 
+def variant_length(ref: str, alt: str) -> int:
+    """Allele span for ``variant_facts.length`` (matches the worker ingest):
+    the longer allele, so SNP=1 and INS/DEL/MNV report their span."""
+    return max(len(ref), len(alt))
+
+
 def determine_variant_type(ref: str, alt: str) -> tuple[str, str]:
     ref_len, alt_len = len(ref), len(alt)
     if alt == "<DEL>" or alt.startswith("<") or alt_len > 50 or ref_len > 50:
@@ -320,7 +326,7 @@ def parse_vcf(path: Path, release_id: str, assembly: str,
                 "variant_id": compute_variant_id(release_id, chrom, pos, ref, alt),
                 "release_key": str(release_id), "assembly_key": assembly,
                 "chromosome": chrom, "position": pos, "ref_allele": ref, "alt_allele": alt,
-                "variant_type": vtype, "variant_subtype": subtype, "length": abs(len(ref) - len(alt)) or 1,
+                "variant_type": vtype, "variant_subtype": subtype, "length": variant_length(ref, alt),
                 "gene_id": gene_id, "gene_symbol": gene_symbol,
                 "gene_surrogate_id": surrogate_id(gene_id) if gene_id else 0,
                 "mutant_line_surrogate_id": ml_sur, "mutant_line_name": ml_name,
