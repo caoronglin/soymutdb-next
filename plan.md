@@ -1,586 +1,461 @@
-# SoyMutDB Next 全线重构执行计划（第六轮 · PI-agent 主计划）
+# SoyMutDB Next 当前状态驱动重构计划（第七轮 · PR #1 收敛版）
 
-> 日期：2026-09-22
-> 状态：唯一主执行计划 / 架构约束 / 测试链 / Release Gate
-> 重构前冻结基线：bef6db6d737f44cfd8d11aef20739c8b80147eb3
-> 冻结归档分支：archive/pre-vue-refactor-2026-09-22-bef6db6
-> 数据正确性前置：ADR-0004~0007、P1 isolation、P2 import manifest/idempotency/finalize
-> 执行原则：先证据后修改；先契约后重构；每个阶段可回滚；CNB 与 GitHub 调用同一测试脚本；未过 Release Gate 的能力不得开启。
-
----
-
-# 0. PI-agent 执行协议
-
-PI-agent 每轮只能执行当前 Phase。开始任何 Phase 前必须重新读取当前 main、plan.md、相关 ADR、最近 20 个 commits、当前分支、PR、测试和受影响代码，不得把本计划中的历史状态当成实时事实。
-
-固定执行循环：
-
-1. READ：读取当前代码和官方文档。
-2. VERIFY：用 git/search/runtime 验证计划假设。
-3. REPRODUCE：先复现当前行为或缺陷。
-4. DESIGN：给出最小迁移边界和回滚点。
-5. IMPLEMENT：只改当前 Phase 所需范围。
-6. FOCUSED TEST：先跑最小相关测试。
-7. BROAD REGRESSION：跑本计划定义的回归层。
-8. CNB PROOF：需要 Docker/服务证明的变更必须在 CNB 跑真实镜像与运行验证。
-9. EVIDENCE：记录 commit、命令、结果、artifact digest、证据等级。
-10. UPDATE PLAN：回填完成项、失败项、阻断项和下一步。
-
-证据等级：E0 文档/历史；E1 当前代码确认；E2 可重复测试；E3 生产等价故障/性能验证；E4 staging/production 观察。
-
-严禁把“代码存在”写成“功能已验证”；严禁把本地 mock 绿写成真实 PostgreSQL/ClickHouse/MinIO/CNB 绿。
+> 审计日期：2026-09-23
+> Canonical plan：`plan.md`（保持小写，禁止再创建 `PLAN.md` 形成双真源）
+> Base：`main@4ec2fdb768d368585e76a399f202607e578a0ec2`
+> 当前实现分支：`refactor/next-vue-and-p2`
+> 本轮审计起点：`ec12ee611f7fd8baae1600c3dffe93aa25c16575`
+> PR：#1 `refactor: Vue mainline + pnpm 12 + P2-3 import protocol (Phase C/A/B/D/F)`
+> 原则：先关闭 PR #1 correctness / CI / runtime gate，再继续新功能。未通过 Gate 的能力不得以“本地可用”替代真实交付证据。
 
 ---
 
-# 1. 冻结基线与归档规则
+## 0. 当前事实：不要再按旧 Phase 从零开始
 
-重构前 React/AntD 主线基线固定为 commit bef6db6d737f44cfd8d11aef20739c8b80147eb3，归档分支 archive/pre-vue-refactor-2026-09-22-bef6db6 已创建，后续不得向该分支继续开发。
+### 0.1 Git / PR
 
-仓库当前未配置 GitHub ruleset。真正服务器侧只读冻结应对 archive/** 增加 ruleset：Restrict updates、Restrict deletions、Block force pushes；GitHub 官方 ruleset/branch protection 支持这些能力。当前 GitHub 连接器没有 administration write 能力，因此归档分支已固定 SHA，但规则锁需仓库管理员在 GitHub 设置中完成。
+- `main` 仍在 `4ec2fdb...`。
+- PR #1 从 main 前进 31 commits、behind 0；审计时 head 为 `ec12ee61...`。
+- PR #1 共 99 changed files，约 +6972 / -600。
+- GitHub 报告 `mergeable=true`，但 `mergeable_state=unstable`。
+- Copilot review 有 22 个未解决线程：16 High、6 Medium。
+- GitHub Actions 两条 PR workflow 均为 failure，因此 PR #1 当前禁止合并。
 
-重构基线 Release 包定义：
+### 0.2 已实现但尚未等于 Release-ready
 
-- source commit = bef6db6d...
-- source archive branch = archive/pre-vue-refactor-2026-09-22-bef6db6
-- CNB 使用该 commit/tag 构建现有 amd64/arm64 runtime images
-- 必须完成 runtime smoke、Trivy、SPDX SBOM、provenance、release manifest、SHA256
-- 归档制品不得用重构后的代码重新构建
-- 后续任何 regression 都可以和此冻结基线做功能/产物/性能对照
+| 工作包 | 当前状态 | 证据等级 | 结论 |
+| --- | --- | --- | --- |
+| Framework-neutral seam | IMPLEMENTED | E2 本地 | shared/query-keys/i18n-core/genome-view-model 已有守卫 |
+| Shared import protocol | IMPLEMENTED | E2 本地 + 真 PG | fingerprint/FSM/visibility 已下沉 |
+| P2-3 staging/verify/finalize | PARTIAL | E2/E3 单节点 chdb + 真 PG | 有真实引擎证明，但存在 review 指出的 finalize/并发/重试风险，不能关闭 Gate |
+| pnpm 12 | IMPLEMENTED_LOCAL | E2 本地 | 12.5.1 + lockfile 已迁，GitHub CI 仍红 |
+| Vue shell | IMPLEMENTED_LOCAL | E2 本地 | Router/Pinia/Vue Query/Antdv Next/Tailwind 已建立 |
+| Vue Home/Search/Gene/Mutants/Variants/Downloads | PARTIAL | E2 本地 | 页面存在，但 release/site/cache/base URL 等 correctness 尚未关闭 |
+| Canonical Vue deployment | NOT_DONE | E1 | 当前正式 build/publish 仍以旧 `apps/web` 为主 |
+| TanStack Charts 全迁 | NOT_STARTED | E0/E1 | 不得在 PR #1 correctness 未关闭前批量启动 |
+| Vue Admin | NOT_STARTED | E0 | 后置 |
+| P1-1 full-stack ID-05 | BLOCKED | E1/E2 局部 | 仍缺真实 seeded release + unreleased sentinel + artifact-level 全栈证据 |
+| CNB Docker / Trivy / SBOM | BLOCKED | E1 配置 | PR #1 尚无真实 CNB 成功证据 |
+| P2-6 capability reopen | BLOCKED | E1 | 所有原默认 OFF scientific imports 继续 OFF |
 
----
+### 0.3 PR #1 提交历史已确认
 
-# 2. 最终技术主线
-
-前端正式切换到 Vue，React 进入迁移期维护，不再扩新产品功能。
-
-目标基线：
-
-- Node 24
-- pnpm 12
-- Vue 最新 stable；禁止 RC/beta 作为生产基线
-- Vue Router 最新 stable
-- Pinia 4
-- VueUse 15
-- TanStack Vue Query 5
-- TanStack Charts 0.x 精确锁定
-- Antdv Next 1.x 精确锁定并通过项目 facade 使用
-- Tailwind CSS 4
-- shadcn-ui/cn，仅采用 cn class merge 工具，不引入完整 shadcn/ui
-- Vite
-- Vitest + Playwright
-
-当前官方复核结论：
-
-- Vue 当前稳定线为 3.5.x；3.6 仍有 RC，因此生产使用 latest stable。
-- Pinia 4 为 ESM-only；Pinia 只负责 client/global UI state。
-- VueUse 15 已有 breaking changes，直接按 15.x API 迁移。
-- TanStack Vue Query 继续承担 server state/cache/mutation。
-- TanStack Router 不作为 Vue 主线，路由迁 Vue Router。
-- Antdv Next 1.x 仍可能在 minor 发生 breaking change，因此 exact pin + @soymutdb/ui-vue facade。
-- TanStack Charts 当前为 0.x Alpha，因此允许全线迁移，但必须 exact pin + @soymutdb/charts facade + visual/a11y/value regression；升级 0.x minor 必须独立 PR。
-- ECharts 只允许迁移期存在，迁移完成后业务代码归零。
-- cn 在兼容测试通过后替换 clsx + tailwind-merge。
-
-Cloudflare Workers 明确不属于本次重构决策，不因为之前提供的 Workers 链接调整架构。
+PR 已按可预览逻辑提交推进：framework seam → import protocol → ClickHouse port/finalize → worker manifest → VCF wiring → genome model → pnpm12 → Vue shell → Vue pages → GitHub workflow pins。这个提交模型保留，不 squash 成单一巨型提交。
 
 ---
 
-# 3. S3 / MinIO 决策
+## 1. PR #1 Exit Gate：这是当前唯一最高优先级
 
-撤销“删除对象存储”的路线。保留 S3-compatible 存储语义，MinIO 继续作为自托管/开发默认实现。
+在以下四组 Gate 全部通过前：
 
-原因：当前仓库已确认 S3/MinIO 直接服务于 Admin multipart upload、module import input、GWAS input/output、fastp/scanpy 等分析结果、public uploads、presigned URL、备份恢复、worker 任务和发布数据对象。删除会产生真实功能回归。
+- 不继续批量迁移 Vue 页面；
+- 不开始全量 TanStack Charts；
+- 不删除 React/ECharts；
+- 不开启 VCF 或其他 scientific import feature flag；
+- 不把 Vue 声称为已上线 canonical portal。
 
-本轮只做接口治理，不删除能力：
+### G1 · CI / Toolchain Gate
 
-- 业务层不得扩散 boto3/MinIO 细节；逐步收敛为统一 StorageService。
-- PostgreSQL 只存对象元数据、checksum、size、MIME、visibility、release/dataset 关系，不用 Large Object 代替 S3。
-- S3 object key、checksum、multipart、presign、backup/restore 继续保留测试。
-- MinIO/S3 配置可简化，但不能从 core compose、worker、backup contract 中删除，除非未来另有 ADR。
-- 所有上传必须继续做 size、MIME、checksum、key namespace、ownership、path/prefix validation。
+当前 GitHub Actions 真实失败项：
 
----
+1. API tests：失败在 Python dependency install。
+2. Frontend：失败在为 OpenAPI export 准备 API venv。
+3. Baseline Ubuntu API：失败在 API/test dependencies install。
+4. Baseline OpenAPI contract：失败在 backend/client dependencies install。
+5. Baseline Windows：失败在 API package install。
+6. Dependency governance：graph/gates 失败。
+7. ClickHouse migration fixture：真实 workflow 失败。
+8. Web/Admin baseline build 本体与 artifact contract 已通过，但 artifact upload 失败。
+9. Docker image / Kind / publish 因上游失败全部 skipped。
 
-# 4. 不可突破的硬约束
+最高概率的第一个安装链问题：`apps/api` / `apps/worker` 已声明本地 `soymutdb-import-protocol==0.1.0`，`[tool.uv.sources]` 能告诉 uv 使用本地路径，但 GitHub workflow 使用 plain pip 且只预装 `packages/jobs-py`。必须先用日志/最小复现确认，不能仅凭推断直接宣布原因。
 
-H1 数据能力 Gate：被 feature flag 关闭的 scientific import 继续关闭。只有 parser + validator + semantic fingerprint + durable manifest + staging + idempotency + verify + finalize + retry/crash/ambiguous ACK + rollback/cleanup + real PG/CH/E2E 证据齐全后，才允许单独评审开启。
+#### G1 实施要求
 
-H2 ClickHouse visibility：WRITING 阶段不得直接向 portal 正常读取的 final facts 暴露 partial data；base 与 dependent MV/summary 必须一起验证/finalize。
+- 新增一个唯一 Python workspace bootstrap 入口，供 GitHub/CNB/local 共用；不要在多个 workflow 手写不同的 `pip install -e ...` 顺序。
+- bootstrap 必须显式安装所有本地 Python packages：至少 `packages/import-protocol`、`packages/jobs-py`，再安装 API/worker。
+- 统一 Python 3.14；历史 ClickHouse job 若仍用 3.12，必须说明是否为 fixture 限制，否则收敛。
+- 修复 dependency-governance 后必须保留 pnpm 12 双文档 lockfile 支持。
+- artifact upload failure 必须读取具体日志，禁止通过 `if-no-files-found: ignore` 等方式绕过。
+- 修复后 GitHub 两个 workflow 必须全部 green，再进入 CNB。
 
-H3 VCF v1：只写 draft release。已发布 release 热替换不属于第一版。
+#### G1 退出证据
 
-H4 Worker/API：worker 不 import apps/api runtime package；共享纯协议放 packages。
-
-H5 双站：external/internal 必须是独立 artifact、独立 SW/cache/analytics/security domain；external 对 internal_id、unreleased sentinel、private content 零泄漏。
-
-H6 Admin：不提供 root/sudo/Docker daemon/arbitrary shell/arbitrary SQL/database superuser。
-
-H7 S3：保留 S3/MinIO；任何重构不得破坏现有上传、分析、导入、备份恢复语义。
-
-H8 Vue 迁移：对应 Vue 功能未达到 parity 前，不删除 React 实现；但禁止继续新增 React 专用业务功能。
-
-H9 Charts：新图表只能使用 TanStack Charts facade；禁止新增 ECharts。迁移结束后 active code/config 中 ECharts 引用必须为 0。
-
-H10 CNB：涉及 Dockerfile、runtime dependency、Node/Python/Rust toolchain、Compose、数据库或 S3 的变更，必须有 CNB 真实 Docker 构建和运行验证，不能只靠静态 CI。
-
----
-
-# 5. Phase A — P2 数据正确性先行
-
-这是全线重构期间仍然最高优先级的数据主线，可与前端基础设施 Phase B/C 并行，但不能被 UI 重构取代。
-
-A1 共享 import protocol：fingerprint canonicalization、manifest state、allowed transition、schema/importer/normalization version 下沉共享 package，API/worker contract test 锁定。
-
-A2 真实 ClickHouse inventory：在仓库固定真实版本上执行 SELECT version、SHOW CREATE TABLE variant_facts、system.tables、system.dependencies，保存 DDL/MV/summary evidence。
-
-A3 staging writer：只写 staging；deterministic batch identity；bounded memory；draft release gate。
-
-A4 verify：expected/written rows、checksum、release、assembly、schema/parser/normalization version。
-
-A5 finalize：base + dependent MV/summary 一致；finalize 后二次验证；失败保持不可公开。
-
-A6 failure matrix：same content retry、different filename、different release/assembly、crash before/mid/after write、crash during finalize、ambiguous ACK、duplicate batch、checksum/row mismatch、FAILED retry。
-
-A7 capability reopen：默认保持 OFF；每种 import 单独评审。
+- GitHub Actions PR head：CI = success。
+- Baseline validation = success，或明确拆除已被新交付链取代且有 ADR 的历史 gate。
+- 所有失败 job 都有 root cause + regression test/contract。
 
 ---
 
-# 6. Phase B — pnpm 12 与依赖治理
+### G2 · Vue correctness / deployment-boundary Gate
 
-目标：在开始大规模 Vue 重写前先把依赖版本真源固定。
+官方 TanStack Query 文档明确要求：query function 依赖的每个会改变结果的变量，都必须进入 query key；Vue 中 ref/getter 应保持响应式依赖。PR review 对当前 query key 的多项问题与官方契约一致。
 
-B1 升级 pnpm 11 → 12；同步 packageManager、engines/devEngines、CNB build image、Dockerfiles、GitHub CI、Corepack/安装方式和 lockfile。
+必须关闭：
 
-B2 pnpm-workspace.yaml 成为 workspace 版本/策略真源：catalogMode strict、catalogPrune、catalog/catalogs、overrides、allowBuilds、workspace:* 内部依赖。
+1. API 请求必须绑定 build/runtime 的 release context，不能页面显示 release A、请求实际使用 active release B。
+2. Gene detail key：加入 `siteVariant + release + assembly + gene identity`。
+3. Mutant detail key：禁止 hard-code null release。
+4. Variants key：加入 chromosome/start/end/impact，以及任何 cursor/limit/sort/result-affecting filter。
+5. Search/Mutant/Gene/Variant 等 query 应优先使用 Vue Query `queryOptions()` 把 queryKey 与 queryFn 共置，避免两者再次漂移。
+6. `VITE_SITE_VARIANT` 必须严格验证，只允许 `external|internal`，非法值 build/start fail-closed。
+7. Vite `base` 与 Vue Router history base 必须来自同一个 `VITE_BASE_URL` / normalized deployment base。
+8. Mutant filter 必须写入 route query，可分享/刷新/后退恢复。
+9. Gene JBrowse 使用 canonical `VITE_JBROWSE_BASE_URL`。
+10. Downloads 必须实现真实 download/presign action，不把 metadata-only 页面标成 parity。
+11. URL-less Search hit 不能保留可交互 anchor 语义。
+12. Vue 进入 canonical build/deploy 前，必须先明确 `preview-only`；不要在同一个 correctness commit 中同时切 production delivery。
 
-B3 catalog 加入 Vue、Vue Router、Pinia、VueUse、TanStack Vue Query、TanStack Charts、Antdv Next、Tailwind、cn、Vite、Vitest。
+#### G2 测试
 
-B4 快速变化依赖 exact pin：Vue 初始迁移版本、Pinia major、VueUse major、Antdv Next、TanStack Charts。
-
-B5 CI contract：禁止 @soymutdb/* 从 registry 解析；禁止第二套 Vue runtime；禁止 package 私自声明 catalog 外公共版本；frozen lockfile。
-
-B6 供应链：allowBuilds 白名单、依赖审计、license、secret scan、Trivy/SBOM 与 lockfile evidence。
-
-Phase B Gate：本地、GitHub、CNB 三端 pnpm/Node 版本一致；pnpm install --frozen-lockfile 通过；dependency governance 全绿。
-
----
-
-# 7. Phase C — Framework-neutral seam
-
-在写 Vue 页面前抽出不可绑定框架的公共层：
-
-- packages/api-client
-- packages/schemas
-- packages/domain
-- packages/query-keys
-- packages/i18n
-- packages/design-tokens
-- packages/genome-view-model
-- packages/import-protocol / jobs-py 对应 Python contract
-
-这些包不得依赖 react、vue、antd、antdv-next。
-
-Gate：现有 React 应用和新的 Vue test harness 均能消费同一 API/schema/domain package。
+- query-key contract：release/site/assembly/filter 任一变化必须生成不同 key。
+- reactive transition：切 release/site/filter 必须 refetch，而非复用旧缓存。
+- deep-link：刷新 URL 后恢复 filter/page/context。
+- `VITE_BASE_URL=/soymutdb-next/` build + preview。
+- external/internal invalid variant negative test。
+- JBrowse origin contract。
+- Downloads presigned URL ownership/visibility test。
+- keyboard/a11y negative interaction test。
 
 ---
 
-# 8. Phase D — Vue Shell
+### G3 · P2-3 import correctness / security Gate
 
-D1 建 Vue Web/Admin shell，接入 Vue Router、Pinia、VueUse、TanStack Vue Query、Antdv Next facade、Tailwind 4、cn。
+chdb 是真实 ClickHouse 引擎证据，但不能替代 production HTTP ClickHouse、mutation、并发 worker、cluster/replica 语义。
 
-D2 状态分工：TanStack Vue Query = server state；Pinia = auth/theme/locale/motion/release-assembly/admin wizard/client state；component local = ref/computed。
+PR review 当前必须逐条 triage：Confirmed / False Positive / Already Fixed。Confirmed 项必须先补 failing regression test，再修实现。
 
-D3 Router：迁移 URL filter/sort/page/release/assembly/deep-link/back-forward/scroll 语义，保留 SSG route enumeration。
+#### G3.1 实际任务入口
 
-D4 Antdv Next：业务只能从 @soymutdb/ui-vue facade 引用。升级上游时 facade contract test 先失败。
+- 确认 Admin/Celery `run_import_adapter(kind=vcf)` 的真实路径最终进入新 ADR-0005 protocol。
+- 如果旧 `VcfAdapter.run` 仍 unconditional fail-closed，则只能二选一：
+  - 保持 capability OFF 并让路径明确 fail-closed；或
+  - 在 P2-6 前把真实 adapter path 接到 protocol。
+- 不允许“存在一个新的 `import_vcf` 函数”就宣称功能已接线。
 
-D5 cn：先跑 Tailwind4、dark、responsive、arbitrary value、CSS variable、genomic token merge snapshots；通过后才删 clsx/tailwind-merge。
+#### G3.2 稳定逻辑身份
 
-Gate：Vue shell 能构建 external/internal 空壳 artifact，CSP、theme、i18n、routing、query client、error boundary/feedback 基础完成。
+- semantic fingerprint 已故意排除 filename/object key。
+- variant identity 也必须从稳定 semantic identity + canonical variant coordinates/alleles 推导，不能依赖可变化的 S3 `file_key`。
+- same bytes + different object key retry 必须得到同一 logical facts / same variant IDs。
 
----
+#### G3.3 并发与恢复
 
-# 9. Phase E — TanStack Charts 全线迁移
+- 同一 fingerprint 同时到达两个 worker 时，只允许一个 writer/finalizer。
+- 优先在 PostgreSQL control plane 使用 transaction-scoped advisory lock 或等价可证明锁；不要依赖 Celery“通常不会重复”。
+- lock key 必须稳定、冲突范围清晰、异常释放可靠。
+- CREATED/PARSING/WRITING/VERIFYING/FAILED/PUBLISHED 每个可恢复状态必须有 retry table。
+- VERIFYING crash 后 retry 不得执行非法 VERIFYING→VERIFYING。
+- PUBLISHED retry 必须是 no-op / return existing result。
 
-目标：最终删除 ECharts，不保留双生产图表栈。
+#### G3.4 ClickHouse finalize
 
-建议迁移顺序：release trend → chromosome density → impact distribution → expression bar → query latency → storage growth → import throughput → donut → heatmap → enrichment → exppattern → widget health。
+- ClickHouse mutations 默认异步时，任何 `ALTER ... DELETE` 后立刻重写都存在 race。
+- 若保留 mutation，production engine 必须使用同步设置并验证 mutation 完成；否则改为不依赖异步 mutation 的 staging/swap/rebuild protocol。
+- v1 仅 draft release，因此优先选择“整 release 可重建且可验证”的简单正确方案，不为增量热更新增加复杂度。
+- summary purge/rebuild 范围必须和 base rewrite 范围一致；不能删除整个 release summary 却只重建 touched chromosomes。
+- post-finalize 必须对 base + summaries 做完整校验。
 
-每张图必须保存旧 ECharts frozen-baseline fixture，并验证：
+#### G3.5 SQL 与重复冲突
 
-- exact input data
-- aggregation 与 missing-value policy
-- axis/units
-- tooltip exact values
-- legend/filter
-- release/assembly context
-- dark/light
-- motion/reduced-motion
-- 390/1024/1440
-- keyboard focus
-- aria label/description
-- linked data table 或可访问替代
-- screenshot/visual regression
+- 所有 release/chromosome/输入派生值必须参数化；禁止 f-string 拼接上传文件内容到 SQL。
+- exact duplicate variant 可 deterministic dedup。
+- 同一 canonical `variant_id` 若 annotation/其他事实冲突：第一版建议 fail-closed，输出 diagnostics；不要静默任选一条。
 
-TanStack Charts 0.x 升级规则：exact pin；minor 升级独立 PR；先跑 facade contract + 全图 snapshot + Playwright visual，禁止业务代码使用未经 facade 暴露的内部 API。
+#### G3 测试矩阵
 
-最终 Gate：git grep 活跃源码/config 不再出现 echarts；删除 use-echarts、ECharts CDN/manual chunk/package/mock/docs active contract。
-
----
-
-# 10. Phase F — 公共站 Vue 迁移
-
-顺序：Home → Search/Omnibox → Genes → Mutants → Variants → Phenotypes → Downloads/Publications → tools → auth/public utility。
-
-每页必须保持：API request/response 语义、URL search state、release/assembly、loading/empty/error、external/internal capability、i18n、SEO/SSG、keyboard、responsive。
-
-禁止为迁移方便把 server-side filter 改回前端拉全量数据。
-
-Gene Preview 从 primer-workbench 吸收 merged genomic viewport：gene/transcript/exon/CDS/UTR 同坐标轴、overlap row packing、strand、pinned detail、keyboard/focus；用 SoyMutDB release/assembly/public projection 重新实现，不能复制旧业务外壳。
-
----
-
-# 11. Phase G — Admin Vue 迁移与发布
-
-迁移 dashboard、Import Studio、release、dataset、content、publication、analytics、settings。
-
-Import Studio 必须映射真实 manifest：Source → Context → Validate/Preview → Ingest → Verify → Publish/Complete。
-
-S3 multipart/presign 保留；Vue 迁移不能改变 object-key ownership/checksum contract。
-
-disabled capability 显示原因和 Gate，不提供点了必失败的假按钮。
-
-高风险 release/publish/rollback 继续需要 RBAC、confirmation、reason、audit、idempotency。
+- same bytes / same key retry。
+- same bytes / different key retry。
+- same semantic input concurrent workers。
+- crash at PARSING/WRITING/VERIFYING/finalize-before-ack/finalize-after-ack。
+- async/ambiguous ACK。
+- quote/SQL-fragment chromosome negative test。
+- duplicate identical row。
+- duplicate conflicting row。
+- touched subset vs pre-existing untouched chromosome。
+- mutation wait failure/timeout。
+- final base/summary checksum + count。
 
 ---
 
-# 12. Phase H — external/internal、SSG 与发布回归
+### G4 · Review / Merge Gate
 
-必须生成独立 external/internal artifact。
+PR #1 合并条件：
 
-回归：
+- 22 review threads 全部有 triage 结论。
+- 所有 Confirmed High 已有 regression test + fix。
+- unresolved High = 0。
+- unresolved Medium = 0，或明确记录为 follow-up 且不影响 correctness/deployment/security。
+- 重新请求一次 fresh code review。
+- GitHub Actions 全绿。
+- CNB 真 Docker Gate 全绿。
+- feature flags 仍保持当前安全默认。
 
-- external HTML/JSON/JS/snapshot/search/SW 中 internal_id = 0
-- unreleased sentinel = 0
-- internal content = 0
-- internal 需要真实 auth/edge protection
-- 两站 cache key/service worker/analytics 不共享
-- release/assembly deep-link 不静默掉到 active/default
-- SSG 页面与 API live page 对同一 release 的核心事实一致
-
-P1-1 只有真实 running API + seeded published release + unreleased sentinel + artifact scan + negative leakage 全绿后才能关闭。
-
----
-
-# 13. Phase I — S3/MinIO 与数据发布回归
-
-不删除 S3。重构重点是把 storage contract 稳定下来。
-
-覆盖：
-
-- Admin multipart create/sign/complete/abort
-- SHA256 server verification
-- bucket/key namespace
-- user/job/dataset ownership
-- public/private URL
-- worker read/write
-- GWAS input/output
-- fastp/scanpy outputs
-- module import object input
-- backup/restore + version/checksum contract
-- MinIO compose health
-- failure/retry/cleanup
-
-任何 Vue/API 重构导致这些接口变化，都必须同时迁移 API client、worker、tests、docs，并提供 backward/forward migration 方案。
+只有满足 G1–G4，才允许 merge PR #1。
 
 ---
 
-# 14. CNB 作为 Docker 生产等价验收主骨架
+## 2. 官方文档驱动的架构修正
 
-官方 CNB 文档确认：.cnb.yml 是 Pipeline-as-Code；services: docker 启用 DinD 与 Docker CLI；CNB 会自动登录当前仓库 Docker 制品库；支持 Docker/buildx、registry cache、多架构 OCI、provenance/SBOM attestation、PR/push/tag 事件、runner CPU、附件制品和 Flow 可视化。
+### 2.1 Vue / Router / Pinia / VueUse
 
-官方参考：
+- Vue 生产线使用 latest stable，不跟 RC/beta；当前迁移基线保持已锁定 stable，升级必须独立提交。
+- Vue Router 已进入 v5 稳定线；继续精确治理，不因迁移再引入第二套路由。
+- Pinia 只做 client/global UI state；server state 继续由 TanStack Vue Query 管。
+- VueUse 15 按 v15 breaking contract 使用，不增加兼容旧 API shim。
 
-- https://docs.cnb.cool/zh/build/configuration.html
-- https://docs.cnb.cool/zh/build/grammar.html
-- https://docs.cnb.cool/zh/build/trigger-rule.html
-- https://docs.cnb.cool/zh/build/build-env.html
-- https://docs.cnb.cool/zh/build/pipeline-cache.html
-- https://docs.cnb.cool/zh/artifact/docker.html
-- https://docs.cnb.cool/zh/artifact/supported-manifest-types.html
-- https://docs.cnb.cool/zh/build/migrate-to-cnb/migrate-from-github-actions.html
+### 2.2 TanStack Query
 
-现有 .cnb.yml 已采用正确的关键模式，重构时继续复用 scripts/ci-job-steps.sh，禁止另写一套 CNB 专用测试逻辑。
+新增项目规则：
 
-## 14.1 CNB PR Gate
+- `packages/query-keys` 只表达 framework-neutral identity。
+- Vue app 新建 typed `queryOptions` factory 层，将 queryKey/queryFn/staleTime/context 共置。
+- 所有 query function result-affecting variables 进入 key。
+- site variant / release / assembly 是 SoyMutDB 默认 cache namespace，不得由页面作者自行决定是否加入。
 
-PR 只验证、不发布：
+### 2.3 TanStack Charts
 
-- frontend/type/lint/unit
-- API + worker tests
-- dependency governance
-- contract tests
-- external/internal artifact build
-- changed Vue pages E2E
-- real PostgreSQL integration
-- real ClickHouse migration/import tests（相关变更时必须）
-- MinIO/S3 integration（storage/import/analysis 相关变更时必须）
+官方仍标记为 Alpha 0.x，当前 published line 文档为 0.18.0。允许后续全线迁移，但：
 
-PR 是不可信事件，不给生产 registry/signing/publication secret。
+- exact pin，禁止 `^0.x`。
+- 必须通过 `@soymutdb/charts` facade。
+- 一个 chart 一个/一组可预览 commit。
+- 每个 0.x minor upgrade 独立 PR。
+- 图表必须有 ariaLabel/ariaDescription 和精确值替代（表格/下载），不能只靠 SVG。
+- PR #1 未合并前不启动全量迁移。
 
-## 14.2 CNB main push Gate
+### 2.4 pnpm 12
 
-至少运行：
+- workspace project settings 继续集中在 `pnpm-workspace.yaml`。
+- lockfile 双文档属于 pnpm 12 行为，任何 scanner/governance parser 都必须覆盖。
+- `allowBuilds` 保持最小白名单。
+- 后续评估 `blockExoticSubdeps`、`trustPolicy: no-downgrade`；先用当前 lockfile 做兼容审计再启用。
+- `minimumReleaseAge` 例外必须逐包、逐版本、有注释，不允许通配符放宽。
 
-- full verification
-- real ClickHouse migration
-- MCP e2e
-- linux/amd64 native image build
-- linux/arm64 native image build
-- docker run runtime smoke
-- image architecture proof
-- Trivy blocking scan
-- SPDX SBOM
-- validated runtime image package
-- external/internal artifact verification
+### 2.5 ClickHouse
 
-## 14.3 CNB Docker 制品
+- PostgreSQL manifest 是 exactly-once / logical visibility authority。
+- ClickHouse 原生 dedup 只能做辅助；其窗口/重试稳定性不能替代应用协议。
+- mutation/DELETE 等异步操作必须显式等待或从协议中移除。
+- dynamic SQL values 使用 parameters。
 
-镜像命名使用 CNB_DOCKER_REGISTRY/CNB_REPO_SLUG_LOWERCASE 命名空间；commit SHA 作为不可变 tag；禁止仅依赖 latest。
+### 2.6 CNB
 
-buildx cache 使用 CNB registry cache；如果 BuildKit 较旧导致 cache manifest 404，按 CNB 官方建议使用 image-manifest=true,oci-mediatypes=true 或升级 BuildKit >=0.21。
+CNB 继续作为 Docker 生产等价证明主骨架：
 
-## 14.4 CNB Runtime Stack Verification
-
-镜像 build 成功不等于可发布。CNB 必须在 DinD 中对验证镜像执行真实运行链：
-
-1. load/pull validated images。
-2. 启动 disposable PostgreSQL、ClickHouse、Redis、MinIO。
-3. 执行 migrations。
-4. 启动 API/worker/MCP 必要服务。
-5. health/live/ready。
-6. seed minimal published release + unreleased sentinel。
-7. API search/gene/mutant/variant smoke。
-8. S3 put/head/get/checksum smoke。
-9. ClickHouse read/write/finalize integration。
-10. external/internal artifact negative leakage。
-11. shutdown and assert no orphan containers/volumes。
-
-所有 runtime smoke 尽量调用 scripts/smoke.sh、scripts/acceptance.sh、scripts/ci-job-steps.sh，不在 .cnb.yml 内重复业务逻辑。
-
-## 14.5 CNB Tag/Release
-
-Tag/release 只消费已经验证的 amd64/arm64 package，不重新 build。最终发布前核对 source revision、platform set、digest、SBOM、provenance、release manifest。
-
-CNB Docker 制品库支持多架构 OCI index 和 buildx provenance/SBOM attestation，可作为 release evidence。
+- `services: docker` 提供 dind + Docker CLI；
+- buildx 可做多架构；
+- CNB Docker registry 可保存镜像与 registry cache；
+- GitHub 与 CNB 必须继续调用同一 shared scripts，禁止双逻辑漂移。
 
 ---
 
-# 15. GitHub CI 的角色
+## 3. PR #1 关闭后的新 Phase 顺序
 
-GitHub 保留为代码协作与第二执行提供商；CNB 与 GitHub 必须调用同一 job body。
+### Phase 1 · Full-stack Isolation + CNB Acceptance
 
-GitHub ruleset 建议：main 要求 PR + required checks；archive/** 限制更新/删除并 block force push。
+目标：把“本地 E2”推进到真实 T8。
 
-官方 GitHub 文档确认 branch protection/ruleset 可阻止 force push、删除、限制更新并要求状态检查。
+- CNB 启动 PostgreSQL + ClickHouse + Redis + MinIO。
+- build API/worker/MCP/JBrowse/必要 frontend artifacts。
+- migrations。
+- seeded published release。
+- unreleased sentinel。
+- running API。
+- external/internal artifacts。
+- artifact-level ID-05 negative leakage。
+- S3 put/head/get/checksum。
+- ClickHouse production engine P2 finalize。
+- Docker runtime smoke、Trivy、SBOM。
 
-参考：
+退出：P1-1 VERIFIED + CNB run/artifact/digest 可引用。
 
-- https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches
-- https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets
+### Phase 2 · P2-4 / P2-5 / P2-6
+
+- `module_data_rows → canonical` 显式 promotion。
+- genes 先做第一 canonical module。
+- 完整 retry/crash/concurrency matrix。
+- 每种 scientific import 单独 Release Gate。
+- 默认 OFF 的能力逐个评审，不批量开启。
+
+### Phase 3 · Vue Canonical Portal Parity
+
+在 PR #1 现有页面基础上继续，而不是重写：
+
+- phenotype。
+- Gene Preview merged genome context。
+- JBrowse deep-link。
+- remaining research tools。
+- SSG/static route enumeration。
+- external/internal build parity。
+- canonical build/deploy 切换。
+
+每页必须有独立可预览 commit / route / test evidence。
+
+### Phase 4 · TanStack Charts
+
+建立 `@soymutdb/charts`，逐图从 ECharts 迁移；最后一个单独 commit 删除 ECharts runtime/CDN/helper。
+
+### Phase 5 · Vue Admin
+
+Admin shell → dashboard → Import Studio → release/dataset/content/publication → analytics/settings。
+
+### Phase 6 · Hardening
+
+- dual-site/SSG regression。
+- a11y / 390-1024-1440 / dark / reduced-motion。
+- performance baseline/regression。
+- S3/backup/restore。
+- security/upload/SSRF/CSP。
+
+### Phase 7 · React/ECharts Retirement
+
+只有 Vue canonical delivery + full E2E parity 后：
+
+- 删除 React active runtime。
+- 删除 AntD React。
+- 删除 React Router/Query adapters。
+- 删除 ECharts。
+- 删除旧 dead configs/scripts。
+- historical docs/ADR 保留 archive。
+
+### Phase R · Rust
+
+仅在 import/search/chart/full-stack profile 有真实瓶颈证据后启动；控制面继续 Python。
 
 ---
 
-# 16. 完整测试链
+## 4. Subagent 模型（从现在起生效）
 
-任何 Phase 不能只跑自己的 unit test 后直接合并。按照风险逐层升级。
+默认最多 4 个 active coding subagents。同一文件同时只能一个 writer。
 
-T0 Static/Contracts：format、lint、typecheck、OpenAPI/client、architecture boundaries、dependency governance、feature flag、migration/schema contracts、CI workflow contracts。
+### 当前 PR #1 推荐四 Lane
 
-T1 Unit：Vue composables/stores/components、domain/view model、API services、worker parser/protocol、chart facade、storage key/security helpers。
+1. `SUBAGENT-CI`：只处理 Python workspace install、GitHub/CNB shared bootstrap、workflow failure root cause。
+2. `SUBAGENT-VUE-CORRECTNESS`：只处理 release/site/queryOptions/base URL/filter/deep-link/download/a11y。
+3. `SUBAGENT-IMPORT-CORRECTNESS`：只处理 manifest locking、stable identity、resume、ClickHouse finalize、SQL params、duplicate policy。
+4. `SUBAGENT-REVIEW-TEST`：read-only 为主，逐条验证 22 review comments、补 test plan、复核 diff。
 
-T2 Component：Vue Testing Library/Vitest、Antdv facade、Pinia state、Vue Query mock boundary、TanStack Charts exact values/a11y、file viewer bounded preview。
+主 Agent 独占：
 
-T3 Real Data Services Integration：PostgreSQL、ClickHouse、Redis、MinIO；migration up、import manifest、staging/finalize、S3 multipart/checksum、Celery task integration。
+- `plan.md`。
+- `pnpm-lock.yaml` 最终协调。
+- `.cnb.yml` / shared CI orchestration 的最终合并。
+- DB migration sequence。
+- feature flag 决策。
+- PR merge。
 
-T4 API Contract：public/internal/admin API；OpenAPI diff；RBAC；release/assembly；404 unpublished；presign ownership；rate limit/error semantics。
-
-T5 Artifact/SSG：external/internal build、SHA256、CSP、SW/cache、sentinel negative leakage、route snapshot、asset integrity。
-
-T6 Browser E2E：Home/Search/Gene/Mutant/Variant/Phenotype/JBrowse、Admin import/publish、auth、keyboard、mobile、back/forward URL state。
-
-T7 Visual/A11y：390/1024/1440、light/dark/reduced-motion、axe、chart keyboard/linked-table、Gene Preview overlap/strand。
-
-T8 Docker Runtime：CNB native image build、docker run smoke、compose stack smoke、migration、health、worker/MCP、S3/CH/PG。
-
-T9 Security/Supply Chain：Trivy vuln/misconfig/secret、SBOM、license、secret scan、CSP、upload/path traversal/SSRF、container non-root/capabilities。
-
-T10 Release/Recovery：backup/restore、rollback、publication exact bytes、release manifest/digest、failure injection、crash/retry/ambiguous ACK。
-
-T11 Performance Regression：bundle budget、route chunks、chart render、search p50/p95/p99、analytics throughput、import rows/s/RSS、CI duration。只有建立 baseline 后才允许声称提升。
+任何 subagent 发现需要越权：STOP → 返回 change request 给主 Agent。
 
 ---
 
-# 17. 固定回归主任务
+## 5. 提交与预览规则
 
-每个里程碑至少回归：
+继续保持每个逻辑变化可预览、可 revert。
 
-1. Gene ID → Gene detail → mutant → variant → JBrowse。
+PR #1 下一批推荐提交链：
+
+1. `fix(ci): install workspace Python protocol packages consistently`
+2. `fix(vue): bind release and site context into query options`
+3. `fix(vue): honor deployment base and URL-backed filters`
+4. `fix(vue): complete download and JBrowse parity`
+5. `fix(import): stabilize logical import identity and serialize workers`
+6. `fix(import): make ClickHouse finalize synchronous and scope-safe`
+7. `fix(import): parameterize SQL and reject conflicting duplicates`
+8. `test(import): close retry concurrency and finalize matrix`
+9. `test(vue): close cache context and deep-link regressions`
+10. `ci(cnb): close Docker runtime acceptance`
+11. `docs(plan): record PR #1 exit evidence`
+
+不要 squash 这些有独立诊断价值的 commits。
+
+每个 commit 必须报告：SHA、purpose、changed files、focused test、preview/repro、risk、next。
+
+---
+
+## 6. 测试链 T0–T11
+
+| 层 | 内容 |
+| --- | --- |
+| T0 | lint/typecheck/contracts/architecture/dependency/feature-flag |
+| T1 | unit |
+| T2 | Vue component/store/queryOptions/chart facade |
+| T3 | real PostgreSQL/ClickHouse/Redis/MinIO integration |
+| T4 | API/OpenAPI/RBAC/release/assembly/presign contracts |
+| T5 | external/internal artifact/SSG/CSP/SW/leakage |
+| T6 | browser E2E research workflows |
+| T7 | visual/a11y/responsive/dark/reduced-motion |
+| T8 | Docker/CNB runtime |
+| T9 | Trivy/SBOM/license/secret/upload/SSRF/security |
+| T10 | crash/retry/backup/restore/rollback/publication |
+| T11 | bundle/search/import/chart/CI performance regression |
+
+风险越高，要求覆盖层级越高。P2 finalize 不能只以 T1/T2 通过关闭；至少需要 T3 + T8 + T10。
+
+---
+
+## 7. 固定科研回归任务
+
+1. Gene ID → Gene → mutant → variant → JBrowse。
 2. Phenotype → mutant → genomic evidence。
 3. Region → variants → variant detail → JBrowse。
-4. Mutant public_id → phenotype/gene/variant/export。
-5. Search exact ID/prefix/general + URL restore。
-6. Admin upload S3 → bind release/assembly → validate → import → verify。
-7. Failed import → diagnostics → safe retry。
-8. Published vs unreleased sentinel isolation。
-9. Backup → restore → checksum/data verification。
-10. CNB validated image → docker run/compose → live/ready → API/S3/CH smoke。
+4. Mutant public ID → phenotype/gene/variant/download。
+5. Search exact/prefix/general，release/site 切换后缓存不串。
+6. URL filter → reload/back/forward 结果一致。
+7. Admin S3 upload → bind release/assembly → validate → import → verify。
+8. Failed import → diagnostics → safe retry。
+9. Published release vs unreleased sentinel negative leakage。
+10. CNB image → migrations → health → PG/CH/S3 smoke。
 
 ---
 
-# 18. Phase J — 仓库清理与 React 退役
+## 8. PR #1 Merge Checklist
 
-先 inventory 再删：tracked generated、.tanstack/tmp、dead React hooks/components、ECharts helper/CDN config、旧 AntD facade、过期 docs、重复 CI、未引用 scripts。
-
-删除门：git search 无生产引用；CI/test/docs 已迁；Vue parity 已过；archive baseline 可回查。
-
-最终移除：react、react-dom、@tanstack/react-query、@tanstack/react-router、antd、@ant-design/icons、echarts、clsx、tailwind-merge，以及只服务旧栈的 active config。
-
-历史 ADR/evidence/archive 不因清理删除。
-
----
-
-# 19. Phase K — Rust
-
-只在 P2 协议和真实性能 baseline 稳定后执行。
-
-优先 kernel：streaming checksum、BGZF、VCF/BCF parse、batch assembly、GFF/GTF、FASTA。
-
-Python 保留 FastAPI/ORM/Celery/RBAC/publication 控制面。
-
-Go/No-Go：correctness parity 100%；真实数据吞吐显著提升；RSS 明显下降；amd64/arm64 CNB build；fuzz/property tests；维护成本可接受。
-
-未达门槛 = NO-GO，不因已写 Rust 而上线。
+- [ ] GitHub CI success。
+- [ ] Baseline workflow success / 或正式 ADR 替代。
+- [ ] CNB shared scripts success。
+- [ ] 22 review threads triaged。
+- [ ] unresolved High = 0。
+- [ ] queryOptions/cache namespace tests green。
+- [ ] base URL/site variant/deep-link tests green。
+- [ ] real adapter VCF path verified fail-closed or protocol-driven。
+- [ ] per-fingerprint serialization tested。
+- [ ] stable variant identity across object-key retry。
+- [ ] VERIFYING retry tested。
+- [ ] ClickHouse mutation/finalize race closed。
+- [ ] summary untouched-partition regression green。
+- [ ] SQL parameterization negative test green。
+- [ ] conflicting duplicate policy green。
+- [ ] P1 feature flags remain safe defaults。
+- [ ] fresh review requested。
+- [ ] plan evidence updated。
 
 ---
 
-# 20. PI-agent 并行策略
+## 9. 官方资料索引（2026-09-23 复核）
 
-允许并行但必须控制冲突：
-
-Lane DATA：Phase A P2 writer/finalize。
-Lane TOOLCHAIN：Phase B pnpm12 + dependency catalog。
-Lane FRONTEND-BASE：Phase C/D framework-neutral + Vue shell。
-Lane CI：CNB/GitHub contract 与 runtime stack tests。
-
-只有前置稳定后才开启：
-
-Lane UI：Phase E/F charts/public pages。
-Lane ADMIN：Phase G。
-Lane CLEANUP：Phase J。
-Lane RUST：Phase K。
-
-同一路径禁止多个 agent 同时修改。任何 lane 合并 main 前必须 rebase/refresh main 后重跑受影响 Gate。
+- Vue releases: https://github.com/vuejs/core/releases
+- Vue Router: https://router.vuejs.org/ and https://github.com/vuejs/router/releases
+- Pinia: https://pinia.vuejs.org/ and https://github.com/vuejs/pinia/releases
+- VueUse 15: https://github.com/vueuse/vueuse/releases/tag/v15.0.0
+- TanStack Vue Query keys: https://tanstack.com/query/latest/docs/framework/vue/guides/query-keys
+- TanStack Vue Query options: https://tanstack.com/query/latest/docs/framework/vue/guides/query-options
+- TanStack Charts: https://tanstack.com/charts/latest/docs/installation
+- TanStack Charts a11y: https://tanstack.com/charts/latest/docs/guides/accessibility
+- pnpm settings: https://pnpm.io/settings
+- pnpm supply chain: https://pnpm.io/supply-chain-security
+- ClickHouse docs: https://clickhouse.com/docs/
+- CNB grammar: https://docs.cnb.cool/zh/build/grammar.html
+- CNB Docker artifacts: https://docs.cnb.cool/zh/artifact/docker.html
 
 ---
 
-# 21. 每个 PI-agent 任务的最小交付格式
+## 10. 当前 Next
 
-每个任务必须在 plan.md 对应 Phase 下回填：
+不要再做 Phase F 新页面。现在严格按：
 
-Completed：具体修改。
-Verified：真实命令 → 结果。
-Tests：测试数、失败数、跳过原因。
-CNB：build/run ID 或明确 BLOCKED。
-Artifacts：digest/SHA/SBOM 路径。
-Evidence：E0-E4。
-Blocked：未完成门禁。
-Regression impact：哪些固定主任务已重跑。
-Commits：SHA + message。
-Next：下一个唯一建议任务。
+**G1 CI install/root-cause → G2 Vue correctness → G3 P2 correctness/security → GitHub green → CNB T8 → fresh review → merge PR #1。**
 
-没有真实 CNB/服务凭据或执行环境时必须写 IMPLEMENTED_UNVERIFIED/BLOCKED，不得写 PASS。
+PR #1 合并后，再从 Phase 1 full-stack isolation/CNB acceptance 继续。
 
----
-
-# 22. 当前立即执行顺序
-
-1. 在冻结基线不再修改的前提下，完成 baseline release evidence/package。
-2. Phase A：P2-3A/P2-3B，继续数据正确性。
-3. Phase B：pnpm 12 全仓统一。
-4. Phase C：framework-neutral packages。
-5. Phase D：Vue shell + Pinia4 + VueUse15 + Vue Query + Antdv Next + cn。
-6. 同步加固 CNB runtime stack verification，确保新栈每一步都真实 Docker 可运行。
-7. Phase E：TanStack Charts 全线替换 ECharts。
-8. Phase F：按页面迁公共 Vue。
-9. Phase G：迁 Admin，保持 S3/MinIO 协议。
-10. Phase H/I：双站、SSG、S3、发布全回归。
-11. Phase J：删除 React/ECharts/旧配置。
-12. Phase K：在真实性能证据后迁 Rust kernels。
-
----
-
-# 23. Definition of Done
-
-全线重构完成必须同时满足：
-
-- Vue 是唯一前端主框架；React active runtime 归零。
-- pnpm 12 是 workspace 唯一包管理基线。
-- Pinia/VueUse/Vue Query 职责清晰，无重复 server state。
-- Antdv Next 通过 facade 使用，升级有 contract gate。
-- TanStack Charts 是唯一通用图表引擎；ECharts active code 归零。
-- Tailwind 4 + cn 通过兼容测试，clsx/tailwind-merge 可移除。
-- S3/MinIO 上传、分析、导入、备份恢复能力无回归。
-- P2 import no partial visibility / duplicate facts / unsafe retry。
-- external/internal 无数据泄漏。
-- Gene Preview 科学坐标/strand/release/assembly 正确。
-- Admin import/publication 可恢复、可审计。
-- CNB 对 amd64/arm64 真实 build + docker run/stack smoke + Trivy + SBOM 全绿。
-- GitHub 与 CNB 不维护两套业务测试逻辑。
-- 关键科研路径、视觉、a11y、性能、security、backup/rollback 回归全绿。
-- 所有开启的 feature flag 有 Release Gate evidence。
-
-> 最终优先级：数据正确性 > 隔离与安全 > 可回滚发布 > 可运行性 > 维护性 > 性能 > 新功能数量。任何重构若破坏前四项，立即停止并回滚到最近通过全部 Gate 的 commit。
-
----
-
-# 24. 执行证据日志（Execution Evidence Log）
-
-> 维护者：主执行代理（PI-agent）。每条 = 一个已合并/可预览单元。证据等级 E0 文档 / E1 代码确认 / E2 可重复测试 / E3 生产等价验证 / E4 staging 观察。未运行的门禁如实标注 BLOCKED，不计为通过。
->
-> 执行环境限制（本机）：Node 24.19.0 / pnpm 11.21.0 / Python 3.14.6；PostgreSQL :55432 可用；**无 Docker/CNB、无 ClickHouse server、无 pnpm 12**。因此 T8/T9/T10 与真实 CH 集成本环境 BLOCKED。
-
-## 已完成单元
-
-### Phase C · framework-neutral seam
-- `test(contracts): guard the framework-neutral seam` — `scripts/check_framework_neutral_packages.py` + unittest（禁止 react/vue/antd 进入中性包）。E2。
-- `feat(query-keys): extract framework-neutral query key factory` — 新增 `@soymutdb/query-keys`，`apps/web` 以 re-export shim 消费（7 处调用零改动）。E2（web typecheck + 5 tests）。
-- `feat(i18n): extract framework-neutral @soymutdb/i18n-core` — catalog/语言元数据下沉中性包；`@soymutdb/i18n` 变 react-i18next 适配层并 re-export；`check-locale-keys` 保留转发 shim。E2（i18n-core 6 tests、web/admin/jbrowse typecheck、CI locale gate 59 tests、web i18n-runtime）。
-- `ci(frontend): enforce the framework-neutral seam in the shared gate` — seam guard 接入 `frontend` job body（CNB/GitHub 共用）。E2（本地确定性通过；**CNB 运行 BLOCKED**）。
-
-### Phase A · shared import protocol（A1）
-- `refactor(import): extract shared soymutdb-import-protocol` — fingerprint / manifest 状态机 / 可见性规则下沉为无依赖共享包 `packages/import-protocol`（`soymutdb-import-protocol`）；`apps/api` re-export 保持向后兼容；`apps/worker` 声明依赖（为 P2-3 worker 侧消费 manifest 铺路，符合 H4）。fingerprint 字节与 DB enum 名不变，无数据迁移。E2（contract 15 tests；apps/api import tests + migrations 27 passed vs PG；worker adapters 42 passed；ruff clean）。uv.lock 两端 +11 行、无版本漂移。
-
-### Phase A · ClickHouse engine port + variant finalize protocol（P2-3，部分）
-真实 ClickHouse 验收改用 **chdb（嵌入式单节点 ClickHouse 26.7，非 mock）**，作为 `apps/worker[dev]` 依赖；`scripts/verify-backend-tests.sh` 安装该 extra。提交链：
-- `feat(import): add ClickHouse engine port + chdb acceptance engine` — `ClickHouseEngine` 端口 + `HttpClickHouseEngine`(生产 clickhouse-connect) / `ChdbEngine`(验收) 。
-- `refactor(import-engine): share a single chdb session across acceptance tests` — 会话级 fixture + 每测试唯一 database；端口加 `query_rows`。
-- `feat(import): add variant staging/verify/finalize protocol` — 只写 staging(无 MV) → `finalize_release`（先 purge 所有 release 维度 summary 一次 → drop 触及的 base 分区 → 从去重 staging 重写）。E2/E3 等价：`pytest tests/test_clickhouse_engine.py tests/test_variant_finalize.py` → 9 passed（真实引擎）。真实引擎还暴露并修复了一个 finalize 逻辑 bug（按分区逐个 purge 会抹掉同 release 其它分区刚写入的 summary）。
-
-> P2-3 状态：**IN PROGRESS（协议实现 + 真实验证完成；待 CNB/能力重开）**。`import_vcf` 已接入协议并默认 OFF（flag 关→422，P1-2 保持）。已全部在**真实引擎**验证：chdb 13 tests（staging 隔离/双计危害/分区级幂等 finalize/校验门/失败矩阵）+ 真 PG manifest 6 tests + **端到端 `test_vcf_import`**（真 PG manifest+release/assembly 解析 + 真 chdb facts）：PUBLISHED、base=2、summary=2、按 fingerprint 幂等。**剩余**：CNB 分布式/集群 T8 运行验收、`SOYMUTDB_ENABLE_VCF_IMPORT` 能力重开（P2-6，Gate 于真实 CH/CNB 全绿）。
-
-### Phase B · pnpm 12 工具链（B1；已本地化实现）
-- `build(pnpm): migrate toolchain to pnpm 12` — 11.21.0 → 12.5.1 全链统一：`package.json` packageManager/engines、`scripts/{ci-job-steps,setup-workspace}.sh`、infra/jbrowse/corepack、`.cnb/env/Dockerfile.frontend`、`.cnb.yml`、`check-toolchain-pins.py`、`test_ci_job_contracts.py`。**pnpm 12 由本机自建（隔离 prefix `/tmp/pnpm12`，非 mamba）**，真实重生成 lockfile。E2（本地 `pnpm@12.5.1 --frozen-lockfile` OK；pins/ci-contracts/dep-governance 三守卫绿）。
-- 兼容修复：pnpm 12 写**双文档 lockfile**（packageManager 依赖单列一档），`dependency_governance._pnpm_graph` 改为多文档加载并选工程档。
-
-### Phase D · Vue shell → foundation → 首个真实读（Checkpoint A/B/C）
-- `feat(vue): bootstrap @soymutdb/web-vue shell + Vue catalog` — catalog pin vue 3.5.43 / plugin-vue / vitest；最小可构建 shell，`define` 注入 `VITE_SITE_VARIANT`（构建期，DB-CORE-5）。可 `pnpm --filter @soymutdb/web-vue dev` 预览。E2。
-- `feat(vue): add router, Pinia context store + TanStack Vue Query` — catalog pin vue-router 5.3.1 / pinia 4.0.3 / @tanstack/vue-query 5.103.2 / @vueuse/core 15.0.0；router + Pinia(release/assembly/site context) + Vue Query；`allowBuilds`(vue-demi) + `minimumReleaseAgeExclude`（pnpm 12 供应链门）。E2（build/typecheck/test 绿，守卫绿）。
-- `feat(vue): migrate home route to a real api-client read` — 首页经中性 seam（query-keys 缓存键按 site-variant 作用域 + api-client `getAssemblies`）渲染 assembly 上下文（DB-CORE-3），证实 React/Vue 共用同一 API/schema/query-key 契约。E2。
-
-## BLOCKED（需环境凭据/服务，未冒充通过）
-- **CNB / 分布式 ClickHouse cluster / T8-T10**：本机无 Docker/CNB；chdb 为单节点嵌入式引擎，可证 staging/finalize/汇总结算语义，但**不覆盖**分布式集群、`Atomic` 数据库引擎、副本去重 token 窗口；真实运行验收需 CNB。
-
-## Next（建议）
-1. P2-3 收尾：worker 侧 manifest(PG，sync) 生命周期集成（复用 `soymutdb-import-protocol` 契约，不 import API 运行时）→ `import_vcf` 在 flag OFF 下仍 fail-closed，flag 开启才走协议；补崩溃/重试/ambiguous-ACK/checksum-mismatch 矩阵（manifest 真 PG + CH 真实引擎）。
-2. P2-4 `module_data_rows → canonical promotion`（纯 PostgreSQL，本机可全验）。
+> 完成标准不是“PR 代码很多”，而是：当前 31+ commits 的每一条新主线能力都有正确上下文、真实回归、真实运行证据，并且能安全成为 main 的下一基线。
