@@ -20,12 +20,13 @@ catalog:
   '@vitejs/plugin-vue': 6.0.9
   # Keep the new Vue app on the workspace Vitest line (no second major).
   vitest: 3.2.7
-  # Vue mainline stack (plan.md §2): Router + Pinia 4 + TanStack Vue Query +
-  # VueUse 15, latest stable, exact-pinned (Phase D Checkpoint B).
+  # Vue mainline stack (plan.md §2): Router + Pinia 4 + TanStack Vue Query,
+  # latest stable, exact-pinned (Phase D Checkpoint B). VueUse 15 joins the
+  # catalog with the first page that uses it: knip fails an unused dependency,
+  # and plan.md §24 forbids replacing simple ref/computed just to justify it.
   vue-router: 5.3.1
   pinia: 4.0.3
   '@tanstack/vue-query': 5.103.2
-  '@vueuse/core': 15.0.0
   # Vue UI layer (Phase D Checkpoint D): Antdv Next 1.x (via the @soymutdb/ui-vue
   # facade only), Tailwind CSS 4 + its Vite plugin. Exact-pinned; Antdv Next may
   # break on minor, so upgrades go through the facade contract test first.
