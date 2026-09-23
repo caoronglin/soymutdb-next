@@ -24,9 +24,15 @@ pnpm install before release.
 - Node.js 24.19.0 is the repository and CI runtime. `.nvmrc`,
   `.node-version`, `package.json`, and every Node-based workflow express the
   same Node 24 LTS line.
-- pnpm 11.21.0 is exact in `packageManager`, the engine contract, and CI.
+- pnpm 12.5.1 is exact in `packageManager`, the engine contract, and CI. The
+  workspace migrated from pnpm 11.21.0 in Phase B (`plan.md`): the lockfile is
+  now a two-document file and `pnpm-workspace.yaml` is the workspace policy
+  source; every scanner/report has to read both documents.
 - The workspace catalog records React 19.2.0, React DOM 19.2.0, TypeScript
-  5.9.3, Vite 6.4.3, and Ant Design 6.6.1 as shared platform decisions.
+  5.9.3, Vite 6.4.3, and Ant Design 6.6.1 as shared platform decisions. The
+  Vue mainline adds Vue 3.5.43, Vue Router, Pinia 4, TanStack Vue Query,
+  Antdv Next, and Tailwind CSS 4 to the same catalog, so the framework-line
+  change stays one reviewed workspace decision.
   React remains a workspace override as well so transitive peers cannot select
   another runtime. Web and Admin consume Ant Design through `catalog:`.
 - `@ant-design/pro-components` remains declared until the source migration has

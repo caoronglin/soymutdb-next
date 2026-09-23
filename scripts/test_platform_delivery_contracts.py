@@ -11,6 +11,7 @@ from compose_loader import load_compose
 
 ROOT = Path(__file__).resolve().parents[1]
 NODE_VERSION = "24.19.0"
+PNPM_VERSION = "12.5.1"
 PROFILES = {"core", "jbrowse", "blast", "analyses", "mcp", "cloudflare-tunnel"}
 UPGRADE = ROOT / "deploy/scripts/upgrade.sh"
 BACKUP = ROOT / "deploy/scripts/backup.sh"
@@ -45,6 +46,17 @@ PLATFORM_CATALOG = {
     "typescript": "5.9.3",
     "vite": "6.4.3",
     "antd": "6.6.1",
+    # Vue mainline (plan.md §2, Phase D): the migrated portal consumes these
+    # through the same reviewed catalog decision as the React platform.
+    "vue": "3.5.43",
+    "@vitejs/plugin-vue": "6.0.9",
+    "vitest": "3.2.7",
+    "vue-router": "5.3.1",
+    "pinia": "4.0.3",
+    "@tanstack/vue-query": "5.103.2",
+    "antdv-next": "1.5.4",
+    "tailwindcss": "4.3.3",
+    "@tailwindcss/vite": "4.3.3",
 }
 
 
@@ -111,8 +123,8 @@ def test_node_and_pnpm_toolchain_is_exact_in_jobs_that_build_assets() -> None:
 
     assert (ROOT / ".nvmrc").read_text(encoding="utf-8").strip() == NODE_VERSION
     assert (ROOT / ".node-version").read_text(encoding="utf-8").strip() == NODE_VERSION
-    assert package["packageManager"] == "pnpm@11.21.0"
-    assert package["engines"] == {"node": ">=24.0.0 <25", "pnpm": "11.21.0"}
+    assert package["packageManager"] == f"pnpm@{PNPM_VERSION}"
+    assert package["engines"] == {"node": ">=24.0.0 <25", "pnpm": PNPM_VERSION}
 
     # CNB is the primary delivery pipeline. Every pipeline that builds or tests
     # the workspace must pin the exact Node release; the smoke pipeline runs the
@@ -231,7 +243,9 @@ def test_workspace_catalog_pins_platform_dependencies() -> None:
 def test_dependency_build_scripts_are_fail_closed_except_for_esbuild() -> None:
     workspace = yaml.safe_load((ROOT / "pnpm-workspace.yaml").read_text(encoding="utf-8"))
 
-    assert workspace["allowBuilds"] == {"esbuild": True}
+    # vue-demi's postinstall selects the installed Vue runtime for the VueUse
+    # line; everything else stays denied by default.
+    assert workspace["allowBuilds"] == {"esbuild": True, "vue-demi": True}
 
 
 def test_antd_consumers_resolve_from_workspace_catalog() -> None:
@@ -1013,7 +1027,7 @@ def test_platform_delivery_adr_records_decisions_and_rollback() -> None:
 
     assert "Status: Accepted" in adr
     assert "Node.js 24.19.0" in adr
-    assert "pnpm 11.21.0" in adr
+    assert f"pnpm {PNPM_VERSION}" in adr
     assert "Ant Design 6" in adr
     assert "image@sha256" in adr
     assert "core,jbrowse,blast,analyses,mcp,cloudflare-tunnel" in adr
