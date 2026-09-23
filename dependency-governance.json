@@ -115,12 +115,35 @@
         "--json",
         "--extensions",
         "ts,tsx",
-        "apps",
+        "apps/web",
+        "apps/admin",
+        "apps/jbrowse",
         "packages"
       ],
       "report": {
         "mode": "stdout",
         "path": "typescript-circular-dependencies.json",
+        "format": "json"
+      }
+    },
+    {
+      "name": "typescript-circular-dependencies-web-vue",
+      "category": "circular-dependencies",
+      "command": [
+        "pnpm",
+        "dlx",
+        "madge@8.0.0",
+        "--circular",
+        "--json",
+        "--extensions",
+        "ts,tsx,vue",
+        "--ts-config",
+        "apps/web-vue/tsconfig.json",
+        "apps/web-vue"
+      ],
+      "report": {
+        "mode": "stdout",
+        "path": "typescript-circular-dependencies-web-vue.json",
         "format": "json"
       }
     },
