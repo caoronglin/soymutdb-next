@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@soymutdb/api-client": "workspace:*",
+    "@soymutdb/genome-view-model": "workspace:*",
     "@soymutdb/query-keys": "workspace:*",
     "@soymutdb/shared": "workspace:*",
     "@soymutdb/ui-vue": "workspace:*",

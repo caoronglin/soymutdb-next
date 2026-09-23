@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from "vue-router";
 
+import GeneView from "../views/GeneView.vue";
 import Home from "../views/HomeView.vue";
 import SearchView from "../views/SearchView.vue";
 
@@ -12,6 +13,7 @@ export const router = createRouter({
   routes: [
     { path: "/", name: "home", component: Home },
     { path: "/search", name: "search", component: SearchView },
+    { path: "/genes/:geneId", name: "gene", component: GeneView },
     {
       path: "/:pathMatch(.*)*",
       name: "not-found",
