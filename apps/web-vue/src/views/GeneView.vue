@@ -108,6 +108,42 @@ const jbrowseHref = computed(() => {
 
         <p v-if="gene.description" class="mt-4 text-sm">{{ gene.description }}</p>
 
+        <section
+          v-if="gene.transcripts.length > 0"
+          class="mt-6"
+          aria-labelledby="gene-transcripts"
+          data-testid="gene-transcripts"
+        >
+          <h2 id="gene-transcripts" class="text-lg font-medium">Transcripts</h2>
+          <table class="mt-2 w-full text-sm">
+            <thead class="text-left opacity-60">
+              <tr>
+                <th>Name</th>
+                <th>Biotype</th>
+                <th>Location</th>
+                <th>Exons</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="transcript in gene.transcripts"
+                :key="transcript.id"
+                data-testid="transcript-row"
+              >
+                <td>
+                  <span class="font-mono">{{ transcript.name ?? transcript.id }}</span>
+                  <span v-if="transcript.is_canonical" class="ml-1 opacity-60">· canonical</span>
+                </td>
+                <td>{{ transcript.biotype ?? "—" }}</td>
+                <td class="font-mono">
+                  {{ transcript.start }}..{{ transcript.end }} ({{ transcript.strand }})
+                </td>
+                <td>{{ transcript.exons.length }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
         <a
           v-if="jbrowseHref"
           :href="jbrowseHref"

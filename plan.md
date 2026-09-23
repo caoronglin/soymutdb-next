@@ -203,6 +203,16 @@ Vue portal 成为 canonical 前的静态托管前置：每条稳定路由获得�
 证据：`web-vue` → **14 files / 52 tests passed**（含表型行、空态与不泄漏 internal_id）；
 query-keys 9 passed；typecheck/lint 干净。
 
+### Phase 3 第五步：gene 详情的 transcript 区块（2026-09-23）
+
+- `packages/api-client`：`GeneDetail.transcripts` 从 `unknown[]` 细化为
+  `GeneTranscript[]`（含 `GeneExon`），与 API `_transcript_to_response` 一致。
+- `GeneView.vue`：transcript 表（名称/生物类型/坐标/外显子数，canonical 标记，
+  缺失名称回退到 transcript id）。
+
+证据：`web-vue` → **14 files / 53 tests passed**；api-client 112 passed；
+双方 typecheck 与 web-vue lint 干净。
+
 ### 阻塞 / 未关闭
 
 - GitHub artifact 上传：已压缩 `pages-demo-dist`、移除无消费者的 dist 上传、缩短证据保留期；等待配额重算（6–12h）后应恢复

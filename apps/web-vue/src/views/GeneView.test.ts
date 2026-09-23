@@ -115,6 +115,53 @@ describe("GeneView (Phase F, DB-CORE-3/4/7)", () => {
     wrapper.unmount();
   });
 
+  it("renders transcript rows with coordinates and the canonical marker", async () => {
+    mockedGetGene.mockResolvedValue({
+      ...GENE_RESPONSE,
+      transcripts: [
+        {
+          id: "tx1",
+          gene_id: "Glyma.01G000100",
+          name: "Glyma.01G000100.1",
+          biotype: "protein_coding",
+          start: 1000,
+          end: 2000,
+          strand: "-",
+          is_canonical: true,
+          exons: [
+            { id: "e1", start: 1000, end: 1200, order: 1 },
+            { id: "e2", start: 1800, end: 2000, order: 2 },
+          ],
+        },
+        {
+          id: "tx2",
+          gene_id: "Glyma.01G000100",
+          name: null,
+          biotype: null,
+          start: 1000,
+          end: 1500,
+          strand: "-",
+          is_canonical: false,
+          exons: [],
+        },
+      ],
+    });
+
+    const { wrapper } = await mountGene("Glyma.01G000100", { assembly: "5" });
+    await flushPromises();
+    await flushPromises();
+
+    const rows = wrapper.findAll('[data-testid="transcript-row"]');
+    expect(rows).toHaveLength(2);
+    expect(wrapper.text()).toContain("Glyma.01G000100.1");
+    expect(wrapper.text()).toContain("canonical");
+    expect(wrapper.text()).toContain("1000..2000");
+    // A missing name falls back to the transcript id, never an empty cell.
+    expect(rows[1].text()).toContain("tx2");
+    expect(wrapper.html()).not.toContain("internal_id");
+    wrapper.unmount();
+  });
+
   it("links to the canonical VITE_JBROWSE_BASE_URL origin", async () => {
     vi.stubEnv("VITE_JBROWSE_BASE_URL", "https://jbrowse.example.org/");
     try {

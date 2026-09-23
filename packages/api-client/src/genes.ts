@@ -17,10 +17,34 @@ export interface GeneSummary {
   high_impact_variants?: number;
 }
 
+export interface GeneExon {
+  id: string;
+  start: number;
+  end: number;
+  order: number;
+}
+
+/**
+ * Transcript view nested in ``GeneDetail.transcripts`` (mirrors the API's
+ * ``_transcript_to_response``): coordinates are 1-based inclusive and the
+ * ``is_canonical`` flag marks the representative transcript.
+ */
+export interface GeneTranscript {
+  id: string;
+  gene_id: string;
+  name: string | null;
+  biotype: string | null;
+  start: number;
+  end: number;
+  strand: string;
+  is_canonical: boolean;
+  exons: GeneExon[];
+}
+
 export interface GeneDetail extends GeneSummary {
   source: string;
   extra: Record<string, unknown>;
-  transcripts: unknown[];
+  transcripts: GeneTranscript[];
   annotations: unknown[];
   snp_count?: number;
   indel_count?: number;
