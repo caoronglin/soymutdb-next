@@ -286,3 +286,26 @@ def test_vcf_adapter_raises_when_the_protocol_did_not_publish(monkeypatch) -> No
     context = data_adapters.ImportContext(1, 2, "rel-1", "bucket/key.vcf", "asm-v5")
     with pytest.raises(UnsupportedImportError, match="row_count_mismatch"):
         data_adapters.get_adapter("vcf").run(context)
+
+
+def test_worker_identity_matches_the_route_b_seed_loader() -> None:
+    """One variant-identity formula for the worker and the seed loader.
+
+    scripts/seed_release_data.py mints ids for controlled real-data seeds; if it
+    kept the old file_key-based formula, seeded rows would not match the ids the
+    import protocol produces for the same facts.
+    """
+    import importlib.util
+    from pathlib import Path
+
+    seed_path = Path(__file__).resolve().parents[3] / "scripts/seed_release_data.py"
+    spec = importlib.util.spec_from_file_location("seed_release_data", seed_path)
+    assert spec is not None and spec.loader is not None
+    seed = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(seed)
+
+    for facts in (
+        ("REL-1", "Chr01", 100, "A", "G"),
+        ("2026.09", "Chr02", 2050, "AT", "A"),
+    ):
+        assert ingest.compute_variant_id(*facts) == seed.compute_variant_id(*facts)
