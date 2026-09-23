@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { queryKeys } from "../query-keys";
+import { queryKeys } from "./index";
 
 describe("queryKeys", () => {
   it("shares one stable assemblies key across routes", () => {
@@ -80,5 +80,24 @@ describe("queryKeys", () => {
     expect(queryKeys.genes.search({ ...base, siteVariant: "internal" })).not.toEqual(geneKey);
     // Pagination within the same context shares one cache entry.
     expect(queryKeys.genes.search({ ...base, page: 2 })).not.toEqual(geneKey);
+  });
+
+  it("scopes mutant caches by mutagen/release/site and keys detail by public id", () => {
+    const base = { mutagen: "EMS", limit: 20, releaseId: "2026.09", siteVariant: "external" as const };
+    const listKey = queryKeys.mutants.list(base);
+    expect(queryKeys.mutants.list({ ...base, mutagen: "gamma" })).not.toEqual(listKey);
+    expect(queryKeys.mutants.list({ ...base, releaseId: "2026.10" })).not.toEqual(listKey);
+    expect(queryKeys.mutants.list({ ...base, siteVariant: "internal" })).not.toEqual(listKey);
+    // Detail is keyed by the public identifier only (never an internal id).
+    const detail = queryKeys.mutants.detail("SM7QF3Z", "2026.09", "external");
+    expect(detail).toContain("SM7QF3Z");
+    expect(detail).not.toContain("internal_id");
+  });
+
+  it("scopes variant caches by assembly/release/site", () => {
+    const base = { assemblyId: "5", releaseId: "2026.09", siteVariant: "external" as const, page: 1 };
+    const key = queryKeys.variants.list(base);
+    expect(queryKeys.variants.list({ ...base, assemblyId: "4" })).not.toEqual(key);
+    expect(queryKeys.variants.list({ ...base, siteVariant: "internal" })).not.toEqual(key);
   });
 });

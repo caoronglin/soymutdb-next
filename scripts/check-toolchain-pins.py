@@ -34,7 +34,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 # The authoritative pins. Everything else is checked against these.
 EXPECTED_NODE = "24.19.0"
-EXPECTED_PNPM = "11.21.0"
+EXPECTED_PNPM = "12.5.1"
 EXPECTED_PYTHON_MIN = (3, 14)
 
 # Container images referenced by the CNB pipeline. The platform builds them on
@@ -234,6 +234,33 @@ def check_build_env_toolchain_tags(errors: list[str]) -> None:
         )
 
 
+def check_workflow_pins(errors: list[str]) -> None:
+    """The GitHub mirror workflows must install the pinned pnpm version.
+
+    AGENTS.md requires the toolchain pins to agree across .nvmrc, package.json,
+    .cnb.yml AND the workflows. The workflows set up pnpm either via
+    pnpm/action-setup (an inline ``version:`` under the step) or corepack
+    (``pnpm@X``); a stale pin breaks ``pnpm install --frozen-lockfile`` against
+    the lockfile format the rest of the repo migrated to.
+    """
+    for path in sorted(ROOT.glob(".github/workflows/*.yml")):
+        relative = path.relative_to(ROOT)
+        lines = path.read_text(encoding="utf-8").splitlines()
+        for index, line in enumerate(lines):
+            if "pnpm/action-setup" in line or "pnpm prepare" in line or (
+                "corepack" in line and "pnpm@" in line
+            ):
+                window = "\n".join(lines[index : index + 7])
+                inline = re.search(r"^\s*version:\s*([0-9][0-9.]*)\s*$", window, re.M)
+                corepack = re.search(r"pnpm@([0-9][0-9.]*)", line)
+                found = inline.group(1) if inline else (corepack.group(1) if corepack else None)
+                if found is not None and found != EXPECTED_PNPM:
+                    _fail(
+                        errors,
+                        f"{relative}: pnpm {found!r} != {EXPECTED_PNPM!r}",
+                    )
+
+
 def check_pin_sources(errors: list[str]) -> None:
     expected = {
         "NODE_VERSION": EXPECTED_NODE,
@@ -272,6 +299,7 @@ def main() -> int:
     check_build_env_images(errors)
     check_build_env_toolchain_tags(errors)
     check_pin_sources(errors)
+    check_workflow_pins(errors)
 
     if args.json:
         print(json.dumps({"ok": not errors, "errors": errors}, indent=2))

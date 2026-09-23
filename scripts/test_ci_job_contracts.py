@@ -23,7 +23,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 
 NODE_VERSION = "24.19.0"
-PNPM_VERSION = "11.21.0"
+PNPM_VERSION = "12.5.1"
 PYTHON_VERSION = "3.14"
 
 CNB_CONFIG = ROOT / ".cnb.yml"
@@ -2258,7 +2258,7 @@ class DeliveryArchitectureTests(unittest.TestCase):
         )
         # A hard-coded pnpm version would let the image warm a store with a
         # pnpm the pipeline never activates.
-        self.assertIn("ARG PNPM_VERSION=11.21.0", dockerfile)
+        self.assertIn(f"ARG PNPM_VERSION={PNPM_VERSION}", dockerfile)
 
         document = _cnb()
         frontend_builds = [

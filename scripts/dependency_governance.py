@@ -89,7 +89,17 @@ def _pnpm_package_id(name: str, resolution: object) -> str:
 
 def _pnpm_graph() -> dict[str, Any]:
     lock_path = ROOT / "pnpm-lock.yaml"
-    lock = yaml.safe_load(lock_path.read_text(encoding="utf-8"))
+    # pnpm >= 10 splits the lockfile into two YAML documents: the first holds
+    # the self-managed packageManager dependencies (a single ``.`` importer with
+    # ``packageManagerDependencies``); the real project lock carries the
+    # workspace importers, settings, catalogs and overrides. Pick the project
+    # lock (the document with the most importers), not the manager shim.
+    documents = [
+        document
+        for document in yaml.safe_load_all(lock_path.read_text(encoding="utf-8"))
+        if isinstance(document, dict)
+    ]
+    lock = max(documents, key=lambda document: len(document.get("importers") or {}))
     nodes: dict[str, dict[str, Any]] = {}
     edges: list[dict[str, Any]] = []
 

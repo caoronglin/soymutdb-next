@@ -14,6 +14,24 @@ catalog:
   typescript: 5.9.3
   vite: 6.4.3
   antd: 6.6.1
+  # Vue frontend mainline (plan.md §2). Latest stable, exact-pinned here so a
+  # framework-line change stays one reviewed workspace decision (Phase D).
+  vue: 3.5.43
+  '@vitejs/plugin-vue': 6.0.9
+  # Keep the new Vue app on the workspace Vitest line (no second major).
+  vitest: 3.2.7
+  # Vue mainline stack (plan.md §2): Router + Pinia 4 + TanStack Vue Query +
+  # VueUse 15, latest stable, exact-pinned (Phase D Checkpoint B).
+  vue-router: 5.3.1
+  pinia: 4.0.3
+  '@tanstack/vue-query': 5.103.2
+  '@vueuse/core': 15.0.0
+  # Vue UI layer (Phase D Checkpoint D): Antdv Next 1.x (via the @soymutdb/ui-vue
+  # facade only), Tailwind CSS 4 + its Vite plugin. Exact-pinned; Antdv Next may
+  # break on minor, so upgrades go through the facade contract test first.
+  antdv-next: 1.5.4
+  tailwindcss: 4.3.3
+  '@tailwindcss/vite': 4.3.3
 
 # pnpm 11: workspace-level settings live here (the root package.json "pnpm"
 # field is no longer read). Overrides force the exact React 19.2.0 build for
@@ -36,3 +54,13 @@ allowBuilds:
   # Vite's platform-specific binary is required at build time. All other
   # dependency lifecycle scripts remain denied by default.
   esbuild: true
+  # vue-demi is the Vue 2/3 switch shim that runtime VueUse expects; its
+  # postinstall selects the installed Vue. Required for the Vue mainline.
+  vue-demi: true
+
+# pnpm 12 supply-chain: minimumReleaseAge refuses packages younger than its
+# window; the pinned TanStack Vue Query (latest stable, plan §2) was published
+# inside it, so those two packages are exempted explicitly here.
+minimumReleaseAgeExclude:
+  - "@tanstack/query-core@5.103.2"
+  - "@tanstack/vue-query@5.103.2"

@@ -3,7 +3,7 @@
 # SoyMutDB JBrowse standalone app — reproducible multi-stage build
 # =====================================================================
 FROM node:24.19.0-alpine AS base
-RUN corepack enable && corepack prepare pnpm@11.21.0 --activate
+RUN corepack enable && corepack prepare pnpm@12.5.1 --activate
 WORKDIR /app
 
 # ---- deps stage: install the complete workspace from the root lockfile

@@ -33,19 +33,54 @@ from typing import Any
 import clickhouse_connect
 from celery import Task
 from clickhouse_connect.driver import Client
-from sqlalchemy import text
+from soymutdb_import_protocol import ImportManifestStatus
+from sqlalchemy import or_, select, text
 
 from soymutdb_worker.config import get_setting
 from soymutdb_worker.main import celery_app
+from soymutdb_worker.tables import assemblies, releases
 from soymutdb_worker.utils.db import get_db
 from soymutdb_worker.utils.s3 import download_file, stream_s3_file
 
+from .clickhouse_engine import ClickHouseEngine, HttpClickHouseEngine
 from .data_adapters import ImportContext, UnsupportedImportError, get_adapter
+from .import_manifest_repo import (
+    get as get_manifest,
+)
+from .import_manifest_repo import (
+    mark_failed,
+    record_counts,
+    start_or_resume,
+    transition,
+)
+from .variant_finalize import (
+    BASE_COLUMNS,
+    clear_staging,
+    finalize_release,
+    list_partitions,
+    stage_batch,
+    verify_against_expected,
+)
 
 logger = logging.getLogger(__name__)
 
 BATCH_SIZE = 50_000
 _IMPORT_LOCK_NAMESPACE = 0x534D4442
+
+# ADR-0005 / P2-3: the idempotent VCF import path is gated behind a worker flag
+# that defaults OFF. Until the flag is flipped, import_vcf keeps failing closed
+# (P1-2 422 preserved). The ON path runs the staging -> verify -> finalize
+# protocol verified against the real engine tests.
+VCF_IMPORT_FLAG = "SOYMUTDB_ENABLE_VCF_IMPORT"
+# Stable importer/schema/normalization/config versions entering the fingerprint.
+_VCF_IMPORTER_VERSION = "vcf-1"
+_VCF_SCHEMA_VERSION = "fact-1"
+_VCF_NORMALIZATION_VERSION = "norm-1"
+_VCF_CONFIG_HASH = hashlib.sha256(b"soymutdb-vcf-import@1").hexdigest()
+
+
+def _vcf_import_enabled() -> bool:
+    return get_setting(VCF_IMPORT_FLAG, "false").lower() in {"1", "true", "yes", "on"}
 _TERMINAL_IMPORT_STATUSES = frozenset({"ready", "published", "rolled_back"})
 
 
@@ -428,236 +463,263 @@ def import_vcf(
     file_key: str,
     assembly_key: str = "",
     batch_size: int = BATCH_SIZE,
+    engine: ClickHouseEngine | None = None,
 ) -> dict:
-    """Ingest variants from a VCF file into ClickHouse.
+    """Ingest variants from a VCF file into ClickHouse via the ADR-0005 protocol.
 
-    This path currently fails closed. Stable variant IDs do not prevent
-    duplicate rows or duplicate materialized-summary counts in the current
-    ``MergeTree`` schema. Re-enable only after a durable checksum/import
-    identity and staging/finalize protocol can make retries safe.
+    Staging -> verify -> finalize make retries safe: writes land only in the
+    staging table, the release partition is rewritten from de-duplicated staged
+    rows, and only a PUBLISHED import is visible to the portal.
+
+    Gated behind ``SOYMUTDB_ENABLE_VCF_IMPORT`` (default OFF). Until the flag is
+    flipped -- which requires real ClickHouse acceptance per ADR-0005 -- this
+    task keeps failing closed so the disabled capability returns 422 (P1-2).
 
     Args:
-        release_id: Release identifier.
-        file_key: S3 key of the VCF file (used for stable ID generation).
-        assembly_key: Assembly identifier.
-        batch_size: Number of variants per batch insert (default 50 000).
-
-    Returns:
-        dict with ingestion statistics.
+        release_id: Release version string; resolved to the integer release id
+            recorded on the manifest and used as the ``variant_facts`` release_key.
+        file_key: object key of the VCF file (stable id + source checksum).
+        assembly_key: Assembly label; resolved to the integer assembly id.
+        batch_size: Number of variants per staging batch.
+        engine: ClickHouse engine port (injected in tests; defaults to the
+            production clickhouse-connect client).
     """
-    raise UnsupportedImportError(
-        "VCF import is disabled: variant_facts uses MergeTree and no durable "
-        "checksum/import identity plus staging finalize prevents duplicate facts on retry"
+    if not _vcf_import_enabled():
+        raise UnsupportedImportError(
+            "VCF import is disabled: variant_facts uses MergeTree and the "
+            "idempotent staging/finalize protocol is gated off until real "
+            "ClickHouse acceptance (ADR-0005)"
+        )
+
+    engine = engine or HttpClickHouseEngine(get_clickhouse_client())
+    logger.info(
+        "Starting protocol-driven VCF ingestion: %s for release %s", file_key, release_id
     )
+    with download_file(file_key) as local_vcf_path:
+        source_sha256 = _sha256_file(local_vcf_path)
+        with get_db() as session:
+            release_id_int, assembly_id_int = _resolve_release_assembly(
+                session, release_id, assembly_key
+            )
+            if release_id_int is None:
+                raise ValueError(f"unknown release version: {release_id!r}")
+            if assembly_id_int is None:
+                raise ValueError(f"unknown assembly: {assembly_key!r}")
+            return _import_vcf_via_protocol(
+                engine,
+                release_id=release_id,
+                assembly_key=assembly_key,
+                local_vcf_path=local_vcf_path,
+                file_key=file_key,
+                batch_size=batch_size,
+                source_sha256=source_sha256,
+                release_id_int=release_id_int,
+                assembly_id_int=assembly_id_int,
+            )
 
-    logger.info("Starting VCF ingestion: %s for release %s", file_key, release_id)
 
-    ch = get_clickhouse_client()
+def _sha256_file(path: str, _chunk: int = 1 << 20) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for block in iter(lambda: handle.read(_chunk), b""):
+            digest.update(block)
+    return digest.hexdigest()
 
-    total_variants = 0
-    total_inserted = 0
-    skipped = 0
-    batch_count = 0
 
-    # Columnar batch storage
-    batch: dict[str, list] = {
-        "variant_id": [],
-        "release_key": [],
-        "assembly_key": [],
-        "chromosome": [],
-        "position": [],
-        "ref_allele": [],
-        "alt_allele": [],
-        "variant_type": [],
-        "variant_subtype": [],
-        "length": [],
-        "gene_id": [],
-        "gene_symbol": [],
-        "gene_surrogate_id": [],
-        "mutant_line_surrogate_id": [],
-        "mutant_line_name": [],
-        "consequence": [],
-        "consequence_id": [],
-        "impact": [],
-        "rs_id": [],
-        "quality_score": [],
-        "filter_status": [],
-        "read_depth": [],
-        "allele_frequency": [],
-        "hgvs_c": [],
-        "hgvs_p": [],
-        "zygosity": [],
-    }
+def _resolve_release_assembly(
+    session, release_version: str, assembly_key: str
+) -> tuple[int | None, int | None]:
+    """Resolve the release version + assembly label to their integer ids.
 
-    def flush_batch() -> None:
-        nonlocal total_inserted, batch_count
-        if not batch["variant_id"]:
-            return
-        ch.insert(
-            "variant_facts",
-            data=list(zip(*batch.values())),
-            column_names=list(batch.keys()),
-        )
-        total_inserted += len(batch["variant_id"])
-        batch_count += 1
-        for key in batch:
-            batch[key] = []
-        self.update_state(
-            state="PROGRESS",
-            meta={
-                "processed": total_variants,
-                "inserted": total_inserted,
-                "skipped": skipped,
-                "batches": batch_count,
-            },
-        )
+    The manifest is keyed by integer release/assembly ids (ADR-0005); the VCF
+    import carries their string labels. Unknown labels return ``None`` so the
+    import fails closed rather than recording a manifest against an unresolved
+    release/assembly.
+    """
+    release_int = session.execute(
+        select(releases.c.id).where(releases.c.version == release_version)
+    ).scalar_one_or_none()
+    assembly_int = None
+    if assembly_key:
+        assembly_int = session.execute(
+            select(assemblies.c.id).where(
+                or_(assemblies.c.name == assembly_key, assemblies.c.version == assembly_key)
+            )
+        ).scalar_one_or_none()
+    return release_int, assembly_int
 
+
+def _iter_vcf_base_rows(
+    local_vcf_path: str, release_key: str, assembly_key: str, file_key: str
+) -> Iterator[tuple]:
+    """Yield canonical ``variant_facts`` rows (BASE_COLUMNS order) from a VCF."""
+    from cyvcf2 import VCF
+
+    vcf = VCF(local_vcf_path)
+    sample_names = vcf.samples
     try:
-        # Download VCF to a local temp file for cyvcf2 (requires file path)
-        with download_file(file_key) as local_vcf_path:
-            from cyvcf2 import VCF
-
-            vcf = VCF(local_vcf_path)
-            sample_names = vcf.samples
-
-            for variant in vcf:
-                total_variants += 1
-
-                chrom = variant.CHROM
-                pos = variant.POS
-                ref = variant.REF
-                alts = variant.ALT
-                qual = variant.QUAL if variant.QUAL is not None else 0.0
-                filt = variant.FILTER if variant.FILTER else "PASS"
-
-                if not alts:
-                    skipped += 1
+        for variant in vcf:
+            alts = variant.ALT
+            if not alts:
+                continue
+            chrom = variant.CHROM
+            pos = variant.POS
+            ref = variant.REF
+            qual = variant.QUAL if variant.QUAL is not None else 0.0
+            filt = variant.FILTER if variant.FILTER else "PASS"
+            annotations = parse_snpeff_ann(variant.INFO.get("ANN", ""))
+            best_ann = pick_most_severe_annotation(annotations)
+            gene_id = best_ann.get("gene_id", "") if best_ann else ""
+            gene_sid = _surrogate_id(gene_id) if gene_id else 0
+            try:
+                mutant_line_name, ml_sid = _pick_mutant_line(
+                    sample_names, variant.gt_types, 0
+                )
+            except Exception:
+                mutant_line_name, ml_sid = "", 0
+            zygosity = "unknown"
+            try:
+                gt_types = variant.gt_types
+                if gt_types is not None and len(gt_types) > 0:
+                    zygosity = determine_zygosity(int(gt_types[0]))
+            except Exception:
+                pass
+            try:
+                af_val = variant.INFO.get("AF")
+                af = float(af_val) if af_val is not None else 0.0
+            except (ValueError, TypeError):
+                af = 0.0
+            try:
+                dp_val = variant.INFO.get("DP")
+                dp = int(dp_val) if dp_val is not None else 0
+            except (ValueError, TypeError):
+                dp = 0
+            rs_id = variant.ID if variant.ID else ""
+            for alt in alts:
+                if alt is None:
                     continue
+                vtype, vsubtype = determine_variant_type(ref, str(alt))
+                row = {
+                    "variant_id": compute_variant_id(
+                        release_key, file_key, chrom, pos, ref, str(alt)
+                    ),
+                    "release_key": release_key,
+                    "assembly_key": assembly_key,
+                    "chromosome": chrom,
+                    "position": pos,
+                    "ref_allele": ref,
+                    "alt_allele": str(alt),
+                    "variant_type": vtype,
+                    "variant_subtype": vsubtype,
+                    "length": max(len(ref), len(str(alt))),
+                    "gene_id": gene_id,
+                    "gene_symbol": best_ann.get("gene_name", "") if best_ann else "",
+                    "gene_surrogate_id": gene_sid,
+                    "mutant_line_surrogate_id": ml_sid,
+                    "mutant_line_name": mutant_line_name,
+                    "consequence": best_ann.get("consequence", "") if best_ann else "",
+                    "consequence_id": 0,
+                    "impact": best_ann.get("impact", "MODIFIER") if best_ann else "MODIFIER",
+                    "rs_id": rs_id,
+                    "quality_score": float(qual),
+                    "filter_status": filt,
+                    "read_depth": dp,
+                    "allele_frequency": af,
+                    "hgvs_c": best_ann.get("hgvs_c", "") if best_ann else "",
+                    "hgvs_p": best_ann.get("hgvs_p", "") if best_ann else "",
+                    "zygosity": zygosity,
+                }
+                yield tuple(row[column] for column in BASE_COLUMNS)
+    finally:
+        vcf.close()
 
-                # Handle multiple ALT alleles
-                for alt_idx, alt in enumerate(alts):
-                    if alt is None:
-                        continue
 
-                    vtype, vsubtype = determine_variant_type(ref, str(alt))
-                    length = max(len(ref), len(str(alt)))
+def _import_vcf_via_protocol(
+    engine: ClickHouseEngine,
+    *,
+    release_id: str,
+    assembly_key: str,
+    local_vcf_path: str,
+    file_key: str,
+    batch_size: int,
+    source_sha256: str,
+    release_id_int: int,
+    assembly_id_int: int,
+) -> dict:
+    """Drive manifest lifecycle + staging/verify/finalize for one VCF import.
 
-                    # Deterministic variant ID; the storage layer must provide deduplication.
-                    variant_id = compute_variant_id(
-                        release_id, file_key, chrom, pos, ref, str(alt)
-                    )
-
-                    # Parse SnpEff ANN field (standard VEP/SnpEff annotation)
-                    ann_str = variant.INFO.get("ANN", "")
-                    annotations = parse_snpeff_ann(ann_str) if ann_str else []
-                    best_ann = pick_most_severe_annotation(annotations)
-
-                    gene_id = best_ann.get("gene_id", "") if best_ann else ""
-                    consequence = best_ann.get("consequence", "") if best_ann else ""
-                    impact = best_ann.get("impact", "MODIFIER") if best_ann else "MODIFIER"
-                    hgvs_c = best_ann.get("hgvs_c", "") if best_ann else ""
-                    hgvs_p = best_ann.get("hgvs_p", "") if best_ann else ""
-
-                    # Resolve gene surrogate ID from gene_id (hash to int)
-                    gene_sid = 0
-                    if gene_id:
-                        gene_sid = _surrogate_id(gene_id)
-
-                    # Resolve mutant-line surrogate ID from sample name
-                    ml_sid = 0
-                    mutant_line_name = ""
-                    try:
-                        mutant_line_name, ml_sid = _pick_mutant_line(
-                            sample_names, variant.gt_types, alt_idx
-                        )
-                    except Exception:
-                        pass
-
-                    # Zygosity from actual sample genotype (not hardcoded)
-                    zygosity = "unknown"
-                    try:
-                        gt_types = variant.gt_types
-                        if gt_types is not None and len(gt_types) > 0:
-                            zygosity = determine_zygosity(int(gt_types[0]))
-                    except Exception:
-                        pass
-
-                    # Other INFO fields (optional, not required)
-                    af = 0.0
-                    try:
-                        af_val = variant.INFO.get("AF")
-                        if af_val is not None:
-                            af = float(af_val)
-                    except (ValueError, TypeError):
-                        pass
-
-                    dp = 0
-                    try:
-                        dp_val = variant.INFO.get("DP")
-                        if dp_val is not None:
-                            dp = int(dp_val)
-                    except (ValueError, TypeError):
-                        pass
-
-                    rs_id = variant.ID if variant.ID else ""
-
-                    batch["variant_id"].append(variant_id)
-                    batch["release_key"].append(release_id)
-                    batch["assembly_key"].append(assembly_key)
-                    batch["chromosome"].append(chrom)
-                    batch["position"].append(pos)
-                    batch["ref_allele"].append(ref)
-                    batch["alt_allele"].append(str(alt))
-                    batch["variant_type"].append(vtype)
-                    batch["variant_subtype"].append(vsubtype)
-                    batch["length"].append(length)
-                    batch["gene_id"].append(gene_id)
-                    batch["gene_symbol"].append(best_ann.get("gene_name", "") if best_ann else "")
-                    batch["gene_surrogate_id"].append(gene_sid)
-                    batch["mutant_line_surrogate_id"].append(ml_sid)
-                    batch["mutant_line_name"].append(mutant_line_name)
-                    batch["consequence"].append(consequence)
-                    batch["consequence_id"].append(0)
-                    batch["impact"].append(impact)
-                    batch["rs_id"].append(rs_id)
-                    batch["quality_score"].append(float(qual))
-                    batch["filter_status"].append(filt)
-                    batch["read_depth"].append(dp)
-                    batch["allele_frequency"].append(af)
-                    batch["hgvs_c"].append(hgvs_c)
-                    batch["hgvs_p"].append(hgvs_p)
-                    batch["zygosity"].append(zygosity)
-
-                    if len(batch["variant_id"]) >= batch_size:
-                        flush_batch()
-
-            # Final flush
-            flush_batch()
-
-            vcf.close()
-
-        # Rebuild trigram full-text index
-        rebuild_trigram_index(ch, release_id)
-
-        logger.info(
-            "VCF ingestion complete: %d/%d variants inserted, %d skipped, %d batches",
-            total_inserted,
-            total_variants,
-            skipped,
-            batch_count,
+    Idempotent by fingerprint: a PUBLISHED import returns without re-writing; a
+    FAILED or interrupted import resumes from its manifest and re-run finalize
+    is safe. A row-count mismatch marks the import FAILED and publishes nothing.
+    """
+    with get_db() as session:
+        manifest, _created = start_or_resume(
+            session,
+            source_sha256=source_sha256,
+            release_id=release_id_int,
+            assembly_id=assembly_id_int,
+            importer_version=_VCF_IMPORTER_VERSION,
+            schema_version=_VCF_SCHEMA_VERSION,
+            normalization_version=_VCF_NORMALIZATION_VERSION,
+            config_hash=_VCF_CONFIG_HASH,
         )
+        import_id = manifest.import_id
+        if manifest.status == ImportManifestStatus.PUBLISHED.value:
+            written = get_manifest(session, import_id)
+            return {
+                "status": "published",
+                "import_id": import_id,
+                "written_rows": (written or {})["written_rows"] or 0,
+                "idempotent": True,
+            }
+        if manifest.status == ImportManifestStatus.FAILED.value:
+            manifest = transition(session, manifest, ImportManifestStatus.CREATED)
+        if manifest.status == ImportManifestStatus.CREATED.value:
+            manifest = transition(session, manifest, ImportManifestStatus.PARSING)
 
+        clear_staging(engine, import_id)
+        total = 0
+        batch: list[tuple] = []
+        batch_index = 0
+        for row in _iter_vcf_base_rows(local_vcf_path, release_id, assembly_key, file_key):
+            batch.append(row)
+            total += 1
+            if len(batch) >= batch_size:
+                stage_batch(
+                    engine, import_id=import_id, batch_index=batch_index, base_rows=batch
+                )
+                batch_index += 1
+                batch = []
+        if batch:
+            stage_batch(engine, import_id=import_id, batch_index=batch_index, base_rows=batch)
+
+        if manifest.status == ImportManifestStatus.PARSING.value:
+            manifest = transition(session, manifest, ImportManifestStatus.WRITING)
+
+        if not verify_against_expected(engine, import_id, total):
+            mark_failed(session, manifest, "row_count_mismatch")
+            return {
+                "status": "failed",
+                "reason": "row_count_mismatch",
+                "import_id": import_id,
+                "expected_rows": total,
+            }
+
+        record_counts(session, manifest, written_rows=total)
+        manifest = transition(session, manifest, ImportManifestStatus.VERIFYING)
+        finalize_release(
+            engine,
+            release_key=release_id,
+            import_id=import_id,
+            partitions=list_partitions(engine, import_id),
+        )
+        manifest = transition(session, manifest, ImportManifestStatus.PUBLISHED)
         return {
-            "total_variants": total_variants,
-            "total_inserted": total_inserted,
-            "skipped": skipped,
-            "batches": batch_count,
-            "release_id": release_id,
+            "status": "published",
+            "import_id": import_id,
+            "written_rows": total,
+            "idempotent": False,
         }
-
-    except Exception as e:
-        logger.error("VCF ingestion failed: %s", e)
-        raise
 
 
 # ---------------------------------------------------------------------------

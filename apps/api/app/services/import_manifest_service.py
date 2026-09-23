@@ -12,6 +12,10 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
+from soymutdb_import_protocol import (
+    can_transition,
+    is_portal_visible_status,
+)
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,28 +42,14 @@ class InvalidManifestTransition(Exception):
     """Raised when a manifest state transition is not permitted."""
 
 
-# Explicit lifecycle transitions (ADR-0005). FAILED -> CREATED models a retry
-# starting a fresh attempt over the same logical import (same fingerprint).
-_ALLOWED_TRANSITIONS: dict[ImportManifestStatus, set[ImportManifestStatus]] = {
-    ImportManifestStatus.CREATED: {
-        ImportManifestStatus.PARSING,
-        ImportManifestStatus.FAILED,
-    },
-    ImportManifestStatus.PARSING: {
-        ImportManifestStatus.WRITING,
-        ImportManifestStatus.FAILED,
-    },
-    ImportManifestStatus.WRITING: {
-        ImportManifestStatus.VERIFYING,
-        ImportManifestStatus.FAILED,
-    },
-    ImportManifestStatus.VERIFYING: {
-        ImportManifestStatus.PUBLISHED,
-        ImportManifestStatus.FAILED,
-    },
-    ImportManifestStatus.PUBLISHED: set(),
-    ImportManifestStatus.FAILED: {ImportManifestStatus.CREATED},
-}
+__all__ = [
+    "InvalidManifestTransition",
+    "can_transition",
+    "find_by_fingerprint",
+    "is_portal_visible",
+    "start_or_resume",
+    "transition",
+]
 
 
 async def find_by_fingerprint(
@@ -106,12 +96,9 @@ async def start_or_resume(
     return manifest, True
 
 
-def can_transition(current: str, target: ImportManifestStatus) -> bool:
-    try:
-        current_status = ImportManifestStatus(current)
-    except ValueError:
-        return False
-    return target in _ALLOWED_TRANSITIONS[current_status]
+def is_portal_visible(manifest: ImportManifest) -> bool:
+    """Publish-visibility rule: the portal sees only PUBLISHED imports."""
+    return is_portal_visible_status(manifest.status)
 
 
 async def transition(
@@ -126,8 +113,3 @@ async def transition(
     await db.commit()
     await db.refresh(manifest)
     return manifest
-
-
-def is_portal_visible(manifest: ImportManifest) -> bool:
-    """Publish-visibility rule: the portal sees only PUBLISHED imports."""
-    return manifest.status == ImportManifestStatus.PUBLISHED.value

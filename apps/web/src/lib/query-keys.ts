@@ -1,63 +1,11 @@
 /**
- * Shared TanStack Query keys for public Web data.
+ * Framework-neutral TanStack query-key factories.
  *
- * Keep keys centralized so equivalent reads share cache entries and future
- * invalidation can use stable prefixes instead of handwritten arrays.
+ * The implementation now lives in the framework-neutral seam package
+ * ``@soymutdb/query-keys`` so the same cache keys are shared by TanStack React
+ * Query and, after the migration, TanStack Vue Query (plan.md Phase C). This
+ * module is a thin re-export kept so existing Web imports keep working; new
+ * routes should import from ``@soymutdb/query-keys`` directly.
  */
-export const queryKeys = {
-  all: ["soymutdb"] as const,
-  assemblies: {
-    all: () => [...queryKeys.all, "assemblies"] as const,
-    chromosomes: (assemblyId: string | number | undefined) =>
-      [...queryKeys.assemblies.all(), "chromosomes", assemblyId ?? null] as const,
-  },
-  genes: {
-    all: () => [...queryKeys.all, "genes"] as const,
-    detail: (geneId: string, assemblyId?: string) =>
-      [...queryKeys.genes.all(), "detail", geneId, assemblyId ?? null] as const,
-    expression: (geneId: string, assemblyId?: string) =>
-      [...queryKeys.genes.all(), "expression", geneId, assemblyId ?? null] as const,
-    homologs: (geneId: string, assemblyId?: string) =>
-      [...queryKeys.genes.all(), "homologs", geneId, assemblyId ?? null] as const,
-    search: (context: {
-      q: string | undefined;
-      assemblyId: string | undefined;
-      page: number;
-      releaseId: string | null;
-      siteVariant: "external" | "internal";
-    }) =>
-      [
-        ...queryKeys.genes.all(),
-        "search",
-        context.q ?? null,
-        context.assemblyId ?? null,
-        context.page,
-        context.releaseId,
-        context.siteVariant,
-      ] as const,
-  },
-  search: {
-    all: () => [...queryKeys.all, "search"] as const,
-    global: (context: {
-      query: string | undefined;
-      types: readonly string[] | undefined;
-      cursor: string | undefined;
-      limit: number;
-      assemblyId: string | undefined;
-      releaseId: string | null;
-      siteVariant: "external" | "internal";
-      federated: boolean;
-    }) => [
-      ...queryKeys.search.all(),
-      "global",
-      context.query ?? null,
-      context.types ?? null,
-      context.cursor ?? null,
-      context.limit,
-      context.assemblyId ?? null,
-      context.releaseId,
-      context.siteVariant,
-      context.federated,
-    ] as const,
-  },
-} as const;
+export { queryKeys } from "@soymutdb/query-keys";
+export type { QueryKeys } from "@soymutdb/query-keys";

@@ -62,7 +62,7 @@ ARG NODE_SHA256_X64=14b342e71204f811bde6153be8e04b62aef63c236fef92b55f9c83154b40
 ARG NODE_SHA256_ARM64=01443c1e1a29e531ccad5a46fefa6df490d2189c49f7955904aecdbb0fe86fdc
 # Must match PNPM_VERSION in scripts/{setup-workspace,ci-job-steps}.sh and
 # package.json's packageManager; scripts/check-toolchain-pins.py enforces it.
-ARG PNPM_VERSION=11.21.0
+ARG PNPM_VERSION=12.5.1
 
 # coreutils    sha256sum for the Node tarball verification
 # ca-certs     pnpm and the OpenAPI export both reach HTTPS endpoints

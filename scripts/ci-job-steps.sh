@@ -50,7 +50,7 @@ export REPO_ROOT
 # copy here plus one in .cnb.yml + one in ci.yml is guarded by
 # scripts/test_ci_job_contracts.py, which fails when the three disagree.
 NODE_VERSION="${SOYMUTDB_CI_NODE_VERSION:-24.19.0}"
-PNPM_VERSION="${SOYMUTDB_CI_PNPM_VERSION:-11.21.0}"
+PNPM_VERSION="${SOYMUTDB_CI_PNPM_VERSION:-12.5.1}"
 PYTHON_VERSION="${SOYMUTDB_CI_PYTHON_VERSION:-3.14}"
 UV_VERSION="${SOYMUTDB_CI_UV_VERSION:-0.11.33}"
 export NODE_VERSION PNPM_VERSION PYTHON_VERSION UV_VERSION
@@ -266,6 +266,13 @@ frontend_build_demo() {
 frontend_run() {
   frontend_install
   ensure_api_venv
+  # Phase C framework-neutral seam guard (plan.md §7): fail before the
+  # expensive artifact build if a neutral package (shared/api-client/query-keys)
+  # starts importing a UI framework. Stdlib-only, so it runs on the venv
+  # interpreter this gate already provisions (the node CI image has no system
+  # python). Both CNB and GitHub reach this via the shared job body.
+  "${REPO_ROOT}/apps/api/.venv/bin/python" \
+    "${REPO_ROOT}/scripts/check_framework_neutral_packages.py"
   bash "${REPO_ROOT}/scripts/verify-frontend-artifacts.sh"
 }
 

@@ -82,7 +82,10 @@ step "Worker test package marker (cross-module imports must resolve)"
 "${VENV_PYTHON}" scripts/check_worker_test_package.py
 
 step "Worker analysis dependencies"
-"${VENV_PYTHON}" -m pip install --quiet -e apps/worker
+# Install the worker dev extra too: the import finalize/staging protocol is
+# accepted against a real embedded ClickHouse (`chdb`), which lives in the
+# worker's dev extra and runs in this shared venv.
+"${VENV_PYTHON}" -m pip install --quiet -e "apps/worker[dev]"
 "${VENV_PYTHON}" -c "import scanpy, anndata, leidenalg, igraph, matplotlib; print('analysis deps OK:', scanpy.__version__)"
 
 step "Worker pytest (PostgreSQL integration required)"

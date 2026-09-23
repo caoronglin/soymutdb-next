@@ -67,6 +67,7 @@ releases = Table(
     "releases",
     metadata,
     Column("id", Integer, primary_key=True),
+    Column("version", String(32)),
     Column("status", release_status_enum, nullable=False),
 )
 
@@ -324,6 +325,47 @@ publication_target_leases = Table(
     Column("latest_publication_id", Integer),
 )
 
+#: Import manifest control plane (ADR-0005 / Phase A).  The API owns the
+#: table + the enum via migration 0037; the worker (P2-3) persists the same
+#: lifecycle while it drives an import.  Mirroring the other tables here keeps
+#: the worker image free of API source (H4).
+import_manifest_status_enum = ENUM(
+    "created",
+    "parsing",
+    "writing",
+    "verifying",
+    "published",
+    "failed",
+    name="import_manifest_status_enum",
+    create_type=False,
+)
+import_manifests = Table(
+    "import_manifests",
+    metadata,
+    Column("import_id", String(64), primary_key=True),
+    Column("fingerprint", String(64), nullable=False, index=True, unique=True),
+    Column("source_sha256", String(64), nullable=False),
+    Column("release_id", Integer, nullable=False, index=True),
+    Column("assembly_id", Integer, nullable=False),
+    Column("importer_version", String(64), nullable=False),
+    Column("schema_version", String(64), nullable=False),
+    Column("normalization_version", String(64), nullable=False),
+    Column("config_hash", String(64), nullable=False),
+    Column(
+        "status",
+        import_manifest_status_enum,
+        nullable=False,
+        server_default="created",
+    ),
+    Column("expected_rows", BigInteger),
+    Column("written_rows", BigInteger),
+    Column("failure_code", String(128)),
+    Column("started_at", DateTime(timezone=True)),
+    Column("completed_at", DateTime(timezone=True)),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    Column("updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+)
+
 
 def utcnow() -> datetime:
     """Timezone-aware current time for status timestamps."""
@@ -342,6 +384,8 @@ __all__ = [
     "gene_homologs",
     "genes",
     "gwas_jobs",
+    "import_manifest_status_enum",
+    "import_manifests",
     "import_tasks",
     "metadata",
     "notifications",
