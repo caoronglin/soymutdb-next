@@ -17,20 +17,12 @@
 
 import { setReleaseId as setClientReleaseId } from "@soymutdb/api-client";
 
-// normalizeBasePath lives in a zero-dependency module so the Vite config can
-// import it without loading the api-client; re-exported here for the views and
-// tests that already read it from the deployment context.
+// normalizeBasePath and resolveSiteVariant live in zero-dependency modules so
+// the Vite config can import them without loading the api-client; re-exported
+// here for the views and tests that already read them from the deployment
+// context.
 export { normalizeBasePath } from "./base-path";
-
-export type SiteVariant = "external" | "internal";
-
-export function resolveSiteVariant(value: unknown): SiteVariant {
-  if (value === undefined || value === null || value === "") return "external";
-  if (value === "external" || value === "internal") return value;
-  throw new Error(
-    `VITE_SITE_VARIANT must be exactly "external" or "internal"; got ${JSON.stringify(value)}`,
-  );
-}
+export { resolveSiteVariant, type SiteVariant } from "./site-variant";
 
 /** Normalize the build-time release pin; empty/absent means "server active". */
 export function resolveInitialReleaseId(value: unknown): string | null {

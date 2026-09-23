@@ -1,29 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  resolveInitialReleaseId,
-  resolveJbrowseBaseUrl,
-  resolveSiteVariant,
-} from "./deployment";
-
-describe("resolveSiteVariant (DB-CORE-5)", () => {
-  it("accepts exactly the two deployment variants", () => {
-    expect(resolveSiteVariant("external")).toBe("external");
-    expect(resolveSiteVariant("internal")).toBe("internal");
-  });
-
-  it("defaults to external only when the input is absent or empty", () => {
-    expect(resolveSiteVariant(undefined)).toBe("external");
-    expect(resolveSiteVariant(null)).toBe("external");
-    expect(resolveSiteVariant("")).toBe("external");
-  });
-
-  it("fails closed on a typo instead of creating a third variant", () => {
-    for (const bad of ["External", " external", "internal ", "public", "EXTERNAL", 1, {}]) {
-      expect(() => resolveSiteVariant(bad)).toThrow(/VITE_SITE_VARIANT/);
-    }
-  });
-});
+import { resolveInitialReleaseId, resolveJbrowseBaseUrl } from "./deployment";
 
 describe("release pin", () => {
   it("trims the release id and treats empty as unpinned", () => {
