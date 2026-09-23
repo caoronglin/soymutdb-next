@@ -26,7 +26,7 @@ from soymutdb_worker.tasks.clickhouse_engine import ChdbEngine
 from soymutdb_worker.tasks.data_adapters import UnsupportedImportError
 from soymutdb_worker.tasks.ingest import compute_variant_id
 from soymutdb_worker.tasks.variant_finalize import BASE_COLUMNS
-from tests.chdb_harness import prepare_schema, session_path, unique_db
+from tests.test_chdb_harness import prepare_schema, session_path, unique_db
 
 ROOT = Path(__file__).resolve().parents[3]
 API_ROOT = ROOT / "apps" / "api"

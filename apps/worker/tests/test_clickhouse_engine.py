@@ -14,7 +14,7 @@ import chdb.session  # noqa: F401
 import pytest
 
 from soymutdb_worker.tasks.clickhouse_engine import ChdbEngine  # noqa: E402
-from tests.chdb_harness import prepare_schema, unique_db  # noqa: E402
+from tests.test_chdb_harness import prepare_schema, unique_db  # noqa: E402
 
 # A faithful, minimal slice of the canonical DDL: the fact table with the real
 # (release_key, chromosome) partition key, one SummingMergeTree summary and the

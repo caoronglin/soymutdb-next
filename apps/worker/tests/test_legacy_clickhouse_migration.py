@@ -32,7 +32,7 @@ import chdb.session  # noqa: F401
 import pytest
 
 from soymutdb_worker.tasks.clickhouse_engine import ChdbEngine  # noqa: E402
-from tests.chdb_harness import unique_db  # noqa: E402
+from tests.test_chdb_harness import unique_db  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[3]
 MIGRATION_LIB = ROOT / "deploy/scripts/migrate_clickhouse_lib.py"

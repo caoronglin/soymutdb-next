@@ -16,7 +16,7 @@ import pytest
 
 from soymutdb_worker.tasks import variant_finalize as vf
 from soymutdb_worker.tasks.clickhouse_engine import ChdbEngine
-from tests.chdb_harness import prepare_schema, unique_db
+from tests.test_chdb_harness import prepare_schema, unique_db
 
 _SCHEMA_SQL = (
     Path(__file__).parent / "fixtures" / "variant_facts_schema.sql"

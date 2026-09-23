@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from tests.chdb_harness import session_path
+from tests.test_chdb_harness import session_path
 
 
 @pytest.fixture(scope="session")
