@@ -32,6 +32,9 @@ GitHub Actions 为当前主 gate）。
 | `6e9bf13cf` | Vue：非法 `VITE_SITE_VARIANT` 构建期 fail closed |
 | `c89e75da6`+`923d8aa4a` | worker：`test_chdb_harness` 命名；内存契约子进程隔离；PG 序列对齐 |
 | `1726f997c` | worker：ADR-0005 正确性（稳定 variant id、fingerprint advisory lock、VERIFYING 恢复、release 全量重建、`mutations_sync`、参数化、冲突 fail-closed、VcfAdapter 接线） |
+| `61dffc4b0` | worker：fingerprint advisory lock 改用专用连接（真实 PostgreSQL 暴露的池化缺陷） |
+| `ca44c516f` | worker：vcf 移出无 writer fail-closed 矩阵（已有协议专用测试） |
+| `bc2b9648d` | CI：artifact 压缩/去重/保留期治理（配额 500MB） |
 
 ### 证据（本地）
 
@@ -40,13 +43,16 @@ GitHub Actions 为当前主 gate）。
 - `web-vue`：**10 files / 31 tests**；typecheck + lint 干净
 - Vite base 构建：`/`、`/soymutdb-next/`、裸 `soymutdb-next` → 产物前缀正确；`VITE_SITE_VARIANT=public` → exit 1
 - worker chdb 套件（finalize/vcf/engine/legacy/协议）→ **22 passed**（untouched summary、冲突、注入、VERIFYING 恢复、adapter 接线）
+- 真实 PostgreSQL 16（本地临时集群，`SOYMUTDB_RUN_POSTGRES_INTEGRATION=1`）：`test_import_manifest_repo.py` + `test_vcf_import.py` → **14 passed**（advisory lock 串行化、VCF e2e、VERIFYING 恢复、序列对齐）。真实 PG 还找到了 lock 在 Session commit 后退池的缺陷（`61dffc4b0`）
+- GitHub api-tests：apps/api pytest **1542 passed**；worker pytest 348 passed + 1 个旧断言（已在 `ca44c516f` 更新）
+- 本地 API 全量复现的 131 errors 为共享库 seed 冲突（CI 用全新 testcontainers），非代码问题
 - GitHub：ClickHouse migration fixture（真实 24.8）→ **success**；MCP e2e → success
 - artifact 配额：`soymutdb-next` 19.5GB + 账户其它仓库 939MB 旧 artifact 已清理；等待 GitHub 重算（6–12h）
 
 ### 阻塞 / 未关闭
 
-- GitHub artifact 上传：配额重算前可能仍失败（基础设施，非代码失败）
-- api-tests 中 PG 集成（advisory lock、VCF e2e）：等待最新 CI run 验证
+- GitHub artifact 上传：已压缩 `pages-demo-dist`、移除无消费者的 dist 上传、缩短证据保留期；等待配额重算（6–12h）后应恢复
+- api-tests 的 PG 集成已在本地真实验证；CI 复跑待最新 run 完成
 - T8 local Docker：本机无 Docker daemon（`LOCAL_DOCKER_T8` PENDING）
 - review 剩余：Vue 未进入 canonical delivery（Phase 3 切换，当前明确 preview-only）
 
