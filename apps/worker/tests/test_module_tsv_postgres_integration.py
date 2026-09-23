@@ -552,3 +552,46 @@ def test_promoted_genes_follow_portal_release_visibility(
         session.commit()
         assert portal_rows(session) == ["G1"]
     assert _canonical_genes(worker_session_factory, assembly_id=assembly_id)
+
+
+def test_promotion_failure_rolls_back_earlier_batches(
+    tmp_path, worker_session_factory
+):
+    """A failure after some rows were promoted must not commit partial state.
+
+    Promotion upserts in batches of 5,000. The first batch here succeeds and
+    the second fails at the database level (a chromosome name longer than
+    chromosomes.name(64)); the whole import must roll back, leaving neither
+    canonical genes nor staging rows and keeping the data set out of `ready`.
+    """
+    source = tmp_path / "late-promotion-failure.tsv"
+    rows = [(f"G{index:04d}", "Chr01", index + 1, index + 100, "") for index in range(5000)]
+    # Sorts last by row_key, so it lands in the second batch.
+    rows.append(("ZZZ", "X" * 80, 1_000_000, 1_000_100, ""))
+    _write_promotion_genes(source, rows)
+    assembly_id = _seed_release(worker_session_factory, release_id=15)
+    _seed_dataset(worker_session_factory, data_set_id=15, release_id=15)
+
+    with pytest.raises(Exception) as raised:  # noqa: B017 - driver exception type
+        get_adapter("module_tsv").run(
+            ImportContext(
+                import_task_id=15,
+                data_set_id=15,
+                release_id="15",
+                file_key=str(source),
+                module_key="genes",
+                filename=source.name,
+            )
+        )
+    assert "too long" in str(raised.value) or "value too long" in str(raised.value)
+
+    # Nothing from either batch survived: canonical genes, chromosomes, staging
+    # and the data set status are all rolled back together.
+    assert _canonical_genes(worker_session_factory, assembly_id=assembly_id) == []
+    assert _canonical_chromosomes(worker_session_factory, assembly_id=assembly_id) == []
+    assert _module_row_count(worker_session_factory, release_id=15) == 0
+    with worker_session_factory() as session:
+        status = session.execute(
+            text("SELECT status FROM data_sets WHERE id = 15")
+        ).scalar_one()
+    assert status != "ready"
