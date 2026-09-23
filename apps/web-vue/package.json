@@ -6,7 +6,7 @@
   "description": "SoyMutDB public portal — Vue/Vite shell (preview-only: not yet part of the published web artifact; apps/web stays canonical until the Phase 3 cutover)",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && tsx scripts/generate-static-routes.ts",
     "preview": "vite preview",
     "test": "vitest run",
     "lint": "eslint src",
@@ -33,6 +33,7 @@
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:",
+    "tsx": "^4.19.0",
     "vue-tsc": "^3.2.0",
     "eslint": "^10.8.0",
     "jsdom": "^29.1.1",

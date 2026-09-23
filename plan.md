@@ -149,6 +149,32 @@ AGENTS.md 要求的 external/internal 工件边界此前只在本地手工验证
 
 Phase 3 未完：Vue SSG/静态路由枚举、canonical build/deploy 切换、剩余页面 parity。
 
+### Phase 3 第二步：Vue 静态路由枚举（2026-09-23）
+
+Vue portal 成为 canonical 前的静态托管前置：每条稳定路由获得独立文档与元数据，
+而不是依赖 SPA fallback。
+
+- `src/router/routes.ts`：路由元数据（title/description/`prerender`/`sitemap`），
+  纯数据、无组件导入（构建脚本可直接加载）。
+- `src/lib/static-routes.ts`：枚举 / 文档路径 / head 注入 / sitemap / robots 的纯函数。
+- `scripts/generate-static-routes.ts`：`vite build` 后为每条可预渲染路由写
+  `<path>/index.html`（注入 title/description/canonical），并写 `routes.json`、
+  `robots.txt`、（external 且已知 origin 时）`sitemap.xml`。
+- 动态路由（`/genes/:geneId`、`/mutants/:publicId`）永不生成文档；
+  internal 变体不生成 sitemap，robots 为 `Disallow: /`。
+- `build` = `vite build && tsx scripts/generate-static-routes.ts`；web-vue 增加 tsx。
+
+证据：
+
+- `pnpm --filter @soymutdb/web-vue test` → **12 files / 43 tests passed**；typecheck/lint 干净。
+- external 构建：5 个文档（`/`、`/search`、`/mutants`、`/variants`、`/downloads`）
+  + `sitemap.xml`（5 URL）+ robots Allow；`/genes` 未生成。
+- internal 构建：同样 5 个文档可用，但 robots 为 `Disallow: /`、无 sitemap、
+  `routes.json` 的 sitemap 条目为 0。
+
+说明：当前文档是带元数据的 SPA shell（页面内容仍由客户端数据驱动）；
+完整 SSG 预渲染需页面布局数据，属 Phase 3 后续。
+
 ### 阻塞 / 未关闭
 
 - GitHub artifact 上传：已压缩 `pages-demo-dist`、移除无消费者的 dist 上传、缩短证据保留期；等待配额重算（6–12h）后应恢复
