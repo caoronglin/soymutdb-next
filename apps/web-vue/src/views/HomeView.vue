@@ -1,20 +1,26 @@
 <script setup lang="ts">
 import { useQuery } from "@tanstack/vue-query";
-import { getAssemblies, type AssemblyInfo } from "@soymutdb/api-client";
-import { queryKeys } from "@soymutdb/query-keys";
+import { computed, toValue } from "vue";
+
+import type { AssemblyInfo } from "@soymutdb/api-client";
 import { cn } from "@soymutdb/shared/cn";
 // Business code imports UI primitives ONLY from the facade (plan D4), never
 // from antdv-next directly.
 import { Button, ConfigProvider, Tag, createThemeConfig } from "@soymutdb/ui-vue";
 
+import { assembliesQueryOptions } from "../lib/query-options";
 import { useSiteContextStore } from "../stores/site-context";
 
 const site = useSiteContextStore();
 
-const { data, isPending, isError, error } = useQuery<AssemblyInfo[]>({
-  queryKey: queryKeys.assemblies.all(),
-  queryFn: () => getAssemblies(),
-});
+// Assembly reference data through the shared queryOptions factory: the page
+// never hand-writes a key that could drift from the request.
+const query = useQuery(assembliesQueryOptions());
+
+const isPending = computed(() => toValue(query.isPending));
+const isError = computed(() => toValue(query.isError));
+const error = computed(() => toValue(query.error));
+const assemblies = computed<AssemblyInfo[]>(() => toValue(query.data) ?? []);
 </script>
 
 <template>
@@ -37,11 +43,11 @@ const { data, isPending, isError, error } = useQuery<AssemblyInfo[]>({
         <p v-else-if="isError" data-testid="assemblies-error" class="text-red-600">
           Could not load assemblies: {{ (error as Error)?.message ?? "unknown error" }}
         </p>
-        <p v-else-if="!data || data.length === 0" data-testid="assemblies-empty">
+        <p v-else-if="assemblies.length === 0" data-testid="assemblies-empty">
           No assemblies are available.
         </p>
         <ul v-else data-testid="assemblies-list" class="mt-2 flex flex-col gap-2">
-          <li v-for="assembly in data" :key="String(assembly.id)">
+          <li v-for="assembly in assemblies" :key="String(assembly.id)">
             <Button type="primary" @click="site.setAssembly(assembly.name)">
               {{ assembly.name }} · {{ assembly.version }} · {{ assembly.species }}
               <Tag v-if="assembly.is_default" color="green">default</Tag>

@@ -15,6 +15,7 @@
 import { queryOptions } from "@tanstack/vue-query";
 
 import {
+  getAssemblies,
   getDownloadFiles,
   getGene,
   getMutantLine,
@@ -32,6 +33,19 @@ export const DOWNLOADS_QUERY_KEY = ["downloads"] as const;
 export interface DeploymentContext {
   releaseId: string | null;
   siteVariant: SiteVariant;
+}
+
+/**
+ * Assembly metadata is global reference data: it does not vary by release or
+ * site variant, so the key intentionally carries neither (plan §14 scopes the
+ * biological reads, not the reference catalogue).
+ */
+export function assembliesQueryOptions() {
+  return queryOptions({
+    queryKey: queryKeys.assemblies.all(),
+    queryFn: () => getAssemblies(),
+    staleTime: 5 * 60_000,
+  });
 }
 
 export function geneQueryOptions(
