@@ -3,9 +3,13 @@ import { useQuery } from "@tanstack/vue-query";
 import { computed, toValue } from "vue";
 import { useRoute } from "vue-router";
 
+import type { PhenotypeResponse } from "@soymutdb/api-client";
 import { ConfigProvider, Tag, createThemeConfig } from "@soymutdb/ui-vue";
 
-import { mutantLineQueryOptions } from "../lib/query-options";
+import {
+  mutantLinePhenotypesQueryOptions,
+  mutantLineQueryOptions,
+} from "../lib/query-options";
 import { useSiteContextStore } from "../stores/site-context";
 
 // Public mutant detail (Phase F, DB-CORE-2). The record is addressed + rendered
@@ -32,6 +36,27 @@ const query = useQuery(
 const isLoading = computed(() => toValue(query.isLoading));
 const isError = computed(() => toValue(query.isError));
 const line = computed(() => toValue(query.data));
+
+// Observations are read under the same release/site context as the line; the
+// query waits for the detail so an unknown public id does not fire a second
+// request whose only possible answer is 404 (mirrors the React route).
+const phenotypesQuery = useQuery(
+  computed(() =>
+    mutantLinePhenotypesQueryOptions({
+      publicId: publicId.value,
+      releaseId: site.releaseId,
+      siteVariant: site.siteVariant,
+      enabled: Boolean(line.value),
+    }),
+  ),
+);
+const phenotypesLoading = computed(() => toValue(phenotypesQuery.isLoading));
+const phenotypesError = computed(() => toValue(phenotypesQuery.isError));
+const phenotypes = computed<PhenotypeResponse[]>(() => toValue(phenotypesQuery.data) ?? []);
+
+function displayValue(value: string | null): string {
+  return value ?? "—";
+}
 </script>
 
 <template>
@@ -68,6 +93,58 @@ const line = computed(() => toValue(query.data));
 
         <p v-if="line.phenotype_summary" class="mt-4 text-sm">{{ line.phenotype_summary }}</p>
         <p v-if="line.description" class="mt-2 text-sm opacity-80">{{ line.description }}</p>
+
+        <section
+          class="mt-8"
+          aria-labelledby="mutant-phenotypes"
+          data-testid="mutant-phenotypes"
+        >
+          <h2 id="mutant-phenotypes" class="text-lg font-medium">Phenotype observations</h2>
+          <p class="mt-1 text-xs opacity-60">
+            Observations recorded for this line; they do not by themselves establish causality.
+          </p>
+          <p
+            v-if="phenotypesLoading"
+            data-testid="phenotypes-loading"
+            class="mt-3 text-sm opacity-70"
+          >
+            Loading phenotypes…
+          </p>
+          <p
+            v-else-if="phenotypesError"
+            data-testid="phenotypes-error"
+            class="mt-3 text-sm opacity-70"
+          >
+            Could not load phenotypes.
+          </p>
+          <p
+            v-else-if="phenotypes.length === 0"
+            data-testid="phenotypes-empty"
+            class="mt-3 text-sm opacity-70"
+          >
+            No phenotypes recorded.
+          </p>
+          <table v-else class="mt-3 w-full text-sm" data-testid="phenotypes-table">
+            <thead class="text-left opacity-60">
+              <tr>
+                <th>Category</th>
+                <th>Name</th>
+                <th>Value</th>
+                <th>Unit</th>
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="phenotype in phenotypes" :key="phenotype.id" data-testid="phenotype-row">
+                <td>{{ phenotype.trait_category }}</td>
+                <td>{{ phenotype.trait_name }}</td>
+                <td>{{ displayValue(phenotype.trait_value) }}</td>
+                <td>{{ displayValue(phenotype.unit) }}</td>
+                <td>{{ displayValue(phenotype.description) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
 
         <!-- DB-CORE-2: no internal identifier is ever rendered on the public site. -->
       </article>

@@ -112,6 +112,20 @@ export const queryKeys = {
       ] as const,
     detail: (publicId: string, releaseId: string | null, siteVariant: "external" | "internal") =>
       [...queryKeys.mutants.all(), "detail", publicId, releaseId, siteVariant] as const,
+    // Phenotype observations are read under the same release/site budget as the
+    // line itself; a release switch must not reuse the previous release's rows.
+    phenotypes: (
+      publicId: string,
+      releaseId: string | null,
+      siteVariant: "external" | "internal",
+    ) =>
+      [
+        ...queryKeys.mutants.all(),
+        "phenotypes",
+        publicId,
+        releaseId,
+        siteVariant,
+      ] as const,
   },
   variants: {
     all: () => [...queryKeys.all, "variants"] as const,

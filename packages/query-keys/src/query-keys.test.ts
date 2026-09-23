@@ -139,6 +139,16 @@ describe("queryKeys", () => {
     // An absent category (the "all" tab) is part of the identity.
     expect(queryKeys.news.list({ ...base, category: null })).not.toEqual(listKey);
 
+    // Phenotype observations share the mutants namespace and its release/site
+    // context: a release or site switch must not reuse the previous rows.
+    const phenotypeKey = queryKeys.mutants.phenotypes("SM7QF3Z", "2026.09", "external");
+    expect(queryKeys.mutants.phenotypes("SM7QF3Z", "2026.10", "external")).not.toEqual(
+      phenotypeKey,
+    );
+    expect(queryKeys.mutants.phenotypes("SM7QF3Z", "2026.09", "internal")).not.toEqual(
+      phenotypeKey,
+    );
+
     const detail = queryKeys.news.detail("release-2026-09");
     expect(detail).toContain("release-2026-09");
     expect(detail[2]).toBe("detail");

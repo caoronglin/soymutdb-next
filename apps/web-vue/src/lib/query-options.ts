@@ -19,6 +19,7 @@ import {
   getDownloadFiles,
   getGene,
   getMutantLine,
+  getMutantLinePhenotypes,
   getNewsBySlug,
   globalSearch,
   listMutantLines,
@@ -201,6 +202,25 @@ export function newsDetailQueryOptions(context: { slug: string }) {
   return queryOptions({
     queryKey: queryKeys.news.detail(context.slug),
     queryFn: () => getNewsBySlug(context.slug),
+    staleTime: 60_000,
+  });
+}
+
+/**
+ * Phenotype observations for one public mutant line. The key carries the same
+ * release/site context as the line detail so a context switch refetches.
+ */
+export function mutantLinePhenotypesQueryOptions(
+  context: DeploymentContext & { publicId: string; enabled?: boolean },
+) {
+  return queryOptions({
+    queryKey: queryKeys.mutants.phenotypes(
+      context.publicId,
+      context.releaseId,
+      context.siteVariant,
+    ),
+    queryFn: () => getMutantLinePhenotypes(context.publicId),
+    enabled: context.enabled ?? true,
     staleTime: 60_000,
   });
 }

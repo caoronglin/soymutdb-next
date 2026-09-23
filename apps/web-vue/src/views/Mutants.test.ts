@@ -29,19 +29,23 @@ vi.mock("@soymutdb/api-client", async (importOriginal) => {
     getReleaseId: () => "2026.09",
     listMutantLines: vi.fn(),
     getMutantLine: vi.fn(),
+    getMutantLinePhenotypes: vi.fn(),
   };
 });
 
-import { getMutantLine, listMutantLines } from "@soymutdb/api-client";
+import { getMutantLine, getMutantLinePhenotypes, listMutantLines } from "@soymutdb/api-client";
 import MutantDetailView from "./MutantDetailView.vue";
 import MutantsListView from "./MutantsListView.vue";
 
 const mockedList = vi.mocked(listMutantLines);
 const mockedDetail = vi.mocked(getMutantLine);
+const mockedPhenotypes = vi.mocked(getMutantLinePhenotypes);
 
 beforeEach(() => {
   mockedList.mockReset();
   mockedDetail.mockReset();
+  mockedPhenotypes.mockReset();
+  mockedPhenotypes.mockResolvedValue([]);
 });
 
 async function mountComponent(component: unknown, url: string) {
@@ -134,6 +138,86 @@ describe("Mutant pages (Phase F, DB-CORE-2 public_id)", () => {
     expect(wrapper.find('[data-testid="mutant-name"]').text()).toBe("line-A");
     expect(wrapper.html()).not.toContain("internal_id");
     // An unknown public id surfaces no internal record (DB-CORE-2).
+    wrapper.unmount();
+  });
+
+  it("renders phenotype observations for the line", async () => {
+    mockedDetail.mockResolvedValue({
+      public_id: "SM7QF3Z",
+      name: "line-A",
+      mutagen: "EMS",
+      cultivar: "W82",
+      variant_count: 3,
+      species: "Glycine max",
+      description: null,
+      generation: "M3",
+      phenotype_summary: null,
+      is_public: true,
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+    });
+    mockedPhenotypes.mockResolvedValue([
+      {
+        id: "p1",
+        mutant_line_public_id: "SM7QF3Z",
+        trait_category: "morphology",
+        trait_name: "plant height",
+        trait_value: "42",
+        unit: "cm",
+        description: "measured at R6",
+      },
+      {
+        id: "p2",
+        mutant_line_public_id: "SM7QF3Z",
+        trait_category: "yield",
+        trait_name: "pod number",
+        trait_value: null,
+        unit: null,
+        description: null,
+      },
+    ] as never);
+
+    const { wrapper } = await mountComponent(MutantDetailView, "/mutants/SM7QF3Z");
+    await flushPromises();
+    await flushPromises();
+    await flushPromises();
+
+    expect(mockedPhenotypes).toHaveBeenCalledWith("SM7QF3Z");
+    const rows = wrapper.findAll('[data-testid="phenotype-row"]');
+    expect(rows).toHaveLength(2);
+    expect(rows[0].text()).toContain("morphology");
+    expect(rows[0].text()).toContain("plant height");
+    expect(rows[0].text()).toContain("42");
+    expect(rows[0].text()).toContain("cm");
+    // A missing value renders as an em dash, never as an empty cell or null.
+    expect(rows[1].text()).toContain("—");
+    expect(wrapper.html()).not.toContain("internal_id");
+    wrapper.unmount();
+  });
+
+  it("shows an explicit empty state when no phenotypes are recorded", async () => {
+    mockedDetail.mockResolvedValue({
+      public_id: "SM7QF3Z",
+      name: "line-A",
+      mutagen: "EMS",
+      cultivar: "W82",
+      variant_count: 3,
+      species: "Glycine max",
+      description: null,
+      generation: "M3",
+      phenotype_summary: null,
+      is_public: true,
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+    });
+
+    const { wrapper } = await mountComponent(MutantDetailView, "/mutants/SM7QF3Z");
+    await flushPromises();
+    await flushPromises();
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="phenotypes-empty"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="phenotypes-table"]').exists()).toBe(false);
     wrapper.unmount();
   });
 

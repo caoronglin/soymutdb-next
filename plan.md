@@ -191,6 +191,18 @@ Vue portal 成为 canonical 前的静态托管前置：每条稳定路由获得�
   typecheck/lint 干净。
 - 构建：external 变体生成 6 个文档（新增 `news/index.html`，title 正确）。
 
+### Phase 3 第四步：mutant 详情表型区块（2026-09-23）
+
+- `packages/query-keys`：`mutants.phenotypes(publicId, releaseId, siteVariant)`，
+  与 line detail 同一 release/site 上下文。
+- `query-options`：`mutantLinePhenotypesQueryOptions`（enabled 由 detail 成功驱动，
+  未知 public id 不发行必然 404 的二次请求）。
+- `MutantDetailView.vue`：表型观测表（分类/名称/值/单位/描述），含 loading/error/empty
+  与“观测不构成因果证据”的边界说明；空值渲染为 `—`。
+
+证据：`web-vue` → **14 files / 52 tests passed**（含表型行、空态与不泄漏 internal_id）；
+query-keys 9 passed；typecheck/lint 干净。
+
 ### 阻塞 / 未关闭
 
 - GitHub artifact 上传：已压缩 `pages-demo-dist`、移除无消费者的 dist 上传、缩短证据保留期；等待配额重算（6–12h）后应恢复
