@@ -1,15 +1,12 @@
+// Client/deployment context store (Pinia: D2 state division — server data lives
+// in TanStack Vue Query; Pinia holds the UI/deployment context). The site
+// variant is the build-time constant, never inferred at runtime (DB-CORE-5).
+// Navigation intentionally lives in components (useRouter), not here: importing
+// the router instance would create a router -> view -> store -> router cycle.
 import { defineStore } from "pinia";
-
-import { router } from "../router";
 
 export type SiteVariant = "external" | "internal";
 
-/**
- * Client/deployment context store (Pinia — D2 state division: server data stays
- * in TanStack Vue Query; Pinia holds the UI/deployment context). The site
- * variant is the build-time constant, never inferred at runtime (DB-CORE-5).
- * Release + assembly are the active navigation context surfaced in the UI.
- */
 export const useSiteContextStore = defineStore("site-context", {
   state: () => ({
     siteVariant: (import.meta.env.VITE_SITE_VARIANT ?? "external") as SiteVariant,
@@ -27,9 +24,6 @@ export const useSiteContextStore = defineStore("site-context", {
     },
     setAssembly(assemblyKey: string | null) {
       this.assemblyKey = assemblyKey;
-    },
-    goHome() {
-      void router.push({ name: "home" });
     },
   },
 });
