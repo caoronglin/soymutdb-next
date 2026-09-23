@@ -414,6 +414,7 @@ def test_module_tsv_run_persists_the_streamed_checksum_not_the_caller_value(
             module_key=module_key,
             target="genes",
             promoted_rows=0,
+            genes_removed=0,
             chromosomes_created=0,
             chromosomes_extended=0,
         ),

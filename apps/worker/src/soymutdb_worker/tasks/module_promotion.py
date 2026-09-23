@@ -42,6 +42,7 @@ from sqlalchemy import (
     Text,
     func,
     select,
+    text,
     update,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -116,6 +117,7 @@ class PromotionResult:
     module_key: str
     target: str
     promoted_rows: int
+    genes_removed: int
     chromosomes_created: int
     chromosomes_extended: int
 
@@ -124,6 +126,7 @@ class PromotionResult:
             "module_key": self.module_key,
             "target": self.target,
             "promoted_rows": self.promoted_rows,
+            "genes_removed": self.genes_removed,
             "chromosomes_created": self.chromosomes_created,
             "chromosomes_extended": self.chromosomes_extended,
         }
@@ -260,6 +263,43 @@ def _upsert_genes(session: Session, payload: list[dict[str, object]]) -> None:
     )
 
 
+def _remove_stale_genes(
+    session: Session, *, module_key: str, release_id: int, assembly_id: int
+) -> int:
+    """Delete canonical genes the staged snapshot no longer contains.
+
+    The importer clears and rewrites staging, so staging is the module's
+    complete snapshot: a gene removed from the source file must disappear from
+    canonical too. A temporary table keeps this O(1) in memory for a 2M-row
+    module, and ON COMMIT DROP scopes it to this transaction.
+    """
+    session.execute(
+        text(
+            "CREATE TEMP TABLE promotion_gene_ids (accession text NOT NULL) "
+            "ON COMMIT DROP"
+        )
+    )
+    session.execute(
+        text(
+            "INSERT INTO promotion_gene_ids (accession) "
+            "SELECT DISTINCT data->>'gene_id' FROM module_data_rows "
+            "WHERE module_key = :module_key AND release_id = :release_id "
+            "AND data->>'gene_id' IS NOT NULL"
+        ),
+        {"module_key": module_key, "release_id": release_id},
+    )
+    result = session.execute(
+        text(
+            "DELETE FROM genes g WHERE g.assembly_id = :assembly_id "
+            "AND NOT EXISTS ("
+            "  SELECT 1 FROM promotion_gene_ids p WHERE p.accession = g.accession"
+            ")"
+        ),
+        {"assembly_id": assembly_id},
+    )
+    return int(result.rowcount or 0)
+
+
 def promote_module_rows(
     session: Session,
     *,
@@ -271,6 +311,10 @@ def promote_module_rows(
     Runs inside the caller's transaction; the caller must roll back if this
     raises. Only ``genes`` is mapped today and an unmapped key is an error, not
     a silent no-op (ADR-0004: staging must not remain write-only).
+
+    A non-empty staging set is the module's complete snapshot, so canonical
+    genes absent from it are removed. An empty staging set is deliberately not
+    a delete instruction (see the module docstring).
     """
     target = PROMOTION_TARGETS.get(module_key)
     if target is None:
@@ -333,10 +377,20 @@ def promote_module_rows(
         payload.clear()
         last_row_key = str(batch[-1][0])
 
+    genes_removed = 0
+    if promoted_rows:
+        genes_removed = _remove_stale_genes(
+            session,
+            module_key=module_key,
+            release_id=release_id,
+            assembly_id=assembly_id,
+        )
+
     return PromotionResult(
         module_key=module_key,
         target=target,
         promoted_rows=promoted_rows,
+        genes_removed=genes_removed,
         chromosomes_created=chromosomes_created,
         chromosomes_extended=chromosomes_extended,
     )

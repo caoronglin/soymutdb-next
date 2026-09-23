@@ -435,16 +435,20 @@ def test_genes_import_promotes_into_canonical_genes_and_chromosomes(
 def test_genes_promotion_is_idempotent_and_updates_coordinates(
     tmp_path, worker_session_factory
 ):
-    """A re-import with the same accession upserts; it never duplicates rows."""
+    """A re-import replaces the snapshot: upserts update, missing genes go."""
     first_source = tmp_path / "promote-first.tsv"
     second_source = tmp_path / "promote-second.tsv"
-    _write_promotion_genes(first_source, [("G1", "Chr01", 100, 200, "")])
-    _write_promotion_genes(second_source, [("G1", "Chr01", 150, 400, "")])
+    _write_promotion_genes(
+        first_source,
+        [("G1", "Chr01", 100, 200, ""), ("G2", "Chr01", 300, 400, "")],
+    )
+    # The second snapshot keeps G1 with new coordinates and drops G2 entirely.
+    _write_promotion_genes(second_source, [("G1", "Chr01", 150, 500, "")])
     assembly_id = _seed_release(worker_session_factory, release_id=11)
     _seed_dataset(worker_session_factory, data_set_id=11, release_id=11)
 
     for index, source in enumerate((first_source, second_source)):
-        get_adapter("module_tsv").run(
+        result = get_adapter("module_tsv").run(
             ImportContext(
                 import_task_id=11 + index,
                 data_set_id=11,
@@ -454,10 +458,11 @@ def test_genes_promotion_is_idempotent_and_updates_coordinates(
                 filename=source.name,
             )
         )
+    assert result.evidence["promotion"]["genes_removed"] == 1
 
     genes = _canonical_genes(worker_session_factory, assembly_id=assembly_id)
-    assert len(genes) == 1
-    assert genes[0][2] == 150 and genes[0][3] == 400
+    assert [row[0] for row in genes] == ["G1"]
+    assert genes[0][2] == 150 and genes[0][3] == 500
     # Staging is replaced by the retry as well, not appended to.
     assert _module_row_count(worker_session_factory, release_id=11) == 1
 
@@ -595,3 +600,112 @@ def test_promotion_failure_rolls_back_earlier_batches(
             text("SELECT status FROM data_sets WHERE id = 15")
         ).scalar_one()
     assert status != "ready"
+
+
+def test_concurrent_imports_for_the_same_release_serialize(
+    tmp_path, worker_session_factory
+):
+    """Two workers importing the same release must not interleave.
+
+    The adapter locks `releases.status` FOR UPDATE, so the second import waits
+    for the first instead of deleting/rewriting staging underneath it. The final
+    staging and canonical rows must equal exactly one of the two inputs — a
+    mixture (or a duplicate-key crash) would mean the lock is not doing its job.
+    """
+    import threading
+
+    first = tmp_path / "concurrent-first.tsv"
+    second = tmp_path / "concurrent-second.tsv"
+    _write_promotion_genes(first, [("G1", "Chr01", 10, 20, ""), ("G2", "Chr01", 30, 40, "")])
+    _write_promotion_genes(
+        second,
+        [
+            ("G3", "Chr02", 50, 60, ""),
+            ("G4", "Chr02", 70, 80, ""),
+            ("G5", "Chr02", 90, 100, ""),
+        ],
+    )
+    assembly_id = _seed_release(worker_session_factory, release_id=16)
+    _seed_dataset(worker_session_factory, data_set_id=16, release_id=16)
+
+    errors: list[Exception] = []
+    barrier = threading.Barrier(2)
+
+    def run_import(source: Path, task_id: int) -> None:
+        try:
+            barrier.wait(timeout=10)
+            get_adapter("module_tsv").run(
+                ImportContext(
+                    import_task_id=task_id,
+                    data_set_id=16,
+                    release_id="16",
+                    file_key=str(source),
+                    module_key="genes",
+                    filename=source.name,
+                )
+            )
+        except Exception as exc:  # noqa: BLE001 - reported below
+            errors.append(exc)
+
+    threads = [
+        threading.Thread(target=run_import, args=(first, 16)),
+        threading.Thread(target=run_import, args=(second, 17)),
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=30)
+    assert not any(thread.is_alive() for thread in threads), "imports did not finish"
+    assert errors == []
+
+    with worker_session_factory() as session:
+        row_keys = [
+            str(row[0])
+            for row in session.execute(
+                text(
+                    "SELECT row_key FROM module_data_rows "
+                    "WHERE module_key = 'genes' AND release_id = 16 ORDER BY row_key"
+                )
+            ).all()
+        ]
+    accessions = sorted(row[0] for row in _canonical_genes(
+        worker_session_factory, assembly_id=assembly_id
+    ))
+    # Exactly one import owns the final state; the other's rows are gone.
+    assert len(row_keys) == len(set(row_keys))
+    assert accessions in (["G1", "G2"], ["G3", "G4", "G5"])
+
+
+def test_empty_staging_does_not_delete_canonical_genes(worker_session_factory):
+    """An empty snapshot is not a delete instruction (ADR-0004 rule)."""
+    from soymutdb_worker.tasks.module_promotion import promote_module_rows
+
+    assembly_id = _seed_release(worker_session_factory, release_id=17)
+    with worker_session_factory.begin() as session:
+        chromosome_id = session.execute(
+            text(
+                'INSERT INTO chromosomes (assembly_id, name, length, "order") '
+                "VALUES (:assembly_id, 'Chr01', 500, 0) RETURNING id"
+            ),
+            {"assembly_id": assembly_id},
+        ).scalar_one()
+        session.execute(
+            text(
+                "INSERT INTO genes (accession, assembly_id, chromosome_id, start, "
+                '"end", strand, biotype) '
+                "VALUES ('KEEP', :assembly_id, :chromosome_id, 1, 10, '+', "
+                "'protein_coding')"
+            ),
+            {"assembly_id": assembly_id, "chromosome_id": chromosome_id},
+        )
+
+    with worker_session_factory() as session:
+        result = promote_module_rows(session, module_key="genes", release_id=17)
+        session.commit()
+
+    assert result.promoted_rows == 0
+    assert result.genes_removed == 0
+    assert [
+        row[0]
+        for row in _canonical_genes(worker_session_factory, assembly_id=assembly_id)
+    ] == ["KEEP"]

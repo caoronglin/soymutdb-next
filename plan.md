@@ -89,18 +89,22 @@ ADR-0004 要求的 “staging → canonical 显式 promotion” 首次落地（g
 - chromosome 缺失时用观测到的最大 gene end 作为临时长度，只增不减；
   genes 按 `(assembly_id, accession)` upsert，`strand='+'`，`mutation_feature` 存入
   `genes.attributes`。
-- 空 staging 不删除 canonical；重试幂等（staging 先清后写 + upsert）。
+- 空 staging 不删除 canonical；非空 staging 视为模块完整快照：缺失的 canonical genes
+  通过临时表 anti-join 删除（替换语义）。重试幂等（staging 先清后写 + upsert）。
 - ADR-0004 追加 implementation amendment（state/consumer/retention/retry/schema 五问）。
 
 证据（真实 PostgreSQL 16，mamba 实例）：
 
-- `apps/worker/tests/test_module_tsv_postgres_integration.py` → **8 passed**：
-  promotion 字段/坐标/attributes、幂等坐标更新、无 assembly fail-closed、
-  未映射模块 fail-closed、draft/published 可见性契约。
+- `apps/worker/tests/test_module_tsv_postgres_integration.py` → **11 passed**：
+  promotion 字段/坐标/attributes、幂等+替换删除旧基因、无 assembly fail-closed、
+  未映射模块 fail-closed、draft/published 可见性契约、批次中途失败整体回滚、
+  并发导入按 release 行锁串行化（终态等于其中一个快照）、空快照不删除。
+- `apps/api/tests/test_genes_database_integration.py` → 真实 PG 读取：
+  release 隔离（同 accession 不同 assembly）、promoted 列与 attributes 可读。
 - `test_data_adapters.py` + `test_module_schema_limits.py` → 73 passed, 1 skipped。
 
-Phase 2 未完：其它 scientific modules 的 promotion 映射、retry/crash matrix 扩展、
-P2-6 capability reopen 逐个评审。
+Phase 2 未完：其它 scientific modules 的 promotion 映射、VCF 全链路 E2E、
+P2-6 capability 逐个评审（本轮已产出评审表，结论：全部保持 OFF）。
 
 ### P2-6 capability 评审（2026-09-23，逐项复核）
 

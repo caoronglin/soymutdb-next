@@ -70,7 +70,11 @@ and before the data set is marked ready. This answers the five open items:
   reading canonical tables only.
 - **Retention / cleanup**: staged rows are retained with the release
   (``module_data_rows.release_id`` cascades on release delete) as an audit and
-  replay source; a successful promotion does not delete them.
+  replay source; a successful promotion does not delete them. On the canonical
+  side a non-empty staging set is the module's complete snapshot (the importer
+  clears and rewrites staging), so genes absent from it are removed through a
+  temporary-table anti-join; an empty staging set is never a delete
+  instruction.
 - **Retry semantics**: the importer clears staging before rewriting, and every
   promotion write is an idempotent upsert keyed by stable identity
   (``(assembly_id, accession)`` for genes, ``(assembly_id, name)`` for
@@ -94,3 +98,8 @@ and before the data set is marked ready. This answers the five open items:
 - Visibility follows the existing release rule: the portal resolves only
   PUBLISHED releases through ``assemblies.release_id``, so draft promotion is
   not publicly readable (regression-tested in the PostgreSQL suite).
+- Replacement semantics: re-importing a release replaces the snapshot — rows are
+  upserted by identity, and canonical genes missing from the new snapshot are
+  deleted. Concurrent imports of the same release serialize on the
+  ``releases.status`` row lock, so the final state always equals exactly one of
+  the two snapshots.
