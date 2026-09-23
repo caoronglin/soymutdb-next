@@ -1,4 +1,5 @@
 import hashlib
+import multiprocessing
 import os
 import time
 from contextlib import contextmanager, nullcontext
@@ -740,6 +741,35 @@ def test_streamed_row_limit_keeps_the_2m_contract_without_a_large_fixture(monkey
     assert rows[-1][1].code == "max_rows"
 
 
+def _measure_stream_import_performance(row_count: int) -> dict:
+    """Measure the streaming import in a fresh interpreter.
+
+    Run via a spawned process by the contract test: sibling worker tests load
+    the embedded ClickHouse engine (chdb), whose resident memory is not
+    attributable to this import, so sharing the interpreter made the absolute
+    RSS envelope depend on test collection order.
+    """
+    from soymutdb_jobs.module_schema import (
+        STREAM_READ_CHUNK_BYTES,
+        validate_module_file_streaming_from_stream,
+    )
+
+    source = _GeneratedGenesTsvStream(rows=row_count)
+    started = time.perf_counter()
+    summary = validate_module_file_streaming_from_stream("genes", "genes.tsv", source)
+    elapsed_seconds = time.perf_counter() - started
+    return {
+        "ok": summary.ok,
+        "row_count": summary.row_count,
+        "error_count": summary.error_count,
+        "elapsed_seconds": elapsed_seconds,
+        "initial_rss_bytes": source.initial_rss_bytes,
+        "peak_rss_bytes": source.peak_rss_bytes,
+        "read_sizes_valid": bool(source.read_sizes)
+        and all(0 < size <= STREAM_READ_CHUNK_BYTES for size in source.read_sizes),
+    }
+
+
 @pytest.mark.slow
 @pytest.mark.parametrize(
     ("row_count", "max_seconds", "max_rss_growth_mib", "max_total_rss_mib"),
@@ -763,34 +793,36 @@ def test_streamed_module_import_performance_contract(
     max_rss_growth_mib: int,
     max_total_rss_mib: int,
 ):
-    """Measure row count, elapsed time, and peak RSS without a giant fixture."""
-    from soymutdb_jobs.module_schema import (
-        STREAM_READ_CHUNK_BYTES,
-        validate_module_file_streaming_from_stream,
-    )
+    """Measure row count, elapsed time, and peak RSS without a giant fixture.
 
-    source = _GeneratedGenesTsvStream(rows=row_count)
-    started = time.perf_counter()
+    The measurement runs in a spawned interpreter so the RSS envelope reflects
+    the import alone. The worker suite also loads chdb (embedded ClickHouse),
+    whose resident memory would otherwise count against the import and make the
+    absolute limit order-dependent (it failed at 591 MiB in CI).
+    """
+    context = multiprocessing.get_context("spawn")
+    with context.Pool(processes=1) as pool:
+        measured = pool.apply(_measure_stream_import_performance, (row_count,))
 
-    summary = validate_module_file_streaming_from_stream("genes", "genes.tsv", source)
-    elapsed_seconds = time.perf_counter() - started
-    initial_rss_mib = source.initial_rss_bytes / 1024 / 1024
-    peak_rss_mib = source.peak_rss_bytes / 1024 / 1024
-
+    elapsed_seconds = measured["elapsed_seconds"]
+    initial_rss_mib = measured["initial_rss_bytes"] / 1024 / 1024
+    peak_rss_mib = measured["peak_rss_bytes"] / 1024 / 1024
     print(
         "module_import_performance "
         f"rows={row_count} elapsed_seconds={elapsed_seconds:.3f} "
         f"initial_rss_mib={initial_rss_mib:.1f} peak_rss_mib={peak_rss_mib:.1f}"
     )
 
-    assert summary.ok is True
-    assert summary.row_count == row_count
-    assert summary.error_count == 0
-    assert source.read_sizes
-    assert all(0 < size <= STREAM_READ_CHUNK_BYTES for size in source.read_sizes)
+    assert measured["ok"] is True
+    assert measured["row_count"] == row_count
+    assert measured["error_count"] == 0
+    assert measured["read_sizes_valid"] is True
     assert elapsed_seconds <= max_seconds
     # ``VmRSS`` includes the worker runtime as well as the de-duplication set.
     # Track both the import-attributable growth and the total process envelope.
     # Non-Linux runners return 0 and retain the time/row contract.
-    assert source.peak_rss_bytes - source.initial_rss_bytes <= max_rss_growth_mib * 1024 * 1024
-    assert source.peak_rss_bytes <= max_total_rss_mib * 1024 * 1024
+    assert (
+        measured["peak_rss_bytes"] - measured["initial_rss_bytes"]
+        <= max_rss_growth_mib * 1024 * 1024
+    )
+    assert measured["peak_rss_bytes"] <= max_total_rss_mib * 1024 * 1024

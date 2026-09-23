@@ -117,7 +117,16 @@ def pg() -> dict:
         capture_output=True,
         text=True,
     )
-    yield {"sync_url": sync_url}
+    # API tests seed releases/assemblies with explicit ids; realign the
+    # sequences before this suite inserts through them.
+    from tests.test_pg_helpers import align_identity_sequences
+
+    sync_engine = create_engine(sync_url)
+    try:
+        align_identity_sequences(sync_engine)
+        yield {"sync_url": sync_url}
+    finally:
+        sync_engine.dispose()
 
 
 def test_protocol_driven_import_end_to_end(
