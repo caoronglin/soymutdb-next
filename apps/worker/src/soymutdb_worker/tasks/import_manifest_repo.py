@@ -123,32 +123,37 @@ def manifest_lock(session: Session, fingerprint: str) -> Iterator[None]:
     """Hold the per-fingerprint session advisory lock around an import.
 
     ``pg_advisory_lock`` blocks until the key is free: a second worker waits for
-    the first finalize, then re-reads the manifest and sees PUBLISHED. The lock
-    is held by the PostgreSQL session, so a worker that dies releases it even if
-    it never reaches the unlock (the failure mode is a stuck import only while
-    the connection is alive, never a permanently wedged fingerprint).
+    the first finalize, then re-reads the manifest and sees PUBLISHED.
 
-    The finally-block rolls back before unlocking: if the critical section left
-    an aborted transaction, executing the unlock statement on it would fail and
-    the lock would outlive the function.
+    The lock lives on its OWN connection, not the business session: SQLAlchemy
+    returns a Session's connection to the pool at every commit, so a lock taken
+    through the session would be unlocked from a different connection (or leak
+    on the old one) as soon as a manifest transition commits. A dedicated
+    ``engine.connect()`` pins one physical connection for the whole critical
+    section. If the unlock cannot be proven, the connection is invalidated so
+    PostgreSQL releases the lock with the socket instead of returning a
+    locked connection to the pool.
     """
     key = _manifest_lock_key(fingerprint)
     parameters = {"namespace": MANIFEST_LOCK_NAMESPACE, "key": key}
-    session.execute(
-        text("SELECT pg_advisory_lock(:namespace, :key)"), parameters
-    )
+    connection = session.get_bind().connect()
+    connection.execute(text("SELECT pg_advisory_lock(:namespace, :key)"), parameters)
     try:
         yield
     finally:
+        unlocked = False
         try:
-            session.rollback()
-        except Exception:  # noqa: BLE001 - never mask the unlock attempt
-            pass
-        unlocked = session.execute(
-            text("SELECT pg_advisory_unlock(:namespace, :key)"), parameters
-        ).scalar_one()
-        session.commit()
-        if not unlocked:
+            unlocked = bool(
+                connection.execute(
+                    text("SELECT pg_advisory_unlock(:namespace, :key)"), parameters
+                ).scalar_one()
+            )
+        finally:
+            if unlocked:
+                connection.close()
+            else:  # pragma: no cover - only on an unlock anomaly
+                connection.invalidate()
+        if not unlocked:  # pragma: no cover - only on an unlock anomaly
             raise RuntimeError(
                 f"advisory lock for fingerprint {fingerprint[:12]}… was not owned at release"
             )

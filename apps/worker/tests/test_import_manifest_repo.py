@@ -175,6 +175,11 @@ def test_manifest_lock_serializes_same_fingerprint_deliveries(session_factory) -
                     order.append("second")
 
         with manifest_lock(first, fingerprint):
+            # A manifest transition commits the business session; the lock must
+            # survive on its dedicated connection (regression: SQLAlchemy returns
+            # the session's connection to the pool at commit, so a lock taken
+            # through the session was unlocked from a different connection).
+            first.commit()
             thread = threading.Thread(target=contender)
             thread.start()
             assert started.wait(timeout=10), "contender never started"
