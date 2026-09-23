@@ -25,8 +25,15 @@ GitHub Pages（`.github/workflows/ci.yml` 生成 `pages-demo-dist` → `.github/
 ### 双站点发布验收
 
 ~~~bash
-# 非生产本地验证（internal canonical URL 使用保留域名）
-VITE_DEPLOYMENT_MODE=standard SOYMUTDB_INTERNAL_SITE_URL=https://internal.soymutdb.invalid pnpm --filter @soymutdb/web build:sites
+# 非生产本地验证（internal canonical URL 使用保留域名）。
+# demo 模式让 SSG 样本离线生成；standard 模式会调用真实 API 抓取发布数据，
+# 因此本地/CI 验收必须显式提供 VITE_API_BASE_URL 与 VITE_JBROWSE_BASE_URL，
+# 否则 vite.config 的 requireDeploymentOrigin 会按设计 fail-closed。
+VITE_DEPLOYMENT_MODE=demo \
+VITE_API_BASE_URL=https://api.soymutdb.test \
+VITE_JBROWSE_BASE_URL=https://jbrowse.soymutdb.test \
+SOYMUTDB_INTERNAL_SITE_URL=https://internal.soymutdb.invalid \
+  pnpm --filter @soymutdb/web build:sites
 
 # 未登录 internal API 必须失败；登录 viewer 才能返回内容
 curl -i 'https://internal.example.com/api/v1/site/content?variant=internal'
@@ -35,6 +42,12 @@ curl -i 'https://www.example.com/api/v1/site/content?variant=external'
 # internal 制品必须 noindex 且不携带 public snapshot
 grep -R 'noindex, nofollow, noarchive' apps/web/dist/internal/*.html
 test ! -e apps/web/dist/internal/data/content.json
+
+# external 制品不得包含 internal origin 等受保护值
+python3 scripts/check_site_artifact_isolation.py \
+  --external-root apps/web/dist/external \
+  --internal-root apps/web/dist/internal \
+  --sentinel https://internal.soymutdb.invalid
 ~~~
 
 将 internal 当成私有应用而不是公开网站处理：边缘 Access 策略、API 授权、数据库审计和部署清单缺一不可。
