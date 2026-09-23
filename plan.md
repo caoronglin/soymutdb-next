@@ -10,6 +10,54 @@
 
 ---
 
+## 2026-09-23 收敛执行记录（PR #1 已合并）
+
+PR #1 已 merge 为 `d17c0a96b`。以下工作从该基线继续（CNB `DEFERRED_QUOTA`，未重试；
+GitHub Actions 为当前主 gate）。
+
+### 已落地提交
+
+| commit | 内容 |
+| --- | --- |
+| `d34b012f2` | CI：唯一 Python workspace bootstrap（`scripts/install_python_workspace.py`）；`packages/import-protocol` 不再从 PyPI 解析；ClickHouse job 3.12→3.14 |
+| `d4f3c5c63` | Vue：移除 store -> router import cycle（未使用的 `goHome`） |
+| `c1e9d0195` | Vue：`cn` falsy 测试满足 `no-constant-binary-expression` |
+| `10d273eaf` | 依赖：移除未使用 Vue deps；`pnpm dedupe` 清除 17 组重复版本（-282 lockfile 行） |
+| `1a40febbe` | 契约：PLATFORM_CATALOG/pnpm 12/vue-demi 对齐；ADR-0001 pnpm 12.5.1 |
+| `472434c48` | ClickHouse：MV 名称断言修复（`mv_gene_impact`）；迁移 SQL `chromosome_summary.cnt` 与 init.sql 对齐；四源交叉契约 + chdb 真实引擎验收 |
+| `8b7b06b2b` | governance：Vue SFC cycle 分析（madge 拆分 + `--ts-config`），16/16 analyzer 通过 |
+| `c934fce31` | Vue：site variant 严格校验、release header pin、canonical JBrowse origin、env 类型声明 |
+| `9dd69532d` | Vue：query key 携带 release/site/assembly/filters；queryOptions 工厂；Mutants/Variants URL 状态；Downloads presign；Search a11y |
+| `147237fcf` | Vue：`VITE_BASE_URL` 驱动 Vite base 与 router history base |
+| `6e9bf13cf` | Vue：非法 `VITE_SITE_VARIANT` 构建期 fail closed |
+| `c89e75da6`+`923d8aa4a` | worker：`test_chdb_harness` 命名；内存契约子进程隔离；PG 序列对齐 |
+| `1726f997c` | worker：ADR-0005 正确性（稳定 variant id、fingerprint advisory lock、VERIFYING 恢复、release 全量重建、`mutations_sync`、参数化、冲突 fail-closed、VcfAdapter 接线） |
+
+### 证据（本地）
+
+- smoke contracts 层（13 scripts + `infra/clickhouse/test_schema_contract.py`）→ **231 passed**
+- governance `pnpm deps:audit`（注入 demo VITE_*）→ **16/16 passed**（含两个 madge entry）
+- `web-vue`：**10 files / 31 tests**；typecheck + lint 干净
+- Vite base 构建：`/`、`/soymutdb-next/`、裸 `soymutdb-next` → 产物前缀正确；`VITE_SITE_VARIANT=public` → exit 1
+- worker chdb 套件（finalize/vcf/engine/legacy/协议）→ **22 passed**（untouched summary、冲突、注入、VERIFYING 恢复、adapter 接线）
+- GitHub：ClickHouse migration fixture（真实 24.8）→ **success**；MCP e2e → success
+- artifact 配额：`soymutdb-next` 19.5GB + 账户其它仓库 939MB 旧 artifact 已清理；等待 GitHub 重算（6–12h）
+
+### 阻塞 / 未关闭
+
+- GitHub artifact 上传：配额重算前可能仍失败（基础设施，非代码失败）
+- api-tests 中 PG 集成（advisory lock、VCF e2e）：等待最新 CI run 验证
+- T8 local Docker：本机无 Docker daemon（`LOCAL_DOCKER_T8` PENDING）
+- review 剩余：Vue 未进入 canonical delivery（Phase 3 切换，当前明确 preview-only）
+
+### Next
+
+1. 监控最新 main CI；关闭剩余真实失败（非配额项）
+2. 配额恢复后确认 artifact 上传与 baseline jobs
+3. Phase 1 full-stack isolation（外部不可用 Docker 时先做 GitHub 可完成部分）
+
+---
+
 ## 0. 当前事实：不要再按旧 Phase 从零开始
 
 ### 0.1 Git / PR
