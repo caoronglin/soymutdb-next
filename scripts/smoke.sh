@@ -107,6 +107,7 @@ smoke_contracts() {
     scripts/test_platform_delivery_contracts.py
     scripts/test_dependency_governance_contracts.py
     scripts/test_install_python_workspace.py
+    scripts/test_clickhouse_migration_contracts.py
     scripts/test_site_artifact_isolation.py
     scripts/test_supply_chain_contracts.py
     scripts/test_production_compose_contract.py
@@ -115,6 +116,7 @@ smoke_contracts() {
     scripts/test_backup_restore_contracts.py
     scripts/test_ci_job_contracts.py
     scripts/test_dockerfile_contracts.py
+    infra/clickhouse/test_schema_contract.py
   )
   # Suites that need an interpreter or service this smoke layer does not own
   # (worker source analysis runs under the API virtualenv; tunnel/compose drift

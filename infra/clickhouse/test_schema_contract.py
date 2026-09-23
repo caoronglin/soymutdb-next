@@ -6,11 +6,11 @@ import re
 
 ROOT = Path(__file__).parents[2]
 DDL = ROOT / "infra/clickhouse/init.sql"
-INGEST = ROOT / "apps/worker/src/soymutdb_worker/tasks/ingest.py"
 SERVICE = ROOT / "apps/api/app/services/clickhouse_service.py"
 EXPORT = ROOT / "apps/worker/src/soymutdb_worker/tasks/export.py"
 STATS = ROOT / "apps/worker/src/soymutdb_worker/tasks/stats.py"
 UPGRADE = ROOT / "infra/clickhouse/upgrade_variant_facts_schema.sql"
+FINALIZE = ROOT / "apps/worker/src/soymutdb_worker/tasks/variant_finalize.py"
 
 CANONICAL_VARIANT_COLUMNS = {
     "variant_id",
@@ -102,13 +102,24 @@ def _table_columns(sql: str, table: str) -> dict[str, str]:
 
 def test_variant_contract_is_shared_by_ddl_worker_and_api() -> None:
     ddl_columns = _variant_ddl_columns()
-    ingest = INGEST.read_text()
+    finalize = FINALIZE.read_text()
     service = SERVICE.read_text()
     export = EXPORT.read_text()
 
-    insert_match = re.search(r'batch: dict\[str, list\] = \{(.*?)\n\s*\}', ingest, re.S)
-    assert insert_match, "worker variant batch declaration is missing"
-    insert_columns = set(re.findall(r'^\s*"([a-z_]+)": \[\]', insert_match.group(1), re.M))
+    # The P2-3 import protocol declares the canonical base columns once, as
+    # BASE_COLUMNS, and the staging table extends that tuple with its import
+    # bookkeeping. The old dict-of-lists batch declaration this test looked for
+    # was replaced by the staging/verify/finalize flow (ADR-0005), which is why
+    # the assertion has to read the tuple.
+    base_match = re.search(
+        r"BASE_COLUMNS: tuple\[str, \.\.\.\] = \((.*?)\n\)", finalize, re.S
+    )
+    assert base_match, "worker canonical BASE_COLUMNS declaration is missing"
+    insert_columns = set(re.findall(r'^\s*"([a-z_]+)",', base_match.group(1), re.M))
+
+    staging_match = re.search(r"STAGING_COLUMNS: tuple\[str, \.\.\.\] = (.+)", finalize)
+    assert staging_match, "worker STAGING_COLUMNS declaration is missing"
+    assert staging_match.group(1).strip() == '(*BASE_COLUMNS, "import_id", "batch_id")'
 
     select_columns = set()
     for match in re.finditer(r"SELECT(.*?)FROM \{VARIANT_FACTS_TABLE\}", service, re.S):
@@ -128,7 +139,6 @@ def test_variant_contract_is_shared_by_ddl_worker_and_api() -> None:
 
 
 def test_worker_stats_and_service_only_reference_variant_columns() -> None:
-    ddl_columns = _variant_ddl_columns()
     sources = [STATS.read_text(), SERVICE.read_text()]
     for source in sources:
         # Ignore SQL aliases and Python identifiers; this catches known
@@ -192,6 +202,70 @@ def test_upgrade_declares_the_same_canonical_target_columns() -> None:
         assert re.search(rf"CREATE TABLE {table}\b", upgrade)
         assert upgrade.index(f"DROP TABLE IF EXISTS {table}") < upgrade.index(f"INSERT INTO {table}")
     assert "DROP TABLE IF EXISTS variant_facts_legacy" not in upgrade
+
+
+def _columns_from_ddl(sql: str, table: str) -> dict[str, str]:
+    """Column name -> definition for both multi-line and single-line DDL.
+
+    ``_table_columns`` requires 4-space-indented column lines (init.sql style),
+    which the one-line summary tables in the migration SQL never have. This
+    splits on top-level commas instead, so it reads both layouts and keeps
+    ``SimpleAggregateFunction(sum, UInt64)`` intact as one definition.
+    """
+    body = re.search(
+        rf"CREATE TABLE(?: IF NOT EXISTS)? {table} \((.*?)\) ENGINE", sql, re.S
+    )
+    assert body, f"{table} DDL is missing"
+    columns: dict[str, str] = {}
+    depth = 0
+    current: list[str] = []
+
+    def add(definition: str) -> None:
+        tokens = definition.strip().split(None, 1)
+        if len(tokens) == 2 and re.fullmatch(r"[a-z_]+", tokens[0]):
+            columns[tokens[0]] = tokens[1].strip()
+
+    for char in body.group(1):
+        if char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+        if char == "," and depth == 0:
+            add("".join(current))
+            current = []
+        else:
+            current.append(char)
+    add("".join(current))
+    return columns
+
+
+def test_summary_tables_match_between_fresh_install_and_migration() -> None:
+    """Both schema paths must end on the same summary-table column types.
+
+    The legacy migration declared ``chromosome_summary.cnt`` as a plain
+    ``UInt64`` while ``init.sql`` declared ``SimpleAggregateFunction(sum,
+    UInt64)``. The drift was invisible on the pinned ClickHouse 24.8 fixture
+    and only surfaced on a newer embedded engine (chdb 4.4.0 / ClickHouse
+    26.7), which rejects the table outright:
+
+        Code: 36. DB::Exception: Column(s) cnt of the AggregatingMergeTree
+        table are neither part of the sorting key nor aggregate measures
+        (BAD_ARGUMENTS)
+
+    It is also a silent data-correctness bug on older servers: merges collapse
+    duplicate ORDER BY keys into one row, so a plain ``cnt`` keeps an
+    arbitrary partial count instead of summing to the real one.
+    """
+    fresh = DDL.read_text()
+    upgrade = UPGRADE.read_text()
+    for table in sorted(SUMMARY_TABLES):
+        assert _columns_from_ddl(upgrade, table) == _columns_from_ddl(fresh, table), table
+    # Pin the exact irregular member so a revert to the plain UInt64 cannot
+    # pass by changing both files together.
+    assert (
+        _columns_from_ddl(upgrade, "chromosome_summary")["cnt"]
+        == "SimpleAggregateFunction(sum, UInt64)"
+    )
 
 
 def test_ttl_expressions_are_date_time_typed() -> None:

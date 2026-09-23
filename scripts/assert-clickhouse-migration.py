@@ -36,7 +36,23 @@ SUMMARY_TABLES = (
     "density_1mb",
     "substitution_spectrum",
 )
-MATERIALIZED_VIEWS = tuple(f"mv_{name}" for name in SUMMARY_TABLES)
+# The materialized-view names are NOT derivable with `mv_{table}`: the legacy
+# schema names the gene-impact view `mv_gene_impact` (without `_summary`),
+# matching infra/clickhouse/init.sql, upgrade_variant_facts_schema.sql, and the
+# executor's MATERIALIZED_VIEWS list. Deriving the name made this assertion
+# fail every real migration with `['mv_gene_impact_summary']` while the
+# migration itself was correct, so the mapping is explicit and cross-checked by
+# scripts/test_clickhouse_migration_contracts.py.
+MATERIALIZED_VIEWS = (
+    "mv_gene_impact",
+    "mv_chromosome_summary",
+    "mv_mutant_line_summary",
+    "mv_release_dashboard",
+    "mv_density_10kb",
+    "mv_density_100kb",
+    "mv_density_1mb",
+    "mv_substitution_spectrum",
+)
 EXPECTED_FIXTURE_ROWS = 3
 
 
