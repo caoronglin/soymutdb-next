@@ -3,7 +3,7 @@
   "version": "2.0.0",
   "private": true,
   "type": "module",
-  "description": "SoyMutDB public portal — Vue/Vite shell (migrated from the React portal)",
+  "description": "SoyMutDB public portal — Vue/Vite shell (preview-only: not yet part of the published web artifact; apps/web stays canonical until the Phase 3 cutover)",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
