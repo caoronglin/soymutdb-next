@@ -293,7 +293,9 @@ def test_worker_identity_matches_the_route_b_seed_loader() -> None:
 
     scripts/seed_release_data.py mints ids for controlled real-data seeds; if it
     kept the old file_key-based formula, seeded rows would not match the ids the
-    import protocol produces for the same facts.
+    import protocol produces for the same facts. The variant-type classifier
+    must agree too: the worker used to call a same-length multi-base
+    substitution an SNP while the seed loader called it an MNV.
     """
     import importlib.util
     from pathlib import Path
@@ -309,3 +311,14 @@ def test_worker_identity_matches_the_route_b_seed_loader() -> None:
         ("2026.09", "Chr02", 2050, "AT", "A"),
     ):
         assert ingest.compute_variant_id(*facts) == seed.compute_variant_id(*facts)
+
+    for ref, alt in (
+        ("A", "G"),
+        ("AC", "GT"),
+        ("A", "AT"),
+        ("AT", "A"),
+        ("A", "<DEL>"),
+    ):
+        assert ingest.determine_variant_type(ref, alt) == seed.determine_variant_type(
+            ref, alt
+        ), (ref, alt)

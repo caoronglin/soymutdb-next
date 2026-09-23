@@ -341,7 +341,15 @@ def compute_variant_id(
 
 
 def determine_variant_type(ref: str, alt: str) -> tuple[str, str]:
-    """Determine variant type and subtype from ref/alt alleles."""
+    """Determine variant type and subtype from ref/alt alleles.
+
+    ``variant_type`` uses the canonical set the ClickHouse schema and its
+    summaries filter on: SNP / INS / DEL / MNV / SV. A same-length multi-base
+    substitution is an MNV, never a SNP: chromosome_summary and
+    substitution_spectrum group by variant_type, and the seed loader
+    (scripts/seed_release_data.py) already classified it as MNV, so the worker
+    would have produced different facts for identical input.
+    """
     ref_len = len(ref)
     alt_len = len(alt)
 
@@ -349,8 +357,8 @@ def determine_variant_type(ref: str, alt: str) -> tuple[str, str]:
         return "SV", "SV"
     if ref_len == 1 and alt_len == 1:
         return "SNP", "SNV"
-    if ref_len == alt_len and ref_len > 1:
-        return "SNP", "MNV"
+    if ref_len == alt_len:
+        return "MNV", "MNV"
     if alt_len > ref_len:
         return "INS", "INS"
     if ref_len > alt_len:
