@@ -35,6 +35,8 @@ GitHub Actions 为当前主 gate）。
 | `61dffc4b0` | worker：fingerprint advisory lock 改用专用连接（真实 PostgreSQL 暴露的池化缺陷） |
 | `ca44c516f` | worker：vcf 移出无 writer fail-closed 矩阵（已有协议专用测试） |
 | `bc2b9648d` | CI：artifact 压缩/去重/保留期治理（配额 500MB） |
+| `29a99f7de` | seed：Route-B loader 与 worker 统一稳定 variant identity |
+| `457695e6e` | seed/worker：统一 `length` 等位跨度定义；MNV 分类修正 |
 
 ### 证据（本地）
 
@@ -53,8 +55,9 @@ GitHub Actions 为当前主 gate）。
 
 - GitHub artifact 上传：已压缩 `pages-demo-dist`、移除无消费者的 dist 上传、缩短证据保留期；等待配额重算（6–12h）后应恢复
 - api-tests 的 PG 集成已在本地真实验证；CI 复跑待最新 run 完成
+- **G4 review triage：PR #1 的 22 条 review threads 已全部回复结论并 resolve（unresolved = 0）**，映射到修复 commit 或 Phase 3 deferral
 - T8 local Docker：本机无 Docker daemon（`LOCAL_DOCKER_T8` PENDING）
-- review 剩余：Vue 未进入 canonical delivery（Phase 3 切换，当前明确 preview-only）
+- internal 双站点工件构建（`build:sites`）不在任何 pipeline；归 Phase 3 的 external/internal parity
 
 ### Next
 
