@@ -276,6 +276,10 @@ frontend_run() {
   "${REPO_ROOT}/apps/api/.venv/bin/python" \
     "${REPO_ROOT}/scripts/check_framework_neutral_packages.py"
   bash "${REPO_ROOT}/scripts/verify-frontend-artifacts.sh"
+  # Dual-site boundary (AGENTS.md): build the internal variant from the same
+  # commit and prove it cannot leak into the external artifact. GitHub runs
+  # the same script as its own frontend step; CNB reaches it here.
+  bash "${REPO_ROOT}/scripts/verify-site-variant-artifacts.sh"
 }
 
 # -----------------------------------------------------------------------------

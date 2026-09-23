@@ -47,6 +47,7 @@ SHARED_SCRIPTS = (
     "scripts/release-contract.golden.sh",
     "scripts/build-pages-artifact.sh",
     "scripts/verify-pages-artifact.sh",
+    "scripts/verify-site-variant-artifacts.sh",
     "scripts/mcp-transport-smoke.sh",
     "scripts/assert-clickhouse-migration.py",
     "scripts/smoke.sh",
@@ -460,6 +461,7 @@ class DeliveryArchitectureTests(unittest.TestCase):
             "scripts/release-contract.golden.sh",
             "scripts/build-pages-artifact.sh",
             "scripts/verify-pages-artifact.sh",
+            "scripts/verify-site-variant-artifacts.sh",
         ):
             self.assertIn(delegation, ci, delegation)
 

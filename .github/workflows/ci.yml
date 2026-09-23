@@ -155,6 +155,12 @@ jobs:
           compression-level: 6
           retention-days: 7
 
+      # Dual-site boundary: build the internal variant from the same commit and
+      # prove it cannot leak into the external artifact (AGENTS.md; the build
+      # and isolation checks live in the shared script so CNB runs them too).
+      - name: Dual-site artifacts (external/internal isolation)
+        run: bash scripts/verify-site-variant-artifacts.sh
+
       # The web/admin/jbrowse dist trees were uploaded purely as evidence; no
       # workflow downloads them (Pages consumes pages-demo-dist, the baseline
       # job builds its own, and the artifact contract runs before upload).

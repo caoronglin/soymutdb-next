@@ -128,6 +128,27 @@ retry / concurrency / crash / real CH / real PG / E2E（不批量开启）。
 但其开启前置（real HTTP ClickHouse + 全栈 E2E + CNB）在外部阻塞下无法完成，
 因此 `imports.vcf` 与 `SOYMUTDB_ENABLE_VCF_IMPORT` 都保持关闭。
 
+### Phase 3 起步：双站点构建与隔离 gate（2026-09-23）
+
+AGENTS.md 要求的 external/internal 工件边界此前只在本地手工验证（deploy/cloudflare.md），
+没有任何回归门禁。本次将其变为可重复的仓库脚本并接入两端 CI：
+
+- 新增 `scripts/verify-site-variant-artifacts.sh`：demo 离线构建 external + internal，
+  断言 internal HTML 带 `noindex, nofollow, noarchive`、internal 不含公开快照
+  （`data/content.json`）、external 不含 internal-only 值（复用
+  `scripts/check_site_artifact_isolation.py`）。
+- GitHub frontend job 新增同名 step；CNB 通过 `scripts/ci-job-steps.sh` 的
+  `frontend_run` 调用同一脚本（两端同一字节）。
+- `scripts/test_ci_job_contracts.py` 将新脚本列入共享脚本与 delegation 断言。
+
+证据：
+
+- 脚本独立运行 → PASS（external 0 命中，internal 9 个 HTML 带 noindex）；
+- 完整 frontend gate（`bash scripts/verify-frontend-artifacts.sh`）→ frontend verification passed；
+- 合同测试 → 125 passed。
+
+Phase 3 未完：Vue SSG/静态路由枚举、canonical build/deploy 切换、剩余页面 parity。
+
 ### 阻塞 / 未关闭
 
 - GitHub artifact 上传：已压缩 `pages-demo-dist`、移除无消费者的 dist 上传、缩短证据保留期；等待配额重算（6–12h）后应恢复
