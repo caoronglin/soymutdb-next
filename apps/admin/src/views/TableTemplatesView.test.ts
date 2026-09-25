@@ -2,9 +2,13 @@
 import { flushPromises } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+// The mount helper is imported first: it registers the @soymutdb/ui-vue mock
+// (Antdv Next does not resolve under vitest's node resolver — see
+// packages/ui-vue/src/facade.test.ts) before the view module graph loads it.
+import { mountAdminView } from "../test/support";
+
 import { listTableViewTemplates, updateTableViewTemplate } from "@soymutdb/api-client";
 import TableTemplatesView from "./TableTemplatesView.vue";
-import { mountAdminView } from "../test/support";
 
 vi.mock("@soymutdb/api-client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@soymutdb/api-client")>();

@@ -7,8 +7,8 @@ import { defineConfig } from "@playwright/test";
  *
  * Requires a built dist (apps/web/dist) — the webServer starts
  * e2e/static-server.mjs which serves the dist at /soymutdb-next with SPA
- * fallback. The SPA bootstraps from the immutable seed definition when the API
- * is unavailable (apps/web/src/page-builder/loader.ts).
+ * fallback. The portal ships no embedded fallback data: an unreachable API
+ * produces an explicit empty or error state, never fabricated rows.
  *
  * Run from e2e/:  npx playwright test -c playwright-public.config.ts
  */
