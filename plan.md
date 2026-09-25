@@ -818,6 +818,52 @@ PR #1 下一批推荐提交链：
 仍未解决：`apps/admin/src/routes/widgets/$name.tsx` 的 zod v3/v4 resolver 类型不匹配（既有，admin typecheck 红）；
 turbo 并发构建在本沙箱触发线程上限（`os error 11`），逐包构建正常，CI 不受影响。
 
+## 13. 基线发布状态（2026-09-25 本轮收尾）
+
+### 13.1 已推送
+
+- `main` 到 `4237ae0ce`（GitHub `origin`）；`v2.1.0` annotated tag 指向同一提交，含发布说明。
+- **CNB 推送被凭据阻塞**：本环境无 cnb.cool 凭据（只有 gh 的 GitHub token），
+  `git push cnb main` 报 `could not read Username for 'https://cnb.cool'`。
+  真实镜像发布流水线 `release-tagged` 在 CNB 上，需要人工推送 main + tag 后触发。
+
+### 13.2 CI 状态（run 36154013825 / tag 同日）
+
+八个 job 中：
+
+| job | 结果 |
+| --- | --- |
+| MCP transport e2e / ClickHouse migration fixture / API tests | **success** |
+| Frontend build + contract | 验证脚本 **通过**，仅 `Upload GitHub Pages demo artifact` 因配额失败 |
+| Dependency graphs + governance | 审计 **通过**（16/16），仅 `Upload dependency governance evidence` 因配额失败 |
+| Docker/镜像/Kind | skipped（依赖上面两个 job 成功） |
+
+即：**代码层面全绿**，唯一阻塞是 GitHub Actions **artifact 存储配额**（账户级）。
+本仓库缓存已从 1.96 GB 清到 0.77 GB；GitHub 每 6–12 h 重算一次配额。
+`Deploy Web to Pages` 门控在 CI success，因此也停在 failure，`E2E Smoke` 被 skip。
+
+### 13.3 本机回归（本轮，全部实测）
+
+| 层 | 结果 |
+| --- | --- |
+| packages | shared 49 / charts 2 / api-client 116 / i18n-core 6 / query-keys 10 / ui-vue 4 / genome-view-model 13 |
+| apps | web 79 / admin 8 / jbrowse 2 |
+| typecheck + lint | 上述全部包与 app（含 jbrowse）全 OK |
+| apps/api（真实 PG 55433） | 1236 passed（+ a0 45，需 `PYTHONPATH=.`） |
+| apps/worker | 334 passed, 24 skipped |
+| scripts 契约 | 263 passed, 1 skipped |
+| 治理审计 | 16/16 passed（knip、deptry×3、cycles×3、licenses×4、audit×4） |
+| 制品门禁 | production 扫描 / artifact headers / nginx / bundle 预算 / contracts smoke / 双站点隔离 全 PASS |
+| e2e | public 29 passed, 2 skipped；admin production 3 passed |
+
+### 13.4 剩余（均已记录，非本轮可完成）
+
+1. GitHub artifact 配额恢复后，`Deploy Web to Pages` 与两个 evidence 上传会自动恢复。
+2. CNB 推送 + `release-tagged` 镜像发布（需凭据）。
+3. 远程物种实例访问模型（用户明确后置；`species_instances` 表与登记页已就绪）。
+4. e2e 规格尚未覆盖 `/analytics`、`/compare` 与 Vue admin 的登录后页面
+   （admin 无公开面，登录后需真实凭据）。
+
 ## 12. Phase 4/5 完成：Charts facade + Vue Admin（2026-09-25 本轮）
 
 ### 12.1 Phase 4 · `@soymutdb/charts`
