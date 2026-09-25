@@ -1,9 +1,9 @@
 {
   "name": "@soymutdb/ui-vue",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
   "type": "module",
-  "description": "Vue UI facade over Antdv Next — the only module allowed to import the design system (plan D4)",
+  "description": "Vue UI facade over Antdv Next \u2014 the only module allowed to import the design system (plan D4)",
   "exports": {
     ".": {
       "types": "./src/index.ts",

@@ -1,6 +1,6 @@
 {
   "name": "@soymutdb/i18n-core",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
   "type": "module",
   "description": "Framework-neutral i18n catalogs, language detection and base i18next options",

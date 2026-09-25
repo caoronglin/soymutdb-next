@@ -1,6 +1,6 @@
 {
   "name": "soymutdb",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
   "description": "SoyMutDB Next \u2014 comprehensive soybean mutant database with SSG public portal and web admin console",
   "packageManager": "pnpm@12.5.1",
