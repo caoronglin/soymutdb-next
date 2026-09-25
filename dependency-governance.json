@@ -127,7 +127,7 @@
       }
     },
     {
-      "name": "typescript-circular-dependencies-web-vue",
+      "name": "typescript-circular-dependencies-portal",
       "category": "circular-dependencies",
       "command": [
         "pnpm",
@@ -138,12 +138,12 @@
         "--extensions",
         "ts,tsx,vue",
         "--ts-config",
-        "apps/web-vue/tsconfig.json",
-        "apps/web-vue"
+        "apps/web/tsconfig.json",
+        "apps/web"
       ],
       "report": {
         "mode": "stdout",
-        "path": "typescript-circular-dependencies-web-vue.json",
+        "path": "typescript-circular-dependencies-portal.json",
         "format": "json"
       }
     },

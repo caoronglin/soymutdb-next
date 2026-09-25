@@ -43,7 +43,7 @@ describe("tools (public, no auth)", () => {
   // seqFetchGenes
   // -------------------------------------------------------------------------
   describe("seqFetchGenes", () => {
-    it("POSTs { genes } to /tools/seqfetch and parses the response", async () => {
+    it("POSTs assembly-scoped genes to /tools/seqfetch and parses the response", async () => {
       const response = {
         format: "fasta",
         sequence: ">Glyma.01G000100\nATGC\n",
@@ -55,12 +55,13 @@ describe("tools (public, no auth)", () => {
       };
       vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(response));
 
-      const result = await seqFetchGenes(["Glyma.01G000100"]);
+      const result = await seqFetchGenes("GmWm82.a2.v1", ["Glyma.01G000100"]);
 
       const [url, init] = lastFetchCall();
       expect(url).toBe(`${API_BASE}/tools/seqfetch`);
       expect(init.method).toBe("POST");
       expect(JSON.parse(init.body as string)).toEqual({
+        assembly: "GmWm82.a2.v1",
         genes: ["Glyma.01G000100"],
       });
       assertNoAuth(init);
@@ -104,6 +105,17 @@ describe("tools (public, no auth)", () => {
   describe("runEnrichment", () => {
     it("POSTs the enrichment request to /tools/enrichment and parses terms", async () => {
       const response = {
+        assembly_id: 5,
+        release_id: 7,
+        assembly_name: "Wm82.v5",
+        assembly_version: "v5",
+        annotation_source: {
+          name: "Synthetic GO fixture",
+          version: "1",
+          url: "https://example.org/go/v1",
+          sha256: "a".repeat(64),
+          imported_at: "2026-09-24T00:00:00Z",
+        },
         ontology: "go" as const,
         input_genes: 2,
         background_genes: 100,
@@ -122,6 +134,7 @@ describe("tools (public, no auth)", () => {
       vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(response));
 
       const result = await runEnrichment({
+        assembly_id: 5,
         genes: ["Glyma.01G000100", "Glyma.01G000200"],
         mode: "ora",
         ontology: "go",
@@ -134,6 +147,7 @@ describe("tools (public, no auth)", () => {
       expect(url).toBe(`${API_BASE}/tools/enrichment`);
       expect(init.method).toBe("POST");
       expect(JSON.parse(init.body as string)).toEqual({
+        assembly_id: 5,
         genes: ["Glyma.01G000100", "Glyma.01G000200"],
         mode: "ora",
         ontology: "go",
@@ -152,6 +166,10 @@ describe("tools (public, no auth)", () => {
   describe("runExpPattern", () => {
     it("POSTs the exppattern request to /tools/exppattern and parses the matrix", async () => {
       const response = {
+        assembly_id: 5,
+        release_id: 7,
+        assembly_name: "Wm82.v5",
+        assembly_version: "v5",
         genes: ["Glyma.01G000100"],
         conditions: ["root"],
         matrix: [[1.5]],
@@ -164,6 +182,7 @@ describe("tools (public, no auth)", () => {
       vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(response));
 
       const result = await runExpPattern({
+        assembly_id: 5,
         genes: ["Glyma.01G000100"],
         conditions: ["root"],
         cluster_rows: false,
@@ -174,6 +193,7 @@ describe("tools (public, no auth)", () => {
       expect(url).toBe(`${API_BASE}/tools/exppattern`);
       expect(init.method).toBe("POST");
       expect(JSON.parse(init.body as string)).toEqual({
+        assembly_id: 5,
         genes: ["Glyma.01G000100"],
         conditions: ["root"],
         cluster_rows: false,

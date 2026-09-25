@@ -16,6 +16,18 @@
       "types": "./src/format.ts",
       "import": "./src/format.ts"
     },
+    "./genomics": {
+      "types": "./src/genomics.ts",
+      "import": "./src/genomics.ts"
+    },
+    "./primer-design": {
+      "types": "./src/primer-design.ts",
+      "import": "./src/primer-design.ts"
+    },
+    "./jbrowse-bridge": {
+      "types": "./src/jbrowse-bridge.ts",
+      "import": "./src/jbrowse-bridge.ts"
+    },
     "./build/csp": {
       "types": "./src/build/csp.ts",
       "import": "./src/build/csp.ts"
@@ -23,11 +35,37 @@
     "./build/csp-hash": {
       "types": "./src/build/csp-hash.ts",
       "import": "./src/build/csp-hash.ts"
+    },
+    "./analyses-upload": {
+      "types": "./src/analyses-upload.ts",
+      "import": "./src/analyses-upload.ts"
+    },
+    "./analyses-local": {
+      "types": "./src/analyses-local.ts",
+      "import": "./src/analyses-local.ts"
+    },
+    "./incremental-sha256": {
+      "types": "./src/incremental-sha256.ts",
+      "import": "./src/incremental-sha256.ts"
+    },
+    "./deployment": {
+      "types": "./src/deployment.ts",
+      "import": "./src/deployment.ts"
     }
   },
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "files": [
     "src"
-  ]
+  ],
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "vitest": "3.2.7"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "lint": "eslint src",
+    "typecheck": "tsc --noEmit",
+    "clean": "rimraf dist .turbo"
+  }
 }

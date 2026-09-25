@@ -1,10 +1,10 @@
 /**
- * Search E2E — Gene ID / Physical Location URL-backed forms (Phase 4/8).
+ * Search E2E — Gene ID / Physical Location URL-backed forms.
  *
- * Offline-capable assertions: form presence, labels, new-tab submit via a
- * window.open stub, and URL-parameter restoration (the inputs are restored
- * from search params before any API call). Live result assertions are marked
- * skip (require a backend); see the "enabling live results" note at the bottom.
+ * Offline-capable assertions: form presence, labels, client-side validation,
+ * and URL-parameter restoration (the inputs are restored from search params
+ * before any API call). Live result assertions are marked skip with an explicit
+ * enablement note; the offline never invents rows.
  */
 import { test, expect, type Page } from "@playwright/test";
 import { gotoReady } from "./helpers";
@@ -24,7 +24,12 @@ async function captureWindowOpen(page: Page): Promise<void> {
 
 /** The form control, rather than the similarly named results landmark. */
 function geneIdInput(page: Page) {
-  return page.getByRole("textbox", { name: "Gene ID", exact: true });
+  return page.getByTestId("search-genes-input");
+}
+
+/** The submit control; disabled until an assembly context is resolved. */
+function searchSubmit(page: Page) {
+  return page.getByTestId("search-genes-submit");
 }
 
 test.describe("Gene ID search", () => {
@@ -35,27 +40,21 @@ test.describe("Gene ID search", () => {
     await expect(page.getByText(/genome version/i).first()).toBeVisible();
   });
 
-  test("submit opens a parameterized result view in a new tab", async ({ page }) => {
-    await captureWindowOpen(page);
+  test("submit runs the assembly-scoped query and reports the result count", async ({ page }) => {
     await gotoReady(page, `${BASE}/search/genes`);
 
-    const input = geneIdInput(page);
-    await input.fill("Glyma.01G000100");
+    await geneIdInput(page).fill("Glyma.01G000100");
     // The submit control stays disabled until the genome-version context is
     // resolved (a request without an assembly would be ambiguous across v4/v5),
     // so wait for the enabled state instead of racing the assemblies request.
-    const submit = page.getByRole("button", { name: "Search", exact: true });
+    const submit = searchSubmit(page);
     await expect(submit).toBeEnabled();
     await submit.click();
 
-    const opened = await page.evaluate(
-      () => (window as unknown as { __opened: string | null }).__opened,
-    );
-    // The new tab URL carries the query, a resolved assembly, and a `run` flag.
-    expect(opened).toContain("/search/genes?");
-    expect(opened).toContain("q=Glyma.01G000100");
-    expect(opened).toContain("run=");
-    expect(opened).toContain("assembly=");
+    // The result region reports the query instead of inventing rows: the mock
+    // returns an empty gene list, so the empty state is the honest outcome.
+    await expect(page.getByTestId("search-genes-total")).toBeVisible();
+    await expect(page.getByTestId("search-genes-empty")).toBeVisible();
   });
 
   test("restores form state from a parameterized URL", async ({ page }) => {
@@ -68,39 +67,45 @@ test.describe("Physical Location search", () => {
   test("renders assembly/chromosome/start/end form", async ({ page }) => {
     await gotoReady(page, `${BASE}/search/location`);
     await expect(page.getByText(/physical location search/i).first()).toBeVisible();
-    await expect(page.getByLabel(/^start$/i)).toBeVisible();
-    await expect(page.getByLabel(/^end$/i)).toBeVisible();
+    await expect(page.getByTestId("location-start")).toBeVisible();
+    await expect(page.getByTestId("location-end")).toBeVisible();
     await expect(page.getByText(/chromosome/i).first()).toBeVisible();
   });
 
-  test("start < 1 or end < start is rejected (no new tab)", async ({ page }) => {
-    await captureWindowOpen(page);
-    await gotoReady(page, `${BASE}/search/location?assembly=Wm82.a4.v1&chromosome=chr01&start=5&end=1&run=1`);
-    // Invalid range never auto-submits; no window.open must have fired.
-    const opened = await page.evaluate(
-      () => (window as unknown as { __opened: string | null }).__opened,
+  test("start < 1 or end < start never submits a request", async ({ page }) => {
+    let regionRequests = 0;
+    page.on("request", (request) => {
+      if (request.url().includes("/variants/region")) regionRequests += 1;
+    });
+    await gotoReady(
+      page,
+      `${BASE}/search/location?assembly=Wm82.a4.v1&chromosome=chr01&start=5&end=1&run=1`,
     );
-    expect(opened).toBeNull();
+    // An inverted range is rejected client-side: no region request is issued.
+    await page.waitForTimeout(500);
+    expect(regionRequests).toBe(0);
   });
 
-  test("submit opens a parameterized location URL in a new tab", async ({ page }) => {
-    await captureWindowOpen(page);
+  test("submit issues the region request for the chosen chromosome", async ({ page }) => {
+    const requested: string[] = [];
+    page.on("request", (request) => {
+      if (request.url().includes("/variants/region")) requested.push(request.url());
+    });
     await gotoReady(page, `${BASE}/search/location`);
 
     // The mock assembly auto-selects; pick a chromosome so the form validates.
-    await page.getByRole("combobox").nth(1).click();
-    await page.locator(".ant-select-item-option").filter({ hasText: "chr01" }).click();
-    await page.getByLabel(/^start$/i).fill("1");
-    await page.getByLabel(/^end$/i).fill("2000");
-    await page.getByRole("button", { name: "Search", exact: true }).click();
+    await page.getByTestId("location-chromosome").selectOption("chr01");
+    await page.getByTestId("location-start").fill("1");
+    await page.getByTestId("location-end").fill("2000");
+    await page.getByTestId("location-submit").click();
 
-    const opened = await page.evaluate(
-      () => (window as unknown as { __opened: string | null }).__opened,
-    );
-    expect(opened).toContain("/search/location?");
-    expect(opened).toContain("start=1");
-    expect(opened).toContain("end=2000");
-    expect(opened).toContain("run=");
+    await expect.poll(() => requested.length).toBeGreaterThan(0);
+    expect(requested[0]).toContain("chromosome=chr01");
+    expect(requested[0]).toContain("start=1");
+    expect(requested[0]).toContain("end=2000");
+    expect(requested[0]).toContain("assembly=Wm82.a4.v1");
+    // The empty result is reported, not hidden.
+    await expect(page.getByTestId("location-empty")).toBeVisible();
   });
 });
 

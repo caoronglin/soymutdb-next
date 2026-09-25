@@ -3,26 +3,25 @@
 # SoyMutDB Web — G2 体积分块预算门禁 (docs/design/upgrade-plan.md §七)
 #
 # 构建后检测 apps/web/dist/assets 下各 chunk 的 gzip 大小（硬门禁）：
-#   antd          ≤ 320 KB  (ANTD_MAX_KB)
-#   pro-components≤ 180 KB  (PRO_MAX_KB)
-#   主入口 index  ≤ 200 KB  (ENTRY_MAX_KB)
+#   ui     (Antdv Next runtime) ≤ 120 KB  (UI_MAX_KB)
+#   vue    (Vue + Router + Pinia) ≤ 45 KB  (VUE_MAX_KB)
+#   query  (TanStack Vue Query)    ≤ 20 KB  (QUERY_MAX_KB)
+#   主入口 index  ≤ 160 KB  (ENTRY_MAX_KB)
 #
 # 超限 exit 1（CI frontend job 硬门禁；本地也可直接跑）。
 # 未生成的 chunk（如试点期未 import pro-components）打印 SKIP，不计失败。
 # 阈值可用环境变量覆盖（ANTD_MAX_KB / PRO_MAX_KB / ENTRY_MAX_KB）。
 #
-# 注：pro chunk 的产物命名按 manualChunks 返回值为 "pro"（pro-*.js），
-# 与 antd/index 一致，故用 pro-*.js 匹配；web 侧未引用 pro-components
-# 时仍打印 SKIP。
 #
 # 用法: bash scripts/check-bundle-size.sh [dist/assets 目录]
 # =============================================================================
 set -uo pipefail
 
 DIST_DIR="${1:-apps/web/dist/assets}"
-ANTD_MAX_KB="${ANTD_MAX_KB:-320}"
-PRO_MAX_KB="${PRO_MAX_KB:-180}"
-ENTRY_MAX_KB="${ENTRY_MAX_KB:-200}"
+UI_MAX_KB="${UI_MAX_KB:-120}"
+VUE_MAX_KB="${VUE_MAX_KB:-45}"
+QUERY_MAX_KB="${QUERY_MAX_KB:-20}"
+ENTRY_MAX_KB="${ENTRY_MAX_KB:-160}"
 
 fail=0
 
@@ -56,17 +55,15 @@ check_chunk() { # $1 = 标签  $2 = glob  $3 = 阈值KB  $4 = chunk 名（输出
 }
 
 
-# Guard the known-safe manual chunk topology.  AntD and rc-* deliberately remain
-# co-located (see apps/web/vite.config.ts): requiring one emitted runtime chunk
-# makes an accidental split visible in CI without changing module assignment.
-require_single_chunk() { # $1 = label  $2 = glob  $3 = optional excluded glob
-  local label="$1" glob="$2" excluded_glob="${3:-}" count=0
-  local f excluded
+# Guard the vendor/entry split the Vite config enforces. Splitting the design
+# system and the framework runtimes out of the entry is what keeps the entry
+# budget meaningful; a regression that folds everything back into index-*.js is
+# visible here without changing module assignment.
+require_single_chunk() { # $1 = label  $2 = glob
+  local label="$1" glob="$2" count=0
+  local f
   for f in "$DIST_DIR"/$glob; do
     [ -e "$f" ] || continue
-    for excluded in "$DIST_DIR"/$excluded_glob; do
-      [ -n "$excluded_glob" ] && [ "$f" = "$excluded" ] && continue 2
-    done
     count=$((count + 1))
   done
   if [ "$count" -eq 1 ]; then
@@ -89,15 +86,16 @@ fi
 
 echo "G2 bundle size budget (gzip):"
 echo "  dir = $DIST_DIR"
-echo "  thresholds: antd<=${ANTD_MAX_KB}KB  pro-components<=${PRO_MAX_KB}KB  entry<=${ENTRY_MAX_KB}KB"
+echo "  thresholds: ui<=${UI_MAX_KB}KB  vue<=${VUE_MAX_KB}KB  query<=${QUERY_MAX_KB}KB  entry<=${ENTRY_MAX_KB}KB"
 
-require_single_chunk "antd-runtime" "antd-*.js" "antd-icons-*.js"
-require_single_chunk "react-runtime" "react-*.js"
-require_single_chunk "router-runtime" "router-*.js"
+require_single_chunk "ui-runtime"     "ui-*.js"
+require_single_chunk "vue-runtime"    "vue-*.js"
+require_single_chunk "query-runtime"  "query-*.js"
 
-check_chunk "antd" "antd-*.js"        "$ANTD_MAX_KB"  "antd"
-check_chunk "pro"  "pro-*.js"             "$PRO_MAX_KB" "pro-components"
-check_chunk "entry" "index-*.js"      "$ENTRY_MAX_KB" "index"
+check_chunk "ui"     "ui-*.js"     "$UI_MAX_KB"    "design system"
+check_chunk "vue"    "vue-*.js"    "$VUE_MAX_KB"   "framework runtime"
+check_chunk "query"  "query-*.js"  "$QUERY_MAX_KB" "vue-query"
+check_chunk "entry"  "index-*.js"  "$ENTRY_MAX_KB" "app entry"
 
 if [ "$fail" -ne 0 ]; then
   echo "G2 bundle check: FAILED — 超阈值的 chunk 见上，需拆分或优化（阈值可用环境变量覆盖）"

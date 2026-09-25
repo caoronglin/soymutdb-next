@@ -287,8 +287,14 @@ class GeneService:
             mapping.setdefault(gene.accession, []).append(gene)
         return mapping
 
-    async def list_assemblies(self, db: AsyncSession) -> list[AssemblyResponse]:
-        result = await db.execute(select(Assembly).order_by(Assembly.name))
+    async def list_assemblies(
+        self, db: AsyncSession, *, release_id: int
+    ) -> list[AssemblyResponse]:
+        result = await db.execute(
+            select(Assembly)
+            .where(Assembly.release_id == release_id)
+            .order_by(Assembly.name)
+        )
         return [
             AssemblyResponse(
                 id=str(a.id),
@@ -304,11 +310,13 @@ class GeneService:
         ]
 
     async def list_chromosomes(
-        self, db: AsyncSession, assembly_id: int
+        self, db: AsyncSession, assembly_id: int, *, release_id: int
     ) -> list[ChromosomeResponse]:
         result = await db.execute(
             select(Chromosome)
+            .join(Assembly, Chromosome.assembly_id == Assembly.id)
             .where(Chromosome.assembly_id == assembly_id)
+            .where(Assembly.release_id == release_id)
             .order_by(Chromosome.order)
         )
         return [

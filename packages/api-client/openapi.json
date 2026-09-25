@@ -408,18 +408,54 @@
           "assemblies"
         ],
         "summary": "List Assemblies",
-        "description": "List all genome assemblies.\n\nRead-hot query cached in Redis (default TTL) via cache-aside; a Redis\nfailure degrades to a direct query.  An empty assembly list is cached as\nwell (short-circuit for a freshly seeded database) \u2014 that empty-result\ncaching is the anti-cache-penetration behaviour shared by every\n``get_or_set`` call site: once a loader result (even an empty one) is\nstored, repeated requests no longer hit the database until the TTL\nexpires.",
+        "description": "List only genome assemblies in the resolved published release.\n\nRead-hot query cached in Redis (default TTL) via cache-aside; a Redis\nfailure degrades to a direct query.  An empty assembly list is cached as\nwell (short-circuit for a freshly seeded database) \u2014 that empty-result\ncaching is the anti-cache-penetration behaviour shared by every\n``get_or_set`` call site: once a loader result (even an empty one) is\nstored, repeated requests no longer hit the database until the TTL\nexpires.",
         "operationId": "list_assemblies_api_v1_genes_assemblies_get",
+        "parameters": [
+          {
+            "name": "release_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
+                  "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/AssemblyResponse"
                   },
-                  "type": "array",
                   "title": "Response List Assemblies Api V1 Genes Assemblies Get"
                 }
               }
@@ -430,7 +466,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -456,7 +492,7 @@
           "assemblies"
         ],
         "summary": "List Chromosomes",
-        "description": "List chromosomes for an assembly.",
+        "description": "List chromosomes only when the assembly belongs to this release.",
         "operationId": "list_chromosomes_api_v1_genes_assemblies__assembly_id__chromosomes_get",
         "parameters": [
           {
@@ -466,6 +502,40 @@
             "schema": {
               "type": "integer",
               "title": "Assembly Id"
+            }
+          },
+          {
+            "name": "release_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
             }
           }
         ],
@@ -2024,15 +2094,51 @@
         "summary": "Seqfetch",
         "description": "Extract sequences for up to 200 gene IDs, or one chromosome interval.\n\n- ``{\"genes\": [\"Glyma.01G000100\", ...]}`` \u2013 batch mode; unknown IDs are\n  skipped and reported in ``missing`` (never 404).\n- ``{\"assembly\": \"GmWm82.a2.v1\", \"region\": \"chr1:1000-2000\"}`` \u2013 single\n  region mode.\n\nResults larger than 10 MiB are stored in S3 and returned with a\npre-signed ``download_url`` (600 s) instead of inline FASTA.",
         "operationId": "seqfetch_api_v1_tools_seqfetch_post",
+        "parameters": [
+          {
+            "name": "release_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/SeqFetchRequest"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -14018,17 +14124,53 @@
           "tools"
         ],
         "summary": "GO/KEGG enrichment analysis (ORA or GSEA)",
-        "description": "Enrichment analysis over the gene_annotations table.  'ora' (default): hypergeometric right-tail test with Benjamini-Hochberg correction; the background set is the full set of genes annotated for the requested ontology.  'gsea': simplified rank-based gene-set test over per-gene values (requires 'values' aligned 1:1 with 'genes' and a minimum term size via 'min_genes').  In both modes terms are filtered by the raw p-value threshold, sorted by q-value ascending, and limited to 'max_terms'.",
+        "description": "Assembly-scoped enrichment analysis over the gene_annotations table. 'ora' (default): hypergeometric right-tail test with Benjamini-Hochberg correction; the background set is the full set of genes annotated for the requested ontology.  'gsea': simplified rank-based gene-set test over per-gene values (requires 'values' aligned 1:1 with 'genes' and a minimum term size via 'min_genes').  In both modes terms are filtered by the raw p-value threshold, sorted by q-value ascending, and limited to 'max_terms'. Annotation rows must be tied to a matching release/assembly and a source-attributed annotation snapshot; legacy unscoped or unattributed rows fail closed.",
         "operationId": "run_enrichment_api_v1_tools_enrichment_post",
+        "parameters": [
+          {
+            "name": "release_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/EnrichmentRequest"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -14080,15 +14222,51 @@
         "summary": "Exppattern",
         "description": "Return a gene \u00d7 condition expression matrix, optionally scaled/clustered.\n\nResponse: ``genes`` (row ids), ``conditions`` (column ids), ``matrix``\n(row-major, ``None`` for missing expression), ``row_order`` (row index\npermutation), ``clustering`` (method used), ``value_range`` ``[min, max]``\nover non-null cells, plus ``missing_genes`` / ``scale`` annotations.",
         "operationId": "exppattern_api_v1_tools_exppattern_post",
+        "parameters": [
+          {
+            "name": "release_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/ExpPatternRequest"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -14096,9 +14274,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "type": "object",
-                  "title": "Response Exppattern Api V1 Tools Exppattern Post"
+                  "$ref": "#/components/schemas/ExpPatternResponse"
                 }
               }
             }
@@ -17243,6 +17419,34 @@
             ],
             "title": "Message",
             "description": "Explanatory note, e.g. when no term passes min_genes"
+          },
+          "assembly_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Assembly Id"
+          },
+          "release_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Release Id"
+          },
+          "assembly_name": {
+            "type": "string",
+            "title": "Assembly Name"
+          },
+          "assembly_version": {
+            "type": "string",
+            "title": "Assembly Version"
+          },
+          "annotation_source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EnrichmentSource"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -17250,10 +17454,15 @@
           "mode",
           "ontology",
           "input_genes",
-          "background_genes"
+          "background_genes",
+          "assembly_id",
+          "release_id",
+          "assembly_name",
+          "assembly_version",
+          "annotation_source"
         ],
         "title": "EnrichmentGseaResponse",
-        "description": "Rank-based (GSEA) enrichment analysis result."
+        "description": "GSEA result with assembly, release, and annotation source context."
       },
       "EnrichmentGseaTerm": {
         "properties": {
@@ -17317,6 +17526,12 @@
       },
       "EnrichmentRequest": {
         "properties": {
+          "assembly_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Assembly Id",
+            "description": "Assembly database id; input genes, annotations, and background are restricted to it."
+          },
           "genes": {
             "items": {
               "type": "string"
@@ -17390,10 +17605,11 @@
         },
         "type": "object",
         "required": [
+          "assembly_id",
           "genes"
         ],
         "title": "EnrichmentRequest",
-        "description": "POST /api/v1/tools/enrichment payload.\n\n``genes`` are gene ids (e.g. ``Glyma.01G000100``); duplicates are\ntolerated and deduplicated server-side.  ``mode`` selects between the\nclassic over-representation test (default, backwards compatible) and the\nrank-based GSEA mode.  ``values`` (one per gene, e.g. log2 fold-changes)\nis required in ``gsea`` mode and must align with ``genes`` 1:1."
+        "description": "POST /api/v1/tools/enrichment payload.\n\n``assembly_id`` is mandatory: both annotations and the statistical\nbackground must be scoped to the selected assembly.\n``genes`` are gene ids (e.g. ``Glyma.01G000100``); duplicates are\ntolerated and deduplicated server-side.  ``mode`` selects between the\nclassic over-representation test (default, backwards compatible) and the\nrank-based GSEA mode.  ``values`` (one per gene, e.g. log2 fold-changes)\nis required in ``gsea`` mode and must align with ``genes`` 1:1."
       },
       "EnrichmentResponse": {
         "properties": {
@@ -17440,6 +17656,34 @@
             ],
             "title": "Message",
             "description": "Explanatory note, e.g. when no input gene has annotations"
+          },
+          "assembly_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Assembly Id"
+          },
+          "release_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Release Id"
+          },
+          "assembly_name": {
+            "type": "string",
+            "title": "Assembly Name"
+          },
+          "assembly_version": {
+            "type": "string",
+            "title": "Assembly Version"
+          },
+          "annotation_source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EnrichmentSource"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -17447,10 +17691,55 @@
           "mode",
           "ontology",
           "input_genes",
-          "background_genes"
+          "background_genes",
+          "assembly_id",
+          "release_id",
+          "assembly_name",
+          "assembly_version",
+          "annotation_source"
         ],
         "title": "EnrichmentResponse",
-        "description": "ORA enrichment analysis result."
+        "description": "ORA result with assembly, release, and annotation source context."
+      },
+      "EnrichmentSource": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Annotation provider or dataset name"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version",
+            "description": "Provider's data release/version"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url",
+            "description": "Public HTTPS source page or download URL"
+          },
+          "sha256": {
+            "type": "string",
+            "title": "Sha256",
+            "description": "SHA-256 of the imported source file"
+          },
+          "imported_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Imported At",
+            "description": "UTC import timestamp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "version",
+          "url",
+          "sha256",
+          "imported_at"
+        ],
+        "title": "EnrichmentSource",
+        "description": "Public, reproducible source identity for the annotation snapshot."
       },
       "EnrichmentTerm": {
         "properties": {
@@ -17614,6 +17903,12 @@
       },
       "ExpPatternRequest": {
         "properties": {
+          "assembly_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Assembly Id",
+            "description": "Genome assembly database id; genes and expression libraries are restricted to it."
+          },
           "genes": {
             "items": {
               "type": "string"
@@ -17659,10 +17954,141 @@
         },
         "type": "object",
         "required": [
+          "assembly_id",
           "genes"
         ],
         "title": "ExpPatternRequest",
-        "description": "Request body for ``POST /api/v1/tools/exppattern``."
+        "description": "Request one expression matrix from exactly one genome assembly."
+      },
+      "ExpPatternResponse": {
+        "properties": {
+          "assembly_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Assembly Id"
+          },
+          "release_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Release Id"
+          },
+          "assembly_name": {
+            "type": "string",
+            "title": "Assembly Name"
+          },
+          "assembly_version": {
+            "type": "string",
+            "title": "Assembly Version"
+          },
+          "genes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Genes"
+          },
+          "conditions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Conditions"
+          },
+          "matrix": {
+            "items": {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            "type": "array",
+            "title": "Matrix"
+          },
+          "row_order": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Row Order"
+          },
+          "clustering": {
+            "type": "string",
+            "enum": [
+              "input",
+              "hierarchical",
+              "mean_sort",
+              "none"
+            ],
+            "title": "Clustering"
+          },
+          "value_range": {
+            "prefixItems": [
+              {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            ],
+            "type": "array",
+            "maxItems": 2,
+            "minItems": 2,
+            "title": "Value Range"
+          },
+          "missing_genes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Missing Genes"
+          },
+          "scale": {
+            "type": "string",
+            "enum": [
+              "zscore",
+              "none"
+            ],
+            "title": "Scale"
+          }
+        },
+        "type": "object",
+        "required": [
+          "assembly_id",
+          "release_id",
+          "assembly_name",
+          "assembly_version",
+          "genes",
+          "conditions",
+          "matrix",
+          "row_order",
+          "clustering",
+          "value_range",
+          "missing_genes",
+          "scale"
+        ],
+        "title": "ExpPatternResponse",
+        "description": "Assembly-labelled expression matrix; ``row_order`` maps display rows to genes."
       },
       "ExportRequest": {
         "properties": {

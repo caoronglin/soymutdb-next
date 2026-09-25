@@ -202,26 +202,53 @@ def _upload_result_file(fasta_text: str) -> str:
 class SeqFetchService:
     """Orchestrates DB lookups + FASTA slicing for the SeqFetch tool."""
 
-    async def extract(self, db: AsyncSession, request: SeqFetchRequest) -> SeqFetchResponse:
+    async def extract(
+        self,
+        db: AsyncSession,
+        request: SeqFetchRequest,
+        *,
+        release_id: int | None = None,
+    ) -> SeqFetchResponse:
         if request.genes is not None:
-            return await self._extract_by_genes(db, request.genes)
+            assert request.assembly is not None
+            return await self._extract_by_genes(
+                db, request.genes, request.assembly, release_id=release_id
+            )
         assert request.assembly is not None and request.region is not None
-        return await self._extract_by_region(db, request.assembly, request.region)
+        return await self._extract_by_region(
+            db, request.assembly, request.region, release_id=release_id
+        )
 
     # ------------------------------------------------------------------ #
     # Genes mode
     # ------------------------------------------------------------------ #
 
     async def _extract_by_genes(
-        self, db: AsyncSession, gene_ids: list[str]
+        self,
+        db: AsyncSession,
+        gene_ids: list[str],
+        assembly_name: str,
+        *,
+        release_id: int | None = None,
     ) -> SeqFetchResponse:
         if not gene_ids:
             raise ValidationError("'genes' must contain at least one gene ID")
         if len(gene_ids) > MAX_GENES:
             raise ValidationError(f"'genes' accepts at most {MAX_GENES} IDs")
 
+        assembly_stmt = select(Assembly).where(Assembly.name == assembly_name)
+        if release_id is not None:
+            assembly_stmt = assembly_stmt.where(Assembly.release_id == release_id)
+        assembly_result = await db.execute(assembly_stmt)
+        assembly_context = assembly_result.scalar_one_or_none()
+        if assembly_context is None:
+            raise ValidationError(f"Unknown assembly '{assembly_name}'")
+
         result = await db.execute(
-            select(Gene).where(Gene.accession.in_(gene_ids))
+            select(Gene).where(
+                Gene.assembly_id == assembly_context.id,
+                Gene.accession.in_(gene_ids),
+            )
         )
         found = {g.accession: g for g in result.scalars().all()}
 
@@ -250,7 +277,7 @@ class SeqFetchService:
                 missing.append(gid)
                 continue
             sequence = slice_fasta(rec, fasta_path, start, end)
-            records.append((gid, sequence))
+            records.append((f"{gid} assembly={assembly_name}", sequence))
 
         return self._build_response(records, missing=missing)
 
@@ -259,13 +286,19 @@ class SeqFetchService:
     # ------------------------------------------------------------------ #
 
     async def _extract_by_region(
-        self, db: AsyncSession, assembly_name: str, region: str
+        self,
+        db: AsyncSession,
+        assembly_name: str,
+        region: str,
+        *,
+        release_id: int | None = None,
     ) -> SeqFetchResponse:
         chromosome_name, start, end = self._parse_region(region)
 
-        result = await db.execute(
-            select(Assembly).where(Assembly.name == assembly_name)
-        )
+        assembly_stmt = select(Assembly).where(Assembly.name == assembly_name)
+        if release_id is not None:
+            assembly_stmt = assembly_stmt.where(Assembly.release_id == release_id)
+        result = await db.execute(assembly_stmt)
         assembly = result.scalar_one_or_none()
         if assembly is None:
             raise ValidationError(f"Unknown assembly '{assembly_name}'")
@@ -312,7 +345,9 @@ class SeqFetchService:
     # ------------------------------------------------------------------ #
 
     def _build_response(
-        self, records: list[tuple[str, str]], missing: list[str] | None = None
+        self,
+        records: list[tuple[str, str]],
+        missing: list[str] | None = None,
     ) -> SeqFetchResponse:
         fasta_text = _format_fasta(records)
         too_large = len(fasta_text.encode("utf-8")) > MAX_INLINE_BYTES

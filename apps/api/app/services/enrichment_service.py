@@ -1,7 +1,7 @@
 """GO/KEGG enrichment analysis service.
 
-Implements two analysis modes over the ``gene_annotations`` table
-(``gene_id``, ``term_id``, ``term_name``, ``ontology`` columns):
+Implements two analysis modes over an assembly-scoped ``gene_annotations``
+table (``assembly_id``, ``gene_id``, ``term_id``, ``term_name``, ``ontology``):
 
 1. **ORA** — hand-written hypergeometric (right-tail) enrichment test with
    Benjamini-Hochberg multiple-testing correction.  SciPy is deliberately
@@ -26,10 +26,10 @@ two-sample Kolmogorov-Smirnov (Smirnov) asymptotic for the p-value, and
 Benjamini-Hochberg FDR.  NES is simplified to a z-score instead of the
 phenotype-permutation normalization of the reference implementation.
 
-The table is probed with ``inspect().has_table()`` first: when it does not
-exist or holds no rows for the requested ontology, the service degrades
-gracefully to an explicit empty result with a human-readable ``message`` —
-never an error.
+The table is probed before querying. A missing table or ontology with no rows
+returns an explicit empty result. If the table exists but assembly provenance
+cannot be verified, the service fails closed with HTTP 503 rather than risk
+mixing records from different assemblies.
 """
 
 from __future__ import annotations
@@ -38,14 +38,20 @@ import math
 from dataclasses import dataclass
 
 import numpy as np
-from sqlalchemy import inspect, text
+from sqlalchemy import inspect, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..core.exceptions import NotFoundError, ServiceUnavailableError
+from ..models.gene_annotation import GeneAnnotationSet
+from ..models.genomic import Assembly
 from ..schemas.enrichment import (
     MAX_TERM_GENES,
+    EnrichmentCalculationResponse,
+    EnrichmentGseaCalculationResponse,
     EnrichmentGseaResponse,
     EnrichmentGseaTerm,
     EnrichmentResponse,
+    EnrichmentSource,
     EnrichmentTerm,
     Ontology,
 )
@@ -189,33 +195,76 @@ def gsea_term_stat(hit_positions: list[int], k: int, n: int) -> tuple[float, flo
 
 
 async def fetch_annotations(
-    db: AsyncSession, ontology: Ontology
+    db: AsyncSession, ontology: Ontology, *, assembly_id: int, release_id: int
 ) -> tuple[dict[str, set[str]], dict[str, str]]:
     """Load gene → term mapping from the ``gene_annotations`` table.
 
     Returns ``(gene_to_terms, term_names)`` where ``gene_to_terms`` maps each
     annotated gene id to the set of its term ids for *ontology*, and
-    ``term_names`` maps term id → display name.  When the table is missing or
-    contains no rows for the ontology, both mappings are empty (the caller
-    turns this into an explicit empty result with a message).
+    ``term_names`` maps term id → display name. When the table or ontology is
+    absent, both mappings are empty. Failure to inspect table provenance, or
+    a table without ``assembly_id`` and ``release_id``, raises
+    ``ServiceUnavailableError``.
     """
     try:
         connection = await db.connection()
         has_table = await connection.run_sync(
             lambda sync_conn: inspect(sync_conn).has_table(ANNOTATION_TABLE)
         )
-    except Exception:
-        # Session unusable (e.g. mocked in tests) — treat as no annotations.
-        return {}, {}
+    except Exception as exc:
+        raise ServiceUnavailableError(
+            "Could not verify assembly and release provenance for GO/KEGG annotations.",
+            details={"code": "annotation_provenance_unavailable"},
+        ) from exc
 
     if not has_table:
         return {}, {}
 
+    try:
+        columns = await connection.run_sync(
+            lambda sync_conn: {
+                column["name"]
+                for column in inspect(sync_conn).get_columns(ANNOTATION_TABLE)
+            }
+        )
+    except Exception as exc:
+        raise ServiceUnavailableError(
+            "Could not verify assembly and release provenance for GO/KEGG annotations.",
+            details={"code": "annotation_provenance_unavailable"},
+        ) from exc
+    scope_columns = {"assembly_id", "release_id", "annotation_set_id"}
+    if not scope_columns.issubset(columns):
+        raise ServiceUnavailableError(
+            "GO/KEGG annotations do not carry source, assembly, and release "
+            "provenance; import scoped annotations before using this tool.",
+            details={
+                "code": "annotation_provenance_required",
+                "table": ANNOTATION_TABLE,
+            },
+        )
+    query_columns = {"ontology", "gene_id", "term_id", "term_name"}
+    if not query_columns.issubset(columns):
+        raise ServiceUnavailableError(
+            "GO/KEGG annotation table is missing required query columns.",
+            details={
+                "code": "annotation_schema_required",
+                "table": ANNOTATION_TABLE,
+            },
+        )
+
     stmt = text(
         "SELECT gene_id, term_id, term_name "
-        f"FROM {ANNOTATION_TABLE} WHERE ontology = :ontology"
+        f"FROM {ANNOTATION_TABLE} WHERE ontology = :ontology "
+        "AND assembly_id = :assembly_id AND release_id = :release_id"
     )
-    result = await db.execute(stmt, {"ontology": ontology})
+    result = await db.execute(
+        stmt,
+        {
+            "ontology": ontology,
+            "assembly_id": assembly_id,
+            "release_id": release_id,
+        },
+    )
 
     gene_to_terms: dict[str, set[str]] = {}
     term_names: dict[str, str] = {}
@@ -224,6 +273,170 @@ async def fetch_annotations(
         gene_to_terms.setdefault(str(gene_id), set()).add(term_id)
         term_names.setdefault(term_id, str(term_name) if term_name else term_id)
     return gene_to_terms, term_names
+
+
+async def fetch_annotation_source(
+    db: AsyncSession,
+    ontology: Ontology,
+    *,
+    assembly_id: int,
+    release_id: int,
+) -> EnrichmentSource | None:
+    """Return the provenance record for the selected annotation snapshot.
+
+    A legacy annotation table with scoped rows but no source record is not
+    suitable for a public enrichment result and fails closed. A missing or
+    empty annotation table yields ``None`` so the API can return its explicit
+    empty-result message. The recorded snapshot row count is compared with the
+    current scoped rows so cascaded gene deletion cannot leave stale source
+    attribution in a public result.
+    """
+    try:
+        connection = await db.connection()
+        table_state = await connection.run_sync(
+            lambda sync_conn: (
+                inspect(sync_conn).has_table(ANNOTATION_TABLE),
+                inspect(sync_conn).has_table("gene_annotation_sets"),
+            )
+        )
+    except Exception as exc:
+        raise ServiceUnavailableError(
+            "Could not verify source provenance for GO/KEGG annotations.",
+            details={"code": "annotation_source_unavailable"},
+        ) from exc
+
+    has_annotations, has_sources = table_state
+    if not has_annotations:
+        return None
+
+    if not has_sources:
+        raise ServiceUnavailableError(
+            "GO/KEGG annotations have no source provenance table; apply the "
+            "annotation schema migration before using this tool.",
+            details={"code": "annotation_source_required"},
+        )
+
+    try:
+        source_columns = await connection.run_sync(
+            lambda sync_conn: {
+                column["name"]
+                for column in inspect(sync_conn).get_columns("gene_annotation_sets")
+            }
+        )
+    except Exception as exc:
+        raise ServiceUnavailableError(
+            "Could not verify source provenance for GO/KEGG annotations.",
+            details={"code": "annotation_source_unavailable"},
+        ) from exc
+    required = {
+        "id",
+        "assembly_id",
+        "release_id",
+        "ontology",
+        "source_name",
+        "source_version",
+        "source_url",
+        "source_sha256",
+        "row_count",
+        "imported_at",
+    }
+    if not required.issubset(source_columns):
+        raise ServiceUnavailableError(
+            "GO/KEGG annotation source metadata is incomplete; re-import a "
+            "source-attributed annotation snapshot.",
+            details={"code": "annotation_source_required"},
+        )
+
+    source_result = await db.execute(
+        select(
+            GeneAnnotationSet.id,
+            GeneAnnotationSet.source_name,
+            GeneAnnotationSet.source_version,
+            GeneAnnotationSet.source_url,
+            GeneAnnotationSet.source_sha256,
+            GeneAnnotationSet.row_count,
+            GeneAnnotationSet.imported_at,
+        )
+        .where(
+            GeneAnnotationSet.ontology == ontology,
+            GeneAnnotationSet.assembly_id == assembly_id,
+            GeneAnnotationSet.release_id == release_id,
+        )
+        .limit(2)
+    )
+    sources = source_result.all()
+    if len(sources) > 1:
+        raise ServiceUnavailableError(
+            "Multiple GO/KEGG annotation sources match the selected assembly and release.",
+            details={"code": "annotation_source_ambiguous"},
+        )
+    if not sources:
+        scoped_rows = await db.execute(
+            text(
+                f"SELECT 1 FROM {ANNOTATION_TABLE} "
+                "WHERE ontology = :ontology AND assembly_id = :assembly_id "
+                "AND release_id = :release_id LIMIT 1"
+            ),
+            {
+                "ontology": ontology,
+                "assembly_id": assembly_id,
+                "release_id": release_id,
+            },
+        )
+        if scoped_rows.first() is not None:
+            raise ServiceUnavailableError(
+                "GO/KEGG annotation rows exist without a matching source snapshot.",
+                details={"code": "annotation_source_required"},
+            )
+        return None
+
+    source = sources[0]
+    row_count_result = await db.execute(
+        text(
+            f"SELECT COUNT(*) FROM {ANNOTATION_TABLE} "
+            "WHERE ontology = :ontology AND assembly_id = :assembly_id "
+            "AND release_id = :release_id"
+        ),
+        {
+            "ontology": ontology,
+            "assembly_id": assembly_id,
+            "release_id": release_id,
+        },
+    )
+    if row_count_result.scalar_one() != source.row_count:
+        raise ServiceUnavailableError(
+            "GO/KEGG annotation rows do not match the selected source snapshot row count.",
+            details={"code": "annotation_source_row_count_mismatch"},
+        )
+
+    mismatched_rows = await db.execute(
+        text(
+            f"SELECT 1 FROM {ANNOTATION_TABLE} "
+            "WHERE ontology = :ontology AND assembly_id = :assembly_id "
+            "AND release_id = :release_id "
+            "AND (annotation_set_id IS NULL OR annotation_set_id != :annotation_set_id) "
+            "LIMIT 1"
+        ),
+        {
+            "ontology": ontology,
+            "assembly_id": assembly_id,
+            "release_id": release_id,
+            "annotation_set_id": source.id,
+        },
+    )
+    if mismatched_rows.first() is not None:
+        raise ServiceUnavailableError(
+            "GO/KEGG annotation rows do not match the selected source snapshot.",
+            details={"code": "annotation_source_mismatch"},
+        )
+
+    return EnrichmentSource(
+        name=source.source_name,
+        version=source.source_version,
+        url=source.source_url,
+        sha256=source.source_sha256,
+        imported_at=source.imported_at,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -251,7 +464,7 @@ def compute_enrichment(
     ontology: Ontology,
     p_threshold: float = 0.05,
     max_terms: int = 20,
-) -> EnrichmentResponse:
+) -> EnrichmentCalculationResponse:
     """Run the hypergeometric enrichment test over pre-loaded annotations.
 
     ``genes``: unique input gene ids (order preserved).
@@ -278,7 +491,7 @@ def compute_enrichment(
             f"No {ontology.upper()} annotations are available; "
             "the gene_annotations table is empty or missing for this ontology."
         )
-        return EnrichmentResponse(
+        return EnrichmentCalculationResponse(
             mode="ora",
             ontology=ontology,
             input_genes=n,
@@ -293,7 +506,7 @@ def compute_enrichment(
             f"None of the {n} input genes have {ontology.upper()} annotations; "
             "no enrichment could be computed."
         )
-        return EnrichmentResponse(
+        return EnrichmentCalculationResponse(
             mode="ora",
             ontology=ontology,
             input_genes=n,
@@ -355,7 +568,7 @@ def compute_enrichment(
         )
         for s, q in significant[:max_terms]
     ]
-    return EnrichmentResponse(
+    return EnrichmentCalculationResponse(
         mode="ora",
         ontology=ontology,
         input_genes=n,
@@ -393,7 +606,7 @@ def compute_gsea_enrichment(
     p_threshold: float = 0.05,
     max_terms: int = 20,
     min_genes: int = 5,
-) -> EnrichmentGseaResponse:
+) -> EnrichmentGseaCalculationResponse:
     """Run the simplified rank-based (GSEA) test over pre-loaded annotations.
 
     ``genes``/``values``: input gene ids aligned 1:1 with per-gene values
@@ -427,7 +640,7 @@ def compute_gsea_enrichment(
             f"No {ontology.upper()} annotations are available; "
             "the gene_annotations table is empty or missing for this ontology."
         )
-        return EnrichmentGseaResponse(
+        return EnrichmentGseaCalculationResponse(
             mode="gsea",
             ontology=ontology,
             input_genes=n,
@@ -438,7 +651,7 @@ def compute_gsea_enrichment(
 
     if n == 0:
         message = "No input genes with values were provided; no GSEA could be computed."
-        return EnrichmentGseaResponse(
+        return EnrichmentGseaCalculationResponse(
             mode="gsea",
             ontology=ontology,
             input_genes=0,
@@ -506,7 +719,7 @@ def compute_gsea_enrichment(
         )
         for s, q in significant[:max_terms]
     ]
-    return EnrichmentGseaResponse(
+    return EnrichmentGseaCalculationResponse(
         mode="gsea",
         ontology=ontology,
         input_genes=n,
@@ -524,6 +737,8 @@ def compute_gsea_enrichment(
 async def run_enrichment(
     db: AsyncSession,
     *,
+    assembly_id: int,
+    release_id: int,
     genes: list[str],
     ontology: Ontology,
     p_threshold: float,
@@ -532,13 +747,18 @@ async def run_enrichment(
     """Load annotations for *ontology* and compute the ORA result.
 
     ``background_genes`` is the number of distinct genes annotated for the
-    requested ontology — i.e. the full annotated set, not limited to the
-    input genes.  Input genes without annotations are simply excluded from
-    the tested set (and reported via the message when none remain).
+    requested ontology in the selected assembly — not limited to input genes.
+    Input genes without annotations are excluded from the tested set.
     """
-    gene_to_terms, term_names = await fetch_annotations(db, ontology)
+    assembly = await _resolve_assembly(db, assembly_id, release_id)
+    gene_to_terms, term_names = await fetch_annotations(
+        db, ontology, assembly_id=assembly_id, release_id=release_id
+    )
+    annotation_source = await fetch_annotation_source(
+        db, ontology, assembly_id=assembly_id, release_id=release_id
+    )
 
-    return compute_enrichment(
+    result = compute_enrichment(
         genes,
         gene_to_terms,
         term_names,
@@ -546,11 +766,21 @@ async def run_enrichment(
         p_threshold=p_threshold,
         max_terms=max_terms,
     )
+    return EnrichmentResponse(
+        assembly_id=assembly.id,
+        release_id=release_id,
+        assembly_name=assembly.name,
+        assembly_version=assembly.version,
+        annotation_source=annotation_source,
+        **result.model_dump(),
+    )
 
 
 async def run_gsea_enrichment(
     db: AsyncSession,
     *,
+    assembly_id: int,
+    release_id: int,
     genes: list[str],
     values: list[float],
     ontology: Ontology,
@@ -559,9 +789,15 @@ async def run_gsea_enrichment(
     min_genes: int,
 ) -> EnrichmentGseaResponse:
     """Load annotations for *ontology* and compute the GSEA result."""
-    gene_to_terms, term_names = await fetch_annotations(db, ontology)
+    assembly = await _resolve_assembly(db, assembly_id, release_id)
+    gene_to_terms, term_names = await fetch_annotations(
+        db, ontology, assembly_id=assembly_id, release_id=release_id
+    )
+    annotation_source = await fetch_annotation_source(
+        db, ontology, assembly_id=assembly_id, release_id=release_id
+    )
 
-    return compute_gsea_enrichment(
+    result = compute_gsea_enrichment(
         genes,
         values,
         gene_to_terms,
@@ -571,6 +807,29 @@ async def run_gsea_enrichment(
         max_terms=max_terms,
         min_genes=min_genes,
     )
+    return EnrichmentGseaResponse(
+        assembly_id=assembly.id,
+        release_id=release_id,
+        assembly_name=assembly.name,
+        assembly_version=assembly.version,
+        annotation_source=annotation_source,
+        **result.model_dump(),
+    )
+
+
+async def _resolve_assembly(
+    db: AsyncSession, assembly_id: int, release_id: int
+) -> Assembly:
+    result = await db.execute(
+        select(Assembly).where(
+            Assembly.id == assembly_id,
+            Assembly.release_id == release_id,
+        )
+    )
+    assembly = result.scalars().first()
+    if assembly is None:
+        raise NotFoundError(f"Assembly {assembly_id} not found")
+    return assembly
 
 
 __all__ = [
@@ -578,6 +837,7 @@ __all__ = [
     "benjamini_hochberg",
     "compute_enrichment",
     "compute_gsea_enrichment",
+    "fetch_annotation_source",
     "fetch_annotations",
     "gsea_term_stat",
     "hypergeom_sf",

@@ -167,19 +167,44 @@ def test_node_and_pnpm_toolchain_is_exact_in_jobs_that_build_assets() -> None:
     assert "Upload GitHub Pages demo artifact" in ci_text
 
 
+def workspace_catalog() -> dict:
+    return yaml.safe_load((ROOT / "pnpm-workspace.yaml").read_text(encoding="utf-8"))["catalog"]
+
+
 def test_frontend_platform_lines_remain_bounded() -> None:
+    """The React line and the Vue line both stay pinned, each where it is used.
+
+    `apps/web` is the Vue portal, so it carries no React dependency at all; the
+    React line is bounded where a React app actually ships (admin, JBrowse), and
+    the Vue line is bounded in the portal.
+    """
     root_package = _json("package.json")
     workspace = yaml.safe_load((ROOT / "pnpm-workspace.yaml").read_text(encoding="utf-8"))
 
     assert root_package["devDependencies"]["typescript"].startswith("^5.9.")
     assert workspace["overrides"]["react"] == "19.2.0"
     assert workspace["overrides"]["react-dom"] == "19.2.0"
-    for app in ("web", "admin", "jbrowse"):
+
+    for app in ("admin", "jbrowse"):
         package = _json(f"apps/{app}/package.json")
         assert package["dependencies"]["react"].startswith("^19.2.")
         assert package["dependencies"]["react-dom"].startswith("^19.2.")
         assert package["devDependencies"]["typescript"].startswith("^5.9.")
         assert package["devDependencies"]["vite"].startswith("^6.")
+
+    portal = _json("apps/web/package.json")
+    for dependency in ("react", "react-dom", "antd", "echarts", "@tanstack/react-router"):
+        assert dependency not in portal["dependencies"], (
+            f"apps/web still depends on {dependency}: the portal is Vue-only"
+        )
+    # The portal consumes Vue through the same reviewed catalog decision as the
+    # React line consumes React, so the assertion is on the catalog entry.
+    assert portal["dependencies"]["vue"] == "catalog:"
+    assert workspace["catalog"]["vue"] == "3.5.43"
+    assert portal["devDependencies"]["typescript"] == "catalog:"
+    assert portal["devDependencies"]["vite"] == "catalog:"
+    assert workspace["catalog"]["typescript"] == "5.9.3"
+    assert workspace["catalog"]["vite"] == "6.4.3"
 
 
 def test_tiptap_family_stays_above_the_redos_advisory() -> None:
@@ -249,15 +274,25 @@ def test_dependency_build_scripts_are_fail_closed_except_for_esbuild() -> None:
 
 
 def test_antd_consumers_resolve_from_workspace_catalog() -> None:
-    for app in ("web", "admin"):
+    """AntD stays a catalog decision for the React apps that still use it.
+
+    The portal moved to `@soymutdb/ui-vue` (Antdv Next behind a facade), so it no
+    longer resolves AntD at all — that is the point of the facade.
+    """
+    for app in ("admin",):
         package = _json(f"apps/{app}/package.json")
         assert package["dependencies"]["antd"] == "catalog:"
+
+    portal = _json("apps/web/package.json")
+    assert "antd" not in portal["dependencies"]
+    assert "@soymutdb/ui-vue" in portal["dependencies"]
 
 
 def test_pro_components_dependency_is_removed_after_source_migration() -> None:
     for app in ("web", "admin"):
         package = _json(f"apps/{app}/package.json")
         assert "@ant-design/pro-components" not in package["dependencies"]
+    assert "@ant-design/pro-components" not in workspace_catalog()
 
     admin_vite = (ROOT / "apps/admin/vite.config.ts").read_text(encoding="utf-8")
     assert "@ant-design/pro-components" not in admin_vite

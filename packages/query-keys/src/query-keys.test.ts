@@ -43,6 +43,26 @@ describe("queryKeys", () => {
     expect(queryKeys.genes.detail(base.geneId, base.assemblyId, base.releaseId, "internal")).not.toEqual(detail);
   });
 
+  it("scopes gene expression and homolog caches by assembly, release and site variant", () => {
+    const base = {
+      geneId: "Glyma.01G000100",
+      assemblyId: "5",
+      releaseId: "2026.09",
+      siteVariant: "external" as const,
+    };
+    const expression = queryKeys.genes.expression(base);
+    const homologs = queryKeys.genes.homologs(base);
+
+    for (const makeKey of [queryKeys.genes.expression, queryKeys.genes.homologs]) {
+      const key = makeKey(base);
+      expect(makeKey({ ...base, assemblyId: "4" })).not.toEqual(key);
+      expect(makeKey({ ...base, releaseId: "2026.10" })).not.toEqual(key);
+      expect(makeKey({ ...base, siteVariant: "internal" })).not.toEqual(key);
+    }
+
+    expect(expression).not.toEqual(homologs);
+  });
+
   it("separates global search caches by biological and deployment context", () => {
     const base = {
       query: "Glyma.01G000100",

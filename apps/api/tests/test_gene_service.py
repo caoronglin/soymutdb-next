@@ -368,28 +368,34 @@ class TestGetGene:
 class TestListAssemblies:
     async def test_maps_rows_to_responses(self):
         session = FakeDbSession(assemblies=[make_assembly(1), make_assembly(2, name="Wm82.gnm4")])
-        responses = await GeneService().list_assemblies(session)
+        responses = await GeneService().list_assemblies(session, release_id=7)
         assert [r.name for r in responses] == ["Wm82.gnm2", "Wm82.gnm4"]
         assert responses[0].species == "Glycine max"
         assert responses[0].is_default is True
 
     async def test_orders_by_name(self):
         session = FakeDbSession(assemblies=[make_assembly()])
-        await GeneService().list_assemblies(session)
+        await GeneService().list_assemblies(session, release_id=7)
         assert "ORDER BY assemblies.name" in str(session.last_stmt)
+        assert "assemblies.release_id" in str(session.last_stmt)
 
 
 class TestListChromosomes:
     async def test_maps_rows_to_responses(self):
         session = FakeDbSession(chromosomes=[make_chromosome(1), make_chromosome(2, name="Gm02")])
-        responses = await GeneService().list_chromosomes(session, assembly_id=1)
+        responses = await GeneService().list_chromosomes(
+            session, assembly_id=1, release_id=7
+        )
         assert [r.name for r in responses] == ["Gm01", "Gm02"]
         assert responses[0].assembly_id == "1"
         assert responses[0].length == 50_000_000
 
     async def test_filters_by_assembly_and_orders(self):
         session = FakeDbSession(chromosomes=[make_chromosome()])
-        await GeneService().list_chromosomes(session, assembly_id=1)
+        await GeneService().list_chromosomes(
+            session, assembly_id=1, release_id=7
+        )
         sql = str(session.last_stmt)
         assert "chromosomes.assembly_id" in sql
+        assert "assemblies.release_id" in sql
         assert 'ORDER BY chromosomes."order"' in sql

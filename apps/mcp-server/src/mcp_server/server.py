@@ -479,7 +479,8 @@ async def stats_summary(ctx: Context | None = None) -> dict[str, Any]:
 @mcp.tool(
     name="seqfetch",
     description=(
-        "Extract sequences: {'genes': [...]} batch mode or "
+        "Extract sequences from an explicit assembly: "
+        "{'assembly': ..., 'genes': [...]} batch mode or "
         "{'assembly': ..., 'region': 'chr1:1000-2000'} interval mode "
         "(read-only)."
     ),
@@ -495,10 +496,10 @@ async def seqfetch(
     if rate_err is not None:
         return rate_err
     payload: dict[str, Any] = {}
-    if genes:
-        payload["genes"] = genes[:200]
     if assembly:
         payload["assembly"] = assembly
+    if genes:
+        payload["genes"] = genes[:200]
     if region:
         payload["region"] = region
     data = await _safe_call(_api_request("POST", "/api/v1/tools/seqfetch", payload=payload))
@@ -506,6 +507,7 @@ async def seqfetch(
         return data
     return {
         "format": data.get("format"),
+        "assembly": assembly,
         "sequence": data.get("sequence"),
         "count": data.get("count", 0),
         "truncated": data.get("truncated", False),

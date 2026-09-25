@@ -1,39 +1,15 @@
 <!doctype html>
-<html lang="en" data-theme="light">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="%BASE_URL%favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#2F6F4F" />
-    <meta
-      name="description"
-      content="SoyMutDB — a comprehensive multi-species mutant database (soybean as the first/default species) providing massive variant data, gene information, mutant resources, and a genome browser to advance plant functional genomics research."
-    />
-    <meta name="author" content="SoyMutDB Consortium" />
-
-    <!-- Content Security Policy: keep in sync with apps/web/public/_headers and
-         apps/web/scripts/base-template.ts (SSG pages). Deployment API and JBrowse
-         origins are injected by Vite from VITE_API_BASE_URL and
-         VITE_JBROWSE_BASE_URL; preview deployments use staging origins.
-         When VITE_CDN_ENABLED=true, add CDN domains to script-src in BOTH this
-         meta tag and the _headers CSP (e.g. cdnjs.cloudflare.com, cdn.jsdelivr.net). -->
-    <meta
-      http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'; frame-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; object-src 'none'; worker-src 'self' blob:"
-    />
-
-    <!-- Preconnect to font origins for faster font load -->
-
-    <!-- Cloudflare Web Analytics beacon placeholder. Replaced at build time by
-         vite.config.ts (transformIndexHtml) with the full beacon <script> when
-         VITE_CLOUDFLARE_ANALYTICS_TOKEN is set; removed otherwise so builds
-         without a token are unchanged. See deploy/cloudflare.md §Web Analytics. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <!-- %CLOUDFLARE_ANALYTICS_TOKEN% -->
-
-    <title>SoyMutDB — Multi-Species Mutant Database</title>
+    <title>SoyMutDB</title>
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

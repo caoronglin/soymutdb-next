@@ -119,6 +119,31 @@ class TestOpenApiContract:
         assert schema["confirm"]["const"] is True
         assert schema["reason"]["minLength"] == 1
 
+    def test_analysis_tool_contracts_require_assembly_context(self):
+        schemas = SCHEMA["components"]["schemas"]
+        for name in ("ExpPatternRequest", "EnrichmentRequest"):
+            assert "assembly_id" in schemas[name]["required"]
+        for name in (
+            "ExpPatternResponse",
+            "EnrichmentResponse",
+            "EnrichmentGseaResponse",
+        ):
+            assert {
+                "assembly_id",
+                "release_id",
+                "assembly_name",
+                "assembly_version",
+            }.issubset(schemas[name]["required"])
+        for name in ("EnrichmentResponse", "EnrichmentGseaResponse"):
+            assert "annotation_source" in schemas[name]["required"]
+        for path in ("/api/v1/tools/exppattern", "/api/v1/tools/enrichment"):
+            parameters = SCHEMA["paths"][path]["post"]["parameters"]
+            assert any(
+                item.get("in") == "header"
+                and item.get("name") == "X-SoyMutDB-Release"
+                for item in parameters
+            )
+
     def test_expected_paths_present(self):
         paths = set(SCHEMA["paths"])
         for expected in EXPECTED_PATHS:
@@ -186,7 +211,8 @@ class TestOpenApiContract:
 
     def test_stats_paths_are_public(self):
         for path in ("/api/v1/stats/homepage", "/api/v1/stats/summary/impact"):
-            assert "security" not in SCHEMA["paths"][path]["get"] or not SCHEMA["paths"][path]["get"]["security"]
+            operation = SCHEMA["paths"][path]["get"]
+            assert "security" not in operation or not operation["security"]
 
     def test_admin_dashboard_requires_auth(self):
         op = SCHEMA["paths"]["/api/v1/admin/dashboard-stats"]["get"]

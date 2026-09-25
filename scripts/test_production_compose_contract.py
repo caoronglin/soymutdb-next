@@ -184,7 +184,7 @@ def test_dockerignore_excludes_generated_output_without_hiding_sources() -> None
     for source in (
         "apps/web/package.json",
         "apps/web/src/main.ts",
-        "apps/web/scripts/ssg-build.ts",
+        "apps/web/scripts/generate-static-routes.ts",
         "apps/web/vite.config.ts",
         "apps/admin/package.json",
         "apps/admin/src/main.tsx",

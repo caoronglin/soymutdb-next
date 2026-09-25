@@ -492,10 +492,19 @@ def test_jbrowse_honors_its_pages_base_path() -> None:
 
 
 def test_web_vite_entry_is_not_prefixed_by_deployment_base() -> None:
+    """The entry must stay root-relative so Vite `base` controls every asset URL.
+
+    A hand-prefixed entry (`/soymutdb-next/src/main.ts`) would break the
+    root-domain deployment and the subpath deployment alike, because the base is
+    the single knob both the asset URLs and `createWebHistory` already read.
+    """
     index = (ROOT / "apps/web/index.html").read_text(encoding="utf-8")
 
-    assert 'src="/src/main.tsx"' in index
-    assert '%BASE_URL%src/main.tsx' not in index
+    assert 'src="/src/main.ts"' in index
+    assert "%BASE_URL%" not in index
+    # The CSP meta the finalizer rewrites must exist, or a build that never ran
+    # the finalizer would still pass the artifact-header gate.
+    assert 'http-equiv="Content-Security-Policy"' in index
 
 
 def test_pages_accepts_publication_dispatch_inputs() -> None:

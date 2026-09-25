@@ -113,18 +113,23 @@ class TestExpressionLibraryListQueryCount:
 
 @pytest.mark.asyncio
 class TestSeqFetchGenesQueryCount:
-    """Guard: multi-gene extraction issues exactly one IN query."""
+    """Guard: multi-gene extraction has one assembly lookup and one IN query."""
 
-    async def test_single_execute_for_many_genes(self) -> None:
+    async def test_constant_two_executes_for_many_genes(self) -> None:
         gene_ids = ["Glyma.01G000100", "Glyma.01G000200"]
+        assembly = MagicMock()
+        assembly.id = 1
         db = MagicMock()
         db.execute = AsyncMock(
-            return_value=_make_exec_result(scalars_list=[])
+            side_effect=[
+                _make_exec_result(scalar_one=assembly),
+                _make_exec_result(scalars_list=[]),
+            ]
         )
 
-        response = await SeqFetchService()._extract_by_genes(db, gene_ids)
+        response = await SeqFetchService()._extract_by_genes(db, gene_ids, "Wm82.v5")
 
-        assert db.execute.await_count == 1
+        assert db.execute.await_count == 2
         assert set(response.missing) == set(gene_ids)
 
 

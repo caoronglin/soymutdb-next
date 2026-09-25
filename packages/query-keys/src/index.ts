@@ -52,10 +52,34 @@ export const queryKeys = {
         releaseId,
         siteVariant,
       ] as const,
-    expression: (geneId: string, assemblyId?: string) =>
-      [...queryKeys.genes.all(), "expression", geneId, assemblyId ?? null] as const,
-    homologs: (geneId: string, assemblyId?: string) =>
-      [...queryKeys.genes.all(), "homologs", geneId, assemblyId ?? null] as const,
+    expression: (context: {
+      geneId: string;
+      assemblyId?: string;
+      releaseId: string | null;
+      siteVariant: "external" | "internal";
+    }) =>
+      [
+        ...queryKeys.genes.all(),
+        "expression",
+        context.geneId,
+        context.assemblyId ?? null,
+        context.releaseId,
+        context.siteVariant,
+      ] as const,
+    homologs: (context: {
+      geneId: string;
+      assemblyId?: string;
+      releaseId: string | null;
+      siteVariant: "external" | "internal";
+    }) =>
+      [
+        ...queryKeys.genes.all(),
+        "homologs",
+        context.geneId,
+        context.assemblyId ?? null,
+        context.releaseId,
+        context.siteVariant,
+      ] as const,
     search: (context: {
       q: string | undefined;
       assemblyId: string | undefined;

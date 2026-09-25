@@ -1,42 +1,50 @@
 /**
- * BLAST E2E — full form at /blast, /search/blast compatibility redirect,
- * FASTA validation, and result cross-links.
+ * BLAST E2E — full form at /blast, the /search/blast compatibility route, FASTA
+ * validation, and result cross-links.
  *
- * The full form renders offline (no databases → empty select + disabled/submit
- * guard). The job-submit and result cross-link assertions require a live
- * backend and are marked skip accordingly.
+ * The full form renders offline (no databases → empty select + disabled submit
+ * guard). `/search/blast` is a compatibility route that renders the same form:
+ * a redirect would break a bookmarked URL's referrer, so the route is served
+ * directly instead of bounced. The job-submit and result cross-link assertions
+ * require a live backend and are marked skip accordingly.
  */
 import { test, expect } from "@playwright/test";
-import { gotoReady, waitForAppReady } from "./helpers";
+import { gotoReady } from "./helpers";
 
 const BASE = "/soymutdb-next";
 
 test.describe("BLAST — form and routing", () => {
   test("/blast renders the full form", async ({ page }) => {
     await gotoReady(page, `${BASE}/blast`);
-    await expect(page.getByText(/blast/i).first()).toBeVisible();
-    // Program/FASTA fields: the form has a program selector and sequence area.
-    await expect(page.getByText(/blastn/i).first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: /blast/i })).toBeVisible();
+    // Program selector: the nucleotide programme is the default selection.
+    const programme = page.getByTestId("blast-program");
+    await expect(programme).toHaveValue("blastn");
     // "Reference sequence type" also matches /sequence/i, so target the query
     // textarea by its exact label ("Input Sequence").
     await expect(page.getByRole("textbox", { name: "Input Sequence" })).toBeVisible();
   });
 
-  test("/search/blast redirects to /blast", async ({ page }) => {
-    await page.goto(`${BASE}/search/blast`);
-    await page.waitForURL(/\/blast/, { timeout: 15_000 });
-    await waitForAppReady(page);
-    expect(page.url()).toContain("/blast");
+  test("/search/blast serves the same form (compatibility route)", async ({ page }) => {
+    await gotoReady(page, `${BASE}/search/blast`);
+    await expect(page.getByRole("textbox", { name: "Input Sequence" })).toBeVisible();
+    await expect(page.getByTestId("blast-program")).toBeVisible();
+    await expect(page.getByTestId("blast-database")).toBeVisible();
   });
 
-  test("empty FASTA is rejected client-side", async ({ page }) => {
+  test("empty FASTA never reaches the API", async ({ page }) => {
+    const submissions: string[] = [];
+    page.on("request", (request) => {
+      if (request.url().includes("/blast/jobs") && request.method() === "POST") {
+        submissions.push(request.url());
+      }
+    });
     await gotoReady(page, `${BASE}/blast`);
-    // The submit control is labelled "BLAST" (blast.submit) — there is no
-    // "Submit" / "Run BLAST" label in the current i18n contract.
-    const submit = page.getByRole("button", { name: "BLAST", exact: true });
-    await submit.click();
-    // The sequence validation message appears (min 10 chars) instead of a job.
-    await expect(page.getByText(/at least 10 characters/i)).toBeVisible();
+    // The submit control is lab/built from blast.submit; with no sequence and no
+    // database selected it must stay disabled rather than fail server-side.
+    const submit = page.getByTestId("blast-submit");
+    await expect(submit).toBeDisabled();
+    expect(submissions).toEqual([]);
   });
 });
 

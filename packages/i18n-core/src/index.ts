@@ -20,7 +20,17 @@ export const catalogs = { en, zh } as const;
 /** Detect the user's preferred language from localStorage or the browser. */
 export function detectLanguage(): SupportedLanguage {
   if (typeof window === "undefined") return DEFAULT_LANGUAGE;
-  const stored = localStorage.getItem("soymutdb_lang");
+  // Storage can be absent (SSR/node), blocked by policy, or exposed only as a
+  // bare global (jsdom). Read whichever binding exists and let a failure fall
+  // through to the navigator hint instead of breaking the page.
+  const storage: Pick<Storage, "getItem"> | undefined =
+    typeof globalThis.localStorage !== "undefined" ? globalThis.localStorage : window.localStorage;
+  let stored: string | null = null;
+  try {
+    stored = storage?.getItem("soymutdb_lang") ?? null;
+  } catch {
+    stored = null;
+  }
   if (stored && SUPPORTED_LANGUAGES.includes(stored as SupportedLanguage)) {
     return stored as SupportedLanguage;
   }

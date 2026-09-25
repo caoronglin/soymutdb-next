@@ -20,29 +20,46 @@ const mockGet = vi.mocked(http.get);
 // ---------------------------------------------------------------------------
 describe("getGeneHomologs", () => {
   it("calls http.get with the correct per-gene path", async () => {
-    const mockResponse = {
+    const apiResponse = {
       gene_id: "Glyma.01G000100",
-      homologs: [{ species: "Arabidopsis", gene_id: "AT1G00010", type: "ortholog", source: "Ensembl" }],
+      homologs: [{
+        homolog_species: "Arabidopsis",
+        homolog_gene_id: "AT1G00010",
+        homolog_type: "ortholog",
+        source: "Ensembl",
+      }],
+      next_cursor: null,
+      has_more: false,
     };
-    mockGet.mockResolvedValueOnce(mockResponse);
+    mockGet.mockResolvedValueOnce(apiResponse);
 
     const result = await getGeneHomologs("Glyma.01G000100");
 
     // No assembly scope → params stay undefined; assembly is forwarded only
     // when provided (see the test below).
-    expect(mockGet).toHaveBeenCalledWith("/genes/Glyma.01G000100/homologs", {
+    expect(mockGet).toHaveBeenCalledWith("/homologs/genes/Glyma.01G000100/homologs", {
       params: undefined,
     });
-    expect(result).toEqual(mockResponse);
+    expect(result).toEqual({
+      gene_id: "Glyma.01G000100",
+      homologs: [{ species: "Arabidopsis", gene_id: "AT1G00010", type: "ortholog", source: "Ensembl" }],
+      next_cursor: null,
+      has_more: false,
+    });
   });
 
   it("forwards the assembly scope when provided", async () => {
-    mockGet.mockResolvedValueOnce({ gene_id: "Glyma.01G000100", homologs: [] });
+    mockGet.mockResolvedValueOnce({
+      gene_id: "Glyma.01G000100",
+      homologs: [],
+      next_cursor: null,
+      has_more: false,
+    });
 
-    await getGeneHomologs("Glyma.01G000100", { assembly_id: "4" });
+    await getGeneHomologs("Glyma.01G000100", { assembly_id: "4", cursor: "11", limit: 20 });
 
-    expect(mockGet).toHaveBeenCalledWith("/genes/Glyma.01G000100/homologs", {
-      params: { assembly_id: "4" },
+    expect(mockGet).toHaveBeenCalledWith("/homologs/genes/Glyma.01G000100/homologs", {
+      params: { assembly_id: "4", cursor: "11", limit: 20 },
     });
   });
 });

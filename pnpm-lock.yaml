@@ -652,6 +652,9 @@ importers:
       '@soymutdb/genome-view-model':
         specifier: workspace:*
         version: link:../../packages/genome-view-model
+      '@soymutdb/i18n-core':
+        specifier: workspace:*
+        version: link:../../packages/i18n-core
       '@soymutdb/query-keys':
         specifier: workspace:*
         version: link:../../packages/query-keys
@@ -667,6 +670,9 @@ importers:
       dompurify:
         specifier: ^3.2.0
         version: 3.4.14
+      i18next:
+        specifier: 24.2.0
+        version: 24.2.0(typescript@5.9.3)
       pinia:
         specifier: 'catalog:'
         version: 4.0.3(@vue/devtools-api@8.2.1)(typescript@5.9.3)(vue@3.5.43(typescript@5.9.3))
@@ -810,7 +816,14 @@ importers:
         specifier: ^3.0.0
         version: 3.2.7(@types/node@22.20.1)(jiti@2.7.0)(jsdom@29.1.1)(lightningcss@1.32.0)(supports-color@10.2.2)(tsx@4.23.12)
 
-  packages/shared: {}
+  packages/shared:
+    devDependencies:
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: 3.2.7
+        version: 3.2.7(@types/node@22.20.1)(jiti@2.7.0)(jsdom@29.1.1)(lightningcss@1.32.0)(supports-color@10.2.2)(tsx@4.23.12)
 
   packages/ui-vue:
     dependencies:

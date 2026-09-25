@@ -5,6 +5,7 @@
  * not depend on API data (news/assemblies degrade to empty states).
  */
 import { test, expect } from "@playwright/test";
+import { gotoReady } from "./helpers";
 
 const BASE = "/soymutdb-next";
 
@@ -18,7 +19,7 @@ test.describe("accessibility — layout at three viewports", () => {
   for (const vp of VIEWPORTS) {
     test(`home has no horizontal page overflow (${vp.name})`, async ({ page }) => {
       await page.setViewportSize({ width: vp.width, height: vp.height });
-      await page.goto(`${BASE}/`);
+      await gotoReady(page, `${BASE}/`);
       const overflow = await page.evaluate(
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
       );
@@ -27,7 +28,7 @@ test.describe("accessibility — layout at three viewports", () => {
 
     test(`focus reaches a visible interactive element (${vp.name})`, async ({ page }) => {
       await page.setViewportSize({ width: vp.width, height: vp.height });
-      await page.goto(`${BASE}/`);
+      await gotoReady(page, `${BASE}/`);
       // Tab through the skip link and header until focus lands on a visible
       // interactive element (link/button/input).
       let reached = false;
@@ -51,7 +52,7 @@ test.describe("accessibility — layout at three viewports", () => {
 
 test.describe("accessibility — navigation and forms", () => {
   test("all primary navigation controls have descriptive text", async ({ page }) => {
-    await page.goto(`${BASE}/`);
+    await gotoReady(page, `${BASE}/`);
     const controls = page.locator('nav[aria-label="Primary"] a, nav[aria-label="Primary"] button');
     const count = await controls.count();
     expect(count).toBeGreaterThanOrEqual(4);
@@ -62,13 +63,16 @@ test.describe("accessibility — navigation and forms", () => {
   });
 
   test("gene-id form inputs have accessible labels", async ({ page }) => {
-    await page.goto(`${BASE}/search/genes`);
-    const input = page.getByLabel(/gene id/i);
+    await gotoReady(page, `${BASE}/search/genes`);
+    const input = page.getByTestId("search-genes-input");
     await expect(input).toBeVisible();
+    // The assembly control is the minimum unambiguous context, so it must be
+    // reachable and labelled, not a bare select.
+    await expect(page.getByTestId("search-genes-assembly")).toBeVisible();
   });
 
   test("html has a lang attribute", async ({ page }) => {
-    await page.goto(`${BASE}/`);
+    await gotoReady(page, `${BASE}/`);
     const lang = await page.locator("html").getAttribute("lang");
     expect(lang).toBeTruthy();
     expect(lang!.length).toBeGreaterThan(0);

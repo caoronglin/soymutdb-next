@@ -21,7 +21,9 @@ from app.core.exceptions import (
     soy_mut_db_exception_handler,
     validation_exception_handler,
 )
+from app.schemas.exppattern import ExpPatternResponse
 from app.services import exppattern_service
+from app.services.release_context import ReleaseContext, get_release_context
 
 # ---------------------------------------------------------------------------
 # Helpers / fixtures
@@ -31,6 +33,9 @@ from app.services import exppattern_service
 def _make_exec_result(scalars_list=None):
     r = MagicMock()
     r.scalars.return_value.all.return_value = scalars_list or []
+    r.scalars.return_value.first.return_value = (
+        scalars_list[0] if scalars_list else None
+    )
     return r
 
 
@@ -47,17 +52,45 @@ def _make_rows_result(rows=None):
 ACCESSION_TO_PK = {"G1": 101, "G2": 102, "G3": 103}
 
 
+def test_exppattern_response_rejects_invalid_row_order():
+    with pytest.raises(ValueError, match="row_order must be a permutation"):
+        ExpPatternResponse(
+            assembly_id=1,
+            release_id=7,
+            assembly_name="Wm82.v5",
+            assembly_version="v5",
+            genes=["G1", "G2"],
+            conditions=["leaf"],
+            matrix=[[1.0], [2.0]],
+            row_order=[0, 0],
+            clustering="hierarchical",
+            value_range=(1.0, 2.0),
+            missing_genes=[],
+            scale="none",
+        )
+
+
 def _make_accession_result(accessions):
-    """``select(Gene.accession, Gene.gene_pk).where(accession.in_(...))``."""
+    """Assembly-scoped accession -> surrogate-key query result."""
     return _make_rows_result([(a, ACCESSION_TO_PK[a]) for a in accessions])
 
 
-def _make_lib(lib_id: int, name: str):
+def _make_assembly(assembly_id=1, name="Wm82.v5", version="v5"):
+    assembly = MagicMock()
+    assembly.id = assembly_id
+    assembly.name = name
+    assembly.version = version
+    assembly.release_id = 7
+    return assembly
+
+
+def _make_lib(lib_id: int, name: str, assembly_id: int = 1):
     lib = MagicMock()
     lib.id = lib_id
     lib.library_name = name
     lib.tissue = "leaf"
     lib.treatment = "control"
+    lib.assembly_id = assembly_id
     return lib
 
 
@@ -109,6 +142,10 @@ async def client(mock_session):
         yield mock_session
 
     app.dependency_overrides[get_db] = override_get_db
+    async def override_release_context():
+        return ReleaseContext(release_id=7, assembly_id=1, assembly="Wm82.v5")
+
+    app.dependency_overrides[get_release_context] = override_release_context
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
@@ -117,17 +154,28 @@ async def client(mock_session):
     app.dependency_overrides.clear()
 
 
-def _setup_data(mock_session, libraries, expr_rows, accessions=None):
-    """Configure the three expected executes of the service.
+def _setup_data(
+    mock_session, libraries, expr_rows, accessions=None, *, assembly_id=1
+):
+    """Configure the four expected executes of the service.
 
-    Order: expression libraries -> accession/gene_pk resolution -> expression
-    rows. ``accessions`` defaults to every accession referenced by
+    Order: assembly -> scoped expression libraries -> accession/gene_pk
+    resolution -> expression rows. ``accessions`` defaults to every accession referenced by
     ``expr_rows`` (plus any passed explicitly).
     """
     if accessions is None:
         resolved_pks = {row.gene_id for row in expr_rows}
         accessions = [a for a, pk in ACCESSION_TO_PK.items() if pk in resolved_pks]
     mock_session.execute.side_effect = [
+        _make_exec_result(
+            scalars_list=[
+                _make_assembly(
+                    assembly_id,
+                    "Wm82.v5" if assembly_id == 1 else f"Assembly.{assembly_id}",
+                    "v5" if assembly_id == 1 else f"v{assembly_id}",
+                )
+            ]
+        ),
         _make_exec_result(scalars_list=libraries),
         _make_accession_result(accessions),
         _make_exec_result(scalars_list=expr_rows),
@@ -157,7 +205,7 @@ class TestMatrixStructure:
         )
         response = await client.post(
             "/api/v1/tools/exppattern",
-            json={"genes": ["G1", "G2"], "scale": "none"},
+            json={"assembly_id": 1, "genes": ["G1", "G2"], "scale": "none"},
         )
         assert response.status_code == 200
         data = response.json()
@@ -168,6 +216,50 @@ class TestMatrixStructure:
         assert data["clustering"] == "input"
         assert data["missing_genes"] == []
         assert data["value_range"] == [1.0, 20.0]
+        assert data["assembly_id"] == 1
+        assert data["assembly_name"] == "Wm82.v5"
+        assert data["assembly_version"] == "v5"
+        assert data["release_id"] == 7
+
+    async def test_assembly_scope_is_applied_to_library_and_gene_queries(
+        self, client, mock_session
+    ):
+        """Same accession names resolve only inside the selected assembly."""
+        assembly_id = 2
+        library = _make_lib(9, "Leaf Control", assembly_id=assembly_id)
+        _setup_data(
+            mock_session,
+            [library],
+            [_make_expr("G1", library, 7.5)],
+            assembly_id=assembly_id,
+        )
+        response = await client.post(
+            "/api/v1/tools/exppattern",
+            json={"assembly_id": assembly_id, "genes": ["G1"], "scale": "none"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["assembly_id"] == assembly_id
+        assert data["assembly_name"] == "Assembly.2"
+        assert data["matrix"] == [[7.5]]
+        assembly_sql = str(mock_session.execute.call_args_list[0].args[0])
+        library_sql = str(mock_session.execute.call_args_list[1].args[0])
+        gene_sql = str(mock_session.execute.call_args_list[2].args[0])
+        expression_sql = str(mock_session.execute.call_args_list[3].args[0])
+        assert "assemblies.release_id" in assembly_sql
+        assert "expression_libraries.assembly_id" in library_sql
+        assert "genes.assembly_id" in gene_sql
+        assert "expression_libraries.assembly_id" in expression_sql
+
+    async def test_unknown_assembly_returns_not_found(self, client, mock_session):
+        mock_session.execute.return_value = _make_exec_result()
+        response = await client.post(
+            "/api/v1/tools/exppattern",
+            json={"assembly_id": 9999, "genes": ["G1"]},
+        )
+        assert response.status_code == 404
+        assert mock_session.execute.await_count == 1
 
     async def test_zscore_default(self, client, mock_session, libraries):
         """Default scale=zscore standardizes each gene row (ddof=0)."""
@@ -180,7 +272,7 @@ class TestMatrixStructure:
             ],
         )
         response = await client.post(
-            "/api/v1/tools/exppattern", json={"genes": ["G1"]}
+            "/api/v1/tools/exppattern", json={"assembly_id": 1, "genes": ["G1"]}
         )
         assert response.status_code == 200
         data = response.json()
@@ -199,7 +291,7 @@ class TestMatrixStructure:
             ],
         )
         response = await client.post(
-            "/api/v1/tools/exppattern", json={"genes": ["G1"]}
+            "/api/v1/tools/exppattern", json={"assembly_id": 1, "genes": ["G1"]}
         )
         assert response.status_code == 200
         assert response.json()["matrix"] == [[0.0, 0.0]]
@@ -217,7 +309,7 @@ class TestMatrixStructure:
         response = await client.post(
             "/api/v1/tools/exppattern",
             json={
-                "genes": ["G1", "G2"],
+                "assembly_id": 1, "genes": ["G1", "G2"],
                 "conditions": ["Leaf Control"],
                 "scale": "none",
             },
@@ -236,7 +328,7 @@ class TestMatrixStructure:
         )
         response = await client.post(
             "/api/v1/tools/exppattern",
-            json={"genes": ["G1", "G1", "G2"]},
+            json={"assembly_id": 1, "genes": ["G1", "G1", "G2"]},
         )
         assert response.status_code == 200
         data = response.json()
@@ -258,11 +350,12 @@ class TestAssemblyScopedResolution:
         r = MagicMock()
         r.all.return_value = [("G1", 101), ("G1", 201)]
         mock_session.execute.side_effect = [
+            _make_exec_result(scalars_list=[_make_assembly()]),
             _make_exec_result(scalars_list=libraries),
             r,
         ]
         response = await client.post(
-            "/api/v1/tools/exppattern", json={"genes": ["G1"]}
+            "/api/v1/tools/exppattern", json={"assembly_id": 1, "genes": ["G1"]}
         )
         assert response.status_code == 422
         body = response.json()
@@ -276,7 +369,7 @@ class TestAssemblyScopedResolution:
         """An accession with no gene row is 'missing', not an error."""
         _setup_data(mock_session, libraries, [], accessions=[])
         response = await client.post(
-            "/api/v1/tools/exppattern", json={"genes": ["NOPE"], "scale": "none"}
+            "/api/v1/tools/exppattern", json={"assembly_id": 1, "genes": ["NOPE"], "scale": "none"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -284,7 +377,7 @@ class TestAssemblyScopedResolution:
         assert data["matrix"] == [[None, None]]
         # libraries + accession resolution; the expression query still runs but
         # matches nothing because no surrogate key was resolved.
-        assert mock_session.execute.await_count == 3
+        assert mock_session.execute.await_count == 4
 
 
 # ---------------------------------------------------------------------------
@@ -305,7 +398,7 @@ class TestMissingGenes:
         )
         response = await client.post(
             "/api/v1/tools/exppattern",
-            json={"genes": ["G1", "G2"], "scale": "none"},
+            json={"assembly_id": 1, "genes": ["G1", "G2"], "scale": "none"},
         )
         assert response.status_code == 200
         data = response.json()
@@ -318,7 +411,7 @@ class TestMissingGenes:
         """All cells missing -> value_range is [None, None]."""
         _setup_data(mock_session, libraries, [])
         response = await client.post(
-            "/api/v1/tools/exppattern", json={"genes": ["G1"]}
+            "/api/v1/tools/exppattern", json={"assembly_id": 1, "genes": ["G1"]}
         )
         assert response.status_code == 200
         data = response.json()
@@ -353,7 +446,7 @@ class TestClustering:
         )
         response = await client.post(
             "/api/v1/tools/exppattern",
-            json={"genes": ["G1", "G2"], "scale": "none", "cluster_rows": True},
+            json={"assembly_id": 1, "genes": ["G1", "G2"], "scale": "none", "cluster_rows": True},
         )
         assert response.status_code == 200
         data = response.json()
@@ -384,7 +477,7 @@ class TestClustering:
         )
         response = await client.post(
             "/api/v1/tools/exppattern",
-            json={"genes": ["G1", "G2"], "cluster_rows": True},
+            json={"assembly_id": 1, "genes": ["G1", "G2"], "cluster_rows": True},
         )
         assert response.status_code == 200
         data = response.json()
@@ -407,7 +500,7 @@ class TestClustering:
         )
         response = await client.post(
             "/api/v1/tools/exppattern",
-            json={"genes": ["G2", "G1"], "scale": "none"},
+            json={"assembly_id": 1, "genes": ["G2", "G1"], "scale": "none"},
         )
         assert response.status_code == 200
         data = response.json()
@@ -426,7 +519,7 @@ class TestScaleLimits:
         """More than 50 genes is rejected with 422."""
         response = await client.post(
             "/api/v1/tools/exppattern",
-            json={"genes": [f"G{i}" for i in range(51)]},
+            json={"assembly_id": 1, "genes": [f"G{i}" for i in range(51)]},
         )
         assert response.status_code == 422
         assert "error" in response.json()
@@ -435,7 +528,7 @@ class TestScaleLimits:
         """More than 200 conditions is rejected with 422."""
         response = await client.post(
             "/api/v1/tools/exppattern",
-            json={"genes": ["G1"], "conditions": [f"L{i}" for i in range(201)]},
+            json={"assembly_id": 1, "genes": ["G1"], "conditions": [f"L{i}" for i in range(201)]},
         )
         assert response.status_code == 422
         assert "error" in response.json()
@@ -447,7 +540,7 @@ class TestScaleLimits:
         libs = [_make_lib(i, f"L{i}") for i in range(201)]
         _setup_data(mock_session, libs, [])
         response = await client.post(
-            "/api/v1/tools/exppattern", json={"genes": ["G1"]}
+            "/api/v1/tools/exppattern", json={"assembly_id": 1, "genes": ["G1"]}
         )
         assert response.status_code == 422
         data = response.json()
@@ -456,11 +549,11 @@ class TestScaleLimits:
     async def test_empty_genes_422(self, client, mock_session):
         """Empty or blank-only genes list is rejected with 422."""
         response = await client.post(
-            "/api/v1/tools/exppattern", json={"genes": []}
+            "/api/v1/tools/exppattern", json={"assembly_id": 1, "genes": []}
         )
         assert response.status_code == 422
         response = await client.post(
-            "/api/v1/tools/exppattern", json={"genes": ["  "]}
+            "/api/v1/tools/exppattern", json={"assembly_id": 1, "genes": ["  "]}
         )
         assert response.status_code == 422
 
@@ -468,6 +561,6 @@ class TestScaleLimits:
         """Unknown scale value is rejected with 422."""
         response = await client.post(
             "/api/v1/tools/exppattern",
-            json={"genes": ["G1"], "scale": "log2"},
+            json={"assembly_id": 1, "genes": ["G1"], "scale": "log2"},
         )
         assert response.status_code == 422

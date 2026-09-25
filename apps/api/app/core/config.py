@@ -86,6 +86,10 @@ class Settings(BaseSettings):
     # extended preserves the full data/async stack; baseline only requires PostgreSQL
     # and exposes optional integrations as disabled capabilities.
     deployment_mode: Literal["baseline", "extended"] = "extended"
+    # The unpublished ``03_soymut`` preview is available only in a local,
+    # baseline deployment after an explicit operator opt-in. Its routes also
+    # require a loopback TCP peer; this flag never changes public search APIs.
+    local_test_preview_enabled: bool = False
     api_v1_prefix: str = "/api/v1"
     debug: bool = False
 
@@ -350,6 +354,13 @@ class Settings(BaseSettings):
             )
 
         validation_errors: list[str] = []
+
+        if self.local_test_preview_enabled and (
+            self.app_env != "dev" or self.deployment_mode != "baseline"
+        ):
+            validation_errors.append(
+                "local_test_preview_enabled requires app_env=dev and deployment_mode=baseline"
+            )
 
         # Credentials are always enabled by the API middleware, so a wildcard
         # origin is unsafe in every environment, not just production.

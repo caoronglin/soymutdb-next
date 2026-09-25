@@ -25,10 +25,15 @@ const mockGet = vi.mocked(http.get);
 // ---------------------------------------------------------------------------
 describe("getGeneExpression", () => {
   it("calls http.get with the gene expression path and params", async () => {
-    const mockResponse = { gene_id: "Glyma.01G000100", expressions: [] };
+    const mockResponse = {
+      gene_id: "Glyma.01G000100",
+      expressions: [],
+      next_cursor: null,
+      has_more: false,
+    };
     mockGet.mockResolvedValueOnce(mockResponse);
 
-    const params = { tissue: "root", min_fpkm: 1.0 };
+    const params = { assembly_id: "5", tissue: "root", min_fpkm: 1.0, cursor: 12, limit: 50 };
     const result = await getGeneExpression("Glyma.01G000100", params);
 
     expect(mockGet).toHaveBeenCalledWith("/expression/genes/Glyma.01G000100/expression", {
@@ -38,7 +43,12 @@ describe("getGeneExpression", () => {
   });
 
   it("works without optional params", async () => {
-    mockGet.mockResolvedValueOnce({ gene_id: "G1", expressions: [] });
+    mockGet.mockResolvedValueOnce({
+      gene_id: "G1",
+      expressions: [],
+      next_cursor: null,
+      has_more: false,
+    });
 
     await getGeneExpression("G1");
 

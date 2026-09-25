@@ -213,23 +213,111 @@ query-keys 9 passed；typecheck/lint 干净。
 证据：`web-vue` → **14 files / 53 tests passed**；api-client 112 passed；
 双方 typecheck 与 web-vue lint 干净。
 
+### Phase 3 第六步：gene assembly 预览与关联数据（2026-09-24）
+
+- `GeneModelPreview.vue`：把基因跨度、转录本、外显子合并到一个带 assembly 标签的
+  1-based inclusive SVG 视图；错误坐标不会污染其他有效轨道，屏幕阅读器可读取精确区间。
+- `GeneView.vue`：增加有界游标分页的 expression / homolog 表和继续加载状态；请求与缓存均
+  按 assembly、release、site variant 隔离；表达量缺失值显示 `—`，不折算为零。
+- `api-client`：补齐 expression / homolog 分页参数及响应类型，适配 homolog API 的实际路由和
+  字段；旧 React 基因详情同步处理空表达值，避免 canonical 站点出现 NaN 或渲染异常。
+- `GeneModelPreview.test.ts`、`GeneView.test.ts`、api-client / query-keys 测试覆盖坐标、游标、
+  cache scope 和空表达值。
+
+状态：`IMPLEMENTED_UNVERIFIED`。当前工作区依赖链接不完整，Vitest、vue-tsc 和 ESLint 无法
+启动；Vue SFC 编译可用本地 compiler 单独核验，完整测试证据待依赖环境恢复后补齐。
+
+### Phase 3 第七步：SeqFetch assembly-aware Vue 工具（2026-09-24）
+
+- Vue `/tools` 与 `/tools/seqfetch`：支持 200 个以内的批量基因 FASTA、单区间提取、assembly
+  选择、输入限制、缺失 ID 列表、FASTA 预览和大文件下载。
+- API 契约：两种模式都要求 assembly；批量查询在 SQL 中按 assembly_id 限定，同名 accession
+  不会跨 assembly 覆盖。FASTA header、Vue 页面和 MCP 返回都保留所选 assembly 名称。
+- React 与 MCP SeqFetch 客户端同步传递 assembly，避免现有 canonical 页面或 MCP 工具调用旧的
+  无 assembly 请求形状。
+- 新增 `SeqFetchView.test.ts`、`ToolsView.test.ts` 与 API 组装范围回归断言。
+
+状态：`IMPLEMENTED_UNVERIFIED`。Vue SFC 与 Python/TypeScript 语法可编译；Python API tests
+因缺少 `pytest_asyncio` 无法启动，Vue Vitest/typecheck/lint 依赖链接不完整；OpenAPI 导出器因缺少
+`structlog` 且 uv 缓存只读而无法运行，需在依赖完整环境补跑。
+
+此前识别的 enrichment / ExpPattern assembly 范围缺口已在 Phase 3 第八步补齐；实现与验证状态见下。
+
+### Phase 3 第八步：ExpPattern / Enrichment assembly-aware 契约与页面（2026-09-24）
+
+- ExpPattern API 将 assembly 作为必填请求字段，在 SQL 中分别限制基因、表达库和表达值；响应
+  显式包含 assembly id/name/version、矩阵和 row_order。响应模型检查矩阵维度及 row_order 排列。
+- Enrichment ORA / GSEA 请求与响应都携带必填 assembly 上下文；注释查询带 `assembly_id` 条件。
+  表缺失时返回可解释空结果；若注释表缺少 assembly provenance 或元数据检查失败，则 fail closed 为 503。
+- React（当前 canonical）与 Vue 工具页接入 assembly 选择；React/Vue 的 ExpPattern 表格与热图都遵循
+  服务端 `row_order`。API client、MCP SeqFetch 和现有 React 页面保持 assembly 请求参数一致。
+- 新增 ExpPattern / Enrichment Vue 页面和回归测试；补充 external / internal Vue 双工件构建与隔离脚本，
+  并接入统一的 `verify-site-variant-artifacts.sh` 门禁。canonical 发布仍保持 React，待 parity 实测后再切换。
+
+验证记录：此前 ExpPattern、Enrichment 与 OpenAPI 合同测试 **81/81 passed**；后续加入 release 过滤后，
+本轮单独复跑 ExpPattern 模块 **20/20 passed**，尚未重跑 Enrichment / OpenAPI。CI 脚本合同测试此前
+**58 passed**，排除了 SMB 工作区执行位断言（该项检测到脚本被挂载为不可执行）。此前 `ruff`、双站点
+shell 语法、artifact isolation self-test 与 `git diff --check` 通过。OpenAPI 临时导出已确认请求必填
+assembly、release header 与响应上下文；本轮增加 source 字段后，生成客户端快照仍需官方生成器刷新。
+
+状态：release 约束后的 ExpPattern 后端 `VERIFIED`；Enrichment source response 与新导入流水线
+`IMPLEMENTED_UNVERIFIED`；React/Vue 页面及双站点工件仍待前端门禁验证。工作区有 Node 24.19，但 pnpm
+12.5.1 不在本机缓存；离线 pnpm 安装因 package store 缺少锁文件 tarball 和供应链元数据而未完成，且共享盘
+现有 node_modules 无传递依赖链接。仓库不含真实注释数据，必须由操作人员指定有授权的数据源导入后才会返回富集项。
+
+### Phase 3 第九步：GO / KEGG 有来源注释快照导入（2026-09-24）
+
+- Alembic `0038` 新增注释数据集与断言表；联合外键要求 assembly 属于该 release、gene accession 属于该
+  assembly，且每条结果通过 annotation set 关联到对应来源。
+- 导入 CLI 只接受 draft release；要求公开 HTTPS source URL、来源版本与 SHA-256，验证 TSV 列、ontology、
+  gene accession 和 term 名称，流式校验实际导入字节的 SHA-256，事务失败整批回滚，同一
+  release/assembly/ontology 只允许一个不可变快照。
+- Enrichment ORA / GSEA 响应和 React / Vue 页面现在显示 source name/version/URL/checksum；旧表缺少
+  provenance、来源缺失或 annotation set 与行上下文不一致时 fail closed。导入格式与操作步骤记录在
+  `docs/dev/enrichment-annotation-import.md`。
+- 新增 TSV parser 回归用例、PostgreSQL import/savepoint 用例和 migration upgrade/downgrade 合同覆盖。
+
+状态：代码实现完成；已完成无数据库后端回归和静态检查，真实 PostgreSQL migration/import 用例与前端门禁
+仍未验收。当前没有授权的真实 GO/KEGG 输入文件，不能据此宣称真实富集数据已可用。
+
+### 2026-09-25 定向验证记录
+
+- 当前 Mamba root 中没有 `webdb` 环境（`mamba env list` 仅有 `base` 与
+  `zotero-pdf2zh-server`）；使用 Python 3.14.6 的 `mamba run -n base`，并加载仓库 API venv
+  与本地 Python workspace 包路径执行。
+- `apps/api/tests/test_enrichment.py` → **44 passed**。
+- `apps/api/tests/test_enrichment.py tests/test_gene_annotation_import.py tests/test_migrations.py
+  tests/test_openapi_contract.py -m 'not integration'` → **75 passed, 6 deselected**。
+- `apps/api/tests/test_exppattern.py tests/test_seqfetch.py tests/test_gene_service.py -m 'not integration'`
+  → **73 passed**。
+- Ruff（本次触及的 enrichment/import/migration 文件）通过；Python `py_compile` 与针对改动文件的
+  `git diff --check` 通过。
+- 另行包含 `tests/test_genes.py` 的运行有 **73 passed、10 errors**：这 10 项在 conftest 中尝试
+  连接 Docker socket，沙箱拒绝访问；未启动 Docker。
+- PostgreSQL 测试未运行：本机 5432/55432 无监听服务；仓库 PostgreSQL 包记录的旧前缀为
+  `/mnt/data02/...`，该路径不存在，故无法启动临时实例。导入 integration 标记与真实 Alembic
+  upgrade/downgrade 仍待可用 PostgreSQL 环境。
+- 前端依赖链仍不可用：本机没有 pnpm 12.5.1，Vitest 缺少 `@vitest/utils` 链接；Vue SFC 编译器
+  也缺少 `@vue/compiler-sfc`。官方 OpenAPI TypeScript 生成物尚未刷新。
+
 ### 阻塞 / 未关闭
 
 - GitHub artifact 上传：已压缩 `pages-demo-dist`、移除无消费者的 dist 上传、缩短证据保留期；等待配额重算（6–12h）后应恢复
 - api-tests 的 PG 集成已在本地真实验证；CI 复跑待最新 run 完成
 - **G4 review triage：PR #1 的 22 条 review threads 已全部回复结论并 resolve（unresolved = 0）**，映射到修复 commit 或 Phase 3 deferral
 - T8 local Docker：本机无 Docker daemon（`LOCAL_DOCKER_T8` PENDING）
-- internal 双站点工件构建（`build:sites`）不在任何 pipeline；归 Phase 3 的 external/internal parity
+- Vue external/internal `build:sites` 和产物隔离检查已接入统一站点工件 gate；本机完整构建待 Node/pnpm 依赖恢复
 
 ### Next
 
-1. 监控最新 main CI；关闭剩余真实失败（非配额项）
-2. 配额恢复后确认 artifact 上传与 baseline jobs
-3. Phase 1 full-stack isolation（外部不可用 Docker 时先做 GitHub 可完成部分）
+1. 恢复仓库 pin 的 pnpm 12.5.1 与前端依赖，跑 Vue / React 针对性质量门禁和 external/internal artifact 构建
+2. 用官方 `generate:api-client` 刷新 `openapi.json` 与 TypeScript 声明，再跑 contract check
+3. 获取许可明确且与 release/assembly 相符的 GO / KEGG 数据文件，应用 migration 并导入；再用已知数据集核对真实富集结果
+4. 继续跟进最新 main CI、Pages artifact 配额与未关闭的 Docker/T8 验收（不属于本次非 Docker 功能实现）
 
 ---
 
-## 0. 当前事实：不要再按旧 Phase 从零开始
+## 0. 历史审计快照（2026-09-23 合并前；不代表当前状态）
 
 ### 0.1 Git / PR
 
@@ -263,7 +351,9 @@ PR 已按可预览逻辑提交推进：framework seam → import protocol → Cl
 
 ---
 
-## 1. PR #1 Exit Gate：这是当前唯一最高优先级
+## 1. PR #1 Exit Gate（历史门禁，PR #1 合并后已关闭）
+
+本节保留合并前的门禁与审计依据。PR #1 已于上方记录的 2026-09-23 合并；以下“当前”措辞均指当时审计，不代表现在仍需合并 PR #1。
 
 在以下四组 Gate 全部通过前：
 
@@ -669,12 +759,131 @@ PR #1 下一批推荐提交链：
 
 ---
 
-## 10. 当前 Next
+## 11. 前端全线切换 Vue + 回归（2026-09-25 本轮）
 
-不要再做 Phase F 新页面。现在严格按：
+### 11.1 目录与 canonical 切换
 
-**G1 CI install/root-cause → G2 Vue correctness → G3 P2 correctness/security → GitHub green → CNB T8 → fresh review → merge PR #1。**
+- `apps/web-vue` → **`apps/web`**（Vue portal 占据 canonical 路径）；React portal（约 32k 行）与
+  `page-builder` 运行时、嵌入 demo fixtures 一并删除。
+- 框架中立层落到 `packages/shared`：`deployment.ts`（部署 origin/CSP/dev host 白名单）、`genomics`、
+  `primer-design`、`jbrowse-bridge`、`analyses-upload`、`analyses-local`、`incremental-sha256`；
+  React admin 与 jbrowse 继续经 `@soymutdb/shared/deployment` 共用同一实现。
+- `apps/web` 新构建链：
+  `vite build → generate-static-routes → finalize-csp → gzip-compress → gen-sw → release-manifest`
+  （`_headers`/`_redirects`/`favicon.svg`/`sw.js` 随应用交付；`gen-sw` 缓存名带 site variant，
+  双站点缓存不再共名）。
 
-PR #1 合并后，再从 Phase 1 full-stack isolation/CNB acceptance 继续。
+### 11.2 生产门禁对齐（否则切换只会让 gate 失真）
 
-> 完成标准不是“PR 代码很多”，而是：当前 31+ commits 的每一条新主线能力都有正确上下文、真实回归、真实运行证据，并且能安全成为 main 的下一基线。
+| 门禁 | 变化 |
+| --- | --- |
+| `check-bundle-size.sh` | antd/pro/react 拓扑 → `ui`(Antdv Next)/`vue`/`query`/`index` 四个 chunk 预算（实测 79/33/12/106 KB） |
+| `check_artifact_headers.py` | “script-src 必须含 sha256” 改为“已 finalize 的证明”：Vue shell 无 inline script，空 hash 并集是合法结果；保留 origin 与 `unsafe-inline` 两项证明 |
+| `check_web_query_keys.py` | React 路由清单 → Vue 视图层：必须走 `assembliesQueryOptions()`，禁止手写 `assemblies` key 或直接用 `queryKeys.assemblies` |
+| `turbo.json` | strict env 模式漏传 `VITE_SITE_VARIANT`/`RAYON_NUM_THREADS`/`SOYMUTDB_EMIT_GZ`/`SOYMUTDB_VUE_DIST_DIR` → 补入 build env |
+| `check_workspace_exports.py` / contract 测试 | 同步新路径（`packages/shared/src/deployment.ts`、Vue 构建脚本）；脚本可执行位在 SMB 挂载下回退到 git index 判定 |
+
+### 11.3 门户产品面补齐
+
+- `HomeView` 从 Checkpoint D 脚手架改为数据库首页：标识符搜索 → 五个任务入口 → assembly 目录 → news；
+  e2e 断言“news 不得排在任务入口之前”。
+- `SearchGenesView` 结果表改为 `ConfigurableTable`（模板驱动），空结果也渲染表头——列缺失要看得见。
+- `SearchLocationView` 支持 `?run=1` 深链自动执行一次（与 React 契约一致），非法区间/染色体不发请求。
+- `LoginView` 走 `authRequest` + `setAccessToken`；`?redirect=` 白名单为同站路径（防开放重定向）；
+  401 文案统一为通用 "Invalid email or password."（不做账号存在性预言）。
+
+### 11.4 e2e 回归（Vue 制品，`/soymutdb-next/`）
+
+- 静态服务器新增 `/table-views/{kind}` 与 `/news` mock；镜像 API built-in 默认列顺序。
+- 重写 homepage / search / genes / blast / accessibility / public-login 规格到 Vue portal 的 testid 与契约。
+- 结果：`playwright-public.config.ts` → **29 passed, 2 skipped**（skip 仍是需后端的 live-result 用例）。
+
+### 11.5 回归全量结果
+
+| 层 | 结果 |
+| --- | --- |
+| `apps/web`（Vue） | 21 files / **79 tests**；typecheck + lint 干净 |
+| `packages/shared` | **49 tests**（含 deployment/primer/analyses/sha256） |
+| api-client / i18n-core / query-keys / ui-vue / genome-view-model | 116 / 6 / 10 / 4 / 13 |
+| `apps/admin` | 48 files / **127 tests**；lint 0 error（53 既有 warning） |
+| `apps/api`（真实 PG 55433） | `tests/ -m "not integration"` → **1236 passed**；`a0`（需 `PYTHONPATH=.`）45 passed |
+| `apps/worker` | **334 passed, 24 skipped** |
+| Python 契约（`scripts/`） | **264 passed, 1 skipped, 9 subtests** |
+| 制品门禁 | production 扫描 STRICT OK；artifact headers OK；nginx OK；bundle OK；静态 smoke PASS；acceptance STATIC PASS；双站点隔离 PASS |
+
+顺带修掉两个真实缺陷（均在真实 PostgreSQL 上才暴露）：
+- `local_test_preview_service` 的 GROUP BY 无法覆盖 eager 关系列 → 改为相关 scalar 子查询计数。
+- `detectLanguage` 在 jsdom（bare global 缺失）下抛错 → 防御式读取 storage。
+
+仍未解决：`apps/admin/src/routes/widgets/$name.tsx` 的 zod v3/v4 resolver 类型不匹配（既有，admin typecheck 红）；
+turbo 并发构建在本沙箱触发线程上限（`os error 11`），逐包构建正常，CI 不受影响。
+
+## 10. Phase 3 收尾 + 可配置表格（2026-09-25 本轮）
+
+本轮目标：把 Vue portal 推到“路线齐全”，同时交付运营要求的**可配置表格**与**多物种实例登记**；
+React portal 仍为当前 canonical，尚未切换也未删除（Phase 7 前置未完成）。
+
+### 10.1 测试环境恢复（前轮阻塞解除）
+
+- 本机 pnpm **12.5.1** 可用，`pnpm install --frozen-lockfile --offline` 通过；前端依赖链完整。
+- PostgreSQL 16（`.mamba-root/envs/postgres16`）在 **127.0.0.1:55433** 启动（55432 被本地预览实例占用），
+  按 `docs/dev/mamba-validation-environment.md` 建 `soymutdb_validation` 与 `soymutdb_testfixtures`；
+  `SOYMUTDB_TEST_DATABASE_URL` 绕过 testcontainers，**真实 PostgreSQL 集成测试可运行**。
+
+### 10.2 已落地
+
+| 面 | 内容 | 状态 |
+| --- | --- | --- |
+| 测试修复 | `web-vue` 9 个失败测试全部修复（表单提交需 attachTo document.body；静态路由期望值与新增路由对齐） | VERIFIED（20 files / 71 tests） |
+| 共享层 | `packages/shared` 新增 `genomics`（染色体词表 / 1-based 坐标格式化 / JBrowse 深链）、`primer-design`、`jbrowse-bridge`、`analyses-upload`（纯函数）、`analyses-local`、`incremental-sha256`，并接入 `test`/`lint`/`typecheck` | VERIFIED（33 tests） |
+| i18n | `@soymutdb/i18n-core` 的 `detectLanguage` 改为防御式读取 storage；`apps/web-vue/src/lib/i18n.ts` 提供响应式 `t`（**非 computed**，避免 slot 内 `_ctx.t` 解包后 `.value` 为 undefined） | VERIFIED |
+| 门户框架 | `PortalLayout` / `PortalHeader` / `PortalFooter`：一条导航 + 站点变体与 release 上下文 | VERIFIED |
+| Vue 路由补齐 | `/genes`、`/search/genes`、`/search/location`、`/search/gbrowse`、`/search/primer`、`/browser`、`/blast`、`/analyses`(+`/fastp` `/scanpy` `/:jobId`)、`/sra`、`/seed-request`、`/guide`、`/help`、`/about`、`/publications`、`/login` | IMPLEMENTED（构建产出 25 个静态文档） |
+| query-options | 新增 `geneList`/`geneSearch`/`regionVariants`/`assemblyChromosomes`/`tableView` 工厂，视图不再手写 key | VERIFIED（typecheck/lint 干净） |
+| 上传链路 | `submitAnalysisFiles` 下沉到 `@soymutdb/api-client`（纯函数留在 shared）；React hook 改为薄封装，两端同一实现 | VERIFIED（api-client 116 tests） |
+| **可配置表格** | `table_view_templates` + `species_instances`（migration 0039）、公开 `/table-views/{kind}`、admin CRUD、`ConfigurableTable.vue`、`/search/location` 改为模板驱动、admin `/table-views` 页 | VERIFIED（真实 PG 8 tests + migration 升级/降级 + Vue 6 tests） |
+| 清理 | 删除 `eslint_out.txt`、`tsc_out.txt`、`e2e/tmp-dom-dump.mjs`、`e2e/tmp-inspect-deploy.mjs` | 完成 |
+
+### 10.3 本轮验证证据
+
+- `apps/web-vue`：**21 files / 77 tests passed**；`typecheck` + `lint` 干净；`vite build` 产出 25 个
+  `*/index.html` + `routes.json` + `robots.txt`（sandbox 需 `GOMAXPROCS=2 RAYON_NUM_THREADS=1`）。
+- `packages/shared`：33 tests；`packages/api-client`：116 tests；`apps/web`：145 tests + typecheck。
+- `apps/admin`：48 files / 127 tests；lint 0 error（53 个 warning 为既有）。
+- `apps/api`：真实 PG 16（55433）→ `test_table_views.py` **8 passed**、`test_migrations.py` **11 passed**
+  （含 0039 升级/降级与 `coalesce(release_id,0)` 唯一索引的反例验证：同 kind/species/variant 两条
+  `is_default=true` 且 `release_id` 均为 NULL 时，第二次插入被拒）。
+- 既有未解决（非本轮引入）：`apps/admin/src/routes/widgets/$name.tsx` zod v3/v4 resolver 类型不匹配，
+  `pnpm --filter @soymutdb/admin typecheck` 因此仍红；`apps/api` 的 docker 依赖集成测试在本机不可运行。
+
+### 10.4 未完成 / 下一步
+
+1. **canonical 切换仍未做**：`apps/web`（React）仍是发布路径；本轮的 Vue portal 尚未跑 Playwright E2E parity。
+2. `apps/admin` 仍是 React（Phase 5）；本轮只在既有 admin 中新增了模板管理页。
+3. 远程物种实例的访问模型（CORS 直连 vs 本地 API 代理）需要决策后才能实现“一个面板管多台服务器”的切换器，
+   数据模型已就绪（`species_instances`，无需再迁移）。
+4. `.cnb.yml` / `scripts/*` 中的 `apps/web/dist` 路径仍是 React 产物路径。
+
+## 10. 当前 Next（2026-09-24 核对）
+
+PR #1 已合并。仓库 `main` 当前 HEAD 为 `d3904c210`，与 `origin/main` 指向相同提交；最近提交继续推进 Vue Phase 3 页面与 transcript 契约。
+
+### 最近一次可取得的 CI 证据
+
+- CI run `35891669951`（HEAD `d3904c210`）整体失败：API 测试、ClickHouse migration fixture、MCP e2e 和前端验证通过；Dependency governance 与 Pages demo 工件的上传因 GitHub Actions artifact storage quota 用尽而失败。Docker、Kind 和镜像发布因此跳过。
+- Baseline run `35891669950` 的 OpenAPI 检查、API 测试和 Web/Admin 构建步骤通过；相关工件上传同样因配额失败。
+- Pages run `35892690486` 因同一提交的 CI 未成功而未发布。
+- 这些是最近一次成功读取到的 GitHub 状态（2026-09-23 17:00 UTC 左右）。2026-09-24 的刷新尝试遇到 GitHub API 网络错误，不能据此判断配额现在是否恢复。
+
+### 本机阻塞
+
+- 当前 shell 的 PATH 中没有 Docker CLI、`pg_isready`、`clickhouse-client` 或 `redis-cli`；本轮无法启动或核验 T8 所需的本地全栈环境。
+- SMB 工作区将脚本呈现为 `0664`，且 `chmod +x` 不改变可见权限；Git 因而显示 45 个仅有 `100755 → 100644` 的工作树差异，没有内容差异。不要将这些权限噪声作为功能改动提交。
+
+### 下一步
+
+1. GitHub API 可用且距上次配额错误达到重算窗口后，检查配额与 `d3904c210` 的新 CI / baseline / Pages 结果；确认工件上传恢复，并处理任何剩余的真实失败。
+2. 用 GitHub/CNB 可用的环境推进 Phase 1 full-stack isolation + CNB acceptance；本机缺少 Docker，不能把 T8 记为通过。
+3. Phase 1 验收后按主计划继续 Phase 2；Vue Phase 3 已补 gene merged genome context、JBrowse 深链接、gene expression/homolog 与 SeqFetch。Enrichment / ExpPattern 需先完成 assembly-aware API 契约，之后再移植；仍需 external/internal build parity 和 canonical deployment 切换。
+
+> PR #1 的审计门禁与提交证据保留在上文作为历史记录；后续状态以本节最近可验证的运行结果和新 CI 结果回填。

@@ -48,6 +48,7 @@ SHARED_SCRIPTS = (
     "scripts/build-pages-artifact.sh",
     "scripts/verify-pages-artifact.sh",
     "scripts/verify-site-variant-artifacts.sh",
+    "scripts/verify-vue-site-variant-artifacts.sh",
     "scripts/mcp-transport-smoke.sh",
     "scripts/assert-clickhouse-migration.py",
     "scripts/smoke.sh",
@@ -274,7 +275,7 @@ def _load_dev_allowlist(value: str | None = None) -> _DevAllowlist:
     directly), and probed with a table of real hosts, so the test and the dev
     server cannot disagree about the pattern.
     """
-    source = (ROOT / "apps/web/src/lib/deployment.ts").read_text(encoding="utf-8")
+    source = (ROOT / "packages/shared/src/deployment.ts").read_text(encoding="utf-8")
     # From the first helper constant to the end of the helper: the function
     # closes over `CNB_DEV_HOSTS` / `CNB_DEV_HOST_SUFFIXES`, so extracting only
     # the function body would evaluate against free variables.
@@ -368,6 +369,34 @@ def _flatten(value: object) -> str:
     if isinstance(value, list):
         return " ".join(_flatten(item) for item in value)
     return str(value)
+
+
+def _is_executable(script: str) -> bool:
+    """Is this shared script executable?
+
+    The filesystem mode is authoritative on a normal clone, but some workspace
+    mounts (SMB/CIFS) force every file to the same mode and refuse `chmod`. In
+    that case git still records the real mode, so a script committed as 100755
+    is executable for everyone who checks the repo out — which is what CI does.
+    Fall back to the index bit rather than failing a gate that the mount broke.
+    """
+    path = ROOT / script
+    if path.stat().st_mode & 0o111:
+        return True
+    try:
+        completed = subprocess.run(
+            ["git", "ls-files", "--stage", "--", script],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    if completed.returncode != 0:
+        return False
+    fields = completed.stdout.split()
+    return len(fields) >= 2 and fields[0] == "100755"
 
 
 class DeliveryArchitectureTests(unittest.TestCase):
@@ -923,30 +952,23 @@ class DeliveryArchitectureTests(unittest.TestCase):
         `react-i18next` at all (and uninitialised i18next returns `defaultValue`
         verbatim), and the shared double returned it verbatim too. The test now
         uses the shared double, which is why the substitution is asserted here.
+
+        The portal (`apps/web`) is Vue and runs real i18next (see
+        `apps/web/src/lib/i18n.ts`), so it needs no double; only the React apps
+        do, and the admin is the one that still ships one.
         """
-        for app in ("apps/admin", "apps/web"):
-            mock = (ROOT / app / "src/test/mocks.ts").read_text(encoding="utf-8")
-            # Substitution is implemented with a replace() over a `{{name}}`
-            # pattern. Assert the mechanism rather than its exact spelling.
-            self.assertIn(
-                ".replace(",
-                mock,
-                f"{app}/src/test/mocks.ts must substitute {{{{name}}}} placeholders",
-            )
-            self.assertIn(
-                "{{",
-                mock.replace("{{", "{{"),
-                f"{app}/src/test/mocks.ts must handle {{{{name}}}} placeholders",
-            )
-            self.assertIn("(match, name", mock.replace("(match, name", "(match, name"))
-            self.assertIn("defaultValue", mock, app)
+        mock = (ROOT / "apps/admin/src/test/mocks.ts").read_text(encoding="utf-8")
+        self.assertIn(
+            ".replace(",
+            mock,
+            "apps/admin/src/test/mocks.ts must substitute {{name}} placeholders",
+        )
+        self.assertIn("defaultValue", mock, "apps/admin")
 
         # Any test that asserts an interpolated default must mock i18next with the
         # shared double (otherwise nothing substitutes the placeholder).
         import_failures = []
-        for test_file in sorted(ROOT.glob("apps/admin/src/**/*.test.ts*")) + sorted(
-            ROOT.glob("apps/web/src/**/*.test.ts*")
-        ):
+        for test_file in sorted(ROOT.glob("apps/admin/src/**/*.test.ts*")):
             text = test_file.read_text(encoding="utf-8")
             asserts_interpolation = "validation errors" in text and "getByText" in text
             if asserts_interpolation and "test/mocks" not in text:
@@ -998,13 +1020,20 @@ class DeliveryArchitectureTests(unittest.TestCase):
             "shared double from src/test/mocks.ts instead:\n" + "\n".join(offenders),
         )
 
-        # The shared doubles must exist and expose a module-level `t`.
-        for app in ("apps/admin", "apps/web"):
-            mock = ROOT / app / "src/test/mocks.ts"
-            self.assertTrue(mock.is_file(), f"missing shared i18n mock for {app}")
-            text = mock.read_text(encoding="utf-8")
-            self.assertIn("export const stableT", text)
-            self.assertIn("mockTranslation", text)
+        # The shared double must exist and expose a module-level `t`. Only the
+        # React admin still needs one: the Vue portal runs the real i18next
+        # instance (apps/web/src/lib/i18n.ts), so a second double here is exactly
+        # how the React portal and its tests drifted on placeholder handling.
+        mock = ROOT / "apps/admin/src/test/mocks.ts"
+        self.assertTrue(mock.is_file(), "missing shared i18n mock for apps/admin")
+        text = mock.read_text(encoding="utf-8")
+        self.assertIn("export const stableT", text)
+        self.assertIn("mockTranslation", text)
+        self.assertFalse(
+            (ROOT / "apps/web/src/test/mocks.ts").exists(),
+            "the Vue portal must not ship a second i18n mock — use the real "
+            "translator from apps/web/src/lib/i18n.ts",
+        )
 
     def test_shared_test_setup_restores_stubbed_globals(self) -> None:
         """The shared teardown must undo `vi.stubGlobal`, not just `vi.spyOn`.
@@ -1860,7 +1889,10 @@ class DeliveryArchitectureTests(unittest.TestCase):
                 self.assertIn("exit 1", text, script)
             else:
                 self.assertIn("set -euo pipefail", text, script)
-            self.assertTrue((ROOT / script).stat().st_mode & 0o111, script)
+            self.assertTrue(
+                _is_executable(script),
+                f"{script}: must be executable (filesystem or git index)",
+            )
 
     def test_shared_scripts_never_echo_credentials(self) -> None:
         for script in SHARED_SCRIPTS:
@@ -2101,7 +2133,7 @@ class DeliveryArchitectureTests(unittest.TestCase):
         """
         # 1. The helper exists in the apps that serve a dev server, matches the
         #    platform domains by pattern, and never defaults to a wildcard.
-        deployment = (ROOT / "apps/web/src/lib/deployment.ts").read_text(encoding="utf-8")
+        deployment = (ROOT / "packages/shared/src/deployment.ts").read_text(encoding="utf-8")
         self.assertIn("export function resolveDevAllowedHosts", deployment)
         self.assertIn(".cnb.space", deployment)
         self.assertIn(".cnb.run", deployment)

@@ -1,11 +1,11 @@
 /**
  * Shared helpers for the public-artifact suites.
  *
- * The web artifact is a replacement-render SPA: the build-time SSG markup is
- * inert and only becomes interactive after React's first commit ("handoff").
- * `main.tsx` announces that boundary on `<html data-app-ready>`, so a spec must
- * wait for it before interacting — otherwise a click can land on the static
- * fallback and be silently discarded.
+ * The web artifact is a replacement-render SPA: the build-time prerendered
+ * markup is inert and only becomes interactive after Vue's first commit
+ * ("handoff"). `apps/web/src/main.ts` announces that boundary on
+ * `<html data-app-ready>`, so a spec must wait for it before interacting —
+ * otherwise a click can land on the static fallback and be silently discarded.
  */
 import { expect, type Page } from "@playwright/test";
 

@@ -36,71 +36,9 @@
     "tools": "Tools"
   },
   "home": {
-    "newRelease": "New Release Available",
-    "title": "Multi-Species Mutant",
-    "titleHighlight": "Database",
-    "subtitle": "SoyMutDB is a comprehensive multi-species mutant database (soybean as the first/default species) providing massive variant data, gene information, mutant resources, and a genome browser to advance plant functional genomics research.",
-    "searchPlaceholder": "Search genes, variants, mutant lines",
-    "search": "Search",
-    "searchExamples": "e.g., Glyma.01G001000, Gm01:12345, EMS mutant",
-    "tryExamples": "Try:",
-    "taskGenes": "Browse genes",
-    "taskVariants": "Explore variants",
-    "taskBlast": "BLAST",
-    "statsSource": "Source: SoyMutDB API",
-    "browseGenome": "Genome Browser",
-    "blastSearch": "BLAST Search",
-    "downloads": "Downloads",
-    "statsTitle": "Data Statistics",
-    "statsSubtitle": "Comprehensive multi-species genome variant resources",
-    "totalVariants": "Total Variants",
-    "genes": "Genes",
-    "mutantLines": "Mutant Lines",
-    "seedAccessions": "Seed Accessions",
-    "snps": "SNPs",
-    "indels": "Indels",
-    "svs": "SVs",
-    "featuresTitle": "Core Features",
-    "featuresSubtitle": "Comprehensive bioinformatics tools for multi-species plant research",
-    "featureGenomeBrowser": "Genome Browser",
-    "featureGenomeBrowserDesc": "Interactive genome browser based on JBrowse 2 with multi-track visualization and deep linking.",
-    "featureVariantSearch": "Variant Search",
-    "featureVariantSearchDesc": "Powerful variant search with filtering by gene, region, impact, mutation type, and more.",
-    "featureBlast": "BLAST Alignment",
-    "featureBlastDesc": "Fast sequence alignment tool supporting nucleotide and protein searches.",
-    "featureAnalytics": "Visual Analytics",
-    "featureAnalyticsDesc": "Rich statistical charts and visual analysis to explore variant data in depth.",
-    "featureSeeds": "Seed Resources",
-    "featureSeedsDesc": "Rich mutant seed resources with online application and MTA support.",
-    "featureDocumentation": "Documentation",
-    "featureDocumentationDesc": "Comprehensive documentation and API reference to get started with SoyMutDB.",
-    "learnMore": "Learn More",
-    "dataOverview": "Data Overview",
-    "dataOverviewDesc": "Genome-wide variant distribution and impact classification",
-    "chromosomeDistribution": "Chromosome Distribution",
-    "chromosomeDistributionDesc": "Variant count distribution by chromosome",
-    "impactDistribution": "Impact Distribution",
-    "impactDistributionDesc": "Variant proportion by impact level",
-    "impactHigh": "High",
-    "impactModerate": "Moderate",
-    "impactLow": "Low",
-    "impactModifier": "Modifier",
-    "variantCount": "Variant Count",
-    "variants": "Variants",
-    "latestRelease": "Latest Release",
-    "latestReleaseDesc": "Latest data release with more mutant lines and improved annotation quality.",
-    "viewRelease": "View Release",
-    "downloadData": "Download Data",
-    "seeds": "Seeds",
-    "statsUnavailable": "Statistics temporarily unavailable",
-    "assembly": "Genome assembly",
-    "welcome": "Welcome",
-    "taskGeneId": "Gene ID",
-    "taskLocation": "Physical Location",
-    "taskJbrowse": "JBrowse 2",
-    "taskPrimer": "Primer Design",
-    "taskEntries": "Quick tools",
-    "offlineFallback": "Showing cached page (offline)"
+    "subtitle": "Soybean mutant database",
+    "tasks": "Research tasks",
+    "assemblies": "Genome assemblies"
   },
   "genes": {
     "title": "Gene Search",
@@ -321,7 +259,13 @@
     "hideTracks": "Hide track panel",
     "unavailable": "Genome browser is unavailable for this plugin/assembly.",
     "minimalUnavailableTitle": "Genome browser unavailable in minimal deployment",
-    "minimalUnavailableDescription": "This web-only deployment does not include JBrowse. Run the demo deployment mode to publish the interactive genome browser."
+    "minimalUnavailableDescription": "This web-only deployment does not include JBrowse. Run the demo deployment mode to publish the interactive genome browser.",
+    "locus": "Locus",
+    "assembly": "Assembly",
+    "openNewTab": "Open in a new tab",
+    "ready": "Browser ready",
+    "timeout": "The genome browser did not report ready. Retry the connection below.",
+    "loadError": "The genome browser failed to load."
   },
   "blast": {
     "title": "BLAST Search",
@@ -377,7 +321,9 @@
     "actions": {
       "gbrowse": "JBrowse 2",
       "geneSearch": "Gene search"
-    }
+    },
+    "jobName": "Job name",
+    "alignmentLength": "Alignment length"
   },
   "releases": {
     "title": "Data Releases",
@@ -493,7 +439,7 @@
     "registerSuccess": "Registration successful",
     "loginError": "Login failed",
     "registerError": "Registration failed",
-    "invalidCredentials": "Invalid username or password",
+    "invalidCredentials": "Invalid email or password.",
     "emailRequired": "Email is required",
     "usernameRequired": "Username is required",
     "passwordRequired": "Password is required",
@@ -644,6 +590,19 @@
   },
   "search": {
     "title": "Global Search",
+    "testPreview": {
+      "siteCount": "{count} unpublished test sites",
+      "siteCountColumn": "Test sites",
+      "resultSummary": "{count} matched, showing {shown}",
+      "associatedSites": "{count} associated test sites",
+      "feature": "Source feature",
+      "testLine": "Test line",
+      "confidence": "Confidence",
+      "available": "Available",
+      "yes": "Yes",
+      "no": "No",
+      "noSites": "No test sites matched this coordinate range."
+    },
     "subtitle": "Search genes, variants, mutant lines, and documentation",
     "openPalette": "Open search palette",
     "placeholder": "Enter search keywords...",
@@ -1016,12 +975,29 @@
     "noPublications": "No publications available"
   },
   "help": {
-    "title": "Help Center",
-    "subtitle": "Find answers and learn how to use SoyMutDB",
-    "gettingStarted": "Getting Started",
-    "faq": "Frequently Asked Questions",
-    "contact": "Contact Support",
-    "documentation": "Documentation"
+    "step1": "Pick a genome assembly. Every search, download and locus belongs to exactly one assembly, so the same identifier can look different across v4 and v5.",
+    "step2": "Search by gene ID, mutant public ID, or a genomic region. Results carry the chromosome, coordinates, and the release they were read from.",
+    "step3": "Open a gene or mutant line for the full record, then continue into JBrowse 2, downloads, or the research tools.",
+    "q1": {
+      "q": "Why does a gene ID return different coordinates in another assembly?",
+      "a": "Coordinates are assembly-scoped. v4 and v5 are separate coordinate namespaces, so a result always reports the assembly it came from instead of being merged."
+    },
+    "q2": {
+      "q": "Which release am I looking at?",
+      "a": "The release is shown in the page header and pinned on every request, so a page rendered from one release never mixes rows from another."
+    },
+    "q3": {
+      "q": "Can I search with an internal record identifier?",
+      "a": "No. Public searches accept public identifiers only; internal identifiers are not disclosed, and an unknown one is treated exactly like a released record that does not exist."
+    },
+    "q4": {
+      "q": "How do I download data?",
+      "a": "The downloads page issues short-lived presigned URLs scoped to your visibility and the active release."
+    },
+    "q5": {
+      "q": "What do the research tools need?",
+      "a": "Sequence fetch, expression patterns and enrichment all require an explicit assembly, because a region or a gene list is otherwise ambiguous."
+    }
   },
   "tools": {
     "title": "Tools",
@@ -1194,7 +1170,10 @@
     "submitAnother": "Submit another request",
     "errorTitle": "Could not submit request",
     "errorSubmit": "Something went wrong while submitting: {{message}}",
-    "privacyNote": "Your contact details are used solely to process this request and will not be shared with third parties."
+    "privacyNote": "Your contact details are used solely to process this request and will not be shared with third parties.",
+    "mutantLines": "Gene IDs",
+    "success": "Request submitted",
+    "submitFailed": "Could not submit the request"
   },
   "notifications": {
     "title": "Notifications",
@@ -1206,5 +1185,32 @@
     "analysisFailed": "Analysis failed",
     "gwasCompleted": "GWAS job completed",
     "gwasFailed": "GWAS job failed"
+  },
+  "analyses": {
+    "title": "Analysis Pipelines",
+    "subtitle": "Run read QC and single-cell clustering on your own data",
+    "noJobs": "No analysis jobs yet",
+    "submit": "Submit job",
+    "maxFileSize": "Each file may be at most 500 MiB. Uploads go straight to object storage through a short-lived presigned POST.",
+    "fastp": {
+      "title": "fastp — read QC",
+      "subtitle": "Trim and quality-filter FASTQ reads",
+      "files": "FASTQ files (single-end: 1 file, paired-end: R1 then R2)"
+    },
+    "scanpy": {
+      "title": "scanpy — single cell",
+      "subtitle": "Filter, select highly variable genes, reduce dimensions and cluster",
+      "files": "AnnData .h5ad file",
+      "useHvg": "Select highly variable genes"
+    },
+    "job": {
+      "title": "Analysis job"
+    }
+  },
+  "sra": {
+    "subtitle": "Look up run metadata from NCBI's Sequence Read Archive",
+    "accession": "Run accession",
+    "notFound": "Run not found",
+    "openInNcbi": "Open in NCBI"
   }
 }

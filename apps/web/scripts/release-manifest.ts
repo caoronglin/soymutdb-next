@@ -18,7 +18,7 @@
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, posix, relative, resolve } from "node:path";
-import { isProductionDeploymentMode } from "../src/lib/deployment";
+import { isProductionDeploymentMode } from "@soymutdb/shared/deployment";
 
 const MANIFEST_NAME = "manifest.json";
 const SHA256_NAME = "SHA256SUMS";

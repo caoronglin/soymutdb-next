@@ -2,7 +2,7 @@
 
 Two mutually exclusive request modes:
 
-- ``genes`` – batch extract the genomic span of up to 200 gene IDs.
+- ``genes`` – batch extract the genomic span of up to 200 gene IDs from one assembly.
 - ``assembly`` + ``region`` – extract a single ``chr:start-end`` interval
   from a named assembly.
 
@@ -36,13 +36,18 @@ class SeqFetchRequest(BaseModel):
     @model_validator(mode="after")
     def _validate_mode(self) -> SeqFetchRequest:
         has_genes = self.genes is not None and len(self.genes) > 0
-        has_region = self.assembly is not None or self.region is not None
+        has_region = self.region is not None
+        has_assembly_only = self.assembly is not None and self.region is None
         if has_genes and has_region:
             raise ValueError("provide either 'genes' or 'assembly'+'region', not both")
-        if has_region and (self.assembly is None or self.region is None):
+        if has_region and self.assembly is None:
+            raise ValueError("'assembly' and 'region' must be provided together")
+        if has_assembly_only and not has_genes:
             raise ValueError("'assembly' and 'region' must be provided together")
         if not has_genes and not has_region:
             raise ValueError("provide either 'genes' or 'assembly'+'region'")
+        if has_genes and self.assembly is None:
+            raise ValueError("'assembly' is required with 'genes'")
         if has_genes and self.genes is not None:
             # De-duplicate while preserving request order; an all-empty list
             # (e.g. [""]) falls through to the "provide either" error above.

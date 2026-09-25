@@ -119,6 +119,7 @@ def seq_env(monkeypatch):
         id=1,
         name="GmWm82.a2.v1",
         version="a2.v1",
+        release_id=7,
         fasta_url="s3://genomic-data/wm82.fa",
         fai_url="s3://genomic-data/wm82.fa.fai",
     )
@@ -168,12 +169,20 @@ class FakeDbSession:
         chromosomes: list[Chromosome] | None = None,
     ) -> None:
         self.genes = genes or []
-        self.assemblies = assemblies or []
+        self.assemblies = (
+            assemblies
+            if assemblies is not None
+            else list({gene.assembly for gene in self.genes if gene.assembly is not None})
+        )
         self.chromosomes = chromosomes or []
+        self.statements = []
 
     async def execute(self, stmt, params=None):  # noqa: ANN001
+        self.statements.append(stmt)
         table = str(stmt)
         name_value = None
+        assembly_id_value = None
+        release_id_value = None
         try:
             bound = stmt.compile().params
         except Exception:  # noqa: BLE001 – best-effort bound-param extraction
@@ -183,10 +192,24 @@ class FakeDbSession:
         for key, value in bound.items():
             if key.startswith("name"):
                 name_value = value
+            if key == "assembly_id_1":
+                assembly_id_value = value
+            if key.startswith("release_id"):
+                release_id_value = value
         if "FROM genes" in table:
-            return _Result(self.genes)
+            genes = self.genes
+            if assembly_id_value is not None:
+                genes = [gene for gene in genes if gene.assembly_id == assembly_id_value]
+            return _Result(genes)
         if "FROM assemblies" in table:
-            return _Result(self._filter_by_name(self.assemblies, name_value))
+            assemblies = self._filter_by_name(self.assemblies, name_value)
+            if release_id_value is not None:
+                assemblies = [
+                    assembly
+                    for assembly in assemblies
+                    if assembly.release_id == release_id_value
+                ]
+            return _Result(assemblies)
         if "FROM chromosomes" in table:
             return _Result(self._filter_by_name(self.chromosomes, name_value))
         return _Result([])
@@ -262,12 +285,22 @@ class TestFaiArithmetic:
 
 
 class TestGenesMode:
+    def test_release_scope_hides_assembly_from_another_release(self, seq_env) -> None:
+        seq_env.assembly.release_id = 8
+        session = FakeDbSession(assemblies=[seq_env.assembly])
+        request = SeqFetchRequest(assembly=seq_env.assembly.name, region="chr1:1-10")
+
+        with pytest.raises(AppValidationError, match="Unknown assembly"):
+            _run(SeqFetchService().extract(session, request, release_id=7))
+
+        assert "assemblies.release_id" in str(session.statements[0])
+
     def test_extract_by_gene_id(self, seq_env) -> None:
         gene = _make_gene(
             "Glyma.01G000100", seq_env.chr1, seq_env.assembly, start=1000, end=1200
         )
         session = FakeDbSession(genes=[gene])
-        request = SeqFetchRequest(genes=["Glyma.01G000100"])
+        request = SeqFetchRequest(assembly=seq_env.assembly.name, genes=["Glyma.01G000100"])
 
         response: SeqFetchResponse = _run(SeqFetchService().extract(session, request))
 
@@ -277,7 +310,7 @@ class TestGenesMode:
         assert response.missing == []
         assert response.download_url is None
         header, body = _inline(response).split("\n", 1)
-        assert header == ">Glyma.01G000100"
+        assert header == f">Glyma.01G000100 assembly={seq_env.assembly.name}"
         assert body.strip() == SEQUENCE[999:1200]
 
     def test_batch_missing_ids_reported_not_404(self, seq_env) -> None:
@@ -286,7 +319,8 @@ class TestGenesMode:
         )
         session = FakeDbSession(genes=[gene])
         request = SeqFetchRequest(
-            genes=["Glyma.01G000100", "Glyma.99G999999", "Glyma.98G888888"]
+            assembly=seq_env.assembly.name,
+            genes=["Glyma.01G000100", "Glyma.99G999999", "Glyma.98G888888"],
         )
 
         response = _run(SeqFetchService().extract(session, request))
@@ -294,6 +328,35 @@ class TestGenesMode:
         assert response.count == 1
         assert response.missing == ["Glyma.99G999999", "Glyma.98G888888"]
         assert _inline(response).startswith(">Glyma.01G000100")
+
+    def test_same_accession_is_selected_only_from_requested_assembly(self, seq_env) -> None:
+        other_assembly = Assembly(
+            id=2,
+            name="GmWm82.v5",
+            version="v5",
+            fasta_url="s3://genomic-data/wm82-v5.fa",
+            fai_url="s3://genomic-data/wm82-v5.fa.fai",
+        )
+        v4_gene = _make_gene(
+            "Glyma.01G000100", seq_env.chr1, seq_env.assembly, start=1, end=4
+        )
+        v5_chromosome = Chromosome(
+            id=3, assembly_id=other_assembly.id, name="chr1", length=CHR_LENGTH, order=1
+        )
+        v5_gene = _make_gene(
+            "Glyma.01G000100", v5_chromosome, other_assembly, start=5, end=8
+        )
+        session = FakeDbSession(genes=[v4_gene, v5_gene])
+        request = SeqFetchRequest(
+            assembly=seq_env.assembly.name, genes=["Glyma.01G000100"]
+        )
+
+        response = _run(SeqFetchService().extract(session, request))
+
+        assert response.count == 1
+        assert _inline(response) == (
+            f">Glyma.01G000100 assembly={seq_env.assembly.name}\n{SEQUENCE[:4]}\n"
+        )
 
     def test_batch_preserves_request_order_and_dedupes(self, seq_env) -> None:
         g2 = _make_gene(
@@ -304,18 +367,24 @@ class TestGenesMode:
         )
         session = FakeDbSession(genes=[g1, g2])
         request = SeqFetchRequest(
-            genes=["Glyma.02G000200", "Glyma.01G000100", "Glyma.02G000200"]
+            assembly=seq_env.assembly.name,
+            genes=["Glyma.02G000200", "Glyma.01G000100", "Glyma.02G000200"],
         )
 
         response = _run(SeqFetchService().extract(session, request))
 
         assert response.count == 2
         headers = [line for line in _inline(response).splitlines() if line.startswith(">")]
-        assert headers == [">Glyma.02G000200", ">Glyma.01G000100"]
+        assert headers == [
+            f">Glyma.02G000200 assembly={seq_env.assembly.name}",
+            f">Glyma.01G000100 assembly={seq_env.assembly.name}",
+        ]
 
     def test_all_missing_returns_empty_fasta(self, seq_env) -> None:
-        session = FakeDbSession(genes=[])
-        request = SeqFetchRequest(genes=["Glyma.99G999999"])
+        session = FakeDbSession(genes=[], assemblies=[seq_env.assembly])
+        request = SeqFetchRequest(
+            assembly=seq_env.assembly.name, genes=["Glyma.99G999999"]
+        )
         response = _run(SeqFetchService().extract(session, request))
         assert response.count == 0
         assert _inline(response) == ""
@@ -329,10 +398,16 @@ class TestGenesMode:
             "Glyma.03G000300", seq_env.chr1, assembly_no_files, start=1, end=10
         )
         session = FakeDbSession(genes=[gene])
-        request = SeqFetchRequest(genes=["Glyma.03G000300"])
+        request = SeqFetchRequest(assembly=assembly_no_files.name, genes=["Glyma.03G000300"])
         response = _run(SeqFetchService().extract(session, request))
         assert response.count == 0
         assert response.missing == ["Glyma.03G000300"]
+
+    def test_unknown_assembly_is_rejected_for_gene_mode(self) -> None:
+        session = FakeDbSession(genes=[], assemblies=[])
+        request = SeqFetchRequest(assembly="Unknown.v9", genes=["Glyma.01G000100"])
+        with pytest.raises(AppValidationError, match="Unknown assembly"):
+            _run(SeqFetchService().extract(session, request))
 
 
 # ---------------------------------------------------------------------------
@@ -439,7 +514,7 @@ class TestSizeTruncation:
             "Glyma.01G000100", seq_env.chr1, seq_env.assembly, start=1000, end=2000
         )
         session = FakeDbSession(genes=[gene])
-        request = SeqFetchRequest(genes=["Glyma.01G000100"])
+        request = SeqFetchRequest(assembly=seq_env.assembly.name, genes=["Glyma.01G000100"])
 
         response = _run(SeqFetchService().extract(session, request))
 
@@ -455,7 +530,7 @@ class TestSizeTruncation:
             "Glyma.01G000100", seq_env.chr1, seq_env.assembly, start=1000, end=1100
         )
         session = FakeDbSession(genes=[gene])
-        request = SeqFetchRequest(genes=["Glyma.01G000100"])
+        request = SeqFetchRequest(assembly=seq_env.assembly.name, genes=["Glyma.01G000100"])
         response = _run(SeqFetchService().extract(session, request))
         assert response.truncated is False
         assert response.download_url is None
@@ -484,6 +559,10 @@ class TestRequestSchema:
         with pytest.raises(PydanticValidationError, match="together"):
             SeqFetchRequest(assembly="GmWm82.a2.v1")
 
+    def test_genes_without_assembly_rejected(self) -> None:
+        with pytest.raises(PydanticValidationError, match="assembly"):
+            SeqFetchRequest(genes=["Glyma.01G000100"])
+
     def test_over_200_genes_rejected(self) -> None:
         with pytest.raises(PydanticValidationError):
             SeqFetchRequest(genes=[f"g{i}" for i in range(201)])
@@ -494,7 +573,10 @@ class TestRequestSchema:
 
     def test_service_rejects_over_200_genes(self, seq_env) -> None:
         session = FakeDbSession(genes=[])
-        request = SeqFetchRequest(genes=[f"g{i}" for i in range(200)])
+        request = SeqFetchRequest(
+            assembly=seq_env.assembly.name,
+            genes=[f"g{i}" for i in range(200)],
+        )
         # Bypass the pydantic cap (service is the second line of defense).
         request.genes = [f"g{i}" for i in range(201)]
         with pytest.raises(AppValidationError, match="200"):

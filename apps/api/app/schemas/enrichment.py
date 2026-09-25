@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -19,6 +20,8 @@ Mode = Literal["ora", "gsea"]
 class EnrichmentRequest(BaseModel):
     """POST /api/v1/tools/enrichment payload.
 
+    ``assembly_id`` is mandatory: both annotations and the statistical
+    background must be scoped to the selected assembly.
     ``genes`` are gene ids (e.g. ``Glyma.01G000100``); duplicates are
     tolerated and deduplicated server-side.  ``mode`` selects between the
     classic over-representation test (default, backwards compatible) and the
@@ -26,6 +29,13 @@ class EnrichmentRequest(BaseModel):
     is required in ``gsea`` mode and must align with ``genes`` 1:1.
     """
 
+    assembly_id: int = Field(
+        ge=1,
+        description=(
+            "Assembly database id; input genes, annotations, and background "
+            "are restricted to it."
+        ),
+    )
     genes: list[str] = Field(
         ...,
         min_length=1,
@@ -149,8 +159,8 @@ class EnrichmentGseaTerm(BaseModel):
     )
 
 
-class EnrichmentResponse(BaseModel):
-    """ORA enrichment analysis result."""
+class EnrichmentCalculationResponse(BaseModel):
+    """Internal ORA result before assembly context is attached."""
 
     mode: Literal["ora"] = Field(..., description="Analysis mode")
     ontology: Ontology
@@ -169,8 +179,28 @@ class EnrichmentResponse(BaseModel):
     )
 
 
-class EnrichmentGseaResponse(BaseModel):
-    """Rank-based (GSEA) enrichment analysis result."""
+class EnrichmentSource(BaseModel):
+    """Public, reproducible source identity for the annotation snapshot."""
+
+    name: str = Field(..., description="Annotation provider or dataset name")
+    version: str = Field(..., description="Provider's data release/version")
+    url: str = Field(..., description="Public HTTPS source page or download URL")
+    sha256: str = Field(..., description="SHA-256 of the imported source file")
+    imported_at: datetime = Field(..., description="UTC import timestamp")
+
+
+class EnrichmentResponse(EnrichmentCalculationResponse):
+    """ORA result with assembly, release, and annotation source context."""
+
+    assembly_id: int = Field(ge=1)
+    release_id: int = Field(ge=1)
+    assembly_name: str
+    assembly_version: str
+    annotation_source: EnrichmentSource | None
+
+
+class EnrichmentGseaCalculationResponse(BaseModel):
+    """Internal GSEA result before assembly context is attached."""
 
     mode: Literal["gsea"] = Field(..., description="Analysis mode")
     ontology: Ontology
@@ -189,3 +219,13 @@ class EnrichmentGseaResponse(BaseModel):
         default=None,
         description="Explanatory note, e.g. when no term passes min_genes",
     )
+
+
+class EnrichmentGseaResponse(EnrichmentGseaCalculationResponse):
+    """GSEA result with assembly, release, and annotation source context."""
+
+    assembly_id: int = Field(ge=1)
+    release_id: int = Field(ge=1)
+    assembly_name: str
+    assembly_version: str
+    annotation_source: EnrichmentSource | None

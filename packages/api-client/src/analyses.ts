@@ -11,6 +11,12 @@
  */
 
 import type { components } from "./generated/openapi";
+import {
+  calculateFileSha256,
+  calculateUploadProgress,
+  postWithProgress,
+} from "@soymutdb/shared/analyses-upload";
+import { recordRecentJob } from "@soymutdb/shared/analyses-local";
 import { http } from "./auth";
 
 export type AnalysisType = components["schemas"]["AnalysisType"];
@@ -89,4 +95,81 @@ export function getAnalysisDownload(
   return http.get<AnalysesDownloadResponse>(`/analyses/${jobId}/download`, {
     params: { object_key: objectKey },
   });
+}
+
+/**
+ * Checksum → presign → upload → submit pipeline for one analysis job.
+ *
+ * The pure hashing/upload helpers live in `@soymutdb/shared/analyses-upload`;
+ * the orchestration lives here because it is the module that owns both the
+ * presign and the submit request. Both frontends share it, so a change to the
+ * upload contract cannot land in one framework only.
+ */
+export async function submitAnalysisFiles(
+  type: AnalysisType,
+  options: {
+    files: File[];
+    params: Record<string, unknown>;
+    onProgress: (percent: number) => void;
+  },
+): Promise<string> {
+  const { files, params, onProgress } = options;
+  if (files.length === 0) throw new Error("Select at least one file first.");
+
+  onProgress(0);
+  const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
+  let uploadedBytes = 0;
+  let uploadedFiles = 0;
+
+  // Hash sequentially so peak JavaScript memory stays bounded to one slice
+  // while preserving the integrity contract.
+  const checksums: string[] = [];
+  for (const file of files) {
+    checksums.push(await calculateFileSha256(file));
+  }
+
+  // Presign every file before any object-store bytes move.
+  const presigned = await Promise.all(
+    files.map((file, index) =>
+      requestUpload(file.name, file.size, checksums[index]!, file.type || undefined).then(
+        (response) => ({
+          file,
+          uploadUrl: response.upload_url,
+          uploadMethod: response.upload_method,
+          uploadFields: response.upload_fields,
+          objectKey: response.object_key,
+        }),
+      ),
+    ),
+  );
+
+  const objectKeys: string[] = [];
+  for (const item of presigned) {
+    await postWithProgress(
+      item.uploadUrl,
+      item.uploadMethod,
+      item.uploadFields,
+      item.file,
+      (ratio: number) => {
+        onProgress(
+          calculateUploadProgress({
+            completedBytes: uploadedBytes,
+            totalBytes,
+            currentFileBytes: item.file.size,
+            currentFileRatio: ratio,
+            completedFiles: uploadedFiles,
+            totalFiles: files.length,
+          }),
+        );
+      },
+    );
+    uploadedBytes += item.file.size;
+    uploadedFiles += 1;
+    objectKeys.push(item.objectKey);
+  }
+
+  onProgress(100);
+  const response = await submitAnalysis(type, { inputObjects: objectKeys, params });
+  recordRecentJob(response.job_id);
+  return response.job_id;
 }

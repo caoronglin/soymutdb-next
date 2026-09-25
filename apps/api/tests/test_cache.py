@@ -21,6 +21,7 @@ import pytest
 
 from app.core.metrics import CACHE_LOOKUPS_TOTAL, CACHE_WRITE_FAILURES_TOTAL
 from app.services.cache import get_or_set, make_cache_key
+from app.services.release_context import ReleaseContext
 
 
 class FakeRedis:
@@ -306,12 +307,14 @@ class TestEndpointCacheIntegration:
 
         monkeypatch.setattr(genes_module, "get_or_set", _fake_get_or_set)
 
-        result = await genes_module.list_assemblies(db)
+        result = await genes_module.list_assemblies(
+            db, release_context=ReleaseContext(release_id=7)
+        )
 
         assert isinstance(result, list)
         assert isinstance(result[0], AssemblyResponse)
         assert result[0].name == "Wm82.a4.v1"
-        assert called["name"] == "genes:assemblies"
+        assert called["name"] == "genes:assemblies:release:7"
         assert called["ttl"] is None  # default TTL
 
     async def test_chromosome_density_cache_hit_skips_db(self, monkeypatch) -> None:
@@ -501,4 +504,3 @@ class TestCachedDecorator:
             "ttl": 60,
             "params": {"request_id": 9},
         }
-

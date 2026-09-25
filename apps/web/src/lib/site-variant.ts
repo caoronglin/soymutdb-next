@@ -1,26 +1,16 @@
-import type { SiteVariant } from "@soymutdb/api-client";
-
 /**
- * Explicit build-time site selection.  Unknown values fail safe to external
- * in the browser; the production build config rejects them before emitting an
- * artifact.  No visitor/request signal is consulted.
+ * Site-variant validation. Zero dependencies on purpose: vite.config.ts runs
+ * this at config time, before any app module (including the api-client) is
+ * loaded, so an illegal VITE_SITE_VARIANT fails the build instead of shipping a
+ * third, unhandled variant.
  */
-const configuredVariant = String(import.meta.env.VITE_SITE_VARIANT ?? "external")
-  .trim()
-  .toLowerCase();
 
-export const SITE_VARIANT: SiteVariant = configuredVariant === "internal"
-  ? "internal"
-  : "external";
+export type SiteVariant = "external" | "internal";
 
-export const IS_INTERNAL_SITE = SITE_VARIANT === "internal";
-
-export const SITE_VARIANT_LABELS: Record<SiteVariant, string> = {
-  external: "External site",
-  internal: "Internal site",
-};
-
-export const SITE_VARIANT_LABELS_ZH: Record<SiteVariant, string> = {
-  external: "外部站点",
-  internal: "内部站点",
-};
+export function resolveSiteVariant(value: unknown): SiteVariant {
+  if (value === undefined || value === null || value === "") return "external";
+  if (value === "external" || value === "internal") return value;
+  throw new Error(
+    `VITE_SITE_VARIANT must be exactly "external" or "internal"; got ${JSON.stringify(value)}`,
+  );
+}

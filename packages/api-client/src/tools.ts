@@ -14,12 +14,48 @@ import { request, TimeoutPresets } from "./client";
 
 export type SeqFetchRequest = components["schemas"]["SeqFetchRequest"];
 export type SeqFetchResponse = components["schemas"]["SeqFetchResponse"];
-export type EnrichmentRequest = components["schemas"]["EnrichmentRequest"];
-export type EnrichmentResponse = components["schemas"]["EnrichmentResponse"];
+export type EnrichmentRequest = Omit<
+  components["schemas"]["EnrichmentRequest"],
+  "genes"
+> & {
+  /** Required assembly database id used for input and background annotations. */
+  assembly_id: number;
+  genes: string[];
+};
+type AssemblyScopedAnalysis = {
+  assembly_id: number;
+  release_id: number;
+  assembly_name: string;
+  assembly_version: string;
+};
+export type EnrichmentSource = {
+  name: string;
+  version: string;
+  url: string;
+  sha256: string;
+  imported_at: string;
+};
+type EnrichmentSourceContext = {
+  annotation_source: EnrichmentSource | null;
+};
+export type EnrichmentResponse =
+  components["schemas"]["EnrichmentResponse"] &
+  AssemblyScopedAnalysis &
+  EnrichmentSourceContext;
 export type EnrichmentTerm = components["schemas"]["EnrichmentTerm"];
-export type EnrichmentGseaResponse = components["schemas"]["EnrichmentGseaResponse"];
+export type EnrichmentGseaResponse =
+  components["schemas"]["EnrichmentGseaResponse"] &
+  AssemblyScopedAnalysis &
+  EnrichmentSourceContext;
 export type EnrichmentGseaTerm = components["schemas"]["EnrichmentGseaTerm"];
-export type ExpPatternRequest = components["schemas"]["ExpPatternRequest"];
+export type ExpPatternRequest = Omit<
+  components["schemas"]["ExpPatternRequest"],
+  "genes"
+> & {
+  /** Required assembly database id; included here until the OpenAPI snapshot is regenerated. */
+  assembly_id: number;
+  genes: string[];
+};
 
 /**
  * Exppattern response shape (local — the backend route returns a raw dict
@@ -29,22 +65,26 @@ export type ExpPatternRequest = components["schemas"]["ExpPatternRequest"];
  * non-null cells (`[null, null]` when empty).
  */
 export interface ExpPatternResponse {
+  assembly_id: number;
+  release_id: number;
+  assembly_name: string;
+  assembly_version: string;
   genes: string[];
   conditions: string[];
   matrix: (number | null)[][];
   row_order: number[];
   clustering: "input" | "mean_sort" | "hierarchical" | "none";
-  value_range: (number | null)[];
+  value_range: [number | null, number | null];
   missing_genes: string[];
   scale: "zscore" | "none";
 }
 
-/** Batch-extract FASTA for up to 200 gene IDs (unknown IDs land in `missing`). */
-export function seqFetchGenes(genes: string[]): Promise<SeqFetchResponse> {
+/** Batch-extract FASTA for up to 200 gene IDs in one explicit assembly. */
+export function seqFetchGenes(assembly: string, genes: string[]): Promise<SeqFetchResponse> {
   return request<SeqFetchResponse>("/tools/seqfetch", {
     method: "POST",
     auth: false,
-    json: { genes } satisfies SeqFetchRequest,
+    json: { assembly, genes } satisfies SeqFetchRequest,
     timeoutMs: TimeoutPresets.CRITICAL,
   });
 }
@@ -63,8 +103,10 @@ export function seqFetchRegion(
 }
 
 /** GO/KEGG hypergeometric enrichment over a gene list (public). */
-export function runEnrichment(req: EnrichmentRequest): Promise<EnrichmentResponse> {
-  return request<EnrichmentResponse>("/tools/enrichment", {
+export function runEnrichment(
+  req: EnrichmentRequest,
+): Promise<EnrichmentResponse | EnrichmentGseaResponse> {
+  return request<EnrichmentResponse | EnrichmentGseaResponse>("/tools/enrichment", {
     method: "POST",
     auth: false,
     json: req,

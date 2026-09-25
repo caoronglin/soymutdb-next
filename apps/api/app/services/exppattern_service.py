@@ -20,9 +20,9 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..core.exceptions import ValidationError
+from ..core.exceptions import NotFoundError, ValidationError
 from ..models.expression import ExpressionData, ExpressionLibrary
-from ..models.genomic import Gene
+from ..models.genomic import Assembly, Gene
 
 MAX_GENES = 50
 MAX_CONDITIONS = 200
@@ -115,14 +115,18 @@ def cluster_row_order(matrix: list[list[float | None]]) -> tuple[list[int], str]
 
 async def fetch_expression_pattern(
     db: AsyncSession,
+    assembly_id: int,
     genes: list[str],
     conditions: list[str] | None = None,
     *,
+    release_id: int,
     cluster_rows: bool = False,
     scale: str = "zscore",
 ) -> dict[str, Any]:
     """Aggregate expression values into a gene × condition matrix.
 
+    * ``assembly_id`` / ``release_id`` — both are required; the assembly must
+      belong to the resolved published release.
     * ``genes`` — gene ids, 1..50 (duplicates are de-duplicated).
     * ``conditions`` — library names to include; ``None``/empty means all.
     * ``cluster_rows`` — reorder rows (hierarchical if SciPy present, else
@@ -145,9 +149,24 @@ async def fetch_expression_pattern(
         )
     genes = list(dict.fromkeys(genes))  # preserve order, drop duplicates
 
-    # Resolve condition set (libraries).  library_name may repeat across
-    # libraries; de-duplicate by name, first occurrence wins.
-    lib_stmt = select(ExpressionLibrary).order_by(ExpressionLibrary.id.asc())
+    assembly_result = await db.execute(
+        select(Assembly).where(
+            Assembly.id == assembly_id,
+            Assembly.release_id == release_id,
+        )
+    )
+    assembly = assembly_result.scalars().first()
+    if assembly is None:
+        raise NotFoundError(f"Assembly {assembly_id} not found")
+
+    # Resolve condition set only inside the selected assembly.  Library names
+    # may repeat across assemblies, so filtering after de-duplication would
+    # silently mix separate coordinate/expression namespaces.
+    lib_stmt = (
+        select(ExpressionLibrary)
+        .where(ExpressionLibrary.assembly_id == assembly_id)
+        .order_by(ExpressionLibrary.id.asc())
+    )
     if conditions:
         lib_stmt = lib_stmt.where(ExpressionLibrary.library_name.in_(conditions))
     lib_result = await db.execute(lib_stmt)
@@ -163,7 +182,8 @@ async def fetch_expression_pattern(
     # accession in multiple assemblies) are rejected so a matrix cell can
     # never mix v4/v5 data silently.
     acc_stmt = select(Gene.accession, Gene.gene_pk).where(
-        Gene.accession.in_(genes)
+        Gene.assembly_id == assembly_id,
+        Gene.accession.in_(genes),
     )
     acc_result = await db.execute(acc_stmt)
     pk_by_accession: dict[str, list[int]] = {}
@@ -186,7 +206,10 @@ async def fetch_expression_pattern(
     data_stmt = (
         select(ExpressionData)
         .join(ExpressionLibrary, ExpressionData.library_id == ExpressionLibrary.id)
-        .where(ExpressionData.gene_id.in_(resolved_pks))
+        .where(
+            ExpressionData.gene_id.in_(resolved_pks),
+            ExpressionLibrary.assembly_id == assembly_id,
+        )
         .order_by(ExpressionData.library_id.asc())
     )
     if conditions:
@@ -223,6 +246,10 @@ async def fetch_expression_pattern(
     value_range = [min(flat), max(flat)] if flat else [None, None]
 
     return {
+        "assembly_id": assembly.id,
+        "release_id": release_id,
+        "assembly_name": assembly.name,
+        "assembly_version": assembly.version,
         "genes": genes,
         "conditions": condition_names,
         "matrix": matrix_out,

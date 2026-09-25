@@ -21,20 +21,27 @@ must not carry demo fixtures or placeholder origins.
 `demo`/`minimal`/`standard`). `isProductionDeploymentMode(value)` is the single
 source of truth the build scripts consult.
 
-### 2. SSG & sample generation fail closed
+### 2. The portal ships no embedded fallback data
 
-`apps/web/scripts/ssg-build.ts` and `apps/web/scripts/generate-samples.ts` opt
-into the guard via `isProductionDeploymentMode(process.env.VITE_DEPLOYMENT_MODE)`.
+The React portal embedded demonstration fixtures and silently fell back to them
+when the API was unreachable, which is how a demo page could be promoted as a
+release. The Vue portal (`apps/web`) has no fallback-data module at all: every
+page drives its table from the API and renders an explicit empty/error state
+when the API is unavailable. There is therefore no silent-fallback path to guard
+— the guard that remains is the deployment-origin check in the Vite config,
+which aborts the build when no API/JBrowse origin is configured, and the strict
+artifact scan that rejects demo fixtures and placeholder origins.
 
-- `ssg-build.ts`: in `production`, `PRODUCTION_MODE && !apiAvailable` **throws**
-  instead of silently using embedded fallback pages. The API base is REQUIRED
-  (`SOYMUTDB_API_URL`/`VITE_API_BASE_URL`); it no longer falls back to
-  `http://localhost:8000`.
-- `generate-samples.ts`: in `production`, it is a hard error to combine
-  `VITE_DEPLOYMENT_MODE=production` with a demo publication mode or a demo
-  deployment, and the generator never reads `FALLBACK_VARIANTS`.
+### 3. CSP finalization fails closed
 
-### 3. Release manifest (real release_id + SHA-256)
+`apps/web/scripts/finalize-csp.ts` is appended to the web `build` chain and runs
+after the last HTML writer. It refuses to continue when `dist/_headers` is
+missing or carries no `Content-Security-Policy` line, because an artifact whose
+site-wide policy is unknown is worse than no artifact at all. See
+`docs/dev/configurable-table-views.md` for the same fail-closed reasoning on the
+column-template resolution path.
+
+### 4. Release manifest (real release_id + SHA-256)
 
 `apps/web/scripts/release-manifest.ts` is appended to the web `build` chain. In
 `production` it:

@@ -139,6 +139,10 @@ def script_hashes(policy: str) -> set[str]:
     return {t for t in parse_csp(policy).get("script-src", []) if t.startswith("sha256-")}
 
 
+def script_tokens(policy: str) -> list[str]:
+    return [t for t in parse_csp(policy).get("script-src", [])]
+
+
 def read_headers_csp(path: Path, report: Report) -> str | None:
     text = path.read_text(encoding="utf-8")
     match = HEADERS_CSP_RE.search(text)
@@ -177,8 +181,12 @@ def check_portal_variant(artifact: Path, report: Report) -> None:
     # Finalization proof: a real origin, and no inline-script permission.
     if "'unsafe-inline'" in site_map.get("script-src", []):
         report.fail(headers, "script-src still allows 'unsafe-inline' (finalizer did not run?)")
-    if not script_hashes(site_csp):
-        report.fail(headers, "script-src carries no sha256 hash: the finalizer did not run")
+    # A document set with no inline scripts legitimately finalizes to an empty
+    # hash union, so "no hash" is not evidence either way. What *is* checkable is
+    # that the header policy came from the finalizer rather than from the
+    # pre-finalization source file: the finalizer drops 'unsafe-inline' from
+    # script-src, which the source `_headers` carries. The origin check below is
+    # the second half of the same proof.
     connect = site_map.get("connect-src", [])
     if not [t for t in connect if t.startswith("http")]:
         report.fail(

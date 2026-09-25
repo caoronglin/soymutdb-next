@@ -64,4 +64,6 @@ export * from "./admin-settings";
 export * from "./page-definitions";
 
 export * from "./capabilities";
+export * from "./table-views";
 export * from "./ontology";
+export * from "./test-data-preview";

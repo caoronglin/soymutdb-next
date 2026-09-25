@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# SoyMutDB — build the web and admin static applications
+# SoyMutDB — build the (Vue) portal and the admin static applications
 # =============================================================================
 # Shared by the baseline validation job and by any caller that needs the two
 # static bundles without the full verification gate set (i18n, budgets,

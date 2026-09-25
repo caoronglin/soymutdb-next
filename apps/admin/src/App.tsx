@@ -50,6 +50,7 @@ const WidgetHealthPage = lazy(() => import("./routes/widget-health"));
 const PageBuilderIndexPage = lazy(() => import("./routes/page-builder/index"));
 const PageBuilderEditPage = lazy(() => import("./routes/page-builder/$pageId"));
 const PublicationsAdminPage = lazy(() => import("./routes/publications"));
+const TableViewsPage = lazy(() => import("./routes/table-views"));
 
 /** Loading fallback for lazy-loaded routes. */
 function RouteLoading() {
@@ -291,6 +292,12 @@ const publicationsAdminRoute = createRoute({
   component: () => withSuspense(PublicationsAdminPage),
 });
 
+const tableViewsRoute = createRoute({
+  getParentRoute: () => authLayoutRoute,
+  path: "/table-views",
+  component: () => withSuspense(TableViewsPage),
+});
+
 const routeTree = rootRoute.addChildren([
   loginRoute,
   authLayoutRoute.addChildren([
@@ -326,6 +333,7 @@ const routeTree = rootRoute.addChildren([
     pageBuilderIndexRoute,
     pageBuilderEditRoute,
     publicationsAdminRoute,
+    tableViewsRoute,
   ]),
 ]);
 

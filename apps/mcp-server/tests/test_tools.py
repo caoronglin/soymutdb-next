@@ -381,12 +381,13 @@ class TestSeqFetch:
             )
 
         with _patch_client(handler):
-            result = asyncio.run(server.seqfetch(genes=["G1"]))
+            result = asyncio.run(server.seqfetch(assembly="Wm82.v5", genes=["G1"]))
 
         assert captured["method"] == "POST"
         assert captured["url"] == "http://localhost:8000/api/v1/tools/seqfetch"
-        assert captured["json"] == {"genes": ["G1"]}
+        assert captured["json"] == {"assembly": "Wm82.v5", "genes": ["G1"]}
         assert result["sequence"] == ">G1\nACGT"
+        assert result["assembly"] == "Wm82.v5"
         assert result["missing"] == ["G2"]
 
     def test_region_mode_payload(self):

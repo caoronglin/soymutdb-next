@@ -18,7 +18,7 @@ authenticated transport.
 | `variant_by_region` | read | `GET /api/v1/variants/region` | |
 | `news_list`       | read   | `GET /api/v1/news`          | category + pagination |
 | `stats_summary`   | read   | `GET /api/v1/stats/dashboard` | |
-| `seqfetch`        | read   | `POST /api/v1/tools/seqfetch` | genes[] or region mode |
+| `seqfetch`        | read   | `POST /api/v1/tools/seqfetch` | assembly-scoped genes[] or region mode |
 | `blast_submit`    | write  | `POST /api/v1/blast/jobs`   | async; returns job + submitter token |
 | `blast_job_status` | write | `GET /api/v1/blast/jobs/{id}` | ownership-checked polling |
 | `analyses_query`  | write  | `GET /api/v1/analyses/{id}` | ownership-checked result polling |

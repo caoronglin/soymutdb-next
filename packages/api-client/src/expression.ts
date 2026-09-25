@@ -3,15 +3,18 @@ import { http } from "./auth";
 export interface ExpressionRecord {
   library_id: number;
   library_name: string;
-  fpkm: number;
-  tpm: number;
+  fpkm: number | null;
+  tpm: number | null;
   tissue: string;
   treatment: string;
+  raw_count?: number | null;
 }
 
 export interface GeneExpressionResponse {
   gene_id: string;
   expressions: ExpressionRecord[];
+  next_cursor: number | null;
+  has_more: boolean;
 }
 
 export interface ExpressionLibrary {
@@ -33,6 +36,8 @@ export async function getGeneExpression(
     treatment?: string;
     min_fpkm?: number;
     max_fpkm?: number;
+    cursor?: number;
+    limit?: number;
   },
 ): Promise<GeneExpressionResponse> {
   return http.get<GeneExpressionResponse>(`/expression/genes/${geneId}/expression`, {

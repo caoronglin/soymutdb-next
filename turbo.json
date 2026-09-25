@@ -5,7 +5,9 @@
     "VITE_API_BASE_URL",
     "VITE_JBROWSE_BASE_URL",
     "SOYMUTDB_PORTAL_ORIGIN",
-    "SOYMUTDB_ADMIN_ORIGIN"
+    "SOYMUTDB_ADMIN_ORIGIN",
+    "VITE_SITE_VARIANT",
+    "VITE_BASE_URL"
   ],
   "tasks": {
     "build": {
@@ -15,6 +17,7 @@
         "CI",
         "CONTENT_SNAPSHOT_URL",
         "NODE_ENV",
+        "RAYON_NUM_THREADS",
         "SITE_BASE_URL",
         "SOYMUTDB_API_URL",
         "SOYMUTDB_FETCH_TIMEOUT",
@@ -29,7 +32,10 @@
         "VITE_JBROWSE_DATA_URL",
         "VITE_JBROWSE_URL",
         "VITE_PUBLIC_URL",
-        "VITE_SW_ENABLED"
+        "VITE_SW_ENABLED",
+        "VITE_SITE_VARIANT",
+        "SOYMUTDB_EMIT_GZ",
+        "SOYMUTDB_VUE_DIST_DIR"
       ]
     },
     "build:web": {

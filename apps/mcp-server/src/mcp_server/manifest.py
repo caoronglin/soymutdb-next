@@ -135,18 +135,19 @@ TOOLS: list[dict[str, object]] = [
     {
         "name": "seqfetch",
         "type": "read",
-        "description": "Extract sequences by gene ids or chromosome interval.",
+        "description": "Extract sequences from one explicit assembly by gene ids or chromosome interval.",
         "endpoint": "POST /api/v1/tools/seqfetch",
         "status": "implemented",
         "auth": "public (API bearer forwarded when configured)",
         "rate_limit": "global 60/min per client",
         "inputs": {
-            "genes": "list[str], optional — batch mode (<= 200 ids)",
-            "assembly": "str, optional — required together with 'region'",
+            "genes": "list[str], optional — batch mode (<= 200 ids; requires assembly)",
+            "assembly": "str, required for either gene-list or region mode",
             "region": "str, optional — 1-based interval 'chr1:1000-2000'",
         },
         "outputs": {
             "format": "str ('fasta')",
+            "assembly": "str | None — assembly used for all returned sequences",
             "sequence": "str | None — inline FASTA when under the size cap",
             "count": "int",
             "truncated": "bool",

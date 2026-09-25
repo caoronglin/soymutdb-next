@@ -1,39 +1,16 @@
 /// <reference types="vite/client" />
 
-declare const __SOYMUTDB_INTERNAL_SITE__: boolean;
-
+// Deployment inputs consumed by the Vue portal. Declared explicitly so views
+// cannot read an unvalidated/untyped env value (or invent a differently named
+// variable such as VITE_JBROWSE_URL) without a type error.
 interface ImportMetaEnv {
-    readonly VITE_SOYMUTDB_RELEASE_ID?: string;
+  readonly VITE_API_BASE_URL?: string;
+  readonly VITE_BASE_URL?: string;
+  readonly VITE_JBROWSE_BASE_URL?: string;
+  readonly VITE_SITE_VARIANT?: string;
+  readonly VITE_SOYMUTDB_RELEASE_ID?: string;
 }
 
-// Web Worker module declarations — allow `import WorkerUrl from './foo.worker.ts?worker'`
-declare module '*.worker.ts?worker' {
-    const WorkerConstructor: { new (): Worker };
-    export default WorkerConstructor;
-}
-declare module '*.worker?worker' {
-    const WorkerConstructor: { new (): Worker };
-    export default WorkerConstructor;
-}
-
-// View Transitions API (not yet in lib.dom for all TS versions).
-interface ViewTransition {
-    finished: Promise<void>;
-    ready: Promise<void>;
-    updateCallbackDone: Promise<void>;
-    skipTransition(): void;
-}
-
-interface Document {
-    startViewTransition?(updateCallback: () => Promise<void> | void): ViewTransition;
-}
-
-// Network Information API (partial, for saveData).
-interface NetworkInformation {
-    readonly saveData?: boolean;
-    readonly effectiveType?: string;
-    readonly downlink?: number;
-}
-interface Navigator {
-    readonly connection?: NetworkInformation;
+interface ImportMeta {
+  readonly env: ImportMetaEnv;
 }

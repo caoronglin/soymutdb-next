@@ -67,6 +67,12 @@ class Assembly(Base, TimestampMixin):
         lazy="joined",
     )
 
+    # Enables annotation rows to enforce that their assembly and release
+    # belong together through a composite foreign key.
+    __table_args__ = (
+        UniqueConstraint("id", "release_id", name="uq_assemblies_id_release"),
+    )
+
     def __repr__(self) -> str:
         return f"<Assembly id={self.id} name={self.name!r}>"
 

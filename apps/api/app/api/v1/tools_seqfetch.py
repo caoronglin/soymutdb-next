@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.database import get_db
 from ...schemas.seqfetch import SeqFetchRequest, SeqFetchResponse
+from ...services.release_context import ReleaseContext, get_release_context
 from ...services.seqfetch_service import SeqFetchService
 
 router = APIRouter(prefix="/tools/seqfetch", tags=["tools"])
@@ -22,6 +23,7 @@ service = SeqFetchService()
 async def seqfetch(
     request: SeqFetchRequest,
     db: AsyncSession = Depends(get_db),
+    release_context: ReleaseContext = Depends(get_release_context),
 ) -> SeqFetchResponse:
     """Extract sequences for up to 200 gene IDs, or one chromosome interval.
 
@@ -33,4 +35,6 @@ async def seqfetch(
     Results larger than 10 MiB are stored in S3 and returned with a
     pre-signed ``download_url`` (600 s) instead of inline FASTA.
     """
-    return await service.extract(db, request)
+    return await service.extract(
+        db, request, release_id=release_context.release_id
+    )

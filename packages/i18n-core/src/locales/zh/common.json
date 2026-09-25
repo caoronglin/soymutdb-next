@@ -36,71 +36,9 @@
     "tools": "工具"
   },
   "home": {
-    "newRelease": "新版本可用",
-    "title": "多物种突变体",
-    "titleHighlight": "数据库",
-    "subtitle": "SoyMutDB 是一个综合性多物种突变体数据库（当前以大豆为首个/默认物种），提供海量变异数据、基因信息、突变体资源和基因组浏览器，推动植物功能基因组学研究。",
-    "searchPlaceholder": "搜索基因、变异、突变系",
-    "search": "搜索",
-    "searchExamples": "例如：Glyma.01G001000、Gm01:12345、EMS 突变体",
-    "tryExamples": "试试：",
-    "taskGenes": "浏览基因",
-    "taskVariants": "探索变异",
-    "taskBlast": "BLAST",
-    "statsSource": "数据来源：SoyMutDB API",
-    "browseGenome": "基因组浏览器",
-    "blastSearch": "BLAST 搜索",
-    "downloads": "下载数据",
-    "statsTitle": "数据统计",
-    "statsSubtitle": "全面的多物种基因组变异资源",
-    "totalVariants": "变异总数",
-    "genes": "基因数",
-    "mutantLines": "突变系数",
-    "seedAccessions": "种子资源数",
-    "snps": "SNP 数",
-    "indels": "Indel 数",
-    "svs": "结构变异数",
-    "featuresTitle": "核心功能",
-    "featuresSubtitle": "为多物种植物研究提供全面的生物信息学工具",
-    "featureGenomeBrowser": "基因组浏览器",
-    "featureGenomeBrowserDesc": "基于 JBrowse 2 的交互式基因组浏览器，支持多轨道可视化和深链接。",
-    "featureVariantSearch": "变异搜索",
-    "featureVariantSearchDesc": "强大的变异搜索功能，支持按基因、区域、影响、突变类型等筛选。",
-    "featureBlast": "BLAST 比对",
-    "featureBlastDesc": "快速序列比对工具，支持核苷酸和蛋白质搜索。",
-    "featureAnalytics": "可视化分析",
-    "featureAnalyticsDesc": "丰富的统计图表和可视化分析，深入探索变异数据。",
-    "featureSeeds": "种子资源",
-    "featureSeedsDesc": "丰富的突变体种子资源，支持在线申请和 MTA 协议。",
-    "featureDocumentation": "文档",
-    "featureDocumentationDesc": "完整的文档和 API 参考，帮助您快速上手 SoyMutDB。",
-    "learnMore": "了解更多",
-    "dataOverview": "数据概览",
-    "dataOverviewDesc": "全基因组变异分布和影响分类",
-    "chromosomeDistribution": "染色体分布",
-    "chromosomeDistributionDesc": "各染色体变异计数分布",
-    "impactDistribution": "影响分布",
-    "impactDistributionDesc": "按影响等级的变异占比",
-    "impactHigh": "高",
-    "impactModerate": "中",
-    "impactLow": "低",
-    "impactModifier": "修饰",
-    "variantCount": "变异数量",
-    "variants": "变异",
-    "latestRelease": "最新版本",
-    "latestReleaseDesc": "最新数据版本，包含更多突变系和更高质量的注释。",
-    "viewRelease": "查看版本",
-    "downloadData": "下载数据",
-    "seeds": "种子",
-    "statsUnavailable": "统计数据暂不可用",
-    "assembly": "基因组版本",
-    "welcome": "欢迎",
-    "taskGeneId": "基因 ID",
-    "taskLocation": "物理位置",
-    "taskJbrowse": "JBrowse 2",
-    "taskPrimer": "引物设计",
-    "taskEntries": "快速工具",
-    "offlineFallback": "显示缓存页面（离线）"
+    "subtitle": "大豆突变体数据库",
+    "tasks": "研究任务",
+    "assemblies": "基因组组装"
   },
   "genes": {
     "title": "基因搜索",
@@ -321,7 +259,13 @@
     "hideTracks": "隐藏轨道面板",
     "unavailable": "此插件或装配未提供可用的基因组浏览器。",
     "minimalUnavailableTitle": "最小化部署未包含基因组浏览器",
-    "minimalUnavailableDescription": "此仅含 Web 的部署不包含 JBrowse。请使用 demo 部署模式发布交互式基因组浏览器。"
+    "minimalUnavailableDescription": "此仅含 Web 的部署不包含 JBrowse。请使用 demo 部署模式发布交互式基因组浏览器。",
+    "locus": "位点",
+    "assembly": "基因组组装",
+    "openNewTab": "在新标签页打开",
+    "ready": "浏览器已就绪",
+    "timeout": "基因组浏览器未报告就绪。请在下方重试连接。",
+    "loadError": "基因组浏览器加载失败。"
   },
   "blast": {
     "title": "BLAST 搜索",
@@ -377,7 +321,9 @@
     "actions": {
       "gbrowse": "JBrowse 2",
       "geneSearch": "基因搜索"
-    }
+    },
+    "jobName": "任务名称",
+    "alignmentLength": "比对长度"
   },
   "releases": {
     "title": "数据版本",
@@ -493,7 +439,7 @@
     "registerSuccess": "注册成功",
     "loginError": "登录失败",
     "registerError": "注册失败",
-    "invalidCredentials": "用户名或密码错误",
+    "invalidCredentials": "邮箱或密码不正确。",
     "emailRequired": "请输入邮箱",
     "usernameRequired": "请输入用户名",
     "passwordRequired": "请输入密码",
@@ -644,6 +590,19 @@
   },
   "search": {
     "title": "全局搜索",
+    "testPreview": {
+      "siteCount": "{count} 个未发布测试位点",
+      "siteCountColumn": "测试位点数",
+      "resultSummary": "命中 {count} 条，显示 {shown} 条",
+      "associatedSites": "关联 {count} 个测试位点",
+      "feature": "来源特征",
+      "testLine": "测试材料",
+      "confidence": "置信度",
+      "available": "可获得",
+      "yes": "是",
+      "no": "否",
+      "noSites": "该坐标范围内没有匹配的测试位点。"
+    },
     "subtitle": "搜索基因、变异、突变系和文档",
     "openPalette": "打开搜索",
     "placeholder": "输入搜索关键词...",
@@ -1016,12 +975,29 @@
     "noPublications": "暂无文献"
   },
   "help": {
-    "title": "帮助中心",
-    "subtitle": "查找答案并学习如何使用 SoyMutDB",
-    "gettingStarted": "快速开始",
-    "faq": "常见问题",
-    "contact": "联系支持",
-    "documentation": "文档"
+    "step1": "先选择基因组组装。检索、下载与位点都只属于一个组装，因此同一标识符在 v4 与 v5 中的坐标可以不同。",
+    "step2": "按基因 ID、突变体公开 ID 或基因组区间检索。结果会标注染色体、坐标以及数据所属的 release。",
+    "step3": "打开基因或突变体详情查看完整记录，再进入 JBrowse 2、下载或研究工具。",
+    "q1": {
+      "q": "为什么同一个基因 ID 在另一个组装中坐标不同？",
+      "a": "坐标按组装划分。v4 与 v5 是两套独立的坐标体系，结果只会报告它来自的组装，不会相互合并。"
+    },
+    "q2": {
+      "q": "我看的是哪个 release？",
+      "a": "release 显示在页头，并固定用于每个请求，因此来自某一 release 的页面不会混入其它 release 的数据。"
+    },
+    "q3": {
+      "q": "可以用内部记录标识符检索吗？",
+      "a": "不可以。公开检索只接受公开标识符；内部标识符不会暴露，未知内部 ID 的返回与不存在的记录完全一致。"
+    },
+    "q4": {
+      "q": "如何下载数据？",
+      "a": "下载页会签发短时效的预签名 URL，范围限定在你的可见性与当前 release。"
+    },
+    "q5": {
+      "q": "研究工具需要什么？",
+      "a": "序列提取、表达谱与富集分析都要求显式指定组装，否则区间或基因列表存在歧义。"
+    }
   },
   "tools": {
     "title": "工具",
@@ -1194,7 +1170,10 @@
     "submitAnother": "再提交一份申请",
     "errorTitle": "提交失败",
     "errorSubmit": "提交时出错：{{message}}",
-    "privacyNote": "您的联系方式仅用于处理本次申请，不会与第三方共享。"
+    "privacyNote": "您的联系方式仅用于处理本次申请，不会与第三方共享。",
+    "mutantLines": "基因 ID",
+    "success": "申请已提交",
+    "submitFailed": "提交失败"
   },
   "notifications": {
     "title": "消息通知",
@@ -1206,5 +1185,32 @@
     "analysisFailed": "分析任务失败",
     "gwasCompleted": "GWAS 任务已完成",
     "gwasFailed": "GWAS 任务失败"
+  },
+  "analyses": {
+    "title": "分析流程",
+    "subtitle": "对自有数据运行读段质控与单细胞聚类",
+    "noJobs": "暂无分析任务",
+    "submit": "提交任务",
+    "maxFileSize": "单个文件最大 500 MiB。上传通过短时效预签名 POST 直接进入对象存储。",
+    "fastp": {
+      "title": "fastp — 读段质控",
+      "subtitle": "对 FASTQ 读段进行修剪与质量过滤",
+      "files": "FASTQ 文件（单端：1 个文件；双端：先 R1 后 R2）"
+    },
+    "scanpy": {
+      "title": "scanpy — 单细胞",
+      "subtitle": "过滤、选择高变基因、降维与聚类",
+      "files": "AnnData .h5ad 文件",
+      "useHvg": "选择高变基因"
+    },
+    "job": {
+      "title": "分析任务"
+    }
+  },
+  "sra": {
+    "subtitle": "查询 NCBI 序列读取档案中的运行元数据",
+    "accession": "运行编号",
+    "notFound": "未找到该运行",
+    "openInNcbi": "在 NCBI 中打开"
   }
 }

@@ -25,8 +25,9 @@ service = GeneService()
 @router.get("/assemblies", response_model=list[AssemblyResponse], tags=["assemblies"])
 async def list_assemblies(
     db: AsyncSession = Depends(get_db),
+    release_context: ReleaseContext = Depends(get_release_context),
 ) -> list[AssemblyResponse]:
-    """List all genome assemblies.
+    """List only genome assemblies in the resolved published release.
 
     Read-hot query cached in Redis (default TTL) via cache-aside; a Redis
     failure degrades to a direct query.  An empty assembly list is cached as
@@ -37,16 +38,16 @@ async def list_assemblies(
     expires.
     """
     payload = await get_or_set(
-        "genes:assemblies",
+        f"genes:assemblies:release:{release_context.release_id}",
         ttl=None,
-        loader=lambda: _load_assemblies(db),
+        loader=lambda: _load_assemblies(db, release_context.release_id),
     )
     return [AssemblyResponse.model_validate(item) for item in payload]
 
 
-async def _load_assemblies(db: AsyncSession) -> list[dict]:
-    """Fetch all assemblies as JSON payloads (loader for the Redis cache)."""
-    rows = await service.list_assemblies(db)
+async def _load_assemblies(db: AsyncSession, release_id: int) -> list[dict]:
+    """Fetch published-release assemblies for the Redis cache."""
+    rows = await service.list_assemblies(db, release_id=release_id)
     return [AssemblyResponse.model_validate(row).model_dump(mode="json") for row in rows]
 
 
@@ -58,9 +59,12 @@ async def _load_assemblies(db: AsyncSession) -> list[dict]:
 async def list_chromosomes(
     assembly_id: int,
     db: AsyncSession = Depends(get_db),
+    release_context: ReleaseContext = Depends(get_release_context),
 ) -> list[ChromosomeResponse]:
-    """List chromosomes for an assembly."""
-    return await service.list_chromosomes(db, assembly_id)
+    """List chromosomes only when the assembly belongs to this release."""
+    return await service.list_chromosomes(
+        db, assembly_id, release_id=release_context.release_id
+    )
 
 
 @router.get("", response_model=GeneListResponse)

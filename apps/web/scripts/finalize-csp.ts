@@ -34,7 +34,7 @@
  * That is deliberate: the alternative is an artifact that looks fine and is
  * either wider or narrower than intended.
  *
- * Usage:  tsx scripts/finalize-csp.ts      (run by `apps/web` build / build:sites)
+ * Usage:  tsx scripts/finalize-csp.ts      (run by the portal build / build:sites)
  * Env:    SOYMUTDB_DIST_DIR   output directory (default `dist`)
  */
 
@@ -44,7 +44,7 @@ import { composeCsp, parseCsp } from "@soymutdb/shared/build/csp";
 // Node-only entry point: imports `node:crypto`, which is why it is separate
 // from the portable `./csp` utilities the browser bundle also reaches.
 import { collectInlineScriptHashes } from "@soymutdb/shared/build/csp-hash";
-import { CSP_CONTENT, decodeHtmlAttribute, escapeHtmlAttribute } from "./base-template";
+import { CSP_CONTENT, decodeHtmlAttribute, escapeHtmlAttribute } from "./csp";
 
 const DIST_DIR = resolve(process.cwd(), process.env.SOYMUTDB_DIST_DIR ?? "dist");
 const HEADERS_FILE = join(DIST_DIR, "_headers");
@@ -88,7 +88,7 @@ function main(): void {
   if (!existsSync(HEADERS_FILE)) {
     throw new Error(
       `[finalize-csp] ${HEADERS_FILE} is missing. The portal ships a _headers file in ` +
-        "apps/web/public/; without it the Pages deployment would serve no security headers " +
+        "public/; without it the Pages deployment would serve no security headers " +
         "and there would be nowhere to put the site-wide CSP. Refusing to continue.",
     );
   }

@@ -22,6 +22,7 @@ from . import (
     admin_publications,
     admin_settings,
     admin_static,
+    admin_table_views,
     admin_uploads,
     analyses,
     analytics,
@@ -42,6 +43,7 @@ from . import (
     ontology,
     page_definitions,
     popgen,
+    preview_test_data,
     releases,
     search,
     seed_requests,
@@ -49,6 +51,7 @@ from . import (
     site,
     sra,
     stats,
+    table_views,
     tools_enrichment,
     tools_exppattern,
     tools_seqfetch,
@@ -71,6 +74,7 @@ api_router.include_router(genes.router)
 api_router.include_router(gwas.router)
 api_router.include_router(jobs.router)
 api_router.include_router(popgen.router)
+api_router.include_router(preview_test_data.router)
 api_router.include_router(variants.router)
 api_router.include_router(tools_seqfetch.router)
 api_router.include_router(search.router)
@@ -80,6 +84,7 @@ api_router.include_router(analyses.router)
 api_router.include_router(tracks.router)
 api_router.include_router(releases.router)
 api_router.include_router(mutants.router)
+api_router.include_router(table_views.router)
 api_router.include_router(seeds.router)
 api_router.include_router(seed_requests.router)
 api_router.include_router(content.router)
@@ -101,6 +106,8 @@ api_router.include_router(import_studio.router)
 api_router.include_router(admin_modules.router)
 api_router.include_router(admin_settings.router)
 api_router.include_router(admin_static.router)
+api_router.include_router(admin_table_views.router)
+api_router.include_router(admin_table_views.species_router)
 api_router.include_router(admin_uploads.router)
 api_router.include_router(expression.router)
 api_router.include_router(homolog.router)

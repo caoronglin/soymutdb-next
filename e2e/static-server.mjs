@@ -168,6 +168,89 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  // Mock table-view templates: the portal asks the API which columns to render
+  // (see docs/dev/configurable-table-views.md). Offline it must still get an
+  // ordered, non-empty column set — the built-in default — or a table would
+  // render with no headers at all.
+  if (
+    req.method === "GET" &&
+    new RegExp(`^${PREFIX}/api/v1/table-views/[a-z_]+$`).test(pathname)
+  ) {
+    const builtin = {
+      mutation_sites: [
+        ["mutant_line_name", "Mutant line"],
+        ["mutation_system", "Mutation system"],
+        ["chromosome", "Chromosome"],
+        ["position", "Position"],
+        ["confidence", "Confidence"],
+        ["gene_id", "Gene ID"],
+        ["feature", "Feature"],
+        ["available", "Available"],
+      ],
+      variants: [
+        ["variant_id", "Variant ID"],
+        ["chromosome", "Chromosome"],
+        ["position", "Position"],
+        ["ref", "Ref"],
+        ["alt", "Alt"],
+        ["variant_type", "Type"],
+        ["impact", "Impact"],
+        ["gene_id", "Gene ID"],
+      ],
+      // Mirrors BUILTIN_DEFAULT_COLUMNS in
+      // apps/api/app/services/table_views_service.py — the approved
+      // search-result order. `apps/api/tests/test_table_views.py` asserts the
+      // server-side list; keep this copy in step with it.
+      genes: [
+        ["assembly_name", "Genome version"],
+        ["chromosome", "Chromosome"],
+        ["position", "Position"],
+        ["variant_count", "Mutation feature"],
+        ["gene_id", "Gene ID"],
+      ],
+      mutant_lines: [
+        ["public_id", "Mutant line"],
+        ["name", "Name"],
+        ["mutagen", "Mutagen"],
+        ["cultivar", "Cultivar"],
+        ["generation", "Generation"],
+      ],
+    };
+    const kind = pathname.split("/").pop();
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(
+      JSON.stringify({
+        kind,
+        species: "Glycine max",
+        site_variant: "external",
+        release_id: null,
+        template_id: null,
+        template_name: "builtin-default",
+        is_builtin_default: true,
+        columns: (builtin[kind] ?? builtin.variants).map(([key, label_en]) => ({
+          key,
+          label_zh: label_en,
+          label_en,
+          visible: true,
+        })),
+        // genome_preview is opt-in per kind (mutation sites enable it by
+        // default; a gene result row already links to the gene detail).
+        actions:
+          kind === "mutation_sites"
+            ? { jbrowse: true, genome_preview: true }
+            : { jbrowse: true, genome_preview: false },
+      }),
+    );
+    return;
+  }
+
+  // Mock news: an empty list is the honest offline answer (no fake headlines).
+  if (req.method === "GET" && pathname.startsWith(`${PREFIX}/api/v1/news`)) {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ items: [], total: 0 }));
+    return;
+  }
+
   // Mock gene search: return an empty result envelope so the result table
   // renders its column headers (never fake rows).
   if (

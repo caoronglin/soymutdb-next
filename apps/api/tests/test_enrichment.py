@@ -11,6 +11,8 @@ testcontainers / PostgreSQL is required.
 from __future__ import annotations
 
 import math
+from datetime import UTC, datetime
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock
 
@@ -19,20 +21,27 @@ from httpx import ASGITransport, AsyncClient
 
 from app.api.v1.tools_enrichment import router as enrichment_router
 from app.core.database import get_db
+from app.core.exceptions import ServiceUnavailableError
 from app.schemas.enrichment import EnrichmentRequest
 from app.services import enrichment_service
 from app.services.enrichment_service import (
     benjamini_hochberg,
     compute_enrichment,
     compute_gsea_enrichment,
+    fetch_annotation_source,
     fetch_annotations,
     gsea_term_stat,
     hypergeom_sf,
 )
+from app.services.release_context import ReleaseContext, get_release_context
 
 # ---------------------------------------------------------------------------
 # Hypergeometric survival function (hand-computed references)
 # ---------------------------------------------------------------------------
+
+
+async def _empty_annotation_source(db, ontology, *, assembly_id, release_id):
+    return None
 
 
 def _comb(n: int, k: int) -> int:
@@ -265,7 +274,11 @@ def test_compute_enrichment_partially_annotated_input():
 # ---------------------------------------------------------------------------
 
 
-def _mock_db(has_table: bool, rows: list[tuple[Any, Any, Any]]) -> AsyncMock:
+def _mock_db(
+    has_table: bool,
+    rows: list[tuple[Any, Any, Any]],
+    columns: list[str] | None = None,
+) -> AsyncMock:
     class _FakeResult:
         def __init__(self, all_rows):
             self._all_rows = all_rows
@@ -275,7 +288,21 @@ def _mock_db(has_table: bool, rows: list[tuple[Any, Any, Any]]) -> AsyncMock:
 
     db = AsyncMock()
     connection = AsyncMock()
-    connection.run_sync = AsyncMock(side_effect=lambda fn: has_table)
+    if columns is None:
+        columns = [
+            "annotation_set_id",
+            "assembly_id",
+            "release_id",
+            "gene_id",
+            "term_id",
+            "term_name",
+            "ontology",
+        ]
+    connection.run_sync = AsyncMock(
+        # run_sync returns the lambda result directly; the second lambda in
+        # fetch_annotations returns a set of column names.
+        side_effect=[has_table, set(columns)]
+    )
     db.connection.return_value = connection
     db.execute.return_value = _FakeResult(rows)
     return db
@@ -283,7 +310,9 @@ def _mock_db(has_table: bool, rows: list[tuple[Any, Any, Any]]) -> AsyncMock:
 
 async def test_fetch_annotations_table_missing_returns_empty():
     db = _mock_db(has_table=False, rows=[])
-    gene_to_terms, term_names = await fetch_annotations(db, "go")
+    gene_to_terms, term_names = await fetch_annotations(
+        db, "go", assembly_id=5, release_id=7
+    )
     assert gene_to_terms == {}
     assert term_names == {}
     db.execute.assert_not_awaited()
@@ -296,7 +325,14 @@ async def test_fetch_annotations_parses_rows():
         ("Glyma.01G000200", "GO:0008150", "biological_process"),
     ]
     db = _mock_db(has_table=True, rows=rows)
-    gene_to_terms, term_names = await fetch_annotations(db, "go")
+    gene_to_terms, term_names = await fetch_annotations(
+        db, "go", assembly_id=5, release_id=7
+    )
+    assert db.execute.await_args.args[1] == {
+        "ontology": "go",
+        "assembly_id": 5,
+        "release_id": 7,
+    }
     assert gene_to_terms == {
         "Glyma.01G000100": {"GO:0008150", "GO:0003674"},
         "Glyma.01G000200": {"GO:0008150"},
@@ -308,9 +344,214 @@ async def test_fetch_annotations_parses_rows():
     # term_name NULL falls back to the term id.
     rows_null = [("Glyma.01G000100", "GO:0009999", None)]
     gene_to_terms, term_names = await fetch_annotations(
-        _mock_db(has_table=True, rows=rows_null), "go"
+        _mock_db(has_table=True, rows=rows_null),
+        "go",
+        assembly_id=5,
+        release_id=7,
     )
     assert term_names["GO:0009999"] == "GO:0009999"
+
+
+async def test_fetch_annotations_fails_closed_without_assembly_column():
+    db = _mock_db(
+        has_table=True,
+        rows=[],
+        columns=["gene_id", "term_id", "term_name", "ontology"],
+    )
+    with pytest.raises(ServiceUnavailableError, match="provenance"):
+        await fetch_annotations(db, "go", assembly_id=5, release_id=7)
+    db.execute.assert_not_awaited()
+
+
+async def test_fetch_annotations_fails_closed_without_release_column():
+    db = _mock_db(
+        has_table=True,
+        rows=[],
+        columns=["assembly_id", "gene_id", "term_id", "term_name", "ontology"],
+    )
+    with pytest.raises(ServiceUnavailableError, match="release provenance"):
+        await fetch_annotations(db, "go", assembly_id=5, release_id=7)
+    db.execute.assert_not_awaited()
+
+
+async def test_fetch_annotations_fails_closed_without_source_set_reference():
+    db = _mock_db(
+        has_table=True,
+        rows=[],
+        columns=["assembly_id", "release_id", "gene_id", "term_id", "term_name", "ontology"],
+    )
+    with pytest.raises(ServiceUnavailableError, match="source, assembly, and release"):
+        await fetch_annotations(db, "go", assembly_id=5, release_id=7)
+    db.execute.assert_not_awaited()
+
+
+async def test_fetch_annotations_fails_closed_when_provenance_cannot_be_checked():
+    db = AsyncMock()
+    connection = AsyncMock()
+    connection.run_sync.side_effect = RuntimeError("database metadata unavailable")
+    db.connection.return_value = connection
+
+    with pytest.raises(ServiceUnavailableError) as exc_info:
+        await fetch_annotations(db, "go", assembly_id=5, release_id=7)
+
+    assert exc_info.value.details == {"code": "annotation_provenance_unavailable"}
+    db.execute.assert_not_awaited()
+
+
+async def test_fetch_annotation_source_returns_matching_snapshot():
+    class _FakeResult:
+        def __init__(self, rows):
+            self._rows = rows
+
+        def all(self):
+            return self._rows
+
+        def first(self):
+            return self._rows[0] if self._rows else None
+
+        def scalar_one(self):
+            return self._rows[0][0]
+
+    imported_at = datetime(2026, 9, 24, tzinfo=UTC)
+    source = SimpleNamespace(
+        id=11,
+        source_name="SoyBase",
+        source_version="2026-08",
+        source_url="https://source.example/annotations/2026-08",
+        source_sha256="a" * 64,
+        row_count=1,
+        imported_at=imported_at,
+    )
+    db = AsyncMock()
+    connection = AsyncMock()
+    connection.run_sync.side_effect = [
+        (True, True),
+        {
+            "id",
+            "assembly_id",
+            "release_id",
+            "ontology",
+            "source_name",
+            "source_version",
+            "source_url",
+            "source_sha256",
+            "row_count",
+            "imported_at",
+        },
+    ]
+    db.connection.return_value = connection
+    db.execute.side_effect = [
+        _FakeResult([source]),
+        _FakeResult([(1,)]),
+        _FakeResult([]),
+    ]
+
+    result = await fetch_annotation_source(
+        db, "go", assembly_id=5, release_id=7
+    )
+
+    assert result is not None
+    assert result.name == "SoyBase"
+    assert result.version == "2026-08"
+    assert result.sha256 == "a" * 64
+    assert result.imported_at == imported_at
+
+
+async def test_fetch_annotation_source_rejects_mismatched_rows():
+    class _FakeResult:
+        def __init__(self, rows):
+            self._rows = rows
+
+        def all(self):
+            return self._rows
+
+        def first(self):
+            return self._rows[0] if self._rows else None
+
+        def scalar_one(self):
+            return self._rows[0][0]
+
+    source = SimpleNamespace(
+        id=11,
+        source_name="SoyBase",
+        source_version="2026-08",
+        source_url="https://source.example/annotations/2026-08",
+        source_sha256="a" * 64,
+        row_count=1,
+        imported_at=datetime(2026, 9, 24, tzinfo=UTC),
+    )
+    db = AsyncMock()
+    connection = AsyncMock()
+    connection.run_sync.side_effect = [
+        (True, True),
+        {
+            "id",
+            "assembly_id",
+            "release_id",
+            "ontology",
+            "source_name",
+            "source_version",
+            "source_url",
+            "source_sha256",
+            "row_count",
+            "imported_at",
+        },
+    ]
+    db.connection.return_value = connection
+    db.execute.side_effect = [
+        _FakeResult([source]),
+        _FakeResult([(1,)]),
+        _FakeResult([(1,)]),
+    ]
+
+    with pytest.raises(ServiceUnavailableError, match="do not match"):
+        await fetch_annotation_source(db, "go", assembly_id=5, release_id=7)
+
+
+async def test_fetch_annotation_source_rejects_row_count_drift():
+    class _FakeResult:
+        def __init__(self, rows):
+            self._rows = rows
+
+        def all(self):
+            return self._rows
+
+        def scalar_one(self):
+            return self._rows[0][0]
+
+    source = SimpleNamespace(
+        id=11,
+        source_name="SoyBase",
+        source_version="2026-08",
+        source_url="https://source.example/annotations/2026-08",
+        source_sha256="a" * 64,
+        row_count=2,
+        imported_at=datetime(2026, 9, 24, tzinfo=UTC),
+    )
+    db = AsyncMock()
+    connection = AsyncMock()
+    connection.run_sync.side_effect = [
+        (True, True),
+        {
+            "id",
+            "assembly_id",
+            "release_id",
+            "ontology",
+            "source_name",
+            "source_version",
+            "source_url",
+            "source_sha256",
+            "row_count",
+            "imported_at",
+        },
+    ]
+    db.connection.return_value = connection
+    db.execute.side_effect = [_FakeResult([source]), _FakeResult([(1,)])]
+
+    with pytest.raises(ServiceUnavailableError) as exc_info:
+        await fetch_annotation_source(db, "go", assembly_id=5, release_id=7)
+
+    assert exc_info.value.details == {"code": "annotation_source_row_count_mismatch"}
 
 
 # ---------------------------------------------------------------------------
@@ -329,6 +570,10 @@ def _make_app() -> Any:
     app.add_exception_handler(
         RequestValidationError, validation_exception_handler
     )
+    async def override_release_context() -> ReleaseContext:
+        return ReleaseContext(release_id=7, assembly_id=5, assembly="Wm82.v5")
+
+    app.dependency_overrides[get_release_context] = override_release_context
     return app
 
 
@@ -346,12 +591,29 @@ async def test_enrichment_route_validation_empty_genes_422():
     app.dependency_overrides[get_db] = override_get_db
     async with _make_client(app) as client:
         response = await client.post(
-            "/api/v1/tools/enrichment", json={"genes": []}
+            "/api/v1/tools/enrichment", json={"assembly_id": 5, "genes": []}
         )
     assert response.status_code == 422
     body = response.json()
     assert body["error"]["code"] == "validation_error"
     assert any("genes" in e["field"] for e in body["errors"])
+
+
+async def test_enrichment_route_requires_assembly_id():
+    app = _make_app()
+
+    async def override_get_db():
+        yield AsyncMock()
+
+    app.dependency_overrides[get_db] = override_get_db
+    async with _make_client(app) as client:
+        response = await client.post(
+            "/api/v1/tools/enrichment", json={"genes": ["G1"]}
+        )
+    assert response.status_code == 422
+    assert any(
+        error["field"].endswith("assembly_id") for error in response.json()["errors"]
+    )
 
 
 async def test_enrichment_route_validation_blank_gene_422():
@@ -364,7 +626,7 @@ async def test_enrichment_route_validation_blank_gene_422():
     async with _make_client(app) as client:
         response = await client.post(
             "/api/v1/tools/enrichment",
-            json={"genes": ["Glyma.01G000100", "   "]},
+            json={"assembly_id": 5, "genes": ["Glyma.01G000100", "   "]},
         )
     assert response.status_code == 422
 
@@ -385,11 +647,19 @@ async def test_enrichment_route_defaults_and_success(monkeypatch):
         gene_to_terms[f"g{i}"] |= {"A"}
     term_names = {"A": "Term A", "B": "Term B"}
 
-    async def fake_fetch(db, ontology):
+    async def fake_fetch(db, ontology, *, assembly_id, release_id):
         assert ontology == "go"  # default
+        assert assembly_id == 5
+        assert release_id == 7
         return gene_to_terms, term_names
 
+    async def fake_resolve(db, assembly_id, release_id):
+        assert release_id == 7
+        return SimpleNamespace(id=assembly_id, name="Wm82.v5", version="v5")
+
     monkeypatch.setattr(enrichment_service, "fetch_annotations", fake_fetch)
+    monkeypatch.setattr(enrichment_service, "fetch_annotation_source", _empty_annotation_source)
+    monkeypatch.setattr(enrichment_service, "_resolve_assembly", fake_resolve)
 
     app = _make_app()
 
@@ -400,11 +670,15 @@ async def test_enrichment_route_defaults_and_success(monkeypatch):
     async with _make_client(app) as client:
         response = await client.post(
             "/api/v1/tools/enrichment",
-            json={"genes": ["g1", "g2", "g3", "g4"]},
+            json={"assembly_id": 5, "genes": ["g1", "g2", "g3", "g4"]},
         )
     assert response.status_code == 200
     body = response.json()
     assert body["ontology"] == "go"
+    assert body["assembly_id"] == 5
+    assert body["assembly_name"] == "Wm82.v5"
+    assert body["assembly_version"] == "v5"
+    assert body["release_id"] == 7
     assert body["input_genes"] == 4
     assert body["background_genes"] == 20
     term_ids = [t["id"] for t in body["terms"]]
@@ -418,11 +692,18 @@ async def test_enrichment_route_defaults_and_success(monkeypatch):
 async def test_enrichment_route_kegg_ontology_and_unknown_genes(monkeypatch):
     captured: dict[str, Any] = {}
 
-    async def fake_fetch(db, ontology):
+    async def fake_fetch(db, ontology, *, assembly_id, release_id):
         captured["ontology"] = ontology
+        captured["assembly_id"] = assembly_id
+        captured["release_id"] = release_id
         return {}, {}
 
+    async def fake_resolve(db, assembly_id, release_id):
+        return SimpleNamespace(id=assembly_id, name="Wm82.v5", version="v5")
+
     monkeypatch.setattr(enrichment_service, "fetch_annotations", fake_fetch)
+    monkeypatch.setattr(enrichment_service, "fetch_annotation_source", _empty_annotation_source)
+    monkeypatch.setattr(enrichment_service, "_resolve_assembly", fake_resolve)
     app = _make_app()
 
     async def override_get_db():
@@ -432,23 +713,27 @@ async def test_enrichment_route_kegg_ontology_and_unknown_genes(monkeypatch):
     async with _make_client(app) as client:
         response = await client.post(
             "/api/v1/tools/enrichment",
-            json={"genes": ["nope1"], "ontology": "kegg"},
+            json={"assembly_id": 5, "genes": ["nope1"], "ontology": "kegg"},
         )
     assert response.status_code == 200
     body = response.json()
     assert captured["ontology"] == "kegg"
+    assert captured["assembly_id"] == 5
+    assert captured["release_id"] == 7
+    assert body["assembly_id"] == 5
+    assert body["release_id"] == 7
     assert body["terms"] == []
     assert body["message"] is not None  # explicit no-annotation note
 
 
 def test_enrichment_request_schema_limits():
     with pytest.raises(Exception):
-        EnrichmentRequest(genes=[])
+        EnrichmentRequest(assembly_id=5, genes=[])
     with pytest.raises(Exception):
-        EnrichmentRequest(genes=["g1"] * 501)
+        EnrichmentRequest(assembly_id=5, genes=["g1"] * 501)
     with pytest.raises(Exception):
-        EnrichmentRequest(genes=["g1"], ontology="kegg", p_threshold=1.5)
-    ok = EnrichmentRequest(genes=[" g1 ", "g2", "g1"], max_terms=50)
+        EnrichmentRequest(assembly_id=5, genes=["g1"], ontology="kegg", p_threshold=1.5)
+    ok = EnrichmentRequest(assembly_id=5, genes=[" g1 ", "g2", "g1"], max_terms=50)
     assert ok.genes == ["g1", "g2", "g1"]
 
 
@@ -704,26 +989,27 @@ def test_compute_gsea_enrichment_max_terms_truncates():
 def test_enrichment_request_gsea_schema_rules():
     # gsea mode without values -> error.
     with pytest.raises(Exception):
-        EnrichmentRequest(genes=["g1"], mode="gsea")
+        EnrichmentRequest(assembly_id=5, genes=["g1"], mode="gsea")
     # values/genes length mismatch -> error.
     with pytest.raises(Exception):
-        EnrichmentRequest(genes=["g1", "g2"], mode="gsea", values=[1.0])
+        EnrichmentRequest(assembly_id=5, genes=["g1", "g2"], mode="gsea", values=[1.0])
     # non-finite values -> error.
     with pytest.raises(Exception):
-        EnrichmentRequest(genes=["g1"], mode="gsea", values=[float("nan")])
+        EnrichmentRequest(assembly_id=5, genes=["g1"], mode="gsea", values=[float("nan")])
     with pytest.raises(Exception):
-        EnrichmentRequest(genes=["g1"], mode="gsea", values=[float("inf")])
+        EnrichmentRequest(assembly_id=5, genes=["g1"], mode="gsea", values=[float("inf")])
     # min_genes bounds.
     with pytest.raises(Exception):
-        EnrichmentRequest(genes=["g1"], mode="gsea", values=[1.0], min_genes=0)
+        EnrichmentRequest(assembly_id=5, genes=["g1"], mode="gsea", values=[1.0], min_genes=0)
     # Happy path.
     ok = EnrichmentRequest(
+        assembly_id=5,
         genes=["g1", "g2"], mode="gsea", values=[1.0, -2.5], min_genes=3
     )
     assert ok.values == [1.0, -2.5]
     assert ok.min_genes == 3
     # ora mode ignores values entirely.
-    ok2 = EnrichmentRequest(genes=["g1"], mode="ora", values=[1.0])
+    ok2 = EnrichmentRequest(assembly_id=5, genes=["g1"], mode="ora", values=[1.0])
     assert ok2.values == [1.0]
 
 
@@ -742,7 +1028,7 @@ async def test_enrichment_route_gsea_missing_values_422():
     async with _make_client(app) as client:
         response = await client.post(
             "/api/v1/tools/enrichment",
-            json={"genes": ["g1", "g2"], "mode": "gsea"},
+            json={"assembly_id": 5, "genes": ["g1", "g2"], "mode": "gsea"},
         )
     assert response.status_code == 422
 
@@ -757,7 +1043,7 @@ async def test_enrichment_route_gsea_values_mismatch_422():
     async with _make_client(app) as client:
         response = await client.post(
             "/api/v1/tools/enrichment",
-            json={"genes": ["g1", "g2"], "mode": "gsea", "values": [1.0]},
+            json={"assembly_id": 5, "genes": ["g1", "g2"], "mode": "gsea", "values": [1.0]},
         )
     assert response.status_code == 422
 
@@ -775,7 +1061,7 @@ async def test_enrichment_route_gsea_non_finite_values_422():
     async with _make_client(app) as client:
         response = await client.post(
             "/api/v1/tools/enrichment",
-            content=b'{"genes": ["g1"], "mode": "gsea", "values": [1e999]}',
+            content=b'{"assembly_id": 5, "genes": ["g1"], "mode": "gsea", "values": [1e999]}',
             headers={"content-type": "application/json"},
         )
     assert response.status_code == 422
@@ -786,11 +1072,19 @@ async def test_enrichment_route_gsea_happy_path(monkeypatch):
     list -> ES = +1.0, p = exp(-3.75); m=1 tested term -> q = p."""
     gene_to_terms, term_names = _gsea_annotations({"g1", "g2", "g3"})
 
-    async def fake_fetch(db, ontology):
+    async def fake_fetch(db, ontology, *, assembly_id, release_id):
         assert ontology == "go"
+        assert assembly_id == 5
+        assert release_id == 7
         return gene_to_terms, term_names
 
+    async def fake_resolve(db, assembly_id, release_id):
+        assert release_id == 7
+        return SimpleNamespace(id=assembly_id, name="Wm82.v5", version="v5")
+
     monkeypatch.setattr(enrichment_service, "fetch_annotations", fake_fetch)
+    monkeypatch.setattr(enrichment_service, "fetch_annotation_source", _empty_annotation_source)
+    monkeypatch.setattr(enrichment_service, "_resolve_assembly", fake_resolve)
     app = _make_app()
 
     async def override_get_db():
@@ -801,6 +1095,7 @@ async def test_enrichment_route_gsea_happy_path(monkeypatch):
         response = await client.post(
             "/api/v1/tools/enrichment",
             json={
+                "assembly_id": 5,
                 "genes": _GSEA_GENES,
                 "values": _GSEA_VALUES,
                 "mode": "gsea",
@@ -815,6 +1110,7 @@ async def test_enrichment_route_gsea_happy_path(monkeypatch):
     assert body["ontology"] == "go"
     assert body["input_genes"] == 8
     assert body["background_genes"] == 8
+    assert body["release_id"] == 7
     assert len(body["terms"]) == 1
     term = body["terms"][0]
     assert term["id"] == "T0"
@@ -832,10 +1128,18 @@ async def test_enrichment_route_ora_mode_response_and_values_ignored(monkeypatch
         gene_to_terms[f"g{i}"] |= {"A"}
     term_names = {"A": "Term A"}
 
-    async def fake_fetch(db, ontology):
+    async def fake_fetch(db, ontology, *, assembly_id, release_id):
+        assert assembly_id == 5
+        assert release_id == 7
         return gene_to_terms, term_names
 
+    async def fake_resolve(db, assembly_id, release_id):
+        assert release_id == 7
+        return SimpleNamespace(id=assembly_id, name="Wm82.v5", version="v5")
+
     monkeypatch.setattr(enrichment_service, "fetch_annotations", fake_fetch)
+    monkeypatch.setattr(enrichment_service, "fetch_annotation_source", _empty_annotation_source)
+    monkeypatch.setattr(enrichment_service, "_resolve_assembly", fake_resolve)
     app = _make_app()
 
     async def override_get_db():
@@ -846,6 +1150,7 @@ async def test_enrichment_route_ora_mode_response_and_values_ignored(monkeypatch
         response = await client.post(
             "/api/v1/tools/enrichment",
             json={
+                "assembly_id": 5,
                 "genes": ["g1", "g2", "g3", "g4"],
                 "mode": "ora",
                 "values": [1.0, 2.0, 3.0, 4.0],  # ignored in ora mode
@@ -854,7 +1159,6 @@ async def test_enrichment_route_ora_mode_response_and_values_ignored(monkeypatch
     assert response.status_code == 200
     body = response.json()
     assert body["mode"] == "ora"
+    assert body["release_id"] == 7
     assert len(body["terms"]) == 1
     assert body["terms"][0]["gene_count"] == 4
-
-

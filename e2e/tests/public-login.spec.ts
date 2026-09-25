@@ -40,8 +40,8 @@ async function openLogin(page: Page, redirect = "/analyses"): Promise<void> {
   // interacting, otherwise a click is silently discarded and no request fires.
   await waitForAppReady(page);
   await expect(page.getByRole("heading", { name: /sign in/i })).toBeVisible();
-  await expect(page.getByLabel(/^email$/i)).toBeVisible();
-  await expect(page.getByLabel(/^password$/i)).toBeVisible();
+  await expect(page.getByTestId("login-email")).toBeVisible();
+  await expect(page.getByTestId("login-password")).toBeVisible();
   await expect(page.getByRole("button", { name: /sign in/i })).toBeVisible();
 }
 
@@ -54,8 +54,8 @@ async function submitLogin(
     response.request().method() === "POST" && isLoginRequest(response.request()),
   );
 
-  await page.getByLabel(/^email$/i).fill(credentials.email);
-  await page.getByLabel(/^password$/i).fill(credentials.password);
+  await page.getByTestId("login-email").fill(credentials.email);
+  await page.getByTestId("login-password").fill(credentials.password);
   await page.getByRole("button", { name: /sign in/i }).click();
 
   const [request, response] = await Promise.all([requestPromise, responsePromise]);

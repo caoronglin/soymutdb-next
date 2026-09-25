@@ -25,7 +25,7 @@
     "dev:admin": "pnpm --filter @soymutdb/admin dev",
     "build:web": "pnpm --filter @soymutdb/web build",
     "build:admin": "pnpm --filter @soymutdb/admin build:web",
-    "build:ssg": "pnpm --filter @soymutdb/web ssg:build",
+    "build:ssg": "pnpm --filter @soymutdb/web ssg:routes",
     "deps:graphs": "python3 scripts/dependency_governance.py graphs --output artifacts/dependency-graphs",
     "deps:audit": "python3 scripts/dependency_governance.py audit --config dependency-governance.json --output artifacts/dependency-audit",
     "review": "python3 tools/code-review/review.py --project apps --output tools/code-review/reports/manual",

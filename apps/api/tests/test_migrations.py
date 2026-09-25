@@ -184,6 +184,101 @@ def test_0036_enforces_one_import_draft_per_dataset_version_and_downgrades() -> 
     ]
 
 
+def test_0038_annotation_migration_adds_scoped_tables_and_downgrades() -> None:
+    revision = _load_revision("0038_gene_annotation_provenance.py")
+    operations = _RecordingOperations()
+    revision.op = operations
+
+    revision.upgrade()
+    created_tables = {
+        args[0]
+        for name, args, _ in operations.calls
+        if name == "create_table"
+    }
+    assert created_tables == {"gene_annotation_sets", "gene_annotations"}
+    created_constraints = {
+        getattr(element, "name", None)
+        for name, args, _ in operations.calls
+        if name == "create_table"
+        for element in args[1:]
+    }
+    assert {
+        "fk_gene_annotation_sets_assembly_release",
+        "fk_gene_annotations_set_scope",
+        "fk_gene_annotations_gene_assembly",
+        "uq_gene_annotation_sets_scope",
+        "uq_gene_annotations_evidence",
+    } <= created_constraints
+    assert (
+        "create_unique_constraint",
+        ("uq_assemblies_id_release", "assemblies", ["id", "release_id"]),
+        {},
+    ) in operations.calls
+
+    operations.calls.clear()
+    revision.downgrade()
+    dropped_tables = {
+        args[0]
+        for name, args, _ in operations.calls
+        if name == "drop_table"
+    }
+    assert dropped_tables == {"gene_annotation_sets", "gene_annotations"}
+    assert any(
+        name == "drop_constraint"
+        and args == ("uq_assemblies_id_release", "assemblies")
+        and kwargs == {"type_": "unique"}
+        for name, args, kwargs in operations.calls
+    )
+
+
+def test_0039_table_views_migration_adds_tables_constraints_and_downgrades() -> None:
+    revision = _load_revision("0039_table_views_and_species_instances.py")
+    operations = _RecordingOperations()
+    revision.op = operations
+
+    revision.upgrade()
+    created_tables = {
+        args[0] for name, args, _ in operations.calls if name == "create_table"
+    }
+    assert created_tables == {"table_view_templates", "species_instances"}
+
+    # The default-uniqueness index must key on coalesce(release_id, 0): a plain
+    # unique index treats two NULL release scopes as distinct, which would let
+    # two deployment-wide defaults coexist for the same kind/species/variant.
+    index_sql = [
+        args[0]
+        for name, args, _ in operations.calls
+        if name == "execute" and isinstance(args[0], str)
+    ]
+    assert any(
+        "uq_table_view_templates_default" in statement
+        and "coalesce(release_id, 0)" in statement
+        and "WHERE is_default" in statement
+        for statement in index_sql
+    ), index_sql
+
+    created_constraints = {
+        getattr(element, "name", None)
+        for name, args, _ in operations.calls
+        if name == "create_table"
+        for element in args[1:]
+    }
+    assert {
+        "ck_table_view_templates_kind",
+        "ck_table_view_templates_site_variant",
+        "ck_table_view_templates_columns_array",
+        "ck_species_instances_url",
+        "fk_table_view_templates_release",
+    } <= created_constraints
+
+    operations.calls.clear()
+    revision.downgrade()
+    dropped_tables = {
+        args[0] for name, args, _ in operations.calls if name == "drop_table"
+    }
+    assert dropped_tables == {"table_view_templates", "species_instances"}
+
+
 class _EmptyResult:
     def scalar_one_or_none(self) -> None:
         return None
@@ -271,3 +366,6 @@ def test_offline_upgrade_uses_model_enum_values_and_safe_blast_ddl() -> None:
         "widget_permission_enum",
     ):
         assert result.stdout.count(f"CREATE TYPE {enum_name} AS ENUM") == 1
+    assert "CREATE TABLE gene_annotation_sets" in result.stdout
+    assert "CREATE TABLE gene_annotations" in result.stdout
+    assert "fk_gene_annotations_gene_assembly" in result.stdout

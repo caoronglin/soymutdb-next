@@ -1,7 +1,7 @@
 /**
  * @soymutdb/ui-vue — the framework-facing design-system facade (plan §7 / D4).
  *
- * Business code (apps/web-vue, apps/admin-vue) MUST import UI primitives from
+ * Business code (apps/web, the future admin) MUST import UI primitives from
  * here, never from `antdv-next` directly. This is the single seam that binds us
  * to Antdv Next 1.x: an upstream minor/major change surfaces as a facade
  * contract-test failure first, before it can ripple through every page.

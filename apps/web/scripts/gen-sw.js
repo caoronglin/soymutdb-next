@@ -34,6 +34,13 @@ const OUT_FILE = join(DIST_DIR, "sw.js");
 const OUT_GZ = `${OUT_FILE}.gz`;
 // 仅容器路径产出 .gz（nginx gzip_static）；Pages/gh-pages 不读取 .gz。
 const EMIT_GZ = process.env.SOYMUTDB_EMIT_GZ === "1";
+// The external and internal artifacts are separate deployments with separate
+// caches (AGENTS.md cache boundary). The version string therefore carries the
+// site variant, so a variant's cache name can never collide with the other's.
+const SITE_VARIANT = (process.env.VITE_SITE_VARIANT ?? "external").trim().toLowerCase();
+if (SITE_VARIANT !== "external" && SITE_VARIANT !== "internal") {
+    throw new Error(`[gen-sw] VITE_SITE_VARIANT must be external or internal, got "${SITE_VARIANT}"`);
+}
 
 /* ------------------------------------------------------------------ */
 /*  Main                                                              */
@@ -65,7 +72,7 @@ function main() {
         throw new Error("[gen-sw] template placeholders (__PRECACHE_MANIFEST__ / __CACHE_VERSION__) missing");
     }
     sw = sw.replace("__PRECACHE_MANIFEST__", manifestJson);
-    sw = sw.replace("__CACHE_VERSION__", version);
+    sw = sw.replace("__CACHE_VERSION__", `${SITE_VARIANT}-${version}`);
 
     // 4) 输出 dist/sw.js + 同步 .gz（与 gzip-compress 相同规则：≥1KB 且压缩变小）
     writeFileSync(OUT_FILE, sw, "utf8");

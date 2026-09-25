@@ -189,12 +189,13 @@ class TestAssemblies:
             "app.services.gene_service.GeneService.list_assemblies",
             new_callable=AsyncMock,
             return_value=assemblies,
-        ):
+        ) as list_assemblies:
             response = await client.get(f"{GENES_PREFIX}/assemblies")
         assert response.status_code == 200
         data = response.json()
         assert len(data) == 2
         assert data[0]["name"] == "Wm82.gnm2"
+        assert list_assemblies.await_args.kwargs["release_id"] == 7
 
 
 @pytest.mark.asyncio
@@ -211,9 +212,10 @@ class TestChromosomes:
             "app.services.gene_service.GeneService.list_chromosomes",
             new_callable=AsyncMock,
             return_value=chromosomes,
-        ):
+        ) as list_chromosomes:
             response = await client.get(f"{GENES_PREFIX}/assemblies/1/chromosomes")
         assert response.status_code == 200
         data = response.json()
         assert len(data) == 2
         assert data[0]["name"] == "Gm01"
+        assert list_chromosomes.await_args.kwargs["release_id"] == 7
