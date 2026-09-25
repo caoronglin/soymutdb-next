@@ -115,7 +115,6 @@
         "--json",
         "--extensions",
         "ts,tsx",
-        "apps/web",
         "apps/admin",
         "apps/jbrowse",
         "packages"
@@ -124,7 +123,8 @@
         "mode": "stdout",
         "path": "typescript-circular-dependencies.json",
         "format": "json"
-      }
+      },
+      "comment": "The portal is Vue: its graph is the Vue-aware one below (typescript-circular-dependencies-portal), which passes --ts-config and the vue extension. This checker only parses ts/tsx, and a .ts file using import.meta (the portal entry) fails its parser, so the portal belongs to the other graph only."
     },
     {
       "name": "typescript-circular-dependencies-portal",

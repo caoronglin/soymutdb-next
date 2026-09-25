@@ -211,7 +211,7 @@ export interface paths {
         };
         /**
          * List Assemblies
-         * @description List all genome assemblies.
+         * @description List only genome assemblies in the resolved published release.
          *
          *     Read-hot query cached in Redis (default TTL) via cache-aside; a Redis
          *     failure degrades to a direct query.  An empty assembly list is cached as
@@ -239,7 +239,7 @@ export interface paths {
         };
         /**
          * List Chromosomes
-         * @description List chromosomes for an assembly.
+         * @description List chromosomes only when the assembly belongs to this release.
          */
         get: operations["list_chromosomes_api_v1_genes_assemblies__assembly_id__chromosomes_get"];
         put?: never;
@@ -487,6 +487,66 @@ export interface paths {
          * @description Per-variant allele frequencies for a locus / gene / interval.
          */
         post: operations["allele_frequencies_api_v1_tools_allelefreq_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/preview/test-data/meta": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Preview Meta
+         * @description Describe the local, unpublished v6 sample and its coordinate space.
+         */
+        get: operations["preview_meta_api_v1_preview_test_data_meta_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/preview/test-data/genes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Preview Genes
+         * @description Find exact GFF gene accessions within the local v6 draft release.
+         */
+        get: operations["preview_genes_api_v1_preview_test_data_genes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/preview/test-data/mutation-sites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Preview Mutation Sites
+         * @description Find source mutation-site records by a 1-based inclusive interval.
+         */
+        get: operations["preview_mutation_sites_api_v1_preview_test_data_mutation_sites_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1303,6 +1363,26 @@ export interface paths {
          * @description List phenotypes for a public mutant line.
          */
         get: operations["get_phenotypes_api_v1_mutants__public_id__phenotypes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/table-views/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Table View
+         * @description Resolve the ordered column layout for one portal table.
+         */
+        get: operations["get_table_view_api_v1_table_views__kind__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3486,6 +3566,78 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/table-views": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Table View Templates */
+        get: operations["list_table_view_templates_api_v1_admin_table_views_get"];
+        put?: never;
+        /** Create Table View Template */
+        post: operations["create_table_view_template_api_v1_admin_table_views_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/table-views/{template_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Table View Template */
+        put: operations["update_table_view_template_api_v1_admin_table_views__template_id__put"];
+        post?: never;
+        /** Delete Table View Template */
+        delete: operations["delete_table_view_template_api_v1_admin_table_views__template_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/species-instances": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Species Instances */
+        get: operations["list_species_instances_api_v1_admin_species_instances_get"];
+        put?: never;
+        /** Create Species Instance */
+        post: operations["create_species_instance_api_v1_admin_species_instances_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/species-instances/{instance_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Species Instance */
+        put: operations["update_species_instance_api_v1_admin_species_instances__instance_id__put"];
+        post?: never;
+        /** Delete Species Instance */
+        delete: operations["delete_species_instance_api_v1_admin_species_instances__instance_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/uploads/presign": {
         parameters: {
             query?: never;
@@ -3849,7 +4001,7 @@ export interface paths {
         put?: never;
         /**
          * GO/KEGG enrichment analysis (ORA or GSEA)
-         * @description Enrichment analysis over the gene_annotations table.  'ora' (default): hypergeometric right-tail test with Benjamini-Hochberg correction; the background set is the full set of genes annotated for the requested ontology.  'gsea': simplified rank-based gene-set test over per-gene values (requires 'values' aligned 1:1 with 'genes' and a minimum term size via 'min_genes').  In both modes terms are filtered by the raw p-value threshold, sorted by q-value ascending, and limited to 'max_terms'.
+         * @description Assembly-scoped enrichment analysis over the gene_annotations table. 'ora' (default): hypergeometric right-tail test with Benjamini-Hochberg correction; the background set is the full set of genes annotated for the requested ontology.  'gsea': simplified rank-based gene-set test over per-gene values (requires 'values' aligned 1:1 with 'genes' and a minimum term size via 'min_genes').  In both modes terms are filtered by the raw p-value threshold, sorted by q-value ascending, and limited to 'max_terms'. Annotation rows must be tied to a matching release/assembly and a source-attributed annotation snapshot; legacy unscoped or unattributed rows fail closed.
          */
         post: operations["run_enrichment_api_v1_tools_enrichment_post"];
         delete?: never;
@@ -4982,7 +5134,7 @@ export interface components {
         };
         /**
          * EnrichmentGseaResponse
-         * @description Rank-based (GSEA) enrichment analysis result.
+         * @description GSEA result with assembly, release, and annotation source context.
          */
         EnrichmentGseaResponse: {
             /**
@@ -5016,6 +5168,15 @@ export interface components {
              * @description Explanatory note, e.g. when no term passes min_genes
              */
             message?: string | null;
+            /** Assembly Id */
+            assembly_id: number;
+            /** Release Id */
+            release_id: number;
+            /** Assembly Name */
+            assembly_name: string;
+            /** Assembly Version */
+            assembly_version: string;
+            annotation_source: components["schemas"]["EnrichmentSource"] | null;
         };
         /**
          * EnrichmentGseaTerm
@@ -5067,6 +5228,8 @@ export interface components {
          * EnrichmentRequest
          * @description POST /api/v1/tools/enrichment payload.
          *
+         *     ``assembly_id`` is mandatory: both annotations and the statistical
+         *     background must be scoped to the selected assembly.
          *     ``genes`` are gene ids (e.g. ``Glyma.01G000100``); duplicates are
          *     tolerated and deduplicated server-side.  ``mode`` selects between the
          *     classic over-representation test (default, backwards compatible) and the
@@ -5074,6 +5237,11 @@ export interface components {
          *     is required in ``gsea`` mode and must align with ``genes`` 1:1.
          */
         EnrichmentRequest: {
+            /**
+             * Assembly Id
+             * @description Assembly database id; input genes, annotations, and background are restricted to it.
+             */
+            assembly_id: number;
             /**
              * Genes
              * @description Gene ids to test for GO/KEGG enrichment (1-500)
@@ -5119,7 +5287,7 @@ export interface components {
         };
         /**
          * EnrichmentResponse
-         * @description ORA enrichment analysis result.
+         * @description ORA result with assembly, release, and annotation source context.
          */
         EnrichmentResponse: {
             /**
@@ -5153,6 +5321,47 @@ export interface components {
              * @description Explanatory note, e.g. when no input gene has annotations
              */
             message?: string | null;
+            /** Assembly Id */
+            assembly_id: number;
+            /** Release Id */
+            release_id: number;
+            /** Assembly Name */
+            assembly_name: string;
+            /** Assembly Version */
+            assembly_version: string;
+            annotation_source: components["schemas"]["EnrichmentSource"] | null;
+        };
+        /**
+         * EnrichmentSource
+         * @description Public, reproducible source identity for the annotation snapshot.
+         */
+        EnrichmentSource: {
+            /**
+             * Name
+             * @description Annotation provider or dataset name
+             */
+            name: string;
+            /**
+             * Version
+             * @description Provider's data release/version
+             */
+            version: string;
+            /**
+             * Url
+             * @description Public HTTPS source page or download URL
+             */
+            url: string;
+            /**
+             * Sha256
+             * @description SHA-256 of the imported source file
+             */
+            sha256: string;
+            /**
+             * Imported At
+             * Format: date-time
+             * @description UTC import timestamp
+             */
+            imported_at: string;
         };
         /**
          * EnrichmentTerm
@@ -5268,9 +5477,14 @@ export interface components {
         };
         /**
          * ExpPatternRequest
-         * @description Request body for ``POST /api/v1/tools/exppattern``.
+         * @description Request one expression matrix from exactly one genome assembly.
          */
         ExpPatternRequest: {
+            /**
+             * Assembly Id
+             * @description Genome assembly database id; genes and expression libraries are restricted to it.
+             */
+            assembly_id: number;
             /**
              * Genes
              * @description Gene IDs to include in the matrix (1–50).
@@ -5291,6 +5505,45 @@ export interface components {
              * Scale
              * @description Row scaling: 'zscore' (default) or 'none' for raw fpkm.
              * @default zscore
+             * @enum {string}
+             */
+            scale: "zscore" | "none";
+        };
+        /**
+         * ExpPatternResponse
+         * @description Assembly-labelled expression matrix; ``row_order`` maps display rows to genes.
+         */
+        ExpPatternResponse: {
+            /** Assembly Id */
+            assembly_id: number;
+            /** Release Id */
+            release_id: number;
+            /** Assembly Name */
+            assembly_name: string;
+            /** Assembly Version */
+            assembly_version: string;
+            /** Genes */
+            genes: string[];
+            /** Conditions */
+            conditions: string[];
+            /** Matrix */
+            matrix: (number | null)[][];
+            /** Row Order */
+            row_order: number[];
+            /**
+             * Clustering
+             * @enum {string}
+             */
+            clustering: "input" | "hierarchical" | "mean_sort" | "none";
+            /** Value Range */
+            value_range: [
+                number | null,
+                number | null
+            ];
+            /** Missing Genes */
+            missing_genes: string[];
+            /**
+             * Scale
              * @enum {string}
              */
             scale: "zscore" | "none";
@@ -6155,6 +6408,37 @@ export interface components {
             ref_allele: string;
             /** Alt Allele */
             alt_allele: string;
+        };
+        /** LocalTestPreviewMeta */
+        LocalTestPreviewMeta: {
+            /**
+             * Preview
+             * @default true
+             * @constant
+             */
+            preview: true;
+            /**
+             * Publication Status
+             * @default unpublished
+             * @constant
+             */
+            publication_status: "unpublished";
+            /**
+             * Coordinate System
+             * @default 1-based-inclusive
+             * @constant
+             */
+            coordinate_system: "1-based-inclusive";
+            dataset: components["schemas"]["PreviewDatasetSource"];
+            assembly: components["schemas"]["PreviewAssembly"];
+            /**
+             * Annotation Version
+             * @default Wm82.a6.v1
+             * @constant
+             */
+            annotation_version: "Wm82.a6.v1";
+            /** Chromosomes */
+            chromosomes: components["schemas"]["PreviewChromosome"][];
         };
         /**
          * LoginRequest
@@ -7229,6 +7513,175 @@ export interface components {
             /** Enabled */
             enabled: boolean;
         };
+        /** PreviewAssembly */
+        PreviewAssembly: {
+            /**
+             * Name
+             * @default Gmax_880_v6.0
+             * @constant
+             */
+            name: "Gmax_880_v6.0";
+            /**
+             * Version
+             * @default v6.0
+             * @constant
+             */
+            version: "v6.0";
+            /**
+             * Species
+             * @default Glycine max
+             * @constant
+             */
+            species: "Glycine max";
+            /**
+             * Status
+             * @default unpublished
+             * @constant
+             */
+            status: "unpublished";
+        };
+        /** PreviewChromosome */
+        PreviewChromosome: {
+            /** Name */
+            name: string;
+            /** Length */
+            length: number;
+        };
+        /** PreviewDatasetSource */
+        PreviewDatasetSource: {
+            /**
+             * Key
+             * @default 03_soymut-a6-test
+             * @constant
+             */
+            key: "03_soymut-a6-test";
+            /** Source File */
+            source_file: string;
+            /** Source Sha256 */
+            source_sha256: string;
+            /** Row Count */
+            row_count: number;
+            /** Annotation File */
+            annotation_file: string;
+            /** Annotation Sha256 */
+            annotation_sha256: string;
+            /** Annotation Gene Count */
+            annotation_gene_count: number;
+        };
+        /** PreviewGeneItem */
+        PreviewGeneItem: {
+            /** Gene Id */
+            gene_id: string;
+            /** Gene Symbol */
+            gene_symbol: string | null;
+            /** Chromosome */
+            chromosome: string;
+            /** Start Pos */
+            start_pos: number;
+            /** End Pos */
+            end_pos: number;
+            /**
+             * Strand
+             * @enum {string}
+             */
+            strand: "+" | "-";
+            /** Biotype */
+            biotype: string;
+            /** Mutation Site Count */
+            mutation_site_count: number;
+        };
+        /** PreviewGeneSearchResponse */
+        PreviewGeneSearchResponse: {
+            /**
+             * Preview
+             * @default true
+             * @constant
+             */
+            preview: true;
+            /**
+             * Publication Status
+             * @default unpublished
+             * @constant
+             */
+            publication_status: "unpublished";
+            assembly: components["schemas"]["PreviewAssembly"];
+            /**
+             * Annotation Version
+             * @default Wm82.a6.v1
+             * @constant
+             */
+            annotation_version: "Wm82.a6.v1";
+            /** Query */
+            query: string;
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Items */
+            items: components["schemas"]["PreviewGeneItem"][];
+        };
+        /** PreviewMutationSiteItem */
+        PreviewMutationSiteItem: {
+            /** Source Site Key */
+            source_site_key: string;
+            /** Mutant Line Name */
+            mutant_line_name: string;
+            /** Chromosome */
+            chromosome: string;
+            /** Position */
+            position: number;
+            /**
+             * Confidence
+             * @enum {string}
+             */
+            confidence: "H" | "L";
+            /** Gene Id */
+            gene_id: string;
+            /** Feature */
+            feature: string;
+            /** Available */
+            available: boolean;
+        };
+        /** PreviewMutationSiteSearchResponse */
+        PreviewMutationSiteSearchResponse: {
+            /**
+             * Preview
+             * @default true
+             * @constant
+             */
+            preview: true;
+            /**
+             * Publication Status
+             * @default unpublished
+             * @constant
+             */
+            publication_status: "unpublished";
+            /**
+             * Coordinate System
+             * @default 1-based-inclusive
+             * @constant
+             */
+            coordinate_system: "1-based-inclusive";
+            assembly: components["schemas"]["PreviewAssembly"];
+            /**
+             * Annotation Version
+             * @default Wm82.a6.v1
+             * @constant
+             */
+            annotation_version: "Wm82.a6.v1";
+            /** Chromosome */
+            chromosome: string;
+            /** Start */
+            start: number;
+            /** End */
+            end: number;
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Items */
+            items: components["schemas"]["PreviewMutationSiteItem"][];
+        };
         /** PreviewRequest */
         PreviewRequest: {
             /** Definition */
@@ -7562,6 +8015,32 @@ export interface components {
             mutant_line_count: number;
         };
         /**
+         * ResolvedTableView
+         * @description The layout the portal should render for this request.
+         */
+        ResolvedTableView: {
+            /** Kind */
+            kind: string;
+            /** Species */
+            species: string;
+            /**
+             * Site Variant
+             * @enum {string}
+             */
+            site_variant: "external" | "internal";
+            /** Release Id */
+            release_id: number | null;
+            /** Template Id */
+            template_id: number | null;
+            /** Template Name */
+            template_name: string;
+            /** Is Builtin Default */
+            is_builtin_default: boolean;
+            /** Columns */
+            columns: components["schemas"]["TableColumn"][];
+            actions: components["schemas"]["TableActions"];
+        };
+        /**
          * SearchResultItem
          * @description A single global-search hit (stable public contract).
          *
@@ -7886,6 +8365,96 @@ export interface components {
          * @enum {string}
          */
         SiteVariant: "external" | "internal";
+        /** SpeciesInstanceCreate */
+        SpeciesInstanceCreate: {
+            /** Code */
+            code: string;
+            /** Name */
+            name: string;
+            /** Species */
+            species: string;
+            /** Api Base Url */
+            api_base_url: string;
+            /** Jbrowse Base Url */
+            jbrowse_base_url?: string | null;
+            /** Portal Base Url */
+            portal_base_url?: string | null;
+            /**
+             * Is Enabled
+             * @default true
+             */
+            is_enabled: boolean;
+            /**
+             * Is Local
+             * @default false
+             */
+            is_local: boolean;
+            /** Notes */
+            notes?: string | null;
+        };
+        /** SpeciesInstanceListResponse */
+        SpeciesInstanceListResponse: {
+            /** Items */
+            items: components["schemas"]["SpeciesInstanceResponse"][];
+            /** Total */
+            total: number;
+        };
+        /** SpeciesInstanceResponse */
+        SpeciesInstanceResponse: {
+            /** Code */
+            code: string;
+            /** Name */
+            name: string;
+            /** Species */
+            species: string;
+            /** Api Base Url */
+            api_base_url: string;
+            /** Jbrowse Base Url */
+            jbrowse_base_url?: string | null;
+            /** Portal Base Url */
+            portal_base_url?: string | null;
+            /**
+             * Is Enabled
+             * @default true
+             */
+            is_enabled: boolean;
+            /**
+             * Is Local
+             * @default false
+             */
+            is_local: boolean;
+            /** Notes */
+            notes?: string | null;
+            /** Id */
+            id: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** SpeciesInstanceUpdate */
+        SpeciesInstanceUpdate: {
+            /** Name */
+            name?: string | null;
+            /** Api Base Url */
+            api_base_url?: string | null;
+            /** Jbrowse Base Url */
+            jbrowse_base_url?: string | null;
+            /** Portal Base Url */
+            portal_base_url?: string | null;
+            /** Is Enabled */
+            is_enabled?: boolean | null;
+            /** Is Local */
+            is_local?: boolean | null;
+            /** Notes */
+            notes?: string | null;
+        };
         /** StaticPageCreate */
         StaticPageCreate: {
             /** Slug */
@@ -8069,6 +8638,144 @@ export interface components {
          * @enum {string}
          */
         Strand: "+" | "-";
+        /**
+         * TableActions
+         * @description Optional trailing action columns of a table view.
+         */
+        TableActions: {
+            /**
+             * Jbrowse
+             * @default false
+             */
+            jbrowse: boolean;
+            /**
+             * Genome Preview
+             * @default false
+             */
+            genome_preview: boolean;
+        };
+        /**
+         * TableColumn
+         * @description One rendered column.
+         *
+         *     ``key`` addresses the field in the API row payload; ``label_zh`` /
+         *     ``label_en`` are the bilingual headers. ``visible=False`` keeps a column
+         *     configured but hidden, which is how an operator stages a column without
+         *     publishing it.
+         */
+        TableColumn: {
+            /** Key */
+            key: string;
+            /** Label Zh */
+            label_zh: string;
+            /** Label En */
+            label_en: string;
+            /**
+             * Visible
+             * @default true
+             */
+            visible: boolean;
+        };
+        /**
+         * TableViewTemplateCreate
+         * @description POST body. ``kind`` is fixed per create call by the operator.
+         */
+        TableViewTemplateCreate: {
+            /** Name */
+            name: string;
+            /**
+             * Species
+             * @default Glycine max
+             */
+            species: string;
+            /**
+             * Site Variant
+             * @default external
+             * @enum {string}
+             */
+            site_variant: "external" | "internal";
+            /** Release Id */
+            release_id?: number | null;
+            /**
+             * Is Default
+             * @default false
+             */
+            is_default: boolean;
+            /** Columns */
+            columns: components["schemas"]["TableColumn"][];
+            actions?: components["schemas"]["TableActions"];
+            /** Notes */
+            notes?: string | null;
+            /**
+             * Kind
+             * @default mutation_sites
+             * @enum {string}
+             */
+            kind: "mutation_sites" | "variants" | "genes" | "mutant_lines";
+        };
+        /** TableViewTemplateListResponse */
+        TableViewTemplateListResponse: {
+            /** Items */
+            items: components["schemas"]["TableViewTemplateResponse"][];
+            /** Total */
+            total: number;
+        };
+        /** TableViewTemplateResponse */
+        TableViewTemplateResponse: {
+            /** Name */
+            name: string;
+            /**
+             * Species
+             * @default Glycine max
+             */
+            species: string;
+            /**
+             * Site Variant
+             * @default external
+             * @enum {string}
+             */
+            site_variant: "external" | "internal";
+            /** Release Id */
+            release_id?: number | null;
+            /**
+             * Is Default
+             * @default false
+             */
+            is_default: boolean;
+            /** Columns */
+            columns: components["schemas"]["TableColumn"][];
+            actions?: components["schemas"]["TableActions"];
+            /** Notes */
+            notes?: string | null;
+            /** Id */
+            id: number;
+            /** Kind */
+            kind: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** TableViewTemplateUpdate */
+        TableViewTemplateUpdate: {
+            /** Name */
+            name?: string | null;
+            /** Columns */
+            columns?: components["schemas"]["TableColumn"][] | null;
+            actions?: components["schemas"]["TableActions"] | null;
+            /** Is Default */
+            is_default?: boolean | null;
+            /** Release Id */
+            release_id?: number | null;
+            /** Notes */
+            notes?: string | null;
+        };
         /**
          * TokenResponse
          * @description Token pair returned after successful authentication.
@@ -9346,8 +10053,12 @@ export interface operations {
     };
     list_assemblies_api_v1_genes_assemblies_get: {
         parameters: {
-            query?: never;
-            header?: never;
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -9368,7 +10079,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
             /** @description Internal Server Error */
@@ -9384,8 +10095,12 @@ export interface operations {
     };
     list_chromosomes_api_v1_genes_assemblies__assembly_id__chromosomes_get: {
         parameters: {
-            query?: never;
-            header?: never;
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
             path: {
                 assembly_id: number;
             };
@@ -9858,6 +10573,128 @@ export interface operations {
             };
         };
     };
+    preview_meta_api_v1_preview_test_data_meta_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocalTestPreviewMeta"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    preview_genes_api_v1_preview_test_data_genes_get: {
+        parameters: {
+            query: {
+                gene_id: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreviewGeneSearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    preview_mutation_sites_api_v1_preview_test_data_mutation_sites_get: {
+        parameters: {
+            query: {
+                chromosome: string;
+                start: number;
+                end: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreviewMutationSiteSearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     list_variants_api_v1_variants_get: {
         parameters: {
             query?: {
@@ -10055,8 +10892,12 @@ export interface operations {
     };
     seqfetch_api_v1_tools_seqfetch_post: {
         parameters: {
-            query?: never;
-            header?: never;
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -11429,6 +12270,52 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PhenotypeResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_table_view_api_v1_table_views__kind__get: {
+        parameters: {
+            query?: {
+                variant?: components["schemas"]["SiteVariant"];
+                species?: string;
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path: {
+                kind: "mutation_sites" | "variants" | "genes" | "mutant_lines";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResolvedTableView"];
                 };
             };
             /** @description Validation Error */
@@ -16727,6 +17614,333 @@ export interface operations {
             };
         };
     };
+    list_table_view_templates_api_v1_admin_table_views_get: {
+        parameters: {
+            query?: {
+                kind?: string | null;
+                species?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TableViewTemplateListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_table_view_template_api_v1_admin_table_views_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TableViewTemplateCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TableViewTemplateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_table_view_template_api_v1_admin_table_views__template_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                template_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TableViewTemplateUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TableViewTemplateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    delete_table_view_template_api_v1_admin_table_views__template_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                template_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_species_instances_api_v1_admin_species_instances_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpeciesInstanceListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_species_instance_api_v1_admin_species_instances_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SpeciesInstanceCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpeciesInstanceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_species_instance_api_v1_admin_species_instances__instance_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                instance_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SpeciesInstanceUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpeciesInstanceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    delete_species_instance_api_v1_admin_species_instances__instance_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                instance_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     create_upload_presign_api_v1_admin_uploads_presign_post: {
         parameters: {
             query?: never;
@@ -17424,8 +18638,12 @@ export interface operations {
     };
     run_enrichment_api_v1_tools_enrichment_post: {
         parameters: {
-            query?: never;
-            header?: never;
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -17466,8 +18684,12 @@ export interface operations {
     };
     exppattern_api_v1_tools_exppattern_post: {
         parameters: {
-            query?: never;
-            header?: never;
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -17483,9 +18705,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["ExpPatternResponse"];
                 };
             };
             /** @description Validation Error */

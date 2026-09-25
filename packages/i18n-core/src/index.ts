@@ -25,7 +25,7 @@ export function detectLanguage(): SupportedLanguage {
   // through to the navigator hint instead of breaking the page.
   const storage: Pick<Storage, "getItem"> | undefined =
     typeof globalThis.localStorage !== "undefined" ? globalThis.localStorage : window.localStorage;
-  let stored: string | null = null;
+  let stored: string | null;
   try {
     stored = storage?.getItem("soymutdb_lang") ?? null;
   } catch {
