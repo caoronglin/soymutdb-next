@@ -1,19 +1,12 @@
 import { defineConfig } from "vitest/config";
-import { resolve } from "node:path";
+import vue from "@vitejs/plugin-vue";
 
 export default defineConfig({
-  resolve: {
-    alias: {
-      "@": resolve(__dirname, "src"),
-    },
-  },
+  plugins: [vue()],
   test: {
     environment: "jsdom",
-    include: ["src/**/*.test.{ts,tsx}"],
-    setupFiles: ["./src/test/setup.ts"],
-    // Node v26: a forked pool with one worker keeps DOM-heavy tests stable.
+    include: ["src/**/*.test.ts"],
     pool: "forks",
-    maxWorkers: 1,
-    css: false,
+    poolOptions: { forks: { singleFork: true, maxForks: 1 } },
   },
 });

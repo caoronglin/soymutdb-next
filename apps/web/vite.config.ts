@@ -132,6 +132,10 @@ export default defineConfig(({ mode }) => {
           manualChunks(id: string) {
             if (!id.includes("node_modules")) return undefined;
             if (id.includes("antdv-next") || id.includes("@ant-design")) return "ui";
+            // `@tanstack/charts` is not vue-query: folding them together made
+            // the query budget measure the chart runtime, which is a different
+            // dependency with a different upgrade cadence.
+            if (id.includes("@tanstack/charts")) return "charts";
             if (id.includes("@tanstack")) return "query";
             if (id.includes("/vue/") || id.includes("@vue/") || id.includes("/pinia/")) {
               return "vue";

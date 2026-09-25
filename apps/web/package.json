@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@soymutdb/api-client": "workspace:*",
+    "@soymutdb/charts": "workspace:*",
     "@soymutdb/genome-view-model": "workspace:*",
     "@soymutdb/i18n-core": "workspace:*",
     "@soymutdb/query-keys": "workspace:*",

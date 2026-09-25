@@ -1,19 +1,11 @@
 /// <reference types="vite/client" />
 
-// View Transitions API types.
-interface ViewTransition {
-    finished: Promise<void>;
-    ready: Promise<void>;
-    updateCallbackDone: Promise<void>;
-    skipTransition(): void;
+interface ImportMetaEnv {
+  readonly VITE_API_BASE_URL?: string;
+  readonly VITE_BASE_URL?: string;
+  readonly VITE_SOYMUTDB_RELEASE_ID?: string;
 }
-interface Document {
-    startViewTransition?(updateCallback: () => Promise<void> | void): ViewTransition;
-}
-interface NetworkInformation {
-    readonly saveData?: boolean;
-    readonly effectiveType?: string;
-}
-interface Navigator {
-    readonly connection?: NetworkInformation;
+
+interface ImportMeta {
+  readonly env: ImportMetaEnv;
 }

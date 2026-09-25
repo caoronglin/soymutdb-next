@@ -586,7 +586,10 @@
     "mutantLineComparison": "突变系比较",
     "chartSummary": "图表摘要",
     "totalByChromosome": "全部 20 条染色体的变异总数。",
-    "noChartData": "暂无图表数据"
+    "noChartData": "暂无图表数据",
+    "discoveryTrend": "发现趋势",
+    "trendDescription": "最近 365 天的累计变异数。",
+    "noData": "该 release 没有汇总数据。"
   },
   "search": {
     "title": "全局搜索",
@@ -925,7 +928,20 @@
       "clipboardEmpty": "剪贴板为空",
       "clipboardError": "无法读取剪贴板，请手动粘贴文本。",
       "markdownPasteSuccess": "已按 Markdown 应用剪贴板内容"
-    }
+    },
+    "tableViews": "表格模板",
+    "tableViewsHint": "配置门户各表格显示哪些列。模板按物种、站点变体与 release 作用域；跨组装同源列默认不启用。",
+    "table": "表格",
+    "species": "物种",
+    "siteVariant": "站点变体",
+    "newTemplate": "新建模板",
+    "noTemplates": "该表还没有模板，门户使用内置默认列。",
+    "templateName": "模板名称",
+    "columns": "列",
+    "setDefault": "设为默认",
+    "genomePreview": "基因预览",
+    "features": "能力开关",
+    "featuresHint": "该部署的导入与科研能力。未开启的能力显示为 OFF 而不是隐藏——缺失的行与未实现无法区分。"
   },
   "news": {
     "title": "新闻动态",
@@ -1212,5 +1228,15 @@
     "accession": "运行编号",
     "notFound": "未找到该运行",
     "openInNcbi": "在 NCBI 中打开"
+  },
+  "compare": {
+    "title": "变异对比",
+    "subtitle": "并排对比已发布的变异。ID 来自 URL，因此对比结果可分享。",
+    "variantIds": "变异 ID",
+    "placeholder": "变异 ID，逗号分隔",
+    "limit": "每次对比最多 {max} 个变异。",
+    "field": "字段",
+    "notFound": "当前 release 中不存在：",
+    "noRows": "这些 ID 在当前 release 中均不可用。"
   }
 }

@@ -6,12 +6,7 @@
     "**/generated/**",
     "**/node_modules/**",
     "**/playwright-report*/**",
-    "**/test-results*/**",
-    "apps/admin/src/components/**",
-    "apps/web/src/components/**",
-    "apps/admin/src/lib/auth-context.tsx",
-    "apps/admin/src/lib/page-builder-api.ts",
-    "apps/admin/src/lib/widget-api.ts"
+    "**/test-results*/**"
   ],
   "exclude": [
     "files",

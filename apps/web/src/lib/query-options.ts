@@ -15,6 +15,12 @@
 import { infiniteQueryOptions, queryOptions } from "@tanstack/vue-query";
 
 import {
+  fetchChromosomeDensity,
+  fetchDiscoveryTrend,
+  fetchEffectDistribution,
+  fetchImpactSummary,
+  fetchMutagenStatistics,
+  fetchVariantTypeSummary,
   getAssemblies,
   getAssemblyChromosomes,
   getTableView,
@@ -192,6 +198,59 @@ export function regionVariantsQueryOptions(
       context.assemblyName && context.chromosome && context.start && context.end,
     ),
     staleTime: 30_000,
+  });
+}
+
+/**
+ * Analytics summaries. These are aggregate reads over the whole release, not a
+ * filtered result set, so the key carries the release/site context (a context
+ * switch must not reuse another release's numbers) and nothing else.
+ */
+export function chromosomeDensityQueryOptions(context: DeploymentContext) {
+  return queryOptions({
+    queryKey: ["analytics", "chromosome-density", context.releaseId, context.siteVariant],
+    queryFn: () => fetchChromosomeDensity(context.releaseId ?? undefined),
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function variantTypeSummaryQueryOptions(context: DeploymentContext) {
+  return queryOptions({
+    queryKey: ["analytics", "variant-types", context.releaseId, context.siteVariant],
+    queryFn: () => fetchVariantTypeSummary(context.releaseId ?? undefined),
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function impactSummaryQueryOptions(context: DeploymentContext) {
+  return queryOptions({
+    queryKey: ["analytics", "impact", context.releaseId, context.siteVariant],
+    queryFn: () => fetchImpactSummary(context.releaseId ?? undefined),
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function effectDistributionQueryOptions(context: DeploymentContext) {
+  return queryOptions({
+    queryKey: ["analytics", "effect-distribution", context.releaseId, context.siteVariant],
+    queryFn: () => fetchEffectDistribution(context.releaseId ?? undefined),
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function mutagenStatisticsQueryOptions(context: DeploymentContext) {
+  return queryOptions({
+    queryKey: ["analytics", "mutagens", context.releaseId, context.siteVariant],
+    queryFn: () => fetchMutagenStatistics(context.releaseId ?? undefined),
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function discoveryTrendQueryOptions(context: DeploymentContext & { days: number }) {
+  return queryOptions({
+    queryKey: ["analytics", "discovery-trend", context.days, context.releaseId, context.siteVariant],
+    queryFn: () => fetchDiscoveryTrend(context.days, context.releaseId ?? undefined),
+    staleTime: 5 * 60_000,
   });
 }
 

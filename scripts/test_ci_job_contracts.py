@@ -937,165 +937,74 @@ class DeliveryArchitectureTests(unittest.TestCase):
                             "pnpm job without a persistent store volume",
                         )
 
-    def test_i18n_test_mock_interpolates_like_the_real_library(self) -> None:
-        """The shared double must substitute {{name}}, not return it literally.
+    def test_i18n_handling_needs_no_framework_double(self) -> None:
+        """Both frontends run the real i18next instance.
 
-        Real CNB failure, after the stable-`t` fix removed the render loop:
+        The React apps carried a hand-written `useTranslation` double so their
+        tests could assert interpolated defaults. That double had its own bugs —
+        it returned the `{{name}}` template verbatim, and it returned a *fresh*
+        `t` every render, which made any `useEffect(..., [t])` loop forever:
+        224 renders for one click, blamed on a page whose assertions had passed.
 
-            src/routes/imports/import-validation-report.test.tsx
-            Unable to find an element with the text: /1 validation errors/
-              <p>{{errors}} validation errors</p>
-
-        The component interpolates a default and the test asserts the result. Two
-        separate gaps produced the literal template: that test did not mock
-        `react-i18next` at all (and uninitialised i18next returns `defaultValue`
-        verbatim), and the shared double returned it verbatim too. The test now
-        uses the shared double, which is why the substitution is asserted here.
-
-        The portal (`apps/web`) is Vue and runs real i18next (see
-        `apps/web/src/lib/i18n.ts`), so it needs no double; only the React apps
-        do, and the admin is the one that still ships one.
+        Both frontends are now Vue and use the shipped translator
+        (`apps/{web,admin}/src/lib/i18n.ts`, over `@soymutdb/i18n-core`), so the
+        interpolation under test is the interpolation that ships. The guard
+        therefore asserts the absence of a second translation path rather than
+        the correctness of a copy.
         """
-        mock = (ROOT / "apps/admin/src/test/mocks.ts").read_text(encoding="utf-8")
-        self.assertIn(
-            ".replace(",
-            mock,
-            "apps/admin/src/test/mocks.ts must substitute {{name}} placeholders",
-        )
-        self.assertIn("defaultValue", mock, "apps/admin")
+        for app in ("web", "admin"):
+            self.assertFalse(
+                (ROOT / f"apps/{app}/src/test/mocks.ts").exists(),
+                f"apps/{app} must not ship an i18n double — use the real "
+                f"translator from apps/{app}/src/lib/i18n.ts",
+            )
+            # The translation layer must import the shared catalogs, or a locale
+            # change would silently apply to only one frontend.
+            i18n = (ROOT / f"apps/{app}/src/lib/i18n.ts").read_text(encoding="utf-8")
+            self.assertIn("@soymutdb/i18n-core", i18n, f"apps/{app}/src/lib/i18n.ts")
 
-        # Any test that asserts an interpolated default must mock i18next with the
-        # shared double (otherwise nothing substitutes the placeholder).
-        import_failures = []
-        for test_file in sorted(ROOT.glob("apps/admin/src/**/*.test.ts*")):
-            text = test_file.read_text(encoding="utf-8")
-            asserts_interpolation = "validation errors" in text and "getByText" in text
-            if asserts_interpolation and "test/mocks" not in text:
-                import_failures.append(str(test_file.relative_to(ROOT)))
-        self.assertEqual(
-            import_failures,
-            [],
-            "these tests assert interpolated output but do not use the shared "
-            "i18n double:\n" + "\n".join(import_failures),
-        )
-
-    def test_i18n_test_mocks_do_not_return_a_fresh_t_per_render(self) -> None:
-        """An inline `useTranslation` mock makes effects loop forever.
-
-        Real CNB failure, after the env leak was fixed:
-
-            src/routes/news/trash.test.tsx > purges only after exact slug
-            AssertionError: expected "vi.fn()" to be called 2 times, but got 224 times
-            src/routes/news/trash.test.tsx > requires exact slug...
-            Error: Unable to perform pointer interaction as the element has
-                   `pointer-events: none`
-
-        The page does `useCallback(load, [message, page, pageSize, t])` and
-        `useEffect(() => { void load(); }, [load])`. The test mocked
-        `useTranslation: () => ({ t: (key) => key })`, which returns a NEW `t`
-        every render, so `load` changed every render, so the fetch effect re-ran
-        every render. 224 was the click landing while the tree was still
-        re-rendering. i18next memoises `t`; the mock must too.
-        """
-        # A per-render `t` is one whose VALUE is an arrow function declared inside
-        # the `useTranslation` return. A reference to a module-scope function is
-        # stable and fine; so is the shared double.
+        # No test may re-introduce the per-render `t` mock.
         offenders = []
         pattern = re.compile(
-            r"useTranslation:\s*\(\)\s*=>\s*\(\{[^}]*?t:\s*(?P<value>\([^)]*\)\s*=>|[A-Za-z_$][\w$]*\s*=>)",
+            r"useTranslation:\s*\(\s*\)\s*=>\s*\(\{[^}]*?t:\s*(?P<value>\([^)]*\)\s*=>|[A-Za-z_$][\w$]*\s*=>)",
             re.S,
         )
         for source in sorted(ROOT.glob("apps/*/src/**/*.test.ts*")):
-            text = source.read_text(encoding="utf-8")
-            if "mockTranslation" in text:
-                continue
-            for match in pattern.finditer(text):
+            if pattern.search(source.read_text(encoding="utf-8")):
                 offenders.append(str(source.relative_to(ROOT)))
-                break
         self.assertEqual(
             offenders,
             [],
-            "these test files mock useTranslation with a per-render `t`; import the "
-            "shared double from src/test/mocks.ts instead:\n" + "\n".join(offenders),
-        )
-
-        # The shared double must exist and expose a module-level `t`. Only the
-        # React admin still needs one: the Vue portal runs the real i18next
-        # instance (apps/web/src/lib/i18n.ts), so a second double here is exactly
-        # how the React portal and its tests drifted on placeholder handling.
-        mock = ROOT / "apps/admin/src/test/mocks.ts"
-        self.assertTrue(mock.is_file(), "missing shared i18n mock for apps/admin")
-        text = mock.read_text(encoding="utf-8")
-        self.assertIn("export const stableT", text)
-        self.assertIn("mockTranslation", text)
-        self.assertFalse(
-            (ROOT / "apps/web/src/test/mocks.ts").exists(),
-            "the Vue portal must not ship a second i18n mock — use the real "
-            "translator from apps/web/src/lib/i18n.ts",
+            "these test files mock useTranslation with a per-render `t`:\n"
+            + "\n".join(offenders),
         )
 
     def test_shared_test_setup_restores_stubbed_globals(self) -> None:
-        """The shared teardown must undo `vi.stubGlobal`, not just `vi.spyOn`.
+        """A test setup that stubs globals must undo them.
 
-        Real CNB failure, after the i18n double was fixed:
+        Real CNB failure: `apps/admin` used `vi.stubGlobal` and then called only
+        `vi.restoreAllMocks()` in teardown. Vitest documents `restoreAllMocks` as
+        spying only — it deliberately leaves stubbed globals in place — so each
+        stub outlived its own test, including a `stubGlobal("crypto", undefined)`
+        that removed the property rather than restoring it, and react-dom then
+        hit the hole from a later file.
 
-            ReferenceError: window is not defined
-              at resolveUpdatePriority (react-dom/cjs/react-dom-client...:1308)
-              at requestUpdateLane
-              at dispatchSetState
-              at Timeout._onTimeout (@rc-component/util/lib/hooks/useDelayState.js:39)
-            This error originated in "src/components/file-upload.test.tsx"
-            Test Files 47 passed (47) | Tests 119 passed (119) | Errors 1 error
-
-        A completely green suite that still exits non-zero, blamed on a file
-        whose own assertions all passed. `vi.stubGlobal` records the replacement
-        it installs and only a walk back over that registry undoes it;
-        `vi.restoreAllMocks()` walks back `vi.spyOn` and deliberately leaves the
-        globals alone. `apps/admin/src/test/setup.ts` called only the latter, so
-        each stub outlived its own test -- including a
-        `stubGlobal("crypto", undefined)` that removed the property rather than
-        restoring it. react-dom then hit the hole from a later file.
-
-        The assertion is on the setup's observable contract, and the sibling
-        `apps/admin/src/test/setup.test.ts` proves the contract behaviourally:
-        that suite declares no `afterEach` of its own, so it fails when this call
-        disappears.
+        The Vue apps do not stub globals: their test support mounts a component
+        with an isolated query client and clears the document between tests, and
+        `vi.clearAllMocks()` is enough because nothing replaces a global. The
+        guard therefore checks that no app reintroduces a setup file that stubs
+        globals without unstubbing them.
         """
-        setup = (ROOT / "apps/admin/src/test/setup.ts").read_text(encoding="utf-8")
-        self.assertIn(
-            "vi.unstubAllGlobals()",
-            setup,
-            "apps/admin/src/test/setup.ts must undo vi.stubGlobal in afterEach",
-        )
-        # `restoreAllMocks` is not a substitute: vitest documents it as spying
-        # only, and the failure above is precisely the difference.
-        self.assertIn("vi.restoreAllMocks()", setup)
-
-        # The teardown must be ordered so the globals are sound before the tree
-        # is unmounted; a detached antd/rc tree rendering against a torn-down
-        # scope is the crash this guards.
-        teardown = setup[setup.index("afterEach((") :]
-        stubs_restored = teardown.index("vi.unstubAllGlobals()")
-        tree_unmounted = teardown.rindex("cleanup()")
-        self.assertLess(
-            stubs_restored,
-            tree_unmounted,
-            "the stubs must be restored before cleanup() unmounts the tree",
-        )
-
-        # And a behavioural specimen must exist for the next reviewer, not just
-        # this textual check.
-        behaviour = ROOT / "apps/admin/src/test/setup.test.ts"
-        self.assertTrue(
-            behaviour.is_file(),
-            "apps/admin/src/test/setup.test.ts must pin the teardown behaviourally",
-        )
-        behaviour_text = behaviour.read_text(encoding="utf-8")
-        self.assertNotIn(
-            "afterEach(",
-            behaviour_text,
-            "apps/admin/src/test/setup.test.ts must rely on the shared setup's "
-            "afterEach; redeclaring one would test a copy instead of the contract",
+        offenders = []
+        for setup in sorted(ROOT.glob("apps/*/src/test/setup.ts")):
+            text = setup.read_text(encoding="utf-8")
+            if "stubGlobal" in text and "unstubAllGlobals" not in text:
+                offenders.append(str(setup.relative_to(ROOT)))
+        self.assertEqual(
+            offenders,
+            [],
+            "these setup files stub globals without unstubbing them:\n"
+            + "\n".join(offenders),
         )
 
     def test_js_unit_tests_do_not_inherit_the_build_environment(self) -> None:

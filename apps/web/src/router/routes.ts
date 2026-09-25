@@ -59,7 +59,9 @@ export interface PortalRouteDefinition {
     | "help"
     | "about"
     | "publications"
-    | "login";
+    | "login"
+    | "analytics"
+    | "compare";
   meta: PortalRouteMeta;
 }
 
@@ -291,6 +293,28 @@ export const PORTAL_ROUTES: readonly PortalRouteDefinition[] = [
       description: "Usage contract, identifiers, assemblies, releases and FAQ.",
       prerender: true,
       sitemap: true,
+    },
+  },
+  {
+    path: "/analytics",
+    name: "analytics",
+    componentKey: "analytics",
+    meta: {
+      title: "Analytics — SoyMutDB",
+      description: "Aggregate views of variant density, types, impact and discovery trend.",
+      prerender: true,
+      sitemap: true,
+    },
+  },
+  {
+    path: "/compare",
+    name: "compare",
+    componentKey: "compare",
+    meta: {
+      title: "Variant comparison — SoyMutDB",
+      description: "Compare released variants side by side by their public ids.",
+      prerender: true,
+      sitemap: false,
     },
   },
   {

@@ -586,7 +586,10 @@
     "mutantLineComparison": "Mutant Line Comparison",
     "chartSummary": "Chart Summary",
     "totalByChromosome": "Total variants across all 20 chromosomes.",
-    "noChartData": "No chart data available"
+    "noChartData": "No chart data available",
+    "discoveryTrend": "Discovery trend",
+    "trendDescription": "Cumulative variant count over the last 365 days.",
+    "noData": "No aggregate data for this release."
   },
   "search": {
     "title": "Global Search",
@@ -925,7 +928,20 @@
       "clipboardEmpty": "Clipboard is empty",
       "clipboardError": "Could not read clipboard. Paste the text manually.",
       "markdownPasteSuccess": "Clipboard content applied as Markdown"
-    }
+    },
+    "tableViews": "Table view templates",
+    "tableViewsHint": "Choose the columns each portal table renders. Templates are scoped by species, site variant and release; the cross-assembly homolog columns are opt-in.",
+    "table": "Table",
+    "species": "Species",
+    "siteVariant": "Site variant",
+    "newTemplate": "New template",
+    "noTemplates": "No template for this table yet — the portal uses the built-in defaults.",
+    "templateName": "Template name",
+    "columns": "Columns",
+    "setDefault": "Set as default",
+    "genomePreview": "Gene preview",
+    "features": "Capabilities",
+    "featuresHint": "Import and scientific capabilities of this deployment. A disabled capability is shown as OFF rather than hidden: an absent row would be indistinguishable from an unimplemented one."
   },
   "news": {
     "title": "News & Updates",
@@ -1212,5 +1228,15 @@
     "accession": "Run accession",
     "notFound": "Run not found",
     "openInNcbi": "Open in NCBI"
+  },
+  "compare": {
+    "title": "Variant comparison",
+    "subtitle": "Compare released variants side by side. Ids come from the URL, so a comparison is shareable.",
+    "variantIds": "Variant IDs",
+    "placeholder": "variant ids, comma separated",
+    "limit": "Up to {max} variants per comparison.",
+    "field": "Field",
+    "notFound": "Not present in the active release:",
+    "noRows": "None of these ids are available in the active release."
   }
 }

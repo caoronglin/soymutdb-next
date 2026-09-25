@@ -82,7 +82,7 @@ python3 scripts/check_page_registry.py
 step "Web query-key architecture"
 python3 scripts/check_web_query_keys.py
 
-step "Admin content architecture"
+step "Admin transport and session boundary"
 python3 scripts/check_admin_content_architecture.py
 
 if [[ "${SOYMUTDB_CI_SKIP_CONTRACT:-0}" != "1" ]]; then

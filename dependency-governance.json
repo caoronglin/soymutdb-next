@@ -115,7 +115,8 @@
         "--json",
         "--extensions",
         "ts,tsx",
-        "apps/admin",
+        "--ts-config",
+        "packages/charts/tsconfig.json",
         "apps/jbrowse",
         "packages"
       ],
@@ -124,7 +125,7 @@
         "path": "typescript-circular-dependencies.json",
         "format": "json"
       },
-      "comment": "The portal is Vue: its graph is the Vue-aware one below (typescript-circular-dependencies-portal), which passes --ts-config and the vue extension. This checker only parses ts/tsx, and a .ts file using import.meta (the portal entry) fails its parser, so the portal belongs to the other graph only."
+      "comment": "Both frontends are Vue: their graphs are the Vue-aware ones below (typescript-circular-dependencies-{portal,admin}), which pass --ts-config and the vue extension. This checker only parses ts/tsx, and a .ts file using import.meta (each app's entry) fails its parser, so the Vue apps belong to the other graphs. This graph also passes a ts-config so the TypeScript sources are parsed as TypeScript."
     },
     {
       "name": "typescript-circular-dependencies-portal",
@@ -144,6 +145,27 @@
       "report": {
         "mode": "stdout",
         "path": "typescript-circular-dependencies-portal.json",
+        "format": "json"
+      }
+    },
+    {
+      "name": "typescript-circular-dependencies-admin",
+      "category": "circular-dependencies",
+      "command": [
+        "pnpm",
+        "dlx",
+        "madge@8.0.0",
+        "--circular",
+        "--json",
+        "--extensions",
+        "ts,tsx,vue",
+        "--ts-config",
+        "apps/admin/tsconfig.json",
+        "apps/admin"
+      ],
+      "report": {
+        "mode": "stdout",
+        "path": "typescript-circular-dependencies-admin.json",
         "format": "json"
       }
     },

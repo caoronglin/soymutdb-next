@@ -6,6 +6,7 @@
 #   ui     (Antdv Next runtime) ≤ 120 KB  (UI_MAX_KB)
 #   vue    (Vue + Router + Pinia) ≤ 45 KB  (VUE_MAX_KB)
 #   query  (TanStack Vue Query)    ≤ 20 KB  (QUERY_MAX_KB)
+#   charts (TanStack Charts)       ≤ 60 KB  (CHARTS_MAX_KB)
 #   主入口 index  ≤ 160 KB  (ENTRY_MAX_KB)
 #
 # 超限 exit 1（CI frontend job 硬门禁；本地也可直接跑）。
@@ -21,6 +22,7 @@ DIST_DIR="${1:-apps/web/dist/assets}"
 UI_MAX_KB="${UI_MAX_KB:-120}"
 VUE_MAX_KB="${VUE_MAX_KB:-45}"
 QUERY_MAX_KB="${QUERY_MAX_KB:-20}"
+CHARTS_MAX_KB="${CHARTS_MAX_KB:-60}"
 ENTRY_MAX_KB="${ENTRY_MAX_KB:-160}"
 
 fail=0
@@ -86,15 +88,17 @@ fi
 
 echo "G2 bundle size budget (gzip):"
 echo "  dir = $DIST_DIR"
-echo "  thresholds: ui<=${UI_MAX_KB}KB  vue<=${VUE_MAX_KB}KB  query<=${QUERY_MAX_KB}KB  entry<=${ENTRY_MAX_KB}KB"
+echo "  thresholds: ui<=${UI_MAX_KB}KB  vue<=${VUE_MAX_KB}KB  query<=${QUERY_MAX_KB}KB  charts<=${CHARTS_MAX_KB}KB  entry<=${ENTRY_MAX_KB}KB"
 
 require_single_chunk "ui-runtime"     "ui-*.js"
 require_single_chunk "vue-runtime"    "vue-*.js"
 require_single_chunk "query-runtime"  "query-*.js"
+require_single_chunk "charts-runtime" "charts-*.js"
 
 check_chunk "ui"     "ui-*.js"     "$UI_MAX_KB"    "design system"
 check_chunk "vue"    "vue-*.js"    "$VUE_MAX_KB"   "framework runtime"
-check_chunk "query"  "query-*.js"  "$QUERY_MAX_KB" "vue-query"
+check_chunk "query"  "query-*.js"  "$QUERY_MAX_KB"  "vue-query"
+check_chunk "charts" "charts-*.js" "$CHARTS_MAX_KB" "charts"
 check_chunk "entry"  "index-*.js"  "$ENTRY_MAX_KB" "app entry"
 
 if [ "$fail" -ne 0 ]; then

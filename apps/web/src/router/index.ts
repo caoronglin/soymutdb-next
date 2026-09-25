@@ -1,6 +1,8 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from "vue-router";
 
 import AboutView from "../views/AboutView.vue";
+import AnalyticsView from "../views/AnalyticsView.vue";
+import CompareView from "../views/CompareView.vue";
 import AnalysesFastpView from "../views/AnalysesFastpView.vue";
 import AnalysesJobView from "../views/AnalysesJobView.vue";
 import AnalysesScanpyView from "../views/AnalysesScanpyView.vue";
@@ -69,6 +71,8 @@ const COMPONENTS = {
   guide: GuideView,
   help: HelpView,
   about: AboutView,
+  analytics: AnalyticsView,
+  compare: CompareView,
   publications: PublicationsView,
   login: LoginView,
 } as const;

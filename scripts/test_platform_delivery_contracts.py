@@ -185,12 +185,21 @@ def test_frontend_platform_lines_remain_bounded() -> None:
     assert workspace["overrides"]["react"] == "19.2.0"
     assert workspace["overrides"]["react-dom"] == "19.2.0"
 
-    for app in ("admin", "jbrowse"):
+    for app in ("jbrowse",):
         package = _json(f"apps/{app}/package.json")
         assert package["dependencies"]["react"].startswith("^19.2.")
         assert package["dependencies"]["react-dom"].startswith("^19.2.")
         assert package["devDependencies"]["typescript"].startswith("^5.9.")
         assert package["devDependencies"]["vite"].startswith("^6.")
+
+    # The admin console is Vue now: the React line is bounded only where a React
+    # app actually ships (JBrowse).
+    admin = _json("apps/admin/package.json")
+    for dependency in ("react", "react-dom", "antd", "@tanstack/react-router", "@tiptap/react"):
+        assert dependency not in admin["dependencies"], (
+            f"apps/admin still depends on {dependency}: the console is Vue-only"
+        )
+    assert admin["dependencies"]["vue"] == "catalog:"
 
     portal = _json("apps/web/package.json")
     for dependency in ("react", "react-dom", "antd", "echarts", "@tanstack/react-router"):
@@ -207,38 +216,22 @@ def test_frontend_platform_lines_remain_bounded() -> None:
     assert workspace["catalog"]["vite"] == "6.4.3"
 
 
-def test_tiptap_family_stays_above_the_redos_advisory() -> None:
-    """Every @tiptap/* pin must clear GHSA-j95f-988m-3j2f.
+def test_tiptap_family_is_gone_with_the_react_editor() -> None:
+    """The tiptap rich-text editor is not part of the Vue console.
 
-    The governance gate runs `pnpm audit --audit-level high` and blocks on a
-    nonzero exit, so a transitive high advisory under one of these pins is a
-    build failure. The advisory is only patched from 3.30.5, and it is a
-    **production** dependency of the admin rich-text editor -- not dev-only.
-
-    The family is pinned explicitly in apps/admin rather than through a
-    workspace override, so this is the one place a pin can silently fall back
-    under the fix. Assert every pin, and that they all agree: @tiptap/core and
-    @tiptap/pm must resolve as a matching pair or the editor fails to load.
+    The React admin shipped a tiptap-based news editor and pinned the whole
+    `@tiptap/*` family above GHSA-j95f-988m-3j2f. The Vue console authors news as
+    Markdown (the portal sanitises it on render), so the family is removed rather
+    than carried: an unpinned advisory surface with no consumer is the worst of
+    both. If an editor is added back, this guard must come back with it.
     """
-    patched = (3, 30, 5)
-    package = _json("apps/admin/package.json")
-    pins = {name: value for name, value in package["dependencies"].items() if name.startswith("@tiptap/")}
+    for app in ("admin", "web"):
+        package = _json(f"apps/{app}/package.json")
+        pins = [name for name in package["dependencies"] if name.startswith("@tiptap/")]
+        assert pins == [], f"apps/{app} should not depend on {pins}"
 
-    assert pins, "apps/admin must pin its @tiptap/* dependencies explicitly"
-    for name, raw in pins.items():
-        value = re.sub(r"^[^\d]*", "", str(raw))
-        resolved = tuple(int(part) for part in value.split(".")[:3])
-        assert resolved >= patched, (
-            f"{name} is {raw}; GHSA-j95f-988m-3j2f is only patched from "
-            f"{'.'.join(str(p) for p in patched)}, and the governance gate "
-            "fails the build on it"
-        )
-
-    versions = {str(value) for value in pins.values()}
-    assert len(versions) == 1, (
-        f"the @tiptap/* family must move in lockstep, found {sorted(versions)}"
-    )
-
+    catalog = workspace_catalog()
+    assert not [name for name in catalog if name.startswith("@tiptap/")]
 
 def test_workspace_security_override_holds_the_js_yaml_floor() -> None:
     """The js-yaml floor must clear GHSA-2883-xcg3-v3hh.
@@ -279,13 +272,10 @@ def test_antd_consumers_resolve_from_workspace_catalog() -> None:
     The portal moved to `@soymutdb/ui-vue` (Antdv Next behind a facade), so it no
     longer resolves AntD at all — that is the point of the facade.
     """
-    for app in ("admin",):
+    for app in ("web", "admin"):
         package = _json(f"apps/{app}/package.json")
-        assert package["dependencies"]["antd"] == "catalog:"
-
-    portal = _json("apps/web/package.json")
-    assert "antd" not in portal["dependencies"]
-    assert "@soymutdb/ui-vue" in portal["dependencies"]
+        assert "antd" not in package["dependencies"], app
+        assert "@soymutdb/ui-vue" in package["dependencies"], app
 
 
 def test_pro_components_dependency_is_removed_after_source_migration() -> None:

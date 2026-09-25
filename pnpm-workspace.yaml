@@ -65,3 +65,11 @@ allowBuilds:
 minimumReleaseAgeExclude:
   - "@tanstack/query-core@5.103.2"
   - "@tanstack/vue-query@5.103.2"
+
+# Charts (plan §2.3): TanStack Charts is pre-1.0, so its pins live in their own
+# catalog and are consumed by @soymutdb/charts only. Upgrades go through one
+# minor at a time, behind that facade's contract test.
+catalogs:
+  charts:
+    '@tanstack/vue-charts': 0.18.0
+    '@tanstack/charts': 0.18.0

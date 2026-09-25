@@ -818,6 +818,73 @@ PR #1 下一批推荐提交链：
 仍未解决：`apps/admin/src/routes/widgets/$name.tsx` 的 zod v3/v4 resolver 类型不匹配（既有，admin typecheck 红）；
 turbo 并发构建在本沙箱触发线程上限（`os error 11`），逐包构建正常，CI 不受影响。
 
+## 12. Phase 4/5 完成：Charts facade + Vue Admin（2026-09-25 本轮）
+
+### 12.1 Phase 4 · `@soymutdb/charts`
+
+- 新包 `packages/charts`（`@soymutdb/charts`）：唯一的图表依赖入口。TanStack Charts
+  **精确固定 0.18.0**，落在独立 catalog `charts:`（pre-1.0 不用 caret）。
+- `ChartFigure.vue` 强制两件契约：图形带 `aria-label`/`aria-description`，并**始终**附带一份
+  精确数值 `<table>`（`<details>` 内）。空数据渲染空态而不是占位序列。零值渲染为 0，
+  不折叠成空白（"未观测" 与 "观测到 0" 必须可区分）。
+- `categoryBarChart` / `trendAreaChart` 是定义工厂（marks + scales 共置）。
+- `apps/web` 的 `/analytics` 页面按此实现：染色体密度、变异类型、影响分布、后果×影响、
+  诱变剂对比、365 天发现趋势；每块都是表优先、图其次、错误态可重试。
+- 分包：`charts` 独立 chunk（36 KB gzip，预算 60 KB）；此前它被并进 `query` chunk，
+  导致 query 预算实际在量图表运行时。
+
+### 12.2 Phase 5 · Vue Admin
+
+`apps/admin` 由 React 切换为 Vue（React admin 约 7.1k 行路由 / 85 文件删除）。
+
+| 页面 | 内容 |
+| --- | --- |
+| `login` | 走 `authRequest` + `setAccessToken`；401 文案通用（不做账号存在性预言）；`?redirect=` 白名单同站路径 |
+| `dashboard` | 当前 release 的状态与计数（来自 release 聚合行，不是分页求和） |
+| `releases` | release 列表 + 按需 provenance |
+| `imports` | 服务端分页 + 状态筛选的导入任务 |
+| `table-templates` | 本轮新增的表格模板管理（列顺序/显隐/同源列/尾部动作/设为默认） |
+| `publications` | 完整 CRUD + 删除确认（列出 DOI） |
+| `news` | 列表 + 创建/编辑/软删除/恢复，草稿与发布状态显式 |
+| `media` | 列表 + 归档（不硬删：被已发布内容引用） |
+| `audit` | 只读审计日志（可编辑的审计就不是审计） |
+| `features` | 能力开关，含 OFF 项（隐藏 OFF 会让"未实现"与"缺失"不可区分） |
+| `settings` | 表单由后端 schema 生成，带 `expected_version` 乐观锁 |
+
+会话与传输边界有专门门禁（`check_admin_content_architecture.py` 重写）：视图不得直接
+`fetch()`，不得读写 web storage。admin `_headers` 的 CSP `connect-src` 在构建期由
+`injectApiOrigin` 写入真实 API origin（源文件保持保守同源策略，不留占位）。
+
+### 12.3 有意移除（有 ADR）
+
+- **ADR-0008**：不迁移 `/antd-pilot`（自 Referential 组件样例页，无消费者；设计系统契约在
+  `@soymutdb/ui-vue` 的 facade 测试里）。
+- **ADR-0009**：退役 page builder 与 widget 系统。Vue 门户不消费 `page_definitions`/widget
+  registry —— 切换后它们只剩 admin 自己的 preview 一个消费者。表与 API 保留（删数据是另一件事）。
+
+### 12.4 `/compare` 重写为 DB 驱动
+
+React 版 `/compare` 对比的是硬编码 demo fixture，与 release 内容无关。Vue 版改为：id 来自
+URL（`?ids=`，上限 4），逐个 `getVariantDetail` 取真实记录，**显式列出当前 release 中不存在的 id**
+而不是静默丢弃；字段行由一张表驱动，position 行链到 JBrowse、gene 行链到基因详情。
+
+### 12.5 本轮验证
+
+| 层 | 结果 |
+| --- | --- |
+| `packages/charts` | 2 tests；typecheck/lint OK |
+| `packages/shared` | 49 tests |
+| api-client / i18n-core / query-keys / ui-vue / genome-view-model | 116 / 6 / 10 / 4 / 13 |
+| `apps/web` | 21 files / **79 tests**；typecheck + lint OK；构建产出 27 个静态文档 |
+| `apps/admin` | **4 tests**；typecheck + lint OK；构建 OK |
+| `apps/jbrowse` | 2 tests；typecheck + lint OK |
+| `apps/api`（真实 PG） | 1236 passed |
+| scripts 契约 | **263 passed, 1 skipped** |
+| 治理 | `dependency governance: passed`（knip/deptry/cycles/licenses/audit 全绿，16 项） |
+| 制品门禁 | production 扫描 OK；artifact headers OK；nginx OK；bundle（ui 79 / vue 33 / query 14 / charts 36 / entry 110 KB）OK；smoke contracts PASS；双站点隔离 PASS |
+
+e2e 尚未按新页面（analytics/compare/admin）扩充规格，仍是上一轮的 29 passed / 2 skipped。
+
 ## 10. Phase 3 收尾 + 可配置表格（2026-09-25 本轮）
 
 本轮目标：把 Vue portal 推到“路线齐全”，同时交付运营要求的**可配置表格**与**多物种实例登记**；
