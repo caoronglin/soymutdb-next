@@ -11,24 +11,36 @@ import { normalizeBasePath, resolveDevAllowedHosts } from "@soymutdb/shared/depl
 // to the same API with an administrator credential, so it has a single site
 // variant and a single origin requirement.
 /**
- * Rewrite the CSP's `connect-src` with the configured API origin.
+ * Write the real API origin into both CSP carriers.
  *
- * The source `_headers` ships a conservative same-origin policy: a placeholder
- * origin must never be the default, and a published admin console whose CSP
- * blocks its own API is the failure this rewrite exists to prevent. The header
- * file is copied verbatim into `dist/`, so the rewrite happens after the copy.
+ * The console has two policies and the browser obeys the *intersection*: the
+ * `<meta>` in the document and the `Content-Security-Policy` line in `_headers`.
+ * Rewriting only the header left the document on the placeholder policy, and a
+ * `default-src 'self'` document blocks the design system's runtime inline styles
+ * — which is not a cosmetic failure: the console renders unstyled and reads as
+ * broken. Both are rewritten here, from one computed policy.
  */
-function injectApiOrigin(apiOrigin: string): Plugin {
+function adminCsp(apiOrigin: string, documentPath: string): Plugin {
+  const origin = new URL(apiOrigin).origin;
+  const csp = (policy: string) =>
+    policy.replace(/connect-src[^;]*/, `connect-src 'self' ${origin}`);
+
   return {
     name: "admin-csp-api-origin",
     apply: "build",
-    closeBundle() {
-      const headers = join(import.meta.dirname, "dist", "_headers");
-      const policy = readFileSync(headers, "utf8").replace(
-        /connect-src[^;]*/,
-        `connect-src 'self' ${new URL(apiOrigin).origin}`,
+    transformIndexHtml(html) {
+      return html.replace(
+        /(<meta\s+http-equiv="Content-Security-Policy"\s+content=")([^"]*)(")/s,
+        (_match, head: string, policy: string, tail: string) =>
+          `${head}${csp(policy)}${tail}`,
       );
-      writeFileSync(headers, policy);
+    },
+    closeBundle() {
+      // `_headers` is copied verbatim into `dist/`, so the rewrite happens after
+      // the copy rather than on the source file.
+      const headers = join(import.meta.dirname, "dist", "_headers");
+      writeFileSync(headers, csp(readFileSync(headers, "utf8")));
+      void documentPath;
     },
   };
 }
@@ -47,7 +59,7 @@ export default defineConfig(({ mode }) => {
   }
   return {
     base: normalizeBasePath(env.VITE_BASE_URL),
-    plugins: [vue(), tailwindcss(), injectApiOrigin(apiOrigin)],
+    plugins: [vue(), tailwindcss(), adminCsp(apiOrigin, "dist/index.html")],
     server: {
       port: 5174,
       host: "0.0.0.0",

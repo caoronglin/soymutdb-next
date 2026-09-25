@@ -2,6 +2,7 @@
 import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
+import { ApiError } from "@soymutdb/api-client";
 import { Button, ConfigProvider, createThemeConfig } from "@soymutdb/ui-vue";
 
 import { useAuth } from "../lib/auth";
@@ -10,9 +11,11 @@ import { t } from "../lib/i18n";
 /**
  * Admin sign-in.
  *
- * The console has no public surface, so the error copy stays generic: a message
- * that distinguishes "no such account" from "wrong password" is an account
- * enumeration oracle, and the admin realm is exactly where that matters.
+ * Two failure modes, two messages: a rejected credential is an authentication
+ * result (generic copy, because distinguishing "no such account" from "wrong
+ * password" is an enumeration oracle) while an unreachable API is an
+ * infrastructure problem. Reporting the second as the first sends an operator
+ * hunting for the wrong cause for as long as it takes to find the network tab.
  */
 const route = useRoute();
 const router = useRouter();
@@ -36,8 +39,11 @@ async function submit() {
   try {
     await auth.login(identifier.value.trim(), password.value);
     await router.push(redirectTarget.value);
-  } catch {
-    errorMessage.value = t("auth.invalidCredentials");
+  } catch (error) {
+    errorMessage.value =
+      error instanceof ApiError && error.status === 401
+        ? t("auth.invalidCredentials")
+        : t("admin.apiUnreachable");
   } finally {
     isPending.value = false;
   }

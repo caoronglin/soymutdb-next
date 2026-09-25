@@ -20,7 +20,18 @@ interface LoginResponse {
 
 const isAuthenticated = ref(false);
 const username = ref<string | null>(null);
-const restoreAttempted = ref(false);
+
+/**
+ * The in-flight restore, shared by every caller.
+ *
+ * A plain "already tried" flag is not enough: the router guard and the app's
+ * mount both call `restore()`, and whichever runs first marks the attempt done
+ * while the refresh is still in the air — so the second caller reads
+ * `isAuthenticated === false` and bounces a signed-in operator back to the login
+ * page on every reload. Handing out the same promise makes both callers wait for
+ * the same answer.
+ */
+let restorePromise: Promise<boolean> | null = null;
 
 /** Decode the token's `sub` without verifying it — the API already did. */
 function subjectOf(token: string): string | null {
@@ -43,28 +54,36 @@ export function useAuth() {
     setAccessToken(response.access_token);
     username.value = subjectOf(response.access_token) ?? identifier;
     isAuthenticated.value = true;
+    // Drop any restore that already failed (a signed-out boot has none, but a
+    // reload that raced the login does): a cached "no session" would bounce the
+    // operator straight back to the login page after a successful sign-in.
+    restorePromise = null;
   }
 
-  async function restore(): Promise<void> {
-    if (restoreAttempted.value) return;
-    restoreAttempted.value = true;
-    try {
-      // `restoreSession` exchanges the HttpOnly refresh cookie for a fresh
-      // access token and reports whether that succeeded. The console never sees
-      // the refresh token itself.
-      const restored = await restoreSession();
-      isAuthenticated.value = restored;
-      if (restored) username.value = "administrator";
-    } catch {
-      // A console with no restorable session is simply signed out.
-      isAuthenticated.value = false;
-    }
+  async function restore(): Promise<boolean> {
+    restorePromise ??= (async () => {
+      try {
+        // `restoreSession` exchanges the HttpOnly refresh cookie for a fresh
+        // access token and reports whether that succeeded. The console never
+        // sees the refresh token itself.
+        return await restoreSession();
+      } catch {
+        // A console with no restorable session is simply signed out.
+        return false;
+      }
+    })();
+    const restored = await restorePromise;
+    isAuthenticated.value = restored;
+    if (restored && !username.value) username.value = "administrator";
+    return restored;
   }
 
   function logout(): void {
     clearAuth();
     isAuthenticated.value = false;
     username.value = null;
+    // A later sign-in must be able to restore again.
+    restorePromise = null;
   }
 
   return {

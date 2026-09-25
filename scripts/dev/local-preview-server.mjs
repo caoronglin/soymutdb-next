@@ -1,19 +1,20 @@
 /**
- * Local preview server: one origin for the portal, the admin console and the API.
+ * Local preview server: one frontend app and the API behind one origin.
  *
- * One origin is not a convenience: the portal's CSP requires an absolute API
- * origin, and a browser opened from anywhere other than this host cannot reach
- * `127.0.0.1`. Serving all three behind one host keeps that origin reachable
- * (and makes a tunnel to this port a complete demo).
+ * The portal and the console are separate deployments with separate origins —
+ * separate artifacts, separate caches, separate CSP. Serving them from one
+ * origin (`/` and `/admin/`) would quietly undo that boundary in the only place
+ * a developer actually looks at it, so each app gets its own process and port
+ * here, and each one proxies `/api/*` to the API on its own origin (which is why
+ * neither needs a CORS allowlist for its own API calls).
  *
- *   /            -> apps/web/dist   (SPA + prerendered documents)
- *   /admin/*     -> apps/admin/dist
- *   /api/*       -> the FastAPI app on 127.0.0.1:8000
- *   /docs,/openapi.json -> the API
+ * Usage
+ *   node scripts/dev/local-preview-server.mjs --app portal --port 8090
+ *   node scripts/dev/local-preview-server.mjs --app admin  --port 8091
  *
- * One origin matters for a demo: the portal's CSP requires an absolute API
- * origin, and serving both behind one host keeps that origin reachable from
- * wherever the page is opened.
+ * Env
+ *   SOYMUTDB_PREVIEW_API_HOST  default 127.0.0.1
+ *   SOYMUTDB_PREVIEW_API_PORT  default 8000
  */
 import { createServer, request as httpRequest } from "node:http";
 import { createReadStream, existsSync, statSync } from "node:fs";
@@ -21,11 +22,27 @@ import { dirname, extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const WEB = resolve(REPO_ROOT, "apps", "web", "dist");
-const ADMIN = resolve(REPO_ROOT, "apps", "admin", "dist");
+const APPS = {
+  portal: resolve(REPO_ROOT, "apps", "web", "dist"),
+  admin: resolve(REPO_ROOT, "apps", "admin", "dist"),
+};
+
+const args = process.argv.slice(2);
+function argValue(flag, fallback) {
+  const index = args.indexOf(flag);
+  return index >= 0 && args[index + 1] ? args[index + 1] : fallback;
+}
+
+const appName = argValue("--app", "portal");
+const APP_ROOT = APPS[appName];
+if (!APP_ROOT) {
+  console.error(`unknown --app ${appName}; expected one of ${Object.keys(APPS).join(", ")}`);
+  process.exit(2);
+}
+
 const API_HOST = process.env.SOYMUTDB_PREVIEW_API_HOST ?? "127.0.0.1";
 const API_PORT = Number(process.env.SOYMUTDB_PREVIEW_API_PORT ?? 8000);
-const PORT = Number(process.argv[2] ?? process.env.SOYMUTDB_PREVIEW_PORT ?? 8090);
+const PORT = Number(argValue("--port", process.env.SOYMUTDB_PREVIEW_PORT ?? 8090));
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -45,7 +62,13 @@ const MIME = {
 
 function proxy(req, res, url) {
   const upstream = httpRequest(
-    { host: API_HOST, port: API_PORT, path: url.pathname + url.search, method: req.method, headers: { ...req.headers, host: `${API_HOST}:${API_PORT}` } },
+    {
+      host: API_HOST,
+      port: API_PORT,
+      path: url.pathname + url.search,
+      method: req.method,
+      headers: { ...req.headers, host: `${API_HOST}:${API_PORT}` },
+    },
     (upstreamRes) => {
       res.writeHead(upstreamRes.statusCode ?? 502, upstreamRes.headers);
       upstreamRes.pipe(res);
@@ -53,21 +76,24 @@ function proxy(req, res, url) {
   );
   upstream.on("error", () => {
     res.writeHead(502, { "content-type": "application/json" });
-    res.end(JSON.stringify({ detail: "the API is not running on 127.0.0.1:8000" }));
+    res.end(
+      JSON.stringify({
+        detail: `the API is not reachable on ${API_HOST}:${API_PORT}`,
+      }),
+    );
   });
   req.pipe(upstream);
 }
 
-function serveStatic(res, root, pathname) {
-  let filePath = join(root, normalize(pathname));
-  if (!filePath.startsWith(root)) {
+function serveStatic(res, pathname) {
+  let filePath = join(APP_ROOT, normalize(pathname));
+  if (!filePath.startsWith(APP_ROOT)) {
     res.writeHead(403).end();
     return;
   }
   if (!existsSync(filePath) || statSync(filePath).isDirectory()) {
     const indexCandidate = join(filePath, "index.html");
-    if (existsSync(indexCandidate)) filePath = indexCandidate;
-    else filePath = join(root, "index.html"); // SPA fallback
+    filePath = existsSync(indexCandidate) ? indexCandidate : join(APP_ROOT, "index.html");
   }
   if (!existsSync(filePath)) {
     res.writeHead(404, { "content-type": "text/plain" });
@@ -80,16 +106,20 @@ function serveStatic(res, root, pathname) {
 
 createServer((req, res) => {
   const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
-  if (url.pathname.startsWith("/api/") || url.pathname === "/health" || url.pathname.startsWith("/docs") || url.pathname.startsWith("/openapi")) {
+  if (
+    url.pathname.startsWith("/api/") ||
+    url.pathname === "/health" ||
+    url.pathname.startsWith("/docs") ||
+    url.pathname.startsWith("/openapi")
+  ) {
     proxy(req, res, url);
     return;
   }
-  if (url.pathname === "/admin" || url.pathname.startsWith("/admin/")) {
-    const rest = url.pathname.replace(/^\/admin\/?/, "") || "";
-    serveStatic(res, ADMIN, rest === "" ? "/index.html" : `/${rest}`);
-    return;
-  }
-  serveStatic(res, WEB, url.pathname);
+  // `_headers` is a host feature (Cloudflare Pages), not something this server
+  // implements. The document's own `<meta>` policy is what a browser here
+  // obeys, which is why the admin build rewrites it too rather than relying on
+  // the header alone.
+  serveStatic(res, url.pathname);
 }).listen(PORT, "0.0.0.0", () => {
-  console.log(`demo server: http://localhost:${PORT}  (portal / admin /admin/ / api /api/v1)`);
+  console.log(`[${appName}] http://localhost:${PORT}  (app + /api/v1 proxy)`);
 });

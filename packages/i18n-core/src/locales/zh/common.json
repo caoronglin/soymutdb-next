@@ -941,7 +941,8 @@
     "setDefault": "设为默认",
     "genomePreview": "基因预览",
     "features": "能力开关",
-    "featuresHint": "该部署的导入与科研能力。未开启的能力显示为 OFF 而不是隐藏——缺失的行与未实现无法区分。"
+    "featuresHint": "该部署的导入与科研能力。未开启的能力显示为 OFF 而不是隐藏——缺失的行与未实现无法区分。",
+    "apiUnreachable": "管理台无法连接 API。请确认 API 已启动且浏览器可达。"
   },
   "news": {
     "title": "新闻动态",

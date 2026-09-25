@@ -49,14 +49,10 @@ export function getRelease(releaseId: string): Promise<ReleaseDetail> {
   return http.get<ReleaseDetail>(`/releases/${releaseId}`);
 }
 
-export function getCurrentRelease(): Promise<ReleaseDetail> {
-  return http.get<ReleaseDetail>("/releases/current");
-}
-
 export function getReleaseProvenance(releaseId: string): Promise<ReleaseProvenance[]> {
   return http.get<ReleaseProvenance[]>(`/releases/${releaseId}/provenance`);
 }
 
-export function getReleaseStats(releaseId: string): Promise<unknown> {
-  return http.get<unknown>(`/releases/${releaseId}/stats`);
-}
+// NOTE: there is no `/releases/current` or `/releases/{id}/stats` route on the
+// API. The active release is the `is_active` row of `getReleases()`; a function
+// that points at a missing route is a 422 waiting for the next caller.

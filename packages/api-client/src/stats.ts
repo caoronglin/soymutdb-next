@@ -67,13 +67,8 @@ export function fetchHomepageStats(): Promise<HomepageStats> {
   return http.get<HomepageStats>("/stats/homepage");
 }
 
-export function fetchReleaseStatistics(
-  onlyActive = false,
-): Promise<ReleaseStats[]> {
-  return http.get<ReleaseStats[]>("/stats/releases", {
-    params: { only_active: onlyActive },
-  });
-}
+// `fetchReleaseStatistics` was removed: it targeted `/stats/releases`, which the
+// API does not serve. Per-release counts come from `listReleases()` rows.
 
 export function fetchVariantTypeSummary(
   releaseId?: string,

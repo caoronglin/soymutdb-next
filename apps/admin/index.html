@@ -3,7 +3,15 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'" />
+    <!--
+      Rewritten at build time by `adminCsp()` in vite.config.ts with the
+      configured API origin. The placeholder here is the conservative
+      same-origin policy a source checkout would serve.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'"
+    />
     <title>SoyMutDB admin</title>
   </head>
   <body>

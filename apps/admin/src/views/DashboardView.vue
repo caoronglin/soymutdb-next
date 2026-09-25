@@ -2,7 +2,7 @@
 import { useQuery } from "@tanstack/vue-query";
 import { computed, toValue } from "vue";
 
-import { getCurrentRelease, getReleases, getReleaseStats } from "@soymutdb/api-client";
+import { getReleases, type ReleaseSummary } from "@soymutdb/api-client";
 import { formatNumber } from "@soymutdb/shared/format";
 import { ConfigProvider, createThemeConfig } from "@soymutdb/ui-vue";
 
@@ -22,33 +22,15 @@ const releasesQuery = useQuery({
   staleTime: 30_000,
 });
 
-const currentQuery = useQuery({
-  queryKey: ["admin", "current-release"],
-  queryFn: getCurrentRelease,
-  staleTime: 30_000,
-});
-
 const releases = computed(() => toValue(releasesQuery.data) ?? []);
-interface ActiveReleaseView {
-  id: string | number;
-  status: string;
-  assembly_name: string;
-  variant_count: number;
-  gene_count: number;
-  mutant_line_count: number;
-}
-
-const activeRelease = computed<ActiveReleaseView | null>(() => {
-  const data = toValue(currentQuery.data) as ActiveReleaseView | null | undefined;
-  return data ?? null;
-});
-const statsQuery = useQuery({
-  queryKey: computed(() => ["admin", "release-stats", activeRelease.value?.id ?? null]),
-  queryFn: () => getReleaseStats(String(activeRelease.value?.id)),
-  enabled: computed(() => Boolean(activeRelease.value?.id)),
-  staleTime: 30_000,
-});
-const stats = computed(() => (toValue(statsQuery.data) ?? null) as { variant_count: number } | null);
+/**
+ * The active release comes from the list the API already returns (`is_active`),
+ * not from a second endpoint: there is no `GET /releases/current`, and a
+ * dashboard that 422s on load is worse than one that reads a field it has.
+ */
+const activeRelease = computed<ReleaseSummary | null>(
+  () => releases.value.find((release) => release.is_active) ?? null,
+);
 </script>
 
 <template>
@@ -96,9 +78,6 @@ const stats = computed(() => (toValue(statsQuery.data) ?? null) as { variant_cou
               <dd>{{ formatNumber(activeRelease.mutant_line_count) }}</dd>
             </div>
           </dl>
-          <p v-if="stats" class="mt-3 text-xs opacity-70" data-testid="dashboard-release-stats">
-            {{ t("admin.totalVariants") }}: {{ formatNumber(stats.variant_count) }}
-          </p>
         </section>
 
         <section class="mt-8" aria-labelledby="releases-heading">

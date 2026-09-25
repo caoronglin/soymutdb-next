@@ -941,7 +941,8 @@
     "setDefault": "Set as default",
     "genomePreview": "Gene preview",
     "features": "Capabilities",
-    "featuresHint": "Import and scientific capabilities of this deployment. A disabled capability is shown as OFF rather than hidden: an absent row would be indistinguishable from an unimplemented one."
+    "featuresHint": "Import and scientific capabilities of this deployment. A disabled capability is shown as OFF rather than hidden: an absent row would be indistinguishable from an unimplemented one.",
+    "apiUnreachable": "The console could not reach the API. Check that the API is running and reachable from this browser."
   },
   "news": {
     "title": "News & Updates",
