@@ -1,17 +1,8 @@
 /**
- * Deployment subpath normalization. Zero dependencies on purpose: the Vite
- * config imports this module, and pulling the api-client (or any other runtime
- * module) into the config loader would break the build.
+ * Deployment subpath normalization.
  *
- * `base` in vite.config.ts and the router's createWebHistory(import.meta.env
- * .BASE_URL) both derive from VITE_BASE_URL, so emitted asset URLs, router
- * links, and deep links agree under `/` and under `/soymutdb-next/`.
+ * The implementation moved to `@soymutdb/shared/deployment` so the Vite config,
+ * the build scripts and the gates share one normaliser; this module is kept as
+ * the import path the app and its tests already use.
  */
-
-const TRAILING_SLASHES = /^\/+|\/+$/g;
-
-export function normalizeBasePath(value: unknown): string {
-  const trimmed = typeof value === "string" ? value.trim() : "";
-  if (!trimmed || trimmed === "/") return "/";
-  return `/${trimmed.replace(TRAILING_SLASHES, "")}/`;
-}
+export { normalizeBasePath } from "@soymutdb/shared/deployment";

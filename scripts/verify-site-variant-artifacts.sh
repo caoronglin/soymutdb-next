@@ -63,6 +63,4 @@ python3 scripts/check_site_artifact_isolation.py \
   --internal-root apps/web/dist/internal \
   --sentinel "${NOINDEX_MARKER}"
 
-echo "[site-variants] React artifacts built and isolated"
-bash "${REPO_ROOT}/scripts/verify-vue-site-variant-artifacts.sh"
-echo "[site-variants] React and Vue dual-site artifacts built and isolated"
+echo "[site-variants] portal dual-site artifacts are built and isolated"

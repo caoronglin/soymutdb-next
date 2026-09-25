@@ -48,7 +48,6 @@ SHARED_SCRIPTS = (
     "scripts/build-pages-artifact.sh",
     "scripts/verify-pages-artifact.sh",
     "scripts/verify-site-variant-artifacts.sh",
-    "scripts/verify-vue-site-variant-artifacts.sh",
     "scripts/mcp-transport-smoke.sh",
     "scripts/assert-clickhouse-migration.py",
     "scripts/smoke.sh",

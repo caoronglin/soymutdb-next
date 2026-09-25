@@ -88,8 +88,11 @@ export function isProductionDeploymentMode(value: string | undefined): boolean {
   return resolveDeploymentMode(value) === "production";
 }
 
-export function normalizeBasePath(value: string): string {
-  const trimmed = value.trim();
+export function normalizeBasePath(value: unknown): string {
+  // Absent/foreign values normalize to the root rather than throwing: this runs
+  // at Vite config time, where an unset env var is the normal case and a crash
+  // there reports as an opaque "failed to load config".
+  const trimmed = typeof value === "string" ? value.trim() : "";
   if (!trimmed || trimmed === "/") return "/";
   return `/${trimmed.replace(/^\/+|\/+$/g, "")}/`;
 }

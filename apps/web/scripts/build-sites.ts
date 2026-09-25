@@ -1,5 +1,13 @@
 #!/usr/bin/env tsx
-/** Build isolated external and internal Vue portal artifacts. */
+/**
+ * Build the isolated external and internal portal artifacts.
+ *
+ * Each variant is a complete build of its own: the SPA shell, the per-route
+ * documents, the finalized CSP, the optional .gz siblings and the service
+ * worker. The two trees never share a build step that could carry one variant's
+ * configuration into the other.
+ */
+
 
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
@@ -20,13 +28,19 @@ function buildVariant(variant: "external" | "internal") {
     VITE_JBROWSE_BASE_URL: isExternal
       ? process.env["SOYMUTDB_EXTERNAL_JBROWSE_URL"] || "https://jbrowse.external.soymutdb.test"
       : process.env["SOYMUTDB_INTERNAL_JBROWSE_URL"] || "https://jbrowse.internal.soymutdb.test",
+    // One dist directory under two names: the Vite config reads
+    // SOYMUTDB_VUE_DIST_DIR, the post-build scripts read SOYMUTDB_DIST_DIR (the
+    // name the React chain used). Setting only one of them made the CSP
+    // finalizer and the service worker write into the single-tree dist/ while
+    // the artifacts landed in dist/<variant>/.
     SOYMUTDB_VUE_DIST_DIR: `dist/${variant}`,
+    SOYMUTDB_DIST_DIR: `dist/${variant}`,
     SOYMUTDB_SITE_URL: isExternal
       ? process.env["SOYMUTDB_SITE_URL"] || "https://external.soymutdb.invalid"
       : process.env["SOYMUTDB_INTERNAL_SITE_URL"] || "https://internal.soymutdb.invalid",
   };
 
-  console.log(`[vue-sites] building ${variant} artifact`);
+  console.log(`[sites] building ${variant} artifact`);
   execFileSync(pnpmCommand, ["exec", "vite", "build"], {
     cwd: packageDir,
     env,
@@ -37,8 +51,29 @@ function buildVariant(variant: "external" | "internal") {
     env,
     stdio: "inherit",
   });
+  // The rest of the chain is the same one `pnpm build` runs, in the same order:
+  // CSP finalization must come after the last HTML writer, and the .gz siblings
+  // and the service worker derive from the final bytes. Skipping it here shipped
+  // variant trees whose meta policy still allowed 'unsafe-inline'.
+  execFileSync(pnpmCommand, ["exec", "tsx", "scripts/finalize-csp.ts"], {
+    cwd: packageDir,
+    env,
+    stdio: "inherit",
+  });
+  if (process.env.SOYMUTDB_EMIT_GZ === "1") {
+    execFileSync(pnpmCommand, ["exec", "tsx", "scripts/gzip-compress.ts"], {
+      cwd: packageDir,
+      env,
+      stdio: "inherit",
+    });
+  }
+  execFileSync(pnpmCommand, ["exec", "node", "scripts/gen-sw.js"], {
+    cwd: packageDir,
+    env,
+    stdio: "inherit",
+  });
 }
 
 buildVariant("external");
 buildVariant("internal");
-console.log("[vue-sites] external and internal artifacts built");
+console.log("[sites] external and internal artifacts built");
