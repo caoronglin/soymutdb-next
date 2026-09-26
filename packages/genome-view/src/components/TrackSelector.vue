@@ -7,7 +7,7 @@
         class="track-selector__checkbox"
         type="checkbox"
         :value="track.trackId"
-        :checked="props.modelValue.includes(track.trackId)"
+        :checked="selected.includes(track.trackId)"
         @change="onToggle(track.trackId, $event)"
       />
       <span class="track-selector__name">{{ track.name }}</span>
@@ -21,21 +21,19 @@ import type { TrackConfig } from "@soymutdb/genome-data";
 const props = withDefaults(
   defineProps<{
     tracks: TrackConfig[];
-    modelValue: string[];
     legend?: string;
     emptyLabel?: string;
   }>(),
   { legend: "Tracks", emptyLabel: "No tracks available" },
 );
 
-const emit = defineEmits<{ (event: "update:modelValue", value: string[]): void }>();
+const selected = defineModel<string[]>({ default: () => [] });
 
 function onToggle(trackId: string, event: Event): void {
   const checked = (event.target as HTMLInputElement).checked;
-  const next = checked
-    ? [...props.modelValue, trackId]
-    : props.modelValue.filter((id) => id !== trackId);
-  emit("update:modelValue", next);
+  selected.value = checked
+    ? [...selected.value, trackId]
+    : selected.value.filter((id) => id !== trackId);
 }
 </script>
 

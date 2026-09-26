@@ -1,7 +1,7 @@
 <template>
   <div class="feature-track" :data-track-id="props.track.trackId">
     <p v-if="props.loading" class="feature-track__state" role="status">Loading features...</p>
-    <p v-else-if="placed.length === 0" class="feature-track__state">No features in view</p>
+    <p v-else-if="layout.placed.length === 0" class="feature-track__state">No features in view</p>
     <svg
       v-else
       class="feature-track__svg"
@@ -11,7 +11,7 @@
       role="img"
       :aria-label="ariaLabel"
     >
-      <g v-for="item in placed" :key="item.id" :transform="translate(item)">
+      <g v-for="item in layout.placed" :key="item.id" :transform="translate(item)">
         <rect
           class="feature-track__feature"
           :width="item.w"
@@ -66,11 +66,10 @@ const layout = computed(() =>
   layoutIntervals(props.records, region.value, props.widthPx, { gapPx: 2 }),
 );
 
-const placed = computed(() => layout.value.placed);
 const heightPx = computed(() => Math.max(props.rowHeight, layout.value.rowCount * props.rowHeight));
 const viewBox = computed(() => "0 0 " + props.widthPx + " " + heightPx.value);
 const ariaLabel = computed(
-  () => props.track.name + " (" + placed.value.length + " features on " + props.refName + ")",
+  () => props.track.name + " (" + layout.value.placed.length + " features on " + props.refName + ")",
 );
 
 function strandOf(id: string): string | undefined {

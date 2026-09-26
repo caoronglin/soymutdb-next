@@ -3,13 +3,12 @@
     <label class="locus-search__label" :for="inputId">{{ props.label }}</label>
     <input
       :id="inputId"
+      v-model="value"
       class="locus-search__input"
       type="text"
-      :value="props.modelValue"
       :placeholder="props.placeholder"
       autocomplete="off"
       spellcheck="false"
-      @input="onInput"
     />
     <button class="locus-search__button" type="submit" :disabled="!canSubmit">
       {{ props.submitLabel }}
@@ -22,13 +21,11 @@ import { computed, useId } from "vue";
 
 const props = withDefaults(
   defineProps<{
-    modelValue?: string;
     label?: string;
     placeholder?: string;
     submitLabel?: string;
   }>(),
   {
-    modelValue: "",
     label: "Location or gene",
     placeholder: "chr01:1-1000000 or gene ID",
     submitLabel: "Go",
@@ -36,20 +33,17 @@ const props = withDefaults(
 );
 
 const emit = defineEmits<{
-  (event: "update:modelValue", value: string): void;
   (event: "submit", value: string): void;
 }>();
 
-const inputId = useId();
-const canSubmit = computed(() => props.modelValue.trim().length > 0);
+const value = defineModel<string>({ default: "" });
 
-function onInput(event: Event): void {
-  emit("update:modelValue", (event.target as HTMLInputElement).value);
-}
+const inputId = useId();
+const canSubmit = computed(() => value.value.trim().length > 0);
 
 function onSubmit(): void {
-  const value = props.modelValue.trim();
-  if (value) emit("submit", value);
+  const trimmed = value.value.trim();
+  if (trimmed) emit("submit", trimmed);
 }
 </script>
 

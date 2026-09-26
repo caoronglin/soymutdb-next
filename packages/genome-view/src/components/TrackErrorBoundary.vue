@@ -19,7 +19,7 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, onErrorCaptured, ref } from "vue";
+import { nextTick, onErrorCaptured, ref, useTemplateRef } from "vue";
 
 const props = withDefaults(
   defineProps<{
@@ -37,7 +37,7 @@ const emit = defineEmits<{
 }>();
 
 const error = ref<Error | null>(null);
-const alertRef = ref<HTMLElement | null>(null);
+const alertRef = useTemplateRef<HTMLElement>("alertRef");
 
 onErrorCaptured((caught) => {
   error.value = caught instanceof Error ? caught : new Error(String(caught));
