@@ -199,7 +199,12 @@ npx playwright test e2e/tests/home.spec.ts     # 若存在
 
 ### P0-2 12.7 MB CJK 字体无子集化、无 preload
 
-**位置**：`apps/web/src/index.css:860-882`，`apps/web/public/fonts/harmonyos/`
+**位置**：`apps/web/src/style.css` 的 `@font-face` 块，`apps/web/public/fonts/harmonyos/`、
+`apps/admin/public/fonts/harmonyos/`
+
+> 状态（2026-09-26）：按 `docs/dev/vue-migration-recovery-plan.md`（保留门户字体、两套应用统一字体），
+> 门户与管理端均已引用自托管 HarmonyOS Sans SC。本项不再包含“删除门户字体”；待办收敛为**子集化**
+> 与 **preload/回退**，旧计划 T26 的删除步骤已被取代。
 
 实测：`Regular 4178.7 KB / Medium 4240.0 KB / Bold 4300.3 KB`。`font-display: swap` 已配置（不会 FOIT），但字体 URL 只有解析完 CSS 才被发现，而 CSS 又在 JS chunk 之后 → **LCP 文本会经历一次完整换字体**，CLS 抬升。
 

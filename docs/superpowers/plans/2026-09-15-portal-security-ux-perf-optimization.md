@@ -1569,6 +1569,11 @@ ls test-results-web-performance/performance-report-*.json
 
 #### T26 · 字体负载治理（**方向修正**）
 
+> **2026-09-26 状态：本节第 1、2 步（删除门户字体）已作废。**
+> `docs/dev/vue-migration-recovery-plan.md` 要求「保留 `apps/web/public/fonts/`」并让两套应用
+> 使用同一套字体；门户现已在 `apps/web/src/style.css` 引用自托管 HarmonyOS Sans SC。
+> 剩余价值集中在第 3 步（子集化决策）与 `docs/dev/performance-optimization-plan.md` P0-2。
+
 **v1 的方向错误（已修正）：** v1 要求「首屏关键字体（Inter latin-400/600）加 preload」。
 实测 web **没有** Inter/Fraunces Web 字体（`index.css:115-117` 用系统 CJK 栈 + JetBrains Mono），
 `discoverAssets()` 的 `fontPreloads` 正则匹配 Inter/Fraunces/JetBrains，实际只匹配到 JetBrains。

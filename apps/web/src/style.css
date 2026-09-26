@@ -96,24 +96,22 @@
     --code-fg: oklch(0.90 0.01 148);
 }
 
-/* NOTE: @fontsource/* 字体 CSS 已移至 src/main.tsx 以 JS import 方式引入。
-   Tailwind v4 postcss 内联 node_modules CSS 时会错误改写其内部
-   url(./files/...) 相对路径（字体文件无法解析、不进入 dist），
-   改为 JS import 后由 Vite 按各 CSS 模块自身路径解析，字体正常打包。 */
+/* HarmonyOS Sans SC is self-hosted from public/fonts/harmonyos and declared
+   at the bottom of this file, matching the admin console's brand typeface. */
 
 /**
  * SoyMutDB — Design tokens & animation system
  *
  * Theme: rich scientific green (plant science), OKLCH color space.
  * Type scale: display 3.5rem / h1 2.5rem / h2 1.875rem / h3 1.5rem / body 1rem.
- * Fonts: system CJK stack (display + body), JetBrains Mono (code).
+ * Fonts: HarmonyOS Sans SC (display + body, self-hosted), JetBrains Mono (code).
  * Layout: max-width 1400px, section spacing 6-8rem, hairline borders.
  */
 
 @theme {
-    /* Avoid a multi-megabyte CJK web-font download on the LCP path. */
-    --font-display: system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
-    --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+    /* Self-hosted HarmonyOS Sans SC is the display and body face. */
+    --font-display: "HarmonyOS Sans SC", ui-sans-serif, system-ui, sans-serif;
+    --font-sans: "HarmonyOS Sans SC", ui-sans-serif, system-ui, sans-serif;
     --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
 
     /* Expose the Web-owned OKLCH tokens to Tailwind utilities. */
@@ -858,9 +856,10 @@
     }
 }
 
-/* System CJK stacks are used for first paint so no multi-megabyte web-font request
-   competes with LCP. The old HarmonyOS sources remain available for a future
-   intentionally subsetted opt-in, but are not referenced by portal CSS. */
+/* HarmonyOS Sans SC is self-hosted from public/fonts/harmonyos and declared at
+   the bottom of this file, matching the admin console. The full CJK faces are
+   large (~4.3 MB/weight); the subsetting decision is tracked in
+   docs/dev/performance-optimization-plan.md. */
 
 /* -------------------------------------------------------------------------
  * Interaction target policy (Ant Design 6 + WCAG 2.5.8)
@@ -1051,4 +1050,28 @@ input.ant-input,
   min-height: 100vh;
   background: var(--background);
   color: var(--foreground);
+}
+
+/* HarmonyOS Sans SC — local fonts (public/fonts/harmonyos), Latin + CJK, shared
+   by the portal and the admin console. @font-face must follow @theme for Tailwind 4. */
+@font-face {
+  font-family: "HarmonyOS Sans SC";
+  src: url("/fonts/harmonyos/HarmonyOS-Sans-SC-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "HarmonyOS Sans SC";
+  src: url("/fonts/harmonyos/HarmonyOS-Sans-SC-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "HarmonyOS Sans SC";
+  src: url("/fonts/harmonyos/HarmonyOS-Sans-SC-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
 }
