@@ -165,12 +165,34 @@ bash deploy/scripts/verify-restore.sh <backup> # 恢复演练校验
 - 指南：[`deploy/conda/README.md`](deploy/conda/README.md)；推荐：docker 起数据层（postgres/clickhouse/redis/redis-celery/minio）+ conda 跑应用层（api/worker/beat）。
 - 一键准备：`bash deploy/scripts/conda-deploy.sh`。
 
+**核心功能部署（不部署 JBrowse 等可选服务）：**
+
+SoyMutDB 是数据库产品：`core` profile 即可提供搜索、实体详情、下载与内容；基因组浏览器、BLAST、按需分析与 MCP 各自独立为可选 profile，核心部署不需要它们。
+
+```bash
+# 只起核心数据面与后端（不含 jbrowse / blast / analyses / mcp）
+docker compose --profile core up --build
+
+# 需要某个可选服务时再叠加对应 profile
+docker compose --profile core --profile jbrowse up -d
+```
+
+前端与静态制品同样支持“无 JBrowse”：
+
+```bash
+VITE_JBROWSE_ENABLED=0 pnpm --filter @soymutdb/web build        # 门户隐藏浏览器入口与链接
+SOYMUTDB_JBROWSE_ENABLED=0 bash scripts/build-pages-artifact.sh  # Pages 制品省略 jbrowse 子应用
+```
+
+关闭时：门户隐藏浏览器导航，`/browser`、`/gbrowse` 落到明确说明页而非 404；Pages 制品以 `.no-jbrowse` 标记声明缺失并通过校验。详见 **[核心功能部署](docs/ops/core-only-deployment.md)**。
+
 ## 文档入口
 
 - [科研用户指南](docs/user/README.md)
 - [项目 Wiki](docs/wiki/README.md)（架构、应用状态、API/端口、部署运维、多实例信任）
 - [项目状态](docs/dev/project-status.md)（部署、门禁、功能与缺口单一视图）
 - [运维与 Admin 手册](docs/ops/README.md)
+- [核心功能部署（JBrowse 可选）](docs/ops/core-only-deployment.md)
 - [CNB 启动与验收](docs/ops/cnb-startup-acceptance.md)
 - [开发者架构与部署](docs/dev/README.md)
 - [历史部署设计（仅参考）](docs/design/deployment-architecture.md)
