@@ -9,6 +9,7 @@ import {
   resolveRegion,
   toGenomeDataError,
   type ReadOptions,
+  throwIfAborted,
 } from "./common";
 
 /** A reference sequence span with its assembly-scoped size. */
@@ -120,6 +121,7 @@ export class SequenceReader {
       const bases = await (
         await this.getReady()
       ).getSequence(query.refName, query.start, query.end, options);
+      throwIfAborted(options.signal, this.trackId);
       if (bases === undefined) {
         throw new GenomeDataError(
           "assembly-mismatch",

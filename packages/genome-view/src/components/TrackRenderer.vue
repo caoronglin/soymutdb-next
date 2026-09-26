@@ -135,22 +135,34 @@ async function load(): Promise<void> {
   };
   try {
     switch (source.kind) {
-      case "reference-sequence":
-        sequenceChunks.value = [await source.reader.getSequence(region, { signal })];
+      case "reference-sequence": {
+        const next = await source.reader.getSequence(region, { signal });
+        if (signal.aborted) return;
+        sequenceChunks.value = [next];
         break;
-      case "variant":
-        variantRecords.value = await source.reader.getVariants(region, { signal });
+      }
+      case "variant": {
+        const next = await source.reader.getVariants(region, { signal });
+        if (signal.aborted) return;
+        variantRecords.value = next;
         break;
+      }
       case "feature":
-      case "interval":
-        featureRecords.value = await source.reader.getFeatures(region, { signal });
+      case "interval": {
+        const next = await source.reader.getFeatures(region, { signal });
+        if (signal.aborted) return;
+        featureRecords.value = next;
         break;
-      case "quantitative":
-        quantRecords.value = await source.reader.getQuantitative(region, { signal });
+      }
+      case "quantitative": {
+        const next = await source.reader.getQuantitative(region, { signal });
+        if (signal.aborted) return;
+        quantRecords.value = next;
         break;
+      }
     }
   } catch (error) {
-    if (isAbortError(error)) return;
+    if (isAbortError(error) || (isGenomeDataError(error) && error.code === "aborted")) return;
     loadError.value = error instanceof Error ? error : new Error(String(error));
     sequenceChunks.value = [];
     variantRecords.value = [];

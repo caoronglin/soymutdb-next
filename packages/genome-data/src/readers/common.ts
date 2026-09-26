@@ -93,3 +93,16 @@ export function resolveRegion(
     end: region.end,
   };
 }
+
+/**
+ * Throw a typed "aborted" error when the caller's signal is already aborted.
+ *
+ * @gmod/tabix and @gmod/indexedfasta 1.x accept a signal but never read it, so
+ * every reader re-checks after its await to keep the cancellation contract
+ * honest end to end (spec 4.4/8).
+ */
+export function throwIfAborted(signal?: AbortSignal, trackId?: string): void {
+  if (signal?.aborted) {
+    throw new GenomeDataError("aborted", "The genome data read was aborted", { trackId });
+  }
+}

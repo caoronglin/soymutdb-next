@@ -5,7 +5,7 @@ import { GenomeDataError } from "../errors";
 import type { FileProvider } from "../file-provider";
 import type { GenomeLocation } from "../location";
 import type { FeatureRecord, Region } from "../types";
-import { resolveRegion, toGenomeDataError, type ReadOptions } from "./common";
+import { resolveRegion, throwIfAborted, toGenomeDataError, type ReadOptions } from "./common";
 
 export interface FeatureReaderOptions {
   readonly provider: FileProvider;
@@ -154,6 +154,7 @@ export class FeatureReader {
           );
         },
       });
+      throwIfAborted(options.signal, this.trackId);
       return records;
     } catch (error) {
       throw toGenomeDataError(

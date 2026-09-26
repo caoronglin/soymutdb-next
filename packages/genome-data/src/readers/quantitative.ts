@@ -4,7 +4,7 @@ import type { AssemblyContext } from "../assembly";
 import type { FileProvider } from "../file-provider";
 import type { GenomeLocation } from "../location";
 import type { QuantRecord, Region } from "../types";
-import { resolveRegion, toGenomeDataError, type ReadOptions } from "./common";
+import { resolveRegion, throwIfAborted, toGenomeDataError, type ReadOptions } from "./common";
 
 export interface QuantitativeReaderOptions {
   readonly provider: FileProvider;
@@ -67,6 +67,7 @@ export class QuantitativeReader {
       const features = await reader.getFeatures(query.refName, query.start, query.end, {
         ...(options.signal ? { signal: options.signal } : {}),
       });
+      throwIfAborted(options.signal, this.trackId);
       return normalizeQuantFeatures(features, this.assembly.key, query.refName);
     } catch (error) {
       // A reachable BigWig handle that cannot be decoded is a parse failure;

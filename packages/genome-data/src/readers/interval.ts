@@ -4,7 +4,7 @@ import type { AssemblyContext } from "../assembly";
 import type { FileProvider } from "../file-provider";
 import type { GenomeLocation } from "../location";
 import type { FeatureRecord, Region } from "../types";
-import { resolveRegion, toGenomeDataError, type ReadOptions } from "./common";
+import { resolveRegion, throwIfAborted, toGenomeDataError, type ReadOptions } from "./common";
 
 export interface IntervalFeatureReaderOptions {
   readonly provider: FileProvider;
@@ -111,6 +111,7 @@ export class IntervalFeatureReader {
       const features = await reader.getFeatures(query.refName, query.start, query.end, {
         ...(options.signal ? { signal: options.signal } : {}),
       });
+      throwIfAborted(options.signal, this.trackId);
       return normalizeBigBedFeatures(features, {
         assemblyKey: this.assembly.key,
         refName: query.refName,

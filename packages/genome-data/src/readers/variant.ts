@@ -6,7 +6,7 @@ import { GenomeDataError } from "../errors";
 import type { FileProvider } from "../file-provider";
 import type { GenomeLocation } from "../location";
 import type { Region, VariantRecord } from "../types";
-import { resolveRegion, toGenomeDataError, type ReadOptions } from "./common";
+import { resolveRegion, throwIfAborted, toGenomeDataError, type ReadOptions } from "./common";
 
 export type VariantKind = VariantRecord["kind"];
 
@@ -232,6 +232,7 @@ export class VariantReader {
           );
         },
       });
+      throwIfAborted(options.signal, this.trackId);
       return records;
     } catch (error) {
       throw toGenomeDataError(
