@@ -91,3 +91,24 @@ HEAD `7bf002a29`；149 项未提交改动 + 41 untracked 保留未动。环境�
 **验证**：web vitest 115、vue-tsc、i18n parity、core-only pages 制品 verify、contracts smoke 全绿；以 flag off 构建产物无 `/browser` 导航、含 FeatureUnavailableView。
 
 **未验证**：完整 `build-pages-artifact.sh` 端到端（`setup-workspace.sh` corepack EACCES 属本机环境）；以等价手工步骤验证制品逻辑。
+
+## 2026-09-26 晚 — 零 React Vue 基因组视图 Wave（协调者 + 4 子代理）
+
+### 已完成（带证据）
+- packages/genome-data：@gmod 读取器 + factory + 离线 fixtures（BGZF/tabix/Trix/chrom.sizes）；87 tests、tsc、eslint 全绿（81cf09c6a）。
+- packages/genome-view：viewport composable、track registry、错误边界、ruler/selector/search、SVG 特征/变异/定量/序列轨道、纯布局核心、数据连接的 TrackRenderer；53 tests、vue-tsc、eslint 全绿（1c3f7568c…f2b0e822d）。
+- packages/genome-view-model：viewport/zoom/clip/ticks（1-based inclusive）；23 tests（9c7d35da6）。
+- bridge 契约加固：消息类型白名单 + 禁止调用方伪造 source/version；jbrowse 21、shared 49、web 120 全绿（5d7d7cf3b）。
+- 功能矩阵 docs/dev/vue-migration-feature-gaps.md：78 行（53 implemented / 9 missing / 10 retired / 6 待复核）。
+
+### 未完成（下一步）
+1. Phase 3：apps/jbrowse 外壳改 Vue（main.ts/App.vue/provider + GenomeBrowser + 复用 bridge.ts/deep-link.ts），需加 vue/@vitejs/plugin-vue 依赖并重算 lockfile；iframe 契约逐字节保留。
+2. D/E：退役 packages/motion 与 packages/i18n React 适配器；移除 react/react-dom/react-i18next/@tanstack/react-query/lucide-react/@jbrowse/react-*/@vitejs/plugin-react；重算 lockfile。
+3. F：功能矩阵 9 项 missing（管理端导入 studio、真实 Dashboard 指标、新闻双语编辑/预览/回收站等）。
+4. 门户 E2E 对新浏览器对齐；/jbrowse-data 在 dev/E2E 的可得性。
+
+### 约束与踩坑
+- pnpm 状态目录（~/.local/share/pnpm）在 workspace-write 下只读：运行 pnpm 需一次性 danger-full-access 提权。
+- @gmod 无离线 BigWig/BigBed writer：二者仅归一化单测，字节级 span 断言需外部生成器。
+- 坐标：genome-data 为 0-based half-open，genome-view-model 为 1-based inclusive，换算只在深链/桥接边界。
+
