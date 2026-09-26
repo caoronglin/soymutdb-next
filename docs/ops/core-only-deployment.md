@@ -58,3 +58,11 @@ A core-only tree carries a `.no-jbrowse` marker (covered by `SHA256SUMS`);
 `verify-pages-artifact.sh` and `stage-pages-publication.sh` accept the absence of
 `soymutdb-jbrowse/index.html` **only** when that marker is present, so a tree
 that lost the sub-app by accident still fails verification.
+
+## Minimal compose variables
+
+`deploy/.env.core-only.example` is the minimal docker-compose variable file for
+a core-only stack: copy it to `.env` beside `docker-compose.yml`, fill the image
+refs and secrets, and run `docker compose --profile core up -d`. It only lists
+the variables the `core` profile requires; `deploy/.env.example` remains the
+full reference (including the optional-service and publication-target values).
