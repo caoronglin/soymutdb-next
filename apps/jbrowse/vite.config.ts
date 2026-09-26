@@ -1,10 +1,56 @@
-import { defineConfig, loadEnv } from "vite";
-import react from "@vitejs/plugin-react";
+import { defineConfig, loadEnv, type Plugin } from "vite";
+import vue from "@vitejs/plugin-vue";
+import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { jbrowseDeploymentHeaders } from "./scripts/inject-headers-origins";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
+const requireFromConfig = createRequire(import.meta.url);
+
+/**
+ * `buffer` is only a transitive dependency (via @gmod/*), so it is not linked
+ * into this package's node_modules even though @soymutdb/genome-data and
+ * generic-filehandle require it and the browser has no Node builtin. Resolve
+ * the pnpm-hoisted copy so the bundle gets the real browser implementation.
+ */
+function resolveBrowserBuffer(): string | undefined {
+    for (const base of [
+        resolve(__dirname, "../../node_modules/.pnpm/node_modules"),
+        resolve(__dirname, "node_modules"),
+    ]) {
+        try {
+            return requireFromConfig.resolve("buffer/index.js", { paths: [base] });
+        } catch {
+            // Try the next candidate location.
+        }
+    }
+    return undefined;
+}
+
+/**
+ * Redirect every `buffer` import to that browser build. When it cannot be
+ * found (an unusual install layout), fall back to a virtual stub so the build
+ * still succeeds; the stub only matters for the in-memory test provider.
+ */
+function browserBufferPlugin(entry: string | undefined): Plugin {
+    const virtualId = "\0soymutdb-jbrowse-buffer";
+    return {
+        name: "soymutdb-jbrowse-buffer",
+        enforce: "pre",
+        resolveId(id) {
+            if (id === "buffer" || id.startsWith("buffer/")) return entry ?? virtualId;
+            if (id === virtualId) return virtualId;
+            return null;
+        },
+        load(id) {
+            if (id === virtualId) {
+                return "const BufferImpl = globalThis.Buffer;\nexport { BufferImpl as Buffer };\nexport default BufferImpl;\n";
+            }
+            return null;
+        },
+    };
+}
 
 /**
  * Duplicated from `apps/web/src/lib/deployment.ts` on purpose (see the admin
@@ -48,7 +94,8 @@ export default defineConfig(({ mode }) => {
     return {
         base: env.VITE_BASE_URL?.trim() || "/",
         plugins: [
-            react(),
+            browserBufferPlugin(resolveBrowserBuffer()),
+            vue(),
             jbrowseDeploymentHeaders({
                 apiBaseUrl: env.VITE_API_BASE_URL,
                 dataUrl: env.VITE_JBROWSE_DATA_URL,

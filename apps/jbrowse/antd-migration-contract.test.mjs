@@ -1,24 +1,71 @@
+/**
+ * Vue-shell contract for the standalone genome browser.
+ *
+ * Guards the React -> Vue port: the Vue entry must not pull React, it must go
+ * through the shared Vue design-system facade, it must render the Vue genome
+ * view, and the HTML entry must point at the Vue module.
+ *
+ * Run with: node --test antd-migration-contract.test.mjs
+ */
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { access, readFile, readdir } from "node:fs/promises";
 import { test } from "node:test";
 
-const appSource = await readFile(new URL("./src/App.tsx", import.meta.url), "utf8");
-const mainSource = await readFile(new URL("./src/main.tsx", import.meta.url), "utf8");
-const styles = await readFile(new URL("./src/index.css", import.meta.url), "utf8");
-const packageJson = JSON.parse(
-  await readFile(new URL("./package.json", import.meta.url), "utf8"),
-);
-const tsconfig = await readFile(new URL("./tsconfig.json", import.meta.url), "utf8");
+const root = new URL("./", import.meta.url);
 
-test("JBrowse uses Ant Design 6 through one provider", () => {
-  assert.match(appSource, /from "antd"/);
-  assert.match(mainSource, /DesignSystemProvider/);
-  assert.equal(packageJson.dependencies.antd, "catalog:");
+async function read(relative) {
+  return readFile(new URL(relative, root), "utf8");
+}
+
+const componentNames = (await readdir(new URL("./src/components", root))).filter((name) =>
+  name.endsWith(".vue"),
+);
+const shellFiles = [
+  "src/main.ts",
+  "src/App.vue",
+  ...componentNames.map((name) => `src/components/${name}`),
+];
+const sources = Object.fromEntries(
+  await Promise.all(shellFiles.map(async (file) => [file, await read(file)])),
+);
+const indexHtml = await read("index.html");
+
+/** Any React / JBrowse-React module specifier in an import or require. */
+const REACT_IMPORT =
+  /(?:from\s*|import\s*\(\s*|require\s*\(\s*)["'](?:react|react-dom|react-dom\/client|react-i18next|@tanstack\/react-query|lucide-react|@jbrowse\/[^"']*)["']/;
+
+test("Vue shell has no React or JBrowse-React import", () => {
+  for (const [file, source] of Object.entries(sources)) {
+    assert.doesNotMatch(source, REACT_IMPORT, `${file} must not import React`);
+    assert.doesNotMatch(
+      source,
+      /from\s*["']antd["']/,
+      `${file} must not import antd directly`,
+    );
+  }
 });
 
-test("JBrowse has no legacy shared UI dependency or source alias", () => {
-  for (const source of [appSource, mainSource, styles, tsconfig]) {
-    assert.doesNotMatch(source, /@soymutdb\/ui/);
+test("Vue shell uses the shared Vue design-system facade", () => {
+  const app = sources["src/App.vue"];
+  assert.match(app, /from\s*["']@soymutdb\/ui-vue["']/);
+  assert.match(app, /createThemeConfig/);
+  assert.match(app, /ConfigProvider/);
+});
+
+test("Vue shell renders the Vue genome view", () => {
+  const app = sources["src/App.vue"];
+  assert.match(app, /from\s*["']@soymutdb\/genome-view["']/);
+  assert.match(app, /GenomeBrowser/);
+  assert.match(sources["src/main.ts"], /registerDefaultTrackRenderers/);
+});
+
+test("index.html loads the Vue entry and drops the React entry", () => {
+  assert.match(indexHtml, /<script[^>]*type="module"[^>]*src="\/src\/main\.ts"/);
+  assert.doesNotMatch(indexHtml, /main\.tsx/);
+});
+
+test("React shell files are removed", async () => {
+  for (const removed of ["src/App.tsx", "src/main.tsx", "src/design-system-provider.tsx"]) {
+    await assert.rejects(access(new URL(removed, root)), `${removed} should be deleted`);
   }
-  assert.equal(packageJson.dependencies["@soymutdb/ui"], undefined);
 });
