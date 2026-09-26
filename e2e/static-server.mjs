@@ -1,3 +1,5 @@
+/* global process, Buffer, URL, console */
+
 /**
  * Minimal static server for LOCAL public-artifact Playwright tests.
  *
@@ -13,7 +15,11 @@
  *   - a mocked `POST /api/v1/tools/seqfetch` returning a fixed FASTA
  *     sequence, so the "from genome" primer mode is testable offline
  *     without a backend. The FASTA contains a GC-balanced 300 bp block
- *     that yields valid primer pairs.
+ *     that yields valid primer pairs;
+ *   - an OPT-IN gene fixture: only with `GENES_JBROWSE_FIXTURE=1` and only for
+ *     the fixture query does gene search return one row, so the JBrowse 2
+ *     deep-link assertion in tests/genes.spec.ts can run offline. The default
+ *     remains an empty result (never fabricated rows).
  *
  * Usage:  node static-server.mjs [root] [port] [prefix]
  *   root  : dist directory (default ../apps/web/dist)
@@ -48,6 +54,32 @@ const MIME = {
 /** GC-balanced 300 bp mock template (15 × ACGTACGTACGTACGTACGT). */
 const MOCK_SEQ =
   "ACGTACGTACGTACGTACGT".repeat(15);
+
+/**
+ * Opt-in deterministic gene fixture for the JBrowse deep-link E2E.
+ *
+ * With GENES_JBROWSE_FIXTURE=1, a search for GENE_JBROWSE_FIXTURE_QUERY returns
+ * exactly this one row. Every other query (and every run without the env flag)
+ * keeps the long-standing empty envelope, so the empty-state assertions still
+ * see no rows and the server never invents data by default.
+ */
+const GENE_JBROWSE_FIXTURE_QUERY = "SMDB-E2E-GENE-1";
+const GENE_JBROWSE_FIXTURE_ROW = Object.freeze({
+  id: "e2e-fixture-gene-1",
+  gene_id: GENE_JBROWSE_FIXTURE_QUERY,
+  symbol: "E2E1",
+  name: "E2E fixture gene",
+  biotype: "protein_coding",
+  assembly_id: "1",
+  assembly_name: "Wm82.a4.v1",
+  chromosome: "chr01",
+  position: 12345,
+  start_pos: 12300,
+  end_pos: 12400,
+  strand: "+",
+  description: null,
+  variant_count: 1,
+});
 
 const LOGIN_TEST_CREDENTIALS = Object.freeze({
   email: "researcher@example.org",
@@ -260,23 +292,30 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  // Mock gene search: return an empty result envelope so the result table
-  // renders its column headers (never fake rows).
+  // Mock gene search: by default return an empty result envelope so the result
+  // table renders its column headers without inventing rows. With
+  // GENES_JBROWSE_FIXTURE=1 (and only for the fixture query) it returns one
+  // deterministic row so the JBrowse deep-link assertion can run offline.
   if (
     req.method === "GET" &&
     pathname.startsWith(`${PREFIX}/api/v1/genes`) &&
     !pathname.startsWith(`${PREFIX}/api/v1/genes/assemblies`)
   ) {
+    const search = url.searchParams.get("search") ?? "";
+    const items =
+      process.env.GENES_JBROWSE_FIXTURE === "1" && search === GENE_JBROWSE_FIXTURE_QUERY
+        ? [GENE_JBROWSE_FIXTURE_ROW]
+        : [];
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(
       JSON.stringify({
-        items: [],
+        items,
         next_cursor: null,
         has_more: false,
         page: 1,
         page_size: 20,
-        total: 0,
-        total_pages: 0,
+        total: items.length,
+        total_pages: items.length ? 1 : 0,
       }),
     );
     return;

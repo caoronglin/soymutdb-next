@@ -18,7 +18,11 @@
     "test:admin-console": "playwright test -c playwright-admin-console.config.ts",
     "test:admin-console:list": "playwright test -c playwright-admin-console.config.ts --list",
     "test:portal-embed": "playwright test -c playwright-portal-embed.config.ts",
-    "test:portal-embed:list": "playwright test -c playwright-portal-embed.config.ts --list"
+    "test:portal-embed:list": "playwright test -c playwright-portal-embed.config.ts --list",
+    "test:entity-detail": "playwright test -c playwright-entity-detail.config.ts",
+    "test:entity-detail:list": "playwright test -c playwright-entity-detail.config.ts --list",
+    "test:internal": "playwright test -c playwright-internal.config.ts",
+    "test:internal:list": "playwright test -c playwright-internal.config.ts --list"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

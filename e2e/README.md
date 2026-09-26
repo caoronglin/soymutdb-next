@@ -210,6 +210,69 @@ Slow-network / CN-network tips:
 - The suite is already hardened: `workers=1`, `retries=1`, 60 s per-test
   timeout. Transient connection resets are retried once before failing.
 
+## Entity detail E2E (deployed stack)
+
+`entity-detail.spec.ts` gates the three entity detail views against a deployed
+portal: a mutant addressed by its `public_id`, a variant (`/compare?ids=…`) with
+assembly/release provenance rows, and a gene with assembly-scoped coordinates and
+a JBrowse deep link. Each page must render a stable, reloadable URL and a stable
+link, with no unexpected console error or pageerror; a mutant URL must never
+carry a private persistence key.
+
+```bash
+PORTAL_BASE_URL=https://soymutdb.test/ \
+  npx playwright test -c playwright-entity-detail.config.ts
+
+# discover / validate the suite without a browser
+npx playwright test -c playwright-entity-detail.config.ts --list
+```
+
+Entity identifiers are derived from the target's own lists; pin them with
+`ENTITY_MUTANT_PUBLIC_ID`, `ENTITY_VARIANT_ID` and `ENTITY_GENE_ID` when a list
+is not representative. A missing `PORTAL_BASE_URL`/`SMOKE_BASE_URL` skips every
+test, and an empty list skips the dependent test instead of failing. The suite
+never invents identifiers and never reads credentials.
+
+## Internal site variant E2E (deployed stack)
+
+The internal artifact is served at the origin root `/`, while the public
+artifact lives under `/soymutdb-next` (running the public suite against internal
+fails with `No route for /soymutdb-next/login`). `internal-site.spec.ts` proves
+the boundary: the internal document is served from `/`, carries the internal
+`noindex, nofollow, noarchive` robots meta, requests only root-relative
+`/assets/*` bundles (never the public sub-path), publishes a `Disallow: /`
+robots.txt, reports the `internal` site variant, and serves its login form at
+`/login`. It never fills or submits credentials.
+
+```bash
+INTERNAL_BASE_URL=https://internal.soymutdb.test/ \
+  npx playwright test -c playwright-internal.config.ts
+
+# discover / validate the suite without a browser
+npx playwright test -c playwright-internal.config.ts --list
+```
+
+Unset `INTERNAL_BASE_URL` skips every test. Set `PUBLIC_BASE_URL` (or
+`PORTAL_BASE_URL`/`SMOKE_BASE_URL`) as well to additionally assert the internal
+base is not the public origin + base path.
+
+## JBrowse 2 deep-link fixture (offline)
+
+The `genes.spec.ts` "JBrowse 2 action opens an assembly-scoped locus deep link"
+test is conditionally skipped, not unconditionally skipped. It runs against
+either:
+
+- the opt-in offline fixture:
+  `GENES_JBROWSE_FIXTURE=1 npx playwright test -c playwright-public.config.ts`.
+  `e2e/static-server.mjs` then returns one deterministic gene row for the fixture
+  query, and the test asserts the row's
+  `/browser?assembly=…&loc=chr:start-end` link and the new tab it opens;
+- a live stack: `GENES_JBROWSE_QUERY=<gene id>` with the public config pointed at
+  that stack.
+
+Without either, the test skips with the exact missing prerequisite. The default
+mock response stays empty, so the empty-state assertions are unchanged.
+
 
 ## 本地离线公开站 E2E（正确构建命令，勿再踩坑）
 
