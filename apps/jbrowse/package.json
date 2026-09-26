@@ -10,14 +10,18 @@
     "test": "node --test antd-migration-contract.test.mjs bridge-contract.test.mjs",
     "preview": "vite preview --host 0.0.0.0 --port 5175",
     "lint": "eslint src",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "vue-tsc --noEmit",
     "clean": "rimraf dist .turbo"
   },
   "dependencies": {
     "@jbrowse/core": "^2.17.0",
     "@jbrowse/react-linear-genome-view": "^2.17.0",
     "@soymutdb/api-client": "workspace:*",
+    "@soymutdb/genome-data": "workspace:*",
+    "@soymutdb/genome-view": "workspace:*",
     "@soymutdb/i18n": "workspace:*",
+    "@soymutdb/i18n-core": "workspace:*",
+    "@soymutdb/ui-vue": "workspace:*",
     "@soymutdb/shared": "workspace:*",
     "@tanstack/react-query": "^5.101.4",
     "antd": "catalog:",
@@ -26,7 +30,8 @@
     "mobx-react": "^9.2.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "react-i18next": "^15.4.0"
+    "react-i18next": "^15.4.0",
+    "vue": "catalog:"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.0",
@@ -34,11 +39,14 @@
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^4.3.4",
+    "@vitejs/plugin-vue": "catalog:",
+    "@vue/test-utils": "^2.5.1",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.49",
     "rimraf": "^6.0.0",
     "tailwindcss": "^4.3.0",
     "typescript": "^5.9.3",
-    "vite": "^6.0.0"
+    "vite": "^6.0.0",
+    "vue-tsc": "^3.2.0"
   }
 }
