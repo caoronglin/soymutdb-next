@@ -308,6 +308,26 @@ def test_static_app_images_supply_their_build_time_origins() -> None:
             )
 
 
+def test_runtime_smoke_provides_production_grade_settings() -> None:
+    """The API/migrate smoke boots the app under production settings.
+
+    `Settings` rejects the development default for `analytics_ip_salt` and
+    requires at least 32 characters, so a smoke run without it fails before the
+    app imports:
+
+        ValidationError: analytics_ip_salt must not use the development default
+    """
+    text = (ROOT / "scripts/build-release-image.sh").read_text(encoding="utf-8")
+    assert "Smoke test API runtime image" in text
+    salts = re.findall(r"-e SOYMUTDB_ANALYTICS_IP_SALT=(\S+)", text)
+    assert salts, "no smoke run provides SOYMUTDB_ANALYTICS_IP_SALT"
+    for salt in salts:
+        assert len(salt) >= 32, (
+            f"analytics salt {salt!r} is shorter than the 32-character floor the "
+            "settings validator enforces"
+        )
+
+
 def test_local_build_override_discards_the_release_image_requirement() -> None:
     compose = load_compose(COMPOSE)
     services = compose["services"]

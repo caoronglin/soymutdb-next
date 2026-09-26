@@ -123,6 +123,7 @@ docker run --rm \
   -e SOYMUTDB_S3_SECRET_KEY=ci-runtime-secret \
   -e SOYMUTDB_JWT_SECRET=ci-runtime-smoke-jwt-secret-0123456789abcdef \
   -e SOYMUTDB_CORS_ORIGINS=https://runtime-smoke.invalid \
+  -e SOYMUTDB_ANALYTICS_IP_SALT=ci-runtime-smoke-analytics-ip-salt-0123456789 \
   "soymutdb-api:ci-${ARCH}" \
   python -c "import soymutdb_jobs; from app.main import app; assert app.title == 'SoyMutDB'; print('API app import OK')"
 
@@ -160,7 +161,7 @@ docker run --rm \
   -e SOYMUTDB_DATABASE_URL=postgresql+asyncpg://ci:ci@database.invalid/soymutdb \
   -e SOYMUTDB_JWT_SECRET=ci-runtime-smoke-jwt-secret-0123456789abcdef \
   -e SOYMUTDB_CORS_ORIGINS=https://runtime-smoke.invalid \
-  -e SOYMUTDB_ANALYTICS_IP_SALT=ci-runtime-smoke-analytics-salt \
+  -e SOYMUTDB_ANALYTICS_IP_SALT=ci-runtime-smoke-analytics-ip-salt-0123456789 \
   "soymutdb-migrate:ci-${ARCH}" \
   sh -ec 'test -f alembic.ini && alembic heads >/dev/null && echo "Alembic heads resolved"'
 
