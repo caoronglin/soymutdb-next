@@ -13,6 +13,15 @@ from prometheus_client import (
     multiprocess,
 )
 
+# The multiprocess metric store must exist before any metric is defined:
+# prometheus_client opens a memory-mapped file in PROMETHEUS_MULTIPROC_DIR when a
+# multiprocess Gauge/Counter is constructed. The API image's CMD creates it, but
+# a management command, a probe, or the runtime smoke that imports `app.main`
+# directly would otherwise crash with
+# `FileNotFoundError: .../gauge_mostrecent_1.db`.
+if os.environ.get("PROMETHEUS_MULTIPROC_DIR"):
+    os.makedirs(os.environ["PROMETHEUS_MULTIPROC_DIR"], exist_ok=True)
+
 # --------------------------------------------------------------------------- #
 # Metrics
 # --------------------------------------------------------------------------- #
