@@ -146,6 +146,50 @@ fallback for `/login`. Failure artifacts are written to
 `e2e/test-results-admin-production/` and
 `e2e/playwright-report-admin-production/`.
 
+## Admin console authenticated E2E (deployed stack)
+
+`admin-production-login.spec.ts` only proves the emitted bundle boots at
+`/login`. `admin-console.spec.ts` goes past the form on a **deployed** console:
+an anonymous deep link must bounce to `/login?redirect=…`, then
+dashboard/imports/settings/news/content must mount in the console chrome, let
+their data query settle, and raise no unexpected console error or pageerror.
+
+```bash
+cd e2e
+ADMIN_BASE_URL=https://admin.soymutdb.test/ \
+ADMIN_STORAGE_STATE=/secure/admin-storage-state.json \
+  npx playwright test -c playwright-admin-console.config.ts
+```
+
+Prerequisites: a deployed console with its API/CORS/CSP configured and, for the
+authenticated routes, a Playwright storage state captured from a real sign-in
+(this suite never reads or fabricates credentials):
+
+```bash
+npx playwright codegen --save-storage=admin-storage-state.json "$ADMIN_BASE_URL/login"
+```
+
+A missing `ADMIN_BASE_URL` skips the redirect test; a missing
+`ADMIN_STORAGE_STATE` skips the authenticated routes. No value ever silently
+tests the wrong environment.
+
+## Portal `/browser` embed regression (deployed stack)
+
+`portal-browser-embed.spec.ts` gates the public embed contract: the `/browser`
+iframe carries `portalOrigin`, the postMessage bridge reaches its ready state
+(`[data-testid="browser-ready"]`), and no URL in the embed — portal location,
+iframe `src`, shell frame URL or new-tab link — exposes a private persistence
+identifier or an unexpected bridge parameter.
+
+```bash
+PORTAL_BASE_URL=https://soymutdb.test/ \
+  npx playwright test -c playwright-portal-embed.config.ts
+```
+
+Prerequisites: a deployed portal built with `VITE_JBROWSE_BASE_URL` and a CSP
+`frame-src` allowing the shell, with `/browser` enabled by its feature gate.
+Unset `PORTAL_BASE_URL` (and `SMOKE_BASE_URL`) skips the suite.
+
 Local static-server run (no network dependency) — **serve dist under the
 `/soymutdb-next` prefix**: the build bakes that base into dynamic-import
 chunk paths, so mounting at the root would produce fake "module script MIME"

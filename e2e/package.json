@@ -14,7 +14,11 @@
     "test:visual:list": "playwright test -c playwright-visual.config.ts --list",
     "test:web-performance": "playwright test -c playwright-web-performance.config.ts",
     "test:jbrowse": "playwright test -c playwright-jbrowse.config.ts",
-    "test:jbrowse:list": "playwright test -c playwright-jbrowse.config.ts --list"
+    "test:jbrowse:list": "playwright test -c playwright-jbrowse.config.ts --list",
+    "test:admin-console": "playwright test -c playwright-admin-console.config.ts",
+    "test:admin-console:list": "playwright test -c playwright-admin-console.config.ts --list",
+    "test:portal-embed": "playwright test -c playwright-portal-embed.config.ts",
+    "test:portal-embed:list": "playwright test -c playwright-portal-embed.config.ts --list"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
