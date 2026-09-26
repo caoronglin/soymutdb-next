@@ -76,7 +76,7 @@ export const ADMIN_ROUTES: readonly (RouteRecordRaw & { navKey?: string })[] = [
   { path: "/settings/advanced", redirect: { path: "/settings", query: { section: "data" } } },
   { path: "/settings/legacy", redirect: "/settings" },
   { path: "/news/new", redirect: { path: "/news", query: { new: "1" } } },
-  { path: "/news/trash", redirect: { path: "/news", query: { status: "archived" } } },
+  { path: "/news/trash", redirect: { path: "/news", query: { status: "trash" } } },
   { path: "/news/:id", redirect: (to) => ({ path: "/news", query: { edit: String(to.params.id) } }) },
   // Resource catalog had no backing API in React (it was a static link grid)
   // and still has none, so it keeps an explicit, documented unavailable page

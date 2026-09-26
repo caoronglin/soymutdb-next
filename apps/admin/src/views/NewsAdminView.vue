@@ -8,54 +8,100 @@ import {
   deleteNews,
   getAdminNewsDetail,
   listAdminNews,
+  listDeletedAdminNews,
+  purgeNews,
   restoreNews,
   updateNews,
+  type DeletedAdminNewsItem,
   type NewsSummary,
 } from "@soymutdb/api-client";
 import { formatDate } from "@soymutdb/shared/format";
 import { Button, ConfigProvider, Tag, createThemeConfig } from "@soymutdb/ui-vue";
 
 import { t } from "../lib/i18n";
+import { renderMarkdownPreview } from "../lib/markdown-preview";
 import WriteTargetNote from "../components/WriteTargetNote.vue";
 
 /**
  * News authoring.
  *
- * News is public content, so the working state is explicit: the list shows the
- * server's `status`, a published article is deleted into the recoverable trash
- * (and restorable from the same row), and nothing is published as a side effect
- * of saving text. The body is authored as Markdown and sanitised again by the
- * portal when it renders.
+ * News is public content, so the working state is explicit:
+ *
+ * - the list shows the server's `status` (draft/published/archived);
+ * - deleting a published article is a *soft delete* into the administrator's
+ *   recycle bin (`GET /admin/news/deleted`), where it can be restored or
+ *   permanently purged;
+ * - nothing is published as a side effect of saving text.
+ *
+ * The body is authored as Markdown in both languages. The preview renders that
+ * Markdown and sanitises it on render (see `lib/markdown-preview.ts`); the
+ * portal re-sanitises the stored body again on its own render path.
  */
+type NewsViewFilter = "all" | "draft" | "published" | "archived" | "trash";
+
 const queryClient = useQueryClient();
 const route = useRoute();
 const page = ref(1);
-const statusFilter = ref<"all" | "draft" | "published" | "archived">("all");
+const statusFilter = ref<NewsViewFilter>("all");
 const errorMessage = ref("");
 const editingId = ref<string | null>(null);
+const purgeTargetId = ref<string | null>(null);
+
+const isTrash = computed(() => statusFilter.value === "trash");
 
 const form = reactive({
   slug: "",
   title_en: "",
   title_zh: "",
   body_en: "",
+  body_zh: "",
   status: "draft" as "draft" | "published",
 });
 
-const query = useQuery({
+/** Only a real status reaches the list endpoint; trash uses its own endpoint. */
+const articleStatus = computed(() =>
+  statusFilter.value === "draft" ||
+  statusFilter.value === "published" ||
+  statusFilter.value === "archived"
+    ? statusFilter.value
+    : undefined,
+);
+
+const articlesQuery = useQuery({
   queryKey: computed(() => ["admin", "news", page.value, statusFilter.value]),
   queryFn: () =>
     listAdminNews({
       page: page.value,
       page_size: 20,
-      status_filter: statusFilter.value === "all" ? undefined : statusFilter.value,
+      status_filter: articleStatus.value,
     }),
+  enabled: computed(() => !isTrash.value),
   staleTime: 15_000,
 });
 
-const items = computed<NewsSummary[]>(() => toValue(query.data)?.items ?? []);
-const total = computed(() => toValue(query.data)?.total ?? 0);
+const trashQuery = useQuery({
+  queryKey: computed(() => ["admin", "news", "deleted", page.value]),
+  queryFn: () => listDeletedAdminNews({ page: page.value, page_size: 20 }),
+  enabled: isTrash,
+  staleTime: 15_000,
+});
+
+const items = computed<NewsSummary[]>(() => toValue(articlesQuery.data)?.items ?? []);
+const deletedItems = computed<DeletedAdminNewsItem[]>(() => toValue(trashQuery.data)?.items ?? []);
+const total = computed(() =>
+  isTrash.value ? toValue(trashQuery.data)?.total ?? 0 : toValue(articlesQuery.data)?.total ?? 0,
+);
 const lastPage = computed(() => Math.max(1, Math.ceil(total.value / 20)));
+const listingPending = computed(() =>
+  isTrash.value ? trashQuery.isPending.value : articlesQuery.isPending.value,
+);
+const listingError = computed(() =>
+  isTrash.value ? trashQuery.isError.value : articlesQuery.isError.value,
+);
+
+/** Sanitised Markdown for the bilingual preview panes. */
+const previewBodyEn = computed(() => renderMarkdownPreview(form.body_en));
+const previewBodyZh = computed(() => renderMarkdownPreview(form.body_zh));
 
 function resetForm() {
   editingId.value = null;
@@ -63,6 +109,7 @@ function resetForm() {
   form.title_en = "";
   form.title_zh = "";
   form.body_en = "";
+  form.body_zh = "";
   form.status = "draft";
   errorMessage.value = "";
 }
@@ -75,12 +122,11 @@ const saveMutation = useMutation({
       slug: form.slug.trim(),
       title_en: form.title_en.trim(),
       title_zh: form.title_zh.trim() || null,
-      content_en: form.body_en,
+      content_en: form.body_en || form.title_en,
+      content_zh: form.body_zh || null,
       status: form.status,
     };
-    return editingId.value
-      ? updateNews(editingId.value, payload)
-      : createNews({ ...payload, content_en: form.body_en || form.title_en });
+    return editingId.value ? updateNews(editingId.value, payload) : createNews(payload);
   },
   onSuccess: () => {
     resetForm();
@@ -107,6 +153,17 @@ const restoreMutation = useMutation({
   },
 });
 
+const purgeMutation = useMutation({
+  mutationFn: (id: string) => purgeNews(id),
+  onSuccess: () => {
+    purgeTargetId.value = null;
+    void invalidate();
+  },
+  onError: () => {
+    errorMessage.value = t("common.errorDescription");
+  },
+});
+
 /** Load one article into the editor, drafts included. */
 async function loadForEdit(id: string) {
   try {
@@ -116,6 +173,7 @@ async function loadForEdit(id: string) {
     form.title_en = detail.title_en;
     form.title_zh = detail.title_zh ?? "";
     form.body_en = detail.content_en ?? "";
+    form.body_zh = detail.content_zh ?? "";
     form.status = detail.status === "published" ? "published" : "draft";
     errorMessage.value = "";
   } catch {
@@ -129,7 +187,12 @@ watch(
   () => route.query,
   (query) => {
     const status = typeof query.status === "string" ? query.status : "";
-    if (status === "draft" || status === "published" || status === "archived") {
+    if (
+      status === "draft" ||
+      status === "published" ||
+      status === "archived" ||
+      status === "trash"
+    ) {
       statusFilter.value = status;
     }
     const edit = typeof query.edit === "string" ? query.edit : "";
@@ -147,7 +210,7 @@ watch(
   <ConfigProvider :theme="createThemeConfig({ dark: false })">
     <div class="grid gap-8 lg:grid-cols-[1.4fr_1fr]">
       <section>
-        <h1 class="text-xl font-semibold">{{ t("admin.news") }}</h1>
+        <h1 class="text-xl font-semibold">{{ t("admin.news.title") }}</h1>
 
         <label class="mt-4 inline-block text-sm opacity-70">
           {{ t("common.status") }}
@@ -161,67 +224,130 @@ watch(
             <option value="draft">{{ t("admin.news.status.draft") }}</option>
             <option value="published">{{ t("admin.news.status.published") }}</option>
             <option value="archived">{{ t("admin.news.status.archived") }}</option>
+            <option value="trash">{{ t("admin.news.trash") }}</option>
           </select>
         </label>
 
-        <p v-if="query.isPending.value" class="mt-4 text-sm opacity-70">{{ t("common.loading") }}</p>
-        <p v-else-if="query.isError.value" data-testid="news-error" class="mt-4 text-sm text-red-700">
+        <p v-if="listingPending" class="mt-4 text-sm opacity-70">{{ t("common.loading") }}</p>
+        <p
+          v-else-if="listingError"
+          :data-testid="isTrash ? 'news-trash-error' : 'news-error'"
+          class="mt-4 text-sm text-red-700"
+        >
           {{ t("common.errorDescription") }}
         </p>
-        <p v-else-if="items.length === 0" data-testid="news-empty" class="mt-4 text-sm opacity-70">
-          {{ t("common.noData") }}
-        </p>
-        <table v-else class="mt-4 w-full text-sm" data-testid="news-table">
-          <thead class="text-left opacity-60">
-            <tr>
-              <th scope="col" class="py-2">{{ t("news.title") }}</th>
-              <th scope="col" class="py-2">{{ t("common.status") }}</th>
-              <th scope="col" class="py-2">{{ t("common.date") }}</th>
-              <th scope="col" class="py-2">{{ t("common.actions") }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="row in items" :key="row.id" class="border-t" data-testid="news-row">
-              <td class="py-2">{{ row.title_en }}</td>
-              <td class="py-2">
-                <Tag :color="row.status === 'published' ? 'green' : 'default'" data-testid="news-status">
-                  {{ row.status }}
-                </Tag>
-              </td>
-              <td class="py-2 text-xs opacity-70">{{ formatDate(row.published_at ?? row.created_at) }}</td>
-              <td class="py-2">
-                <button
-                  type="button"
-                  class="underline"
-                  :data-testid="'news-edit-' + row.id"
-                  @click="loadForEdit(row.id)"
-                >
-                  {{ t("common.edit") }}
-                </button>
-                <button
-                  v-if="row.status !== 'archived'"
-                  type="button"
-                  class="ms-3 underline text-red-700"
-                  :data-testid="'news-delete-' + row.id"
-                  @click="deleteMutation.mutate(row.id)"
-                >
-                  {{ t("common.delete") }}
-                </button>
-                <button
-                  v-else
-                  type="button"
-                  class="ms-3 underline"
-                  :data-testid="'news-restore-' + row.id"
-                  @click="restoreMutation.mutate(row.id)"
-                >
-                  {{ t("common.retry") }}
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
 
-        <nav v-if="items.length" class="mt-4 flex items-center gap-3" :aria-label="t('common.pagination')">
+        <template v-else-if="isTrash">
+          <p v-if="deletedItems.length === 0" data-testid="news-trash-empty" class="mt-4 text-sm opacity-70">
+            {{ t("admin.news.trashEmpty") }}
+          </p>
+          <table v-else class="mt-4 w-full text-sm" data-testid="news-trash-table">
+            <thead class="text-left opacity-60">
+              <tr>
+                <th scope="col" class="py-2">{{ t("news.title") }}</th>
+                <th scope="col" class="py-2">{{ t("admin.news.columns.deletedAt") }}</th>
+                <th scope="col" class="py-2">{{ t("common.actions") }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="row in deletedItems"
+                :key="row.id"
+                class="border-t"
+                data-testid="news-trash-row"
+              >
+                <td class="py-2">{{ row.title_en }}</td>
+                <td class="py-2 text-xs opacity-70">{{ formatDate(row.deleted_at) }}</td>
+                <td class="py-2">
+                  <button
+                    type="button"
+                    class="underline"
+                    :data-testid="'news-restore-' + row.id"
+                    @click="restoreMutation.mutate(String(row.id))"
+                  >
+                    {{ t("admin.news.restore") }}
+                  </button>
+                  <template v-if="purgeTargetId === String(row.id)">
+                    <span class="ms-3 text-xs text-red-700">
+                      {{ t("admin.news.purgeConfirmTitle") }}
+                    </span>
+                    <button
+                      type="button"
+                      class="ms-2 underline text-red-700"
+                      :data-testid="'news-purge-confirm-' + row.id"
+                      @click="purgeMutation.mutate(String(row.id))"
+                    >
+                      {{ t("admin.news.purge") }}
+                    </button>
+                    <button
+                      type="button"
+                      class="ms-2 underline"
+                      @click="purgeTargetId = null"
+                    >
+                      {{ t("common.cancel") }}
+                    </button>
+                  </template>
+                  <button
+                    v-else
+                    type="button"
+                    class="ms-3 underline text-red-700"
+                    :data-testid="'news-purge-' + row.id"
+                    @click="purgeTargetId = String(row.id)"
+                  >
+                    {{ t("admin.news.purge") }}
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </template>
+
+        <template v-else>
+          <p v-if="items.length === 0" data-testid="news-empty" class="mt-4 text-sm opacity-70">
+            {{ t("common.noData") }}
+          </p>
+          <table v-else class="mt-4 w-full text-sm" data-testid="news-table">
+            <thead class="text-left opacity-60">
+              <tr>
+                <th scope="col" class="py-2">{{ t("news.title") }}</th>
+                <th scope="col" class="py-2">{{ t("common.status") }}</th>
+                <th scope="col" class="py-2">{{ t("common.date") }}</th>
+                <th scope="col" class="py-2">{{ t("common.actions") }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in items" :key="row.id" class="border-t" data-testid="news-row">
+                <td class="py-2">{{ row.title_en }}</td>
+                <td class="py-2">
+                  <Tag :color="row.status === 'published' ? 'green' : 'default'" data-testid="news-status">
+                    {{ row.status }}
+                  </Tag>
+                </td>
+                <td class="py-2 text-xs opacity-70">{{ formatDate(row.published_at ?? row.created_at) }}</td>
+                <td class="py-2">
+                  <button
+                    type="button"
+                    class="underline"
+                    :data-testid="'news-edit-' + row.id"
+                    @click="loadForEdit(row.id)"
+                  >
+                    {{ t("common.edit") }}
+                  </button>
+                  <button
+                    type="button"
+                    class="ms-3 underline text-red-700"
+                    :data-testid="'news-delete-' + row.id"
+                    @click="deleteMutation.mutate(row.id)"
+                  >
+                    {{ t("common.delete") }}
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </template>
+
+        <nav v-if="total > 0" class="mt-4 flex items-center gap-3" :aria-label="t('common.pagination')">
           <button
             type="button"
             class="rounded-md border px-3 py-1.5 text-sm disabled:opacity-50"
@@ -269,15 +395,28 @@ watch(
           </label>
           <label class="text-sm opacity-70">
             {{ t("news.title") }} {{ t("admin.news.form.langZh") }}
-            <input v-model="form.title_zh" class="mt-1 w-full rounded-md border bg-background px-2 py-1.5" />
+            <input
+              v-model="form.title_zh"
+              class="mt-1 w-full rounded-md border bg-background px-2 py-1.5"
+              data-testid="news-title-zh"
+            />
           </label>
           <label class="text-sm opacity-70">
-            {{ t("admin.news.form.bodyMarkdown") }}
+            {{ t("admin.news.form.bodyMarkdown") }} {{ t("admin.news.form.langEn") }}
             <textarea
               v-model="form.body_en"
-              rows="8"
+              rows="6"
               class="mt-1 w-full rounded-md border bg-background p-2 font-mono text-xs"
               data-testid="news-body"
+            />
+          </label>
+          <label class="text-sm opacity-70">
+            {{ t("admin.news.form.bodyMarkdown") }} {{ t("admin.news.form.langZh") }}
+            <textarea
+              v-model="form.body_zh"
+              rows="6"
+              class="mt-1 w-full rounded-md border bg-background p-2 font-mono text-xs"
+              data-testid="news-body-zh"
             />
           </label>
           <label class="text-sm opacity-70">
@@ -298,6 +437,22 @@ watch(
           </div>
           <p class="text-xs opacity-60">{{ t("common.total") }}: {{ total }}</p>
         </form>
+
+        <section class="mt-4 rounded-md border p-3" data-testid="news-preview">
+          <h3 class="text-sm font-medium">{{ t("admin.news.preview.renderedTitle") }}</h3>
+          <div class="mt-2 grid gap-4 md:grid-cols-2">
+            <div data-testid="news-preview-en">
+              <p class="text-xs uppercase opacity-60">{{ t("admin.news.form.langEn") }}</p>
+              <div v-if="previewBodyEn" class="mt-1 text-sm" v-html="previewBodyEn" />
+              <p v-else class="mt-1 text-xs opacity-60">{{ t("admin.news.preview.empty") }}</p>
+            </div>
+            <div data-testid="news-preview-zh">
+              <p class="text-xs uppercase opacity-60">{{ t("admin.news.form.langZh") }}</p>
+              <div v-if="previewBodyZh" class="mt-1 text-sm" v-html="previewBodyZh" />
+              <p v-else class="mt-1 text-xs opacity-60">{{ t("admin.news.preview.empty") }}</p>
+            </div>
+          </div>
+        </section>
       </section>
     </div>
   </ConfigProvider>

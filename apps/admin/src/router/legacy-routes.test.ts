@@ -53,7 +53,7 @@ describe("legacy admin deep links", () => {
 
     await router.push("/news/trash");
     expect(router.currentRoute.value.path).toBe("/news");
-    expect(router.currentRoute.value.query.status).toBe("archived");
+    expect(router.currentRoute.value.query.status).toBe("trash");
 
     await router.push("/news/article-7");
     expect(router.currentRoute.value.path).toBe("/news");

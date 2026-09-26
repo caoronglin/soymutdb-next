@@ -376,6 +376,7 @@
     "minimalUnavailableDescription": "This web-only deployment does not include JBrowse. Run the demo deployment mode to publish the interactive genome browser.",
     "locus": "Locus",
     "assembly": "Assembly",
+    "chromosome": "Chromosome",
     "openNewTab": "Open in a new tab",
     "ready": "Browser ready",
     "timeout": "The genome browser did not report ready. Retry the connection below.",
@@ -995,6 +996,13 @@
       "disabled": "Disabled"
     },
     "dashboard": "Dashboard",
+    "dashboardStats": {
+      "analyticsHeading": "Visitor analytics",
+      "windowLabel": "Window (days)",
+      "analyticsError": "Analytics is unavailable for this deployment: the summary endpoint could not be reached. No placeholder numbers are shown.",
+      "analyticsEmpty": "No analytics events were recorded in this window.",
+      "releasesEmpty": "No data releases are registered yet."
+    },
     "users": "User Management",
     "roles": "Roles & Permissions",
     "releases": "Release Management",
@@ -1142,6 +1150,7 @@
         "category": "Category",
         "status": "Status",
         "publishedAt": "Published",
+        "deletedAt": "Deleted",
         "featuredSort": "Featured Sort",
         "carouselGroup": "Carousel Group",
         "actions": "Actions"
@@ -1168,7 +1177,9 @@
         "copyLink": "Copy Link",
         "copied": "Link copied",
         "openPreview": "Open Preview",
-        "loading": "Generating preview link..."
+        "loading": "Generating preview link...",
+        "renderedTitle": "Bilingual preview",
+        "empty": "Nothing to preview yet."
       },
       "form": {
         "titleEn": "Title (EN)",
@@ -1218,6 +1229,7 @@
         "empty": "No published articles to reorder"
       },
       "loading": "Loading articles...",
+      "trashEmpty": "The recycle bin is empty.",
       "empty": "No articles yet. Create the first one."
     },
     "uploads": {

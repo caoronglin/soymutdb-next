@@ -124,7 +124,7 @@ are in `apps/admin/src/router/index.ts`.
 | React feature/route | React evidence (file@commit) | Vue status | Vue file | gap/action |
 | --- | --- | --- | --- | --- |
 | Login /login | `apps/admin/src/routes/login.tsx@2004c25c6` | implemented | `LoginView.vue` | none |
-| Dashboard / | `apps/admin/src/routes/index.tsx@2004c25c6` | implemented | `DashboardView.vue` | wiki notes React had extra metrics; current page has "关键指标" |
+| Dashboard / | `apps/admin/src/routes/index.tsx@2004c25c6` | implemented | `DashboardView.vue` | real metrics only: the active-release aggregate row via `getReleases` (variant/gene/mutant-line counts) plus `GET /admin/analytics/summary` via `getAdminAnalyticsSummary`; explicit loading/error/empty states; locked by `DashboardView.test.ts` |
 | Resource catalog /resource-catalog | `apps/admin/src/routes/resource-catalog.tsx@2004c25c6` | documented unavailable | `LegacyUnavailableView.vue` | no backing API exists: the React page was a static link grid and there is no resource-catalog endpoint. `router/index.ts` renders the explicit unavailable page with a `reasonKey`/`statusKey` and a link to `/imports`, so no catalog data is fabricated |
 | Imports list /imports | `apps/admin/src/routes/imports.tsx@2004c25c6` | implemented | `ImportsView.vue` | none |
 | Import create /imports/new | `apps/admin/src/routes/imports/new.tsx@2004c25c6` | implemented | `ImportCreateView.vue` | restored; **corrects** `wiki/applications.md` line 53 and §6.5 which still list it as not restored; locked by `legacy-routes.test.ts` ("P1-06") |
@@ -133,9 +133,9 @@ are in `apps/admin/src/router/index.ts`.
 | Content pages /content/pages | `apps/admin/src/App.tsx@2004c25c6` mounts `PageBuilderIndexPage` (`apps/admin/src/routes/page-builder/index.tsx@2004c25c6`) | implemented (reinterpreted) | `StaticPagesView.vue` | ADR-0009 keeps the page builder retired; `/content/pages` is repurposed as the static-page editor (same view as `/content`) and `/content/pages/:pageId` redirects to `/content?edit=<id>`. No page-builder editor is restored; see §6 |
 | Content legacy migration /content/legacy | `apps/admin/src/routes/content.tsx@2004c25c6` (`isLegacyRoute` + `StaticPageMigrationReport`) | implemented (read-only) | `ContentLegacyMigrationView.vue` | calls the real `POST /admin/content/pages/migrate-to-page-builder/dry-run` (`apps/api/app/api/v1/admin_content.py`, `dry_run` only); page builder stays retired per ADR-0009, so the report is a diagnostic and writes nothing |
 | Media /media | `apps/admin/src/routes/media.tsx@2004c25c6` | implemented | `MediaView.vue` | none |
-| News list /news | `apps/admin/src/routes/news/index.tsx@2004c25c6` | implemented | `NewsAdminView.vue` | none |
+| News list /news | `apps/admin/src/routes/news/index.tsx@2004c25c6` | implemented | `NewsAdminView.vue` | soft delete into the administrator recycle bin + restore/permanent purge (`DELETE /admin/news/{id}`, `GET /admin/news/deleted`, `POST /admin/news/{id}/restore`, `DELETE /admin/news/{id}/purge` via `deleteNews`/`listDeletedAdminNews`/`restoreNews`/`purgeNews`) and a bilingual Markdown preview sanitised on render (`apps/admin/src/lib/markdown-preview.ts` + `markdown-preview.test.ts`); locked by `NewsAdminView.test.ts` |
 | News new /news/new | `apps/admin/src/routes/news/new.tsx@2004c25c6` | implemented (redirect) | `NewsAdminView.vue` | `router/index.ts:52` -> `/news?new=1` |
-| News trash /news/trash | `apps/admin/src/routes/news/trash.tsx@2004c25c6` | implemented (redirect) | `NewsAdminView.vue` | `router/index.ts:53` -> `/news?status=archived` |
+| News trash /news/trash | `apps/admin/src/routes/news/trash.tsx@2004c25c6` | implemented (redirect) | `NewsAdminView.vue` | `router/index.ts` -> `/news?status=trash`, which lists `GET /admin/news/deleted` and offers restore/purge |
 | News edit /news/$id | `apps/admin/src/routes/news/$id.tsx@2004c25c6` | implemented (redirect) | `NewsAdminView.vue` | `router/index.ts:54` -> `/news?edit=<id>` |
 | Audit /audit | `apps/admin/src/routes/audit.tsx@2004c25c6` | implemented | `AuditView.vue` | none |
 | Settings overview /settings | `apps/admin/src/routes/settings/index.tsx@2004c25c6` | implemented | `SettingsView.vue` | supports `?section=` (used by the security/appearance/integrations/localization/advanced redirects); a requested-but-unregistered section renders a documented unavailable state instead of the first section |
@@ -167,19 +167,22 @@ no backing API), 7 intentionally retired (ADR-0009), 0 missing, 0 待复核.
 These routes existed at the initial baseline and were **deleted in `cab115493`**
 (2026-08-13, "complete data publishing and search upgrade"), i.e. before the Vue
 cutover. They are not part of the `2004c25c6` React baseline, so they are listed
-separately. Their disposition is not documented in any ADR -> **待复核**.
+separately. All six were removed together with the Tauri desktop admin
+(`apps/admin/src-tauri/**`) and `apps/core-rs/**` in that same commit; no
+successor surface exists and ADR-0009 does not cover them, so they are recorded
+as **retired** rather than left open.
 
 | React feature/route | React evidence (file@commit) | Vue status | Vue file | gap/action |
 | --- | --- | --- | --- | --- |
-| Users admin /users | `apps/admin/src/routes/users.tsx@4d970bfba` | 待复核 | — | Removed in `cab115493`. Confirm no replacement: `git log --all --oneline --diff-filter=AD -- apps/admin/src/routes/users.tsx` |
-| Assemblies admin /assemblies | `apps/admin/src/routes/assemblies.tsx@4d970bfba` | 待复核 | — | Removed in `cab115493`. Confirm: `grep -rn 'assemblies' apps/admin/src/router` |
-| Variants admin /variants | `apps/admin/src/routes/variants.tsx@4d970bfba` | 待复核 | — | Removed in `cab115493`. Confirm: `grep -rn 'variants' apps/admin/src/router` |
-| Tracks admin /tracks | `apps/admin/src/routes/tracks.tsx@4d970bfba` | 待复核 | — | Removed in `cab115493`. Confirm: `grep -rn 'tracks' apps/admin/src/router apps/admin/src/views` |
-| BLAST admin /blast | `apps/admin/src/routes/blast.tsx@4d970bfba` | 待复核 | — | Removed in `cab115493`; public `/blast` is not an admin surface. Confirm: `git log -S 'blast' --oneline -- apps/admin/src` |
-| Seeds admin /seeds | `apps/admin/src/routes/seeds.tsx@4d970bfba` | 待复核 | — | Removed in `cab115493`. Confirm: `grep -rn 'seed' apps/admin/src/router` |
+| Users admin /users | `apps/admin/src/routes/users.tsx@4d970bfba` | retired | — | Deleted with the Tauri desktop admin in `cab115493` (same commit removed `apps/admin/src-tauri/**` and `apps/core-rs/**`); confirm: `git log --all --oneline --diff-filter=AD -- apps/admin/src/routes/users.tsx`. No successor surface; not covered by ADR-0009. |
+| Assemblies admin /assemblies | `apps/admin/src/routes/assemblies.tsx@4d970bfba` | retired | — | Deleted with the Tauri desktop admin in `cab115493`; confirm: `git log --all --oneline --diff-filter=AD -- apps/admin/src/routes/assemblies.tsx`. The only remaining `assembly` matches are the import-create `assembly` field and release `assembly_name` columns — not a replacement admin route. |
+| Variants admin /variants | `apps/admin/src/routes/variants.tsx@4d970bfba` | retired | — | Deleted with the Tauri desktop admin in `cab115493`; confirm: `git log --all --oneline --diff-filter=AD -- apps/admin/src/routes/variants.tsx`. Remaining `variant` matches are release `variant_count` labels, not a replacement route. |
+| Tracks admin /tracks | `apps/admin/src/routes/tracks.tsx@4d970bfba` | retired | — | Deleted with the Tauri desktop admin in `cab115493`; confirm: `git log --all --oneline --diff-filter=AD -- apps/admin/src/routes/tracks.tsx`; `grep -rn 'tracks' apps/admin/src/router apps/admin/src/views` finds no admin-facing track surface. |
+| BLAST admin /blast | `apps/admin/src/routes/blast.tsx@4d970bfba` | retired | — | Deleted with the Tauri desktop admin in `cab115493`; confirm: `git log --all --oneline --diff-filter=AD -- apps/admin/src/routes/blast.tsx` and `git log -S 'blast' --oneline -- apps/admin/src`. The public `/blast` route is not an admin surface. |
+| Seeds admin /seeds | `apps/admin/src/routes/seeds.tsx@4d970bfba` | retired | — | Deleted with the Tauri desktop admin in `cab115493`; confirm: `git log --all --oneline --diff-filter=AD -- apps/admin/src/routes/seeds.tsx`. Remaining `seed_data` is an import type, not a replacement route. |
 | Releases admin /releases | `apps/admin/src/routes/releases.tsx@4d970bfba` | implemented | `ReleasesView.vue` | Removed in `cab115493`, reintroduced in the Vue console (`router/index.ts:32`) |
 
-Earlier-baseline tally: 1 implemented, 0 missing, 0 retired, 6 待复核.
+Earlier-baseline tally: 1 implemented, 0 missing, 6 retired, 0 待复核.
 
 ## 6. Intentionally retired (ADR call-outs)
 
@@ -229,13 +232,13 @@ the table below checks both against the current tree.
 
 | Doc claim (source) | Current-tree evidence | Reconciliation |
 | --- | --- | --- |
-| §4: "P0 React->Vue 功能矩阵（admin 约 34->11 路由）— 未开始" | `apps/web/src/router/routes.ts` (35), `apps/admin/src/router/index.ts` (15 functional), `docs/wiki/applications.md` matrix | Superseded by §6.5/§7: matrix exists. Remaining gaps = 9 missing admin routes (§4) + 6 earlier-baseline 待复核 (§5). |
+| §4: "P0 React->Vue 功能矩阵（admin 约 34->11 路由）— 未开始" | `apps/web/src/router/routes.ts` (35), `apps/admin/src/router/index.ts` (15 functional), `docs/wiki/applications.md` matrix | Superseded by §6.5/§7: matrix exists. Remaining gaps = 0: the six earlier-baseline routes are retired with the Tauri desktop admin in `cab115493` (§5), not open questions. |
 | §4: "P0 部署态 CSS/CSP/缓存/子路径浏览器验证 — 待复核" | §3.1/§10.3 static smoke only; no deployed-service test artefact in tree | Still **待复核**; needs a live deployment (`bash scripts/smoke.sh --profile runtime` + browser probe). |
 | §4: "P0 assembly 选择与深链 — 待复核" | `apps/web/src/lib/assembly-selection.ts`; §6.1; `project-status.md` "后端 label 规范化计划中" | Code parity done; backend `assembly_id` normalization still planned. |
 | §4: "P0 中英文逐页文案扫描 — 部分" | §8: budget `6 串 / 1 文件`; `scripts/visible-i18n-baseline.json` | Resolved to budget (whitelisted data values only). |
 | §4: "P1 首页新闻状态机 — 待复核" | §7.2; `apps/web/src/views/HomeView.test.ts`; `featuredNewsQueryOptions` envelope validation | Resolved (E2E 29 passed / 2 skipped, §7.1). |
 | §4: "P1 登录独立布局、子路径回跳 — 部分" | `LoginView.vue` + `apps/web/src/lib/redirect.ts` (+ `redirect.test.ts`) | Implemented. |
-| §4: "P1 管理端 favicon、dashboard/导入/新闻 — 待复核" | §6.3 favicon + `scripts/check_app_shell_assets.py`; `ImportsView.vue`, `ImportCreateView.vue`, `ImportDetailView.vue` | favicon/imports resolved; news preview/trash still "计划中" per `docs/wiki/applications.md`. |
+| §4: "P1 管理端 favicon、dashboard/导入/新闻 — 待复核" | §6.3 favicon + `scripts/check_app_shell_assets.py`; `ImportsView.vue`, `ImportCreateView.vue`, `ImportDetailView.vue`, `DashboardView.vue` + `DashboardView.test.ts`, `NewsAdminView.vue` + `NewsAdminView.test.ts` | Resolved: the dashboard shows real release-aggregate + analytics-summary metrics with explicit states, and news has the bilingual sanitised preview plus the delete/restore/purge recycle bin. |
 | §4: "P1 静态预览/部署 API base 与 CORS — 待复核" | no artefact in tree | Still **待复核**. |
 | §4: "D 多实例远端写操作 — 按设计关闭" | `apps/admin/src/lib/instance-connector.ts` (`RemoteAdministrationDisabledError`) | Closed by design (unchanged). |
 | §4: "E 默认 API 端口 8010 — 未开始" | §6.4 (39 files updated); `project-status.md` "默认 API 端口 8010" | Resolved. |
@@ -254,30 +257,27 @@ the table below checks both against the current tree.
 | implemented | 62 |
 | documented unavailable (no API) | 1 |
 | missing | 0 |
-| intentionally retired w/ ADR | 9 |
-| 待复核 | 6 |
+| intentionally retired | 15 |
+| 待复核 (unresolved row status) | 0 |
 | **total rows** | **78** |
 
 Breakdown: web = 35 implemented + 2 retired (37 rows); admin `2004c25c6` =
 26 implemented + 1 documented-unavailable + 7 retired (34 rows); earlier admin
-`4d970bfba` = 1 implemented + 6 待复核 (7 rows).
+`4d970bfba` = 1 implemented + 6 retired in `cab115493` with the Tauri desktop
+admin (7 rows).
 
 ## 10. 待复核 register (exact confirming commands)
 
 Resolved since the audit (see §4): `/content`, `/content/pages`,
 `/content/legacy`, `/analytics-settings` and the settings sub-pages are
 implemented; `/resource-catalog` is an explicit documented-unavailable page. The
-two former `/content` rows are removed from this register.
+two former `/content` rows are removed from this register. The six
+earlier-baseline route rows are resolved as **retired** in §5 (deleted with the
+Tauri desktop admin in `cab115493`) and are removed from this register.
 
 | Item | Command |
 | --- | --- |
 | `/table-views` -> `/table-templates` old deep-link reachability | `grep -n 'table-views' apps/admin/src/router/index.ts` |
-| Earlier-baseline `/users` disposition | `git log --all --oneline --diff-filter=AD -- apps/admin/src/routes/users.tsx` |
-| Earlier-baseline `/assemblies` disposition | `grep -rn 'assemblies' apps/admin/src/router apps/admin/src/views` |
-| Earlier-baseline `/variants` disposition | `grep -rn 'variants' apps/admin/src/router` |
-| Earlier-baseline `/tracks` disposition | `grep -rn 'tracks' apps/admin/src/router apps/admin/src/views` |
-| Earlier-baseline `/blast` disposition | `git log -S 'blast' --oneline -- apps/admin/src` |
-| Earlier-baseline `/seeds` disposition | `grep -rn 'seed' apps/admin/src/router` |
 | §4 deployment-state CSS/CSP/subpath verification | `bash scripts/smoke.sh --profile runtime` plus a browser probe of the deployed origins |
 | §4 static preview/deploy API base and CORS | inspect the deployed nginx/proxy config and re-run `scripts/verify-pages-artifact.sh` |
 | Build-time brand into static HTML/manifest | `grep -rn 'brand' scripts/generate-static-routes.ts apps/web/index.html` |
