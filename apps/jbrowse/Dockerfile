@@ -11,8 +11,13 @@ FROM base AS deps
 COPY package.json pnpm-workspace.yaml turbo.json pnpm-lock.yaml ./
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/api-client/package.json packages/api-client/package.json
-COPY packages/i18n/package.json packages/i18n/package.json
-COPY packages/motion/package.json packages/motion/package.json
+COPY packages/i18n-core/package.json packages/i18n-core/package.json
+COPY packages/query-keys/package.json packages/query-keys/package.json
+COPY packages/charts/package.json packages/charts/package.json
+COPY packages/ui-vue/package.json packages/ui-vue/package.json
+COPY packages/genome-view-model/package.json packages/genome-view-model/package.json
+COPY packages/genome-data/package.json packages/genome-data/package.json
+COPY packages/genome-view/package.json packages/genome-view/package.json
 COPY apps/web/package.json apps/web/package.json
 COPY apps/admin/package.json apps/admin/package.json
 COPY apps/jbrowse/package.json apps/jbrowse/package.json
