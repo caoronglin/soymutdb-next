@@ -61,6 +61,8 @@ export * from "./admin-plugins";
 export * from "./admin-imports";
 export * from "./admin-import-studio";
 export * from "./admin-settings";
+export * from "./admin-content";
+export * from "./admin-analytics";
 export * from "./page-definitions";
 
 export * from "./capabilities";

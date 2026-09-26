@@ -60,11 +60,11 @@ cat docs/adr/0009-retire-page-builder-and-widgets.md
 | React web routes @ `d3904c210` | 36 | 36 route files under `apps/web/src/routes` (excluding `__root.tsx` and the non-route helper `tools/api.ts`). |
 | Vue web routes (current) | 35 | `grep -c 'path: "' apps/web/src/router/routes.ts` -> 35. |
 | React admin routes @ `2004c25c6` | 34 | `git show 2004c25c6:apps/admin/src/App.tsx` -> 34 `path:` definitions. |
-| Vue admin functional routes (current) | 15 | `apps/admin/src/router/index.ts` named routes excluding `not-found`; plus 5 redirects and 11 `LegacyUnavailableView` entries. |
+| Vue admin functional routes (current) | 19 | `apps/admin/src/router/index.ts` named non-redirect component routes excluding `not-found`; plus 11 redirects, 1 documented-unavailable route (`/resource-catalog`) and 7 ADR-0009 `LegacyUnavailableView` routes. |
 | Earlier React admin routes @ `4d970bfba` | 18 | `git show 4d970bfba:apps/admin/src/App.tsx` -> 18 `path:` definitions. |
 
 Correction: `docs/wiki/applications.md` says "公共站 34 条路由" and "管理端 14 条路由";
-the current tables are **35** web routes and **15** admin functional routes.
+the current tables are **35** web routes and **19** admin functional routes.
 
 ## 3. apps/web — React `d3904c210` -> current Vue
 
@@ -125,41 +125,42 @@ are in `apps/admin/src/router/index.ts`.
 | --- | --- | --- | --- | --- |
 | Login /login | `apps/admin/src/routes/login.tsx@2004c25c6` | implemented | `LoginView.vue` | none |
 | Dashboard / | `apps/admin/src/routes/index.tsx@2004c25c6` | implemented | `DashboardView.vue` | wiki notes React had extra metrics; current page has "关键指标" |
-| Resource catalog /resource-catalog | `apps/admin/src/routes/resource-catalog.tsx@2004c25c6` | missing | `LegacyUnavailableView.vue` (`router/index.ts:55`) | not restored; explicit unavailable page (no bare 404) |
+| Resource catalog /resource-catalog | `apps/admin/src/routes/resource-catalog.tsx@2004c25c6` | documented unavailable | `LegacyUnavailableView.vue` | no backing API exists: the React page was a static link grid and there is no resource-catalog endpoint. `router/index.ts` renders the explicit unavailable page with a `reasonKey`/`statusKey` and a link to `/imports`, so no catalog data is fabricated |
 | Imports list /imports | `apps/admin/src/routes/imports.tsx@2004c25c6` | implemented | `ImportsView.vue` | none |
 | Import create /imports/new | `apps/admin/src/routes/imports/new.tsx@2004c25c6` | implemented | `ImportCreateView.vue` | restored; **corrects** `wiki/applications.md` line 53 and §6.5 which still list it as not restored; locked by `legacy-routes.test.ts` ("P1-06") |
 | Import task detail /imports/$taskId | `apps/admin/src/routes/imports/task-detail.tsx@2004c25c6` | implemented | `ImportDetailView.vue` | restored; same correction; progress enhancement remains "计划中" per wiki |
-| Content management /content | `apps/admin/src/routes/content.tsx@2004c25c6` | missing | `LegacyUnavailableView.vue` (`router/index.ts:56`) | not restored; **待复核** whether intentional: `git log -S 'static_pages' --oneline -- docs/adr docs/dev` |
-| Content pages /content/pages | `apps/admin/src/App.tsx@2004c25c6` mounts `PageBuilderIndexPage` (`apps/admin/src/routes/page-builder/index.tsx@2004c25c6`) | intentionally retired w/ ADR | `LegacyUnavailableView.vue` (`router/index.ts:57`) | ADR-0009 retires the page builder; see §6 |
-| Content legacy migration /content/legacy | `apps/admin/src/routes/content.tsx@2004c25c6` (`isLegacyRoute` + `StaticPageMigrationReport`) | missing | `LegacyUnavailableView.vue` (`router/index.ts:58`) | one-way migration report not restored; **待复核** retirement: `git log -S 'StaticPageMigrationReport' --oneline -- docs/adr` |
+| Content management /content | `apps/admin/src/routes/content.tsx@2004c25c6` | implemented | `StaticPagesView.vue` | static-page list + create/edit + publish/unpublish/delete backed by `adminContentApi` (`packages/api-client/src/admin-content.ts`); `router/index.ts` `/content`; resolves the 待复核 — the pages tab is restored, not retired |
+| Content pages /content/pages | `apps/admin/src/App.tsx@2004c25c6` mounts `PageBuilderIndexPage` (`apps/admin/src/routes/page-builder/index.tsx@2004c25c6`) | implemented (reinterpreted) | `StaticPagesView.vue` | ADR-0009 keeps the page builder retired; `/content/pages` is repurposed as the static-page editor (same view as `/content`) and `/content/pages/:pageId` redirects to `/content?edit=<id>`. No page-builder editor is restored; see §6 |
+| Content legacy migration /content/legacy | `apps/admin/src/routes/content.tsx@2004c25c6` (`isLegacyRoute` + `StaticPageMigrationReport`) | implemented (read-only) | `ContentLegacyMigrationView.vue` | calls the real `POST /admin/content/pages/migrate-to-page-builder/dry-run` (`apps/api/app/api/v1/admin_content.py`, `dry_run` only); page builder stays retired per ADR-0009, so the report is a diagnostic and writes nothing |
 | Media /media | `apps/admin/src/routes/media.tsx@2004c25c6` | implemented | `MediaView.vue` | none |
 | News list /news | `apps/admin/src/routes/news/index.tsx@2004c25c6` | implemented | `NewsAdminView.vue` | none |
 | News new /news/new | `apps/admin/src/routes/news/new.tsx@2004c25c6` | implemented (redirect) | `NewsAdminView.vue` | `router/index.ts:52` -> `/news?new=1` |
 | News trash /news/trash | `apps/admin/src/routes/news/trash.tsx@2004c25c6` | implemented (redirect) | `NewsAdminView.vue` | `router/index.ts:53` -> `/news?status=archived` |
 | News edit /news/$id | `apps/admin/src/routes/news/$id.tsx@2004c25c6` | implemented (redirect) | `NewsAdminView.vue` | `router/index.ts:54` -> `/news?edit=<id>` |
 | Audit /audit | `apps/admin/src/routes/audit.tsx@2004c25c6` | implemented | `AuditView.vue` | none |
-| Settings overview /settings | `apps/admin/src/routes/settings/index.tsx@2004c25c6` | implemented | `SettingsView.vue` | supports `?section=` (used by the security redirect) |
-| Settings legacy form /settings/legacy | `apps/admin/src/routes/settings.tsx@2004c25c6` | missing | `LegacyUnavailableView.vue` (`router/index.ts:59`) | legacy monolithic form not restored |
+| Settings overview /settings | `apps/admin/src/routes/settings/index.tsx@2004c25c6` | implemented | `SettingsView.vue` | supports `?section=` (used by the security/appearance/integrations/localization/advanced redirects); a requested-but-unregistered section renders a documented unavailable state instead of the first section |
+| Settings legacy form /settings/legacy | `apps/admin/src/routes/settings.tsx@2004c25c6` | implemented (redirect) | `SettingsView.vue` | `router/index.ts` -> `/settings`; the schema-driven overview exposes every registered section, which is the monolithic form's replacement |
 | Settings site /settings/site | `apps/admin/src/routes/settings/site.tsx@2004c25c6` | implemented (redirect) | `SiteBrandSettingsView.vue` | `router/index.ts:50` -> `/settings/brand` |
-| Settings appearance /settings/appearance | `apps/admin/src/routes/settings/appearance.tsx@2004c25c6` | missing | `LegacyUnavailableView.vue` (`router/index.ts:60`) | not restored |
-| Settings integrations /settings/integrations | `apps/admin/src/routes/settings/integrations.tsx@2004c25c6` | missing | `LegacyUnavailableView.vue` (`router/index.ts:61`) | not restored |
+| Settings appearance /settings/appearance | `apps/admin/src/routes/settings/appearance.tsx@2004c25c6` | implemented (redirect) | `SettingsView.vue` | `router/index.ts` -> `/settings?section=general` (`general` carries `defaultTheme`/`primaryColor`, verified against `apps/api/app/core/settings_registry.py`); an unregistered `?section` renders a documented unavailable state |
+| Settings integrations /settings/integrations | `apps/admin/src/routes/settings/integrations.tsx@2004c25c6` | implemented (redirect) | `SettingsView.vue` | `router/index.ts` -> `/settings?section=cdn` (`cdn` section, verified against `settings_registry.py`) |
 | Settings security /settings/security | `apps/admin/src/routes/settings/security.tsx@2004c25c6` | implemented (redirect) | `SettingsView.vue` | `router/index.ts:51` -> `/settings?section=security` |
-| Settings localization /settings/localization | `apps/admin/src/routes/settings/localization.tsx@2004c25c6` | missing | `LegacyUnavailableView.vue` (`router/index.ts:62`) | not restored |
-| Settings advanced /settings/advanced | `apps/admin/src/routes/settings/advanced.tsx@2004c25c6` | missing | `LegacyUnavailableView.vue` (`router/index.ts:63`) | not restored |
+| Settings localization /settings/localization | `apps/admin/src/routes/settings/localization.tsx@2004c25c6` | implemented (redirect) | `SettingsView.vue` | `router/index.ts` -> `/settings?section=general` (`defaultLanguage`); site-variant content remains in the overview |
+| Settings advanced /settings/advanced | `apps/admin/src/routes/settings/advanced.tsx@2004c25c6` | implemented (redirect) | `SettingsView.vue` | `router/index.ts` -> `/settings?section=data`; the other advanced sections (`email`, `file_preview`) stay reachable in the overview nav |
 | Features /features | `apps/admin/src/routes/features.tsx@2004c25c6` | implemented | `FeaturesView.vue` | none |
-| Analytics settings /analytics-settings | `apps/admin/src/routes/analytics-settings.tsx@2004c25c6` | missing | `LegacyUnavailableView.vue` (`router/index.ts:64`) | not restored |
-| Widgets /widgets | `apps/admin/src/routes/widgets.tsx@2004c25c6` | intentionally retired w/ ADR | `LegacyUnavailableView.vue` (`router/index.ts:65`) | ADR-0009; see §6 |
-| Widget editor /widgets/$name | `apps/admin/src/routes/widgets/$name.tsx@2004c25c6` | intentionally retired w/ ADR | `LegacyUnavailableView.vue` (`router/index.ts:66`) | ADR-0009; see §6 |
-| Layout editor /layout | `apps/admin/src/routes/layout.tsx@2004c25c6` | intentionally retired w/ ADR | `LegacyUnavailableView.vue` (`router/index.ts:67`) | ADR-0009; see §6 |
-| Widget preview /widget-preview | `apps/admin/src/routes/widget-preview.tsx@2004c25c6` | intentionally retired w/ ADR | `LegacyUnavailableView.vue` (`router/index.ts:68`) | ADR-0009; see §6 |
-| Widget health /widget-health | `apps/admin/src/routes/widget-health.tsx@2004c25c6` | intentionally retired w/ ADR | `LegacyUnavailableView.vue` (`router/index.ts:69`) | ADR-0009; see §6 |
-| Page builder /page-builder | `apps/admin/src/routes/page-builder/index.tsx@2004c25c6` | intentionally retired w/ ADR | `LegacyUnavailableView.vue` (`router/index.ts:70`) | ADR-0009; see §6 |
-| Page builder edit /page-builder/$pageId | `apps/admin/src/routes/page-builder/$pageId.tsx@2004c25c6` | intentionally retired w/ ADR | `LegacyUnavailableView.vue` (`router/index.ts:71`) | ADR-0009; see §6 |
+| Analytics settings /analytics-settings | `apps/admin/src/routes/analytics-settings.tsx@2004c25c6` | implemented | `AnalyticsSettingsView.vue` | real summary from `GET /admin/analytics/summary` via `packages/api-client/src/admin-analytics.ts`; the Cloudflare beacon remains documented build-time configuration and the page never shows placeholder numbers |
+| Widgets /widgets | `apps/admin/src/routes/widgets.tsx@2004c25c6` | intentionally retired w/ ADR | `LegacyUnavailableView.vue` (`router/index.ts`, ADR-0009) | ADR-0009; see §6 |
+| Widget editor /widgets/$name | `apps/admin/src/routes/widgets/$name.tsx@2004c25c6` | intentionally retired w/ ADR | `LegacyUnavailableView.vue` (`router/index.ts`, ADR-0009) | ADR-0009; see §6 |
+| Layout editor /layout | `apps/admin/src/routes/layout.tsx@2004c25c6` | intentionally retired w/ ADR | `LegacyUnavailableView.vue` (`router/index.ts`, ADR-0009) | ADR-0009; see §6 |
+| Widget preview /widget-preview | `apps/admin/src/routes/widget-preview.tsx@2004c25c6` | intentionally retired w/ ADR | `LegacyUnavailableView.vue` (`router/index.ts`, ADR-0009) | ADR-0009; see §6 |
+| Widget health /widget-health | `apps/admin/src/routes/widget-health.tsx@2004c25c6` | intentionally retired w/ ADR | `LegacyUnavailableView.vue` (`router/index.ts`, ADR-0009) | ADR-0009; see §6 |
+| Page builder /page-builder | `apps/admin/src/routes/page-builder/index.tsx@2004c25c6` | intentionally retired w/ ADR | `LegacyUnavailableView.vue` (`router/index.ts`, ADR-0009) | ADR-0009; see §6 |
+| Page builder edit /page-builder/$pageId | `apps/admin/src/routes/page-builder/$pageId.tsx@2004c25c6` | intentionally retired w/ ADR | `LegacyUnavailableView.vue` (`router/index.ts`, ADR-0009) | ADR-0009; see §6 |
 | Publications /publications | `apps/admin/src/routes/publications.tsx@2004c25c6` | implemented | `PublicationsAdminView.vue` | none |
 | Table views /table-views | `apps/admin/src/routes/table-views.tsx@2004c25c6` | implemented (renamed) | `TableTemplatesView.vue` | Vue path is `/table-templates` (`router/index.ts:36`); no `/table-views` alias -> **待复核** old link reachability: `grep -n 'table-views' apps/admin/src/router/index.ts` |
 
-Admin tally: 17 implemented, 9 missing, 8 intentionally retired (ADR-0009),
-0 待复核 (two rows carry a 待复核 sub-note but are counted as missing).
+Admin tally: 26 implemented (including the read-only migration preview and the
+`/content/pages` reinterpretation), 1 documented unavailable (`/resource-catalog`,
+no backing API), 7 intentionally retired (ADR-0009), 0 missing, 0 待复核.
 
 ## 5. Earlier React admin baseline `4d970bfba` — routes removed before the Vue cutover
 
@@ -202,8 +203,11 @@ Earlier-baseline tally: 1 implemented, 0 missing, 0 retired, 6 待复核.
   `apps/admin/src/routes/layout.tsx`, `apps/admin/src/routes/widget-preview.tsx`,
   `apps/admin/src/routes/widget-health.tsx`; `/content/pages` mounted the page
   builder via `apps/admin/src/App.tsx`.
-- Current Vue: all seven paths (plus `/content/pages`) resolve to
-  `LegacyUnavailableView.vue` (`apps/admin/src/router/index.ts:57`, `:65`-`:71`).
+- Current Vue: the seven page-builder/widget paths resolve to
+  `LegacyUnavailableView.vue` (`apps/admin/src/router/index.ts`). `/content/pages`
+  is no longer inside the retirement boundary: it is repurposed as the
+  static-page editor (`StaticPagesView.vue`) while the page builder itself stays
+  retired.
 - ADR boundary: `page_definitions` / widget tables and endpoints remain until a
   separate audited migration; the ADR does **not** authorise deleting them.
 
@@ -238,31 +242,35 @@ the table below checks both against the current tree.
 | §4: "F docs/wiki 与目录清理 — 未开始" | `docs/wiki/{README,architecture,applications,api-and-ports,deployment-and-ops,multi-instance}.md` | Resolved. |
 | §4: "C 构建期品牌写入静态 HTML/manifest — 未开始" | `project-status.md` "构建期静态写入**计划中**" | Still planned. |
 | `project-status.md`: "公共站 34 条路由全部实现" | `grep -c 'path: "' apps/web/src/router/routes.ts` -> 35 | Count is stale; behaviour parity holds (35/35 implemented). |
-| `project-status.md`: "管理端 14 条路由" | `apps/admin/src/router/index.ts` -> 15 functional named routes | Count is stale; update to 15. |
-| `project-status.md`: "Page Builder/内容页/Widgets/导入向导详情为计划中" | router: widgets/page-builder/layout -> `LegacyUnavailableView`; ADR-0009; imports create/detail implemented | Page builder/widgets/layout are **intentionally retired** (ADR-0009), not "planned". Content pages remain unrestored. Import wizard detail is implemented (`ImportDetailView.vue`), contradicting the doc. |
+| `project-status.md`: "管理端 14 条路由" | `apps/admin/src/router/index.ts` -> 19 functional named routes | Count is stale; update to 19. |
+| `project-status.md`: "Page Builder/内容页/Widgets/导入向导详情为计划中" | router: widgets/page-builder/layout -> `LegacyUnavailableView`; ADR-0009; `/content` and `/content/pages` -> `StaticPagesView`; imports create/detail implemented | Page builder/widgets/layout are **intentionally retired** (ADR-0009), not "planned". Content pages are now implemented as static-page management (`StaticPagesView.vue` + `packages/api-client/src/admin-content.ts`). Import wizard detail is implemented (`ImportDetailView.vue`), contradicting the doc. |
 | `docs/wiki/applications.md` line 53-54: `/imports/new`, `/imports/:taskId` listed under "尚未恢复" | `apps/admin/src/router/index.ts:34-35`; `legacy-routes.test.ts` "restores the import create and detail deep links (P1-06)" | Doc error: both are restored; update the wiki list. |
-| `docs/wiki/applications.md` line 6/26: web 34 / admin 14 routes | routes.ts 35; admin router 15 functional | Doc counts stale by one each. |
+| `docs/wiki/applications.md` line 6/26: web 34 / admin 14 routes | routes.ts 35; admin router 19 functional | Doc counts stale; the admin count lags by five. |
 
 ## 9. Tally
 
 | Status | Count |
 | --- | --- |
-| implemented | 53 |
-| missing | 9 |
-| intentionally retired w/ ADR | 10 |
+| implemented | 62 |
+| documented unavailable (no API) | 1 |
+| missing | 0 |
+| intentionally retired w/ ADR | 9 |
 | 待复核 | 6 |
 | **total rows** | **78** |
 
 Breakdown: web = 35 implemented + 2 retired (37 rows); admin `2004c25c6` =
-17 implemented + 9 missing + 8 retired (34 rows); earlier admin `4d970bfba` =
-1 implemented + 6 待复核 (7 rows).
+26 implemented + 1 documented-unavailable + 7 retired (34 rows); earlier admin
+`4d970bfba` = 1 implemented + 6 待复核 (7 rows).
 
 ## 10. 待复核 register (exact confirming commands)
 
+Resolved since the audit (see §4): `/content`, `/content/pages`,
+`/content/legacy`, `/analytics-settings` and the settings sub-pages are
+implemented; `/resource-catalog` is an explicit documented-unavailable page. The
+two former `/content` rows are removed from this register.
+
 | Item | Command |
 | --- | --- |
-| `/content` and `/content/legacy` retirement intent | `git log -S 'static_pages' --oneline -- docs/adr docs/dev` and `git show 2004c25c6:apps/admin/src/routes/content/pages-tab.tsx` |
-| `/content/legacy` static-page migration report retirement | `git log -S 'StaticPageMigrationReport' --oneline -- docs/adr apps/admin/src` |
 | `/table-views` -> `/table-templates` old deep-link reachability | `grep -n 'table-views' apps/admin/src/router/index.ts` |
 | Earlier-baseline `/users` disposition | `git log --all --oneline --diff-filter=AD -- apps/admin/src/routes/users.tsx` |
 | Earlier-baseline `/assemblies` disposition | `grep -rn 'assemblies' apps/admin/src/router apps/admin/src/views` |

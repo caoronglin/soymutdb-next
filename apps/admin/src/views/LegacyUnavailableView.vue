@@ -7,14 +7,40 @@ import { t } from "../lib/i18n";
 
 /**
  * Explicit landing page for legacy console deep links whose workflow has not
- * been restored in the Vue console yet.
+ * been restored in the Vue console.
  *
  * The alternative — a bare 404 or an empty shell — reads as "the feature broke"
  * or, worse, as "there is nothing here", which is why the migration plan
- * forbids both. This page names the requested path, states that the workflow is
- * not available in this build, and offers the routes that are restored. It does
+ * forbids both. This page names the requested path, states why the workflow is
+ * unavailable in this build, and offers the routes that are restored. It does
  * not pretend to load data and it writes nothing.
+ *
+ * Route entries may pass `reasonKey`/`statusKey`/`referenceHref` to turn a
+ * generic placeholder into a documented disposition; the ADR-0009 retired
+ * routes keep the defaults.
  */
+withDefaults(
+  defineProps<{
+    /** i18n key naming why this workflow is unavailable. */
+    reasonKey?: string;
+    /** i18n key for the status line; defaults to the generic "planned". */
+    statusKey?: string;
+    /** Optional in-app route the operator can follow. */
+    referenceTo?: string;
+    /** Optional external reference the operator can follow (ADR/docs URL). */
+    referenceHref?: string;
+    /** i18n key for the reference link label. */
+    referenceLabelKey?: string;
+  }>(),
+  {
+    reasonKey: "",
+    statusKey: "admin.legacyUnavailable.planned",
+    referenceTo: "",
+    referenceHref: "",
+    referenceLabelKey: "admin.legacyUnavailable.reference",
+  },
+);
+
 const route = useRoute();
 </script>
 
@@ -26,9 +52,28 @@ const route = useRoute();
       <p class="mt-3 rounded-md border border-border bg-muted px-3 py-2 font-mono text-xs">
         {{ t("admin.legacyUnavailable.requested") }}: {{ route.path }}
       </p>
+      <p v-if="reasonKey" class="mt-3 text-sm" data-testid="legacy-unavailable-reason">
+        <span class="opacity-70">{{ t("admin.legacyUnavailable.reason") }}:</span>
+        {{ t(reasonKey) }}
+      </p>
       <p class="mt-3 text-sm">
         <span class="opacity-70">{{ t("admin.legacyUnavailable.status") }}:</span>
-        <span data-testid="legacy-unavailable-status">{{ t("admin.legacyUnavailable.planned") }}</span>
+        <span data-testid="legacy-unavailable-status">{{ t(statusKey) }}</span>
+      </p>
+      <p v-if="referenceTo || referenceHref" class="mt-3 text-sm">
+        <RouterLink v-if="referenceTo" :to="referenceTo" class="text-primary underline" data-testid="legacy-unavailable-reference">
+          {{ t(referenceLabelKey) }}
+        </RouterLink>
+        <a
+          v-else
+          :href="referenceHref"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="text-primary underline"
+          data-testid="legacy-unavailable-reference"
+        >
+          {{ t(referenceLabelKey) }}
+        </a>
       </p>
       <div class="mt-5 flex flex-wrap gap-3">
         <RouterLink
@@ -45,6 +90,14 @@ const route = useRoute();
           data-testid="legacy-unavailable-settings"
         >
           {{ t("admin.settings") }}
+        </RouterLink>
+        <RouterLink
+          v-if="route.path.startsWith('/content')"
+          to="/content"
+          class="inline-flex min-h-10 items-center rounded-md border border-border px-3 text-sm"
+          data-testid="legacy-unavailable-content"
+        >
+          {{ t("admin.content") }}
         </RouterLink>
         <RouterLink
           v-if="route.path.startsWith('/news')"

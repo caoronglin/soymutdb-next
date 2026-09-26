@@ -22,6 +22,7 @@ const queryClient = useQueryClient();
 const route = useRoute();
 const router = useRouter();
 const activeSection = ref("");
+const missingSection = ref("");
 const draft = reactive<Record<string, string>>({});
 const errorMessage = ref("");
 const savedMessage = ref("");
@@ -47,9 +48,19 @@ watch(
   ([value, requested]) => {
     const wanted = typeof requested === "string" ? requested : "";
     if (wanted && value.some((section) => section.id === wanted)) {
+      missingSection.value = "";
       activeSection.value = wanted;
       return;
     }
+    if (wanted && value.length > 0) {
+      // Requested but not registered: falling back to the first section would
+      // read as if the requested editor had opened, so render an explicit
+      // unavailable state instead (path + reason + link).
+      missingSection.value = wanted;
+      activeSection.value = "";
+      return;
+    }
+    missingSection.value = "";
     if (!activeSection.value && value.length > 0) activeSection.value = value[0]!.id;
   },
   { immediate: true },
@@ -128,7 +139,24 @@ const saveMutation = useMutation({
       <p v-else-if="schemaQuery.isError.value" data-testid="settings-error" class="mt-4 text-sm text-red-700">
         {{ t("common.errorDescription") }}
       </p>
-      <div v-else class="mt-4 grid gap-6 lg:grid-cols-[200px_1fr]">
+      <div v-else class="mt-4">
+        <div
+          v-if="missingSection"
+          class="max-w-2xl rounded-lg border border-amber-300 p-4"
+          data-testid="settings-section-missing"
+        >
+          <h2 class="text-sm font-semibold">{{ t("admin.legacyUnavailable.sectionMissingTitle") }}</h2>
+          <p class="mt-2 text-sm opacity-80">
+            {{ t("admin.legacyUnavailable.sectionMissingDescription", { section: missingSection }) }}
+          </p>
+          <p class="mt-2 rounded-md border border-border bg-muted px-3 py-2 font-mono text-xs">
+            {{ t("admin.legacyUnavailable.sectionMissingPath", { path: route.path, section: missingSection }) }}
+          </p>
+          <RouterLink to="/settings" class="mt-3 inline-block text-sm text-primary underline">
+            {{ t("admin.settings") }}
+          </RouterLink>
+        </div>
+        <div v-else class="grid gap-6 lg:grid-cols-[200px_1fr]">
         <nav class="grid content-start gap-1" :aria-label="t('admin.settingsSections')">
           <button
             v-for="section in sections"
@@ -196,6 +224,7 @@ const saveMutation = useMutation({
             </Button>
           </form>
         </section>
+        </div>
       </div>
     </div>
   </ConfigProvider>

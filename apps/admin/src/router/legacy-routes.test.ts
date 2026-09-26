@@ -15,7 +15,10 @@ vi.mock("@soymutdb/ui-vue", () => ({
   Table: { template: "<table><slot /></table>" },
 }));
 
+import AnalyticsSettingsView from "../views/AnalyticsSettingsView.vue";
+import ContentLegacyMigrationView from "../views/ContentLegacyMigrationView.vue";
 import LegacyUnavailableView from "../views/LegacyUnavailableView.vue";
+import StaticPagesView from "../views/StaticPagesView.vue";
 import { ADMIN_ROUTES } from "./index";
 import { createMemoryHistory, createRouter } from "vue-router";
 
@@ -57,18 +60,53 @@ describe("legacy admin deep links", () => {
     expect(router.currentRoute.value.query.edit).toBe("article-7");
   });
 
-  it("lands unported workflows on the explicit unavailable page", () => {
+  it("maps each settings sub-page onto a registered schema section", async () => {
+    const expected: Array<[string, string]> = [
+      ["/settings/appearance", "general"],
+      ["/settings/integrations", "cdn"],
+      ["/settings/localization", "general"],
+      ["/settings/advanced", "data"],
+    ];
+    for (const [path, section] of expected) {
+      await router.push(path);
+      expect(router.currentRoute.value.path, path).toBe("/settings");
+      expect(router.currentRoute.value.query.section, path).toBe(section);
+    }
+
+    // The monolithic legacy form is the overview: every registered section is
+    // reachable and the first one opens by default.
+    await router.push("/settings/legacy");
+    expect(router.currentRoute.value.path).toBe("/settings");
+    expect(router.currentRoute.value.query.section).toBeUndefined();
+  });
+
+  it("exposes the content and analytics routes as real data-backed views", () => {
+    expect(router.resolve("/content").name).toBe("content");
+    expect(router.resolve("/content").matched.at(-1)?.components?.default).toBe(StaticPagesView);
+
+    expect(router.resolve("/content/pages").name).toBe("content-pages");
+    expect(router.resolve("/content/pages").matched.at(-1)?.components?.default).toBe(StaticPagesView);
+
+    expect(router.resolve("/content/legacy").name).toBe("content-legacy");
+    expect(router.resolve("/content/legacy").matched.at(-1)?.components?.default).toBe(
+      ContentLegacyMigrationView,
+    );
+
+    expect(router.resolve("/analytics-settings").name).toBe("analytics-settings");
+    expect(router.resolve("/analytics-settings").matched.at(-1)?.components?.default).toBe(
+      AnalyticsSettingsView,
+    );
+  });
+
+  it("redirects a /content/pages/:pageId deep link into the editor", async () => {
+    await router.push("/content/pages/42");
+    expect(router.currentRoute.value.path).toBe("/content");
+    expect(router.currentRoute.value.query.edit).toBe("42");
+  });
+
+  it("lands unbacked and ADR-0009-retired workflows on the explicit unavailable page", () => {
     for (const path of [
       "/resource-catalog",
-      "/content",
-      "/content/pages",
-      "/content/legacy",
-      "/settings/legacy",
-      "/settings/appearance",
-      "/settings/integrations",
-      "/settings/localization",
-      "/settings/advanced",
-      "/analytics-settings",
       "/widgets",
       "/widgets/import-throughput",
       "/layout",
