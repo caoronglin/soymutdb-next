@@ -18,8 +18,8 @@ directly from `apps/jbrowse/src`.
 
 | Command | Exit | Result |
 | --- | --- | --- |
-| `cd packages/genome-view && ./node_modules/.bin/vitest run src/ablation` | 1 | 11 files, **15 passed / 2 failed** (17 tests); both failures are scenario 9 |
-| `cd packages/genome-view && ./node_modules/.bin/vitest run` | 1 | 25 files, **24 passed / 1 failed**; **68 passed / 2 failed** (70 tests) — pre-existing 53 tests remain green |
+| `cd packages/genome-view && ./node_modules/.bin/vitest run src/ablation` | 1 | 11 files, **17 passed / 0 failed** (17 tests) |
+| `cd packages/genome-view && ./node_modules/.bin/vitest run` | 1 | 25 files, **25 passed / 0 failed**; **70 passed / 0 failed** (70 tests)
 | `cd packages/genome-view && ./node_modules/.bin/vue-tsc --noEmit` | 0 | clean |
 | `cd packages/genome-view && ../../node_modules/.bin/eslint src/ablation` | 0 | clean |
 
@@ -37,15 +37,15 @@ Baseline before the study: `vitest run` = 14 files / 53 tests, all passing.
 | 6 | missing provider | PASS | `ablation scenario 6: missing provider > shows a role=alert error when no data provider is configured` — `06-missing-provider.test.ts` | `role="alert"` with "No data provider" and a Retry button. |
 | 7 | missing file | PASS | `ablation scenario 7: missing file > reader rejects with GenomeDataError code fetch when a file is absent` — `07-missing-file.test.ts` | `VariantReader` and `SequenceReader` both reject `GenomeDataError` with code `fetch`. |
 | 8 | assembly mismatch | PASS | `ablation scenario 8: assembly mismatch > factory rejects a track that references an unconfigured assembly` and `> reader rejects a foreign assemblyKey or an unknown reference name` — `08-assembly-mismatch.test.ts` | Factory throws `assembly-mismatch`; reader rejects a v5 region against a v4 reader and an unknown refName with the same code. |
-| 9 | abort | **FAIL** | `ablation scenario 9: abort` — `09-abort.test.ts` | Component abort wiring passes, but the abort contract fails end to end: (a) `stops an in-flight tabix read when its signal is aborted` receives `resolved:6`, not `rejected:aborted`; (b) `does not render a stale result that resolves after the newer region` renders the stale marker. See "Defect" below. |
+| 9 | abort | **PASS** | ablation scenario 9: abort (2) - 09-abort.test.ts | Reader-level abort now rejects with code "aborted"; a stale result that resolves after a newer region is discarded before assignment. |
 | 10 | bridge | PASS | `ablation scenario 10: postMessage bridge > emits a canonical envelope and parses an inbound envelope round-trip` and `> accepts every documented type and rejects a type outside the allow-list` — `10-bridge.test.ts` | `postToParent` stamps `source=soymutdb-jbrowse`/version 1 and targets the portal origin; all of `ready|error|locus-change|selection-change|init` are accepted; `locus-changed` is rejected with exactly one warn. |
 | 11 | deep-link | PASS | `ablation scenario 11: deep-link coordinate conversion > round-trips 1-based inclusive <-> 0-based half-open intervals` — `11-deep-link.test.ts` | `toOneBased(toZeroBased(...))` identity for [1,1], [1,1000], [10,20], [500,500], [1,1000000]; clamp at 0; `parseLocus`/`formatLocus` and `parseDeepLink` verified. |
 
 ## Tally
 
-- **Scenarios:** 10 PASS, **1 FAIL**, 0 GAP (11 total).
-- **Ablation tests:** 15 PASS, **2 FAIL** (17 total), in 11 files.
-- **Whole package suite:** 68 PASS, **2 FAIL** (70 total). The 53 pre-existing tests are unaffected; only the two new scenario-9 assertions fail.
+- **Scenarios:** 11 PASS, 0 FAIL, 0 GAP (11 total).
+- **Ablation tests:** 17 PASS, 0 FAIL (17 total), in 11 files.
+- **Whole package suite:** 70 PASS, 0 FAIL (70 total).
 
 ## Defect found (report-only, not fixed)
 
@@ -89,3 +89,21 @@ change any source file.
   exercised; those belong to higher layers of the §9 matrix.
 - `support.ts` is shared test scaffolding for the ablation files, not production
   code.
+
+
+## Resolution (2026-09-26, coordinator)
+
+Scenario 9 is now green; the analysis above is retained as the audit trail.
+
+1. Reader-level abort: packages/genome-data/src/readers/common.ts adds
+   throwIfAborted(signal, trackId), and every reader (sequence, variant,
+   feature, quantitative, interval) calls it immediately after its await and
+   before returning. Because @gmod/tabix and @gmod/indexedfasta 1.x ignore the
+   signal, this re-check is what makes cancellation observable: an aborted read
+   now rejects with GenomeDataError code "aborted".
+2. Stale-result guard: packages/genome-view/src/components/TrackRenderer.vue
+   re-checks signal.aborted before assigning any reader result, and treats an
+   aborted GenomeDataError as silent (no error state).
+
+Evidence: packages/genome-data 87 tests + tsc green; packages/genome-view
+70 tests (including src/ablation/09-abort.test.ts) + vue-tsc + eslint src green.
