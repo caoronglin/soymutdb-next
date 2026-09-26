@@ -122,3 +122,13 @@ HEAD `7bf002a29`；149 项未提交改动 + 41 untracked 保留未动。环境�
 - **验证**: pnpm --frozen-lockfile OK；python contracts 125 passed；framework-neutral clean；jbrowse vue-tsc + vite build + 24 node:test；genome-data 87、genome-view 70 tests 全绿。
 - **残留**: pnpm-lock 仍含 @tanstack/charts 的 react/react-dom/react-is 可选 peer 解析（无第一方 import）；干净重算 lockfile 需联网（pnpm 自校验平台二进制），已记录。
 
+
+## [21:15] 清理: 残留 React 代码与配置 + Dockerfile 修复
+
+- **代码/配置清理**（2c00c87f1）：`apps/jbrowse/tsconfig.json` 去掉 `jsx: react-jsx`→`preserve`；`apps/jbrowse/src/config.ts` 删除无消费者的 `buildJBrowseTheme`、`TRACK_CATEGORIES`/`TrackCategory` 与 default export（`buildJBrowseConfig`/`buildTrixAdapter` 保留，后者被内部调用）；`default-renderers.ts` 删除未用的 `trackRenderers` 聚合与四个失效 import；`knip.json` 删除全部 React/tiptap/router/testing-library 死条目；`docs/wiki/applications.md` 34→35；`e2e/README.md` React→Vue。
+- **Dockerfile 修复**（7fbaf9157）：`apps/jbrowse/Dockerfile` 仍在 COPY 已删除的 `packages/i18n`/`packages/motion`（镜像必失败）→ 改为复制当前工作区包（i18n-core/query-keys/charts/ui-vue/genome-view-model/genome-data/genome-view）。
+- **契约收紧**：`test_platform_delivery_contracts.py` 的「禁止 copy packages/ui」断言原为子串匹配，会误伤合法的 `packages/ui-vue`；改为匹配 `packages/ui/`。
+- **验证**: jbrowse vue-tsc+vite build+24 node:test；genome-view vue-tsc+70 tests+eslint；python contracts **125 passed**；第一方 React import 0。
+- **未完成（本轮尝试失败）**: 重算 lockfile 以清除 `@tanstack/charts` 的可选 React peer（react/react-dom/react-is，35 行）。离线重算被 pnpm 自校验平台二进制阻断；在线重算（registry 200 可达）在提权审批等待中超过 wall-clock。命令：在可联网环境执行 `pnpm install`（建议先加 `autoInstallPeers: false`）后 `pnpm install --frozen-lockfile`。
+- **仍缺的守卫**: `packages/motion/motion-policy-contract.test.mjs` 随包删除，其「禁 gsap/lenis」不变量未替代。
+
