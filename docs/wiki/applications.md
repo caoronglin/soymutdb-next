@@ -23,40 +23,59 @@
 - 品牌快照运行时更新页眉、文档标题与 favicon；读取失败保留构建期默认。
   **构建期把品牌写入静态 HTML/manifest：计划中。**
 
-## 管理端 `apps/admin`（15 条路由）
+## 管理端 `apps/admin`（19 条功能路由）
 
-路由定义：`apps/admin/src/router/index.ts`。
+路由定义：`apps/admin/src/router/index.ts`。`ADMIN_ROUTES` 共 39 条记录，其中 **19 条为有独立视图的
+功能路由**；其余为旧深链重定向与 `LegacyUnavailableView` 显式退役页，不计入功能路由。
 
 | 路由 | 功能 | 状态 |
 | --- | --- | --- |
 | `/login` | 独立登录卡片，根路径/子路径回跳 | 已实现 |
-| `/` | Dashboard（真实指标；React 版扩展指标） | 已实现（关键指标） |
+| `/` | Dashboard（真实指标） | 已实现（关键指标） |
 | `/releases` | 发布版本与来源 | 已实现 |
-| `/imports`、`/imports/new`、`/imports/:taskId` | 导入列表、创建与任务详情 | 已实现；进度增强: 计划中（`ImportCreateView.vue`、`ImportDetailView.vue`；`apps/admin/src/router/index.ts:34-35`） |
+| `/imports`、`/imports/new`、`/imports/:taskId` | 导入列表、创建与任务详情 | 已实现（`ImportCreateView.vue`、`ImportDetailView.vue`；`apps/admin/src/router/index.ts:37-38`） |
+| `/content`、`/content/pages` | 静态页面管理（编辑经 `?edit=`） | 已实现（`StaticPagesView.vue`；`router/index.ts:39-40`） |
+| `/content/legacy` | 旧内容迁移视图 | 已实现（`ContentLegacyMigrationView.vue`；`router/index.ts:46`） |
 | `/table-templates` | 可配置表格列模板 | 已实现 |
 | `/publications` | 文献管理 | 已实现 |
-| `/news` | 新闻双语编辑；预览/回收站 | 部分（列表/编辑已实现，预览/回收站计划中） |
+| `/news` | 新闻双语编辑；状态筛选（`?status=`）、新建（`?new=1`）、编辑（`?edit=`） | 已实现（`NewsAdminView.vue`） |
 | `/media` | 媒体库（归档而非硬删） | 已实现 |
 | `/audit` | 审计日志筛选 | 已实现 |
 | `/features` | 能力开关 | 已实现 |
 | `/instances` | 实例登记、连接探活、门户跳转、设为当前目标；全部页面显示目标实例/发布/服务器 | 已实现（本地可写，远端只读） |
 | `/settings` | 版本化设置编辑器 + 设置历史 | 已实现（历史回滚 UI 计划中） |
 | `/settings/brand` | 外网/内网双语品牌与图标 | 已实现 |
+| `/analytics-settings` | 分析统计设置 | 已实现（`AnalyticsSettingsView.vue`；`router/index.ts:56`） |
 
-React 基线（`2004c25c6`）的旧深链采用两种明确处理（`apps/admin/src/router/index.ts`）；
+历史 React 基线（`2004c25c6`）的旧深链采用两种明确处理（`apps/admin/src/router/index.ts`；
+React 已在 Vue 迁移中移除，见 `apps/admin/package.json`）；
 其中 `/imports/new`、`/imports/:taskId` 已是独立视图（`ImportCreateView.vue`、
-`ImportDetailView.vue`，见 `router/index.ts:34-35`），不属于以下两类：
+`ImportDetailView.vue`，见 `router/index.ts:37-38`），不属于以下两类：
 
 - **重定向到已恢复的等价入口**：
   `/settings/site → /settings/brand`；`/settings/security → /settings?section=security`；
-  `/news/new → /news?new=1`；`/news/trash → /news?status=archived`；`/news/:id → /news?edit=<id>`。
-  `SettingsView` 支持 `?section=`，`NewsAdminView` 支持 `?status=`/`?edit=`/`?new=`。
+  `/news/new → /news?new=1`；`/news/trash → /news?status=archived`；`/news/:id → /news?edit=<id>`；
+  `/content/pages/:pageId → /content?edit=<id>`（`router/index.ts:41-45`）。
+  `SettingsView` 支持 `?section=`，`NewsAdminView` 支持 `?status=`/`?edit=`/`?new=`，
+  `StaticPagesView` 支持 `?edit=`。
 - **落到 `LegacyUnavailableView`**：写明请求路径、不读写任何数据，并提供已恢复入口；
   禁止用空页面或无说明 404 代替（`legacy-routes.test.ts` 锁定该策略）。其中：
-  - **有意退役（ADR-0009）**：`/page-builder*`、`/content/pages`、`/widgets*`、`/layout`、
-    `/widget-preview`、`/widget-health`。
-  - **尚未恢复（标记「计划中」）**：`/content`、`/content/legacy`、`/resource-catalog`、
-    `/analytics-settings`、`/settings/{legacy,appearance,integrations,localization,advanced}`。
+  - **有意退役（ADR-0009）**：`/page-builder*`、`/widgets*`、`/layout`、
+    `/widget-preview`、`/widget-health`（`router/index.ts:96-104`）。
+  - **尚未恢复（标记「计划中」）**：`/resource-catalog`（`router/index.ts:85-95`）。
+  - `/settings/{legacy,appearance,integrations,localization,advanced}` 是重定向而非退役
+    （`router/index.ts:71-77`），见上一条。
+
+## 前端技术栈（2026-09-26 核对）
+
+三个前端均为 Vue 3 + Vite，仓库内无第一方 React 代码或 `.tsx`：
+
+- `apps/web`：Vue Router + Pinia + `@tanstack/vue-query`（`apps/web/package.json`）。
+- `apps/admin`：Vue Router + `@soymutdb/ui-vue`（`apps/admin/package.json`）。
+- `apps/jbrowse`：Vue 3 壳，复用 `@soymutdb/genome-view` 与 `@soymutdb/genome-data`
+  （`apps/jbrowse/src/App.vue` 的 import）。
+- `packages/motion` 与 `packages/i18n` 已移除，字典在 `packages/i18n-core`；
+  可用 `ls packages` 与 `find apps packages -name '*.tsx'` 复核。
 
 ## 语言
 

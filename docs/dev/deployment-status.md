@@ -5,6 +5,9 @@
 > 双站构建与健康接口，逐项给出文件或运行证据。历史材料（pi-overall-2026-09-08 等）仅作线索，不作为完成证据。
 > 状态取值：NOT_STARTED / IN_PROGRESS / IMPLEMENTED_UNVERIFIED / BLOCKED_ENVIRONMENT / FAILED / VERIFIED。
 
+> **2026-09-26 校正（历史日志）**：文中 React 相关条目记录的是当时的实现。公共站现为 Vue 3
+> （入口 `apps/web/src/main.ts`），`data-app-ready` 就绪信号语义不变；历史 `main.tsx` 已由 Vue 入口取代。
+
 ## D0 能力与缺口表
 
 ### A. 已存在能力（有文件证据）

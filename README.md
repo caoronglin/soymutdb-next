@@ -20,7 +20,7 @@
 │  /api/v1/*     ──► FastAPI（apps/api）                        │
 │                     ├─ /content/snapshot → 内容快照（release 感知） │
 │                     ├─ /page-definitions/{route} → PageDefinition │
-│                     ├─ /admin/* → 管理 API（JWT，Page Builder 等） │
+│                     ├─ /admin/* → 管理 API（JWT，设置/导入/发布等） │
 │                     ├─ /widget/{name} → 消毒 HTML             │
 │                     └─ /search、/genes、/blast … JSON API     │
 │                                                             │
@@ -38,9 +38,10 @@
 
 | 层 | 技术 | 边界 |
 |----|------|------|
-| Public Web | SSG HTML + React（TanStack Router + PageDefinition 渲染器） | 纯静态；无服务端渲染 HTML |
+| Public Web | SSG HTML + Vue 3（Vue Router + Pinia + @tanstack/vue-query） | 纯静态；无服务端渲染 HTML（`apps/web/package.json`） |
 | API | FastAPI（Python） | 消毒 HTML 片段 + JSON；OpenAPI 是唯一契约 |
-| Admin | React + Vite（Web-only，部署于 `/soymutdb-admin/`） | 静态托管 + 受保护 Admin API（JWT） |
+| Admin | Vue 3 + Vite（Web-only，部署于 `/soymutdb-admin/`） | 静态托管 + 受保护 Admin API（JWT）（`apps/admin/package.json`） |
+| JBrowse | Vue 3 壳，复用 `@soymutdb/genome-view` + `@soymutdb/genome-data`（`apps/jbrowse/src/App.vue`） | 静态托管于 `/soymutdb-jbrowse/`；core profile 下可选 |
 | Worker | Celery（多队列） | ingest/export/stats/cleanup/blast/analyses；直连数据层（窄 SQLAlchemy Core） |
 
 前端代码不直连数据库；数据统一经 API / worker 层。Tauri 桌面壳与 Rust 热路径（`core-rs`）已清理移除，当前仅保留 Web-only Admin。
@@ -206,21 +207,21 @@ SOYMUTDB_JBROWSE_ENABLED=0 bash scripts/build-pages-artifact.sh  # Pages 制品�
 
 ```
 apps/
-├── web/               # 公共 SSG 门户（React + Vite + TanStack Router）
+├── web/               # 公共 SSG 门户（Vue 3 + Vite + Vue Router）
 │   ├── src/
-│   │   ├── routes/          # 文件路由（/search、/blast、/genes、/downloads、...）
-│   │   ├── components/      # React 组件（site-header 五导航等）
-│   │   ├── page-builder/    # PageDefinition 渲染器/registry/seed/loader
-│   │   ├── lib/             # widget-loader、deployment、view-transitions 等
-│   │   └── workers/         # Web Workers（离主线程搜索）
-│   ├── scripts/             # SSG 构建脚本（tsx）：ssg-build/ssg-content/build-manifest/validate-static-tree…
+│   │   ├── router/          # 显式路由表（routes.ts）+ 视图绑定（index.ts）
+│   │   ├── views/           # 页面级 Vue 组件（HomeView、SearchView、...）
+│   │   ├── components/      # Vue 组件（site-header 五导航等）
+│   │   ├── stores/          # Pinia 状态（release/assembly/site 上下文）
+│   │   └── lib/             # deployment、i18n、feature gating、SSG 客户端
+│   ├── scripts/             # SSG 构建脚本（tsx/js）：generate-static-routes/finalize-csp/gen-sw/release-manifest…
 │   └── dist/                # 生成静态输出（含 dist/releases/<release-id>/<digest>/）
 │
-├── admin/             # Admin 控制台（React + Vite，Web-only）
+├── admin/             # Admin 控制台（Vue 3 + Vite，Web-only）
 │   └── src/
-│       ├── routes/          # 管理页（page-builder 三栏编辑器、widgets、content、...）
-│       ├── components/      # page-builder 编辑器组件等
-│       └── lib/             # widget-api、page-builder-api（fetch）
+│       ├── views/           # 管理页（dashboard、导入、发布、内容、设置、...）
+│       ├── components/      # 可复用 UI 组件
+│       └── lib/             # api-client 封装、实例连接器、主题等
 │
 ├── api/               # FastAPI 后端（Python 3.13+）
 │   └── app/
@@ -239,16 +240,21 @@ apps/
 │       ├── publication/     # 三适配器（local/github_pages/cloudflare_pages）
 │       ├── repositories.py / tables.py / utils/
 │
-├── jbrowse/           # JBrowse 2 基因组浏览器静态资产
+├── jbrowse/           # Vue 3 壳，复用 @soymutdb/genome-view + @soymutdb/genome-data（src/App.vue）
 └── mcp-server/        # MCP server（Python）
 
 packages/
 ├── api-client/        # 类型化 Fetch API client（+ 生成的 openapi.d.ts）
-├── i18n/              # 英/中翻译
-├── jobs-py/           # 共享 jobs 契约（任务名/队列/状态机，API 与 worker 共用）
-├── shared/            # 共享 DTO（page-builder 等）
-├── motion/            # GSAP/Lenis 动画 hooks
-└── ui/                # 共享 shadcn/ui 组件库
+├── charts/            # Vue 图表组件
+├── genome-data/       # 基因组数据源/适配器（@soymutdb/genome-data）
+├── genome-view/       # 基因组视图组件（Vue，@soymutdb/genome-view）
+├── genome-view-model/ # 浏览器 viewport 状态模型
+├── i18n-core/         # en/zh 字典与 i18next 绑定
+├── import-protocol/   # 导入任务契约
+├── jobs-py/           # 共享 jobs 契约（Python，API 与 worker 共用）
+├── query-keys/        # 查询缓存键契约
+├── shared/            # 共享 DTO 与工具
+└── ui-vue/            # 共享 Vue 设计系统门面
 
 infra/
 ├── nginx/             # Nginx 配置：gzip、静态、反代、admin allowlist

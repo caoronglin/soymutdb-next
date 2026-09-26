@@ -2,6 +2,9 @@
 
 > 状态：**IMPLEMENTED_UNVERIFIED**（CNB 侧需要一次真实构建才能判定 VERIFIED）。
 
+> **2026-09-26 校正（历史日志）**：文中 `packages/i18n` 已在 Vue 迁移中移除；当前 locale 键校验脚本为
+> `packages/i18n-core/check-locale-keys.mjs`。本文其余内容保留为迁移当时的记录。
+
 ## 1. 迁移原则
 
 不是"把 YAML 翻译一遍"，而是**先把逻辑从 YAML 里搬出来，再让两个 provider 引用**。

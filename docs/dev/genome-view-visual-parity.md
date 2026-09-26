@@ -1,6 +1,12 @@
 # Genome-view visual parity with the React design system
 
 Status: implemented (styles only).
+
+> **2026-09-26 correction (historical note):** this note predates the Vue migration. The React
+> baselines below (`apps/jbrowse/src/App.tsx`, the deleted `genome-browser-widget.tsx`) no longer
+> exist; `apps/jbrowse` is now a Vue 3 shell (`apps/jbrowse/src/App.vue`) over
+> `@soymutdb/genome-view` and `@soymutdb/genome-data`. The style decisions remain the record of
+> that migration step.
 Scope: `packages/genome-view/src/components/**` scoped styles.
 Baselines read:
 

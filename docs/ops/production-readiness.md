@@ -103,7 +103,7 @@ OCI digest 引用、blue/green 外部适配器合同），但对应真实后端�
 | 通知 | 站内/邮件通知 | 默认关闭（`smtp_enabled=false`） |
 | MCP 外部访问 | `/mcp/*` | 生产 profile 可选；有 token 鉴权，但**未承诺**面向外部提供 |
 | 桌面壳 / 原生客户端 | Tauri/rust 热路径 | **已清理移除**，不存在 |
-| 多语言 | i18n 中/英 | 已有 `packages/i18n`，不作为 P0 硬门禁 |
+| 多语言 | i18n 中/英 | 已有 `packages/i18n-core`（`packages/i18n` 已移除），不作为 P0 硬门禁 |
 
 > **说明**：以上「不承诺」并非说代码不存在，而是指**首版上线验收不要求其可用**，且**不得用占位数据
 > 冒充真实数据**。`frontend-platform`(t5/t6) 与 `data-platform`(t3) 负责在生产构建/前端将 demo 内容与

@@ -103,7 +103,7 @@ Admin 现在为 Web-only（`/soymutdb-admin/`）。删除前须确认无生产�
 
 ## 双站点变体与安全边界
 
-SoyMutDB 的门户现在支持两个**独立静态制品**：external（外部站点）和 internal（内部站点）。两者共用 React/Vite 代码，但通过构建变量显式选择，不根据 hostname、IP、请求头、cookie、User-Agent 或访客身份在后端推断站点。
+SoyMutDB 的门户现在支持两个**独立静态制品**：external（外部站点）和 internal（内部站点）。两者共用 Vue 3/Vite 代码（`apps/web/package.json`），但通过构建变量显式选择，不根据 hostname、IP、请求头、cookie、User-Agent 或访客身份在后端推断站点。
 
 - 在 apps/web 执行 pnpm run build:sites 会按顺序生成 dist/external 与 dist/internal 两棵完整制品树；每棵树的 hashed bundle、SSG HTML、robots.txt、Service Worker 和 integrity manifest 都独立生成。
 - VITE_SITE_VARIANT 只允许 external 或 internal。external 的 site API 可公开缓存；internal 的 site API（about、home、footer、content）必须携带 Bearer 访问令牌，并返回 private, no-store，避免共享缓存泄露内容。

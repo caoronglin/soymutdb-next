@@ -3,6 +3,11 @@
 > 单一状态视图。执行日志与逐项证据见 `docs/dev/vue-migration-recovery-status.md`，
 > 功能矩阵见 `docs/wiki/applications.md`，本页只回答“现在是什么状态”。
 
+> **2026-09-26 校正**：按 Vue 迁移后的现有代码复核。三端均为 Vue 3；`packages/motion` 与
+> `packages/i18n` 已移除；公共站路由数以 `apps/web/src/router/routes.ts` 为准，管理端功能路由数以
+> `apps/admin/src/router/index.ts` 为准。下文旧计数（34/14）与复现包清单已在本次校正中更新；
+> “最近一次全绿”的测试条数为迁移期快照，包集合已变化。
+
 ## 一句话
 
 Vue 迁移恢复的 P0/P1 已清零；i18n backlog 从 225 串清到 6 串；本机完成无 Docker 全面部署，
@@ -53,10 +58,12 @@ Vue 迁移恢复的 P0/P1 已清零；i18n backlog 从 225 串清到 6 串；本
 
 ## 功能状态摘要
 
-- **公共站** 34 条路由全部实现；首页数据库入口、搜索、实体详情、工具、新闻、登录均可用。
-- **管理端** 14 条路由：登录、dashboard、发布、导入、表格模板、文献、新闻、媒体、审计、能力、
-  实例、设置、品牌已实现；Page Builder/内容页/Widgets/导入向导详情为**计划中**，
-  旧深链已全部重定向或落到明确“未恢复”页。
+- **公共站** 35 条路由全部实现（`apps/web/src/router/routes.ts` 的 35 个 `PortalRouteDefinition`）；
+  首页数据库入口、搜索、实体详情、工具、新闻、登录均可用。
+- **管理端** 19 条功能路由（`apps/admin/src/router/index.ts`）：登录、dashboard、发布、导入（列表/新建/详情）、
+  内容页、旧内容迁移、表格模板、文献、新闻、媒体、审计、能力、实例、设置、品牌、分析设置已实现；
+  Page Builder/Widgets/Layout（ADR-0009）为**有意退役**，`/resource-catalog` 落到明确“未恢复”页，
+  其余旧深链已重定向。
 - **i18n**：字典 en/zh 各 1431 key 完全对等；可见文案预算 6 串 / 1 文件（数据值白名单）。
 - **assembly**：URL/缓存/请求身份统一稳定 `id`，未知/歧义显式报错；后端 label 规范化**计划中**。
 - **品牌**：运行时写入页眉/标题/favicon 已通（写入→公共读取→回滚实测）；构建期静态写入**计划中**。
@@ -64,7 +71,8 @@ Vue 迁移恢复的 P0/P1 已清零；i18n backlog 从 225 串清到 6 串；本
 
 ## 已知缺口（均标注计划中）
 
-1. 管理端深度功能：Page Builder、内容页、Widgets/Layout、导入向导/任务详情。
+1. 管理端遗留项：`/resource-catalog`（“未恢复”页）；设置历史回滚 UI。Page Builder/Widgets/Layout 为
+   ADR-0009 有意退役，不属于待恢复缺口。
 2. 后端 `assembly_id` 入参与 ClickHouse `assembly_key` 规范化。
 3. 构建期品牌写入静态 HTML/manifest。
 4. 部署态在线 smoke 与 Service Worker 升级测试（需部署/网络）。
@@ -81,8 +89,9 @@ Vue 迁移恢复的 P0/P1 已清零；i18n backlog 从 225 串清到 6 串；本
 
 ```bash
 # 质量门禁（逐包；沙箱下比 turbo 更稳）
-for p in @soymutdb/api-client @soymutdb/charts @soymutdb/genome-view-model @soymutdb/i18n \
-         @soymutdb/i18n-core @soymutdb/motion @soymutdb/query-keys @soymutdb/shared @soymutdb/ui-vue \
+for p in @soymutdb/api-client @soymutdb/charts @soymutdb/genome-data @soymutdb/genome-view \
+         @soymutdb/genome-view-model @soymutdb/i18n-core \
+         @soymutdb/query-keys @soymutdb/shared @soymutdb/ui-vue \
          @soymutdb/web @soymutdb/admin @soymutdb/jbrowse; do
   pnpm --filter "$p" run lint && pnpm --filter "$p" run typecheck && pnpm --filter "$p" run test
 done

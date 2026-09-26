@@ -5,6 +5,9 @@
 > **范围**：`apps/admin`（内容管理界面）· `apps/web/scripts`（SSG 与模板生成）· `apps/api/app/page_builder`（服务端注册表）· `packages/shared`（契约）
 > **定位**：本方案是 SoyMutDB 优化系列的第五份，与其余四份互补，不重叠。
 
+> **2026-09-26 校正（历史文档）**：文中 `packages/i18n` 已移除（现为 `packages/i18n-core`）；
+> Page Builder/Widgets 管理面按 ADR-0009 有意退役，内容页现由 `/content`、`/content/legacy` 承担。
+
 | 文档 | 主题 |
 | --- | --- |
 | `optimization-plan.md`（v1.0） | 工程化改造 |

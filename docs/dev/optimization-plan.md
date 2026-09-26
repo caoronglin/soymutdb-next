@@ -3,6 +3,9 @@
 > 文档版本：1.0 | 生成日期：2025-08-26
 > 覆盖范围：前端（web/admin/jbrowse）、后端（api/worker/mcp）、共享包、CI/CD、Docker、Nginx
 
+> **2026-09-26 校正（历史文档）**：本文为迁移前（React 期）计划。`packages/i18n` 与 `packages/motion`
+> 已移除，三端现为 Vue 3；测试清单以当前 `packages/` 与各 `package.json` 为准。
+
 ---
 
 ## 目录

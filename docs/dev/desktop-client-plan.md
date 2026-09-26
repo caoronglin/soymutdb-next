@@ -4,6 +4,9 @@
 
 > **版本**：v1.0　**日期**：2026-08-29
 > **性质**：设计方案（Design Proposal），可直接进入 spike 与实施。
+
+> **2026-09-26 校正（历史方案）**：Tauri 桌面壳与 Rust 热路径已清理移除；前端已从 React 迁到 Vue 3，
+> 本文中“项目已锁定 React + antd”“复用 apps/web 全部代码（React）”等前提已不成立，仅作历史参考。
 > **上游文档**：
 > - `docs/dev/optimization-plan.md`（v1.0 · 正确性与工程卫生）
 > - `docs/dev/performance-optimization-plan.md`（v2.0 · 性能与动效）

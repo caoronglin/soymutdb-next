@@ -2,13 +2,18 @@
 
 > 本文描述当前代码实现，而不是未来愿景。接口路径使用前端 client 的逻辑路径；实际 HTTP 前缀由 @soymutdb/api-client 的 VITE_API_BASE_URL 决定，生产环境通常为 /api/v1。
 
+> **2026-09-26 校正**：前端已从 React 迁到 Vue 3（`apps/admin/package.json`、`apps/web/package.json`），
+> `packages/motion` 与 `packages/i18n` 已移除，Page Builder/Widgets 管理面按 ADR-0009 有意退役。
+> 下文 §3.3、§5 仍保留 Page Builder 时期的记录，阅读时以当前 `apps/admin/src/router/index.ts`
+> 与 `apps/admin/src/views/` 为准。
+
 ## 1. 分层边界
 
 ~~~text
-Admin React/Vite
-  ├─ routes/                 页面状态、交互、Query key
-  ├─ components/             可复用 UI（表格、编辑器、Page Builder、使用说明）
-  └─ lib/                    API client、主题、Query、拖放与预览适配器
+Admin Vue 3 + Vite
+  ├─ views/                  页面视图（dashboard、导入、发布、内容、设置）
+  ├─ components/             可复用 UI（表格、编辑器、使用说明）
+  └─ lib/                    API client、主题、Query、实例连接器
           │ 只通过 HTTP，不访问 ORM/数据库
           ▼
 FastAPI /api/v1
@@ -31,15 +36,17 @@ FastAPI /api/v1
 
 ~~~text
 apps/
-  admin/                    认证后的管理控制台
-    src/routes/             页面路由（设置、内容、导入、组件、发布）
-    src/components/         表单、表格、Page Builder、AdminUsageGuide
-    src/lib/                 API/主题/Query/拖放与预览适配器
+  admin/                    认证后的管理控制台（Vue 3 + Vite）
+    src/router/             路由表（ADMIN_ROUTES）与鉴权守卫
+    src/views/              页面视图（设置、内容、导入、发布等）
+    src/components/         可复用 UI 组件
+    src/lib/                API/主题/Query/实例连接器
     vite.config.ts           base、CSP、manual chunks、生产 fail-closed
-  web/                      公共 React/Vite SSG 门户与 Page Builder renderer
-    src/routes/              公开页面与搜索工具
-    src/page-builder/        只渲染服务端已发布定义
-    scripts/                 content snapshot 与 SSG
+  web/                      公共 Vue 3/Vite SSG 门户（external/internal）
+    src/router/              路由表与视图绑定
+    src/views/               公开页面与搜索工具
+    scripts/                 content snapshot、静态路由生成与 SSG
+  jbrowse/                  Vue 3 壳，复用 @soymutdb/genome-view + @soymutdb/genome-data
   api/                      FastAPI + SQLAlchemy
     app/api/v1/              HTTP transport
     app/services/            业务事务与跨存储协调
@@ -120,7 +127,7 @@ data_sources 是页面定义中的**受约束引用元数据**，其 id/kind/con
 
 - Admin QueryClient：staleTime=30s、gcTime=5min、关闭窗口聚焦重复请求；变更后按资源 key 精确失效。
 - Router：defaultPreload="intent"、预加载新鲜期 30s，避免鼠标悬停导致重复加载。
-- 大依赖分块：ECharts、TipTap/ProseMirror、React、TanStack、AntD/rc 单独 chunk；富文本编辑器通过 lazy import，避免进入首屏入口。
+- 大依赖分块：图表、富文本编辑器、Vue/router、组件库单独 chunk（`apps/admin/vite.config.ts`）；富文本编辑器通过 lazy import，避免进入首屏入口。
 - 列表默认分页，不以一次性拉取 100/200 条掩盖缺少分页；搜索和排序由 API 承担。
 - 颜色、主题和轻量偏好使用受校验的 localStorage；业务内容、权限和发布状态不能只存浏览器。
 

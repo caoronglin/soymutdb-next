@@ -7,6 +7,10 @@
 > 上游约束：`AGENTS.md`、`docs/dev/database-core-contract.md`、`docs/dev/pi-agent-hard-constraints.md` H01–H12、
 > `docs/design/full-stack-upgrade-2026-08.md`（"No microservice decomposition without measured need"）
 
+> **2026-09-26 校正（历史评估）**：代码基线 `cc8792a` 早于 Vue 迁移。§1.1 的
+> "React 19 + Vite 6" 与 `packages/*` 中的 `i18n`/`motion` 已不成立：三端现为 Vue 3，
+> `packages/motion` 与 `packages/i18n` 已移除。
+
 ---
 
 ## §0 一句话结论

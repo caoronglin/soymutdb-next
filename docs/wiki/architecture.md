@@ -12,10 +12,14 @@ admin Vue ── 管理 BFF/API ──┤                      └─ Redis (缓
              └─ 受限实例连接器 ── remote SoyMutDB API (独立数据与权限)
 ```
 
-- 前端：`apps/web`（公共站，external/internal 两种构建变体）、`apps/admin`（管理端）。
+- 前端（均为 Vue 3 + Vite）：`apps/web`（公共站，external/internal 两种构建变体）、
+  `apps/admin`（管理端）、`apps/jbrowse`（JBrowse 2 壳，复用 `@soymutdb/genome-view` +
+  `@soymutdb/genome-data`，见 `apps/jbrowse/src/App.vue`）。
 - 后端：`apps/api`（FastAPI）、`apps/worker`（Celery）、`apps/mcp-server`（MCP 工具）。
 - 共享包：`packages/api-client`（typed 客户端）、`packages/ui-vue`（设计系统门面）、
+  `packages/genome-view`/`packages/genome-data`（基因组视图与数据源）、
   `packages/i18n-core`（en/zh 字典）、`packages/query-keys`（缓存键契约）。
+  `packages/motion` 与 `packages/i18n` 已移除。
 
 ## 权威存储
 
