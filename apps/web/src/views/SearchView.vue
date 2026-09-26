@@ -288,6 +288,15 @@ function submit() {
                 >
                   <Tag class="font-mono uppercase">{{ result.type }}</Tag>
                   <span class="min-w-0 flex-1 truncate font-medium">{{ result.name ?? result.id }}</span>
+                  <span
+                    class="shrink-0 font-mono text-xs opacity-70"
+                    data-testid="search-result-public-id"
+                  >{{ result.public_id ?? result.id }}</span>
+                  <span
+                    v-if="site.isInternal && result.internal_id"
+                    class="shrink-0 font-mono text-xs opacity-60"
+                    data-testid="search-result-internal-id"
+                  >{{ t("nav.internalBadge") }}: {{ result.internal_id }}</span>
                   <span class="shrink-0 text-xs opacity-60" data-testid="search-result-meta">
                     <template v-if="result.assembly || result.assembly_id != null">
                       {{ t("search.assemblyLabel") }}
@@ -308,6 +317,15 @@ function submit() {
                 >
                   <Tag class="font-mono uppercase">{{ result.type }}</Tag>
                   <span class="min-w-0 flex-1 truncate font-medium">{{ result.name ?? result.id }}</span>
+                  <span
+                    class="shrink-0 font-mono text-xs opacity-70"
+                    data-testid="search-result-public-id"
+                  >{{ result.public_id ?? result.id }}</span>
+                  <span
+                    v-if="site.isInternal && result.internal_id"
+                    class="shrink-0 font-mono text-xs opacity-60"
+                    data-testid="search-result-internal-id"
+                  >{{ t("nav.internalBadge") }}: {{ result.internal_id }}</span>
                   <span class="shrink-0 text-xs opacity-60" data-testid="search-result-meta">
                     <template v-if="result.assembly || result.assembly_id != null">
                       {{ t("search.assemblyLabel") }}

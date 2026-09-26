@@ -23,10 +23,14 @@ vi.mock("@soymutdb/api-client", async (importOriginal) => {
 
 import { globalSearch } from "@soymutdb/api-client";
 import SearchView from "./SearchView.vue";
+import { useSiteContextStore } from "../stores/site-context";
 
 const mockedSearch = vi.mocked(globalSearch);
 
-async function mountSearch(query: Record<string, string> = {}) {
+async function mountSearch(
+  query: Record<string, string> = {},
+  siteVariant: "external" | "internal" = "external",
+) {
   const params = new URLSearchParams(query);
   const url = params.toString() ? `/search?${params}` : "/search";
   const router = createRouter({
@@ -35,12 +39,16 @@ async function mountSearch(query: Record<string, string> = {}) {
   });
   router.push(url);
   await router.isReady();
+  const pinia = createPinia();
+  // The variant is an explicit deployment decision (DB-CORE-5), never inferred
+  // from the host or URL: seed the store before mount so the view reads it.
+  useSiteContextStore(pinia).siteVariant = siteVariant;
   const wrapper = mount(SearchView, {
     global: {
-      plugins: [createPinia(), router, [VueQueryPlugin, { queryClient: new QueryClient({ defaultOptions: { queries: { retry: false } } }) }]],
+      plugins: [pinia, router, [VueQueryPlugin, { queryClient: new QueryClient({ defaultOptions: { queries: { retry: false } } }) }]],
     },
   });
-  return { wrapper, router };
+  return { wrapper, router, pinia };
 }
 
 beforeEach(() => mockedSearch.mockReset());
@@ -241,6 +249,53 @@ describe("SearchView (Phase F, DB-CORE-1/2/5/6)", () => {
     await flushPromises();
     expect(router.currentRoute.value.query.cursor).toBeUndefined();
     wrapper.unmount();
+  });
+
+  it("surfaces the dual identity only on the internal site variant", async () => {
+    const response = {
+      query: "SM7QF3Z",
+      results: [
+        {
+          id: "SM7QF3Z",
+          type: "mutant_line",
+          name: "line-A",
+          url: "/mutants/SM7QF3Z",
+          public_id: "SM7QF3Z",
+          internal_id: "node-42",
+        },
+      ],
+      by_type: { mutant_line: 1 },
+      by_assembly: {},
+      ambiguous: false,
+      cursor: null,
+      next_cursor: null,
+      has_more: false,
+      total_count: 1,
+    };
+
+    mockedSearch.mockResolvedValue(response as never);
+    const external = await mountSearch({ q: "SM7QF3Z" }, "external");
+    await flushPromises();
+    await flushPromises();
+
+    // The public identity is visible on the external site...
+    expect(external.wrapper.get('[data-testid="search-result-public-id"]').text()).toBe("SM7QF3Z");
+    // ...but the private key is neither rendered nor attached as an attribute.
+    expect(external.wrapper.html()).not.toContain("node-42");
+    expect(external.wrapper.html()).not.toContain("internal_id");
+    expect(external.wrapper.html()).not.toContain("data-internal-id");
+    expect(external.wrapper.find('[data-testid="search-result-internal-id"]').exists()).toBe(false);
+    external.wrapper.unmount();
+
+    mockedSearch.mockResolvedValue(response as never);
+    const internal = await mountSearch({ q: "SM7QF3Z" }, "internal");
+    await flushPromises();
+    await flushPromises();
+
+    // The internal site variant is the only surface allowed to show both ids.
+    expect(internal.wrapper.get('[data-testid="search-result-public-id"]').text()).toBe("SM7QF3Z");
+    expect(internal.wrapper.get('[data-testid="search-result-internal-id"]').text()).toContain("node-42");
+    internal.wrapper.unmount();
   });
 
   // Note: the error/loading affordances (search-error / search-loading sections
