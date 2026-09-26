@@ -1,13 +1,22 @@
 /**
- * Contract tests for locus-box resolution (coordinates + gene-ID search) and
- * the reference-file location helper backing refNames loading.
+ * Contract tests for locus-box resolution (coordinates + gene-ID search), the
+ * reference-file location helper backing refNames loading, and the built-in
+ * JBrowse track definitions (including the BAM alignment track).
  *
  * Run with: node --test locus-search.test.mjs
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { DEFAULT_ASSEMBLY, sequenceFileLocations } from "./src/config.ts";
+import {
+  ALIGNMENT_TRACK_ID,
+  ALL_TRACKS,
+  DEFAULT_ASSEMBLY,
+  DEFAULT_TRACKS,
+  buildJBrowseConfig,
+  sequenceFileLocations,
+  validateTrackTypes,
+} from "./src/config.ts";
 import { parseTextSearchLabel, resolveLocusInput } from "./src/gene-search.ts";
 
 // ---------------------------------------------------------------------------
@@ -113,4 +122,37 @@ test("returns null for an assembly whose reference adapter is unsupported", () =
     },
   };
   assert.equal(sequenceFileLocations(assembly), null);
+});
+
+// ---------------------------------------------------------------------------
+// Track configuration
+// ---------------------------------------------------------------------------
+
+test("registers a BamAdapter alignment track bound to the default assembly", () => {
+  const track = ALL_TRACKS.find((candidate) => candidate.trackId === ALIGNMENT_TRACK_ID);
+  assert.ok(track, "alignment track should be in ALL_TRACKS");
+  assert.equal(track.type, "AlignmentsTrack");
+  assert.equal(track.adapter.type, "BamAdapter");
+  assert.deepEqual(track.assemblyNames, [DEFAULT_ASSEMBLY.name]);
+  assert.match(track.adapter.bamLocation.uri, /\/alignment\.bam$/);
+  assert.equal(track.adapter.index.indexType, "BAI");
+  assert.match(track.adapter.index.location.uri, /\/alignment\.bam\.bai$/);
+});
+
+test("validateTrackTypes keeps the BamAdapter alignment track", () => {
+  const validated = validateTrackTypes(ALL_TRACKS);
+  const track = validated.find((candidate) => candidate.trackId === ALIGNMENT_TRACK_ID);
+  assert.ok(track, "alignment track should survive validateTrackTypes");
+  assert.equal(track.type, "AlignmentsTrack");
+  assert.equal(track.adapter.type, "BamAdapter");
+});
+
+test("buildJBrowseConfig keeps the alignment track discoverable but off by default", () => {
+  const config = buildJBrowseConfig();
+  const track = config.tracks.find((candidate) => candidate.trackId === ALIGNMENT_TRACK_ID);
+  assert.ok(track, "alignment track should survive buildJBrowseConfig");
+  assert.equal(track.type, "AlignmentsTrack");
+  assert.deepEqual(track.assemblyNames, [DEFAULT_ASSEMBLY.name]);
+  // Explicit visibility choice: available for selection, not fetched on load.
+  assert.equal(DEFAULT_TRACKS.includes(ALIGNMENT_TRACK_ID), false);
 });

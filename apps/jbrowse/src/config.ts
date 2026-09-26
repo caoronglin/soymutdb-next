@@ -2,8 +2,9 @@
  * JBrowse 2 configuration builder for the standalone SoyMutDB genome browser.
  *
  * Builds a complete JBrowse configuration from assembly and track definitions,
- * supporting four track categories: reference, variant, annotation, quantitative.
- * Includes Trix text-search index configuration for gene/feature lookup.
+ * supporting five track categories: reference, variant, annotation, quantitative,
+ * alignment. Includes Trix text-search index configuration for gene/feature
+ * lookup.
  */
 
 /** A single JBrowse track configuration. */
@@ -295,15 +296,57 @@ export const QUANTITATIVE_TRACKS: JBrowseTrack[] = [
     },
 ];
 
+/**
+ * Alignment tracks (BAM read alignments for the default assembly).
+ *
+ * Visibility choice: this track is intentionally NOT in DEFAULT_TRACKS. A BAM
+ * read pileup over the 1 Mbp default window is much heavier than the other
+ * default tracks, so it is opt-in (deep link / backend config) rather than
+ * loaded on first paint. It still lives in ALL_TRACKS so it is discoverable and
+ * selectable, and validateTrackTypes keeps its AlignmentsTrack type.
+ */
+export const ALIGNMENT_TRACK_ID = "alignments_v4";
+
+export const ALIGNMENT_TRACKS: JBrowseTrack[] = [
+    {
+        trackId: ALIGNMENT_TRACK_ID,
+        name: "Read Alignments (v4.0)",
+        type: "AlignmentsTrack",
+        assemblyNames: [DEFAULT_ASSEMBLY.name],
+        category: ["Alignments"],
+        description: "BAM read alignments for release v4.0",
+        adapter: {
+            type: "BamAdapter",
+            bamLocation: uri(`${JBROWSE_DATA_URL}/alignment.bam`),
+            index: {
+                indexType: "BAI",
+                location: uri(`${JBROWSE_DATA_URL}/alignment.bam.bai`),
+            },
+        },
+        displays: [
+            {
+                type: "LinearAlignmentsDisplay",
+                displayId: "alignments_v4-linear",
+            },
+        ],
+    },
+];
+
 /** All built-in tracks by category. */
 export const ALL_TRACKS: JBrowseTrack[] = [
     REFERENCE_TRACK,
     ...VARIANT_TRACKS,
     ...ANNOTATION_TRACKS,
     ...QUANTITATIVE_TRACKS,
+    ...ALIGNMENT_TRACKS,
 ];
 
-/** Default tracks shown on initial load. */
+/**
+ * Default tracks shown on initial load.
+ *
+ * Alignments are deliberately omitted (see ALIGNMENT_TRACKS): they stay
+ * available but are not fetched until a caller opts in.
+ */
 export const DEFAULT_TRACKS = ["reference_sequence", "gene_models", "variants_v4"];
 
 /** Trix text-search adapter for gene lookup. */

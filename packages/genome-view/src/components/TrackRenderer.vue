@@ -35,6 +35,16 @@
         :width-px="props.widthPx"
         :loading="loading"
       />
+      <AlignmentsTrack
+        v-else-if="kind === 'alignment'"
+        :track="props.track"
+        :assembly-key="props.assemblyKey"
+        :ref-name="props.refName"
+        :records="alignmentRecords"
+        :region="props.region"
+        :width-px="props.widthPx"
+        :loading="loading"
+      />
       <QuantitativeTrack
         v-else
         :track="props.track"
@@ -56,6 +66,7 @@ import {
   isAbortError,
   isGenomeDataError,
   GenomeDataError,
+  type AlignmentRecord,
   type AssemblyContext,
   type FeatureRecord,
   type FileProvider,
@@ -67,6 +78,7 @@ import {
   type VariantRecord,
 } from "@soymutdb/genome-data";
 
+import AlignmentsTrack from "./AlignmentsTrack.vue";
 import FeatureTrack from "./FeatureTrack.vue";
 import QuantitativeTrack from "./QuantitativeTrack.vue";
 import SequenceTrack from "./SequenceTrack.vue";
@@ -114,6 +126,7 @@ const sequenceChunks = shallowRef<SequenceChunk[]>([]);
 const variantRecords = shallowRef<VariantRecord[]>([]);
 const featureRecords = shallowRef<FeatureRecord[]>([]);
 const quantRecords = shallowRef<QuantRecord[]>([]);
+const alignmentRecords = shallowRef<AlignmentRecord[]>([]);
 const loading = ref(false);
 const loadError = ref<Error | null>(null);
 
@@ -160,6 +173,12 @@ async function load(): Promise<void> {
         quantRecords.value = next;
         break;
       }
+      case "alignment": {
+        const next = await source.reader.getAlignments(region, { signal });
+        if (signal.aborted) return;
+        alignmentRecords.value = next;
+        break;
+      }
     }
   } catch (error) {
     if (isAbortError(error) || (isGenomeDataError(error) && error.code === "aborted")) return;
@@ -168,6 +187,7 @@ async function load(): Promise<void> {
     variantRecords.value = [];
     featureRecords.value = [];
     quantRecords.value = [];
+    alignmentRecords.value = [];
   } finally {
     if (!signal.aborted) loading.value = false;
   }
