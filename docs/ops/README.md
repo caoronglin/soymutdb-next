@@ -11,6 +11,14 @@ ready 检查 → 原子发布或回滚；就绪后可选将静态门户不可变
 发布/回滚必须填写理由并留审计；生产镜像使用显式 tag。`gwas` 是 GWAS bucket，`analyses` 是分析对象
 bucket，`analyses` 队列由 `worker-analyses` 消费，三者不可混用。
 
+## 核心功能部署（JBrowse 可选）
+
+`core` profile 提供数据库产品的核心：搜索、实体详情、下载与内容。基因组浏览器、BLAST、
+按需分析与 MCP 是可选 profile，核心部署不启动它们。门户可用 `VITE_JBROWSE_ENABLED=0`
+构建为无浏览器版本（隐藏入口并把 `/browser`、`/gbrowse` 落到说明页）；Pages 制品可用
+`SOYMUTDB_JBROWSE_ENABLED=0` 省略 jbrowse 子应用并以 `.no-jbrowse` 标记声明。
+见 [`core-only-deployment.md`](core-only-deployment.md)。
+
 ## CNB 启动与验收
 
 在 CNB 上「起得来」与「收不收」是两条独立入口：分支页的云原生开发按钮启动可运行环境
