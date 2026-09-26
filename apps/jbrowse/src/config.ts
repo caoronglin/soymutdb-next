@@ -80,8 +80,9 @@ export interface TrixSearchAdapter {
 }
 
 /**
- * Track types supported by the pre-bundled @jbrowse/react-linear-genome-view corePlugins.
- * Tracks with types outside this set will cause a "TrackType 'undefined' not found" error.
+ * Track types supported by the @soymutdb/genome-view default renderers.
+ * Tracks with types outside this set are skipped by GenomeBrowser instead of
+ * failing the whole view.
  */
 export const SUPPORTED_TRACK_TYPES = [
     "ReferenceSequenceTrack",
