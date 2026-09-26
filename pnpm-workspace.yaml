@@ -73,3 +73,15 @@ catalogs:
   charts:
     '@tanstack/vue-charts': 0.18.0
     '@tanstack/charts': 0.18.0
+
+  # Framework-neutral genome readers (zero-React JBrowse replacement) over the
+  # same /jbrowse-data files. Exact pins so the data layer never drifts with
+  # JBrowse's transitive tree.
+  genomics:
+    '@gmod/bbi': 5.0.0
+    '@gmod/bgzf-filehandle': 1.4.4
+    '@gmod/indexedfasta': 2.0.2
+    '@gmod/tabix': 1.5.6
+    '@gmod/trix': 2.0.9
+    '@gmod/vcf': 5.0.9
+    generic-filehandle: 3.4.0
