@@ -1,0 +1,14 @@
+##fileformat=VCFv4.2
+##contig=<ID=chr01,length=60>
+##contig=<ID=chr02,length=40>
+##INFO=<ID=END,Number=1,Type=Integer,Description="End position">
+##INFO=<ID=SVTYPE,Number=1,Type=String,Description="SV type">
+##INFO=<ID=DP,Number=1,Type=Integer,Description="Total depth">
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO
+chr01	1	rs1	A	T	50	PASS	DP=10
+chr01	5	.	ACGT	A	40	PASS	DP=7
+chr01	10	.	A	AT	30	PASS	.
+chr01	15	.	ACGT	AGGT	20	PASS	.
+chr01	20	.	N	<DEL>	.	PASS	SVTYPE=DEL;END=40
+chr01	50	.	N	N]chr02:30]	.	PASS	SVTYPE=BND
+chr02	3	rs2	G	C	60	PASS	DP=3

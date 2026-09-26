@@ -31,3 +31,56 @@ export type {
   TrackConfig,
   VariantRecord,
 } from "./types";
+export {
+  createTrackDataSource,
+  type CreateTrackDataSourceOptions,
+  type TrackDataSource,
+  type TrackDataSourceKind,
+} from "./factory";
+export {
+  assertValidRegion,
+  resolveRegion,
+  toGenomeDataError,
+  type ReadOptions,
+  type ReaderErrorCode,
+  type ResolvedRegion,
+} from "./readers/common";
+export {
+  FeatureReader,
+  normalizeGff3Line,
+  parseGff3Attributes,
+  type FeatureReaderOptions,
+} from "./readers/feature";
+export {
+  IntervalFeatureReader,
+  normalizeBigBedFeatures,
+  parseBigBedRest,
+  type BigBedRestFields,
+  type IntervalFeatureReaderOptions,
+} from "./readers/interval";
+export {
+  normalizeQuantFeatures,
+  QuantitativeReader,
+  type QuantitativeReaderOptions,
+} from "./readers/quantitative";
+export {
+  SequenceReader,
+  type ChromSize,
+  type SequenceReaderOptions,
+} from "./readers/sequence";
+export {
+  TextSearchReader,
+  type TextSearchReaderOptions,
+  type TextSearchResult,
+} from "./readers/trix";
+export {
+  classifyAllele,
+  classifyVariantKind,
+  isBreakendAllele,
+  isSymbolicAllele,
+  normalizeVariantLine,
+  variantEnd,
+  VariantReader,
+  type VariantKind,
+  type VariantReaderOptions,
+} from "./readers/variant";

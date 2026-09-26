@@ -1,0 +1,7 @@
+##gff-version 3
+chr01	src	gene	1	60	.	+	.	ID=gene01;Name=Gene01
+chr01	src	mRNA	1	60	.	+	.	ID=mrna01;Parent=gene01
+chr01	src	exon	1	20	.	+	.	ID=exon01;Parent=mrna01
+chr01	src	CDS	5	20	.	+	0	ID=cds01;Parent=mrna01
+chr01	src	exon	41	60	.	+	.	ID=exon02;Parent=mrna01
+chr02	src	gene	1	40	.	-	.	ID=gene02;Name=Gene%2002
