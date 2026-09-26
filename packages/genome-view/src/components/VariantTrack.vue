@@ -149,7 +149,8 @@ function fillFor(kind: VariantRecord["kind"]): string {
   margin: 0;
   padding: 1rem;
   text-align: center;
-  font-size: 0.8125rem;
+  font-size: var(--text-small, 0.875rem);
+  line-height: var(--text-small--line-height, 1.55);
   color: var(--muted-foreground, oklch(0.48 0.028 152));
 }
 .variant-track__legend {
@@ -159,9 +160,9 @@ function fillFor(kind: VariantRecord["kind"]): string {
   margin: 0.25rem 0 0;
   padding: 0;
   list-style: none;
-  font-size: 0.6875rem;
+  font-size: var(--text-caption, 0.75rem);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   color: var(--muted-foreground, oklch(0.48 0.028 152));
 }
 .variant-track__legend-item {
@@ -172,6 +173,6 @@ function fillFor(kind: VariantRecord["kind"]): string {
 .variant-track__swatch {
   inline-size: 0.625rem;
   block-size: 0.625rem;
-  border-radius: 2px;
+  border-radius: 0.25rem;
 }
 </style>

@@ -113,7 +113,8 @@ function titleOf(id: string): string {
   margin: 0;
   padding: 1rem;
   text-align: center;
-  font-size: 0.8125rem;
+  font-size: var(--text-small, 0.875rem);
+  line-height: var(--text-small--line-height, 1.55);
   color: var(--muted-foreground, oklch(0.48 0.028 152));
 }
 </style>

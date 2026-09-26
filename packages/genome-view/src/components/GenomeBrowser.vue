@@ -86,7 +86,7 @@ const resolvedTracks = computed<ResolvedTrack[]>(() => {
   min-inline-size: 0;
   border: 1px solid var(--border, oklch(0.905 0.02 148));
   border-radius: var(--radius-lg, 0.875rem);
-  background: var(--background, #fff);
+  background: var(--card, #fff);
   overflow: hidden;
 }
 .genome-browser__ruler {
@@ -94,13 +94,13 @@ const resolvedTracks = computed<ResolvedTrack[]>(() => {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  min-height: 1.75rem;
+  min-height: var(--ruler-height, 1.75rem);
   padding-inline: 0.75rem;
   border-block-end: 1px solid var(--border, oklch(0.905 0.02 148));
-  background: var(--muted, oklch(0.968 0.012 148));
+  background: color-mix(in oklch, var(--muted, oklch(0.968 0.012 148)) 30%, transparent);
   color: var(--muted-foreground, oklch(0.48 0.028 152));
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.75rem;
+  font-size: var(--text-caption, 0.75rem);
 }
 .genome-browser__ruler-label {
   flex: none;
@@ -118,7 +118,7 @@ const resolvedTracks = computed<ResolvedTrack[]>(() => {
   padding: 1.5rem;
   text-align: center;
   color: var(--muted-foreground, oklch(0.48 0.028 152));
-  font-size: 0.875rem;
+  font-size: var(--text-small, 0.875rem);
 }
 .genome-browser__track {
   display: block;

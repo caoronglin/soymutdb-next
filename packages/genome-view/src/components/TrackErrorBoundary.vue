@@ -65,7 +65,7 @@ function retry(): void {
   padding: 0.75rem;
   border: 1px solid var(--destructive, oklch(0.58 0.22 27));
   border-radius: var(--radius-md, 0.625rem);
-  background: color-mix(in oklch, var(--destructive, oklch(0.58 0.22 27)) 8%, transparent);
+  background: color-mix(in oklch, var(--destructive, oklch(0.58 0.22 27)) 10%, transparent);
 }
 .track-error-boundary__error:focus-visible {
   outline: 2px solid var(--ring, oklch(0.55 0.14 152));
@@ -73,22 +73,24 @@ function retry(): void {
 }
 .track-error-boundary__title {
   margin: 0;
-  font-size: 0.875rem;
+  font-size: var(--text-small, 0.875rem);
   font-weight: 600;
   color: var(--foreground, oklch(0.195 0.028 152));
 }
 .track-error-boundary__message {
   margin: 0;
-  font-size: 0.8125rem;
+  font-size: var(--text-small, 0.875rem);
+  line-height: var(--text-small--line-height, 1.55);
   color: var(--muted-foreground, oklch(0.48 0.028 152));
 }
 .track-error-boundary__retry {
-  min-height: 32px;
+  min-height: 2rem;
   padding-inline: 0.75rem;
   border: 1px solid var(--border, oklch(0.905 0.02 148));
   border-radius: var(--radius-md, 0.625rem);
   background: var(--card, #fff);
   color: var(--foreground, oklch(0.195 0.028 152));
+  font-size: var(--text-small, 0.875rem);
   font-weight: 600;
   cursor: pointer;
 }

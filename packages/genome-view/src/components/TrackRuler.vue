@@ -31,7 +31,7 @@ const ticks = computed(() => computeTicks(props.region, props.widthPx, props.tar
 <style scoped>
 .track-ruler {
   position: relative;
-  height: 1.25rem;
+  height: var(--ruler-height, 1.75rem);
   width: 100%;
 }
 .track-ruler__tick {
@@ -47,8 +47,8 @@ const ticks = computed(() => computeTicks(props.region, props.widthPx, props.tar
   left: 0.25rem;
   white-space: nowrap;
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.6875rem;
-  line-height: 1.25rem;
+  font-size: var(--text-caption, 0.75rem);
+  line-height: var(--ruler-height, 1.75rem);
   color: var(--muted-foreground, oklch(0.48 0.028 152));
 }
 </style>

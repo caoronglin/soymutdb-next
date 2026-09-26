@@ -54,7 +54,7 @@ const ariaLabel = computed(
   gap: 1px;
   padding: 0.5rem;
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.8125rem;
+  font-size: var(--text-small, 0.875rem);
   letter-spacing: 0.05em;
 }
 .sequence-track__base {
@@ -63,7 +63,7 @@ const ariaLabel = computed(
   justify-content: center;
   min-inline-size: 1.25rem;
   block-size: 1.5rem;
-  border-radius: 3px;
+  border-radius: 0.25rem;
   background: var(--muted, oklch(0.968 0.012 148));
   color: var(--foreground, oklch(0.195 0.028 152));
 }
@@ -75,7 +75,8 @@ const ariaLabel = computed(
   margin: 0;
   padding: 1rem;
   text-align: center;
-  font-size: 0.8125rem;
+  font-size: var(--text-small, 0.875rem);
+  line-height: var(--text-small--line-height, 1.55);
   color: var(--muted-foreground, oklch(0.48 0.028 152));
 }
 </style>

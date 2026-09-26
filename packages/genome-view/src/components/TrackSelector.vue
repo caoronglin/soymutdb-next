@@ -50,7 +50,7 @@ function onToggle(trackId: string, event: Event): void {
 }
 .track-selector__legend {
   padding-inline: 0.25rem;
-  font-size: 0.75rem;
+  font-size: var(--text-caption, 0.75rem);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -60,7 +60,7 @@ function onToggle(trackId: string, event: Event): void {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  min-height: 24px;
+  min-height: var(--track-height, 1.5rem);
   cursor: pointer;
 }
 .track-selector__checkbox {
@@ -73,12 +73,12 @@ function onToggle(trackId: string, event: Event): void {
   outline-offset: 2px;
 }
 .track-selector__name {
-  font-size: 0.875rem;
+  font-size: var(--text-small, 0.875rem);
   color: var(--foreground, oklch(0.195 0.028 152));
 }
 .track-selector__empty {
   margin: 0;
-  font-size: 0.875rem;
+  font-size: var(--text-small, 0.875rem);
   color: var(--muted-foreground, oklch(0.48 0.028 152));
 }
 </style>
