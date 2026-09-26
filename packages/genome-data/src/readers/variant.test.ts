@@ -2,6 +2,8 @@ import VCF from "@gmod/vcf";
 import { describe, expect, it } from "vitest";
 
 import type { AssemblyContext } from "../assembly";
+import { GenomeDataError } from "../errors";
+import type { FileProvider } from "../file-provider";
 import { VariantReader } from "./variant";
 import {
   classifyAllele,
@@ -11,7 +13,12 @@ import {
   normalizeVariantLine,
   variantEnd,
 } from "./variant";
-import { fixtureLocation, fixtureProvider, fixtureText } from "./test-fixtures";
+import {
+  FailFirstOpenProvider,
+  fixtureLocation,
+  fixtureProvider,
+  fixtureText,
+} from "./test-fixtures";
 
 const assembly: AssemblyContext = {
   key: "v5.0",
@@ -29,7 +36,7 @@ function makeParser(): VCF {
   return new VCF({ header });
 }
 
-function makeReader(provider = fixtureProvider(FIXTURE_NAMES)): VariantReader {
+function makeReader(provider: FileProvider = fixtureProvider(FIXTURE_NAMES)): VariantReader {
   return new VariantReader({
     provider,
     assembly,
@@ -186,5 +193,20 @@ describe("VariantReader", () => {
     await expect(
       reader.getVariants({ assemblyKey: "v5.0", refName: "chr01", start: 0, end: 10 }),
     ).rejects.toMatchObject({ code: "fetch" });
+  });
+
+  it("clears the tabix and parser caches after a failed open and retries", async () => {
+    const provider = new FailFirstOpenProvider(fixtureProvider(FIXTURE_NAMES));
+    const reader = makeReader(provider);
+    const region = { assemblyKey: "v5.0", refName: "chr01", start: 0, end: 60 };
+    const first = await reader.getVariants(region).catch((error: unknown) => error);
+    expect(first).toBeInstanceOf(GenomeDataError);
+    expect(first).toMatchObject({ code: "fetch" });
+    const openedAfterFailure = provider.openCount;
+    // The parser is derived from the tabix open, so it fails on the first read
+    // too: a stale parser promise would keep this second read failing even
+    // after the tabix open is successfully retried.
+    await expect(reader.getVariants(region)).resolves.toHaveLength(6);
+    expect(provider.openCount).toBeGreaterThan(openedAfterFailure);
   });
 });

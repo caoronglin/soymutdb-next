@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { AssemblyContext } from "../assembly";
 import { GenomeDataError } from "../errors";
-import { resolveRegion, toGenomeDataError } from "./common";
+import { OpenCache, resolveRegion, toGenomeDataError } from "./common";
 
 const assembly: AssemblyContext = {
   key: "v5.0",
@@ -31,6 +31,41 @@ describe("toGenomeDataError", () => {
     expect(toGenomeDataError(abortError, "fetch", "read failed").code).toBe("aborted");
     const nodeAbort = Object.assign(new Error("aborted"), { code: "ERR_ABORTED" });
     expect(toGenomeDataError(nodeAbort, "parse", "read failed").code).toBe("aborted");
+  });
+});
+
+describe("OpenCache", () => {
+  it("returns one promise for concurrent callers and caches success", async () => {
+    const cache = new OpenCache<number>();
+    let calls = 0;
+    const open = (): Promise<number> => {
+      calls += 1;
+      return Promise.resolve(calls);
+    };
+    const first = cache.run(open);
+    const second = cache.run(open);
+    expect(second).toBe(first);
+    await expect(first).resolves.toBe(1);
+    // A later caller still gets the cached successful open, never a new one.
+    await expect(cache.run(open)).resolves.toBe(1);
+    expect(calls).toBe(1);
+  });
+
+  it("clears a rejected open so the next caller retries", async () => {
+    const cache = new OpenCache<string>();
+    let calls = 0;
+    const open = (): Promise<string> => {
+      calls += 1;
+      return calls === 1
+        ? Promise.reject(new Error("nope"))
+        : Promise.resolve("ok");
+    };
+    const first = cache.run(open);
+    const shared = cache.run(open);
+    expect(shared).toBe(first);
+    await expect(first).rejects.toThrow("nope");
+    await expect(cache.run(open)).resolves.toBe("ok");
+    expect(calls).toBe(2);
   });
 });
 

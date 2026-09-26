@@ -4,7 +4,13 @@ import type { AssemblyContext } from "../assembly";
 import type { FileProvider } from "../file-provider";
 import type { GenomeLocation } from "../location";
 import type { FeatureRecord, Region } from "../types";
-import { resolveRegion, throwIfAborted, toGenomeDataError, type ReadOptions } from "./common";
+import {
+  OpenCache,
+  resolveRegion,
+  throwIfAborted,
+  toGenomeDataError,
+  type ReadOptions,
+} from "./common";
 
 export interface IntervalFeatureReaderOptions {
   readonly provider: FileProvider;
@@ -75,7 +81,7 @@ export class IntervalFeatureReader {
   private readonly assembly: AssemblyContext;
   private readonly trackId?: string;
   private readonly featureType: string;
-  private bigBed?: Promise<BigBed>;
+  private readonly bigBedCache = new OpenCache<BigBed>();
 
   constructor(private readonly options: IntervalFeatureReaderOptions) {
     this.assembly = options.assembly;
@@ -84,8 +90,7 @@ export class IntervalFeatureReader {
   }
 
   private getBigBed(): Promise<BigBed> {
-    this.bigBed ??= this.openBigBed();
-    return this.bigBed;
+    return this.bigBedCache.run(() => this.openBigBed());
   }
 
   private async openBigBed(): Promise<BigBed> {

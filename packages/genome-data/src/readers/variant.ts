@@ -6,7 +6,13 @@ import { GenomeDataError } from "../errors";
 import type { FileProvider } from "../file-provider";
 import type { GenomeLocation } from "../location";
 import type { Region, VariantRecord } from "../types";
-import { resolveRegion, throwIfAborted, toGenomeDataError, type ReadOptions } from "./common";
+import {
+  OpenCache,
+  resolveRegion,
+  throwIfAborted,
+  toGenomeDataError,
+  type ReadOptions,
+} from "./common";
 
 export type VariantKind = VariantRecord["kind"];
 
@@ -155,8 +161,8 @@ export function normalizeVariantLine(
 export class VariantReader {
   private readonly assembly: AssemblyContext;
   private readonly trackId?: string;
-  private tabix?: Promise<TabixIndexedFile>;
-  private parser?: Promise<VCF>;
+  private readonly tabixCache = new OpenCache<TabixIndexedFile>();
+  private readonly parserCache = new OpenCache<VCF>();
 
   constructor(private readonly options: VariantReaderOptions) {
     this.assembly = options.assembly;
@@ -164,8 +170,7 @@ export class VariantReader {
   }
 
   private getTabix(): Promise<TabixIndexedFile> {
-    this.tabix ??= this.openTabix();
-    return this.tabix;
+    return this.tabixCache.run(() => this.openTabix());
   }
 
   private async openTabix(): Promise<TabixIndexedFile> {
@@ -187,8 +192,7 @@ export class VariantReader {
   }
 
   private getParser(): Promise<VCF> {
-    this.parser ??= this.createParser();
-    return this.parser;
+    return this.parserCache.run(() => this.createParser());
   }
 
   private async createParser(): Promise<VCF> {

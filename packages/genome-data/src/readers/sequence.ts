@@ -6,6 +6,7 @@ import type { FileProvider } from "../file-provider";
 import type { GenomeLocation } from "../location";
 import type { Region, SequenceChunk } from "../types";
 import {
+  OpenCache,
   resolveRegion,
   toGenomeDataError,
   type ReadOptions,
@@ -39,7 +40,7 @@ export interface SequenceReaderOptions {
 export class SequenceReader {
   private readonly assembly: AssemblyContext;
   private readonly trackId?: string;
-  private ready?: Promise<BgzipIndexedFasta>;
+  private readonly readyCache = new OpenCache<BgzipIndexedFasta>();
 
   constructor(private readonly options: SequenceReaderOptions) {
     this.assembly = options.assembly;
@@ -47,8 +48,7 @@ export class SequenceReader {
   }
 
   private getReady(): Promise<BgzipIndexedFasta> {
-    this.ready ??= this.open(this.options);
-    return this.ready;
+    return this.readyCache.run(() => this.open(this.options));
   }
 
   private async open(options: SequenceReaderOptions): Promise<BgzipIndexedFasta> {

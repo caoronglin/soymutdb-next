@@ -1,12 +1,18 @@
 import { describe, expect, it } from "vitest";
 
 import type { AssemblyContext } from "../assembly";
+import { GenomeDataError } from "../errors";
+import type { FileProvider } from "../file-provider";
 import {
   IntervalFeatureReader,
   normalizeBigBedFeatures,
   parseBigBedRest,
 } from "./interval";
-import { fixtureLocation, fixtureProvider } from "./test-fixtures";
+import {
+  FailFirstOpenProvider,
+  fixtureLocation,
+  fixtureProvider,
+} from "./test-fixtures";
 
 const assembly: AssemblyContext = {
   key: "v5.0",
@@ -14,7 +20,7 @@ const assembly: AssemblyContext = {
   refNames: ["chr01"],
 };
 
-function makeReader(provider = fixtureProvider([])): IntervalFeatureReader {
+function makeReader(provider: FileProvider = fixtureProvider([])): IntervalFeatureReader {
   return new IntervalFeatureReader({
     provider,
     assembly,
@@ -23,6 +29,13 @@ function makeReader(provider = fixtureProvider([])): IntervalFeatureReader {
     featureType: "repeat",
   });
 }
+
+// A minimal valid bigBed (chr01:0-10, BED3, blockSize=1, itemsPerSlot=1)
+// generated once with Biopython's Bio.Align.bigbed.AlignmentWriter. The repo
+// ships no offline bigBed writer, so this is the only decodeable bigBed
+// payload in the test suite; it lets the retry test reach a successful read.
+const BIGBED_BASE64 =
+  "6/KJhwQAAQB0AgAAAAAAAKUCAAAAAAAAuwIAAAAAAAADAAMAMAEAAAAAAAAMAgAAAAAAACAAAAA0AgAAAAAAAAoAAAAAAAAADwMAAAAAAAAyAwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHRhYmxlIGJlZAoiQnJvd3NlciBFeHRlbnNpYmxlIERhdGEiCigKICAgc3RyaW5nIGNocm9tOyAgICAgICAgICJSZWZlcmVuY2Ugc2VxdWVuY2UgY2hyb21vc29tZSBvciBzY2FmZm9sZCIKICAgdWludCAgIGNocm9tU3RhcnQ7ICAgICJTdGFydCBwb3NpdGlvbiBpbiBjaHJvbW9zb21lIgogICB1aW50ICAgY2hyb21FbmQ7ICAgICAgIkVuZCBwb3NpdGlvbiBpbiBjaHJvbW9zb21lIgopCgAKAAAAAAAAAAAAAAAAAPA/AAAAAAAA8D8AAAAAAAAkQAAAAAAAACRAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAJGMyngBAAAABQAAAAgAAAABAAAAAAAAAAAAAAAAAAAAAQABAGNocjAxAAAAADwAAAABAAAAAAAAAHicY2CAAC4QAQAAPwAL4KxoJAEAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAoAAAC7AgAAAAAAAAEAAAAAAAAAAQABAAAAAAAAAAAAAAAAAAoAAACtAgAAAAAAAA4AAAAAAAAAAQAAAHicY2CAAC4oZmBosIdgBUcQBgAVyAJVeJwDAAAAAAHgrGgkAQAAAAEAAAAAAAAAAAAAAAAAAAAAAAAACgAAADIDAAAAAAAAAQAAAAAAAAABAAEAAAAAAAAAAAAAAAAACgAAABMDAAAAAAAAHwAAAAAAAADr8omH";
 
 describe("parseBigBedRest", () => {
   it("splits the space-separated BED columns", () => {
@@ -104,6 +117,28 @@ describe("IntervalFeatureReader", () => {
         end: 10,
       }),
     ).rejects.toMatchObject({ code: "fetch" });
+  });
+
+  it("retries the open after a failed open and then succeeds", async () => {
+    const inner = fixtureProvider([]);
+    inner.add(fixtureLocation("repeats.bb"), Buffer.from(BIGBED_BASE64, "base64"));
+    const provider = new FailFirstOpenProvider(inner);
+    const reader = makeReader(provider);
+    const region = { assemblyKey: "v5.0", refName: "chr01", start: 0, end: 10 };
+    const first = await reader.getFeatures(region).catch((error: unknown) => error);
+    expect(first).toBeInstanceOf(GenomeDataError);
+    expect(first).toMatchObject({ code: "fetch" });
+    const openedAfterFailure = provider.openCount;
+    const features = await reader.getFeatures(region);
+    expect(features).toHaveLength(1);
+    expect(features[0]).toMatchObject({
+      assemblyKey: "v5.0",
+      refName: "chr01",
+      start: 0,
+      end: 10,
+      type: "repeat",
+    });
+    expect(provider.openCount).toBeGreaterThan(openedAfterFailure);
   });
 
   // No offline BigBed writer exists in this repo; see the quantitative test

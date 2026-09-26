@@ -5,7 +5,13 @@ import { GenomeDataError } from "../errors";
 import type { FileProvider } from "../file-provider";
 import type { GenomeLocation } from "../location";
 import type { FeatureRecord, Region } from "../types";
-import { resolveRegion, throwIfAborted, toGenomeDataError, type ReadOptions } from "./common";
+import {
+  OpenCache,
+  resolveRegion,
+  throwIfAborted,
+  toGenomeDataError,
+  type ReadOptions,
+} from "./common";
 
 export interface FeatureReaderOptions {
   readonly provider: FileProvider;
@@ -104,7 +110,7 @@ export function normalizeGff3Line(
 export class FeatureReader {
   private readonly assembly: AssemblyContext;
   private readonly trackId?: string;
-  private tabix?: Promise<TabixIndexedFile>;
+  private readonly tabixCache = new OpenCache<TabixIndexedFile>();
 
   constructor(private readonly options: FeatureReaderOptions) {
     this.assembly = options.assembly;
@@ -112,8 +118,7 @@ export class FeatureReader {
   }
 
   private getTabix(): Promise<TabixIndexedFile> {
-    this.tabix ??= this.openTabix();
-    return this.tabix;
+    return this.tabixCache.run(() => this.openTabix());
   }
 
   private async openTabix(): Promise<TabixIndexedFile> {

@@ -1,8 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import type { AssemblyContext } from "../assembly";
+import { GenomeDataError } from "../errors";
+import type { FileProvider } from "../file-provider";
 import { AlignmentReader } from "./alignment";
-import { fixtureLocation, fixtureProvider } from "./test-fixtures";
+import {
+  FailFirstOpenProvider,
+  fixtureLocation,
+  fixtureProvider,
+} from "./test-fixtures";
 
 const assembly: AssemblyContext = {
   key: "v5.0",
@@ -12,7 +18,7 @@ const assembly: AssemblyContext = {
 
 const FIXTURE_NAMES = ["alignment.bam", "alignment.bam.bai"];
 
-function makeReader(provider = fixtureProvider(FIXTURE_NAMES)): AlignmentReader {
+function makeReader(provider: FileProvider = fixtureProvider(FIXTURE_NAMES)): AlignmentReader {
   return new AlignmentReader({
     provider,
     assembly,
@@ -133,6 +139,18 @@ describe("AlignmentReader", () => {
     await expect(
       reader.getAlignments({ assemblyKey: "v5.0", refName: "chr01", start: 0, end: 60 }),
     ).rejects.toMatchObject({ code: "fetch" });
+  });
+
+  it("retries the open after a failed open and then succeeds", async () => {
+    const provider = new FailFirstOpenProvider(fixtureProvider(FIXTURE_NAMES));
+    const reader = makeReader(provider);
+    const region = { assemblyKey: "v5.0", refName: "chr01", start: 0, end: 60 };
+    const first = await reader.getAlignments(region).catch((error: unknown) => error);
+    expect(first).toBeInstanceOf(GenomeDataError);
+    expect(first).toMatchObject({ code: "fetch" });
+    const openedAfterFailure = provider.openCount;
+    await expect(reader.getAlignments(region)).resolves.toHaveLength(3);
+    expect(provider.openCount).toBeGreaterThan(openedAfterFailure);
   });
 
   it("wraps an undecodable BAM payload as a fetch error", async () => {

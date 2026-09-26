@@ -1,11 +1,17 @@
 import { describe, expect, it } from "vitest";
 
+import { GenomeDataError } from "../errors";
+import type { FileProvider } from "../file-provider";
 import { TextSearchReader } from "./trix";
-import { fixtureLocation, fixtureProvider } from "./test-fixtures";
+import {
+  FailFirstOpenProvider,
+  fixtureLocation,
+  fixtureProvider,
+} from "./test-fixtures";
 
 const FIXTURE_NAMES = ["genes.ix", "genes.ixx"];
 
-function makeReader(provider = fixtureProvider(FIXTURE_NAMES)): TextSearchReader {
+function makeReader(provider: FileProvider = fixtureProvider(FIXTURE_NAMES)): TextSearchReader {
   return new TextSearchReader({
     provider,
     trackId: "gene-search",
@@ -43,5 +49,16 @@ describe("TextSearchReader", () => {
   it("wraps a missing index as a fetch error", async () => {
     const reader = makeReader(fixtureProvider(["genes.ix"]));
     await expect(reader.search("at1")).rejects.toMatchObject({ code: "fetch" });
+  });
+
+  it("retries the open after a failed open and then succeeds", async () => {
+    const provider = new FailFirstOpenProvider(fixtureProvider(FIXTURE_NAMES));
+    const reader = makeReader(provider);
+    const first = await reader.search("at1").catch((error: unknown) => error);
+    expect(first).toBeInstanceOf(GenomeDataError);
+    expect(first).toMatchObject({ code: "fetch" });
+    const openedAfterFailure = provider.openCount;
+    await expect(reader.search("at1")).resolves.toHaveLength(2);
+    expect(provider.openCount).toBeGreaterThan(openedAfterFailure);
   });
 });

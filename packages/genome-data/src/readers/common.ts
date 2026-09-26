@@ -106,3 +106,32 @@ export function throwIfAborted(signal?: AbortSignal, trackId?: string): void {
     throw new GenomeDataError("aborted", "The genome data read was aborted", { trackId });
   }
 }
+
+/**
+ * A lazy, recoverable cache for one in-flight open promise.
+ *
+ * `run` starts the open at most once and returns the same promise to every
+ * concurrent caller, so a successful open is cached and reused for the reader's
+ * lifetime. When the open rejects, the cache is cleared only if it still holds
+ * that exact promise, so the next read starts a fresh open instead of replaying
+ * the cached rejection (a Retry after a missing/unreachable file must be able
+ * to succeed). The original promise is always returned, so callers still
+ * observe the rejection and the error is never swallowed.
+ */
+export class OpenCache<T> {
+  private pending?: Promise<T>;
+
+  run(open: () => Promise<T>): Promise<T> {
+    const cached = this.pending;
+    if (cached) return cached;
+    const started = open();
+    this.pending = started;
+    // Detach a rejection handler so a failed open clears the cache. The derived
+    // promise resolves (the callback returns void), so no unhandled rejection
+    // is produced; `started` itself is still rejected for every caller.
+    void started.catch(() => {
+      if (this.pending === started) this.pending = undefined;
+    });
+    return started;
+  }
+}

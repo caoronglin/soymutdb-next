@@ -2,8 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import type { AssemblyContext } from "../assembly";
 import { GenomeDataError } from "../errors";
+import type { FileProvider } from "../file-provider";
 import { SequenceReader } from "./sequence";
-import { fixtureLocation, fixtureProvider } from "./test-fixtures";
+import {
+  FailFirstOpenProvider,
+  fixtureLocation,
+  fixtureProvider,
+} from "./test-fixtures";
 
 const assembly: AssemblyContext = {
   key: "v5.0",
@@ -12,7 +17,7 @@ const assembly: AssemblyContext = {
   refNameAliases: { "1": "chr01" },
 };
 
-function makeReader(provider = fixtureProvider(FIXTURE_NAMES)): SequenceReader {
+function makeReader(provider: FileProvider = fixtureProvider(FIXTURE_NAMES)): SequenceReader {
   return new SequenceReader({
     provider,
     assembly,
@@ -115,5 +120,19 @@ describe("SequenceReader", () => {
   it("wraps a missing file as a fetch error", async () => {
     const reader = makeReader(fixtureProvider(["reference.fa.gz", "reference.fa.gz.fai"]));
     await expect(reader.getChromSizes()).rejects.toMatchObject({ code: "fetch" });
+  });
+
+  it("retries the open after a failed open and then succeeds", async () => {
+    const provider = new FailFirstOpenProvider(fixtureProvider(FIXTURE_NAMES));
+    const reader = makeReader(provider);
+    const first = await reader.getChromSizes().catch((error: unknown) => error);
+    expect(first).toBeInstanceOf(GenomeDataError);
+    expect(first).toMatchObject({ code: "fetch" });
+    const openedAfterFailure = provider.openCount;
+    await expect(reader.getChromSizes()).resolves.toEqual([
+      { refName: "chr01", size: 60 },
+      { refName: "chr02", size: 40 },
+    ]);
+    expect(provider.openCount).toBeGreaterThan(openedAfterFailure);
   });
 });

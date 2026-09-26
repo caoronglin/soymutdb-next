@@ -4,7 +4,13 @@ import type { AssemblyContext } from "../assembly";
 import type { FileProvider } from "../file-provider";
 import type { GenomeLocation } from "../location";
 import type { AlignmentRecord, Region } from "../types";
-import { resolveRegion, throwIfAborted, toGenomeDataError, type ReadOptions } from "./common";
+import {
+  OpenCache,
+  resolveRegion,
+  throwIfAborted,
+  toGenomeDataError,
+  type ReadOptions,
+} from "./common";
 
 /** SAM flag bit 0x10 marks a read mapped to the reverse strand. */
 const BAM_REVERSE_FLAG = 0x10;
@@ -61,7 +67,7 @@ export function normalizeBamRecords(
 export class AlignmentReader {
   private readonly assembly: AssemblyContext;
   private readonly trackId?: string;
-  private bam?: Promise<BamFile>;
+  private readonly bamCache = new OpenCache<BamFile>();
 
   constructor(private readonly options: AlignmentReaderOptions) {
     this.assembly = options.assembly;
@@ -69,8 +75,7 @@ export class AlignmentReader {
   }
 
   private getBam(): Promise<BamFile> {
-    this.bam ??= this.openBam();
-    return this.bam;
+    return this.bamCache.run(() => this.openBam());
   }
 
   private async openBam(): Promise<BamFile> {

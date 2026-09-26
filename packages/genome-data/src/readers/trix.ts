@@ -2,7 +2,7 @@ import Trix from "@gmod/trix";
 
 import type { FileProvider } from "../file-provider";
 import type { GenomeLocation } from "../location";
-import { toGenomeDataError } from "./common";
+import { OpenCache, toGenomeDataError } from "./common";
 
 export interface TextSearchReaderOptions {
   readonly provider: FileProvider;
@@ -36,7 +36,7 @@ const DEFAULT_MAX_RESULTS = 1500;
 export class TextSearchReader {
   private readonly trackId?: string;
   private readonly limitCap: number;
-  private trix?: Promise<Trix>;
+  private readonly trixCache = new OpenCache<Trix>();
 
   constructor(private readonly options: TextSearchReaderOptions) {
     this.trackId = options.trackId;
@@ -44,8 +44,7 @@ export class TextSearchReader {
   }
 
   private getTrix(): Promise<Trix> {
-    this.trix ??= this.openTrix();
-    return this.trix;
+    return this.trixCache.run(() => this.openTrix());
   }
 
   private async openTrix(): Promise<Trix> {

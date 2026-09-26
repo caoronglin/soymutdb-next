@@ -4,7 +4,13 @@ import type { AssemblyContext } from "../assembly";
 import type { FileProvider } from "../file-provider";
 import type { GenomeLocation } from "../location";
 import type { QuantRecord, Region } from "../types";
-import { resolveRegion, throwIfAborted, toGenomeDataError, type ReadOptions } from "./common";
+import {
+  OpenCache,
+  resolveRegion,
+  throwIfAborted,
+  toGenomeDataError,
+  type ReadOptions,
+} from "./common";
 
 export interface QuantitativeReaderOptions {
   readonly provider: FileProvider;
@@ -32,7 +38,7 @@ export function normalizeQuantFeatures(
 export class QuantitativeReader {
   private readonly assembly: AssemblyContext;
   private readonly trackId?: string;
-  private bigWig?: Promise<BigWig>;
+  private readonly bigWigCache = new OpenCache<BigWig>();
 
   constructor(private readonly options: QuantitativeReaderOptions) {
     this.assembly = options.assembly;
@@ -40,8 +46,7 @@ export class QuantitativeReader {
   }
 
   private getBigWig(): Promise<BigWig> {
-    this.bigWig ??= this.openBigWig();
-    return this.bigWig;
+    return this.bigWigCache.run(() => this.openBigWig());
   }
 
   private async openBigWig(): Promise<BigWig> {
