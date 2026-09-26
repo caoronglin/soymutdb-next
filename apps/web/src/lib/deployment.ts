@@ -42,6 +42,24 @@ export function resolveJbrowseBaseUrl(value: unknown): string {
 }
 
 /**
+ * Canonical origin the portal validates every incoming bridge message against.
+ *
+ * Derived from the same `VITE_JBROWSE_BASE_URL` the frame is loaded from, so the
+ * origin in the URL and the origin in the validator cannot drift. A relative
+ * base ("/jbrowse") resolves against the portal origin, which is also what a
+ * same-origin deployment posts from; an absent document (prerender) falls back
+ * to the portal origin rather than an unusable relative string.
+ */
+export function resolveJbrowseOrigin(value: unknown, portalOrigin: string): string {
+  const base = resolveJbrowseBaseUrl(value);
+  try {
+    return new URL(base, portalOrigin || undefined).origin;
+  } catch {
+    return portalOrigin;
+  }
+}
+
+/**
  * Pin the release the api-client sends as `X-SoyMutDB-Release`. Called with the
  * same value the store exposes, so the release shown in the UI and the release
  * requested from the API can never disagree.

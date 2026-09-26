@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
 import {
@@ -12,7 +12,7 @@ import { SOYBEAN_CHROMOSOMES } from "@soymutdb/shared/genomics";
 import { Button } from "@soymutdb/ui-vue";
 
 import PortalLayout from "../components/PortalLayout.vue";
-import { resolveJbrowseBaseUrl } from "../lib/deployment";
+import { resolveJbrowseBaseUrl, resolveJbrowseOrigin } from "../lib/deployment";
 import { t } from "../lib/i18n";
 import { useSiteContextStore } from "../stores/site-context";
 
@@ -21,8 +21,15 @@ import { useSiteContextStore } from "../stores/site-context";
  *
  * Reliability model: the iframe counts as ready only when it posts a `ready`
  * bridge message. A timer can only flip "loading" into "timeout"; it can never
- * declare success. Every incoming message is validated against the canonical
- * JBrowse origin, the bridge source, and the version before it is trusted.
+ * declare success. Every incoming message is validated through the shared
+ * jbrowse-bridge against the canonical JBrowse origin (derived from
+ * VITE_JBROWSE_BASE_URL), the bridge source, the bridge version, the message
+ * type and the iframe window before it is trusted.
+ *
+ * URL hygiene: only the documented deep-link keys (assembly, locus, tracks,
+ * release) are written back to the address bar or forwarded into the frame URL,
+ * so published or internal record identifiers cannot leak through this page's
+ * URL or bridge logs.
  */
 const READY_TIMEOUT_MS = 15_000;
 
@@ -30,36 +37,54 @@ const route = useRoute();
 const router = useRouter();
 const site = useSiteContextStore();
 
+// Captured once per render context. In the browser these are the live document
+// values the bridge is validated against; during prerender there is no document
+// and the relative base is kept relative so hydration can rewrite it.
+const portalHref = typeof window === "undefined" ? "" : window.location.href;
+const portalOrigin = typeof window === "undefined" ? "" : window.location.origin;
+
 const jbrowseBaseUrl = computed(() =>
   resolveJbrowseBaseUrl(import.meta.env.VITE_JBROWSE_BASE_URL),
 );
-const jbrowseOrigin = computed(() => {
-  try {
-    return new URL(jbrowseBaseUrl.value).origin;
-  } catch {
-    return jbrowseBaseUrl.value;
-  }
-});
+const jbrowseOrigin = computed(() =>
+  resolveJbrowseOrigin(import.meta.env.VITE_JBROWSE_BASE_URL, portalOrigin),
+);
 
 const params = computed(() => {
-  const locus = typeof route.query.locus === "string" ? route.query.locus : typeof route.query.loc === "string" ? route.query.loc : "chr01";
+  const locus =
+    typeof route.query.locus === "string"
+      ? route.query.locus
+      : typeof route.query.loc === "string"
+        ? route.query.loc
+        : "chr01";
   const rawTracks = route.query.tracks;
   const tracks = Array.isArray(rawTracks)
     ? rawTracks.map(String).filter(Boolean)
     : typeof rawTracks === "string"
-      ? rawTracks.split(",").map((item) => item.trim()).filter(Boolean)
+      ? rawTracks
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean)
       : [];
   return {
-    assembly: typeof route.query.assembly === "string" && route.query.assembly ? route.query.assembly : "Wm82.a4.v1",
+    assembly:
+      typeof route.query.assembly === "string" && route.query.assembly
+        ? route.query.assembly
+        : "Wm82.a4.v1",
     locus,
     tracks,
     release:
       typeof route.query.release === "string" && route.query.release
         ? route.query.release
-        : site.releaseId ?? undefined,
+        : (site.releaseId ?? undefined),
   };
 });
 
+/**
+ * Build a JBrowse URL. A relative base ("/jbrowse") is resolved against the
+ * portal document; without one (prerender) the base is kept relative instead of
+ * calling `new URL` with no base, which would throw.
+ */
 function buildJbrowseUrl(input: {
   assembly: string;
   locus: string;
@@ -67,20 +92,64 @@ function buildJbrowseUrl(input: {
   release?: string;
   portalOrigin?: string;
 }): string {
-  const url = new URL(jbrowseBaseUrl.value);
-  url.searchParams.set("assembly", input.assembly);
-  url.searchParams.set("locus", input.locus);
-  if (input.tracks.length > 0) url.searchParams.set("tracks", input.tracks.join(","));
-  if (input.release) url.searchParams.set("release", input.release);
-  if (input.portalOrigin) url.searchParams.set("portalOrigin", input.portalOrigin);
-  return url.toString();
+  const search = new URLSearchParams();
+  search.set("assembly", input.assembly);
+  search.set("locus", input.locus);
+  if (input.tracks.length > 0) search.set("tracks", input.tracks.join(","));
+  if (input.release) search.set("release", input.release);
+  if (input.portalOrigin) search.set("portalOrigin", input.portalOrigin);
+  const query = search.toString();
+  if (portalHref) {
+    const url = new URL(jbrowseBaseUrl.value, portalHref);
+    url.search = query;
+    return url.toString();
+  }
+  return query ? `${jbrowseBaseUrl.value}?${query}` : jbrowseBaseUrl.value;
 }
 
-const portalOrigin = typeof window === "undefined" ? "" : window.location.origin;
 const jbrowseSrc = computed(() => buildJbrowseUrl({ ...params.value, portalOrigin }));
 const newTabSrc = computed(() => buildJbrowseUrl({ ...params.value }));
 
-const iframeRef = ref<HTMLIFrameElement | null>(null);
+// Only the documented deep-link keys may persist. Unknown keys — including
+// record identifiers — are dropped instead of being echoed back into the URL.
+function singleQuery(value: unknown): string | undefined {
+  return typeof value === "string" && value ? value : undefined;
+}
+
+function listQuery(value: unknown): string | undefined {
+  const raw = Array.isArray(value)
+    ? value.map(String).join(",")
+    : typeof value === "string"
+      ? value
+      : "";
+  const joined = raw
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .join(",");
+  return joined || undefined;
+}
+
+function replaceBrowserQuery(
+  patch: Partial<Record<"assembly" | "locus" | "tracks" | "release", string | undefined>>,
+): void {
+  const query: Record<string, string> = {};
+  const assembly = singleQuery(route.query.assembly);
+  const locus = singleQuery(route.query.locus) ?? singleQuery(route.query.loc);
+  const tracks = listQuery(route.query.tracks);
+  const release = singleQuery(route.query.release);
+  if (assembly) query.assembly = assembly;
+  if (locus) query.locus = locus;
+  if (tracks) query.tracks = tracks;
+  if (release) query.release = release;
+  for (const [key, value] of Object.entries(patch)) {
+    if (value) query[key] = value;
+    else delete query[key];
+  }
+  void router.replace({ path: "/browser", query });
+}
+
+const iframeRef = useTemplateRef<HTMLIFrameElement>("iframeRef");
 const status = ref<"loading" | "ready" | "timeout" | "error">("loading");
 const errorMessage = ref<string | null>(null);
 const iframeKey = ref(0);
@@ -96,11 +165,16 @@ watch(
   },
 );
 
+function clearReadyTimer() {
+  window.clearTimeout(timeoutId);
+  timeoutId = undefined;
+}
+
 function resetBridge() {
   status.value = "loading";
   errorMessage.value = null;
   initSent = false;
-  window.clearTimeout(timeoutId);
+  clearReadyTimer();
   timeoutId = window.setTimeout(() => {
     // A late `ready` still recovers; the timer never claims success.
     if (status.value === "loading") status.value = "timeout";
@@ -133,12 +207,14 @@ function handleMessage(event: MessageEvent) {
   if (message.type === "ready") {
     if (initSent) return;
     initSent = true;
+    clearReadyTimer();
     status.value = "ready";
     postInit();
     return;
   }
   if (message.type === "error") {
     const payload = message.payload as { message?: unknown } | undefined;
+    clearReadyTimer();
     errorMessage.value =
       typeof payload?.message === "string" && payload.message ? payload.message : t("browser.loadError");
     status.value = "error";
@@ -148,14 +224,11 @@ function handleMessage(event: MessageEvent) {
     const payload = message.payload as LocusChangePayload | undefined;
     if (!payload || typeof payload.locus !== "string" || !payload.locus) return;
     if (payload.locus !== params.value.locus) {
-      void router.replace({
-        path: "/browser",
-        query: {
-          assembly: payload.assembly || params.value.assembly,
-          locus: payload.locus,
-          tracks: payload.tracks?.join(",") || undefined,
-          release: params.value.release,
-        },
+      replaceBrowserQuery({
+        assembly: payload.assembly || params.value.assembly,
+        locus: payload.locus,
+        tracks: listQuery(payload.tracks),
+        release: params.value.release,
       });
     }
   }
@@ -168,7 +241,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener("message", handleMessage);
-  window.clearTimeout(timeoutId);
+  clearReadyTimer();
 });
 
 watch(iframeKey, () => resetBridge());
@@ -176,7 +249,11 @@ watch(iframeKey, () => resetBridge());
 function applyLocus() {
   const value = locusInput.value.trim();
   if (!value) return;
-  void router.replace({ path: "/browser", query: { ...route.query, locus: value } });
+  replaceBrowserQuery({ locus: value });
+}
+
+function selectAssembly(value: string) {
+  replaceBrowserQuery({ assembly: value });
 }
 </script>
 
@@ -203,7 +280,7 @@ function applyLocus() {
             class="mt-1 w-40 rounded-md border bg-background px-2 py-1.5"
             :value="params.assembly"
             data-testid="browser-assembly"
-            @change="router.replace({ path: '/browser', query: { ...$route.query, assembly: ($event.target as HTMLSelectElement).value } })"
+            @change="selectAssembly(($event.target as HTMLSelectElement).value)"
           >
             <option v-for="name in SOYBEAN_CHROMOSOMES" :key="name" :value="name">{{ name }}</option>
           </select>

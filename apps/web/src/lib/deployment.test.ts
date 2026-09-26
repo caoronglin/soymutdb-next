@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveFeatureFlag, resolveInitialReleaseId, resolveJbrowseBaseUrl } from "./deployment";
+import {
+  resolveFeatureFlag,
+  resolveInitialReleaseId,
+  resolveJbrowseBaseUrl,
+  resolveJbrowseOrigin,
+} from "./deployment";
 
 describe("release pin", () => {
   it("trims the release id and treats empty as unpinned", () => {
@@ -22,6 +27,33 @@ describe("resolveJbrowseBaseUrl", () => {
   it("falls back to the same-origin /jbrowse path", () => {
     expect(resolveJbrowseBaseUrl(undefined)).toBe("/jbrowse");
     expect(resolveJbrowseBaseUrl("   ")).toBe("/jbrowse");
+  });
+});
+
+describe("resolveJbrowseOrigin", () => {
+  it("uses the configured absolute origin and ignores the portal", () => {
+    expect(resolveJbrowseOrigin("https://jbrowse.example.org/", "https://portal.example.org")).toBe(
+      "https://jbrowse.example.org",
+    );
+    expect(
+      resolveJbrowseOrigin("https://jbrowse.example.org/soymutdb-next/", "https://portal.example.org"),
+    ).toBe("https://jbrowse.example.org");
+  });
+
+  it("resolves a same-origin /jbrowse path against the portal origin", () => {
+    expect(resolveJbrowseOrigin("/jbrowse/", "https://portal.example.org")).toBe(
+      "https://portal.example.org",
+    );
+    expect(resolveJbrowseOrigin(undefined, "https://portal.example.org")).toBe(
+      "https://portal.example.org",
+    );
+  });
+
+  it("does not invent an origin without a document to resolve against", () => {
+    expect(resolveJbrowseOrigin("/jbrowse", "")).toBe("");
+    expect(resolveJbrowseOrigin("https://jbrowse.example.org", "")).toBe(
+      "https://jbrowse.example.org",
+    );
   });
 });
 
