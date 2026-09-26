@@ -2,8 +2,12 @@
   <div class="genome-browser" :data-assembly-key="props.assemblyKey" :data-ref-name="props.refName">
     <div class="genome-browser__ruler" data-testid="genome-ruler">
       <span class="genome-browser__ruler-label">{{ props.refName }}</span>
+      <TrackRuler v-if="props.region" :region="props.region" :width-px="props.widthPx" />
     </div>
     <div class="genome-browser__tracks" data-testid="genome-tracks">
+      <p v-if="resolvedTracks.length === 0" class="genome-browser__empty">
+        {{ props.emptyLabel }}
+      </p>
       <TrackErrorBoundary
         v-for="entry in resolvedTracks"
         :key="entry.track.trackId"
@@ -25,13 +29,22 @@
 import { computed } from "vue";
 import type { TrackConfig } from "@soymutdb/genome-data";
 import { resolveTrackRenderer, type TrackRendererDescriptor } from "../registry";
+import type { RulerRegion } from "../ruler";
 import TrackErrorBoundary from "./TrackErrorBoundary.vue";
+import TrackRuler from "./TrackRuler.vue";
 
-const props = defineProps<{
-  assemblyKey: string;
-  refName: string;
-  tracks: TrackConfig[];
-}>();
+const props = withDefaults(
+  defineProps<{
+    assemblyKey: string;
+    refName: string;
+    tracks: TrackConfig[];
+    /** Optional viewport window; when present the ruler draws ticks. */
+    region?: RulerRegion;
+    widthPx?: number;
+    emptyLabel?: string;
+  }>(),
+  { widthPx: 800, emptyLabel: "No tracks available" },
+);
 
 interface ResolvedTrack {
   track: TrackConfig;
@@ -59,3 +72,52 @@ const resolvedTracks = computed<ResolvedTrack[]>(() => {
   return resolved;
 });
 </script>
+
+<style scoped>
+.genome-browser {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+  border: 1px solid var(--border, oklch(0.905 0.02 148));
+  border-radius: var(--radius-lg, 0.875rem);
+  background: var(--background, #fff);
+  overflow: hidden;
+}
+.genome-browser__ruler {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 1.75rem;
+  padding-inline: 0.75rem;
+  border-block-end: 1px solid var(--border, oklch(0.905 0.02 148));
+  background: var(--muted, oklch(0.968 0.012 148));
+  color: var(--muted-foreground, oklch(0.48 0.028 152));
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.75rem;
+}
+.genome-browser__ruler-label {
+  flex: none;
+  font-weight: 600;
+}
+.genome-browser__tracks {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  min-block-size: 6rem;
+}
+.genome-browser__empty {
+  margin: 0;
+  padding: 1.5rem;
+  text-align: center;
+  color: var(--muted-foreground, oklch(0.48 0.028 152));
+  font-size: 0.875rem;
+}
+.genome-browser__track {
+  display: block;
+  border: 1px solid var(--border, oklch(0.905 0.02 148));
+  border-radius: var(--radius-md, 0.625rem);
+  overflow: hidden;
+}
+</style>
