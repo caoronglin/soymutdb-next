@@ -132,3 +132,15 @@ HEAD `7bf002a29`；149 项未提交改动 + 41 untracked 保留未动。环境�
 - **未完成（本轮尝试失败）**: 重算 lockfile 以清除 `@tanstack/charts` 的可选 React peer（react/react-dom/react-is，35 行）。离线重算被 pnpm 自校验平台二进制阻断；在线重算（registry 200 可达）在提权审批等待中超过 wall-clock。命令：在可联网环境执行 `pnpm install`（建议先加 `autoInstallPeers: false`）后 `pnpm install --frozen-lockfile`。
 - **仍缺的守卫**: `packages/motion/motion-policy-contract.test.mjs` 随包删除，其「禁 gsap/lenis」不变量未替代。
 
+
+## [21:35] 完成: 4 个收尾子代理全部合并
+
+- **bf7aa7b62** 恢复 motion 守卫 + 文档对账（Agent 3）：`scripts/test_motion_policy.py` 接入 smoke contracts；`applications.md` 14→15 路由、`/imports` 行；`plan.md` 追加 2026-09-26 更正。
+- **5e06276c4** Vue JBrowse E2E（Agent 4）：`e2e/tests/jbrowse-browser.spec.ts` + `playwright-jbrowse.config.ts`；离线真实运行 **4 passed / 1 skipped**。
+- **0ec59f674** 浏览器收尾（Agent 2）：`AssemblyRefNameLoader` 从 .fai 填充完整 `refNames`；基因 ID 搜索（API 优先 + assembly-scoped Trix）；LocusSearch 状态反馈。genome-data **98**、genome-view **73**、jbrowse **33** tests。
+- **a6b8c1353** 管理端路由对等（Agent 1）：9 条 legacy 路由 → 真实/显式不可用；新增 `StaticPagesView`/`ContentLegacyMigrationView`/`AnalyticsSettingsView`、`adminContentApi`/`getAdminAnalyticsSummary`；admin **63**、api-client **129** tests；visible-i18n OK；locale parity OK。
+
+- **合并后全量复核**：smoke contracts **PASS**；admin-content-architecture / web-query-keys / page-registry 均 OK；admin build OK；第一方 React import 0。
+- **功能矩阵**：`docs/dev/vue-migration-feature-gaps.md` 更新为 global 62 implemented / 1 documented-unavailable / 0 missing / 9 retired / 6 待复核；admin 功能路由 15→19。
+- **仍未完成**：lockfile 的 `@tanstack/charts` 可选 React peer（需提权 pnpm install）；live 部署态验证（CSS/CSP/SW/子路径、P0-06b Kind、P1-08 CI E2E、G10/G12）；BigWig/BigBed 离线 fixture；AlignmentsTrack；真实 Dashboard 指标/新闻预览回收站。
+
