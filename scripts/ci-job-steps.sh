@@ -459,6 +459,17 @@ clickhouse_migration_run() {
   export SOYMUTDB_CLICKHOUSE_DATABASE=soymutdb
   export CLICKHOUSE_MIGRATION_PYTHON="${CLICKHOUSE_MIGRATION_PYTHON:-python}"
 
+  # The migration script and its assertions import `clickhouse_connect`, but the
+  # job image (python:3.14) does not ship it. Provision it in this SHARED body
+  # so CNB and GitHub get the same dependency: the GitHub job used to
+  # `pip install` it inline while CNB did not, which is exactly how CNB reached
+  # "clickhouse-connect is required for ClickHouse migration" while GitHub
+  # passed.
+  if ! "${CLICKHOUSE_MIGRATION_PYTHON}" -c "import clickhouse_connect" >/dev/null 2>&1; then
+    "${CLICKHOUSE_MIGRATION_PYTHON}" -m pip install --quiet --disable-pip-version-check \
+      "clickhouse-connect>=0.8.0"
+  fi
+
   bash "${REPO_ROOT}/deploy/scripts/migrate-ch-fixture.sh"
   bash "${REPO_ROOT}/deploy/scripts/migrate-clickhouse.sh"
   python "${REPO_ROOT}/scripts/assert-clickhouse-migration.py"

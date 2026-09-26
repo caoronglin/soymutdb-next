@@ -25,8 +25,9 @@
 # Contract (asserted by scripts/test_dockerfile_contracts.py)
 #   * WORKDIR is /app/apps/api, which is where `alembic.ini` lives, so the
 #     Compose command `alembic upgrade head` works without `-c`.
-#   * `packages/jobs-py` is COPYed before `uv sync`: apps/api depends on
-#     `soymutdb-jobs` by path, so a sync without it cannot resolve the lockfile.
+#   * `packages/jobs-py` and `packages/import-protocol` are COPYed before
+#     `uv sync`: apps/api depends on both by path, so a sync without them cannot
+#     resolve the lockfile.
 #   * No `COPY` may be added after the last `uv sync --frozen` — a late copy that
 #     adds dependencies would produce an image whose venv disagrees with the
 #     lockfile (see scripts/check-dockerfile-copy.sh).
@@ -49,10 +50,11 @@ COPY --from=ghcr.io/astral-sh/uv:0.11.33 /uv /usr/local/bin/uv
 
 WORKDIR /app
 
-# The job contract lives in a separate workspace package that apps/api depends
-# on by path; it must be present before `uv sync` resolves the lockfile.
+# The workspace packages apps/api depends on by path must be present before
+# `uv sync` resolves the lockfile.
 COPY apps/api/pyproject.toml apps/api/uv.lock ./apps/api/
 COPY packages/jobs-py ./packages/jobs-py
+COPY packages/import-protocol ./packages/import-protocol
 
 RUN UV_PROJECT_ENVIRONMENT=/opt/venv uv sync --frozen --no-dev --no-install-project \
       --project apps/api

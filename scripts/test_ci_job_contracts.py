@@ -2391,6 +2391,34 @@ class DeliveryArchitectureTests(unittest.TestCase):
             "compose-acceptance does not supply placeholders for: " + ", ".join(missing),
         )
 
+    def test_clickhouse_migration_provisions_its_python_dependency(self) -> None:
+        """CNB and GitHub must install clickhouse-connect the same way.
+
+        The GitHub job used to `pip install clickhouse-connect` inline while the
+        CNB job did not, so only CNB reached:
+
+          clickhouse-connect is required for ClickHouse migration
+
+        The install now lives in the shared body so both providers provision the
+        same dependency, and the workflow no longer inlines it.
+        """
+        jobs = (ROOT / "scripts/ci-job-steps.sh").read_text(encoding="utf-8")
+        self.assertIn("clickhouse_migration_run()", jobs)
+        body = jobs.split("clickhouse_migration_run()", 1)[1].split("\n}", 1)[0]
+        self.assertIn("clickhouse_connect", body, "the migration body must check for the client")
+        self.assertIn(
+            "pip install",
+            body,
+            "the migration body must install clickhouse-connect when it is missing",
+        )
+
+        ci = _workflow_text("ci.yml")
+        self.assertNotIn(
+            "pip install --quiet clickhouse-connect",
+            ci,
+            "the dependency belongs in the shared script, not inlined in the workflow",
+        )
+
     def test_setup_workspace_declares_helpers_before_it_calls_them(self) -> None:
         """Step 0 runs before any helper declared below it.
 

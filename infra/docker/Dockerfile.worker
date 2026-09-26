@@ -26,6 +26,7 @@ WORKDIR /app
 
 COPY apps/worker/pyproject.toml apps/worker/uv.lock ./apps/worker/
 COPY packages/jobs-py ./packages/jobs-py
+COPY packages/import-protocol ./packages/import-protocol
 
 # ONE resolution for the whole third-party dependency graph. The layer order is
 # what makes that true: only the manifests are copied yet, so a source-only

@@ -234,6 +234,47 @@ def test_migrate_clickhouse_dockerfile_is_not_a_second_worker() -> None:
     assert "/opt/venv" in text
 
 
+def test_images_copy_every_workspace_path_dependency_before_sync() -> None:
+    """A workspace path dependency must exist before `uv sync --frozen`.
+
+    `apps/api` and `apps/worker` resolve `soymutdb-jobs` and
+    `soymutdb-import-protocol` from the workspace by path. A Dockerfile that
+    copies only some of them fails the sync with:
+
+        error: Failed to determine installation plan
+          Caused by: Distribution not found at: file:///app/packages/<name>
+
+    which is how the image build broke after `import-protocol` was added to the
+    API/worker dependencies but never to the Docker build context.
+    """
+    pairs = (
+        (
+            "apps/api/uv.lock",
+            ("infra/docker/Dockerfile.api", "infra/docker/Dockerfile.migrate"),
+        ),
+        ("apps/worker/uv.lock", ("infra/docker/Dockerfile.worker",)),
+    )
+    for lock_path, dockerfiles in pairs:
+        lock = (ROOT / lock_path).read_text(encoding="utf-8")
+        packages = sorted(
+            set(re.findall(r'directory = "(?:\.\./)+packages/([a-z0-9-]+)"', lock))
+        )
+        assert packages, f"{lock_path} declares no workspace path dependencies"
+        for dockerfile in dockerfiles:
+            text = _instructions((ROOT / dockerfile).read_text(encoding="utf-8"))
+            sync = text.index("uv sync --frozen")
+            for name in packages:
+                needle = f"COPY packages/{name} ./packages/{name}"
+                assert needle in text, (
+                    f"{dockerfile} does not COPY packages/{name}; `uv sync --frozen` "
+                    "cannot resolve the lockfile without it"
+                )
+                assert text.index(needle) < sync, (
+                    f"{dockerfile} COPYs packages/{name} after `uv sync --frozen`; "
+                    "the venv would be built without it"
+                )
+
+
 def test_local_build_override_discards_the_release_image_requirement() -> None:
     compose = load_compose(COMPOSE)
     services = compose["services"]

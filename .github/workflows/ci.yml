@@ -558,11 +558,10 @@ jobs:
         with:
           python-version: "3.14"
 
-      - name: Install ClickHouse client
-        run: python -m pip install --quiet clickhouse-connect
-
       # Real ClickHouse server, legacy fixture, canonical-state assertions and
-      # the idempotence re-run — all in one shared script.
+      # the idempotence re-run — all in one shared script. The script also
+      # provisions its Python dependency (clickhouse-connect) so CNB and GitHub
+      # install the same thing instead of one inlining it here.
       - name: Migrate the legacy ClickHouse fixture (scripts/ci-job-steps.sh)
         run: bash scripts/ci-job-steps.sh run clickhouse-migration
 
