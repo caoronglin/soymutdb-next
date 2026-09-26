@@ -5,6 +5,7 @@ import { GenomeDataError } from "./errors";
 import { createTrackDataSource } from "./factory";
 import { localLocation, uriLocation } from "./location";
 import type { TrackConfig } from "./types";
+import { AlignmentReader } from "./readers/alignment";
 import { FeatureReader } from "./readers/feature";
 import { IntervalFeatureReader } from "./readers/interval";
 import { QuantitativeReader } from "./readers/quantitative";
@@ -158,13 +159,66 @@ describe("createTrackDataSource", () => {
     }
   });
 
-  it("rejects AlignmentsTrack as not implemented yet", () => {
+  it("builds an AlignmentsTrack source for a BamAdapter and reads alignments", async () => {
+    const source = createTrackDataSource(
+      track({
+        type: "AlignmentsTrack",
+        adapter: {
+          type: "BamAdapter",
+          bamLocation: "memory://alignment.bam",
+          index: { indexType: "BAI", location: { uri: "memory://alignment.bam.bai" } },
+        },
+      }),
+      options(fixtureProvider(["alignment.bam", "alignment.bam.bai"])),
+    );
+    expect(source.kind).toBe("alignment");
+    expect(source.trackId).toBe("track");
+    expect(source.assemblyKey).toBe("v5.0");
+    if (source.kind !== "alignment") throw new Error("unreachable");
+    expect(source.reader).toBeInstanceOf(AlignmentReader);
+    const records = await source.reader.getAlignments({
+      assemblyKey: "v5.0",
+      refName: "chr01",
+      start: 0,
+      end: 60,
+    });
+    expect(records.map((record) => record.readName)).toEqual(["r1", "r2", "r3"]);
+  });
+
+  it("rejects an AlignmentsTrack with a non-Bam adapter", () => {
     try {
-      createTrackDataSource(track({ type: "AlignmentsTrack" }), options());
+      createTrackDataSource(
+        track({
+          type: "AlignmentsTrack",
+          adapter: { type: "CramAdapter", cramLocation: "memory://alignment.cram" },
+        }),
+        options(),
+      );
       throw new Error("expected createTrackDataSource to throw");
     } catch (error) {
       expect(error).toBeInstanceOf(GenomeDataError);
       expect((error as GenomeDataError).code).toBe("unsupported-type");
+    }
+  });
+
+  it("rejects an AlignmentsTrack bound to an unknown assembly", () => {
+    try {
+      createTrackDataSource(
+        track({
+          type: "AlignmentsTrack",
+          assemblyNames: ["v4.0"],
+          adapter: {
+            type: "BamAdapter",
+            bamLocation: "memory://alignment.bam",
+            index: "memory://alignment.bam.bai",
+          },
+        }),
+        options(),
+      );
+      throw new Error("expected createTrackDataSource to throw");
+    } catch (error) {
+      expect(error).toBeInstanceOf(GenomeDataError);
+      expect((error as GenomeDataError).code).toBe("assembly-mismatch");
     }
   });
 

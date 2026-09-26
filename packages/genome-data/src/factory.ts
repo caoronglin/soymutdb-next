@@ -2,6 +2,7 @@ import type { AssemblyContext } from "./assembly";
 import { GenomeDataError } from "./errors";
 import type { FileProvider } from "./file-provider";
 import { localLocation, uriLocation, type GenomeLocation } from "./location";
+import { AlignmentReader } from "./readers/alignment";
 import { FeatureReader } from "./readers/feature";
 import { IntervalFeatureReader } from "./readers/interval";
 import { QuantitativeReader } from "./readers/quantitative";
@@ -27,7 +28,8 @@ export type TrackDataSource =
   | (TrackDataSourceBase & { readonly kind: "variant"; readonly reader: VariantReader })
   | (TrackDataSourceBase & { readonly kind: "feature"; readonly reader: FeatureReader })
   | (TrackDataSourceBase & { readonly kind: "interval"; readonly reader: IntervalFeatureReader })
-  | (TrackDataSourceBase & { readonly kind: "quantitative"; readonly reader: QuantitativeReader });
+  | (TrackDataSourceBase & { readonly kind: "quantitative"; readonly reader: QuantitativeReader })
+  | (TrackDataSourceBase & { readonly kind: "alignment"; readonly reader: AlignmentReader });
 
 export type TrackDataSourceKind = TrackDataSource["kind"];
 
@@ -197,11 +199,21 @@ export function createTrackDataSource(
         }),
       };
     }
-    case "AlignmentsTrack":
-      throw unsupported(
-        track.trackId,
-        "AlignmentsTrack is not implemented yet (track \"" + track.trackId + "\")",
-      );
+    case "AlignmentsTrack": {
+      const adapter = readAdapter(track);
+      requireAdapterType(track, adapter, ["BamAdapter"]);
+      return {
+        ...base,
+        kind: "alignment",
+        reader: new AlignmentReader({
+          provider: options.provider,
+          assembly,
+          trackId: track.trackId,
+          bam: requireLocation(adapter, "bamLocation", track.trackId),
+          index: requireLocation(adapter, "index", track.trackId),
+        }),
+      };
+    }
     default:
       throw unsupported(
         track.trackId,

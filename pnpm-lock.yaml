@@ -205,6 +205,9 @@ catalogs:
       specifier: 5.3.1
       version: 5.3.1
   genomics:
+    '@gmod/bam':
+      specifier: 4.0.1
+      version: 4.0.1
     '@gmod/bbi':
       specifier: 5.0.0
       version: 5.0.0
@@ -516,6 +519,9 @@ importers:
 
   packages/genome-data:
     dependencies:
+      '@gmod/bam':
+        specifier: catalog:genomics
+        version: 4.0.1
       '@gmod/bbi':
         specifier: catalog:genomics
         version: 5.0.0
@@ -1133,6 +1139,10 @@ packages:
 
   '@gmod/abortable-promise-cache@2.0.1':
     resolution: {integrity: sha512-6PQTJv+uxAb8XE/oL2Uh4EmFJpn65YOTSqGn8HLNXrWRlW1Clp1Oze6biHeRCMonLwEx4oH4bPeyjdcMnNP8pw==}
+
+  '@gmod/bam@4.0.1':
+    resolution: {integrity: sha512-qwSLfXMaB3w8y5xlF20LWdqBJUbE1ul1qvViLGtZ/Q4jIOPGuTFsRV9h/1M6wcbUpRnaTHsY91Idrj7iLRxpHw==}
+    engines: {node: '>=6'}
 
   '@gmod/bbi@5.0.0':
     resolution: {integrity: sha512-hfgvHmyyiHmc8mGx8xysumurzkN8DgcEH2HCn2zouBJG7tzcOYzF/3x5NeBG4aIuPRHAoeP7Vkm57+tWnqfVsA==}
@@ -2106,6 +2116,9 @@ packages:
     resolution: {integrity: sha512-BLrgEcRTwX2o6gGxGOCNyMvGSp35YofuYzw9h1IMTRmKqttAZZVU67bdb9Pr2vUHA8+j3i2tJfjO6C6+4myGTA==}
     engines: {node: 18 || 20 || >=22}
 
+  base64-js@1.5.1:
+    resolution: {integrity: sha512-AKpaYlHn8t4SVbOHCy+b5+KKgvR4vrsD8vbvrbiQJps7fKDTkjkDry6ji0rUJjC0kzbNePLwzxq8iypo41qeWA==}
+
   baseline-browser-mapping@2.11.26:
     resolution: {integrity: sha512-GLQdD3y6UF8iVuMJl5fHgE4jdn/ua7n+toKfLgNlg3BqQtOZjpy68T8Tup8/wGWZCDlm7KMg7tPb4MPn7oN0TQ==}
     engines: {node: '>=6.0.0'}
@@ -2128,6 +2141,9 @@ packages:
     resolution: {integrity: sha512-AUdjuRyCNGUYtqpqfTmWyM4fXay8yIQhmLnvYe/THMGfT9B/34X7xQd3ifKxwyNPPpowVBjLb+64BN9Rn1mizw==}
     engines: {node: ^6 || ^7 || ^8 || ^9 || ^10 || ^11 || ^12 || >=13.7}
     hasBin: true
+
+  buffer@6.0.3:
+    resolution: {integrity: sha512-FTiCpNxtwiZZHEZbcbTIcZjERVICn9yq/pDFkTl95/AxzD1naBctN7YO68riM/gLSDY7sdrMby8hofADYuuqOA==}
 
   cac@6.7.14:
     resolution: {integrity: sha512-b6Ilus+c3RrdDk+JhLKUAQfzzgLEPy6wcXqS7f/xe1EETvsDP6GORG7SFuOs6cID5YkqchW/LXZbX5bc8j7ZcQ==}
@@ -2187,6 +2203,15 @@ packages:
 
   config-chain@1.1.13:
     resolution: {integrity: sha512-qj+f8APARXHrM0hraqXYb2/bOVSV4PvJQlNZ/DVj0QrmNM2q2euizkeuVckQ57J+W0mRH6Hvi+k50M4Jul2VRQ==}
+
+  crc@4.3.2:
+    resolution: {integrity: sha512-uGDHf4KLLh2zsHa8D8hIQ1H/HtFQhyHrc0uhHBcoKGol/Xnb+MPYfUMw7cvON6ze/GUESTudKayDcJC5HnJv1A==}
+    engines: {node: '>=12'}
+    peerDependencies:
+      buffer: '>=6.0.3'
+    peerDependenciesMeta:
+      buffer:
+        optional: true
 
   cross-spawn@7.0.6:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
@@ -2663,6 +2688,9 @@ packages:
     peerDependenciesMeta:
       typescript:
         optional: true
+
+  ieee754@1.2.1:
+    resolution: {integrity: sha512-dcyqhDvX1C46lXZcVqCpK+FtMRQVdIMN6/Df5js2zouUsqG7I6sFxitIC+7KYK29KdXOLHdu9zL4sFnoVQnqaA==}
 
   ignore@5.3.2:
     resolution: {integrity: sha512-hsBTNUqQTDwkWtcdYI2i06Y/nUBEsNEDJKjWdigLvegy8kDuJAS8uRlpkkcQpyEXL0Z/pjDy5HBmMjRCJ2gq+g==}
@@ -3972,6 +4000,16 @@ snapshots:
 
   '@gmod/abortable-promise-cache@2.0.1': {}
 
+  '@gmod/bam@4.0.1':
+    dependencies:
+      '@gmod/abortable-promise-cache': 2.0.1
+      '@gmod/bgzf-filehandle': 1.4.4
+      buffer: 6.0.3
+      crc: 4.3.2(buffer@6.0.3)
+      generic-filehandle: 3.4.0
+      long: 4.0.0
+      quick-lru: 4.0.1
+
   '@gmod/bbi@5.0.0':
     dependencies:
       '@gmod/abortable-promise-cache': 2.0.1
@@ -5010,6 +5048,8 @@ snapshots:
 
   balanced-match@4.0.4: {}
 
+  base64-js@1.5.1: {}
+
   baseline-browser-mapping@2.11.26: {}
 
   bidi-js@1.1.0:
@@ -5033,6 +5073,11 @@ snapshots:
       electron-to-chromium: 1.5.439
       node-releases: 2.0.57
       update-browserslist-db: 1.3.3(browserslist@4.29.1)
+
+  buffer@6.0.3:
+    dependencies:
+      base64-js: 1.5.1
+      ieee754: 1.2.1
 
   cac@6.7.14: {}
 
@@ -5095,6 +5140,10 @@ snapshots:
     dependencies:
       ini: 1.3.8
       proto-list: 1.2.4
+
+  crc@4.3.2(buffer@6.0.3):
+    optionalDependencies:
+      buffer: 6.0.3
 
   cross-spawn@7.0.6:
     dependencies:
@@ -5701,6 +5750,8 @@ snapshots:
       '@babel/runtime': 7.29.7
     optionalDependencies:
       typescript: 5.9.3
+
+  ieee754@1.2.1: {}
 
   ignore@5.3.2: {}
 

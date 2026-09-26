@@ -24,6 +24,7 @@ export {
   type FileProvider,
 } from "./file-provider";
 export type {
+  AlignmentRecord,
   FeatureRecord,
   QuantRecord,
   Region,
@@ -48,6 +49,11 @@ export {
   type ReaderErrorCode,
   type ResolvedRegion,
 } from "./readers/common";
+export {
+  AlignmentReader,
+  normalizeBamRecords,
+  type AlignmentReaderOptions,
+} from "./readers/alignment";
 export {
   FeatureReader,
   normalizeGff3Line,

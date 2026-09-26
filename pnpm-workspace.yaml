@@ -78,6 +78,7 @@ catalogs:
   # JBrowse's transitive tree.
   genomics:
     '@gmod/bbi': 5.0.0
+    '@gmod/bam': 4.0.1
     '@gmod/bgzf-filehandle': 1.4.4
     '@gmod/indexedfasta': 2.0.2
     '@gmod/tabix': 1.5.6

@@ -47,6 +47,17 @@ export interface SequenceChunk {
   readonly bases: string;
 }
 
+export interface AlignmentRecord extends Region {
+  readonly id: string;
+  readonly readName: string;
+  readonly read: string;
+  readonly strand: "+" | "-";
+  readonly cigar?: string;
+  readonly mapq?: number;
+  readonly templateLength?: number;
+  readonly flags?: number;
+}
+
 /** A backend track definition (a superset of the JBrowse config shape). */
 export interface TrackConfig {
   readonly trackId: string;

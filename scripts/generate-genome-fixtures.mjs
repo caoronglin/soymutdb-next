@@ -8,11 +8,29 @@
 //   features.gff3[.gz / .gz.tbi]    tabix GFF3
 //   genes.ix / genes.ixx            Trix text search
 //   chrom.sizes                     plain text reference sizes
+//   alignment.sam                   SAM source of the committed alignment.bam
 //
-// LIMITATION: BigWig (.bw) and BigBed (.bb) have no offline writer in this repo
-// (only the @gmod/bbi readers are installed), so no binary BigWig/BigBed fixture
-// is produced. The quantitative and interval readers are covered by unit tests
-// of their normalizers plus fetch-failure wrapping; see src/readers/*.test.ts.
+// alignment.bam / alignment.bam.bai are committed binaries. Rebuild them from
+// the emitted SAM with samtools 1.24, run from this fixtures directory:
+//
+//   samtools view -b -o alignment.bam alignment.sam
+//   samtools index alignment.bam
+//
+// The @PG line in the BAM header records that exact command, so samtools 1.24
+// reproduces the committed alignment.bam/.bai byte for byte.
+//
+// gc_content.bw is a committed BigWig fixture (chr01:0-20 = 0.4,
+// chr01:20-40 = 0.6) produced with pyBigWig. This dependency-free script does
+// not rewrite it (no offline BigWig writer in Node); the source is:
+//
+//   import pyBigWig
+//   bw = pyBigWig.open("gc_content.bw", "w")
+//   bw.addHeader([("chr01", 60), ("chr02", 40)])
+//   bw.addEntries("chr01", [0, 20], ends=[20, 40], values=[0.4, 0.6])
+//   bw.close()
+//
+// LIMITATION: BigBed (.bb) has no offline writer in this repo (only the
+// @gmod/bbi readers are installed), so no binary BigBed fixture is produced.
 //
 // Run: node scripts/generate-genome-fixtures.mjs
 
@@ -275,14 +293,33 @@ function generateTrix() {
   write("genes.ixx", "a" + "0000000000" + "\n");
 }
 
+// SAM source for alignment.bam: four 5M reads with Phred-40 qualities. It is
+// written so the committed BAM stays reproducible with samtools (see header).
+const ALIGNMENT_SAM = [
+  "@HD\tVN:1.6\tSO:coordinate",
+  "@SQ\tSN:chr01\tLN:60",
+  "@SQ\tSN:chr02\tLN:40",
+  "r1\t0\tchr01\t1\t60\t5M\t*\t0\t0\tACGTA\tIIIII",
+  "r2\t0\tchr01\t10\t60\t5M\t*\t0\t0\tTTTTT\tIIIII",
+  "r3\t16\tchr01\t20\t60\t5M\t*\t0\t0\tCCCCC\tIIIII",
+  "r4\t0\tchr02\t5\t60\t5M\t*\t0\t0\tGGGGG\tIIIII",
+].join("\n") + "\n";
+
+function generateAlignment() {
+  write("alignment.sam", ALIGNMENT_SAM);
+}
+
 function main() {
   mkdirSync(OUT, { recursive: true });
   generateFasta();
   generateVcf();
   generateGff();
   generateTrix();
+  generateAlignment();
   process.stdout.write("genome fixtures written to " + OUT + "\n");
-  process.stdout.write("note: BigWig/BigBed fixtures are not generated (no offline writer)\n");
+  process.stdout.write(
+    "note: rebuild alignment.bam/.bai with samtools and gc_content.bw with pyBigWig (see header)\n",
+  );
 }
 
 main();

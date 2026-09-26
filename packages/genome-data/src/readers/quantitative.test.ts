@@ -10,12 +10,14 @@ const assembly: AssemblyContext = {
   refNames: ["chr01"],
 };
 
-function makeReader(provider = fixtureProvider([])): QuantitativeReader {
+const FIXTURE_NAMES = ["gc_content.bw"];
+
+function makeReader(provider = fixtureProvider(FIXTURE_NAMES)): QuantitativeReader {
   return new QuantitativeReader({
     provider,
     assembly,
     trackId: "coverage",
-    bigWig: fixtureLocation("coverage.bw"),
+    bigWig: fixtureLocation("gc_content.bw"),
   });
 }
 
@@ -37,6 +39,47 @@ describe("normalizeQuantFeatures", () => {
 });
 
 describe("QuantitativeReader", () => {
+  // Real BigWig bytes: gc_content.bw holds chr01:0-20 = 0.4 and
+  // chr01:20-40 = 0.6 (float32 on disk, hence the tolerance below).
+  it("reads the two gc_content.bw intervals end to end", async () => {
+    const records = await makeReader().getQuantitative({
+      assemblyKey: "v5.0",
+      refName: "chr01",
+      start: 0,
+      end: 60,
+    });
+    expect(records).toHaveLength(2);
+    expect(records.map((record) => [record.start, record.end])).toEqual([
+      [0, 20],
+      [20, 40],
+    ]);
+    expect(records[0]).toMatchObject({
+      assemblyKey: "v5.0",
+      refName: "chr01",
+      start: 0,
+      end: 20,
+    });
+    expect(records[1]).toMatchObject({
+      assemblyKey: "v5.0",
+      refName: "chr01",
+      start: 20,
+      end: 40,
+    });
+    expect(records[0].score).toBeCloseTo(0.4, 6);
+    expect(records[1].score).toBeCloseTo(0.6, 6);
+  });
+
+  it("filters spans to the queried window", async () => {
+    const records = await makeReader().getQuantitative({
+      assemblyKey: "v5.0",
+      refName: "chr01",
+      start: 0,
+      end: 20,
+    });
+    expect(records.map((record) => [record.start, record.end])).toEqual([[0, 20]]);
+    expect(records[0].score).toBeCloseTo(0.4, 6);
+  });
+
   it("rejects a cross-assembly region", async () => {
     await expect(
       makeReader().getQuantitative({ assemblyKey: "v4.0", refName: "chr01", start: 0, end: 10 }),
@@ -64,13 +107,9 @@ describe("QuantitativeReader", () => {
     ).rejects.toMatchObject({ code: "fetch" });
   });
 
-  // No offline BigWig writer exists in this repo, so the fixture directory has
-  // no .bw file. A garbage payload still exercises BigWig header parsing and
-  // the reader error mapping; byte-exact span assertions live in
-  // normalizeQuantFeatures above.
   it("maps an undecodable BigWig payload to a parse error", async () => {
     const provider = fixtureProvider([]);
-    provider.add(fixtureLocation("coverage.bw"), "not a bigwig file");
+    provider.add(fixtureLocation("gc_content.bw"), "not a bigwig file");
     await expect(
       makeReader(provider).getQuantitative({
         assemblyKey: "v5.0",
