@@ -19,6 +19,10 @@
           :track="entry.track"
           :assembly-key="props.assemblyKey"
           :ref-name="props.refName"
+          :region="props.region"
+          :width-px="props.widthPx"
+          :provider="props.provider"
+          :assemblies="props.assemblies"
         />
       </TrackErrorBoundary>
     </div>
@@ -27,7 +31,7 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
-import type { TrackConfig } from "@soymutdb/genome-data";
+import type { AssemblyContext, FileProvider, TrackConfig } from "@soymutdb/genome-data";
 import { resolveTrackRenderer, type TrackRendererDescriptor } from "../registry";
 import type { RulerRegion } from "../ruler";
 import TrackErrorBoundary from "./TrackErrorBoundary.vue";
@@ -42,6 +46,8 @@ const props = withDefaults(
     region?: RulerRegion;
     widthPx?: number;
     emptyLabel?: string;
+    provider?: FileProvider;
+    assemblies?: readonly AssemblyContext[];
   }>(),
   { widthPx: 800, emptyLabel: "No tracks available" },
 );
