@@ -162,3 +162,43 @@ HEAD `7bf002a29`；149 项未提交改动 + 41 untracked 保留未动。环境�
 - **并行注意**: 另一 worker 正在写 `apps/api/tests/test_ablation_*`、`apps/web/src/ablation/`、`docs/dev/ablation/2026-09-26/`（mtime 21:58–22:13，引用 HEAD 8e78116fd）。这些不是本会话产出，保持 untracked、未纳入提交。
 - **仍缺**: live 部署态验证（CSS/CSP/SW/子路径、P0-06b Kind、P1-08 CI E2E、G10/G12）；BigWig/BigBed 离线 fixture；AlignmentsTrack；真实 Dashboard 指标/新闻预览回收站。
 
+
+## [22:20] 全项目消融实验战役（协调者 + 6 子代理 @ nwafu/DeepSeek-V4.1-Flash）
+
+**产出**：`docs/dev/ablation/2026-09-26/`（PLAN.md + README.md 汇总 + 6 份分报告），51 场景 → GUARD-ACTIVE 43 / GUARD-INERT 5 / GAP 6。
+
+**6 个 GAP（全部 P1，均有复现命令）**：
+1. ASM-04 跨版本 crosswalk 未接线 — `apps/api/app/services/search_service.py:28` 未 import `GeneCrosswalk`，`MatchType.CROSS_VERSION` 零生产者；增删 crosswalk 行搜索结果无差异。
+2. UI-02 internal 双 id 前端缺失 — `packages/api-client/src/search.ts:5-17`、`apps/web/src/views/SearchView.vue:290-302`；后端契约已在 `generated/openapi.d.ts`。
+3. 联邦搜索缓存键缺 release/assembly/site_variant — `apps/api/app/search/cache.py:26-34`，调用点 `search/aggregator.py:69`、`api/v1/search.py:183`。
+4. E2E 无实体详情页 spec。
+5. E2E JBrowse 深链无条件 `test.skip` — `e2e/tests/genes.spec.ts:55`。
+6. E2E 内部站无 config/spec — 挂 internal 制品跑公开套件 8 failed/1 passed（`No route for /soymutdb-next/login`，internal base 为 `/`）。
+
+**INERT/覆盖缺口**：external/index.html 缺失不被拦；哨兵集合过窄（`internal.soymutdb.invalid` 可放行）；空目录名哨兵不查；`not.toContain("internal_id")` 弱断言。
+
+**协调者证据**：契约锚点 36 passed（abl_coord）；W1 13 passed；W2 6 passed + GAP 支 1 failed；W3 47+9 passed；W4 18 passed；W5 harness 4/4 GUARD-ACTIVE + CH DDL 12 passed/1 skipped；W6 双站扫描 exit 0 + isolation 单测 6 OK。生产源码零持久改动。
+
+**复现基础设施**：PostgreSQL 16 后台作业 @127.0.0.1:55432（每个工作流独立库 abl_<domain>）；`.validation/ablation/` 下为 scratch harness 与日志；pnpm 在沙箱需 `PNPM_HOME/XDG_*` 指向工作区（`.validation/ablation/artifact/pnpmenv.sh`）。
+
+## [22:36] Vue 迁移收尾：对齐/文档/E2E/搜索完整性 + 独立复核（协调者 + 10 子代理 @ nwafu/DeepSeek-V4.1-Flash）
+
+**提交（10）**：
+- `0fae5ceb6` genome-data BAM 对齐读取器 + 真实 BAM/BAI/BigWig fixture
+- `64631e6d0` 文档对齐 Vue-only（门户 35 路由 / 管理端 19 功能路由；motion、i18n 记为已移除）
+- `202ae7f92` e2e：admin console + portal embed
+- `4959405d1` web：门户 JBrowse iframe 桥加固（canonical origin、ready 握手、双 id 卫生）
+- `5b32032aa` admin：真实 Dashboard 指标 + 新闻双语预览/软删回收站 + i18n（含 browser.chromosome）
+- `11cc6de91` genome-view：BAM 对齐端到端渲染 + jbrowse BamAdapter 轨道（默认不加载）
+- `2836aa4de` e2e：实体详情、JBrowse 深链真实断言、内部站 config/spec
+- `362e7a30b` web：搜索双身份按站点变体渲染（public_id/internal_id）
+- `f5a144f6a` api：搜索缓存键绑定完整生物作用域 + cross_version 链接
+- `df16b12c3` genome-data：reader open 缓存失败后可重试（OpenCache）
+
+**验证**：全量第一方测试 **698 passed**（web 147、admin 82、api-client 137、genome-data 121、genome-view 80、gvm 23、shared 49、charts 2、query-keys 10、ui-vue 4、i18n-core 7、jbrowse node:test 36）；第一方 React import 0、manifest `react` 0。依赖治理 **16/16 passed** —— 必须 `source .validation/ablation/artifact/pnpmenv.sh` 并设 `VITE_API_BASE_URL` 及 `UV_CACHE_DIR`/`UV_TOOL_DIR`/`UV_TOOL_BIN_DIR`/`UV_PYTHON_INSTALL_DIR` 指向工作区，否则 knip/deptry/pip-audit 因 `~/.cache`、`~/.local/share/uv` 只读而误报失败。
+
+**重要发现并修复**：全部 reader 曾用 `??=` 缓存 open promise，open 失败被永久缓存，导致 TrackRenderer 的 Retry 对“文件缺失/不可达”永远无效；`OpenCache` 在拒绝时仅在 `pending` 仍指向同一 promise 时清空，8 处缓存点全部替换并逐 reader 加重试测试。
+
+**并发**：另一 workstream（消融/优化）同时改 `packages/api-client/src/search.ts`、`apps/api/app/{search,services}`、`apps/web/src/ablation/**`、`scripts/*isolation*`、`docs/dev/ablation/**`。已协调让本会话子代理让出 api-client 搜索文件；其已完成且经 tsc/测试验证的部分随 `362e7a30b`/`f5a144f6a` 带入。该 stream 在提交后仍在继续修改上述区域。
+
+**仍缺/未验证**：live 部署态验证（CSS/CSP/SW/子路径、P0-06b、P1-08 CI E2E、G10/G12）；实体详情/内部站的 live 双 origin 断言；SearchView 到 `internalSearch` 的运行时接线（搜索仍走公开 `/search`，internal_id 暂无数据来源）；BigBed 离线 fixture（interval 重试测试内嵌 906B bigBed 绕过）。
