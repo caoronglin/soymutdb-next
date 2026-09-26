@@ -200,7 +200,7 @@ cd e2e && npx playwright test -c playwright-public.config.ts
 
 ### 交互前的就绪等待（重要）
 
-web 制品是 **replacement-render SPA**：构建期 SSG 标记是惰性的，React 首次提交
+web 制品是 **replacement-render SPA**：构建期 SSG 标记是惰性的，Vue 首次提交
 （handoff）后才可交互。`src/main.tsx` 在 `<html>` 上以 `data-app-ready` 通告该边界。
 
 因此任何交互前必须等待就绪，否则点击会落在静态回退上并被静默丢弃。用

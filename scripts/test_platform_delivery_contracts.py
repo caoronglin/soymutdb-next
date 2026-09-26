@@ -303,7 +303,11 @@ def test_legacy_shared_ui_package_is_not_copied_into_ci_images() -> None:
         "infra/docker/Dockerfile.admin",
     ):
         source = (ROOT / dockerfile).read_text(encoding="utf-8")
-        assert "packages/ui" not in source, dockerfile
+        # Match the retired React package path (packages/ui/...), not the
+        # current Vue design-system facade (packages/ui-vue/...).
+        assert "packages/ui/" not in source, (
+            f"{dockerfile} must not copy the retired packages/ui into the image"
+        )
 
 
 def test_production_compose_has_explicit_capability_profiles() -> None:

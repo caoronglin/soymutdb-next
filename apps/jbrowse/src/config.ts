@@ -92,13 +92,6 @@ export const SUPPORTED_TRACK_TYPES = [
     "AlignmentsTrack",
 ] as const;
 
-/** Track category identifiers. */
-export type TrackCategory =
-    | "reference"
-    | "variant"
-    | "annotation"
-    | "quantitative";
-
 /** Base URL for JBrowse data files. */
 const JBROWSE_DATA_URL =
     (import.meta.env?.VITE_JBROWSE_DATA_URL as string | undefined) ??
@@ -280,14 +273,6 @@ export const ALL_TRACKS: JBrowseTrack[] = [
 /** Default tracks shown on initial load. */
 export const DEFAULT_TRACKS = ["reference_sequence", "gene_models", "variants_v4"];
 
-/** Track categories for the selector UI. */
-export const TRACK_CATEGORIES: Array<{ id: TrackCategory; label: string }> = [
-    { id: "reference", label: "Reference" },
-    { id: "annotation", label: "Annotations" },
-    { id: "variant", label: "Variants" },
-    { id: "quantitative", label: "Quantitative" },
-];
-
 /** Trix text-search adapter for gene lookup. */
 export function buildTrixAdapter(assemblyName: string): TrixSearchAdapter {
     return {
@@ -377,53 +362,7 @@ export function buildJBrowseConfig(
 }
 
 /** Build a JBrowse theme object matching the SoyMutDB green scientific theme. */
-export function buildJBrowseTheme(mode: "light" | "dark") {
-    return {
-        palette: {
-            mode,
-            primary: {
-                main: mode === "light" ? "#2f7d32" : "#6bb867",
-            },
-            secondary: {
-                main: mode === "light" ? "#4e9b4a" : "#8cc987",
-            },
-            background: {
-                default: mode === "light" ? "#fdfdfb" : "#1a1f1a",
-                paper: mode === "light" ? "#ffffff" : "#222822",
-            },
-            text: {
-                primary: mode === "light" ? "#1a2b1a" : "#f0f4f0",
-                secondary: mode === "light" ? "#5a6b5a" : "#a8b8a8",
-            },
-            divider: mode === "light" ? "#e0e5e0" : "#3a4a3a",
-        },
-        typography: {
-            fontFamily: "Inter, 'Noto Sans SC', ui-sans-serif, system-ui, sans-serif",
-            fontSize: 13,
-        },
-        shape: {
-            borderRadius: 6,
-        },
-    };
-}
-
 /** Helper to create a URI location object. */
 function uri(path: string): { uri: string; locationType: "UriLocation" } {
     return { uri: path, locationType: "UriLocation" };
 }
-
-export default {
-    DEFAULT_ASSEMBLY,
-    ALL_TRACKS,
-    DEFAULT_TRACKS,
-    TRACK_CATEGORIES,
-    REFERENCE_TRACK,
-    VARIANT_TRACKS,
-    ANNOTATION_TRACKS,
-    QUANTITATIVE_TRACKS,
-    SUPPORTED_TRACK_TYPES,
-    buildJBrowseConfig,
-    buildJBrowseTheme,
-    buildTrixAdapter,
-    validateTrackTypes,
-};

@@ -1,9 +1,5 @@
 import { registerTrackRenderer, resolveTrackRenderer } from "./registry";
 import TrackRenderer from "./components/TrackRenderer.vue";
-import FeatureTrack from "./components/FeatureTrack.vue";
-import QuantitativeTrack from "./components/QuantitativeTrack.vue";
-import SequenceTrack from "./components/SequenceTrack.vue";
-import VariantTrack from "./components/VariantTrack.vue";
 
 /**
  * Bind the backend track types to their Vue renderers.
@@ -24,6 +20,3 @@ export function registerDefaultTrackRenderers(): void {
     }
   }
 }
-
-/** Presentation-only renderers, exported for hosts that fetch records themselves. */
-export const trackRenderers = { SequenceTrack, FeatureTrack, VariantTrack, QuantitativeTrack };
