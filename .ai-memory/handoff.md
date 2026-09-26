@@ -153,3 +153,12 @@ HEAD `7bf002a29`；149 项未提交改动 + 41 untracked 保留未动。环境�
 - **验证**: `pnpm install --frozen-lockfile` OK；smoke contracts PASS；根 eslint 全仓 sweep 0 error；逐包测试全绿——web 120、admin 63、jbrowse 33、api-client 129、shared 49、genome-data 98、genome-view 73、genome-view-model 23、charts 2、query-keys 10、ui-vue 4、i18n-core 7（合计约 711）。
 - **提交**: 5808f0391。
 
+
+## [22:15] 完成: 依赖治理审计 16/16（含线上重算 lockfile）
+
+- **清除 React peer（联网）**: `pnpm-workspace.yaml` 加 `autoInstallPeers: false`，后台提权作业联网重算 lockfile（42.5s）→ `react`/`react-dom`/`react-is` 从安装图与 node_modules 移除（提交 5808f0391）。副作用：根 dev 工具在 semver 内升级（eslint 10.11 / turbo 2.11.4 / globals 17.12 / typescript-eslint 8.70.1）。
+- **审计首轮失败 → 修复**: knip 报 3 个未用直接依赖；pnpm dedupe 检查失败；`genome-view-model` 存在 `index.ts ↔ viewport.ts` 循环（我引入）。修复：错误类抽到 `errors.ts` 破环；删除 `genome-view` 的 `@soymutdb/genome-view-model`、`genome-data` 的 `@gmod/bgzf-filehandle`（经 indexedfasta 传递）、`apps/jbrowse` 的 `@vue/test-utils`；`pnpm dedupe`。
+- **验证**: `dependency governance: passed` **16/16**（knip、deptry×3、duplicate-versions、cycles×4、licenses×4、audit×4）；genome-view 73、genome-data 98、jbrowse 33 tests + tsc 干净；smoke contracts PASS。提交 177d36ccc。
+- **并行注意**: 另一 worker 正在写 `apps/api/tests/test_ablation_*`、`apps/web/src/ablation/`、`docs/dev/ablation/2026-09-26/`（mtime 21:58–22:13，引用 HEAD 8e78116fd）。这些不是本会话产出，保持 untracked、未纳入提交。
+- **仍缺**: live 部署态验证（CSS/CSP/SW/子路径、P0-06b Kind、P1-08 CI E2E、G10/G12）；BigWig/BigBed 离线 fixture；AlignmentsTrack；真实 Dashboard 指标/新闻预览回收站。
+
