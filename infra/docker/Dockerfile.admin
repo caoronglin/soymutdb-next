@@ -16,7 +16,7 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* turbo.json ./
 COPY apps/admin/package.json ./apps/admin/
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/api-client/package.json ./packages/api-client/
-COPY packages/i18n/package.json ./packages/i18n/
+COPY packages/i18n-core/package.json ./packages/i18n-core/
 
 RUN pnpm install --frozen-lockfile
 

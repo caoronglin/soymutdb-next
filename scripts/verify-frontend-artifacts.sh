@@ -38,8 +38,8 @@ step "i18n locale key parity"
 # marker and passes everything after it verbatim, so `-- --self-test` reached the
 # script as a literal ["--", "--self-test"]: `node` then tried to open a file
 # named "--" (observed on a real CNB build). Pass the flag alone.
-pnpm --filter @soymutdb/i18n check:locale-keys --self-test
-pnpm --filter @soymutdb/i18n check:locale-keys
+pnpm --filter @soymutdb/i18n-core check:locale-keys --self-test
+pnpm --filter @soymutdb/i18n-core check:locale-keys
 
 step "Build workspace packages and the single-tree apps (admin, jbrowse)"
 # The portal is built once per site variant below; a third build through a

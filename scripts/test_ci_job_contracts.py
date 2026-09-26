@@ -1050,7 +1050,7 @@ class DeliveryArchitectureTests(unittest.TestCase):
 
         On a real CNB build the frontend gate ran
 
-            pnpm --filter @soymutdb/i18n check:locale-keys -- --self-test
+            pnpm --filter @soymutdb/i18n-core check:locale-keys -- --self-test
 
         which executed `node check-locale-keys.mjs -- --self-test` and failed
         with `ENOENT: no such file or directory, open '--'`. The symptom points
@@ -1092,16 +1092,16 @@ class DeliveryArchitectureTests(unittest.TestCase):
         """
         gate = (ROOT / "scripts/verify-frontend-artifacts.sh").read_text(encoding="utf-8")
         self.assertIn(
-            "pnpm --filter @soymutdb/i18n check:locale-keys --self-test",
+            "pnpm --filter @soymutdb/i18n-core check:locale-keys --self-test",
             gate,
             "the locale parity gate must run the checker's self-test",
         )
 
-        checker = (ROOT / "packages/i18n/check-locale-keys.mjs").read_text(encoding="utf-8")
+        checker = (ROOT / "packages/i18n-core/check-locale-keys.mjs").read_text(encoding="utf-8")
         self.assertIn('args[0] === "--self-test"', checker)
 
         manifest = json.loads(
-            (ROOT / "packages/i18n/package.json").read_text(encoding="utf-8")
+            (ROOT / "packages/i18n-core/package.json").read_text(encoding="utf-8")
         )
         self.assertIn("check:locale-keys", manifest.get("scripts", {}))
 
@@ -1109,7 +1109,7 @@ class DeliveryArchitectureTests(unittest.TestCase):
         for args in (["--self-test"], []):
             completed = subprocess.run(
                 ["node", "check-locale-keys.mjs", *args],
-                cwd=ROOT / "packages/i18n",
+                cwd=ROOT / "packages/i18n-core",
                 capture_output=True,
                 text=True,
                 check=False,
@@ -1127,7 +1127,7 @@ class DeliveryArchitectureTests(unittest.TestCase):
         # false green this regression exists to prevent.
         completed = subprocess.run(
             ["node", "check-locale-keys.mjs", "--", "--self-test"],
-            cwd=ROOT / "packages/i18n",
+            cwd=ROOT / "packages/i18n-core",
             capture_output=True,
             text=True,
             check=False,

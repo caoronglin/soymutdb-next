@@ -41,11 +41,8 @@ RELEASE_SERVICES = {
     "migrate-clickhouse",
 }
 PLATFORM_CATALOG = {
-    "react": "19.2.0",
-    "react-dom": "19.2.0",
     "typescript": "5.9.3",
     "vite": "6.4.3",
-    "antd": "6.6.1",
     # Vue mainline (plan.md §2, Phase D): the migrated portal consumes these
     # through the same reviewed catalog decision as the React platform.
     "vue": "3.5.43",
@@ -182,15 +179,26 @@ def test_frontend_platform_lines_remain_bounded() -> None:
     workspace = yaml.safe_load((ROOT / "pnpm-workspace.yaml").read_text(encoding="utf-8"))
 
     assert root_package["devDependencies"]["typescript"].startswith("^5.9.")
-    assert workspace["overrides"]["react"] == "19.2.0"
-    assert workspace["overrides"]["react-dom"] == "19.2.0"
+    # React is fully retired: no catalog entry, no override, no app dependency.
+    assert "react" not in workspace.get("overrides", {})
+    assert "react-dom" not in workspace.get("overrides", {})
+    assert "react" not in workspace["catalog"]
+    assert "react-dom" not in workspace["catalog"]
 
-    for app in ("jbrowse",):
-        package = _json(f"apps/{app}/package.json")
-        assert package["dependencies"]["react"].startswith("^19.2.")
-        assert package["dependencies"]["react-dom"].startswith("^19.2.")
-        assert package["devDependencies"]["typescript"].startswith("^5.9.")
-        assert package["devDependencies"]["vite"].startswith("^6.")
+    jbrowse = _json("apps/jbrowse/package.json")
+    for dependency in (
+        "react",
+        "react-dom",
+        "react-i18next",
+        "@jbrowse/react-linear-genome-view",
+        "@jbrowse/core",
+    ):
+        assert dependency not in jbrowse["dependencies"], (
+            f"apps/jbrowse still depends on {dependency}: the shell is Vue-only"
+        )
+    assert jbrowse["dependencies"]["vue"] == "catalog:"
+    assert jbrowse["devDependencies"]["typescript"].startswith("^5.9.")
+    assert jbrowse["devDependencies"]["vite"].startswith("^6.")
 
     # The admin console is Vue now: the React line is bounded only where a React
     # app actually ships (JBrowse).

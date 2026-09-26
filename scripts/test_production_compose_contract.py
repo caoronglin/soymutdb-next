@@ -198,7 +198,7 @@ def test_dockerignore_excludes_generated_output_without_hiding_sources() -> None
         "packages/shared/package.json",
         "packages/shared/src/index.ts",
         "packages/api-client/package.json",
-        "packages/i18n/package.json",
+        "packages/i18n-core/package.json",
         "infra/docker/precompress.sh",
         "infra/docker/web-nginx.conf",
         "package.json",

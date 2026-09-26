@@ -841,16 +841,6 @@ def test_root_scripts_and_knip_configuration_are_executable_contracts() -> None:
     assert "**/dist/**" in knip["ignore"]
 
 
-def test_i18n_workspace_unifies_react_and_react_dom_runtime() -> None:
-    package = json.loads(
-        (ROOT / "packages/i18n/package.json").read_text(encoding="utf-8")
-    )
-    assert package["dependencies"]["react"] == "19.2.0"
-    assert package["dependencies"]["react-dom"] == "19.2.0"
-    lockfile = (ROOT / "pnpm-lock.yaml").read_text(encoding="utf-8")
-    assert "react-dom@19.2.8(react@19.2.0)" not in lockfile
-
-
 def test_evidence_is_generated_and_uploaded_before_image_builds() -> None:
     """Governance evidence must exist before any image is built or published."""
     job_text = _cnb_pipeline("verify")
