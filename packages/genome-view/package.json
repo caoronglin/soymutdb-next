@@ -23,7 +23,6 @@
   },
   "dependencies": {
     "@soymutdb/genome-data": "workspace:*",
-    "@soymutdb/genome-view-model": "workspace:*",
     "vue": "catalog:"
   },
   "devDependencies": {

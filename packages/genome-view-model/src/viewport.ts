@@ -7,7 +7,7 @@
  *
  * Pure functions, zero dependencies.
  */
-import { InvalidCoordinateError } from "./index";
+import { InvalidCoordinateError } from "./errors";
 
 export interface Viewport {
   assemblyKey: string;

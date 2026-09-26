@@ -23,7 +23,6 @@
   },
   "dependencies": {
     "@gmod/bbi": "catalog:genomics",
-    "@gmod/bgzf-filehandle": "catalog:genomics",
     "@gmod/indexedfasta": "catalog:genomics",
     "@gmod/tabix": "catalog:genomics",
     "@gmod/trix": "catalog:genomics",
