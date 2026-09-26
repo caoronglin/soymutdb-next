@@ -936,6 +936,12 @@ e2e 尚未按新页面（analytics/compare/admin）扩充规格，仍是上一�
 本轮目标：把 Vue portal 推到“路线齐全”，同时交付运营要求的**可配置表格**与**多物种实例登记**；
 React portal 仍为当前 canonical，尚未切换也未删除（Phase 7 前置未完成）。
 
+> **订正（2026-09-26，追加而非改写历史）：** “React portal 仍为当前 canonical” 是本段
+> 当时的状态，已被后续提交推翻。本文件 `11.1 目录与 canonical 切换` 记录 `apps/web-vue` →
+> `apps/web`，Vue portal 占据 canonical 路径、React portal（约 32k 行）已删除；`12.2 Phase 5 ·
+> Vue Admin` 记录 admin 也切换为 Vue。`255`、`974` 行的同类表述同理失效。当前状态以 §11/§12
+> 为准，证据：`apps/web/src/App.vue` + `apps/web/src/router/routes.ts`（Vue 路由表）。
+
 ### 10.1 测试环境恢复（前轮阻塞解除）
 
 - 本机 pnpm **12.5.1** 可用，`pnpm install --frozen-lockfile --offline` 通过；前端依赖链完整。

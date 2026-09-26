@@ -23,7 +23,7 @@
 - 品牌快照运行时更新页眉、文档标题与 favicon；读取失败保留构建期默认。
   **构建期把品牌写入静态 HTML/manifest：计划中。**
 
-## 管理端 `apps/admin`（14 条路由）
+## 管理端 `apps/admin`（15 条路由）
 
 路由定义：`apps/admin/src/router/index.ts`。
 
@@ -32,7 +32,7 @@
 | `/login` | 独立登录卡片，根路径/子路径回跳 | 已实现 |
 | `/` | Dashboard（真实指标；React 版扩展指标） | 已实现（关键指标） |
 | `/releases` | 发布版本与来源 | 已实现 |
-| `/imports` | 导入列表与创建 | 已实现；导入详情/进度增强: 计划中 |
+| `/imports`、`/imports/new`、`/imports/:taskId` | 导入列表、创建与任务详情 | 已实现；进度增强: 计划中（`ImportCreateView.vue`、`ImportDetailView.vue`；`apps/admin/src/router/index.ts:34-35`） |
 | `/table-templates` | 可配置表格列模板 | 已实现 |
 | `/publications` | 文献管理 | 已实现 |
 | `/news` | 新闻双语编辑；预览/回收站 | 部分（列表/编辑已实现，预览/回收站计划中） |
@@ -43,17 +43,20 @@
 | `/settings` | 版本化设置编辑器 + 设置历史 | 已实现（历史回滚 UI 计划中） |
 | `/settings/brand` | 外网/内网双语品牌与图标 | 已实现 |
 
-React 基线（`2004c25c6`）的旧深链采用两种明确处理（`apps/admin/src/router/index.ts`）：
+React 基线（`2004c25c6`）的旧深链采用两种明确处理（`apps/admin/src/router/index.ts`）；
+其中 `/imports/new`、`/imports/:taskId` 已是独立视图（`ImportCreateView.vue`、
+`ImportDetailView.vue`，见 `router/index.ts:34-35`），不属于以下两类：
 
 - **重定向到已恢复的等价入口**：
   `/settings/site → /settings/brand`；`/settings/security → /settings?section=security`；
   `/news/new → /news?new=1`；`/news/trash → /news?status=archived`；`/news/:id → /news?edit=<id>`。
   `SettingsView` 支持 `?section=`，`NewsAdminView` 支持 `?status=`/`?edit=`/`?new=`。
-- **尚未恢复的工作流**：`/page-builder*`、`/content*`、`/resource-catalog`、`/widgets*`、
-  `/layout`、`/widget-preview`、`/widget-health`、`/analytics-settings`、`/imports/new`、
-  `/imports/:taskId`、`/settings/{legacy,appearance,integrations,localization,advanced}`
-  落到 `LegacyUnavailableView`：写明请求路径、标记「计划中」、不读写任何数据，并提供已恢复入口。
-  禁止用空页面或无说明 404 代替（`legacy-routes.test.ts` 锁定该策略）。
+- **落到 `LegacyUnavailableView`**：写明请求路径、不读写任何数据，并提供已恢复入口；
+  禁止用空页面或无说明 404 代替（`legacy-routes.test.ts` 锁定该策略）。其中：
+  - **有意退役（ADR-0009）**：`/page-builder*`、`/content/pages`、`/widgets*`、`/layout`、
+    `/widget-preview`、`/widget-health`。
+  - **尚未恢复（标记「计划中」）**：`/content`、`/content/legacy`、`/resource-catalog`、
+    `/analytics-settings`、`/settings/{legacy,appearance,integrations,localization,advanced}`。
 
 ## 语言
 
