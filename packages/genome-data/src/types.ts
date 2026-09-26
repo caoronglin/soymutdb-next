@@ -35,6 +35,8 @@ export interface VariantRecord extends Region {
 }
 
 export interface QuantRecord extends Region {
+  /** Optional stable id; consumers synthesize one from the interval when absent. */
+  readonly id?: string;
   readonly score: number;
 }
 

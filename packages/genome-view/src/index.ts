@@ -19,4 +19,5 @@ export { default as TrackErrorBoundary } from "./components/TrackErrorBoundary.v
 export { default as TrackRuler } from "./components/TrackRuler.vue";
 export { default as TrackSelector } from "./components/TrackSelector.vue";
 export { default as LocusSearch } from "./components/LocusSearch.vue";
-export { default as FeatureTrack } from "./components/FeatureTrack.vue";
+export { default as FeatureTrack } from "./components/FeatureTrack.vue";export { default as VariantTrack } from "./components/VariantTrack.vue";
+export { default as QuantitativeTrack } from "./components/QuantitativeTrack.vue";
