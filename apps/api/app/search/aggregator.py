@@ -10,12 +10,14 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Iterable
+from collections.abc import Iterable, Mapping
+from typing import Any
 
 import httpx
 import structlog
 from redis.asyncio import Redis
 
+from ..core.site_variant import SiteVariant
 from .adapters import BaseAdapter, EBIAdapter, EnsemblAdapter, NCBIAdapter, UniProtAdapter
 from .cache import SearchCache
 from .models import (
@@ -36,10 +38,25 @@ AGGREGATE_TIMEOUT = 8.0
 class ExternalSearchAggregator:
     """Run parallel external searches and aggregate normalized results."""
 
-    def __init__(self, redis: Redis, shared_http_client: httpx.AsyncClient | None = None) -> None:
+    def __init__(
+        self,
+        redis: Redis,
+        shared_http_client: httpx.AsyncClient | None = None,
+        *,
+        site_variant: SiteVariant = SiteVariant.EXTERNAL,
+        release_id: int | None = None,
+        assembly_id: int | None = None,
+        filters: Mapping[str, Any] | None = None,
+    ) -> None:
         self._redis = redis
         self._cache = SearchCache(redis)
         self._shared_client = shared_http_client
+        # Biological scope of every cache entry this aggregator reads/writes.
+        # It is supplied by the API call site, never inferred here.
+        self._site_variant = site_variant
+        self._release_id = release_id
+        self._assembly_id = assembly_id
+        self._filters = dict(filters or {})
         self._adapters: dict[SearchSource, BaseAdapter] = {
             SearchSource.NCBI: NCBIAdapter(redis),
             SearchSource.UNIPROT: UniProtAdapter(redis),
@@ -65,8 +82,17 @@ class ExternalSearchAggregator:
         requested = [s for s in self.available_sources() if s in requested]
 
         # Cache lookup (HTML / JSON is cached separately by the caller; here
-        # we cache the normalized response structure).
-        cache_key = SearchCache.make_key(query, tuple(s.value for s in requested))
+        # we cache the normalized response structure).  The key carries the
+        # full biological scope plus the per-source limit, so neither a
+        # different release/assembly/site nor a different limit can reuse it.
+        cache_key = SearchCache.make_key(
+            query,
+            tuple(s.value for s in requested),
+            site_variant=self._site_variant,
+            release_id=self._release_id,
+            assembly_id=self._assembly_id,
+            filters={**self._filters, "limit_per_source": limit_per_source},
+        )
         cached = None
         if use_cache:
             cached = await self._cache.get_json(cache_key)

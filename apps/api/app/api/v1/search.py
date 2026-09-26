@@ -117,6 +117,30 @@ def _external_json_payload(response: ExternalSearchResponse) -> dict:
     }
 
 
+def _external_html_cache_key(
+    query: str,
+    sources: list[SearchSource],
+    *,
+    assembly_id: int | None,
+    limit_per_source: int,
+) -> str:
+    """Scope the federated HTML-fragment cache like the structured cache.
+
+    The external site variant is fixed for this route; the requested assembly
+    and the per-source result limit are part of the scope.  Federated
+    providers are release-independent, so no release id is available at this
+    call site and the key intentionally hashes it as null rather than
+    inventing one.
+    """
+    return SearchCache.make_key(
+        query,
+        tuple(source.value for source in sources),
+        site_variant=SiteVariant.EXTERNAL,
+        assembly_id=assembly_id,
+        filters={"limit_per_source": limit_per_source},
+    )
+
+
 # --------------------------------------------------------------------- JSON
 @router.get(
     "",
@@ -150,7 +174,11 @@ async def global_search(
             if not await FeatureFlagService.is_enabled(db, "search.external"):
                 raise HTTPException(status_code=503, detail="External search is currently disabled")
             selected_sources = _parse_sources(sources)
-            aggregator = ExternalSearchAggregator(get_redis())
+            aggregator = ExternalSearchAggregator(
+                get_redis(),
+                site_variant=SiteVariant.EXTERNAL,
+                assembly_id=assembly_id,
+            )
             ext_resp = await aggregator.search(
                 q,
                 sources=selected_sources,
@@ -177,10 +205,20 @@ async def global_search(
     per_source_limit = max(3, min(10, limit))
 
     redis = get_redis()
-    aggregator = ExternalSearchAggregator(redis)
+    aggregator = ExternalSearchAggregator(
+        redis,
+        site_variant=SiteVariant.EXTERNAL,
+        assembly_id=assembly_id,
+    )
 
-    # Cache-key for the rendered HTML fragment.
-    cache_key = SearchCache.make_key(q, tuple(s.value for s in selected_sources))
+    # Cache-key for the rendered HTML fragment.  It shares the aggregator's
+    # biological scope (site variant, assembly, query, sources, limit).
+    cache_key = _external_html_cache_key(
+        q,
+        selected_sources,
+        assembly_id=assembly_id,
+        limit_per_source=per_source_limit,
+    )
     cache = SearchCache(redis)
 
     # Try a cached HTML fragment first (separate from the structured cache

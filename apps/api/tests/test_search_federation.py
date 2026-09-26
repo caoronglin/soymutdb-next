@@ -36,7 +36,7 @@ async def test_external_json_preserves_source_degradation(monkeypatch):
     aggregator.search.return_value = response
     monkeypatch.setattr(
         "app.api.v1.search.ExternalSearchAggregator",
-        lambda redis: aggregator,
+        lambda redis, **scope: aggregator,
     )
     monkeypatch.setattr("app.api.v1.search.get_redis", lambda: object())
     db = AsyncMock()

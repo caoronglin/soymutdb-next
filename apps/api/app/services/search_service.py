@@ -20,14 +20,16 @@ from urllib.parse import quote, urlencode
 
 from sqlalchemy import and_, case, desc, func, literal, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from ..core.exceptions import ValidationError
 from ..core.public_ids import normalize_public_id
 from ..core.site_variant import SiteVariant
 from ..models.content import Publication
-from ..models.genomic import Assembly, Gene, GeneAlias
+from ..models.genomic import Assembly, Gene, GeneAlias, GeneCrosswalk
 from ..models.variant import MutantLine
 from ..schemas.search import (
+    CrossVersionLink,
     GlobalSearchResponse,
     InternalGeneSearchItem,
     InternalMutantSearchItem,
@@ -368,6 +370,14 @@ class SearchService:
             "types": [result_type.value for result_type in active_types],
             "cursor": cursor,
             "limit": limit,
+            # Defence in depth (cache-site.md I2): with the internal bypass
+            # below in force, INTERNAL never reaches the shared store, so this
+            # field is currently unreachable for internal callers. It is kept
+            # deliberately: the moment the bypass is removed (or another
+            # caller routes INTERNAL through get_or_set) an omitted
+            # site_variant would silently let internal and external reuse one
+            # cache entry. Pinned by
+            # tests/test_opt_crossversion_links.py::test_opt02_*.
             "site_variant": site_variant.value,
             "release_id": release_id,
             "assembly_id": assembly_id,
@@ -523,6 +533,16 @@ class SearchService:
             hits.sort(key=lambda hit: hit.score, reverse=True)
             hits = hits[:limit]
             visible_ids = {id(hit) for hit in hits}
+            # Cross-version links are metadata on the matched gene item, not
+            # extra rows: the page/total_count above are already final.
+            gene_pks = [
+                int(hit.metadata["gene_pk"])
+                for hit in hits
+                if hit.type == SearchResultType.GENE and hit.metadata.get("gene_pk") is not None
+            ]
+            cross_version_by_gene = await self._resolve_cross_version_links(
+                db, gene_pks, release_id=release_id
+            )
             has_more = False
             for source_name, (page_hits, source_has_more) in source_pages.items():
                 source = SearchResultType(source_name)
@@ -562,6 +582,9 @@ class SearchService:
                         release_id=hit.metadata.get("release_id"),
                         assembly_id=hit.metadata.get("assembly_id"),
                         assembly=hit.metadata.get("assembly"),
+                        cross_version=cross_version_by_gene.get(
+                            hit.metadata.get("gene_pk"), []
+                        ),
                     )
                     for hit in hits
                 ],
@@ -767,6 +790,7 @@ class SearchService:
                     match_type=match_type,
                     metadata={
                         "biotype": row.biotype,
+                        "gene_pk": int(row.gene_pk),
                         "release_id": release_id,
                         "assembly_id": row.assembly_id,
                         "assembly": " ".join(
@@ -794,6 +818,87 @@ class SearchService:
                 )
             )
         return hits
+
+    async def _resolve_cross_version_links(
+        self,
+        db: AsyncSession,
+        gene_pks: list[int],
+        *,
+        release_id: int,
+    ) -> dict[int, list[CrossVersionLink]]:
+        """Resolve explicit cross-assembly links for the matched genes.
+
+        One batched query (no N+1) over ``gene_crosswalks`` in BOTH
+        directions: a row is relevant whether the matched gene is its source
+        or its target. Rows scoped to a different release are skipped;
+        ``release_id IS NULL`` means "generic, every release". The linked
+        gene's assembly is joined purely for display metadata, never to
+        infer equivalence.
+        """
+        if not gene_pks:
+            return {}
+        matched = set(gene_pks)
+        source_gene = aliased(Gene)
+        target_gene = aliased(Gene)
+        source_assembly = aliased(Assembly)
+        target_assembly = aliased(Assembly)
+        stmt = (
+            select(
+                GeneCrosswalk.source_gene_id,
+                GeneCrosswalk.target_gene_id,
+                GeneCrosswalk.relation_type,
+                GeneCrosswalk.provenance_source,
+                source_gene.accession.label("source_accession"),
+                source_gene.assembly_id.label("source_assembly_id"),
+                source_assembly.name.label("source_assembly_name"),
+                source_assembly.version.label("source_assembly_version"),
+                target_gene.accession.label("target_accession"),
+                target_gene.assembly_id.label("target_assembly_id"),
+                target_assembly.name.label("target_assembly_name"),
+                target_assembly.version.label("target_assembly_version"),
+            )
+            .join(source_gene, source_gene.gene_pk == GeneCrosswalk.source_gene_id)
+            .join(target_gene, target_gene.gene_pk == GeneCrosswalk.target_gene_id)
+            .join(source_assembly, source_assembly.id == source_gene.assembly_id)
+            .join(target_assembly, target_assembly.id == target_gene.assembly_id)
+            .where(
+                or_(
+                    GeneCrosswalk.source_gene_id.in_(matched),
+                    GeneCrosswalk.target_gene_id.in_(matched),
+                ),
+                or_(
+                    GeneCrosswalk.release_id.is_(None),
+                    GeneCrosswalk.release_id == release_id,
+                ),
+            )
+        )
+
+        def as_link(prefix: str, row: Any) -> CrossVersionLink:
+            return CrossVersionLink(
+                gene_accession=getattr(row, f"{prefix}_accession"),
+                assembly_id=getattr(row, f"{prefix}_assembly_id"),
+                assembly_name=getattr(row, f"{prefix}_assembly_name"),
+                assembly_version=getattr(row, f"{prefix}_assembly_version"),
+                relation_type=row.relation_type,
+                provenance_source=row.provenance_source,
+            )
+
+        resolved: dict[int, list[CrossVersionLink]] = {}
+        seen: dict[int, set[tuple[str, str, str]]] = {}
+        for row in (await db.execute(stmt)).all():
+            for matched_pk, other_prefix in (
+                (row.source_gene_id, "target"),
+                (row.target_gene_id, "source"),
+            ):
+                if matched_pk not in matched:
+                    continue
+                link = as_link(other_prefix, row)
+                identity = (link.gene_accession, link.relation_type, link.provenance_source)
+                if identity in seen.setdefault(matched_pk, set()):
+                    continue
+                seen[matched_pk].add(identity)
+                resolved.setdefault(matched_pk, []).append(link)
+        return resolved
 
     async def _gene_assembly_distribution(
         self,

@@ -63,6 +63,26 @@ class SearchSuggestion(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class CrossVersionLink(BaseModel):
+    """An explicit, provenance-bearing cross-assembly relation of a gene hit.
+
+    Attached to the matched gene's result item only; a linked gene never
+    becomes an extra result row (so ``total_count``/pagination are unchanged)
+    and the matched hit keeps its own ``match_type`` (e.g. ``exact``). The
+    relation is only ever read from ``gene_crosswalks``; string similarity
+    alone never produces one. ``match_type`` here is the value that finally
+    gives ``MatchType.CROSS_VERSION`` a producer.
+    """
+
+    gene_accession: str
+    assembly_id: int | None = None
+    assembly_name: str | None = None
+    assembly_version: str | None = None
+    relation_type: str
+    provenance_source: str
+    match_type: MatchType = MatchType.CROSS_VERSION
+
+
 class SearchResultItem(BaseModel):
     """A single global-search hit (stable public contract).
 
@@ -84,6 +104,9 @@ class SearchResultItem(BaseModel):
     # Human-readable assembly label (name + version) for display; the numeric
     # ``assembly_id`` stays the machine key. Never derived from coordinates.
     assembly: str | None = None
+    # Explicit cross-version relations for gene hits (empty for other types
+    # and for genes with no provenance-bearing crosswalk row).
+    cross_version: list[CrossVersionLink] = Field(default_factory=list)
 
 
 class GlobalSearchResponse(BaseModel):
