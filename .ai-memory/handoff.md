@@ -112,3 +112,13 @@ HEAD `7bf002a29`；149 项未提交改动 + 41 untracked 保留未动。环境�
 - @gmod 无离线 BigWig/BigBed writer：二者仅归一化单测，字节级 span 断言需外部生成器。
 - 坐标：genome-data 为 0-based half-open，genome-view-model 为 1-based inclusive，换算只在深链/桥接边界。
 
+
+## [20:45] 完成: 零 React 全线迁移（外壳 + 视觉对等 + 消融 + 退役）
+
+- **jbrowse Vue 外壳**（子代理 6841671c，协调者复跑）：App.vue/AppHeader/AppFooter/Loading/Error + main.ts + i18n.ts；复刻 React 布局与 Tailwind 类；GenomeBrowser + /tracks/jbrowse-config + UriFileProvider；bridge/深链契约保留。提交 aee71825f。
+- **视觉对等**（子代理 7754f972）：10 组件 token 对齐 + docs/dev/genome-view-visual-parity.md。提交 ad92b3678。
+- **消融**（子代理 9b83eb1f）：11 场景 + docs/dev/genome-browser-ablation-report.md；发现 abort 缺陷 → 协调者修复（b608c16db、ffc4e7e1c），现 11 PASS/0 FAIL/0 GAP。
+- **React 退役**（f5250e584）：删除 packages/motion、packages/i18n；jbrowse 仅 vue/genome-* 依赖；移除 React catalog/overrides、eslint-plugin-react-hooks；Dockerfile/CI/治理契约改指 i18n-core。
+- **验证**: pnpm --frozen-lockfile OK；python contracts 125 passed；framework-neutral clean；jbrowse vue-tsc + vite build + 24 node:test；genome-data 87、genome-view 70 tests 全绿。
+- **残留**: pnpm-lock 仍含 @tanstack/charts 的 react/react-dom/react-is 可选 peer 解析（无第一方 import）；干净重算 lockfile 需联网（pnpm 自校验平台二进制），已记录。
+
