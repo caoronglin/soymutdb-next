@@ -14,6 +14,7 @@ export function registerDefaultTrackRenderers(): void {
     "FeatureTrack",
     "VariantTrack",
     "QuantitativeTrack",
+    "AlignmentsTrack",
   ]) {
     if (!resolveTrackRenderer(type)) {
       registerTrackRenderer(type, { component: TrackRenderer });

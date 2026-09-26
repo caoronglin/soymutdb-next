@@ -6,7 +6,7 @@ import { resolveTrackRenderer } from "./registry";
 describe("registerDefaultTrackRenderers", () => {
   it("binds the supported backend track types", () => {
     registerDefaultTrackRenderers();
-    for (const type of ["ReferenceSequenceTrack", "FeatureTrack", "VariantTrack", "QuantitativeTrack"]) {
+    for (const type of ["ReferenceSequenceTrack", "FeatureTrack", "VariantTrack", "QuantitativeTrack", "AlignmentsTrack"]) {
       expect(resolveTrackRenderer(type)?.component).toBeDefined();
     }
   });
