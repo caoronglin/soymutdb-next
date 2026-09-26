@@ -36,6 +36,7 @@ import SraView from "../views/SraView.vue";
 import ToolsView from "../views/ToolsView.vue";
 import VariantsView from "../views/VariantsView.vue";
 import { PORTAL_ROUTES } from "./routes";
+import { isFeatureGated } from "./feature-gating";
 import { isJbrowseEnabled } from "../lib/deployment";
 
 // Public-portal routes (Checkpoint B). Route metadata lives in ./routes.ts so
@@ -80,7 +81,6 @@ const COMPONENTS = {
 } as const;
 
 const jbrowseEnabled = isJbrowseEnabled();
-const JBROWSE_ROUTE_NAMES = new Set(["browser", "gbrowse"]);
 
 export const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -92,10 +92,9 @@ export const router = createRouter({
         // A core-only deployment does not run JBrowse. Its routes stay
         // registered so a shared deep link reaches an explicit explanation
         // instead of a broken iframe or an upstream 502.
-        component:
-          !jbrowseEnabled && JBROWSE_ROUTE_NAMES.has(route.name)
-            ? FeatureUnavailableView
-            : COMPONENTS[route.componentKey],
+        component: isFeatureGated(route.componentKey, jbrowseEnabled)
+          ? FeatureUnavailableView
+          : COMPONENTS[route.componentKey],
         // Spread into a fresh literal: vue-router's RouteMeta is an index
         // signature type, which a named interface does not satisfy directly.
         meta: { ...route.meta },

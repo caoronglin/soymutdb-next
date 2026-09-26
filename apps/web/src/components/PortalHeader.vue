@@ -59,9 +59,9 @@ const NAV_GROUPS: readonly NavigationGroup[] = [
 ];
 
 // A core-only deployment does not run JBrowse: its nav entry is hidden rather
-// than left as a link into a 502. The routes themselves are gated in
-// router/index.ts so a deep link stays reachable and explains why.
-const JBROWSE_ROUTES = ["/browser", "/gbrowse"] as const;
+// than left as a link into a 502. The routes themselves are gated by component
+// key in router/index.ts so a deep link (including /search/gbrowse) explains why.
+const JBROWSE_ROUTES = ["/browser", "/search/gbrowse"] as const;
 const disabledRoutes = new Set<string>(isJbrowseEnabled() ? [] : JBROWSE_ROUTES);
 const navGroups = computed<readonly NavigationGroup[]>(() =>
   NAV_GROUPS.map((group) => ({

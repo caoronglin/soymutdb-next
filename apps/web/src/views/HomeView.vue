@@ -7,6 +7,7 @@ import type { AssemblyInfo, NewsSummary } from "@soymutdb/api-client";
 import { Button, Tag } from "@soymutdb/ui-vue";
 
 import PortalLayout from "../components/PortalLayout.vue";
+import { isJbrowseEnabled } from "../lib/deployment";
 import { currentLanguage, t } from "../lib/i18n";
 import { assembliesQueryOptions, featuredNewsQueryOptions } from "../lib/query-options";
 import { useSiteContextStore } from "../stores/site-context";
@@ -57,6 +58,14 @@ const isAssembliesPending = computed(() => toValue(assembliesQuery.isPending));
 const isAssembliesError = computed(() => toValue(assembliesQuery.isError));
 const isNewsPending = computed(() => toValue(newsQuery.isPending));
 const isNewsError = computed(() => toValue(newsQuery.isError));
+
+// A core-only deployment runs no genome browser: its entry card would link into
+// a route that only explains the feature is absent.
+const taskEntries = computed(() =>
+  isJbrowseEnabled()
+    ? TASK_ENTRIES
+    : TASK_ENTRIES.filter((entry) => entry.testId !== "task-jbrowse"),
+);
 
 function submitSearch() {
   const value = query.value.trim();
@@ -185,7 +194,7 @@ function newsDate(item: NewsSummary): string {
             <p class="mt-1 text-sm text-muted-foreground">{{ t("home.tasksSubtitle") }}</p>
           </div>
           <ul class="grid gap-3 sm:grid-cols-2" data-testid="task-entries">
-            <li v-for="entry in TASK_ENTRIES" :key="entry.to">
+            <li v-for="entry in taskEntries" :key="entry.to">
               <RouterLink
                 :to="entry.to"
                 class="flex min-h-24 flex-col justify-center rounded-lg border border-border bg-card px-4 py-3 outline-none transition-colors hover:border-primary/50 hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring"

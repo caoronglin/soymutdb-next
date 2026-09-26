@@ -136,3 +136,25 @@ describe("HomeView database entry point", () => {
     wrapper.unmount();
   });
 });
+
+describe("HomeView core-only deployment (JBrowse optional)", () => {
+  it("hides the JBrowse entry card when VITE_JBROWSE_ENABLED=0", async () => {
+    vi.stubEnv("VITE_JBROWSE_ENABLED", "0");
+    const { wrapper } = await mountHome();
+
+    expect(wrapper.find('[data-testid="task-jbrowse"]').exists()).toBe(false);
+    expect(wrapper.findAll('[data-testid="task-entries"] > li')).toHaveLength(4);
+    expect(wrapper.find('[data-testid="task-gene-search"]').exists()).toBe(true);
+    vi.unstubAllEnvs();
+    wrapper.unmount();
+  });
+
+  it("keeps the JBrowse entry card by default", async () => {
+    vi.stubEnv("VITE_JBROWSE_ENABLED", "1");
+    const { wrapper } = await mountHome();
+
+    expect(wrapper.find('[data-testid="task-jbrowse"]').exists()).toBe(true);
+    vi.unstubAllEnvs();
+    wrapper.unmount();
+  });
+});
