@@ -2364,6 +2364,33 @@ class DeliveryArchitectureTests(unittest.TestCase):
             "the compose variables must exist before the first compose call",
         )
 
+    def test_image_build_compose_gate_supplies_every_required_variable(self) -> None:
+        """The CI compose gate must interpolate the production file with no .env.
+
+        `docker compose config` resolves every `${VAR:?}` in the file before it
+        selects a profile's services, so the image-build gate aborted before
+        building a single image:
+
+          error while interpolating x-app-env.SOYMUTDB_REDIS_URL:
+            required variable REDIS_PASSWORD is missing a value
+
+        The gate must supply a validation-only placeholder for every required
+        variable; otherwise a new `${VAR:?}` silently breaks the image build.
+        """
+        compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+        required = sorted(set(re.findall(r"\$\{([A-Z0-9_]+):\?", compose)))
+        self.assertTrue(required, "docker-compose.yml declares no required variables")
+
+        jobs = (ROOT / "scripts/ci-job-steps.sh").read_text(encoding="utf-8")
+        self.assertIn("compose_acceptance_run()", jobs)
+        body = jobs.split("compose_acceptance_run()", 1)[1].split("\n}", 1)[0]
+        missing = [name for name in required if name not in body]
+        self.assertEqual(
+            [],
+            missing,
+            "compose-acceptance does not supply placeholders for: " + ", ".join(missing),
+        )
+
     def test_setup_workspace_declares_helpers_before_it_calls_them(self) -> None:
         """Step 0 runs before any helper declared below it.
 

@@ -379,6 +379,39 @@ dependency_governance_run() {
 # compose-acceptance — production Compose profile validation (Docker required)
 # -----------------------------------------------------------------------------
 compose_acceptance_run() {
+  # `docker compose config` interpolates the WHOLE file before it selects the
+  # services a profile enables, so every `${VAR:?}` must resolve even though this
+  # gate never starts anything. CI has release credentials, not deployment
+  # secrets, so fill validation-only placeholders (an explicitly provided value
+  # still wins). Missing them aborted the image build before a single image was
+  # built:
+  #   error while interpolating x-app-env.SOYMUTDB_REDIS_URL:
+  #     required variable REDIS_PASSWORD is missing a value
+  # scripts/test_ci_job_contracts.py asserts this list covers every `${VAR:?}`
+  # in docker-compose.yml, so a new required variable cannot silently break the
+  # image build again.
+  local placeholders=(
+    "API_IMAGE_REF=soymutdb-validation/api:local"
+    "WORKER_IMAGE_REF=soymutdb-validation/worker:local"
+    "MIGRATE_IMAGE_REF=soymutdb-validation/migrate:local"
+    "MIGRATE_CLICKHOUSE_IMAGE_REF=soymutdb-validation/migrate-clickhouse:local"
+    "JBROWSE_IMAGE_REF=soymutdb-validation/jbrowse:local"
+    "MCP_IMAGE_REF=soymutdb-validation/mcp-server:local"
+    "POSTGRES_PASSWORD=ci-validation"
+    "CLICKHOUSE_PASSWORD=ci-validation"
+    "REDIS_PASSWORD=ci-validation"
+    "MINIO_ROOT_USER=ci-validation"
+    "MINIO_ROOT_PASSWORD=ci-validation"
+    "GRAFANA_PASSWORD=ci-validation"
+    "SOYMUTDB_MCP_API_TOKEN=ci-validation"
+  )
+  local entry name
+  for entry in "${placeholders[@]}"; do
+    name="${entry%%=*}"
+    if [[ -z "${!name:-}" ]]; then
+      export "${entry}"
+    fi
+  done
   local profile_sets=(
     "core"
     "core,jbrowse"
