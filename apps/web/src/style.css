@@ -1,44 +1,1054 @@
 @import "tailwindcss";
 
-/* Tailwind v4 needs theme mappings for semantic classes used across the portal. */
-@theme {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-border: var(--border);
-  --color-ring: var(--ring);
+/* ----------------------------------------------------------------------------
+ * Cascade layer order (oracle R1 修正, 2026-08):
+ *   antd, theme, design, base, components, utilities
+ * 必须含 `design` 层——原方案遗漏会导致 widget/header 等 design 层样式被
+ * antd 的未分层 runtime 样式压住。层声明本身也建立了 Tailwind v4 与未来
+ * AntD 主题样式的优先级边界：utilities 最后声明 = 层内最高优先级。
+ * antd 层目前为空（cssinjs 注入的样式未分层，按 CSS 规范未分层样式优先），
+ * 保留该层名以稳定顺序，避免后续引入 @layer antd 内容时顺序漂移。
+ * ------------------------------------------------------------------------- */
+@layer antd, theme, design, base, components, utilities;
+
+/* Web-owned color and surface tokens. Light mode is the default. */
+:root {
+    --radius: 0.625rem;
+    --radius-lg: 0.875rem;
+    --radius-xl: 1.125rem;
+    --background: oklch(0.991 0.004 148);
+    --foreground: oklch(0.195 0.028 152);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.195 0.028 152);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.195 0.028 152);
+    --primary: oklch(0.46 0.13 152);
+    --primary-foreground: oklch(0.988 0.004 148);
+    --primary-glow: oklch(0.46 0.13 152 / 0.35);
+    --primary-gradient-start: oklch(0.52 0.14 150);
+    --primary-gradient-end: oklch(0.40 0.12 154);
+    --secondary: oklch(0.955 0.028 148);
+    --secondary-foreground: oklch(0.29 0.07 152);
+    --muted: oklch(0.968 0.012 148);
+    --muted-foreground: oklch(0.48 0.028 152);
+    --accent: oklch(0.928 0.048 148);
+    --accent-foreground: oklch(0.28 0.075 152);
+    --border: oklch(0.905 0.02 148);
+    --input: oklch(0.905 0.02 148);
+    --ring: oklch(0.55 0.14 152);
+    --destructive: oklch(0.58 0.22 27);
+    --destructive-foreground: oklch(0.988 0.004 148);
+    --chart-1: oklch(0.55 0.14 152);
+    --chart-2: oklch(0.66 0.12 150);
+    --chart-3: oklch(0.76 0.09 148);
+    --chart-4: oklch(0.85 0.06 146);
+    --chart-5: oklch(0.46 0.11 156);
+    --impact-high: oklch(0.58 0.22 27);
+    --impact-moderate: oklch(0.72 0.16 65);
+    --impact-low: oklch(0.60 0.13 240);
+    --impact-modifier: oklch(0.62 0.025 152);
+    --shadow-sm: 0 1px 2px oklch(0.15 0.03 150 / 0.05);
+    --shadow-md: 0 1px 2px oklch(0.15 0.03 150 / 0.04), 0 8px 24px -12px oklch(0.15 0.03 150 / 0.12);
+    --shadow-lg: 0 2px 4px oklch(0.15 0.03 150 / 0.04), 0 12px 32px -12px oklch(0.15 0.03 150 / 0.16);
+    --shadow-glow: 0 0 0 1px var(--primary-glow), 0 8px 32px -8px var(--primary-glow);
+    --code-bg: oklch(0.26 0.015 250);
+    --code-fg: oklch(0.92 0.01 148);
 }
 
-/*
- * SoyMutDB design tokens (shared with @soymutdb/ui-vue via
- * @soymutdb/ui-vue/design-tokens — brandCssVariables). Declared as CSS
- * variables so Tailwind utilities and inline styles agree on the brand hue.
+[data-theme="dark"],
+.dark {
+    --background: oklch(0.155 0.014 152);
+    --foreground: oklch(0.955 0.01 148);
+    --card: oklch(0.195 0.018 152);
+    --card-foreground: oklch(0.955 0.01 148);
+    --popover: oklch(0.215 0.018 152);
+    --popover-foreground: oklch(0.955 0.01 148);
+    --primary: oklch(0.70 0.12 151);
+    --primary-foreground: oklch(0.155 0.014 152);
+    --primary-glow: oklch(0.70 0.12 151 / 0.25);
+    --primary-gradient-start: oklch(0.74 0.12 150);
+    --primary-gradient-end: oklch(0.64 0.11 154);
+    --secondary: oklch(0.26 0.03 152);
+    --secondary-foreground: oklch(0.955 0.01 148);
+    --muted: oklch(0.23 0.018 152);
+    --muted-foreground: oklch(0.68 0.025 152);
+    --accent: oklch(0.29 0.045 151);
+    --accent-foreground: oklch(0.955 0.01 148);
+    --border: oklch(0.30 0.02 152);
+    --input: oklch(0.30 0.02 152);
+    --ring: oklch(0.70 0.12 151);
+    --destructive: oklch(0.62 0.22 27);
+    --destructive-foreground: oklch(0.955 0.01 148);
+    --chart-1: oklch(0.70 0.12 151);
+    --chart-2: oklch(0.74 0.11 150);
+    --chart-3: oklch(0.79 0.09 148);
+    --chart-4: oklch(0.85 0.06 146);
+    --chart-5: oklch(0.62 0.10 156);
+    --impact-high: oklch(0.65 0.22 27);
+    --impact-moderate: oklch(0.78 0.16 65);
+    --impact-low: oklch(0.68 0.13 240);
+    --impact-modifier: oklch(0.70 0.025 152);
+    --shadow-sm: 0 1px 2px oklch(0 0 0 / 0.25);
+    --shadow-md: 0 1px 2px oklch(0 0 0 / 0.20), 0 8px 24px -12px oklch(0 0 0 / 0.45);
+    --shadow-lg: 0 2px 4px oklch(0 0 0 / 0.20), 0 12px 32px -12px oklch(0 0 0 / 0.50);
+    --shadow-glow: 0 0 0 1px var(--primary-glow), 0 8px 32px -8px var(--primary-glow);
+    --code-bg: oklch(0.18 0.012 250);
+    --code-fg: oklch(0.90 0.01 148);
+}
+
+/* NOTE: @fontsource/* 字体 CSS 已移至 src/main.tsx 以 JS import 方式引入。
+   Tailwind v4 postcss 内联 node_modules CSS 时会错误改写其内部
+   url(./files/...) 相对路径（字体文件无法解析、不进入 dist），
+   改为 JS import 后由 Vite 按各 CSS 模块自身路径解析，字体正常打包。 */
+
+/**
+ * SoyMutDB — Design tokens & animation system
+ *
+ * Theme: rich scientific green (plant science), OKLCH color space.
+ * Type scale: display 3.5rem / h1 2.5rem / h2 1.875rem / h3 1.5rem / body 1rem.
+ * Fonts: system CJK stack (display + body), JetBrains Mono (code).
+ * Layout: max-width 1400px, section spacing 6-8rem, hairline borders.
  */
+
+@theme {
+    /* Avoid a multi-megabyte CJK web-font download on the LCP path. */
+    --font-display: system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+    --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
+
+    /* Expose the Web-owned OKLCH tokens to Tailwind utilities. */
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+    --color-popover: var(--popover);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-secondary: var(--secondary);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-border: var(--border);
+    --color-input: var(--input);
+    --color-ring: var(--ring);
+    --color-destructive: var(--destructive);
+    --color-destructive-foreground: var(--destructive-foreground);
+
+    --color-chart-1: var(--chart-1);
+    --color-chart-2: var(--chart-2);
+    --color-chart-3: var(--chart-3);
+    --color-chart-4: var(--chart-4);
+    --color-chart-5: var(--chart-5);
+
+    --color-impact-high: var(--impact-high);
+    --color-impact-moderate: var(--impact-moderate);
+    --color-impact-low: var(--impact-low);
+    --color-impact-modifier: var(--impact-modifier);
+
+    /* Type scale (rem) */
+    --text-display: 3.5rem;
+    --text-display--line-height: 1.05;
+    --text-display--letter-spacing: -0.02em;
+    --text-h1: 2.5rem;
+    --text-h1--line-height: 1.15;
+    --text-h1--letter-spacing: -0.015em;
+    --text-h2: 1.875rem;
+    --text-h2--line-height: 1.25;
+    --text-h2--letter-spacing: -0.01em;
+    --text-h3: 1.5rem;
+    --text-h3--line-height: 1.3;
+    --text-body: 1rem;
+    --text-body--line-height: 1.65;
+    --text-small: 0.875rem;
+    --text-small--line-height: 1.55;
+    --text-caption: 0.75rem;
+    --text-caption--line-height: 1.5;
+
+    /* Radii */
+    --radius-sm: 0.375rem;
+    --radius-md: 0.625rem;
+    --radius-lg: 0.875rem;
+    --radius-xl: 1.125rem;
+    --radius-2xl: 1.5rem;
+
+    /* Section rhythm */
+    --spacing-section: 7rem;
+    --container-prose: 1400px;
+}
+
+/* ----------------------------------------------------------------------------
+ * Design layer — tokens and CSS custom properties available globally.
+ * ------------------------------------------------------------------------- */
+@layer design {
+    :root {
+        --widget-radius: 0.75rem;
+        --widget-shadow: 0 1px 2px oklch(0.2 0.025 150 / 0.04), 0 8px 24px -12px oklch(0.2 0.025 150 / 0.12);
+        --track-height: 24px;
+        --ruler-height: 28px;
+        --widget-compact: 480px;
+        --widget-wide: 768px;
+
+        /* Header scroll state (JS-driven) */
+        --header-blur: 12px;
+        --header-bg-opacity: 0.7;
+        --header-border-opacity: 0.4;
+        --header-shadow-opacity: 0;
+    }
+
+    .widget-container {
+        container-type: inline-size;
+        container-name: widget;
+    }
+}
+
+/* ----------------------------------------------------------------------------
+ * Animation intensity variables
+ * ------------------------------------------------------------------------- */
+:root {
+    --anim-duration: 300ms;
+    --anim-duration-fast: 200ms;
+    --anim-duration-slow: 500ms;
+    --anim-easing: cubic-bezier(0.16, 1, 0.3, 1);
+    --anim-easing-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --anim-stagger: 60ms;
+}
+
+[data-anim="minimal"] {
+    --anim-duration: 100ms;
+    --anim-duration-fast: 80ms;
+    --anim-duration-slow: 150ms;
+    --anim-easing: ease-out;
+    --anim-easing-spring: ease-out;
+    --anim-stagger: 20ms;
+}
+
+[data-anim="off"] *,
+[data-anim="off"] *::before,
+[data-anim="off"] *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+}
+
+/* Header scrolled state */
+.site-header--scrolled {
+    --header-blur: 20px;
+    --header-bg-opacity: 0.85;
+    --header-border-opacity: 1;
+    --header-shadow-opacity: 0.06;
+}
+
+/* ----------------------------------------------------------------------------
+ * Keyframes — only transform & opacity + background-position (shimmer).
+ * ------------------------------------------------------------------------- */
+@keyframes fade-down {
+    from { opacity: 0; transform: translateY(-12px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeInUp {
+    from { opacity: 0; transform: translate3d(0, 24px, 0); }
+    to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes scaleIn {
+    from { opacity: 0; transform: scale(0.96); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes drawStroke {
+    from { stroke-dashoffset: var(--stroke-length, 1000); }
+    to { stroke-dashoffset: 0; }
+}
+
+@keyframes slideInRight {
+    from { opacity: 0; transform: translateX(32px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slideDown {
+    from { opacity: 0; transform: translateY(-8px) scaleY(0.96); transform-origin: top; }
+    to { opacity: 1; transform: translateY(0) scaleY(1); }
+}
+
+@keyframes menuItemIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+}
+
+@keyframes pulse-skeleton {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.45; }
+}
+
+@keyframes dna-rotate {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+@keyframes dna-pulse {
+    0%, 100% { opacity: 0.25; }
+    50% { opacity: 0.45; }
+}
+
+@keyframes dna-strand {
+    0%, 100% { transform: translateX(0); }
+    50% { transform: translateX(8px); }
+}
+
+@keyframes gradient-shift {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+}
+
+@keyframes glow-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 var(--primary-glow); }
+    50% { box-shadow: 0 0 28px 4px var(--primary-glow); }
+}
+
+/* ----------------------------------------------------------------------------
+ * View Transition API
+ * ------------------------------------------------------------------------- */
+::view-transition-old(root),
+::view-transition-new(root) {
+    animation-duration: var(--anim-duration);
+    animation-timing-function: var(--anim-easing);
+}
+
+::view-transition-old(root) {
+    animation-name: fadeOut;
+}
+
+::view-transition-new(root) {
+    animation-name: fadeIn;
+}
+
+@keyframes fadeOut {
+    from { opacity: 1; }
+    to { opacity: 0; }
+}
+
+::view-transition-old(genome-browser),
+::view-transition-new(genome-browser) {
+    mix-blend-mode: normal;
+}
+
+::view-transition-group(genome-widget) {
+    animation-duration: var(--anim-duration-fast);
+}
+
+/* ----------------------------------------------------------------------------
+ * Scroll-driven animations
+ * ------------------------------------------------------------------------- */
+@supports (animation-timeline: scroll()) {
+    .scroll-fade-in {
+        animation: fadeInUp linear both;
+        animation-timeline: view();
+        animation-range: entry 0% cover 40%;
+    }
+}
+
+/* ----------------------------------------------------------------------------
+ * Base layer — typography, focus rings, scrollbar, code blocks.
+ * ------------------------------------------------------------------------- */
+@layer base {
+    /* Skip-to-content link — visually hidden until focused */
+    .skip-link {
+        position: absolute;
+        top: -100%;
+        left: 1rem;
+        z-index: 100;
+        padding: 0.75rem 1.25rem;
+        background: var(--primary);
+        color: var(--primary-foreground);
+        border-radius: var(--radius-md);
+        font-weight: 600;
+        font-size: 0.875rem;
+        box-shadow: var(--shadow-md);
+        transition: top var(--anim-duration-fast) var(--anim-easing);
+    }
+    .skip-link:focus {
+        top: 1rem;
+        outline: 2px solid var(--ring);
+        outline-offset: 2px;
+    }
+
+    html {
+        -webkit-text-size-adjust: 100%;
+        text-rendering: optimizeLegibility;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+    }
+
+    body {
+        background-color: var(--background);
+        color: var(--foreground);
+        font-family: var(--font-sans);
+        font-size: var(--text-body);
+        line-height: var(--text-body--line-height);
+        font-feature-settings: "cv11", "ss01";
+        min-height: 100vh;
+    }
+
+    h1, h2, h3, h4, h5, h6 {
+        font-family: var(--font-display);
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        text-wrap: balance;
+    }
+
+    .font-mono,
+    [data-numeric] {
+        font-variant-numeric: tabular-nums;
+        font-feature-settings: "tnum";
+    }
+
+    :focus-visible {
+        outline: 2px solid var(--ring);
+        outline-offset: 2px;
+        border-radius: 2px;
+    }
+
+    ::selection {
+        background-color: oklch(0.82 0.10 150);
+        color: var(--foreground);
+    }
+
+    .dark ::selection {
+        background-color: oklch(0.50 0.12 152 / 0.4);
+        color: var(--foreground);
+    }
+
+    /* Slim, theme-aware scrollbar */
+    * {
+        scrollbar-width: thin;
+        scrollbar-color: var(--border) transparent;
+    }
+
+    *::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+    }
+
+    *::-webkit-scrollbar-thumb {
+        background-color: var(--border);
+        border-radius: 999px;
+    }
+
+    *::-webkit-scrollbar-thumb:hover {
+        background-color: var(--muted-foreground);
+    }
+
+    /* Canvas-based genome tracks should not have text selection */
+    canvas[data-genome-track] {
+        user-select: none;
+        -webkit-user-select: none;
+        touch-action: none;
+    }
+
+    /* Code blocks — consistent dark theme */
+    pre, code {
+        font-family: var(--font-mono);
+    }
+    pre {
+        background: var(--code-bg);
+        color: var(--code-fg);
+        border-radius: var(--radius-lg);
+        padding: 1rem 1.25rem;
+        overflow-x: auto;
+        font-size: 0.875rem;
+        line-height: 1.6;
+        border: 1px solid var(--border);
+    }
+    code {
+        font-size: 0.875em;
+    }
+    :not(pre) > code {
+        background: var(--muted);
+        padding: 0.15em 0.4em;
+        border-radius: 0.25rem;
+        font-size: 0.875em;
+    }
+}
+
+/* ----------------------------------------------------------------------------
+ * Components — utility classes used across routes.
+ * ------------------------------------------------------------------------- */
+@layer components {
+    .container-prose {
+        width: 100%;
+        max-width: var(--container-prose);
+        margin-inline: auto;
+        padding-inline: 1.5rem;
+    }
+
+    .section-rhythm {
+        padding-block: var(--spacing-section);
+    }
+
+    .eyebrow {
+        font-family: var(--font-mono);
+        font-size: var(--text-caption);
+        text-transform: uppercase;
+        letter-spacing: 0.18em;
+        color: var(--muted-foreground);
+    }
+
+    .hairline {
+        border-color: var(--border);
+    }
+
+    .link-underline {
+        position: relative;
+        text-decoration: none;
+        background-image: linear-gradient(currentColor, currentColor);
+        background-size: 0% 1px;
+        background-position: 0 100%;
+        background-repeat: no-repeat;
+        transition: background-size var(--anim-duration-fast) var(--anim-easing);
+    }
+    .link-underline:hover,
+    .link-underline:focus-visible {
+        background-size: 100% 1px;
+    }
+
+    /* ---- Card hover lift + gradient top accent ---- */
+    .card-lift {
+        transition:
+            transform var(--anim-duration) var(--anim-easing),
+            box-shadow var(--anim-duration) var(--anim-easing),
+            border-color var(--anim-duration) var(--anim-easing);
+    }
+    .card-lift:hover {
+        transform: translateY(-3px);
+        box-shadow: var(--shadow-lg);
+        border-color: var(--border);
+    }
+
+    /* Gradient bar that slides in at top of card on hover */
+    .card-hover-accent::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: linear-gradient(90deg, var(--primary-gradient-start), var(--primary-gradient-end));
+        transform: scaleX(0);
+        transform-origin: left;
+        transition: transform var(--anim-duration) var(--anim-easing);
+        z-index: 1;
+    }
+    .card-hover-accent:hover::before {
+        transform: scaleX(1);
+    }
+
+    /* ---- Skeleton shimmer ---- */
+    .skeleton-pulse {
+        animation: pulse-skeleton 1.6s ease-in-out infinite;
+    }
+
+    .shimmer {
+        background: linear-gradient(
+            90deg,
+            var(--muted) 25%,
+            color-mix(in oklch, var(--muted) 70%, var(--foreground) 4%) 50%,
+            var(--muted) 75%
+        );
+        background-size: 200% 100%;
+        animation: shimmer 1.8s ease-in-out infinite;
+    }
+
+    /* ---- Glass morphism (use sparingly) ---- */
+    .glass {
+        background-color: color-mix(in oklch, var(--background) 75%, transparent);
+        backdrop-filter: blur(var(--header-blur, 12px)) saturate(150%);
+        -webkit-backdrop-filter: blur(var(--header-blur, 12px)) saturate(150%);
+    }
+
+    /* ---- Gradient text ---- */
+    .text-gradient {
+        background: linear-gradient(135deg, var(--primary-gradient-start), var(--primary-gradient-end));
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        color: transparent;
+    }
+
+    .text-gradient-animated {
+        background: linear-gradient(270deg, var(--primary-gradient-start), var(--primary-gradient-end), oklch(0.60 0.14 148));
+        background-size: 200% 200%;
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        color: transparent;
+        animation: gradient-shift 6s ease infinite;
+    }
+
+    /* ---- Focus ring utility (extra visibility) ---- */
+    .focus-ring:focus-visible {
+        outline: 2px solid var(--ring);
+        outline-offset: 2px;
+        border-radius: var(--radius-sm);
+    }
+
+    /* ---- Subtle gradient accent bg for sections ---- */
+    .bg-gradient-accent {
+        background-image:
+            radial-gradient(ellipse at top left, color-mix(in oklch, var(--primary) 8%, transparent), transparent 55%),
+            radial-gradient(ellipse at bottom right, color-mix(in oklch, var(--primary) 5%, transparent), transparent 55%);
+    }
+
+    /* ---- Hero CTA glow ---- */
+    .btn-glow {
+        position: relative;
+    }
+    .btn-glow::after {
+        content: "";
+        position: absolute;
+        inset: -2px;
+        border-radius: inherit;
+        background: linear-gradient(135deg, var(--primary-gradient-start), var(--primary-gradient-end));
+        opacity: 0;
+        z-index: -1;
+        filter: blur(12px);
+        transition: opacity var(--anim-duration) var(--anim-easing);
+    }
+    .btn-glow:hover::after {
+        opacity: 0.5;
+    }
+
+    /* ---- Animated nav underline ---- */
+    .nav-link {
+        position: relative;
+    }
+    .nav-link::after {
+        content: "";
+        position: absolute;
+        bottom: 2px;
+        left: 12px;
+        right: 12px;
+        height: 2px;
+        background: var(--primary);
+        border-radius: 2px;
+        transform: scaleX(0);
+        transform-origin: center;
+        transition: transform var(--anim-duration-fast) var(--anim-easing);
+    }
+    .nav-link:hover::after,
+    .nav-link[data-active="true"]::after {
+        transform: scaleX(1);
+    }
+
+    /* ---- DNA Helix background (CSS-only, cheap) ---- */
+    .dna-bg {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        overflow: hidden;
+        z-index: 0;
+    }
+    .dna-strand {
+        position: absolute;
+        width: 2px;
+        border-radius: 2px;
+        background: linear-gradient(to bottom, transparent, var(--primary) 15%, var(--primary) 85%, transparent);
+        opacity: 0.12;
+        animation: dna-pulse 4s ease-in-out infinite;
+    }
+    .dark .dna-strand {
+        opacity: 0.10;
+    }
+    .dna-rung {
+        position: absolute;
+        height: 1px;
+        background: linear-gradient(to right, transparent, var(--primary) 30%, var(--primary) 70%, transparent);
+        opacity: 0.08;
+        animation: dna-pulse 4s ease-in-out infinite;
+    }
+    .dark .dna-rung {
+        opacity: 0.07;
+    }
+    .dna-dot {
+        position: absolute;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--primary);
+        opacity: 0.15;
+        animation: dna-pulse 3s ease-in-out infinite;
+    }
+
+    /* ---- Chromosome SVG stroke draw ---- */
+    .chromosome-draw [data-chrom-outline] {
+        stroke-dasharray: var(--stroke-length, 1000);
+        animation: drawStroke 0.8s var(--anim-easing) forwards;
+    }
+
+    /* ---- Sparkline mini-chart (gene density) ---- */
+    .sparkline-bar {
+        transition: transform var(--anim-duration-fast) var(--anim-easing), opacity var(--anim-duration-fast);
+    }
+    .sparkline-bar:hover {
+        opacity: 1;
+        transform: scaleY(1.1);
+        transform-origin: bottom;
+    }
+
+    /* ---- Mobile menu animation ---- */
+    .mobile-menu-enter {
+        animation: slideDown var(--anim-duration) var(--anim-easing);
+    }
+    .mobile-menu-item {
+        animation: menuItemIn var(--anim-duration) var(--anim-easing) both;
+    }
+
+    /* ---- Consortium logo placeholder ---- */
+    .consortium-logo {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 3.5rem;
+        padding: 0 1.25rem;
+        border-radius: var(--radius-md);
+        border: 1px solid var(--border);
+        background: var(--card);
+        font-family: var(--font-display);
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--muted-foreground);
+        filter: grayscale(1);
+        opacity: 0.7;
+        transition:
+            opacity var(--anim-duration-fast) var(--anim-easing),
+            filter var(--anim-duration-fast) var(--anim-easing),
+            border-color var(--anim-duration-fast) var(--anim-easing),
+            color var(--anim-duration-fast) var(--anim-easing);
+    }
+    .consortium-logo:hover {
+        opacity: 1;
+        filter: none;
+        border-color: var(--primary);
+        color: var(--primary);
+    }
+
+    /* ---- KBD / shortcut key styling ---- */
+    kbd {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 1.5rem;
+        height: 1.5rem;
+        padding: 0 0.35rem;
+        border-radius: 0.25rem;
+        border: 1px solid var(--border);
+        background: var(--muted);
+        font-family: var(--font-mono);
+        font-size: 0.6875rem;
+        font-weight: 500;
+        color: var(--muted-foreground);
+        box-shadow: 0 1px 0 var(--border);
+    }
+
+    /* ---- Search modal (Cmd+K) ---- */
+    .search-modal-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 100;
+        background: oklch(0 0 0 / 0.4);
+        backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
+        animation: fadeIn var(--anim-duration-fast) var(--anim-easing);
+    }
+    .search-modal-panel {
+        animation: scaleIn var(--anim-duration) var(--anim-easing);
+    }
+
+    /* Container queries */
+    @container widget (max-width: 480px) {
+        .widget-compact-hide {
+            display: none;
+        }
+    }
+
+    @container widget (min-width: 768px) {
+        .widget-wide-show {
+            display: flex;
+        }
+    }
+}
+
+/* ----------------------------------------------------------------------------
+ * Utilities
+ * ------------------------------------------------------------------------- */
+@layer utilities {
+    .will-change-transform { will-change: transform; }
+    .will-change-opacity { will-change: opacity; }
+    .will-change-auto { will-change: auto; }
+
+    .snap-x-mandatory {
+        scroll-snap-type: x mandatory;
+        overscroll-behavior-x: contain;
+    }
+    .snap-start { scroll-snap-align: start; }
+
+    .text-balance { text-wrap: balance; }
+    .text-pretty { text-wrap: pretty; }
+}
+
+/* ----------------------------------------------------------------------------
+ * Reduced motion
+ * ------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+        view-transition-name: none !important;
+    }
+
+    .scroll-fade-in {
+        animation: none !important;
+        opacity: 1 !important;
+        transform: none !important;
+    }
+
+    .card-lift:hover {
+        transform: none;
+    }
+
+    .btn-glow::after,
+    .card-hover-accent::before,
+    .nav-link::after {
+        display: none;
+    }
+
+    .dna-bg { display: none; }
+
+}
+
+/* ----------------------------------------------------------------------------
+ * Data saver
+ * ------------------------------------------------------------------------- */
+@media (prefers-reduced-data: reduce) {
+    .card-lift:hover {
+        transform: none;
+        box-shadow: none;
+    }
+    .shimmer { animation: none; }
+    .dna-bg { display: none; }
+    .text-gradient-animated {
+        animation: none;
+    }
+}
+
+/* System CJK stacks are used for first paint so no multi-megabyte web-font request
+   competes with LCP. The old HarmonyOS sources remain available for a future
+   intentionally subsetted opt-in, but are not referenced by portal CSS. */
+
+/* -------------------------------------------------------------------------
+ * Interaction target policy (Ant Design 6 + WCAG 2.5.8)
+ *
+ * Text links remain visually compact, but their hit areas are never reduced
+ * to the line box. The responsive rule gives mobile users a 44px target while
+ * retaining the PPTX desktop density at 24px minimum.
+ * ------------------------------------------------------------------------- */
+.site-footer-link,
+.home-section-link,
+.home-news-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    padding-block: 4px;
+}
+
+.ant-carousel .slick-dots {
+    height: 28px;
+    align-items: center;
+    bottom: 8px;
+}
+
+.ant-carousel .slick-dots li,
+.ant-carousel .slick-dots li.slick-active {
+    width: 32px;
+    height: 24px;
+    margin-inline: 4px;
+}
+
+.ant-carousel .slick-dots li button,
+.ant-carousel .slick-dots li.slick-active button {
+    width: 100%;
+    min-height: 24px;
+    height: 24px;
+    border-radius: 999px;
+}
+
+/* Compact controls are still required to expose a comfortable hit area. */
+.ant-input,
+.ant-input-affix-wrapper,
+.ant-input-number,
+.ant-select-selector {
+    min-height: 32px;
+}
+
+@media (max-width: 767px) {
+    .site-footer-link,
+    .home-section-link,
+    .home-news-link {
+        min-height: 44px;
+        padding-block: 10px;
+    }
+
+    .ant-btn,
+    .ant-input,
+    .ant-input-affix-wrapper,
+    .ant-input-number,
+    .ant-select-selector,
+    .ant-checkbox-wrapper {
+        min-height: 44px;
+    }
+
+    .ant-checkbox-wrapper {
+        align-items: center;
+        display: inline-flex;
+        padding-block: 8px;
+    }
+
+    .ant-checkbox {
+        min-width: 18px;
+        min-height: 18px;
+    }
+}
+
+
+input[type="checkbox"] {
+    width: 24px;
+    height: 24px;
+    min-width: 24px;
+    min-height: 24px;
+}
+
+.ant-input-number-input {
+    min-height: 30px;
+}
+
+@media (max-width: 767px) {
+    input[type="checkbox"] {
+        width: 28px;
+        height: 28px;
+        min-width: 28px;
+        min-height: 28px;
+    }
+
+    .ant-input-number-input {
+        min-height: 42px;
+    }
+}
+
+/* AntD composite controls: the visible inner control must share the outer hit area. */
+input.ant-input,
+.ant-input-number-input {
+    min-height: 30px !important;
+    height: 30px !important;
+}
+
+.ant-input-number-handler-wrap {
+    min-height: 48px;
+}
+
+.ant-input-number-handler {
+    min-height: 24px !important;
+    height: 24px !important;
+}
+
+@media (max-width: 767px) {
+    input.ant-input,
+    .ant-input-number-input {
+        min-height: 42px !important;
+        height: 42px !important;
+    }
+
+    .ant-input-number-handler-wrap {
+        min-height: 48px;
+    }
+
+    .ant-input-number-handler {
+        min-height: 24px !important;
+        height: 24px !important;
+    }
+}
+
+.ant-select-input {
+    min-height: 30px !important;
+    height: 30px !important;
+}
+
+@media (max-width: 767px) {
+    .ant-select-input {
+        min-height: 42px !important;
+        height: 42px !important;
+    }
+}
+
+/* AntD 6.6 InputNumber renamed spinner handlers to `action`. */
+.ant-input-number-actions {
+    min-width: 24px;
+    width: 24px;
+}
+
+.ant-input-number-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px !important;
+    min-width: 24px !important;
+    height: 24px !important;
+    min-height: 24px !important;
+}
+
+@media (max-width: 767px) {
+    .ant-input-number-actions {
+        min-width: 44px;
+        width: 44px;
+    }
+
+    .ant-input-number-action {
+        width: 44px !important;
+        min-width: 44px !important;
+        height: 24px !important;
+        min-height: 24px !important;
+    }
+}
+
+/* ---------------------------------------------------------------------------
+ * Vue mounting + shared brand tokens.
+ * The React design system above targets `#root`; the Vue portal mounts at
+ * `#app`, and @soymutdb/ui-vue reads the --smdb-* variables.
+ * ------------------------------------------------------------------------- */
 :root {
   --smdb-primary: oklch(0.46 0.13 152);
   --smdb-primary-dark: oklch(0.70 0.12 151);
   --smdb-radius: 0.625rem;
-  --background: oklch(0.991 0.004 148);
-  --foreground: oklch(0.195 0.028 152);
-  --card: oklch(1 0 0);
-  --primary: var(--smdb-primary);
-  --primary-foreground: oklch(0.988 0.004 148);
-  --muted: oklch(0.968 0.012 148);
-  --muted-foreground: oklch(0.48 0.028 152);
-  --border: oklch(0.905 0.02 148);
-  --ring: oklch(0.55 0.14 152);
 }
 
-html,
-body,
 #app {
-  margin: 0;
+  min-height: 100vh;
   background: var(--background);
   color: var(--foreground);
-  font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei",
-    "Noto Sans CJK SC", sans-serif;
 }

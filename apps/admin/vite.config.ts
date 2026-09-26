@@ -27,7 +27,10 @@ function adminCsp(apiOrigin: string, documentPath: string): Plugin {
 
   return {
     name: "admin-csp-api-origin",
-    apply: "build",
+    // Applies in dev too: `vite dev` serves the source index.html, whose
+    // placeholder `connect-src 'self'` would block every cross-origin API call
+    // and leave the console looking broken. The web portal's equivalent plugin
+    // already runs in dev; this keeps the two consistent.
     transformIndexHtml(html) {
       return html.replace(
         /(<meta\s+http-equiv="Content-Security-Policy"\s+content=")([^"]*)(")/s,
