@@ -394,7 +394,7 @@ main:
         cpus: 8
       imports:
         # Registry credentials and the OIDC issuer live in the CNB secret store.
-        - https://cnb.cool/crl-code/mutlidb/-/blob/main/.cnb/env/release.yml
+        - https://cnb.cool/math-nwafu/webdb-docker/-/blob/main/.cnb/env/release.yml
       # CNB accepts a Dockerfile only in `docker.build`, and `docker.build`
       # is pipeline-scoped: the platform's runner passes a stage-level
       # `image:` straight to `docker pull`, so a repository path in it fails
@@ -572,7 +572,7 @@ $:
       runner:
         cpus: 8
       imports:
-        - https://cnb.cool/crl-code/mutlidb/-/blob/main/.cnb/env/release.yml
+        - https://cnb.cool/math-nwafu/webdb-docker/-/blob/main/.cnb/env/release.yml
       docker:
         build:
           dockerfile: .cnb/env/Dockerfile.build-tools
@@ -913,7 +913,7 @@ $:
       runner:
         cpus: 8
       imports:
-        - https://cnb.cool/crl-code/mutlidb/-/blob/main/.cnb/env/release.yml
+        - https://cnb.cool/math-nwafu/webdb-docker/-/blob/main/.cnb/env/release.yml
       # CNB accepts a Dockerfile only in `docker.build`, and `docker.build`
       # is pipeline-scoped: the platform's runner passes a stage-level
       # `image:` straight to `docker pull`, so a repository path in it fails
