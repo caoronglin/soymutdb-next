@@ -43,9 +43,10 @@ def _base_row(
     variant_type: str = "SNP",
     impact: str = "MODERATE",
     consequence: str = "missense_variant",
+    assembly: str = "v5",
 ) -> tuple:
     return (
-        variant_id, release, "v5", chromosome, position, ref, alt, variant_type, "",
+        variant_id, release, assembly, chromosome, position, ref, alt, variant_type, "",
         max(len(ref), len(alt)), f"gene{gene_sid}", f"g{gene_sid}", gene_sid, mutant_sid,
         "", consequence, 0, impact, "", 0.0, "PASS", 0, 0.0, "", "", "unknown",
     )
@@ -129,6 +130,56 @@ def test_other_release_partition_is_preserved(engine: ChdbEngine) -> None:
 def test_deterministic_batch_id_is_stable() -> None:
     assert vf.deterministic_batch_id("imp", 0) == vf.deterministic_batch_id("imp", 0)
     assert vf.deterministic_batch_id("imp", 0) != vf.deterministic_batch_id("imp", 1)
+
+
+def test_single_assembly_import_preserves_other_assembly_on_shared_chromosome(
+    engine: ChdbEngine,
+) -> None:
+    """P1-01: re-importing v4 Chr01 must not delete v5's Chr01 rows.
+
+    The physical partition is (release, chromosome), so v4 and v5 rows for the
+    same chromosome share a partition and a partition drop removes both.
+    """
+    engine.insert_rows(
+        "variant_facts",
+        [
+            _base_row(10, "R-ASM", "Chr01", 100, assembly="v4", gene_sid=4),
+            _base_row(20, "R-ASM", "Chr01", 100, assembly="v5", gene_sid=5),
+        ],
+        list(vf.BASE_COLUMNS),
+    )
+
+    import_id = "imp-asm"
+    vf.stage_batch(
+        engine,
+        import_id=import_id,
+        batch_index=0,
+        base_rows=[_base_row(11, "R-ASM", "Chr01", 100, assembly="v4", gene_sid=4)],
+    )
+    partitions = vf.list_partitions(engine, import_id)
+    vf.finalize_release(
+        engine, release_key="R-ASM", import_id=import_id, partitions=partitions
+    )
+
+    v4_count = engine.scalar(
+        "SELECT count() FROM variant_facts "
+        "WHERE release_key='R-ASM' AND assembly_key='v4'"
+    )
+    v5_count = engine.scalar(
+        "SELECT count() FROM variant_facts "
+        "WHERE release_key='R-ASM' AND assembly_key='v5'"
+    )
+    assert int(v4_count) == 1
+    assert int(v5_count) == 1
+    # The imported v4 fact replaced only its own id; v5's row survives.
+    assert int(engine.scalar(
+        "SELECT count() FROM variant_facts "
+        "WHERE release_key='R-ASM' AND assembly_key='v4' AND variant_id=11"
+    )) == 1
+    assert int(engine.scalar(
+        "SELECT count() FROM variant_facts "
+        "WHERE release_key='R-ASM' AND assembly_key='v5' AND variant_id=20"
+    )) == 1
 
 
 def test_duplicate_staging_batch_publishes_each_fact_once(engine: ChdbEngine) -> None:

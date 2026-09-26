@@ -76,7 +76,7 @@ cd apps/api && conda run -n soymutdb-api alembic upgrade head
 
 # 4) 启动 API（FastAPI，4 workers；--proxy-headers 供 nginx 反代取真实 IP）
 cd apps/api && conda run -n soymutdb-api uvicorn app.main:app \
-    --host 0.0.0.0 --port 8000 --workers 4 --proxy-headers --forwarded-allow-ips=*
+    --host 0.0.0.0 --port 8010 --workers 4 --proxy-headers --forwarded-allow-ips=*
 
 # 5) 启动 Celery worker + beat（见 §6 多队列命令）
 #    也可用 systemd 生成器一键生成/安装单元：
@@ -96,7 +96,7 @@ After=network.target
 User=soymutdb
 WorkingDirectory=/opt/soymutdb/apps/api
 EnvironmentFile=/opt/soymutdb/.env
-ExecStart=/home/soymutdb/.miniforge3/envs/soymutdb-api/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4 --proxy-headers --forwarded-allow-ips=*
+ExecStart=/home/soymutdb/.miniforge3/envs/soymutdb-api/bin/uvicorn app.main:app --host 0.0.0.0 --port 8010 --workers 4 --proxy-headers --forwarded-allow-ips=*
 Restart=always
 
 [Install]
@@ -137,7 +137,7 @@ WantedBy=multi-user.target
 
 ```bash
 cd apps/api && conda run -n soymutdb-api uvicorn app.main:app \
-    --host 0.0.0.0 --port 8000 --workers 4 --proxy-headers --forwarded-allow-ips=*
+    --host 0.0.0.0 --port 8010 --workers 4 --proxy-headers --forwarded-allow-ips=*
 ```
 
 **Celery workers（队列契约：`ingest / export / stats / cleanup / blast / analyses / default`；与 compose 分工一致）：**
@@ -182,15 +182,15 @@ conda run -n soymutdb-worker celery -A soymutdb_worker.main:celery_app beat \
 **健康检查：**
 
 ```bash
-curl http://localhost:8000/api/v1/health/live     # 存活
-curl http://localhost:8000/api/v1/health/ready    # 就绪（含依赖探活）
+curl http://localhost:8010/api/v1/health/live     # 存活
+curl http://localhost:8010/api/v1/health/ready    # 就绪（含依赖探活）
 conda run -n soymutdb-worker celery -A soymutdb_worker.main:celery_app inspect ping -d worker-default@<hostname>
 ```
 
 ## 7. 对外暴露（nginx 反代或直连）
 
-- **直连**：API 端口 `8000` 直接对外（防火墙放行；`SOYMUTDB_CORS_ORIGINS` 配好前端域名）。
-- **nginx 反代**（推荐，与 compose 内 nginx 语义一致）：`/api/v1/*` → `127.0.0.1:8000`、`/mcp/*`（SSE，`proxy_buffering off`）→ MCP server（conda 下需另跑 `mcp_server` 或仍用 compose 的 `mcp-server` 容器）、`/data/*` → MinIO `localhost:9001`（纯裸机数据层时使用实际配置端口）。配置可参考 `infra/nginx/conf.d/default.conf` 改动量最小化。
+- **直连**：API 端口 `8010` 直接对外（防火墙放行；`SOYMUTDB_CORS_ORIGINS` 配好前端域名）。
+- **nginx 反代**（推荐，与 compose 内 nginx 语义一致）：`/api/v1/*` → `127.0.0.1:8010`、`/mcp/*`（SSE，`proxy_buffering off`）→ MCP server（conda 下需另跑 `mcp_server` 或仍用 compose 的 `mcp-server` 容器）、`/data/*` → MinIO `localhost:9001`（纯裸机数据层时使用实际配置端口）。配置可参考 `infra/nginx/conf.d/default.conf` 改动量最小化。
 
 ## 8. 与 Docker 部署的差异
 

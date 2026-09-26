@@ -32,7 +32,7 @@
         │
         ▼
 [conda 裸进程]
-  soymutdb-api     :8000   uvicorn
+  soymutdb-api     :8010   uvicorn
   worker-default / worker-blast / worker-ingest / worker-analyses
   beat
 ```

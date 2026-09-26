@@ -120,7 +120,7 @@ ps: ## Show service status
 	$(DOCKER_COMPOSE) ps
 
 run-api: ## Run API server locally (dev mode)
-	cd $(API_DIR) && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+	cd $(API_DIR) && uvicorn app.main:app --reload --host 0.0.0.0 --port 8010
 
 run-worker: ## Run Celery worker locally
 	cd apps/worker && celery -A soymutdb_worker.main:celery_app worker --loglevel=info --concurrency=2

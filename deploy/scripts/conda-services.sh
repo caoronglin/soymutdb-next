@@ -63,7 +63,7 @@ User=${SOYMUTDB_SERVICE_USER:-soymutdb}
 Group=${SOYMUTDB_SERVICE_GROUP:-soymutdb}
 WorkingDirectory=${PROJECT_ROOT}/apps/api
 EnvironmentFile=${ENV_FILE}
-ExecStart=${API_ENV_BIN}/uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${API_WORKERS} --proxy-headers --forwarded-allow-ips=*
+ExecStart=${API_ENV_BIN}/uvicorn app.main:app --host 0.0.0.0 --port 8010 --workers ${API_WORKERS} --proxy-headers --forwarded-allow-ips=*
 Restart=always
 RestartSec=5
 LimitNOFILE=65536

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useRoute, useRouter } from "vue-router";
+import { t } from "../lib/i18n";
 
 const route = useRoute();
 const router = useRouter();
@@ -8,8 +9,8 @@ const router = useRouter();
 <template>
   <main class="notfound">
     <h1>404</h1>
-    <p>No route for <code>{{ route.fullPath }}</code>.</p>
-    <button type="button" @click="router.push({ name: 'home' })">Back to home</button>
+    <p>{{ t("common.noRouteFor", { path: route.fullPath }) }}</p>
+    <button type="button" @click="router.push({ name: 'home' })">{{ t("common.backToHome") }}</button>
   </main>
 </template>
 

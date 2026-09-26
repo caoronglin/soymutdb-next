@@ -18,7 +18,7 @@ const year = new Date().getFullYear();
         SoyMutDB · {{ site.siteVariant }} · {{ t("releases.title") }}:
         {{ site.releaseId ?? t("releases.active") }}
       </p>
-      <nav class="flex flex-wrap gap-4" aria-label="Footer">
+      <nav class="flex flex-wrap gap-4" :aria-label="t('footer.label')">
         <RouterLink to="/about" class="underline">{{ t("nav.about") }}</RouterLink>
         <RouterLink to="/help" class="underline">{{ t("nav.help") }}</RouterLink>
         <RouterLink to="/publications" class="underline">{{ t("nav.publications") }}</RouterLink>

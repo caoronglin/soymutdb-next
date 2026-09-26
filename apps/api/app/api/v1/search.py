@@ -217,16 +217,16 @@ async def suggest(
     limit: int = Query(default=5, ge=1, le=20),
 ) -> list[dict]:
     """Autocomplete suggestions (internal DB only, release-scoped)."""
-    context: int | None
     try:
         release_context = await resolve_release_context(db)
-        context = release_context.release_id
     except ServiceUnavailableError:
-        # Degrade gracefully: without a published release, suggest stays
-        # release-unscoped rather than failing the autocomplete surface.
-        context = None
+        # Fail closed: without a published release there is no release-scoped
+        # suggestion set. Returning an unscoped list would expose draft
+        # assemblies, so the anonymous surface stays empty instead.
+        logger.warning("search.suggest.no_active_release")
+        return []
     suggestions = await service.suggest(
-        db, query=q, limit=limit, release_id=context
+        db, query=q, limit=limit, release_id=release_context.release_id
     )
     return [s if isinstance(s, dict) else s.model_dump() for s in suggestions]
 

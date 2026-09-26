@@ -40,7 +40,13 @@ from ...core.settings_registry import (
 from ...core.site_variant import SiteVariant, variant_section
 from ...models.auth import User
 from ...models.system_settings import SystemSetting
-from ...schemas.site import AboutContentResponse, FooterContentResponse, HomeContentResponse
+from ...schemas.site import (
+    AboutContentResponse,
+    FooterContentResponse,
+    HomeContentResponse,
+    SiteBrandResponse,
+)
+from ...services.site_brand_service import get_site_brand_document
 from .deps import get_optional_user, get_user_roles
 
 router = APIRouter(prefix="/site", tags=["site"])
@@ -138,6 +144,20 @@ def _sanitize_values(values: dict[str, str], rich_keys: frozenset[str]) -> dict[
         key: sanitize_rich_html(value) if key in rich_keys else value
         for key, value in values.items()
     }
+
+
+@router.get("/branding", response_model=SiteBrandResponse)
+async def get_site_branding(
+    response: Response,
+    variant: SiteVariant = Query(default=SiteVariant.EXTERNAL),
+    db: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(get_optional_user),
+) -> SiteBrandResponse:
+    """Return a bilingual brand snapshot for one explicit site artifact."""
+    _ensure_variant_access(variant, current_user)
+    _set_cache_policy(response, variant)
+    document = await get_site_brand_document(db, variant=variant)
+    return SiteBrandResponse(variant=variant.value, **document.values.model_dump())
 
 
 @router.get("/about", response_model=AboutContentResponse)

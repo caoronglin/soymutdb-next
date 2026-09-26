@@ -67,4 +67,29 @@ describe("i18n core", () => {
     expect(options.resources.en).toBeTruthy();
     expect(options.interpolation.escapeValue).toBe(false);
   });
+
+  it("keeps one interpolation syntax ({{var}}) across both catalogs", () => {
+    // i18next only interpolates its own prefix/suffix ({{ }}). A single-brace
+    // placeholder renders literally, so a `{count} results` value would ship as
+    // text on the page. Mixed conventions in one catalog are the failure this
+    // guards against.
+    const singleBrace = /(?<!\{)\{[A-Za-z_][A-Za-z0-9_]*\}(?!\})/;
+    const collect = (value: unknown, path: string, offences: string[]): void => {
+      if (typeof value === "string") {
+        if (singleBrace.test(value)) offences.push(`${path}: ${value}`);
+        return;
+      }
+      if (value && typeof value === "object") {
+        for (const [key, child] of Object.entries(value)) {
+          collect(child, `${path}.${key}`, offences);
+        }
+      }
+    };
+
+    const offences: string[] = [];
+    for (const [language, catalog] of Object.entries(catalogs)) {
+      collect(catalog, language, offences);
+    }
+    expect(offences).toEqual([]);
+  });
 });

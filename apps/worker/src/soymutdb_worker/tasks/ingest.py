@@ -206,8 +206,15 @@ def _surrogate_id(key: str) -> int:
     )
 
 
-def _pick_mutant_line(sample_names: list[str], gt_types: Any, alt_idx: int) -> tuple[str, int]:
+def _pick_mutant_line(
+    sample_names: list[str], gt_types: Any, alt_idx: int
+) -> tuple[str, int, int]:
     """Choose the first known non-reference sample for an ALT row.
+
+    Returns ``(sample_name, ml_sid, sample_idx)``. The index is returned so
+    the caller reads the genotype of the SAME sample that was selected;
+    reading ``gt_types[0]`` unconditionally reports the first column's
+    zygosity even when a later sample is the mutant line.
 
     The returned ``ml_sid`` is a ClickHouse projection surrogate
     (``_surrogate_id``), not an authoritative PostgreSQL mutant-line key.
@@ -216,14 +223,14 @@ def _pick_mutant_line(sample_names: list[str], gt_types: Any, alt_idx: int) -> t
     ``mutant_lines.id`` (or ``public_id``) for any authoritative linkage.
     """
     if not sample_names or gt_types is None:
-        return "", 0
+        return "", 0, -1
     for sample_idx, gt_type in enumerate(gt_types):
         if sample_idx >= len(sample_names):
             break
         if int(gt_type) not in (0, 3):
             sample_name = sample_names[sample_idx]
-            return sample_name, _surrogate_id(sample_name)
-    return "", 0
+            return sample_name, _surrogate_id(sample_name), sample_idx
+    return "", 0, -1
 
 # ---------------------------------------------------------------------------
 # SnpEff ANN field consequence rank (most → least severe)
@@ -312,6 +319,7 @@ def get_clickhouse_client() -> Client:
 
 def compute_variant_id(
     release_id: str,
+    assembly: str,
     chromosome: str,
     position: int,
     ref: str,
@@ -319,8 +327,11 @@ def compute_variant_id(
 ) -> int:
     """Compute a deterministic variant ID from stable semantic facts.
 
-    The identity is derived from ``release_id + chromosome + position + ref +
-    alt`` only. The uploaded object key is deliberately NOT an input: the
+    The identity is derived from ``release_id + assembly + chromosome +
+    position + ref + alt``. ``assembly`` participates because v4 and v5 are
+    distinct coordinate namespaces: the same locus in the same release must
+    not collapse to one identity across assemblies (ASM-01). The uploaded
+    object key is deliberately NOT an input: the
     manifest fingerprint ignores it so a retry can resume the same logical
     import (ADR-0005), and the per-variant identity must agree with that —
     otherwise the same bytes retried under a new object key would mint new
@@ -329,7 +340,7 @@ def compute_variant_id(
     This replaces the non-idempotent ``variant_id_counter`` from the quartz
     reference; durable import idempotency remains a separate requirement.
     """
-    key = f"{release_id}|{chromosome}|{position}|{ref}|{alt}"
+    key = f"{release_id}|{assembly}|{chromosome}|{position}|{ref}|{alt}"
     digest = hashlib.sha256(key.encode("utf-8")).digest()
     # Use the first 8 bytes as a signed 64-bit integer
     return int.from_bytes(digest[:8], byteorder="big", signed=False)
@@ -595,16 +606,19 @@ def _iter_vcf_base_rows(
             gene_id = best_ann.get("gene_id", "") if best_ann else ""
             gene_sid = _surrogate_id(gene_id) if gene_id else 0
             try:
-                mutant_line_name, ml_sid = _pick_mutant_line(
+                mutant_line_name, ml_sid, mutant_sample_idx = _pick_mutant_line(
                     sample_names, variant.gt_types, 0
                 )
             except Exception:
-                mutant_line_name, ml_sid = "", 0
+                mutant_line_name, ml_sid, mutant_sample_idx = "", 0, -1
             zygosity = "unknown"
             try:
                 gt_types = variant.gt_types
-                if gt_types is not None and len(gt_types) > 0:
-                    zygosity = determine_zygosity(int(gt_types[0]))
+                if (
+                    gt_types is not None
+                    and 0 <= mutant_sample_idx < len(gt_types)
+                ):
+                    zygosity = determine_zygosity(int(gt_types[mutant_sample_idx]))
             except Exception:
                 pass
             try:
@@ -624,7 +638,7 @@ def _iter_vcf_base_rows(
                 vtype, vsubtype = determine_variant_type(ref, str(alt))
                 row = {
                     "variant_id": compute_variant_id(
-                        release_key, chrom, pos, ref, str(alt)
+                        release_key, assembly_key, chrom, pos, ref, str(alt)
                     ),
                     "release_key": release_key,
                     "assembly_key": assembly_key,

@@ -88,7 +88,7 @@ Windows Server 2022 或 Windows 11 Pro；Node 24、pnpm 11、Python 3.13/3.14、
     C:\ProgramData\SoyMutDB\backups\
     C:\ProgramData\SoyMutDB\logs\
 
-服务名为 SoyMutDB-API，默认监听 127.0.0.1:8000，由 IIS URL Rewrite/ARR 或安全网关对外暴露。
+服务名为 SoyMutDB-API，默认监听 127.0.0.1:8010，由 IIS URL Rewrite/ARR 或安全网关对外暴露。
 
 提供纯 PowerShell 安装、校验、迁移、健康检查、备份、升级、回滚和卸载脚本；使用 Get-Service、Start-Service、Invoke-WebRequest，不要求 Git Bash。WinSW 优先，配置 stdout/stderr、自动重启和停止超时。CI 验证路径、权限、编码、换行和服务停止行为。
 

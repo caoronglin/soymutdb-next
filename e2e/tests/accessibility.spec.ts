@@ -53,7 +53,7 @@ test.describe("accessibility — layout at three viewports", () => {
 test.describe("accessibility — navigation and forms", () => {
   test("all primary navigation controls have descriptive text", async ({ page }) => {
     await gotoReady(page, `${BASE}/`);
-    const controls = page.locator('nav[aria-label="Primary"] a, nav[aria-label="Primary"] button');
+    const controls = page.locator('nav[aria-label="Primary navigation"] a, nav[aria-label="Primary navigation"] button');
     const count = await controls.count();
     expect(count).toBeGreaterThanOrEqual(4);
     for (let i = 0; i < count; i++) {

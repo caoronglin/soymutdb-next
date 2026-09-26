@@ -1,6 +1,6 @@
 # Windows no-Docker deployment
 
-These PowerShell scripts deploy the FastAPI application directly on Windows. The API defaults to `127.0.0.1:8000`; override with `WEB_API_HOST`/`WEB_API_PORT`. The default ASGI entry is `app.main:app`; override with `WEB_APP_MODULE` only when required.
+These PowerShell scripts deploy the FastAPI application directly on Windows. The API defaults to `127.0.0.1:8010`; override with `WEB_API_HOST`/`WEB_API_PORT`. The default ASGI entry is `app.main:app`; override with `WEB_APP_MODULE` only when required.
 
 ## Prerequisites
 

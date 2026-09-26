@@ -13,7 +13,7 @@ import { Rate } from "k6/metrics";
  *   k6 run tests/load/variant-stress.js
  */
 
-const BASE_URL = __ENV.BASE_URL || "http://localhost:8000";
+const BASE_URL = __ENV.BASE_URL || "http://localhost:8010";
 const API_PREFIX = "/api/v1";
 
 export const errorRate = new Rate("errors");

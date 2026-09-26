@@ -89,4 +89,4 @@ fi
 echo "baseline installation prepared at ${RELEASE_DIR}"
 echo "environment: ${ENV_FILE}"
 echo "logs: journalctl -u soymutdb-api.service -f"
-echo "health: curl --fail http://127.0.0.1:8000/health"
+echo "health: curl --fail http://127.0.0.1:8010/health"

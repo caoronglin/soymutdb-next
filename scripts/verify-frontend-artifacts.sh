@@ -41,16 +41,31 @@ step "i18n locale key parity"
 pnpm --filter @soymutdb/i18n check:locale-keys --self-test
 pnpm --filter @soymutdb/i18n check:locale-keys
 
-step "Build all apps (offline demo fixture)"
+step "Build workspace packages and the single-tree apps (admin, jbrowse)"
+# The portal is built once per site variant below; a third build through a
+# full `pnpm build` pass was pure duplication (web built 3x per gate). Turbo
+# still builds the shared workspace packages both paths import.
 VITE_DEPLOYMENT_MODE="${SOYMUTDB_CI_DEMO_MODE}" \
 VITE_API_BASE_URL="${SOYMUTDB_CI_DEMO_API_URL}" \
 VITE_JBROWSE_BASE_URL="${SOYMUTDB_CI_DEMO_JBROWSE_URL}" \
 SOYMUTDB_PORTAL_ORIGIN="${SOYMUTDB_CI_DEMO_PORTAL_URL}" \
 SOYMUTDB_ADMIN_ORIGIN="${SOYMUTDB_CI_DEMO_ADMIN_URL}" \
-  pnpm build
+  pnpm turbo run build --filter='!@soymutdb/web'
+
+step "Build the portal site variants (external + internal)"
+# Both variants are complete builds; the external tree is the one the artifact
+# checks below run against. `verify-site-variant-artifacts.sh` later reuses
+# these trees (SOYMUTDB_SITE_VARIANTS_PREBUILT=1) instead of rebuilding them.
+VITE_DEPLOYMENT_MODE="${SOYMUTDB_CI_DEMO_MODE}" \
+VITE_API_BASE_URL="${SOYMUTDB_CI_DEMO_API_URL}" \
+VITE_JBROWSE_BASE_URL="${SOYMUTDB_CI_DEMO_JBROWSE_URL}" \
+SOYMUTDB_PORTAL_ORIGIN="${SOYMUTDB_CI_DEMO_PORTAL_URL}" \
+SOYMUTDB_ADMIN_ORIGIN="${SOYMUTDB_CI_DEMO_ADMIN_URL}" \
+SOYMUTDB_SITE_URL="${SOYMUTDB_CI_DEMO_API_URL}" \
+  pnpm --filter @soymutdb/web build:sites
 
 step "Scan demo artifact for placeholder origins"
-bash "${REPO_ROOT}/scripts/check-production-artifact.sh" apps/web/dist --allow-demo
+bash "${REPO_ROOT}/scripts/check-production-artifact.sh" apps/web/dist/external --allow-demo
 
 # `_headers` is copied verbatim into `dist/`, so a comment there is published
 # text. Both of these read the emitted trees rather than the sources, and both
@@ -61,11 +76,17 @@ bash "${REPO_ROOT}/scripts/check-production-artifact.sh" apps/web/dist --allow-d
 step "Artifact header contract (CSP, placeholders, build-variable names)"
 python3 scripts/check_artifact_headers.py
 
+step "App shell assets (favicon declared and present in built trees)"
+python3 scripts/check_app_shell_assets.py
+
+step "Visible i18n contract (hardcoded text budget)"
+python3 scripts/check_visible_i18n.py
+
 step "nginx security-header fragments"
 python3 scripts/check_nginx_security_headers.py
 
 step "Bundle size budget gate"
-bash "${REPO_ROOT}/scripts/check-bundle-size.sh"
+bash "${REPO_ROOT}/scripts/check-bundle-size.sh" apps/web/dist/external/assets
 
 step "Workspace JS unit tests"
 pnpm turbo run test

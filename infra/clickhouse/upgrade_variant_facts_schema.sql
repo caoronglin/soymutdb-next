@@ -77,6 +77,45 @@ SELECT countIf(variant_id = 0) AS zero_variant_ids FROM variant_facts_new;
 -- ============================================================
 RENAME TABLE variant_facts TO variant_facts_legacy, variant_facts_new TO variant_facts;
 
+-- ============================================================
+-- STAGE 2b: import staging table (P1-03)
+-- ============================================================
+-- Canonical variant_facts columns plus the import/batch identity; the
+-- staging -> verify -> finalize protocol writes here before the rebuild.
+CREATE TABLE IF NOT EXISTS variant_facts_staging (
+    variant_id       UInt64,
+    release_key      String,
+    assembly_key     String,
+    chromosome       LowCardinality(String),
+    position         UInt64,
+    ref_allele       String,
+    alt_allele       String,
+    variant_type     LowCardinality(String),
+    variant_subtype  LowCardinality(String) DEFAULT '',
+    length           UInt32 DEFAULT 0,
+    gene_id          LowCardinality(String),
+    gene_symbol      LowCardinality(String) DEFAULT '',
+    gene_surrogate_id UInt32 DEFAULT 0,
+    mutant_line_surrogate_id UInt32 DEFAULT 0,
+    mutant_line_name LowCardinality(String) DEFAULT '',
+    consequence      LowCardinality(String),
+    consequence_id   UInt32 DEFAULT 0,
+    impact           LowCardinality(String),
+    rs_id            String DEFAULT '',
+    quality_score    Float32 DEFAULT 0,
+    filter_status    LowCardinality(String) DEFAULT 'PASS',
+    read_depth       UInt32 DEFAULT 0,
+    allele_frequency Float32 DEFAULT 0,
+    hgvs_c           String DEFAULT '',
+    hgvs_p           String DEFAULT '',
+    zygosity         LowCardinality(String) DEFAULT 'unknown',
+    import_id        String,
+    batch_id         String
+) ENGINE = MergeTree()
+PARTITION BY (release_key, chromosome)
+ORDER BY (release_key, chromosome, position, variant_id)
+SETTINGS index_granularity = 8192;
+
 -- Summaries are derived data. DROP before CREATE makes a complete rerun safe and
 -- prevents SummingMergeTree duplicate backfills from doubling counts.
 DROP TABLE IF EXISTS mv_gene_impact;

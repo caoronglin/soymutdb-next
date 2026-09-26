@@ -3,7 +3,7 @@
 FastMCP server over **Streamable HTTP**.  Every tool is a thin passthrough
 to the internal SoyMutDB REST API (apps/api) via httpx:
 
-- base URL  : ``SOYMUTDB_API_BASE`` (default ``http://localhost:8000``)
+- base URL  : ``SOYMUTDB_API_BASE`` (default ``http://localhost:8010``)
 - auth      : ``SOYMUTDB_MCP_API_TOKEN`` forwarded as ``Authorization: Bearer``
   on every internal REST call
 - rate limit: global 60 req/min per MCP client (all tools) + 10
@@ -29,7 +29,7 @@ Error contract (all tools return plain dicts):
 
 Run (local)::
 
-    SOYMUTDB_API_BASE=http://localhost:8000 \\
+    SOYMUTDB_API_BASE=http://localhost:8010 \\
     SOYMUTDB_MCP_API_TOKEN=... \\
     python -m mcp_server.server --host 0.0.0.0 --port 9000
 """
@@ -54,7 +54,7 @@ from .ratelimit import GLOBAL_LIMITER, SUBMIT_LIMITER
 # Configuration (env-driven)
 # ---------------------------------------------------------------------------
 
-API_BASE: str = os.environ.get("SOYMUTDB_API_BASE", "http://localhost:8000").rstrip("/")
+API_BASE: str = os.environ.get("SOYMUTDB_API_BASE", "http://localhost:8010").rstrip("/")
 API_TOKEN: str = os.environ.get("SOYMUTDB_MCP_API_TOKEN", "")
 
 #: Per-request HTTP timeout (seconds).

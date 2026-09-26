@@ -9,6 +9,7 @@ are never accepted by the runtime settings API.
 from __future__ import annotations
 
 import re
+import uuid
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Final
@@ -25,6 +26,7 @@ class SettingKind(StrEnum):
     ENUM = "enum"
     EMAIL = "email"
     URL = "url"
+    UUID = "uuid"
     SECRET = "secret"
 
 
@@ -2173,6 +2175,50 @@ _SITE_VARIANT_DEFINITIONS = tuple(
 )
 _DEFINITIONS = (*_DEFINITIONS, *_SITE_VARIANT_DEFINITIONS)
 
+# Branding is stored in explicit variant namespaces so the external and
+# internal sites can never fall through to each other's values.
+_BRAND_DEFINITIONS = tuple(
+    definition
+    for variant in ("external", "internal")
+    for definition in (
+        _definition(
+            f"brand_{variant}",
+            "name_zh",
+            default="SoyMutDB",
+            permission=SettingPermission.ADMINISTRATOR,
+            scope=SettingScope.GLOBAL,
+            hot_reload=True,
+            redaction=SettingRedaction.NONE,
+            requires_approval=False,
+            max_length=120,
+        ),
+        _definition(
+            f"brand_{variant}",
+            "name_en",
+            default="SoyMutDB",
+            permission=SettingPermission.ADMINISTRATOR,
+            scope=SettingScope.GLOBAL,
+            hot_reload=True,
+            redaction=SettingRedaction.NONE,
+            requires_approval=False,
+            max_length=120,
+        ),
+        _definition(
+            f"brand_{variant}",
+            "icon_asset_id",
+            SettingKind.UUID,
+            default="",
+            permission=SettingPermission.ADMINISTRATOR,
+            scope=SettingScope.GLOBAL,
+            hot_reload=True,
+            redaction=SettingRedaction.NONE,
+            requires_approval=False,
+            max_length=36,
+        ),
+    )
+)
+_DEFINITIONS = (*_DEFINITIONS, *_BRAND_DEFINITIONS)
+
 SETTINGS_REGISTRY: Final[dict[str, SettingDefinition]] = {
     definition.full_key: definition for definition in _DEFINITIONS
 }
@@ -2245,6 +2291,12 @@ def validate_setting_update(section: str, key: str, value: object) -> str:
         return str(parsed)
 
     string_value = _validate_string(definition, value)
+    if section in {"brand_external", "brand_internal"} and key in {"name_zh", "name_en"}:
+        string_value = string_value.strip()
+        if not string_value or "<" in string_value or ">" in string_value:
+            raise SettingValidationError(
+                f"Setting '{definition.full_key}' must be non-empty plain text"
+            )
     if definition.kind is SettingKind.ENUM:
         if string_value not in definition.allowed_values:
             raise SettingValidationError(
@@ -2262,6 +2314,14 @@ def validate_setting_update(section: str, key: str, value: object) -> str:
             raise SettingValidationError(
                 f"Setting '{definition.full_key}' must be a valid email address"
             )
+    elif definition.kind is SettingKind.UUID:
+        if string_value:
+            try:
+                string_value = str(uuid.UUID(string_value))
+            except ValueError as exc:
+                raise SettingValidationError(
+                    f"Setting '{definition.full_key}' must be a UUID or empty"
+                ) from exc
     elif definition.kind is SettingKind.URL:
         parsed_url = urlsplit(string_value)
         if (

@@ -10,6 +10,7 @@ import {
   mutantLinePhenotypesQueryOptions,
   mutantLineQueryOptions,
 } from "../lib/query-options";
+import { t } from "../lib/i18n";
 import { useSiteContextStore } from "../stores/site-context";
 
 // Public mutant detail (Phase F, DB-CORE-2). The record is addressed + rendered
@@ -62,16 +63,16 @@ function displayValue(value: string | null): string {
 <template>
   <ConfigProvider :theme="createThemeConfig({ dark: false })">
     <div class="mx-auto max-w-3xl p-8">
-      <p class="text-sm opacity-70"><RouterLink to="/mutants" class="underline">Mutant lines</RouterLink></p>
+      <p class="text-sm opacity-70"><RouterLink to="/mutants" class="underline">{{ t("mutantLines.title") }}</RouterLink></p>
 
       <div v-if="isLoading" data-testid="mutant-loading" class="mt-6 h-24 animate-pulse rounded bg-black/5" />
       <div v-else-if="isError" data-testid="mutant-error" class="mt-6 rounded border border-red-300 p-5">
-        <p class="font-medium">This mutant line is unavailable.</p>
+        <p class="font-medium">{{ t("mutantLines.unavailable") }}</p>
       </div>
 
       <article v-else-if="line" data-testid="mutant-detail" class="mt-4">
         <div class="flex items-center gap-2">
-          <Tag class="font-mono uppercase">mutant</Tag>
+          <Tag class="font-mono uppercase">{{ t("mutantLines.entityTag") }}</Tag>
           <h1 class="text-2xl font-semibold" data-testid="mutant-name">{{ line.name }}</h1>
           <span class="ml-auto font-mono text-sm opacity-70" data-testid="mutant-public-id">
             {{ line.public_id }}
@@ -79,15 +80,15 @@ function displayValue(value: string | null): string {
         </div>
 
         <dl class="mt-4 grid grid-cols-2 gap-2 text-sm">
-          <dt class="opacity-70">Mutagen</dt>
+          <dt class="opacity-70">{{ t("mutantLines.mutagenLabel") }}</dt>
           <dd data-testid="mutant-mutagen">{{ line.mutagen ?? "—" }}</dd>
-          <dt class="opacity-70">Cultivar</dt>
+          <dt class="opacity-70">{{ t("mutantLines.cultivarLabel") }}</dt>
           <dd>{{ line.cultivar ?? "—" }}</dd>
-          <dt class="opacity-70">Generation</dt>
+          <dt class="opacity-70">{{ t("mutantLines.generationLabel") }}</dt>
           <dd>{{ line.generation ?? "—" }}</dd>
-          <dt class="opacity-70">Species</dt>
+          <dt class="opacity-70">{{ t("mutantLines.speciesLabel") }}</dt>
           <dd>{{ line.species }}</dd>
-          <dt class="opacity-70">Linked variants</dt>
+          <dt class="opacity-70">{{ t("mutantLines.linkedVariants") }}</dt>
           <dd>{{ line.variant_count }}</dd>
         </dl>
 
@@ -99,39 +100,39 @@ function displayValue(value: string | null): string {
           aria-labelledby="mutant-phenotypes"
           data-testid="mutant-phenotypes"
         >
-          <h2 id="mutant-phenotypes" class="text-lg font-medium">Phenotype observations</h2>
+          <h2 id="mutant-phenotypes" class="text-lg font-medium">{{ t("mutantLines.phenotypeObservations") }}</h2>
           <p class="mt-1 text-xs opacity-60">
-            Observations recorded for this line; they do not by themselves establish causality.
+            {{ t("mutantLines.phenotypeNote") }}
           </p>
           <p
             v-if="phenotypesLoading"
             data-testid="phenotypes-loading"
             class="mt-3 text-sm opacity-70"
           >
-            Loading phenotypes…
+            {{ t("mutantLines.phenotypesLoading") }}
           </p>
           <p
             v-else-if="phenotypesError"
             data-testid="phenotypes-error"
             class="mt-3 text-sm opacity-70"
           >
-            Could not load phenotypes.
+            {{ t("mutantLines.phenotypesError") }}
           </p>
           <p
             v-else-if="phenotypes.length === 0"
             data-testid="phenotypes-empty"
             class="mt-3 text-sm opacity-70"
           >
-            No phenotypes recorded.
+            {{ t("mutantLines.phenotypesEmpty") }}
           </p>
           <table v-else class="mt-3 w-full text-sm" data-testid="phenotypes-table">
             <thead class="text-left opacity-60">
               <tr>
-                <th>Category</th>
-                <th>Name</th>
-                <th>Value</th>
-                <th>Unit</th>
-                <th>Description</th>
+                <th>{{ t("mutantLines.categoryLabel") }}</th>
+                <th>{{ t("genes.transcriptName") }}</th>
+                <th>{{ t("mutantLines.valueLabel") }}</th>
+                <th>{{ t("common.unit") }}</th>
+                <th>{{ t("mutantLines.description") }}</th>
               </tr>
             </thead>
             <tbody>
@@ -149,7 +150,7 @@ function displayValue(value: string | null): string {
         <!-- DB-CORE-2: no internal identifier is ever rendered on the public site. -->
       </article>
 
-      <div v-else data-testid="mutant-empty" class="mt-6 text-sm opacity-70">Mutant line not found.</div>
+      <div v-else data-testid="mutant-empty" class="mt-6 text-sm opacity-70">{{ t("mutantLines.notFound") }}</div>
     </div>
   </ConfigProvider>
 </template>

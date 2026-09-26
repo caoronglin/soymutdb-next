@@ -40,15 +40,18 @@ def surrogate_id(key: str) -> int:
     return int.from_bytes(hashlib.sha256(key.encode()).digest()[:4], "big", signed=False) & 0xFFFFFFFF
 
 
-def compute_variant_id(release_id: str, chrom: str, pos: int, ref: str, alt: str) -> int:
-    """Deterministic variant id: first 8 bytes of sha256(release|chrom|pos|ref|alt).
+def compute_variant_id(
+    release_id: str, assembly: str, chrom: str, pos: int, ref: str, alt: str
+) -> int:
+    """Deterministic variant id: sha256(release|assembly|chrom|pos|ref|alt).
 
-    The object key is deliberately NOT part of the identity, matching
-    apps/worker/tasks/ingest.py: the manifest fingerprint ignores it so a retry
-    can resume the same logical import, and seeded rows must agree with the
-    ids the import protocol would mint for the same facts.
+    ``assembly`` is part of the identity because v4/v5 are distinct coordinate
+    namespaces (ASM-01). The object key is deliberately NOT part of the
+    identity, matching apps/worker/tasks/ingest.py: the manifest fingerprint
+    ignores it so a retry can resume the same logical import, and seeded rows
+    must agree with the ids the import protocol would mint for the same facts.
     """
-    key = f"{release_id}|{chrom}|{pos}|{ref}|{alt}"
+    key = f"{release_id}|{assembly}|{chrom}|{pos}|{ref}|{alt}"
     return int.from_bytes(hashlib.sha256(key.encode()).digest()[:8], byteorder="big", signed=False)
 
 
@@ -323,7 +326,7 @@ def parse_vcf(path: Path, release_id: str, assembly: str,
             gene_id = ann_gene_id or info_map.get("GENE", "") or _nearest_gene_hint(chrom, pos)
             gene_symbol = ann_gene_symbol or info_map.get("GENE_SYMBOL", "")
             rows.append({
-                "variant_id": compute_variant_id(release_id, chrom, pos, ref, alt),
+                "variant_id": compute_variant_id(release_id, assembly, chrom, pos, ref, alt),
                 "release_key": str(release_id), "assembly_key": assembly,
                 "chromosome": chrom, "position": pos, "ref_allele": ref, "alt_allele": alt,
                 "variant_type": vtype, "variant_subtype": subtype, "length": variant_length(ref, alt),

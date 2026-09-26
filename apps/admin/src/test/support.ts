@@ -27,14 +27,14 @@ vi.mock("@soymutdb/ui-vue", () => ({
  */
 export function mountAdminView(
   component: Component,
-  options: { path: string; query?: Record<string, string> } = { path: "/" },
+  options: { path: string; query?: Record<string, string>; push?: string } = { path: "/" },
 ): { wrapper: VueWrapper; router: ReturnType<typeof createRouter>; pinia: ReturnType<typeof createPinia> } {
   const routes: RouteRecordRaw[] = [
     { path: options.path, name: options.path, component },
     { path: "/:pathMatch(.*)*", component },
   ];
   const router = createRouter({ history: createMemoryHistory(), routes });
-  void router.push({ path: options.path, query: options.query ?? {} });
+  void router.push({ path: options.push ?? options.path, query: options.query ?? {} });
   const pinia = createPinia();
   const wrapper = mount(component, {
     attachTo: document.body,

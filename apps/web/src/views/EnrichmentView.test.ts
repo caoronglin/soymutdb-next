@@ -87,7 +87,7 @@ describe("EnrichmentView", () => {
       min_genes: 5,
     });
     expect(wrapper.get('[data-testid="enrichment-summary"]').text()).toContain("Wm82.v5 · v5");
-    expect(wrapper.get('[data-testid="enrichment-summary"]').text()).toContain("release 7");
+    expect(wrapper.get('[data-testid="enrichment-summary"]').text()).toContain("Release 7");
     expect(wrapper.get('[data-testid="enrichment-provenance"]').text()).toContain(
       "Synthetic GO fixture · 1",
     );

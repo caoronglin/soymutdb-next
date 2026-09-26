@@ -322,7 +322,7 @@ services:
       SOYMUTDB_PLUGIN_MANIFEST_SIGNING_KEY: ${SOYMUTDB_PLUGIN_MANIFEST_SIGNING_KEY:-}
       SOYMUTDB_PLUGIN_MANIFESTS_JSON: ${SOYMUTDB_PLUGIN_MANIFESTS_JSON:-[]}
     expose:
-      - "8000"
+      - "8010"
     networks:
       default:
       api-proxy:
@@ -331,7 +331,7 @@ services:
         aliases: ["api-tunnel"]
     healthcheck:
       # Liveness（readiness 由发布脚本轮询 /api/v1/health/ready）
-      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health/live', timeout=5)" ]
+      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8010/api/v1/health/live', timeout=5)" ]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -523,7 +523,7 @@ services:
 
   # ------------------------------------------------------------------
   # MCP Server (FastMCP, Streamable HTTP) - B1 skeleton
-  # 工具为 stub，穿透调用内部 REST API（SOYMUTDB_API_BASE -> api:8000）。
+  # 工具为 stub，穿透调用内部 REST API（SOYMUTDB_API_BASE -> api:8010）。
   # 写工具鉴权用 SOYMUTDB_MCP_API_TOKEN（Bearer 透传）；60/min 限流占位，
   # 由 G3 门禁在传输层实现。端口仅容器网络可见（expose，不发布到宿主机——
   # 宿主 9000 已被 clickhouse 占用）；对外经 nginx /mcp/ 反代（SSE 配置见
@@ -537,7 +537,7 @@ services:
       api:
         condition: service_healthy
     environment:
-      SOYMUTDB_API_BASE: http://api:8000
+      SOYMUTDB_API_BASE: http://api:8010
       SOYMUTDB_MCP_API_TOKEN: ${SOYMUTDB_MCP_API_TOKEN:?SOYMUTDB_MCP_API_TOKEN is required}
       SOYMUTDB_MCP_REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis:6379/0
     expose:

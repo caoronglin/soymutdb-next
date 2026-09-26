@@ -211,7 +211,10 @@ def _columns_from_ddl(sql: str, table: str) -> dict[str, str]:
     which the one-line summary tables in the migration SQL never have. This
     splits on top-level commas instead, so it reads both layouts and keeps
     ``SimpleAggregateFunction(sum, UInt64)`` intact as one definition.
+    Line comments are stripped first: a comma inside a trailing ``--`` comment
+    would otherwise be mis-read as a column separator.
     """
+    sql = _strip_line_comments(sql)
     body = re.search(
         rf"CREATE TABLE(?: IF NOT EXISTS)? {table} \((.*?)\) ENGINE", sql, re.S
     )
@@ -307,3 +310,44 @@ def test_ttl_expressions_are_date_time_typed() -> None:
                 "DateTime64 column in toDateTime(); ClickHouse rejects a bare "
                 "DateTime64 TTL expression with BAD_TTL_EXPRESSION"
             )
+
+
+def test_import_staging_table_is_declared_in_production_ddl() -> None:
+    """P1-03: the ON import path needs variant_facts_staging in real DDL.
+
+    The staging -> verify -> finalize protocol writes canonical rows into
+    ``variant_facts_staging`` before the release rebuild. It previously existed
+    only in the worker test fixture, so enabling the VCF flag against a real
+    engine would fail on a missing table.
+    """
+    canonical = _table_columns(DDL.read_text(), "variant_facts")
+    staging = _table_columns(DDL.read_text(), "variant_facts_staging")
+    expected = set(canonical) | {"import_id", "batch_id"}
+    assert set(staging) == expected
+
+    upgrade = UPGRADE.read_text()
+    upgrade_staging = _table_columns(upgrade, "variant_facts_staging")
+    assert set(upgrade_staging) == expected
+
+    key_sql = DDL.read_text()
+    key_sql = key_sql[key_sql.index("CREATE TABLE IF NOT EXISTS variant_facts_staging"):]
+    key_sql = key_sql[: key_sql.index("SETTINGS index_granularity")]
+    partition = re.search(r"PARTITION BY \(([^)]*)\)", key_sql).group(1)
+    order = re.search(r"ORDER BY \(([^)]*)\)", key_sql).group(1)
+    for key in re.findall(r"\b([a-z_]+)\b", partition + "," + order):
+        assert key in staging, f"staging key uses undeclared column: {key}"
+
+
+def test_worker_chdb_fixture_matches_production_staging_ddl() -> None:
+    """The worker's chdb fixture must not drift from the production DDL.
+
+    Acceptance tests load the fixture, so a fixture that quietly disagrees with
+    production (e.g. a missing import_id) would pass while a real engine fails.
+    """
+    fixture = (
+        ROOT / "apps/worker/tests/fixtures/variant_facts_schema.sql"
+    ).read_text()
+    for table in ("variant_facts", "variant_facts_staging"):
+        production = _columns_from_ddl(DDL.read_text(), table)
+        fixture_columns = _columns_from_ddl(fixture, table)
+        assert set(fixture_columns) == set(production), table

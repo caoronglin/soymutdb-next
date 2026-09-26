@@ -148,6 +148,15 @@ describe("queryKeys", () => {
     expect(queryKeys.variants.list({ ...base, start: 2000 })).not.toEqual(key);
     expect(queryKeys.variants.list({ ...base, end: 3000 })).not.toEqual(key);
     expect(queryKeys.variants.list({ ...base, impact: "LOW" })).not.toEqual(key);
+    expect(queryKeys.variants.list({ ...base, variantType: "SNP" })).not.toEqual(key);
+    expect(queryKeys.variants.list({ ...base, mutantLineId: "SM7QF3Z" })).not.toEqual(key);
+    // P1-04: the cursor is sent to the API, so it must key the cache too. A
+    // cursor URL that happens to share a page index with page one otherwise
+    // reads page one's cached rows.
+    expect(queryKeys.variants.list({ ...base, cursor: "c2" })).not.toEqual(
+      queryKeys.variants.list({ ...base, cursor: "c1" }),
+    );
+    expect(queryKeys.variants.list({ ...base, cursor: "c1" })).not.toEqual(key);
   });
 
   it("scopes news caches by category, page and page size", () => {

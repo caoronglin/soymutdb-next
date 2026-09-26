@@ -80,7 +80,7 @@ function scrollToTop() {
         {{ t("common.errorDescription") }}
       </p>
       <template v-else-if="blocks.length > 0">
-        <nav class="mt-6 rounded-lg border p-4" aria-label="Table of contents" data-testid="guide-toc">
+        <nav class="mt-6 rounded-lg border p-4" :aria-label="t('common.tableOfContents')" data-testid="guide-toc">
           <p class="text-sm font-medium">{{ t("docs.gettingStarted") }}</p>
           <ul class="mt-2 grid gap-1 text-sm">
             <li v-for="(item, index) in toc" :key="index" :class="item.kind === 'h3' ? 'ms-4 opacity-70' : ''">

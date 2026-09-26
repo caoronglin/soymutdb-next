@@ -325,7 +325,18 @@ async def update_species_instance(
     instance = await db.get(SpeciesInstance, instance_id)
     if instance is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Instance not found")
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    updates = payload.model_dump(exclude_unset=True)
+    if (
+        ("api_base_url" in updates and updates["api_base_url"] != instance.api_base_url)
+        or ("is_local" in updates and updates["is_local"] != instance.is_local)
+    ):
+        # Health status belongs to a specific origin and role. Never carry a
+        # previous peer's successful check onto a newly registered endpoint.
+        instance.connection_state = "unknown"
+        instance.last_checked_at = None
+        instance.last_error_at = None
+        instance.last_error_code = None
+    for field, value in updates.items():
         setattr(instance, field, value)
     if payload.is_local:
         await _clear_local_flag(db, keep_id=instance.id)

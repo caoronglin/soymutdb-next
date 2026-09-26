@@ -11,10 +11,11 @@
  * Usage
  *   node scripts/dev/local-preview-server.mjs --app portal --port 8090
  *   node scripts/dev/local-preview-server.mjs --app admin  --port 8091
+ *   node scripts/dev/local-preview-server.mjs --app portal --dist apps/web/dist-internal --port 8094
  *
  * Env
  *   SOYMUTDB_PREVIEW_API_HOST  default 127.0.0.1
- *   SOYMUTDB_PREVIEW_API_PORT  default 8000
+ *   SOYMUTDB_PREVIEW_API_PORT  default 8010
  */
 import { createServer, request as httpRequest } from "node:http";
 import { createReadStream, existsSync, statSync } from "node:fs";
@@ -25,6 +26,7 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const APPS = {
   portal: resolve(REPO_ROOT, "apps", "web", "dist"),
   admin: resolve(REPO_ROOT, "apps", "admin", "dist"),
+  jbrowse: resolve(REPO_ROOT, "apps", "jbrowse", "dist"),
 };
 
 const args = process.argv.slice(2);
@@ -34,14 +36,20 @@ function argValue(flag, fallback) {
 }
 
 const appName = argValue("--app", "portal");
-const APP_ROOT = APPS[appName];
+const APP_ROOT = argValue("--dist", APPS[appName]);
 if (!APP_ROOT) {
   console.error(`unknown --app ${appName}; expected one of ${Object.keys(APPS).join(", ")}`);
   process.exit(2);
 }
 
+// JBrowse is served under the portal/console origin at /jbrowse/, matching the
+// deployment shape where the browser frame is same-origin with its shell. The
+// built /jbrowse asset URLs are relative, so stripping the prefix is enough.
+const JBROWSE_ROOT = APPS.jbrowse;
+const JBROWSE_PREFIX = "/jbrowse";
+
 const API_HOST = process.env.SOYMUTDB_PREVIEW_API_HOST ?? "127.0.0.1";
-const API_PORT = Number(process.env.SOYMUTDB_PREVIEW_API_PORT ?? 8000);
+const API_PORT = Number(process.env.SOYMUTDB_PREVIEW_API_PORT ?? 8010);
 const PORT = Number(argValue("--port", process.env.SOYMUTDB_PREVIEW_PORT ?? 8090));
 
 const MIME = {
@@ -85,15 +93,15 @@ function proxy(req, res, url) {
   req.pipe(upstream);
 }
 
-function serveStatic(res, pathname) {
-  let filePath = join(APP_ROOT, normalize(pathname));
-  if (!filePath.startsWith(APP_ROOT)) {
+function serveStatic(res, pathname, root = APP_ROOT) {
+  let filePath = join(root, normalize(pathname));
+  if (!filePath.startsWith(root)) {
     res.writeHead(403).end();
     return;
   }
   if (!existsSync(filePath) || statSync(filePath).isDirectory()) {
     const indexCandidate = join(filePath, "index.html");
-    filePath = existsSync(indexCandidate) ? indexCandidate : join(APP_ROOT, "index.html");
+    filePath = existsSync(indexCandidate) ? indexCandidate : join(root, "index.html");
   }
   if (!existsSync(filePath)) {
     res.writeHead(404, { "content-type": "text/plain" });
@@ -119,6 +127,11 @@ createServer((req, res) => {
   // implements. The document's own `<meta>` policy is what a browser here
   // obeys, which is why the admin build rewrites it too rather than relying on
   // the header alone.
+  if (url.pathname === JBROWSE_PREFIX || url.pathname.startsWith(`${JBROWSE_PREFIX}/`)) {
+    const stripped = url.pathname.slice(JBROWSE_PREFIX.length) || "/";
+    serveStatic(res, stripped, JBROWSE_ROOT);
+    return;
+  }
   serveStatic(res, url.pathname);
 }).listen(PORT, "0.0.0.0", () => {
   console.log(`[${appName}] http://localhost:${PORT}  (app + /api/v1 proxy)`);

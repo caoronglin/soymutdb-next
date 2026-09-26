@@ -88,7 +88,7 @@ const archiveMutation = useMutation({
           </tbody>
         </table>
         <p v-if="errorMessage" role="alert" class="mt-3 text-sm text-red-700">{{ errorMessage }}</p>
-        <nav class="mt-4 flex items-center gap-3" aria-label="Pagination">
+        <nav class="mt-4 flex items-center gap-3" :aria-label="t('common.pagination')">
           <button
             type="button"
             class="rounded-md border px-3 py-1.5 text-sm disabled:opacity-50"

@@ -58,9 +58,9 @@ function toggle(key: string, enabled: boolean) {
       <table v-else class="mt-4 w-full text-sm" data-testid="features-table">
         <thead class="text-left opacity-60">
           <tr>
-            <th scope="col" class="py-2">capability</th>
+            <th scope="col" class="py-2">{{ t("admin.featureCapability") }}</th>
             <th scope="col" class="py-2">{{ t("common.status") }}</th>
-            <th scope="col" class="py-2">description</th>
+            <th scope="col" class="py-2">{{ t("admin.featureDescription") }}</th>
           </tr>
         </thead>
         <tbody>

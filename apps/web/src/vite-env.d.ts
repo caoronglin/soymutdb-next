@@ -7,6 +7,7 @@ interface ImportMetaEnv {
   readonly VITE_API_BASE_URL?: string;
   readonly VITE_BASE_URL?: string;
   readonly VITE_JBROWSE_BASE_URL?: string;
+  readonly VITE_JBROWSE_ENABLED?: string;
   readonly VITE_SITE_VARIANT?: string;
   readonly VITE_SOYMUTDB_RELEASE_ID?: string;
 }

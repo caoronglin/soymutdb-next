@@ -3,6 +3,7 @@ import { computed } from "vue";
 
 import { contains, normalizeInterval } from "@soymutdb/genome-view-model";
 import type { GeneTranscript } from "@soymutdb/api-client";
+import { t } from "../lib/i18n";
 
 interface TranscriptTrack {
   id: string;
@@ -128,11 +129,20 @@ function directionPoints(strand: string, x: number, width: number, y: number): s
   return `${x + 7},${midY - 5} ${x},${midY} ${x + 7},${midY + 5}`;
 }
 
-const assemblyLabel = computed(() => props.assemblyName ?? `Assembly ${props.assemblyId}`);
+const assemblyLabel = computed(
+  () => props.assemblyName ?? `${t("genes.assemblyLabel")} ${props.assemblyId}`,
+);
 const svgLabel = computed(() => {
   const count = layout.value?.tracks.length ?? 0;
-  return `${props.geneId} gene model on ${assemblyLabel.value}, ` +
-    `${props.chromosome}:${props.start}..${props.end}, ${props.strand} strand, ${count} transcripts`;
+  return t("genes.modelAria", {
+    geneId: props.geneId,
+    assembly: assemblyLabel.value,
+    chromosome: props.chromosome,
+    start: props.start,
+    end: props.end,
+    strand: props.strand,
+    count,
+  });
 });
 
 function intervalLabel(start: number, end: number): string {
@@ -147,9 +157,9 @@ function geneArrow(): string | null {
 
 <template>
   <section class="mt-6" aria-labelledby="gene-model-heading" data-testid="gene-model-preview">
-    <h2 id="gene-model-heading" class="text-lg font-medium">Gene structure</h2>
+    <h2 id="gene-model-heading" class="text-lg font-medium">{{ t("genes.structureTitle") }}</h2>
     <p class="mt-1 text-sm opacity-70">
-      {{ assemblyLabel }} · {{ chromosome }} · 1-based inclusive coordinates
+      {{ assemblyLabel }} · {{ chromosome }} · {{ t("genes.coordinatesNote") }}
     </p>
 
     <div v-if="layout" class="mt-3 overflow-x-auto rounded-lg border p-3">
@@ -163,7 +173,7 @@ function geneArrow(): string | null {
         <title>{{ svgLabel }}</title>
 
         <g data-testid="gene-model-gene-track">
-          <text x="8" :y="GENE_Y + 4" class="fill-current text-xs">Gene</text>
+          <text x="8" :y="GENE_Y + 4" class="fill-current text-xs">{{ t("genes.geneLabel") }}</text>
           <line
             :x1="layout.geneX"
             :x2="layout.geneX + layout.geneWidth"
@@ -225,7 +235,7 @@ function geneArrow(): string | null {
             data-testid="gene-model-exon"
             :data-interval="`${exon.start}..${exon.end}`"
           >
-            <title>{{ transcript.label }} exon {{ intervalLabel(exon.start, exon.end) }}</title>
+            <title>{{ t("genes.exonTooltip", { name: transcript.label, interval: intervalLabel(exon.start, exon.end) }) }}</title>
           </rect>
         </g>
 
@@ -253,22 +263,19 @@ function geneArrow(): string | null {
         </g>
       </svg>
       <p class="mt-2 text-xs opacity-70">
-        Blocks mark exons; connecting lines show introns. Arrowheads indicate strand direction.
+        {{ t("genes.structureNote") }}
       </p>
-      <ul class="sr-only" aria-label="Exact gene model coordinates">
+      <ul class="sr-only" :aria-label="t('genes.structureAria')">
         <li>
-          Gene {{ geneId }}: {{ intervalLabel(layout.geneStart, layout.geneEnd) }}
-          ({{ strand }} strand)
+          {{ t("genes.structureGeneLine", { geneId, interval: intervalLabel(layout.geneStart, layout.geneEnd), strand }) }}
         </li>
         <li v-for="transcript in layout.tracks" :key="`detail-${transcript.id}`">
-          Transcript {{ transcript.label }}: {{ intervalLabel(transcript.start, transcript.end) }}
-          ({{ transcript.strand }} strand); exons:
-          {{ transcript.exons.map((exon) => intervalLabel(exon.start, exon.end)).join(", ") || "none" }}
+          {{ t("genes.structureTranscriptLine", { name: transcript.label, interval: intervalLabel(transcript.start, transcript.end), strand: transcript.strand, exons: transcript.exons.map((exon) => intervalLabel(exon.start, exon.end)).join(", ") || t("genes.exonsNone") }) }}
         </li>
       </ul>
     </div>
     <p v-else class="mt-3 rounded border p-4 text-sm opacity-70" data-testid="gene-model-unavailable">
-      Gene structure preview is unavailable because its coordinates are invalid.
+      {{ t("genes.invalidCoordinates") }}
     </p>
   </section>
 </template>

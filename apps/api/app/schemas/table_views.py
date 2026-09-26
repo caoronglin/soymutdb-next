@@ -12,9 +12,40 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from urllib.parse import urlsplit
 
 SiteVariant = Literal["external", "internal"]
+ConnectionState = Literal["unknown", "healthy", "unhealthy", "disabled", "unconfigured"]
+RemoteManagementState = Literal["local", "registration_only"]
+
+
+def _validated_instance_url(value: str | None, *, allow_path: bool) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip()
+    try:
+        parsed = urlsplit(normalized)
+        # Accessing .port validates malformed port syntax.
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError("instance URLs must be valid absolute HTTP(S) URLs") from exc
+    if (
+        parsed.scheme.lower() not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+        or (not allow_path and parsed.path not in {"", "/"})
+    ):
+        raise ValueError("instance URLs must be absolute HTTP(S) URLs without credentials or query")
+    hostname = parsed.hostname.lower()
+    if ":" in hostname:
+        hostname = f"[{hostname}]"
+    netloc = f"{hostname}:{port}" if port is not None else hostname
+    path = parsed.path.rstrip("/") if allow_path else ""
+    return f"{parsed.scheme.lower()}://{netloc}{path}"
 
 
 class TableColumn(BaseModel):
@@ -114,6 +145,34 @@ class SpeciesInstanceBase(BaseModel):
     is_local: bool = False
     notes: str | None = None
 
+    @field_validator("api_base_url")
+    @classmethod
+    def _validate_api_origin(cls, value: str) -> str:
+        return _validated_instance_url(value, allow_path=False) or value
+
+    @field_validator("jbrowse_base_url", "portal_base_url")
+    @classmethod
+    def _validate_site_urls(cls, value: str | None) -> str | None:
+        return _validated_instance_url(value, allow_path=True)
+
+    @model_validator(mode="after")
+    def _remote_api_requires_https(self) -> "SpeciesInstanceBase":
+        if not self.is_local and urlsplit(self.api_base_url).scheme != "https":
+            raise ValueError("remote instance API origins must use HTTPS")
+        return self
+
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_site_url_alias(cls, value):
+        if not isinstance(value, dict) or "site_url" not in value:
+            return value
+        normalized = dict(value)
+        site_url = normalized.pop("site_url")
+        if "portal_base_url" in normalized and normalized["portal_base_url"] != site_url:
+            raise ValueError("site_url and portal_base_url cannot disagree")
+        normalized["portal_base_url"] = site_url
+        return normalized
+
 
 class SpeciesInstanceCreate(SpeciesInstanceBase):
     pass
@@ -130,13 +189,65 @@ class SpeciesInstanceUpdate(BaseModel):
     is_local: bool | None = None
     notes: str | None = None
 
+    @field_validator("api_base_url")
+    @classmethod
+    def _validate_api_origin(cls, value: str | None) -> str | None:
+        return _validated_instance_url(value, allow_path=False)
+
+    @field_validator("jbrowse_base_url", "portal_base_url")
+    @classmethod
+    def _validate_site_urls(cls, value: str | None) -> str | None:
+        return _validated_instance_url(value, allow_path=True)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_site_url_alias(cls, value):
+        if not isinstance(value, dict) or "site_url" not in value:
+            return value
+        normalized = dict(value)
+        site_url = normalized.pop("site_url")
+        if "portal_base_url" in normalized and normalized["portal_base_url"] != site_url:
+            raise ValueError("site_url and portal_base_url cannot disagree")
+        normalized["portal_base_url"] = site_url
+        return normalized
+
+    @model_validator(mode="after")
+    def _remote_api_requires_https(self) -> "SpeciesInstanceUpdate":
+        if (
+            self.api_base_url is not None
+            and self.is_local is not True
+            and urlsplit(self.api_base_url).scheme != "https"
+        ):
+            raise ValueError("remote instance API origins must use HTTPS")
+        return self
+
 
 class SpeciesInstanceResponse(SpeciesInstanceBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    site_url: str | None = None
+    connection_state: ConnectionState = "unknown"
+    last_checked_at: datetime | None = None
+    last_error_at: datetime | None = None
+    is_stale: bool = True
+    remote_management: RemoteManagementState
     created_at: datetime
     updated_at: datetime
+
+
+class SpeciesInstanceHealthResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    code: str
+    connection_state: ConnectionState
+    checked_at: datetime
+    last_checked_at: datetime | None = None
+    last_error_at: datetime | None = None
+    is_stale: bool
+    error_code: str | None = None
+    remote_management: RemoteManagementState
 
 
 class SpeciesInstanceListResponse(BaseModel):
@@ -148,6 +259,7 @@ __all__ = [
     "ResolvedTableView",
     "SpeciesInstanceBase",
     "SpeciesInstanceCreate",
+    "SpeciesInstanceHealthResponse",
     "SpeciesInstanceListResponse",
     "SpeciesInstanceResponse",
     "SpeciesInstanceUpdate",

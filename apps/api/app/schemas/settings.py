@@ -8,7 +8,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-PublicSettingKind = Literal["string", "color", "integer", "boolean", "enum", "email", "url"]
+PublicSettingKind = Literal[
+    "string", "color", "integer", "boolean", "enum", "email", "url", "uuid"
+]
 PublicSettingPermission = Literal["administrator"]
 PublicSettingScope = Literal["global"]
 PublicSettingRedaction = Literal["none", "omit"]

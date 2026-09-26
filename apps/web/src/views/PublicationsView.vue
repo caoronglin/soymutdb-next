@@ -52,7 +52,7 @@ const isError = computed(() => toValue(query.isError));
             <span v-if="item.journal">{{ item.journal }}</span>
             <span v-if="item.year"> · {{ item.year }}</span>
           </p>
-          <p v-if="item.doi" class="mt-1 font-mono text-xs opacity-70">DOI: {{ item.doi }}</p>
+          <p v-if="item.doi" class="mt-1 font-mono text-xs opacity-70">{{ t("publications.doi") }} {{ item.doi }}</p>
         </li>
       </ol>
     </div>

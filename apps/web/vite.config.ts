@@ -77,7 +77,7 @@ export default defineConfig(({ mode }) => {
   // Development is the only mode allowed to bind a loopback origin.
   const allowInsecureDevOrigins = mode === "development";
   const apiOrigin = requireDeploymentOrigin(
-    env.VITE_API_BASE_URL || (mode === "development" ? "http://localhost:8000" : undefined),
+    env.VITE_API_BASE_URL || (mode === "development" ? "http://localhost:8010" : undefined),
     "API",
     { allowInsecureHttp: allowInsecureDevOrigins },
   );

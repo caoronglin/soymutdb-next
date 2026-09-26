@@ -10,7 +10,70 @@ All fields are optional — a fresh deployment without the corresponding
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+SiteVariant = Literal["external", "internal"]
+
+
+class SiteBrandValues(BaseModel):
+    """Bilingual display names and a verified media-library icon URL."""
+
+    name_zh: str
+    name_en: str
+    icon_url: str | None = None
+
+
+class SiteBrandResponse(SiteBrandValues):
+    """Brand values for one explicitly selected public site variant."""
+
+    variant: SiteVariant
+
+
+class AdminSiteBrandResponse(BaseModel):
+    """Versioned admin view; values are adapted from the settings registry."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    variant: SiteVariant
+    version: int = Field(ge=0)
+    values: SiteBrandValues
+
+
+class SiteBrandPatchValues(BaseModel):
+    """Sparse site-brand patch. An explicit null icon clears the selection."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name_zh: str | None = Field(default=None, min_length=1, max_length=120)
+    name_en: str | None = Field(default=None, min_length=1, max_length=120)
+    icon_url: str | None = Field(default=None, max_length=2048)
+
+    @model_validator(mode="after")
+    def _at_least_one_value(self) -> "SiteBrandPatchValues":
+        if not self.model_fields_set:
+            raise ValueError("values must contain at least one brand field")
+        for field in ("name_zh", "name_en"):
+            value = getattr(self, field)
+            if value is not None:
+                normalized = value.strip()
+                if not normalized:
+                    raise ValueError(f"{field} must not be blank")
+                setattr(self, field, normalized)
+        if self.icon_url is not None:
+            normalized_url = self.icon_url.strip()
+            if not normalized_url:
+                raise ValueError("icon_url must be a verified media URL or null")
+            self.icon_url = normalized_url
+        return self
+
+
+class SiteBrandPatchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_version: int = Field(ge=0)
+    values: SiteBrandPatchValues
 
 
 class AboutContentResponse(BaseModel):

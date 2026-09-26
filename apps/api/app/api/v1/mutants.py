@@ -17,31 +17,40 @@ from ...core.exceptions import NotFoundError
 from ...core.public_ids import normalize_public_id
 from ...models.variant import MutantLine, Phenotype, VariantSummary
 from ...schemas.variant import MutantLineDetail, MutantLineResponse, PhenotypeResponse
+from ...services.release_context import ReleaseContext, get_release_context
 
 router = APIRouter(prefix="/mutants", tags=["mutants"])
 
 
-def _visible_public_conditions():
-    """Filters shared by every public mutant entry point."""
+def _visible_public_conditions(release_id: int):
+    """Filters shared by every public mutant entry point.
+
+    A record is publicly visible only when it belongs to the currently
+    resolved published release. Rows attached to a draft/other release or
+    with ``release_id IS NULL`` are excluded, so an unpublished draft can
+    never surface through a public route.
+    """
     return (
         MutantLine.is_deleted.is_(False),
         MutantLine.is_public.is_(True),
         MutantLine.public_id.is_not(None),
+        MutantLine.release_id == release_id,
     )
 
 
 @router.get("", response_model=list[MutantLineResponse])
 async def list_mutant_lines(
     db: AsyncSession = Depends(get_db),
+    release_context: ReleaseContext = Depends(get_release_context),
     mutagen: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
 ) -> list[MutantLineResponse]:
-    """List public mutant lines."""
+    """List public mutant lines from the active published release."""
     variant_count = func.count(VariantSummary.id).label("variant_count")
     stmt = (
         select(MutantLine, variant_count)
         .outerjoin(VariantSummary, VariantSummary.mutant_line_id == MutantLine.id)
-        .where(*_visible_public_conditions())
+        .where(*_visible_public_conditions(release_context.release_id))
         .group_by(MutantLine.id)
         .order_by(func.lower(MutantLine.public_id), MutantLine.id)
         .limit(limit)
@@ -56,6 +65,7 @@ async def list_mutant_lines(
 async def get_mutant_line(
     public_id: str,
     db: AsyncSession = Depends(get_db),
+    release_context: ReleaseContext = Depends(get_release_context),
 ) -> MutantLineDetail:
     """Get a public mutant line by its public identifier.
 
@@ -68,7 +78,7 @@ async def get_mutant_line(
         .outerjoin(VariantSummary, VariantSummary.mutant_line_id == MutantLine.id)
         .where(
             func.upper(MutantLine.public_id) == normalize_public_id(public_id),
-            *_visible_public_conditions(),
+            *_visible_public_conditions(release_context.release_id),
         )
         .group_by(MutantLine.id)
     )
@@ -83,12 +93,13 @@ async def get_mutant_line(
 async def get_phenotypes(
     public_id: str,
     db: AsyncSession = Depends(get_db),
+    release_context: ReleaseContext = Depends(get_release_context),
 ) -> list[PhenotypeResponse]:
-    """List phenotypes for a public mutant line."""
+    """List phenotypes for a public mutant line in the active release."""
     visible_parent = await db.execute(
         select(MutantLine).where(
             func.upper(MutantLine.public_id) == normalize_public_id(public_id),
-            *_visible_public_conditions(),
+            *_visible_public_conditions(release_context.release_id),
         )
     )
     ml = visible_parent.scalar_one_or_none()

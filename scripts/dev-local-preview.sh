@@ -26,7 +26,7 @@
 #   SOYMUTDB_DATABASE_URL    required; the database the API reads
 #   SOYMUTDB_JWT_SECRET      required; >= 32 chars
 #   SOYMUTDB_PREVIEW_PORT    origin port               (default 8090)
-#   SOYMUTDB_PREVIEW_API_PORT API port                (default 8000)
+#   SOYMUTDB_PREVIEW_API_PORT API port                (default 8010)
 #   SOYMUTDB_PREVIEW_ORIGIN  portal origin the browser uses (default http://localhost:$PORT)
 #   SOYMUTDB_PREVIEW_ADMIN_PORT  console port          (default 8091)
 #   SOYMUTDB_PREVIEW_ADMIN_ORIGIN console origin (default http://localhost:$ADMIN_PORT)
@@ -42,7 +42,7 @@ cd "${REPO_ROOT}"
 
 PORT="${SOYMUTDB_PREVIEW_PORT:-8090}"
 ADMIN_PORT="${SOYMUTDB_PREVIEW_ADMIN_PORT:-8091}"
-API_PORT="${SOYMUTDB_PREVIEW_API_PORT:-8000}"
+API_PORT="${SOYMUTDB_PREVIEW_API_PORT:-8010}"
 PORTAL_ORIGIN="${SOYMUTDB_PREVIEW_ORIGIN:-http://localhost:${PORT}}"
 ADMIN_ORIGIN="${SOYMUTDB_PREVIEW_ADMIN_ORIGIN:-http://localhost:${ADMIN_PORT}}"
 LOG_DIR="${SOYMUTDB_PREVIEW_LOG_DIR:-.dev-logs}"

@@ -245,7 +245,7 @@ function applyLocus() {
         :key="iframeKey"
         ref="iframeRef"
         :src="jbrowseSrc"
-        title="SoyMutDB genome browser (JBrowse 2)"
+        :title="t('browser.iframeTitle')"
         class="mt-4 h-[70vh] w-full rounded-md border"
         data-testid="browser-iframe"
       />

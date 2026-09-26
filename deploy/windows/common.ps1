@@ -4,7 +4,7 @@ $Script:DeployRoot = (Resolve-Path (Join-Path $PSScriptRoot "../..")).Path
 $Script:EnvFile = Join-Path $Script:DeployRoot ".env"
 $Script:ServiceName = if ($env:WEB_SERVICE_NAME) { $env:WEB_SERVICE_NAME } else { "SoyMutDB-API" }
 $Script:ApiHost = if ($env:WEB_API_HOST) { $env:WEB_API_HOST } else { "127.0.0.1" }
-$Script:ApiPort = if ($env:WEB_API_PORT) { $env:WEB_API_PORT } else { "8000" }
+$Script:ApiPort = if ($env:WEB_API_PORT) { $env:WEB_API_PORT } else { "8010" }
 $Script:WinSW = Join-Path $PSScriptRoot "winsw.exe"
 
 function Test-DryRun([switch]$DryRun) { return [bool]$DryRun }

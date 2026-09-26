@@ -7,6 +7,7 @@ import type { NewsSummary } from "@soymutdb/api-client";
 import { ConfigProvider, Tag, createThemeConfig } from "@soymutdb/ui-vue";
 
 import { newsListQueryOptions } from "../lib/query-options";
+import { t } from "../lib/i18n";
 
 // Public news list (Phase 3 parity). The filters live in the URL
 // (/news?category=update&page=2) so reload, back/forward, and shared links
@@ -14,6 +15,17 @@ import { newsListQueryOptions } from "../lib/query-options";
 // is never inferred from the host or a cookie.
 const PAGE_SIZE = 10;
 const CATEGORIES = ["all", "news", "update", "announcement"] as const;
+
+/** Category buttons show dictionary labels, not the raw query values. */
+function categoryLabel(value: string): string {
+  const keys: Record<string, string> = {
+    all: "news.categories.all",
+    news: "news.categories.news",
+    update: "news.categories.update",
+    announcement: "news.categories.announcement",
+  };
+  return t(keys[value] ?? "news.categories.all");
+}
 
 const route = useRoute();
 const router = useRouter();
@@ -75,13 +87,13 @@ function goToPage(next: number) {
 <template>
   <ConfigProvider :theme="createThemeConfig({ dark: false })">
     <div class="mx-auto max-w-3xl p-8">
-      <p class="text-sm opacity-70"><RouterLink to="/" class="underline">Home</RouterLink></p>
-      <h1 class="mt-2 text-2xl font-semibold">News</h1>
+      <p class="text-sm opacity-70"><RouterLink to="/" class="underline">{{ t("nav.home") }}</RouterLink></p>
+      <h1 class="mt-2 text-2xl font-semibold">{{ t("news.title") }}</h1>
       <p class="mt-2 text-sm opacity-70">
-        Announcements, updates, and news from the SoyMutDB project.
+        {{ t("news.subtitle") }}
       </p>
 
-      <nav class="mt-6 flex flex-wrap gap-2" aria-label="News categories">
+      <nav class="mt-6 flex flex-wrap gap-2" :aria-label="t('news.categoriesAria')">
         <button
           v-for="option in CATEGORIES"
           :key="option"
@@ -92,7 +104,7 @@ function goToPage(next: number) {
           :data-testid="`news-category-${option}`"
           @click="selectCategory(option)"
         >
-          {{ option }}
+          {{ categoryLabel(option) }}
         </button>
       </nav>
 
@@ -100,15 +112,15 @@ function goToPage(next: number) {
         <div v-for="index in 3" :key="index" class="h-16 w-full rounded bg-black/5" />
       </div>
       <div v-else-if="isError" data-testid="news-error" class="mt-6 rounded border border-red-300 p-5">
-        <p class="font-medium">Could not load news.</p>
+        <p class="font-medium">{{ t("news.loadErrorTitle") }}</p>
       </div>
 
-      <section v-else data-testid="news-results" class="mt-6" aria-label="News articles">
+      <section v-else data-testid="news-results" class="mt-6" :aria-label="t('news.articlesAria')">
         <p class="mb-3 text-sm opacity-70" data-testid="news-total">
-          {{ total }} article{{ total === 1 ? "" : "s" }}
+          {{ t("news.total", { count: total }) }}
         </p>
         <p v-if="items.length === 0" data-testid="news-empty" class="text-sm opacity-70">
-          No articles in this category yet.
+          {{ t("news.emptyCategory") }}
         </p>
         <ul v-else class="grid gap-3">
           <li v-for="item in items" :key="item.id">
@@ -127,7 +139,7 @@ function goToPage(next: number) {
         <nav
           v-if="totalPages > 1"
           class="mt-4 flex items-center justify-between text-sm"
-          aria-label="News pagination"
+          :aria-label="t('news.paginationAria')"
         >
           <button
             type="button"
@@ -136,9 +148,9 @@ function goToPage(next: number) {
             data-testid="news-previous"
             @click="goToPage(page - 1)"
           >
-            Previous
+            {{ t("news.prevPage") }}
           </button>
-          <span class="opacity-70" data-testid="news-page">Page {{ page }} of {{ totalPages }}</span>
+          <span class="opacity-70" data-testid="news-page">{{ t("news.pageOf", { page, pages: totalPages }) }}</span>
           <button
             type="button"
             class="rounded-md border px-3 py-1 disabled:opacity-50"
@@ -146,7 +158,7 @@ function goToPage(next: number) {
             data-testid="news-next"
             @click="goToPage(page + 1)"
           >
-            Next
+            {{ t("news.nextPage") }}
           </button>
         </nav>
       </section>

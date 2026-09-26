@@ -3,7 +3,7 @@
 # =====================================================================
 # Scrapes only existing services with metrics endpoints (all exporters are
 # defined in docker-compose.yml):
-#   - api                FastAPI /metrics on port 8000
+#   - api                FastAPI /metrics on port 8010
 #   - clickhouse         built-in /metrics on port 9363
 #   - postgres-exporter  port 9187 (service: postgres-exporter)
 #   - redis-exporter     port 9121 (service: redis-exporter; scrapes both
@@ -35,7 +35,7 @@ scrape_configs:
   # ------------------------------------------------------------------
   - job_name: "api"
     static_configs:
-      - targets: ["api:8000"]
+      - targets: ["api:8010"]
     metrics_path: "/metrics"
     scrape_interval: 10s
     scrape_timeout: 5s

@@ -272,6 +272,18 @@ async def test_global_cursor_merges_sources_by_score_without_skipping(
     monkeypatch.setattr(service, "_search_mutant_lines", mutants)
     monkeypatch.setattr(service, "_search_publications", publications)
 
+    async def gene_assembly_distribution(db, query, pattern, *, release_id):
+        del db, query, pattern, release_id
+        distribution: dict[str, int] = {}
+        for row in rows[SearchResultType.GENE]:
+            key = str(row[2]["assembly_id"])
+            distribution[key] = distribution.get(key, 0) + 1
+        return distribution
+
+    monkeypatch.setattr(
+        service, "_gene_assembly_distribution", gene_assembly_distribution
+    )
+
     response = await service.global_search(
         object(), "same query", types=list(rows), limit=limit
     )

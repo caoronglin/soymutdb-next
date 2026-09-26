@@ -48,14 +48,14 @@ const lastPage = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
     <div>
       <h1 class="text-xl font-semibold">{{ t("admin.auditLogs") }}</h1>
       <p class="mt-1 text-sm opacity-70">
-        {{ t("common.total") }}: {{ total }} · read-only
+        {{ t("common.total") }}: {{ total }} · {{ t("admin.audit.readOnly") }}
       </p>
 
       <form class="mt-4 flex gap-2" role="search" @submit.prevent="page = 1">
         <input
           v-model="action"
           class="w-64 rounded-md border bg-background px-2 py-1.5 text-sm font-mono"
-          placeholder="action"
+          :placeholder="t('admin.audit.actionPlaceholder')"
           data-testid="audit-action-filter"
         />
         <button type="submit" class="rounded-md border px-3 py-1.5 text-sm">{{ t("common.apply") }}</button>
@@ -71,9 +71,9 @@ const lastPage = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
       <table v-else class="mt-4 w-full text-sm" data-testid="audit-table">
         <thead class="text-left opacity-60">
           <tr>
-            <th scope="col" class="py-2">action</th>
-            <th scope="col" class="py-2">actor</th>
-            <th scope="col" class="py-2">resource</th>
+            <th scope="col" class="py-2">{{ t("admin.audit.action") }}</th>
+            <th scope="col" class="py-2">{{ t("admin.audit.actor") }}</th>
+            <th scope="col" class="py-2">{{ t("admin.audit.resource") }}</th>
             <th scope="col" class="py-2">{{ t("common.date") }}</th>
           </tr>
         </thead>
@@ -89,7 +89,7 @@ const lastPage = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
         </tbody>
       </table>
 
-      <nav v-if="items.length" class="mt-4 flex items-center gap-3" aria-label="Pagination">
+      <nav v-if="items.length" class="mt-4 flex items-center gap-3" :aria-label="t('common.pagination')">
         <button
           type="button"
           class="rounded-md border px-3 py-1.5 text-sm disabled:opacity-50"

@@ -7,6 +7,7 @@ import { useRoute } from "vue-router";
 import { ConfigProvider, Tag, createThemeConfig } from "@soymutdb/ui-vue";
 
 import { newsDetailQueryOptions } from "../lib/query-options";
+import { t } from "../lib/i18n";
 
 // Public news article (Phase 3 parity). The article body is CMS HTML: the
 // backend sanitises it, and the client re-sanitises with DOMPurify before
@@ -46,14 +47,14 @@ const listQuery = computed(() => (lang.value === "zh" ? { lang: "zh" } : {}));
     <div class="mx-auto max-w-3xl p-8">
       <p class="text-sm opacity-70">
         <RouterLink :to="{ path: '/news', query: listQuery }" class="underline">
-          News
+          {{ t("nav.news") }}
         </RouterLink>
       </p>
 
       <div v-if="isLoading" data-testid="news-detail-loading" class="mt-6 h-24 animate-pulse rounded bg-black/5" />
 
       <div v-else-if="isError" data-testid="news-detail-error" class="mt-6 rounded border border-red-300 p-5">
-        <p class="font-medium">This article is unavailable.</p>
+        <p class="font-medium">{{ t("news.unavailable") }}</p>
       </div>
 
       <article v-else-if="article" data-testid="news-detail" class="mt-4">
@@ -68,7 +69,7 @@ const listQuery = computed(() => (lang.value === "zh" ? { lang: "zh" } : {}));
       </article>
 
       <div v-else data-testid="news-detail-empty" class="mt-6 text-sm opacity-70">
-        Article not found.
+        {{ t("news.articleNotFound") }}
       </div>
     </div>
   </ConfigProvider>

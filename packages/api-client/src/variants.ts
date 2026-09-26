@@ -7,6 +7,8 @@ export interface VariantSummary {
   ref_allele: string;
   alt_allele: string;
   variant_type: string;
+  /** Assembly key the row came from; lets an "All assemblies" list label rows. */
+  assembly?: string | null;
   consequence?: string;
   impact?: string;
   gene_id?: string;

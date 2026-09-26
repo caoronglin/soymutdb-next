@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed, reactive, ref, toValue, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 
 import { adminSettingsApi, type SettingValue } from "@soymutdb/api-client";
 import { Button, ConfigProvider, Tag, createThemeConfig } from "@soymutdb/ui-vue";
@@ -18,6 +19,8 @@ import { t } from "../lib/i18n";
  * each other.
  */
 const queryClient = useQueryClient();
+const route = useRoute();
+const router = useRouter();
 const activeSection = ref("");
 const draft = reactive<Record<string, string>>({});
 const errorMessage = ref("");
@@ -36,13 +39,26 @@ const sections = computed(() =>
   })),
 );
 
+// The active section is shareable: `?section=` selects a registered section
+// and the sidebar writes it back, so a legacy deep link (e.g. one that lands on
+// the security section) opens the right editor instead of the first one.
 watch(
-  sections,
-  (value) => {
+  [sections, () => route.query.section],
+  ([value, requested]) => {
+    const wanted = typeof requested === "string" ? requested : "";
+    if (wanted && value.some((section) => section.id === wanted)) {
+      activeSection.value = wanted;
+      return;
+    }
     if (!activeSection.value && value.length > 0) activeSection.value = value[0]!.id;
   },
   { immediate: true },
 );
+
+function selectSection(id: string): void {
+  activeSection.value = id;
+  void router.replace({ path: route.path, query: { ...route.query, section: id } });
+}
 
 const currentSection = computed(() => sections.value.find((section) => section.id === activeSection.value));
 
@@ -100,13 +116,20 @@ const saveMutation = useMutation({
   <ConfigProvider :theme="createThemeConfig({ dark: false })">
     <div>
       <h1 class="text-xl font-semibold">{{ t("admin.settings") }}</h1>
+      <RouterLink
+        to="/settings/brand"
+        class="mt-2 inline-block text-sm text-primary underline"
+        data-testid="settings-brand-link"
+      >
+        {{ t("admin.brand.title") }}
+      </RouterLink>
 
       <p v-if="schemaQuery.isPending.value" class="mt-4 text-sm opacity-70">{{ t("common.loading") }}</p>
       <p v-else-if="schemaQuery.isError.value" data-testid="settings-error" class="mt-4 text-sm text-red-700">
         {{ t("common.errorDescription") }}
       </p>
       <div v-else class="mt-4 grid gap-6 lg:grid-cols-[200px_1fr]">
-        <nav class="grid content-start gap-1" aria-label="Settings sections">
+        <nav class="grid content-start gap-1" :aria-label="t('admin.settingsSections')">
           <button
             v-for="section in sections"
             :key="section.id"
@@ -114,7 +137,7 @@ const saveMutation = useMutation({
             class="rounded-md px-2 py-1.5 text-left text-sm"
             :class="section.id === activeSection ? 'bg-black/5 font-medium' : 'opacity-70'"
             :data-testid="'settings-section-' + section.id"
-            @click="activeSection = section.id"
+            @click="selectSection(section.id)"
           >
             {{ section.id }}
           </button>
@@ -136,7 +159,7 @@ const saveMutation = useMutation({
           <form v-else class="mt-3 grid gap-3" @submit.prevent="saveMutation.mutate()">
             <label v-for="field in currentSection?.fields ?? []" :key="field.key" class="text-sm opacity-70">
               <span class="font-mono text-xs">{{ field.key }}</span>
-              <Tag v-if="field.redaction === 'omit'" color="gold">secret</Tag>
+              <Tag v-if="field.redaction === 'omit'" color="gold">{{ t("admin.settingsSecret") }}</Tag>
               <select
                 v-if="field.kind === 'enum' && field.allowed_values.length"
                 v-model="draft[field.key]"

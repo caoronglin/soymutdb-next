@@ -156,16 +156,21 @@ export const queryKeys = {
     // Every variable the variant search sends belongs in the key: assembly,
     // site, release, pagination AND the region/impact filters. Omitting the
     // filters let a changed chromosome/start/end/impact reuse the previous
-    // filter's cached page.
+    // filter's cached page. The cursor is part of the key too: a cursor URL
+    // that happens to share a page index with the first page otherwise reads
+    // the first page's cached rows.
     list: (context: {
       assemblyId: string | null;
       releaseId: string | null;
       siteVariant: "external" | "internal";
       page: number;
+      cursor?: string | null;
       chromosome?: string | null;
       start?: number | null;
       end?: number | null;
       impact?: string | null;
+      variantType?: string | null;
+      mutantLineId?: string | null;
     }) =>
       [
         ...queryKeys.variants.all(),
@@ -174,10 +179,13 @@ export const queryKeys = {
         context.releaseId,
         context.siteVariant,
         context.page,
+        context.cursor ?? null,
         context.chromosome ?? null,
         context.start ?? null,
         context.end ?? null,
         context.impact ?? null,
+        context.variantType ?? null,
+        context.mutantLineId ?? null,
       ] as const,
   },
 } as const;

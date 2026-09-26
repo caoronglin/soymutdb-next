@@ -20,16 +20,18 @@ def test_pick_mutant_line_uses_first_non_reference_known_sample():
     assert _pick_mutant_line(sample_names, [0, 1, 2], 0) == (
         "mutant-a",
         _surrogate_id("mutant-a"),
+        1,
     )
     assert _pick_mutant_line(sample_names, [0, 1, 2], 1) == (
         "mutant-a",
         _surrogate_id("mutant-a"),
+        1,
     )
 
 
 def test_pick_mutant_line_returns_empty_for_missing_or_unknown_samples():
-    assert _pick_mutant_line([], [], 0) == ("", 0)
-    assert _pick_mutant_line(["unknown"], [3], 0) == ("", 0)
+    assert _pick_mutant_line([], [], 0) == ("", 0, -1)
+    assert _pick_mutant_line(["unknown"], [3], 0) == ("", 0, -1)
 
 
 def test_vcf_import_fails_closed_while_flag_is_off(monkeypatch):

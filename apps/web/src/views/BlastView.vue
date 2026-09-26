@@ -147,7 +147,7 @@ function submit() {
         {{ t("blast.viewResults") }}: <span class="font-mono">{{ submittedJobId }}</span>
       </p>
 
-      <section class="mt-8" aria-label="Recent jobs">
+      <section class="mt-8" :aria-label="t('blast.recentJobs')">
         <h2 class="text-lg font-medium">{{ t("blast.jobHistory") }}</h2>
         <ul class="mt-2 grid gap-1" data-testid="blast-jobs">
           <li v-for="job in jobs" :key="job.id">
@@ -158,7 +158,7 @@ function submit() {
         </ul>
       </section>
 
-      <section class="mt-8" aria-label="BLAST hits">
+      <section class="mt-8" :aria-label="t('blast.hitsAria')">
         <h2 class="text-lg font-medium">{{ t("blast.hits") }}</h2>
         <p v-if="!selectedJobId" data-testid="blast-hits-empty" class="mt-2 text-sm opacity-70">
           {{ t("blast.noJobs") }}

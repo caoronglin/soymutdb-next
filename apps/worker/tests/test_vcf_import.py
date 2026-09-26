@@ -82,7 +82,7 @@ def test_vcf_rows_are_extracted_in_canonical_order(tmp_path: Path) -> None:
         index = BASE_COLUMNS.index
         assert row[index("release_key")] == "REL"
         assert row[index("assembly_key")] == "asm-v5"
-    first_variant_id = compute_variant_id("REL", "Chr01", 100, "A", "G")
+    first_variant_id = compute_variant_id("REL", "asm-v5", "Chr01", 100, "A", "G")
     assert rows[0][BASE_COLUMNS.index("variant_id")] == first_variant_id
 
 
@@ -307,8 +307,8 @@ def test_worker_identity_matches_the_route_b_seed_loader() -> None:
     spec.loader.exec_module(seed)
 
     for facts in (
-        ("REL-1", "Chr01", 100, "A", "G"),
-        ("2026.09", "Chr02", 2050, "AT", "A"),
+        ("REL-1", "asm-v5", "Chr01", 100, "A", "G"),
+        ("2026.09", "asm-v4", "Chr02", 2050, "AT", "A"),
     ):
         assert ingest.compute_variant_id(*facts) == seed.compute_variant_id(*facts)
 
@@ -329,3 +329,51 @@ def test_worker_identity_matches_the_route_b_seed_loader() -> None:
     assert ingest.variant_length("A", "AT") == 2
     assert ingest.variant_length("AT", "A") == 2
     assert ingest.variant_length("AC", "GT") == 2
+
+
+def test_variant_identity_separates_assemblies() -> None:
+    """P1-01: the same locus in one release differs per assembly namespace."""
+    v4 = compute_variant_id("REL", "asm-v4", "Chr01", 100, "A", "G")
+    v5 = compute_variant_id("REL", "asm-v5", "Chr01", 100, "A", "G")
+    assert v4 != v5
+    # Stable across calls (retry/idempotency) and distinct across releases.
+    assert v5 == compute_variant_id("REL", "asm-v5", "Chr01", 100, "A", "G")
+    assert v5 != compute_variant_id("OTHER", "asm-v5", "Chr01", 100, "A", "G")
+
+
+def _two_sample_vcf(tmp_path: Path) -> str:
+    ann = (
+        "ANN=G|missense_variant|MODERATE|Glyma.01G000100|Glyma.01G000100"
+        "|transcript|tx1|protein_coding|1/1000|c.1A>G|p.Met1Val|1/1000"
+    )
+    header = "\n".join(
+        [
+            "##fileformat=VCFv4.2",
+            "##contig=<ID=Chr01,length=100000>",
+            "\t".join(
+                [
+                    "#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER",
+                    "INFO", "FORMAT", "control", "mutant-a",
+                ]
+            ),
+        ]
+    )
+    row = "\t".join(
+        ["Chr01", "100", ".", "A", "G", "50", "PASS", ann, "GT", "0/0", "0/1"]
+    )
+    path = tmp_path / "two-sample.vcf"
+    path.write_text(header + "\n" + row + "\n", encoding="utf-8")
+    return str(path)
+
+
+def test_vcf_zygosity_reads_the_selected_sample(tmp_path: Path) -> None:
+    """P1-02: zygosity must come from the chosen mutant sample, not column 0."""
+    rows = list(
+        ingest._iter_vcf_base_rows(_two_sample_vcf(tmp_path), "REL", "asm-v5", "fk")
+    )
+    assert len(rows) == 1
+    index = BASE_COLUMNS.index
+    # control is hom-ref (0/0) and is skipped; mutant-a (0/1) is selected.
+    assert rows[0][index("mutant_line_name")] == "mutant-a"
+    # The old code read gt_types[0] and reported homozygous_ref for mutant-a.
+    assert rows[0][index("zygosity")] == "heterozygous"

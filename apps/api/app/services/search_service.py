@@ -285,6 +285,42 @@ def _is_exact_accession(query: str) -> bool:
     return 0 < len(stripped) <= 64 and " " not in stripped
 
 
+def _gene_match_conditions(
+    query: str,
+    pattern: str,
+    *,
+    release_id: int,
+    assembly_id: int | None,
+) -> list:
+    """WHERE terms shared by gene search and its assembly distribution.
+
+    Extracted so the ambiguity aggregate and the page query can never drift
+    apart: both must apply the identical text/alias/release scope.
+    """
+    text_match = or_(
+        Gene.accession.ilike(pattern, escape="\\"),
+        Gene.name.ilike(pattern, escape="\\"),
+        Gene.description.ilike(pattern, escape="\\"),
+    )
+    conditions: list = [text_match]
+    if _is_exact_accession(query):
+        # Curated alias equality widens the candidate set; matching never
+        # falls back to string similarity.
+        alias_exists = (
+            select(GeneAlias.gene_id)
+            .where(
+                GeneAlias.gene_id == Gene.gene_pk,
+                func.lower(GeneAlias.alias) == func.lower(query.strip()),
+            )
+            .exists()
+        )
+        conditions = [or_(text_match, alias_exists)]
+    conditions.append(Assembly.release_id == release_id)
+    if assembly_id is not None:
+        conditions.append(Gene.assembly_id == assembly_id)
+    return conditions
+
+
 class SearchService:
     """Cross-entity search service."""
 
@@ -493,12 +529,20 @@ class SearchService:
                 visible_hits = [hit for hit in page_hits if id(hit) in visible_ids]
                 finish_source(source, page_hits, source_has_more, visible_hits)
                 has_more = has_more or source_has_more or len(visible_hits) < len(page_hits)
-            by_assembly: dict[str, int] = {}
-            for hit in hits:
-                assembly = hit.metadata.get("assembly_id")
-                if assembly is not None:
-                    key = str(assembly)
-                    by_assembly[key] = by_assembly.get(key, 0) + 1
+            # Ambiguity is a property of the whole release-scoped match set,
+            # not of the truncated page: an unscoped ``limit=1`` page must
+            # still reveal that the accession matches several assemblies.
+            if SearchResultType.GENE in active_types and assembly_id is None:
+                by_assembly = await self._gene_assembly_distribution(
+                    db, query, pattern, release_id=release_id
+                )
+            else:
+                by_assembly = {}
+                for hit in hits:
+                    assembly = hit.metadata.get("assembly_id")
+                    if assembly is not None:
+                        key = str(assembly)
+                        by_assembly[key] = by_assembly.get(key, 0) + 1
             response = GlobalSearchResponse(
                 query=query,
                 results=[
@@ -517,6 +561,7 @@ class SearchService:
                         source=hit.metadata.get("source", "internal"),
                         release_id=hit.metadata.get("release_id"),
                         assembly_id=hit.metadata.get("assembly_id"),
+                        assembly=hit.metadata.get("assembly"),
                     )
                     for hit in hits
                 ],
@@ -630,25 +675,9 @@ class SearchService:
         site_variant: SiteVariant = SiteVariant.EXTERNAL,
     ) -> list[SearchHit]:
         """Search genes with exact > alias > text match typing."""
-        text_match = or_(
-            Gene.accession.ilike(pattern, escape="\\"),
-            Gene.name.ilike(pattern, escape="\\"),
-            Gene.description.ilike(pattern, escape="\\"),
+        conditions = _gene_match_conditions(
+            query, pattern, release_id=release_id, assembly_id=assembly_id
         )
-        conditions = [text_match]
-        if _is_exact_accession(query):
-            # Curated alias equality widens the candidate set; matching
-            # never falls back to string similarity.
-            needle = query.strip()
-            alias_match = (
-                select(GeneAlias.gene_id)
-                .where(
-                    GeneAlias.gene_id == Gene.gene_pk,
-                    func.lower(GeneAlias.alias) == func.lower(needle),
-                )
-                .exists()
-            )
-            conditions = [or_(text_match, alias_match)]
         exact_match = (
             func.lower(Gene.accession) == func.lower(query.strip())
             if _is_exact_accession(query)
@@ -669,9 +698,6 @@ class SearchService:
             (alias_match, 2),
             else_=1,
         )
-        conditions.append(Assembly.release_id == release_id)
-        if assembly_id is not None:
-            conditions.append(Gene.assembly_id == assembly_id)
         if cursor_key is not None:
             conditions.append(
                 or_(
@@ -700,6 +726,8 @@ class SearchService:
                 Gene.description,
                 Gene.biotype,
                 Gene.assembly_id,
+                Assembly.name.label("assembly_name"),
+                Assembly.version.label("assembly_version"),
                 rank_expr.label("match_rank"),
             )
             .join(Assembly, Assembly.id == Gene.assembly_id)
@@ -741,6 +769,12 @@ class SearchService:
                         "biotype": row.biotype,
                         "release_id": release_id,
                         "assembly_id": row.assembly_id,
+                        "assembly": " ".join(
+                            part
+                            for part in (row.assembly_name, row.assembly_version)
+                            if part
+                        )
+                        or None,
                         "_cursor": (
                             {
                                 "rank": int(row.match_rank),
@@ -760,6 +794,34 @@ class SearchService:
                 )
             )
         return hits
+
+    async def _gene_assembly_distribution(
+        self,
+        db: AsyncSession,
+        query: str,
+        pattern: str,
+        *,
+        release_id: int,
+    ) -> dict[str, int]:
+        """Count gene matches per assembly over the full release-scoped set.
+
+        Ambiguity is a property of the whole match set, not of the current
+        page: ``limit=1`` must still report that two assemblies match.
+        """
+        stmt = (
+            select(Gene.assembly_id, func.count())
+            .join(Assembly, Assembly.id == Gene.assembly_id)
+            .where(
+                and_(
+                    *_gene_match_conditions(
+                        query, pattern, release_id=release_id, assembly_id=None
+                    )
+                )
+            )
+            .group_by(Gene.assembly_id)
+        )
+        rows = (await db.execute(stmt)).all()
+        return {str(assembly_id): int(count) for assembly_id, count in rows}
 
     async def _search_mutant_lines(
         self,
@@ -928,18 +990,29 @@ class SearchService:
         release_id: int,
         limit: int,
     ) -> list[InternalMutantSearchItem]:
-        """Internal mutant search across public_id and lab designation."""
+        """Internal mutant search across public_id, internal id and name."""
+        stripped = query.strip()
+        is_exact = _is_exact_accession(query)
+        needle = normalize_public_id(stripped) if is_exact else None
+        # Only a bare decimal token is treated as an internal-key lookup, and
+        # only within int4 range: a mixed token must not coerce, and an
+        # out-of-range literal must not reach the database as a bad cast.
+        internal_id_value: int | None = None
+        if is_exact and stripped.isdigit():
+            candidate = int(stripped)
+            if candidate <= 2_147_483_647:
+                internal_id_value = candidate
         conditions = [
             MutantLine.is_deleted.is_(False),
         ]
-        if _is_exact_accession(query):
-            needle = normalize_public_id(query.strip())
-            conditions.append(
-                or_(
-                    MutantLine.name.ilike(pattern, escape="\\"),
-                    func.upper(MutantLine.public_id) == needle,
-                )
-            )
+        if is_exact:
+            match_conditions = [
+                MutantLine.name.ilike(pattern, escape="\\"),
+                func.upper(MutantLine.public_id) == needle,
+            ]
+            if internal_id_value is not None:
+                match_conditions.append(MutantLine.id == internal_id_value)
+            conditions.append(or_(*match_conditions))
         else:
             conditions.append(MutantLine.name.ilike(pattern, escape="\\"))
         stmt = (
@@ -950,18 +1023,16 @@ class SearchService:
         )
         result = await db.execute(stmt)
         items: list[InternalMutantSearchItem] = []
-        needle = normalize_public_id(query.strip()) if _is_exact_accession(query) else None
         for ml in result.scalars().all():
             matched_field = "name"
             match_type = MatchType.TEXT
-            if (
-                ml.public_id
-                and needle
-                and ml.public_id.upper() == needle
-            ):
+            if ml.public_id and needle and ml.public_id.upper() == needle:
                 matched_field = "public_id"
                 match_type = MatchType.EXACT
-            elif ml.name.lower() == query.strip().lower():
+            elif internal_id_value is not None and int(ml.id) == internal_id_value:
+                matched_field = "internal_id"
+                match_type = MatchType.EXACT
+            elif ml.name.lower() == stripped.lower():
                 matched_field = "name"
                 match_type = MatchType.EXACT
             items.append(

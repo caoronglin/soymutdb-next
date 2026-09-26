@@ -53,6 +53,10 @@ class VariantResponse(BaseModel):
 
     id: str | None = None
     assembly_id: str | None = None
+    # Assembly key (name) the fact belongs to. ``assembly_id`` above is the
+    # legacy numeric slot; this carries the namespace the row actually came
+    # from so an "All assemblies" listing can label every row (P1-05).
+    assembly: str | None = None
     variant_id: str | None = None
     chromosome: str
     position: int = Field(..., ge=0)

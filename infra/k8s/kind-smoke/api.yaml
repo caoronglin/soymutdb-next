@@ -38,7 +38,7 @@ spec:
           imagePullPolicy: Never
           ports:
             - name: http
-              containerPort: 8000
+              containerPort: 8010
           env:
             # The Kind harness tests process/HTTP behavior only. It does not
             # pretend to provision the production PostgreSQL/Redis/S3 stack.

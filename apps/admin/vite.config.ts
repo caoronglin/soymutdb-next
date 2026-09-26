@@ -49,7 +49,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, import.meta.dirname, "");
   const apiOrigin =
     env.VITE_API_BASE_URL?.trim() ||
-    (mode === "development" ? "http://localhost:8000" : "");
+    (mode === "development" ? "http://localhost:8010" : "");
   if (!apiOrigin) {
     // Fail closed: an admin bundle with no API origin would load and then fail
     // every request with an opaque network error.

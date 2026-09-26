@@ -110,6 +110,139 @@ describe("SearchView (Phase F, DB-CORE-1/2/5/6)", () => {
     wrapper.unmount();
   });
 
+  it("reports and groups cross-assembly ambiguity over the full result set", async () => {
+    mockedSearch.mockResolvedValue({
+      query: "Glyma.01G000100",
+      results: [
+        {
+          id: "Glyma.01G000100",
+          type: "gene",
+          name: "v4 gene",
+          url: "/genes/Glyma.01G000100?assembly=1",
+          assembly_id: 1,
+          assembly: "Wm82 v4",
+          release_id: 7,
+          source: "internal",
+        },
+        {
+          id: "Glyma.01G000100",
+          type: "gene",
+          name: "v5 gene",
+          url: "/genes/Glyma.01G000100?assembly=2",
+          assembly_id: 2,
+          assembly: "Wm82 v5",
+          release_id: 7,
+          source: "internal",
+        },
+      ],
+      by_type: { gene: 2 },
+      by_assembly: { "1": 1, "2": 1 },
+      ambiguous: true,
+      cursor: null,
+      next_cursor: null,
+      has_more: false,
+      total_count: 2,
+    } as never);
+
+    const { wrapper } = await mountSearch({ q: "Glyma.01G000100" });
+    await flushPromises();
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="search-ambiguous-notice"]').exists()).toBe(true);
+    const groups = wrapper.findAll('[data-testid="search-assembly-group"]');
+    expect(groups).toHaveLength(2);
+    expect(wrapper.text()).toContain("Wm82 v4");
+    expect(wrapper.text()).toContain("Wm82 v5");
+    // Both deep links keep their assembly context (DB-CORE assembly contract).
+    const rows = wrapper.findAll('[data-testid="search-result-row"]');
+    expect(rows.map((row) => row.attributes("data-url"))).toEqual([
+      "/genes/Glyma.01G000100?assembly=1",
+      "/genes/Glyma.01G000100?assembly=2",
+    ]);
+    wrapper.unmount();
+  });
+
+  it("does not show an ambiguity notice for a single-assembly result", async () => {
+    mockedSearch.mockResolvedValue({
+      query: "Glyma.01G000200",
+      results: [
+        {
+          id: "Glyma.01G000200",
+          type: "gene",
+          name: "only",
+          url: "/genes/Glyma.01G000200",
+          assembly_id: 1,
+          assembly: "Wm82 v4",
+        },
+      ],
+      by_type: { gene: 1 },
+      by_assembly: { "1": 1 },
+      ambiguous: false,
+      cursor: null,
+      next_cursor: null,
+      has_more: false,
+      total_count: 1,
+    } as never);
+
+    const { wrapper } = await mountSearch({ q: "Glyma.01G000200" });
+    await flushPromises();
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="search-ambiguous-notice"]').exists()).toBe(false);
+    expect(wrapper.findAll('[data-testid="search-assembly-group"]')).toHaveLength(0);
+    expect(wrapper.find('[data-testid="search-result-row"]').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it("pages forward with the cursor and back to the first page (P1-05)", async () => {
+    mockedSearch
+      .mockResolvedValueOnce({
+        query: "Glyma",
+        results: [{ id: "g1", type: "gene", name: "g1", url: "/genes/g1" }],
+        by_type: { gene: 1 },
+        by_assembly: {},
+        ambiguous: false,
+        cursor: null,
+        next_cursor: "cur-2",
+        has_more: true,
+        total_count: 2,
+      } as never)
+      .mockResolvedValueOnce({
+        query: "Glyma",
+        results: [{ id: "g2", type: "gene", name: "g2", url: "/genes/g2" }],
+        by_type: { gene: 1 },
+        by_assembly: {},
+        ambiguous: false,
+        cursor: "cur-2",
+        next_cursor: null,
+        has_more: false,
+        total_count: 2,
+      } as never);
+
+    const { wrapper, router } = await mountSearch({ q: "Glyma" });
+    await flushPromises();
+    await flushPromises();
+
+    expect(wrapper.get('[data-testid="search-next"]').attributes("disabled")).toBeUndefined();
+    await wrapper.get('[data-testid="search-next"]').trigger("click");
+    await flushPromises();
+    await flushPromises();
+
+    expect(router.currentRoute.value.query.cursor).toBe("cur-2");
+    expect(mockedSearch).toHaveBeenLastCalledWith(
+      expect.objectContaining({ cursor: "cur-2" }),
+    );
+    expect(
+      wrapper.get('[data-testid="search-previous"]').attributes("disabled"),
+    ).toBeUndefined();
+
+    await wrapper.get('[data-testid="search-previous"]').trigger("click");
+    await flushPromises();
+    await flushPromises();
+    expect(router.currentRoute.value.query.cursor).toBeUndefined();
+    wrapper.unmount();
+  });
+
   // Note: the error/loading affordances (search-error / search-loading sections
   // with a Retry button) are rendered by the component and covered by the build
   // + the mirrored React route; asserting their async settle in jsdom proved

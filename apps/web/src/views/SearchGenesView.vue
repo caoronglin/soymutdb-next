@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { useQuery } from "@tanstack/vue-query";
 import { computed, ref, toValue, watch } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 
 import type { AssemblyInfo, GeneSummary } from "@soymutdb/api-client";
 import { Button } from "@soymutdb/ui-vue";
 
 import ConfigurableTable, { type ConfigurableRow } from "../components/ConfigurableTable.vue";
 import PortalLayout from "../components/PortalLayout.vue";
+import { assemblyOptionLabel, resolveAssemblyParam } from "../lib/assembly-selection";
 import { t } from "../lib/i18n";
 import {
   assembliesQueryOptions,
@@ -29,6 +30,7 @@ import { useSiteContextStore } from "../stores/site-context";
 
 
 const route = useRoute();
+const router = useRouter();
 const site = useSiteContextStore();
 
 const initial = {
@@ -51,16 +53,40 @@ const isAssembliesError = computed(() => toValue(assembliesQuery.isError));
 const defaultAssembly = computed(
   () => assemblies.value.find((item) => item.is_default) ?? assemblies.value[0],
 );
-const linkedAssembly = computed(() =>
-  assemblies.value.find(
-    (item) => String(item.id) === initial.assembly || item.name === initial.assembly,
-  ),
+
+// The deep-link parameter is the stable id; a legacy name resolves once and is
+// rewritten to the id. Unknown or shared names must not silently fall through
+// to the default assembly (that queries another coordinate namespace).
+const assemblyResolution = computed(() =>
+  resolveAssemblyParam(assemblies.value, initial.assembly),
+);
+const unknownAssembly = computed(
+  () =>
+    assemblyResolution.value.status === "unknown" ||
+    assemblyResolution.value.status === "ambiguous",
 );
 const formAssemblyId = computed(() => {
   if (draftAssemblyId.value) return draftAssemblyId.value;
-  const linked = linkedAssembly.value ?? defaultAssembly.value;
+  const resolution = assemblyResolution.value;
+  if (resolution.status === "unknown" || resolution.status === "ambiguous") return "";
+  const linked = resolution.status === "resolved" ? resolution.assembly : defaultAssembly.value;
   return linked ? String(linked.id) : "";
 });
+
+let canonicalized = false;
+watch(
+  [assemblyResolution, isLoadingAssemblies],
+  ([resolution, loading]) => {
+    if (canonicalized || loading) return;
+    if (resolution.status !== "resolved" || resolution.via !== "name") return;
+    canonicalized = true;
+    void router.replace({
+      path: route.path,
+      query: { ...route.query, assembly: String(resolution.assembly.id) },
+    });
+  },
+  { immediate: true },
+);
 
 /**
  * A deep link runs at most once, and only once its assembly can be resolved:
@@ -142,11 +168,11 @@ function submit() {
             @change="draftAssemblyId = ($event.target as HTMLSelectElement).value"
           >
             <option v-for="item in assemblies" :key="String(item.id)" :value="String(item.id)">
-              {{ item.name }}{{ item.is_default ? " · default" : "" }}
+              {{ assemblyOptionLabel(item) }}{{ item.is_default ? " · default" : "" }}
             </option>
           </select>
         </label>
-        <Button html-type="submit" :disabled="!formAssemblyId" data-testid="search-genes-submit">
+        <Button html-type="submit" :disabled="!formAssemblyId || unknownAssembly" data-testid="search-genes-submit">
           {{ t("search.genes.submit") }}
         </Button>
         <p id="search-genes-hint" class="text-xs opacity-60 sm:col-span-2">
@@ -160,8 +186,16 @@ function submit() {
       <p v-else-if="isAssembliesError" data-testid="search-genes-assemblies-error" class="mt-6 text-sm text-red-700">
         {{ t("common.errorDescription") }}
       </p>
+      <p
+        v-else-if="unknownAssembly"
+        role="alert"
+        data-testid="search-genes-unknown-assembly"
+        class="mt-4 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700"
+      >
+        {{ assemblyResolution.status === "ambiguous" ? t("common.ambiguousAssembly") : t("common.unknownAssembly") }}
+      </p>
 
-      <div class="mt-6" role="region" aria-label="Gene ID search results">
+      <div class="mt-6" role="region" :aria-label="t('genes.resultsAria')">
         <p v-if="isLoading" data-testid="search-genes-loading" class="text-sm opacity-70">
           {{ t("common.loading") }}
         </p>

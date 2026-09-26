@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
-import { computed, reactive, ref, toValue } from "vue";
+import { computed, reactive, ref, toValue, watch } from "vue";
+import { useRoute } from "vue-router";
 
 import {
   createNews,
@@ -15,6 +16,7 @@ import { formatDate } from "@soymutdb/shared/format";
 import { Button, ConfigProvider, Tag, createThemeConfig } from "@soymutdb/ui-vue";
 
 import { t } from "../lib/i18n";
+import WriteTargetNote from "../components/WriteTargetNote.vue";
 
 /**
  * News authoring.
@@ -26,6 +28,7 @@ import { t } from "../lib/i18n";
  * portal when it renders.
  */
 const queryClient = useQueryClient();
+const route = useRoute();
 const page = ref(1);
 const statusFilter = ref<"all" | "draft" | "published" | "archived">("all");
 const errorMessage = ref("");
@@ -119,6 +122,25 @@ async function loadForEdit(id: string) {
     errorMessage.value = t("common.errorDescription");
   }
 }
+
+// Legacy deep links (/news/new, /news/trash, /news/:id) redirect here with a
+// query. Consume it so each link restores the editor state it names.
+watch(
+  () => route.query,
+  (query) => {
+    const status = typeof query.status === "string" ? query.status : "";
+    if (status === "draft" || status === "published" || status === "archived") {
+      statusFilter.value = status;
+    }
+    const edit = typeof query.edit === "string" ? query.edit : "";
+    if (edit) {
+      void loadForEdit(edit);
+    } else if (query.new === "1") {
+      resetForm();
+    }
+  },
+  { immediate: true, deep: true },
+);
 </script>
 
 <template>
@@ -136,9 +158,9 @@ async function loadForEdit(id: string) {
             @change="page = 1"
           >
             <option value="all">{{ t("common.all") }}</option>
-            <option value="draft">draft</option>
-            <option value="published">published</option>
-            <option value="archived">archived</option>
+            <option value="draft">{{ t("admin.news.status.draft") }}</option>
+            <option value="published">{{ t("admin.news.status.published") }}</option>
+            <option value="archived">{{ t("admin.news.status.archived") }}</option>
           </select>
         </label>
 
@@ -199,7 +221,7 @@ async function loadForEdit(id: string) {
           </tbody>
         </table>
 
-        <nav v-if="items.length" class="mt-4 flex items-center gap-3" aria-label="Pagination">
+        <nav v-if="items.length" class="mt-4 flex items-center gap-3" :aria-label="t('common.pagination')">
           <button
             type="button"
             class="rounded-md border px-3 py-1.5 text-sm disabled:opacity-50"
@@ -225,9 +247,10 @@ async function loadForEdit(id: string) {
           {{ editingId ? t("common.edit") : t("common.save") }}
           <span v-if="editingId" class="ms-2 font-mono text-xs opacity-70">{{ editingId }}</span>
         </h2>
+        <WriteTargetNote />
         <form class="mt-3 grid gap-3" @submit.prevent="saveMutation.mutate()">
           <label class="text-sm opacity-70">
-            slug
+            {{ t("admin.news.form.slug") }}
             <input
               v-model="form.slug"
               required
@@ -236,7 +259,7 @@ async function loadForEdit(id: string) {
             />
           </label>
           <label class="text-sm opacity-70">
-            {{ t("news.title") }} (en)
+            {{ t("news.title") }} {{ t("admin.news.form.langEn") }}
             <input
               v-model="form.title_en"
               required
@@ -245,11 +268,11 @@ async function loadForEdit(id: string) {
             />
           </label>
           <label class="text-sm opacity-70">
-            {{ t("news.title") }} (zh)
+            {{ t("news.title") }} {{ t("admin.news.form.langZh") }}
             <input v-model="form.title_zh" class="mt-1 w-full rounded-md border bg-background px-2 py-1.5" />
           </label>
           <label class="text-sm opacity-70">
-            body (Markdown)
+            {{ t("admin.news.form.bodyMarkdown") }}
             <textarea
               v-model="form.body_en"
               rows="8"
@@ -260,8 +283,8 @@ async function loadForEdit(id: string) {
           <label class="text-sm opacity-70">
             {{ t("common.status") }}
             <select v-model="form.status" class="mt-1 w-full rounded-md border bg-background px-2 py-1.5" data-testid="news-status-select">
-              <option value="draft">draft</option>
-              <option value="published">published</option>
+              <option value="draft">{{ t("admin.news.status.draft") }}</option>
+              <option value="published">{{ t("admin.news.status.published") }}</option>
             </select>
           </label>
           <p v-if="errorMessage" role="alert" class="text-sm text-red-700" data-testid="news-error-form">

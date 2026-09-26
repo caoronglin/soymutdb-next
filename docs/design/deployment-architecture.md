@@ -51,7 +51,7 @@ flowchart LR
         end
 
         subgraph APP["应用层"]
-            API["api (FastAPI)<br/>容器 8000（仅 compose 网络）"]
+            API["api (FastAPI)<br/>容器 8010（仅 compose 网络）"]
             MCP["mcp-server (FastMCP)<br/>容器 9000（仅内网）"]
             W1["worker-default<br/>queues: ingest,export,stats,cleanup,default"]
             W2["worker-blast<br/>queue: blast"]
@@ -148,7 +148,7 @@ minio-init ──► minio(healthy)（一次性建 6 个 bucket + genomic-data �
 | --- | --- | --- | --- | --- |
 | 门户网站（前端） | https://caoronglin.github.io/soymutdb-next/ | 公开 | GitHub Pages（gh-pages 分支） | API 调用走 `VITE_API_BASE_URL`（构建期注入） |
 | API（经 nginx） | `http://<HOST>:8080/api/v1/*` | JWT（Bearer） | compose：nginx → api | 生产前端 CORS 白名单需含 gh-pages origin |
-| API（容器内直连，排障） | `docker compose exec api curl http://localhost:8000/api/v1/health/ready` | JWT | compose：api | api 仅 expose 8000；宿主与公网入口均经 nginx:8080 |
+| API（容器内直连，排障） | `docker compose exec api curl http://localhost:8010/api/v1/health/ready` | JWT | compose：api | api 仅 expose 8010；宿主与公网入口均经 nginx:8080 |
 | MCP Server | `http://<HOST>:8080/mcp/*`（SSE） | Bearer `SOYMUTDB_MCP_API_TOKEN` | compose：nginx → mcp-server | 60/min 限流占位（G3 门禁未接）；**nginx 必须 `proxy_buffering off`** |
 | 基因组数据文件 | `http://<HOST>:8080/data/*` | 公开（genomic-data bucket） | compose：nginx → minio | 支持 Range（BAM/CRAM/tabix） |
 | MinIO S3 API | `http://<HOST>:9001` | `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` | compose | 宿主 9001 → 容器 9000 |
@@ -250,7 +250,7 @@ minio-init ──► minio(healthy)（一次性建 6 个 bucket + genomic-data �
 
 | 变量 | 说明 |
 | --- | --- |
-| `SOYMUTDB_API_BASE` | 固定 `http://api:8000`（容器内），穿透调用内部 REST |
+| `SOYMUTDB_API_BASE` | 固定 `http://api:8010`（容器内），穿透调用内部 REST |
 | `SOYMUTDB_MCP_API_TOKEN` | 写工具 Bearer 透传鉴权；为空则写工具无鉴权占位（G3 未接） |
 
 ### 4.4 前端 VITE_*（**build 期**变量，打进产物；禁止放 secret）
@@ -326,7 +326,7 @@ bash deploy/scripts/healthcheck.sh
 
 **迁移说明**：`upgrade.sh` 第 5 步执行一次性迁移（`docker compose run --rm migrate`，alembic upgrade head）；api/worker 自身 `depends_on` 也强制 migrate 成功。迁移失败会中止发布并回滚镜像。
 
-**防火墙放行清单**（按需，勿全开）：`8080`（nginx 唯一对外入口，公网）、`8000`（API 直连，仅内网）、`9002`（MinIO 控制台，内网/运维 VPN）、`3000`（Grafana，内网）、`9090`（Prometheus，内网）。`5432/8123/9000/6379` 一律仅 localhost。
+**防火墙放行清单**（按需，勿全开）：`8080`（nginx 唯一对外入口，公网）、`8010`（API 直连，仅内网）、`9002`（MinIO 控制台，内网/运维 VPN）、`3000`（Grafana，内网）、`9090`（Prometheus，内网）。`5432/8123/9000/6379` 一律仅 localhost。
 
 ---
 

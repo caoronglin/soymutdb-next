@@ -106,7 +106,7 @@ def test_tunnel_origin_allows_only_public_api_data_and_health_routes() -> None:
     assert "listen 8081;" in config
     # The upstreams target the network aliases the Compose file declares; the
     # bare service names no longer resolve on the split tunnel networks.
-    assert "server api-tunnel:8000" in config
+    assert "server api-tunnel:8010" in config
     assert "server minio-tunnel:9000" in config
     assert "location = /health" in config
     assert "location = /api/v1/admin" in config

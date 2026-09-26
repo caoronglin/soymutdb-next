@@ -320,8 +320,8 @@ def test_kind_smoke_policy_checker_rejects_host_ports(tmp_path: Path) -> None:
     api_path = tmp_path / "api.yaml"
     api_path.write_text(
         api_path.read_text(encoding="utf-8").replace(
-            "            containerPort: 8000\n",
-            "            containerPort: 8000\n              hostPort: 8000\n",
+            "            containerPort: 8010\n",
+            "            containerPort: 8010\n              hostPort: 8010\n",
         ),
         encoding="utf-8",
     )

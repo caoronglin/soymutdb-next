@@ -158,7 +158,10 @@ jobs:
       # Dual-site boundary: build the internal variant from the same commit and
       # prove it cannot leak into the external artifact (AGENTS.md; the build
       # and isolation checks live in the shared script so CNB runs them too).
+      # The frontend gate above already built both variants, so reuse them.
       - name: Dual-site artifacts (external/internal isolation)
+        env:
+          SOYMUTDB_SITE_VARIANTS_PREBUILT: "1"
         run: bash scripts/verify-site-variant-artifacts.sh
 
       # The web/admin/jbrowse dist trees were uploaded purely as evidence; no

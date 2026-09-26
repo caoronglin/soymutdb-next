@@ -9,10 +9,28 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, patch
 
 import pytest
+import pytest_asyncio
 
 from app.core.site_variant import SiteVariant
+from app.models.content import Release, ReleaseStatus
+from app.models.data_publishing import ActiveRelease
 
 SEARCH_PREFIX = "/api/v1/search"
+
+
+@pytest_asyncio.fixture
+async def active_release(db_session):
+    """Active published release so release-scoped routes resolve."""
+    release = Release(
+        version="search-suggest-release",
+        name="search suggest release",
+        status=ReleaseStatus.PUBLISHED,
+    )
+    db_session.add(release)
+    await db_session.flush()
+    db_session.add(ActiveRelease(id=1, release_id=release.id))
+    await db_session.flush()
+    return release
 
 
 @pytest.mark.asyncio
@@ -147,7 +165,7 @@ class TestGlobalSearch:
 class TestSuggest:
     """Tests for GET /api/v1/search/suggest."""
 
-    async def test_suggest_returns_suggestions(self, client):
+    async def test_suggest_returns_suggestions(self, client, active_release):
         """Autocomplete returns matching suggestions."""
         mock_suggestions = [
             {"text": "Glyma.01G000100", "type": "gene"},
@@ -175,7 +193,7 @@ class TestSuggest:
         response = await client.get(f"{SEARCH_PREFIX}/suggest")
         assert response.status_code == 422
 
-    async def test_suggest_with_limit(self, client):
+    async def test_suggest_with_limit(self, client, active_release):
         """Suggest respects the limit parameter."""
         mock_suggestions = [{"text": "Glyma.01G000100", "type": "gene"}]
         with patch(

@@ -31,6 +31,7 @@ import {
   getMutantLine,
   getMutantLinePhenotypes,
   getNewsBySlug,
+  getFeaturedNews,
   globalSearch,
   listMutantLines,
   listNews,
@@ -161,11 +162,17 @@ export function geneSearchQueryOptions(
 }
 
 /**
- * Region search: assembly name + chromosome + 1-based inclusive interval. The
- * coordinates are only meaningful inside the assembly the name resolves to.
+ * Region search: stable assembly id + chromosome + 1-based inclusive interval.
+ *
+ * Coordinates are only meaningful inside one assembly namespace (DB-CORE-4), so
+ * the cache key and the UI state carry the assembly *id*. The label-based
+ * backend query is resolved at the request boundary from the id's catalogue
+ * entry; a missing label means the caller resolved nothing and the query stays
+ * disabled rather than guessing a namespace.
  */
 export function regionVariantsQueryOptions(
   context: DeploymentContext & {
+    assemblyId: string | null;
     assemblyName: string | null;
     chromosome: string | null;
     start: number | null;
@@ -178,7 +185,7 @@ export function regionVariantsQueryOptions(
       "search-region",
       "released",
       {
-        assemblyName: context.assemblyName,
+        assemblyId: context.assemblyId,
         chromosome: context.chromosome,
         start: context.start,
         end: context.end,
@@ -195,7 +202,7 @@ export function regionVariantsQueryOptions(
         max_results: context.maxResults,
       }),
     enabled: Boolean(
-      context.assemblyName && context.chromosome && context.start && context.end,
+      context.assemblyId && context.assemblyName && context.chromosome && context.start && context.end,
     ),
     staleTime: 30_000,
   });
@@ -369,10 +376,11 @@ export interface VariantFilters {
   start?: number;
   end?: number;
   impact?: string;
+  variantType?: string;
+  mutantLineId?: string;
 }
-
 export function variantsQueryOptions(
-  context: DeploymentContext & VariantFilters & { page: number; limit: number },
+  context: DeploymentContext & VariantFilters & { page: number; limit: number; cursor?: string; assemblyName?: string | null },
 ) {
   return queryOptions({
     queryKey: queryKeys.variants.list({
@@ -380,20 +388,29 @@ export function variantsQueryOptions(
       releaseId: context.releaseId,
       siteVariant: context.siteVariant,
       page: context.page,
+      cursor: context.cursor ?? null,
       chromosome: context.chromosome ?? null,
       start: context.start ?? null,
       end: context.end ?? null,
       impact: context.impact ?? null,
+      variantType: context.variantType ?? null,
+      mutantLineId: context.mutantLineId ?? null,
     }),
     queryFn: () =>
       searchVariants({
-        assembly: context.assemblyId ?? undefined,
+        // The list endpoint filters by assembly label; the stable id stays in
+        // the cache key, the label is resolved at this boundary.
+        assembly: context.assemblyName || undefined,
         chromosome: context.chromosome || undefined,
         start: context.start,
         end: context.end,
+        variant_type: (context.variantType || undefined) as never,
+        mutant_line_id: context.mutantLineId || undefined,
         impact: (context.impact || undefined) as never,
+        cursor: context.cursor,
         limit: context.limit,
       }),
+    enabled: !context.assemblyId || Boolean(context.assemblyName),
     staleTime: 30_000,
   });
 }
@@ -462,6 +479,24 @@ export function newsListQueryOptions(context: {
       pageSize: context.pageSize,
     }),
     queryFn: () => listNews(context.category, context.page, context.pageSize),
+    staleTime: 60_000,
+  });
+}
+
+/** Homepage editorial content; queried separately so failures never look like an empty list. */
+export function featuredNewsQueryOptions() {
+  return queryOptions({
+    queryKey: ["news", "featured"],
+    queryFn: async () => {
+      const data = await getFeaturedNews();
+      // A 200 with the wrong envelope is a contract violation, not an empty
+      // homepage: reject it so the section renders its error state instead of
+      // silently showing "no news" or crashing a render on `featured.slice`.
+      if (!Array.isArray(data?.featured)) {
+        throw new Error("Malformed featured-news response");
+      }
+      return data;
+    },
     staleTime: 60_000,
   });
 }

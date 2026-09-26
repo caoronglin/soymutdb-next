@@ -51,7 +51,9 @@ verify_and_stage() {
   cp -a "${ARTIFACT_DIR}/." "${PUBLISH_DIR}/"
 
   test -f "${PUBLISH_DIR}/index.html"
-  test -f "${PUBLISH_DIR}/soymutdb-jbrowse/index.html"
+  if [[ ! -f "${PUBLISH_DIR}/.no-jbrowse" ]]; then
+    test -f "${PUBLISH_DIR}/soymutdb-jbrowse/index.html"
+  fi
   test -f "${PUBLISH_DIR}/SHA256SUMS"
   ( cd "${PUBLISH_DIR}" && sha256sum -c SHA256SUMS )
 

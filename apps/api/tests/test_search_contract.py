@@ -242,3 +242,90 @@ async def test_internal_search_sets_private_no_store_header():
             )
 
     assert response.headers.get("Cache-Control") == "private, no-store"
+
+
+async def _capture_cache_params(context: ReleaseContext, site_variant: SiteVariant):
+    captured: dict[str, Any] = {}
+
+    async def fake_get_or_set(name, ttl, loader, *, params=None):
+        del name, ttl, loader
+        captured["params"] = params
+        return {
+            "query": "Glyma",
+            "results": [],
+            "by_type": {"gene": 0},
+            "by_assembly": {},
+            "ambiguous": False,
+            "cursor": None,
+            "next_cursor": None,
+            "has_more": False,
+            "total_count": 0,
+        }
+
+    with (
+        patch(
+            "app.services.search_service.resolve_release_context",
+            AsyncMock(return_value=context),
+        ),
+        patch("app.services.search_service.get_or_set", fake_get_or_set),
+    ):
+        await SearchService().global_search(
+            object(),
+            "Glyma",
+            types=[SearchResultType.GENE],
+            assembly_id=context.assembly_id,
+            site_variant=site_variant,
+        )
+    return captured["params"]
+
+
+@pytest.mark.asyncio
+async def test_global_search_cache_isolates_site_variant_release_and_assembly():
+    """CTX-01/02/03: the shared cache must not be reused across contexts.
+
+    The earlier contract only asserted one call's params; it never proved that
+    a different release or assembly yields a different key, which is the
+    property that keeps v4 and v5 (and two releases) from serving each other's
+    cached rows.
+    """
+    external_v4_release7 = await _capture_cache_params(
+        ReleaseContext(release_id=7, assembly_id=11), SiteVariant.EXTERNAL
+    )
+    other_release = await _capture_cache_params(
+        ReleaseContext(release_id=8, assembly_id=11), SiteVariant.EXTERNAL
+    )
+    other_assembly = await _capture_cache_params(
+        ReleaseContext(release_id=7, assembly_id=12), SiteVariant.EXTERNAL
+    )
+
+    assert external_v4_release7["site_variant"] == "external"
+    assert external_v4_release7["release_id"] == 7
+    assert external_v4_release7["assembly_id"] == 11
+    # CTX-02: a different release must not share the entry.
+    assert external_v4_release7 != other_release
+    # CTX-03: a different assembly must not share the entry.
+    assert external_v4_release7 != other_assembly
+
+
+@pytest.mark.asyncio
+async def test_internal_global_search_bypasses_the_shared_cache():
+    """CTX-01: internal rows must never enter the shared (external) cache."""
+    cache = AsyncMock()
+    service = SearchService()
+    with (
+        patch(
+            "app.services.search_service.resolve_release_context",
+            AsyncMock(return_value=ReleaseContext(release_id=7, assembly_id=11)),
+        ),
+        patch("app.services.search_service.get_or_set", cache),
+        patch.object(service, "_search_genes", AsyncMock(return_value=[])),
+        patch.object(service, "_gene_assembly_distribution", AsyncMock(return_value={})),
+    ):
+        await service.global_search(
+            object(),
+            "Glyma",
+            types=[SearchResultType.GENE],
+            site_variant=SiteVariant.INTERNAL,
+        )
+
+    cache.assert_not_awaited()

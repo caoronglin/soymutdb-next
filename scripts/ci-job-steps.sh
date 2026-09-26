@@ -278,8 +278,11 @@ frontend_run() {
   bash "${REPO_ROOT}/scripts/verify-frontend-artifacts.sh"
   # Dual-site boundary (AGENTS.md): build the internal variant from the same
   # commit and prove it cannot leak into the external artifact. GitHub runs
-  # the same script as its own frontend step; CNB reaches it here.
-  bash "${REPO_ROOT}/scripts/verify-site-variant-artifacts.sh"
+  # the same script as its own frontend step; CNB reaches it here. The frontend
+  # gate above already built both variants, so this only re-runs the isolation
+  # assertions instead of rebuilding them.
+  SOYMUTDB_SITE_VARIANTS_PREBUILT=1 \
+    bash "${REPO_ROOT}/scripts/verify-site-variant-artifacts.sh"
 }
 
 # -----------------------------------------------------------------------------

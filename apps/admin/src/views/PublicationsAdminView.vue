@@ -154,7 +154,7 @@ const deleteMutation = useMutation({
             <tr v-for="row in items" :key="row.id" class="border-t" data-testid="publication-row">
               <td class="py-2">
                 {{ row.title }}
-                <Tag v-if="row.is_featured" color="gold">featured</Tag>
+                <Tag v-if="row.is_featured" color="gold">{{ t("admin.publications.featured") }}</Tag>
               </td>
               <td class="py-2 text-xs opacity-70">{{ row.year ?? "—" }}</td>
               <td class="py-2">
@@ -174,7 +174,7 @@ const deleteMutation = useMutation({
           </tbody>
         </table>
 
-        <nav v-if="items.length" class="mt-4 flex items-center gap-3" aria-label="Pagination">
+        <nav v-if="items.length" class="mt-4 flex items-center gap-3" :aria-label="t('common.pagination')">
           <button
             type="button"
             class="rounded-md border px-3 py-1.5 text-sm disabled:opacity-50"
@@ -251,7 +251,7 @@ const deleteMutation = useMutation({
           </label>
           <label class="flex items-center gap-2 text-sm">
             <input v-model="form.is_featured" type="checkbox" data-testid="publication-featured" />
-            featured
+            {{ t("admin.publications.featured") }}
           </label>
           <p v-if="errorMessage" role="alert" class="text-sm text-red-700" data-testid="publication-error">
             {{ errorMessage }}

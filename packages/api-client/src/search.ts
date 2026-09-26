@@ -12,12 +12,18 @@ export interface SearchResult {
   score?: number;
   release_id?: number | null;
   assembly_id?: number | null;
+  /** Human-readable genome version label (name + version); display only. */
+  assembly?: string | null;
 }
 
 export interface SearchResponse {
   query: string;
   results: SearchResult[];
   by_type: Record<string, number>;
+  /** Match counts per assembly over the full release-scoped result set. */
+  by_assembly?: Record<string, number>;
+  /** True when an unscoped query matched more than one assembly. */
+  ambiguous?: boolean;
   cursor: string | null;
   next_cursor: string | null;
   has_more: boolean;

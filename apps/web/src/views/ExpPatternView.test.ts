@@ -80,7 +80,7 @@ describe("ExpPatternView", () => {
       scale: "zscore",
     });
     expect(wrapper.get('[data-testid="exppattern-summary"]').text()).toContain(
-      "Wm82.v5 · v5 · release 7",
+      "Wm82.v5 · v5 · Release 7",
     );
     wrapper.unmount();
   });

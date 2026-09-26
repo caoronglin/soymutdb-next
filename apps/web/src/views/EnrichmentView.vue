@@ -11,6 +11,7 @@ import {
 import { ConfigProvider, createThemeConfig } from "@soymutdb/ui-vue";
 
 import { assembliesQueryOptions } from "../lib/query-options";
+import { t } from "../lib/i18n";
 
 type Mode = "ora" | "gsea";
 type Result = EnrichmentResponse | EnrichmentGseaResponse;
@@ -115,7 +116,7 @@ function parseRankedGenes(raw: string): Array<{ gene: string; value: number }> {
     const [gene, valueText, extra] = trimmed.split(/[\s\t]+/);
     const value = Number(valueText);
     if (!gene || valueText === undefined || extra !== undefined || !Number.isFinite(value)) {
-      throw new Error("Enter each ranked gene as: gene ID, then one finite value.");
+      throw new Error(t("tools.enrichment.gsea.errorBadLine"));
     }
     if (!seen.has(gene)) {
       seen.add(gene);
@@ -134,18 +135,18 @@ function selectAssembly(event: Event) {
 
 function submit() {
   if (!assemblyId.value) {
-    fieldError.value = "Select an assembly.";
+    fieldError.value = t("tools.enrichment.errorAssemblyRequired");
     return;
   }
   const p = Number(pThreshold.value);
   if (!Number.isFinite(p) || p <= 0 || p > 1) {
-    fieldError.value = "Enter a p-value threshold greater than 0 and at most 1.";
+    fieldError.value = t("tools.enrichment.errorP");
     return;
   }
   if (mode.value === "ora") {
     const genes = parseGenes(genesRaw.value);
     if (!genes.length || genes.length > 500) {
-      fieldError.value = "Enter between 1 and 500 unique gene IDs.";
+      fieldError.value = t("tools.enrichment.errorGenesRange");
       return;
     }
   } else {
@@ -153,16 +154,17 @@ function submit() {
     try {
       pairs = parseRankedGenes(rankedGenesRaw.value);
     } catch (error) {
-      fieldError.value = error instanceof Error ? error.message : "Invalid ranked gene list.";
+      fieldError.value =
+        error instanceof Error ? error.message : t("tools.enrichment.invalidRanked");
       return;
     }
     if (!pairs.length || pairs.length > 500) {
-      fieldError.value = "Enter between 1 and 500 ranked genes.";
+      fieldError.value = t("tools.enrichment.errorRankedRange");
       return;
     }
     const minimum = Number(minGenes.value);
     if (!Number.isInteger(minimum) || minimum < 1 || minimum > 500) {
-      fieldError.value = "Minimum term size must be an integer from 1 to 500.";
+      fieldError.value = t("tools.enrichment.errorMinGenesInteger");
       return;
     }
   }
@@ -208,16 +210,16 @@ function formatLogQ(qValue: number): string {
   <ConfigProvider :theme="createThemeConfig({ dark: false })">
     <main class="mx-auto grid max-w-7xl gap-8 p-6 md:p-8" data-testid="enrichment-page">
       <header class="grid gap-2">
-        <RouterLink to="/tools" class="text-sm underline opacity-70">Research tools</RouterLink>
-        <h1 class="text-2xl font-semibold">GO / KEGG enrichment</h1>
+        <RouterLink to="/tools" class="text-sm underline opacity-70">{{ t("home.tasks") }}</RouterLink>
+        <h1 class="text-2xl font-semibold">{{ t("tools.enrichment.title") }}</h1>
         <p class="max-w-3xl text-sm opacity-75">
-          Run over-representation or ranked gene-set analysis against annotations from one selected assembly.
+          {{ t("tools.enrichment.subtitle") }}
         </p>
       </header>
 
       <form class="grid gap-5 rounded-lg border p-5" @submit.prevent="submit">
         <div class="grid gap-2">
-          <label for="enrichment-assembly" class="text-sm font-medium">Assembly</label>
+          <label for="enrichment-assembly" class="text-sm font-medium">{{ t("tools.enrichment.assemblyLabel") }}</label>
           <select
             id="enrichment-assembly"
             class="rounded-md border bg-transparent p-2"
@@ -226,49 +228,49 @@ function formatLogQ(qValue: number): string {
             data-testid="enrichment-assembly"
             @change="selectAssembly"
           >
-            <option value="" disabled>Select an assembly</option>
+            <option value="" disabled>{{ t("tools.enrichment.assemblyPlaceholder") }}</option>
             <option v-for="item in assemblies" :key="item.id" :value="item.id">
               {{ item.name }} · {{ item.version }}{{ item.is_default ? " (default)" : "" }}
             </option>
           </select>
-          <p v-if="isAssembliesLoading" role="status" class="text-sm opacity-70">Loading assemblies…</p>
-          <p v-else-if="isAssembliesError" role="alert" class="text-sm text-red-700">Assemblies could not be loaded.</p>
-          <p v-else class="text-xs opacity-70">Input genes, annotation terms, and the background set use this assembly.</p>
+          <p v-if="isAssembliesLoading" role="status" class="text-sm opacity-70">{{ t("tools.enrichment.loadingAssemblies") }}</p>
+          <p v-else-if="isAssembliesError" role="alert" class="text-sm text-red-700">{{ t("tools.enrichment.assembliesError") }}</p>
+          <p v-else class="text-xs opacity-70">{{ t("tools.enrichment.assemblyHelp") }}</p>
         </div>
 
-        <div class="flex flex-wrap gap-2" role="group" aria-label="Analysis mode">
+        <div class="flex flex-wrap gap-2" role="group" :aria-label="t('tools.enrichment.modeLabel')">
           <button type="button" :aria-pressed="mode === 'ora'" class="rounded-md border px-3 py-2" data-testid="enrichment-mode-ora" @click="changeMode('ora')">
-            Over-representation
+            {{ t("tools.enrichment.modeOra") }}
           </button>
           <button type="button" :aria-pressed="mode === 'gsea'" class="rounded-md border px-3 py-2" data-testid="enrichment-mode-gsea" @click="changeMode('gsea')">
-            Ranked GSEA
+            {{ t("tools.enrichment.modeGsea") }}
           </button>
         </div>
 
         <div class="grid gap-4 sm:grid-cols-2">
           <label class="grid gap-2 text-sm">
-            <span>Ontology</span>
+            <span>{{ t("tools.enrichment.ontologyLabel") }}</span>
             <select v-model="ontology" class="rounded-md border bg-transparent p-2" data-testid="enrichment-ontology">
               <option value="go">GO</option>
               <option value="kegg">KEGG</option>
             </select>
           </label>
           <label class="grid gap-2 text-sm">
-            <span>Raw p-value threshold</span>
+            <span>{{ t("tools.enrichment.pLabel") }}</span>
             <input v-model="pThreshold" type="number" min="0.000001" max="1" step="any" class="rounded-md border bg-transparent p-2" data-testid="enrichment-p-threshold" />
           </label>
         </div>
 
         <div v-if="mode === 'ora'" class="grid gap-2">
-          <label for="enrichment-genes" class="text-sm font-medium">Gene IDs</label>
-          <textarea id="enrichment-genes" v-model="genesRaw" rows="7" class="rounded-md border bg-transparent p-3 font-mono text-sm" placeholder="One gene ID per line" data-testid="enrichment-genes" />
-          <p class="text-xs opacity-70">Up to 500 unique gene IDs.</p>
+          <label for="enrichment-genes" class="text-sm font-medium">{{ t("tools.enrichment.genesLabel") }}</label>
+          <textarea id="enrichment-genes" v-model="genesRaw" rows="7" class="rounded-md border bg-transparent p-3 font-mono text-sm" :placeholder="t('tools.enrichment.genesPlaceholder')" data-testid="enrichment-genes" />
+          <p class="text-xs opacity-70">{{ t("tools.enrichment.genesLimit") }}</p>
         </div>
         <div v-else class="grid gap-3">
-          <label for="enrichment-ranked-genes" class="text-sm font-medium">Ranked gene values</label>
-          <textarea id="enrichment-ranked-genes" v-model="rankedGenesRaw" rows="7" class="rounded-md border bg-transparent p-3 font-mono text-sm" placeholder="Gene ID<TAB>log2 fold-change" data-testid="enrichment-ranked-genes" />
+          <label for="enrichment-ranked-genes" class="text-sm font-medium">{{ t("tools.enrichment.gsea.valuesLabel") }}</label>
+          <textarea id="enrichment-ranked-genes" v-model="rankedGenesRaw" rows="7" class="rounded-md border bg-transparent p-3 font-mono text-sm" :placeholder="t('tools.enrichment.gsea.valuesPlaceholder')" data-testid="enrichment-ranked-genes" />
           <label class="grid max-w-xs gap-2 text-sm">
-            <span>Minimum term size</span>
+            <span>{{ t("tools.enrichment.gsea.minGenesLabel") }}</span>
             <input v-model="minGenes" type="number" min="1" max="500" step="1" class="rounded-md border bg-transparent p-2" data-testid="enrichment-min-genes" />
           </label>
         </div>
@@ -276,50 +278,53 @@ function formatLogQ(qValue: number): string {
         <p v-if="fieldError" role="alert" class="text-sm text-red-700" data-testid="enrichment-field-error">{{ fieldError }}</p>
         <div class="flex flex-wrap gap-3">
           <button type="submit" class="rounded-md border px-4 py-2 font-medium disabled:opacity-50" :disabled="isPending || isAssembliesLoading || isAssembliesError" data-testid="enrichment-submit">
-            {{ isPending ? "Analyzing…" : "Run enrichment" }}
+            {{ isPending ? t("tools.enrichment.submitting") : t("tools.enrichment.submit") }}
           </button>
-          <button type="button" class="rounded-md border px-4 py-2" data-testid="enrichment-clear" @click="clear">Clear</button>
+          <button type="button" class="rounded-md border px-4 py-2" data-testid="enrichment-clear" @click="clear">{{ t("common.clear") }}</button>
         </div>
       </form>
 
       <section aria-live="polite" class="grid gap-4" data-testid="enrichment-result">
-        <p v-if="isPending" role="status">Running analysis…</p>
+        <p v-if="isPending" role="status">{{ t("tools.enrichment.running") }}</p>
         <div v-else-if="requestError" role="alert" class="rounded-md border border-red-700 p-4" data-testid="enrichment-error">
-          <p>Analysis is unavailable.</p>
+          <p>{{ t("tools.enrichment.errorTitle") }}</p>
           <p class="mt-2 text-sm">{{ requestError.message }}</p>
         </div>
-        <p v-else-if="!result" class="text-sm opacity-70">Submit a gene list to run an analysis.</p>
+        <p v-else-if="!result" class="text-sm opacity-70">{{ t("tools.enrichment.emptyPrompt") }}</p>
         <article v-else class="grid gap-4 rounded-lg border p-5" data-testid="enrichment-summary">
           <header class="grid gap-1">
-            <h2 class="text-lg font-semibold">{{ result.mode === "gsea" ? "GSEA results" : "ORA results" }}</h2>
+            <h2 class="text-lg font-semibold">{{ result.mode === "gsea" ? t("tools.enrichment.gseaResults") : t("tools.enrichment.oraResults") }}</h2>
             <p class="text-sm opacity-75">
-              {{ result.assembly_name }} · {{ result.assembly_version }} · release {{ result.release_id }} ·
-              {{ result.input_genes }} input genes / {{ result.background_genes }} annotated background genes
+              {{ result.assembly_name }} · {{ result.assembly_version }} ·
+              {{ t("tools.enrichment.releaseLabel") }} {{ result.release_id }} ·
+              {{ result.mode === "gsea"
+                ? t("tools.enrichment.gsea.summaryDesc", { input: result.input_genes, background: result.background_genes })
+                : t("tools.enrichment.summaryDesc", { input: result.input_genes, background: result.background_genes }) }}
             </p>
-            <p class="text-xs opacity-70">{{ result.ontology.toUpperCase() }} · {{ rows.length }} terms</p>
+            <p class="text-xs opacity-70">{{ result.ontology.toUpperCase() }} · {{ t("tools.enrichment.termsBadge", { count: rows.length }) }}</p>
             <p v-if="result.annotation_source" class="break-words text-xs opacity-70" data-testid="enrichment-provenance">
-              Source:
+              {{ t("tools.enrichment.source") }}
               <a :href="result.annotation_source.url" target="_blank" rel="noopener noreferrer" class="underline">
                 {{ result.annotation_source.name }} · {{ result.annotation_source.version }}
               </a>
               · SHA-256 <code>{{ result.annotation_source.sha256 }}</code>
             </p>
             <p v-else class="text-xs opacity-70" data-testid="enrichment-provenance-empty">
-              No annotation source is loaded for this release.
+              {{ t("tools.enrichment.noSource") }}
             </p>
           </header>
           <p v-if="result.message" class="rounded-md border p-3 text-sm" data-testid="enrichment-message">{{ result.message }}</p>
-          <p v-if="!rows.length && !result.message" class="text-sm opacity-70">No terms passed the selected threshold.</p>
+          <p v-if="!rows.length && !result.message" class="text-sm opacity-70">{{ t("tools.enrichment.emptyDesc") }}</p>
           <div v-if="rows.length" class="grid gap-4">
-            <ul aria-label="Enrichment significance plot" class="grid gap-2 rounded-md border p-3 text-sm" data-testid="enrichment-plot">
+            <ul :aria-label="t('tools.enrichment.plotAria')" class="grid gap-2 rounded-md border p-3 text-sm" data-testid="enrichment-plot">
               <li v-for="row in rows" :key="row.id" class="grid gap-1">
-                <div class="flex justify-between gap-3"><span class="truncate">{{ row.name }} <code>{{ row.id }}</code></span><span>-log10(q) {{ formatLogQ(row.qValue) }}</span></div>
+                <div class="flex justify-between gap-3"><span class="truncate">{{ row.name }} <code>{{ row.id }}</code></span><span>{{ t("tools.enrichment.gsea.chartX") }} {{ formatLogQ(row.qValue) }}</span></div>
                 <div class="h-2 rounded bg-slate-100"><div class="h-2 rounded bg-blue-600" :style="{ width: barWidth(row.qValue) }" /></div>
               </li>
             </ul>
             <div class="overflow-auto rounded-md border">
-              <table class="min-w-full text-sm" aria-label="Enrichment terms">
-                <thead><tr><th scope="col" class="p-2 text-left">Term</th><th scope="col" class="p-2 text-right">p</th><th scope="col" class="p-2 text-right">q</th><th scope="col" class="p-2 text-right">Genes</th><th v-if="result.mode === 'gsea'" scope="col" class="p-2 text-right">ES / NES</th></tr></thead>
+              <table class="min-w-full text-sm" :aria-label="t('tools.enrichment.tableAria')">
+                <thead><tr><th scope="col" class="p-2 text-left">{{ t("tools.enrichment.colTerm") }}</th><th scope="col" class="p-2 text-right">{{ t("tools.enrichment.colP") }}</th><th scope="col" class="p-2 text-right">{{ t("tools.enrichment.colQ") }}</th><th scope="col" class="p-2 text-right">{{ t("tools.enrichment.colGenes") }}</th><th v-if="result.mode === 'gsea'" scope="col" class="p-2 text-right">{{ t("tools.enrichment.colEsNes") }}</th></tr></thead>
                 <tbody>
                   <tr v-for="row in rows" :key="row.id" class="border-t align-top">
                     <th scope="row" class="p-2 text-left"><code>{{ row.id }}</code><span class="ml-2 font-normal">{{ row.name }}</span><p class="mt-1 max-w-lg break-words font-mono text-xs opacity-70">{{ row.genes.join(", ") }}</p></th>

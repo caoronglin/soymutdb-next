@@ -110,7 +110,7 @@ pnpm dev:web
 pnpm dev:admin
 
 # FastAPI backend
-cd apps/api && uvicorn app.main:app --reload --port 8000
+cd apps/api && uvicorn app.main:app --reload --port 8010
 
 # Celery worker（按队列；见 deploy/conda/README.md §6）
 cd apps/worker && celery -A soymutdb_worker.main:celery_app worker --loglevel=info
@@ -168,6 +168,8 @@ bash deploy/scripts/verify-restore.sh <backup> # 恢复演练校验
 ## 文档入口
 
 - [科研用户指南](docs/user/README.md)
+- [项目 Wiki](docs/wiki/README.md)（架构、应用状态、API/端口、部署运维、多实例信任）
+- [项目状态](docs/dev/project-status.md)（部署、门禁、功能与缺口单一视图）
 - [运维与 Admin 手册](docs/ops/README.md)
 - [CNB 启动与验收](docs/ops/cnb-startup-acceptance.md)
 - [开发者架构与部署](docs/dev/README.md)

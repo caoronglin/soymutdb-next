@@ -7,7 +7,8 @@ import { normalizeInterval, length as intervalLength } from "@soymutdb/genome-vi
 import { ConfigProvider, Tag, createThemeConfig } from "@soymutdb/ui-vue";
 
 import GeneModelPreview from "../components/GeneModelPreview.vue";
-import { resolveJbrowseBaseUrl } from "../lib/deployment";
+import { isJbrowseEnabled, resolveJbrowseBaseUrl } from "../lib/deployment";
+import { t } from "../lib/i18n";
 import {
   geneExpressionQueryOptions,
   geneHomologsQueryOptions,
@@ -89,6 +90,8 @@ const interval = computed(() => {
 });
 
 const jbrowseHref = computed(() => {
+  // Core-only deployments run no genome browser: no link into a dead upstream.
+  if (!isJbrowseEnabled()) return undefined;
   const g = gene.value;
   if (!g) return undefined;
   const params = new URLSearchParams({ loc: `${g.chromosome}:${g.start_pos}..${g.end_pos}` });
@@ -103,17 +106,17 @@ const jbrowseHref = computed(() => {
 <template>
   <ConfigProvider :theme="createThemeConfig({ dark: false })">
     <div class="mx-auto max-w-3xl p-8">
-      <p class="text-sm opacity-70"><RouterLink to="/search" class="underline">Search</RouterLink></p>
+      <p class="text-sm opacity-70"><RouterLink to="/search" class="underline">{{ t("genes.search") }}</RouterLink></p>
 
       <div v-if="isLoading" data-testid="gene-loading" class="mt-6 h-24 animate-pulse rounded bg-black/5" />
 
       <div v-else-if="isError" data-testid="gene-error" class="mt-6 rounded border border-red-300 p-5">
-        <p class="font-medium">Could not load this gene.</p>
+        <p class="font-medium">{{ t("genes.loadError") }}</p>
       </div>
 
       <article v-else-if="gene" data-testid="gene-detail" class="mt-4">
         <div class="flex items-center gap-2">
-          <Tag class="font-mono uppercase">gene</Tag>
+          <Tag class="font-mono uppercase">{{ t("genes.entityTag") }}</Tag>
           <h1 class="text-2xl font-semibold" data-testid="gene-id">{{ gene.gene_id }}</h1>
         </div>
         <p class="mt-1 text-sm opacity-70">
@@ -121,23 +124,23 @@ const jbrowseHref = computed(() => {
         </p>
 
         <dl class="mt-4 grid grid-cols-2 gap-2 text-sm" data-testid="gene-context">
-          <dt class="opacity-70">Assembly</dt>
+          <dt class="opacity-70">{{ t("genes.assemblyLabel") }}</dt>
           <dd data-testid="gene-assembly">
             {{ gene.assembly_name ?? "—" }}
             <span v-if="gene.assembly_id" class="font-mono opacity-60">(#{{ gene.assembly_id }})</span>
           </dd>
-          <dt class="opacity-70">Coordinates</dt>
+          <dt class="opacity-70">{{ t("genes.coordinatesLabel") }}</dt>
           <dd data-testid="gene-coords">
             {{ gene.chromosome }}:{{ gene.start_pos }}..{{ gene.end_pos }}
-            <template v-if="interval"> ({{ interval.length }} bp, {{ gene.strand }} strand)</template>
+            <template v-if="interval"> {{ t("genes.coordinatesDetail", { length: interval.length, strand: gene.strand }) }}</template>
           </dd>
         </dl>
 
         <section v-if="gene.variant_count !== undefined" class="mt-4 text-sm" data-testid="gene-variants">
-          <span class="opacity-70">Variants:</span>
+          <span class="opacity-70">{{ t("genes.variantsLabel") }}</span>
           {{ gene.variant_count }}
           <span v-if="gene.high_impact_variants" class="opacity-70">
-            · {{ gene.high_impact_variants }} high-impact
+            · {{ t("genes.highImpactCount", { count: gene.high_impact_variants }) }}
           </span>
         </section>
 
@@ -161,14 +164,14 @@ const jbrowseHref = computed(() => {
           aria-labelledby="gene-transcripts"
           data-testid="gene-transcripts"
         >
-          <h2 id="gene-transcripts" class="text-lg font-medium">Transcripts</h2>
+          <h2 id="gene-transcripts" class="text-lg font-medium">{{ t("genes.transcripts") }}</h2>
           <table class="mt-2 w-full text-sm">
             <thead class="text-left opacity-60">
               <tr>
-                <th>Name</th>
-                <th>Biotype</th>
-                <th>Location</th>
-                <th>Exons</th>
+                <th>{{ t("genes.transcriptName") }}</th>
+                <th>{{ t("genes.biotypeLabel") }}</th>
+                <th>{{ t("genes.transcriptLocation") }}</th>
+                <th>{{ t("genes.exonsLabel") }}</th>
               </tr>
             </thead>
             <tbody>
@@ -179,7 +182,7 @@ const jbrowseHref = computed(() => {
               >
                 <td>
                   <span class="font-mono">{{ transcript.name ?? transcript.id }}</span>
-                  <span v-if="transcript.is_canonical" class="ml-1 opacity-60">· canonical</span>
+                  <span v-if="transcript.is_canonical" class="ml-1 opacity-60">· {{ t("genes.canonicalBadge") }}</span>
                 </td>
                 <td>{{ transcript.biotype ?? "—" }}</td>
                 <td class="font-mono">
@@ -197,26 +200,26 @@ const jbrowseHref = computed(() => {
           aria-labelledby="gene-expression-heading"
           data-testid="gene-expression"
         >
-          <h2 id="gene-expression-heading" class="text-lg font-medium">Expression</h2>
+          <h2 id="gene-expression-heading" class="text-lg font-medium">{{ t("genes.expression") }}</h2>
           <p class="mt-1 text-sm opacity-70">
-            Expression measurements are observations; they do not establish causality.
+            {{ t("genes.expressionNote") }}
           </p>
           <p v-if="toValue(expressionQuery.isLoading)" class="mt-3 text-sm" data-testid="expression-loading">
-            Loading expression records…
+            {{ t("genes.expressionLoading") }}
           </p>
           <p
             v-else-if="toValue(expressionQuery.isError) && expressionRecords.length === 0"
             class="mt-3 text-sm text-red-700"
             data-testid="expression-error"
           >
-            Expression records could not be loaded.
+            {{ t("genes.expressionError") }}
           </p>
           <p
             v-else-if="expressionRecords.length === 0"
             class="mt-3 text-sm opacity-70"
             data-testid="expression-empty"
           >
-            No expression records are available for this gene and assembly.
+            {{ t("genes.expressionEmpty") }}
           </p>
           <template v-else>
             <p
@@ -224,17 +227,17 @@ const jbrowseHref = computed(() => {
               class="mt-3 text-sm text-red-700"
               data-testid="expression-more-error"
             >
-              More expression records could not be loaded. Your loaded records are still shown.
+              {{ t("genes.expressionMoreError") }}
             </p>
             <div class="mt-3 overflow-x-auto">
-              <table class="w-full text-sm" aria-label="Gene expression measurements">
+              <table class="w-full text-sm" :aria-label="t('genes.expressionAria')">
                 <thead class="text-left opacity-60">
                   <tr>
-                    <th>Library</th>
-                    <th>Tissue</th>
-                    <th>Treatment</th>
-                    <th class="text-right">FPKM</th>
-                    <th class="text-right">TPM</th>
+                    <th>{{ t("genes.libraryLabel") }}</th>
+                    <th>{{ t("genes.tissueLabel") }}</th>
+                    <th>{{ t("genes.treatmentLabel") }}</th>
+                    <th class="text-right">{{ t("genes.fpkmLabel") }}</th>
+                    <th class="text-right">{{ t("genes.tpmLabel") }}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -260,7 +263,7 @@ const jbrowseHref = computed(() => {
               :disabled="toValue(expressionQuery.isFetchingNextPage)"
               @click="expressionQuery.fetchNextPage()"
             >
-              {{ toValue(expressionQuery.isFetchingNextPage) ? "Loading…" : "Load more expression data" }}
+              {{ toValue(expressionQuery.isFetchingNextPage) ? t("common.loading") : t("genes.loadMoreExpression") }}
             </button>
           </template>
         </section>
@@ -271,23 +274,23 @@ const jbrowseHref = computed(() => {
           aria-labelledby="gene-homologs-heading"
           data-testid="gene-homologs"
         >
-          <h2 id="gene-homologs-heading" class="text-lg font-medium">Homologs</h2>
+          <h2 id="gene-homologs-heading" class="text-lg font-medium">{{ t("genes.homologs") }}</h2>
           <p v-if="toValue(homologsQuery.isLoading)" class="mt-3 text-sm" data-testid="homologs-loading">
-            Loading homologs…
+            {{ t("genes.homologsLoading") }}
           </p>
           <p
             v-else-if="toValue(homologsQuery.isError) && homologRecords.length === 0"
             class="mt-3 text-sm text-red-700"
             data-testid="homologs-error"
           >
-            Homologs could not be loaded.
+            {{ t("genes.homologsError") }}
           </p>
           <p
             v-else-if="homologRecords.length === 0"
             class="mt-3 text-sm opacity-70"
             data-testid="homologs-empty"
           >
-            No homolog records are available for this gene and assembly.
+            {{ t("genes.homologsEmpty") }}
           </p>
           <template v-else>
             <p
@@ -295,16 +298,16 @@ const jbrowseHref = computed(() => {
               class="mt-3 text-sm text-red-700"
               data-testid="homologs-more-error"
             >
-              More homologs could not be loaded. Your loaded records are still shown.
+              {{ t("genes.homologsMoreError") }}
             </p>
             <div class="mt-3 overflow-x-auto">
-              <table class="w-full text-sm" aria-label="Gene homologs">
+              <table class="w-full text-sm" :aria-label="t('genes.homologsAria')">
                 <thead class="text-left opacity-60">
                   <tr>
-                    <th>Species</th>
-                    <th>Homolog gene</th>
-                    <th>Relationship</th>
-                    <th>Source</th>
+                    <th>{{ t("genes.speciesLabel") }}</th>
+                    <th>{{ t("genes.homologGeneLabel") }}</th>
+                    <th>{{ t("genes.relationshipLabel") }}</th>
+                    <th>{{ t("genes.sourceLabel") }}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -329,12 +332,12 @@ const jbrowseHref = computed(() => {
               :disabled="toValue(homologsQuery.isFetchingNextPage)"
               @click="homologsQuery.fetchNextPage()"
             >
-              {{ toValue(homologsQuery.isFetchingNextPage) ? "Loading…" : "Load more homologs" }}
+              {{ toValue(homologsQuery.isFetchingNextPage) ? t("common.loading") : t("genes.loadMoreHomologs") }}
             </button>
           </template>
         </section>
         <p v-else class="mt-6 text-sm opacity-70" data-testid="gene-associated-data-unavailable">
-          Select an assembly to view expression and homolog records.
+          {{ t("genes.assemblyHint") }}
         </p>
 
         <a
@@ -343,13 +346,13 @@ const jbrowseHref = computed(() => {
           data-testid="gene-jbrowse"
           class="mt-6 inline-block rounded-md border px-3 py-2 text-sm"
         >
-          Open in JBrowse 2
+          {{ t("genes.viewInBrowser") }}
         </a>
 
         <!-- The public detail never renders a private internal identifier. -->
       </article>
 
-      <div v-else data-testid="gene-empty" class="mt-6 text-sm opacity-70">Gene not found.</div>
+      <div v-else data-testid="gene-empty" class="mt-6 text-sm opacity-70">{{ t("genes.notFound") }}</div>
     </div>
   </ConfigProvider>
 </template>

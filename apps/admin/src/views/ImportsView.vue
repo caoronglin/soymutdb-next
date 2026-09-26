@@ -54,6 +54,9 @@ const STATUSES = ["pending", "running", "processing", "completed", "failed", "ca
   <ConfigProvider :theme="createThemeConfig({ dark: false })">
     <div>
       <h1 class="text-xl font-semibold">{{ t("admin.imports") }}</h1>
+      <RouterLink to="/imports/new" class="mt-2 inline-block text-sm underline" data-testid="imports-new">
+        {{ t("admin.importCreate.title") }}
+      </RouterLink>
 
       <form class="mt-4 flex flex-wrap items-end gap-3" @submit.prevent="page = 1">
         <label class="text-sm opacity-70">
@@ -91,13 +94,17 @@ const STATUSES = ["pending", "running", "processing", "completed", "failed", "ca
           </thead>
           <tbody>
             <tr v-for="task in items" :key="task.id" class="border-t" data-testid="import-row">
-              <td class="py-2 font-mono text-xs">{{ task.filename }}</td>
+              <td class="py-2 font-mono text-xs">
+                <RouterLink :to="`/imports/${task.id}`" class="underline" data-testid="import-detail-link">
+                  {{ task.filename }}
+                </RouterLink>
+              </td>
               <td class="py-2" data-testid="import-status">{{ task.status }}</td>
               <td class="py-2 text-xs opacity-70">{{ formatDate(task.created_at) }}</td>
             </tr>
           </tbody>
         </table>
-        <nav class="mt-4 flex items-center gap-3" aria-label="Pagination">
+        <nav class="mt-4 flex items-center gap-3" :aria-label="t('common.pagination')">
           <button
             type="button"
             class="rounded-md border px-3 py-1.5 text-sm disabled:opacity-50"

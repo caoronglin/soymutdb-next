@@ -48,7 +48,11 @@ fi
 
 log "Verify exact Pages artifact tree"
 test -f "${ARTIFACT_DIR}/index.html"
-test -f "${ARTIFACT_DIR}/soymutdb-jbrowse/index.html"
+if [[ -f "${ARTIFACT_DIR}/.no-jbrowse" ]]; then
+  log "core-only artifact: JBrowse sub-app is deliberately absent (.no-jbrowse)"
+else
+  test -f "${ARTIFACT_DIR}/soymutdb-jbrowse/index.html"
+fi
 test -f "${ARTIFACT_DIR}/SHA256SUMS"
 
 log "Verify checksums (hidden files included)"

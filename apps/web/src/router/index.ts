@@ -12,6 +12,7 @@ import BrowserView from "../views/BrowserView.vue";
 import DownloadsView from "../views/DownloadsView.vue";
 import EnrichmentView from "../views/EnrichmentView.vue";
 import ExpPatternView from "../views/ExpPatternView.vue";
+import FeatureUnavailableView from "../views/FeatureUnavailableView.vue";
 import GbrowseView from "../views/GbrowseView.vue";
 import GeneView from "../views/GeneView.vue";
 import GenesListView from "../views/GenesListView.vue";
@@ -35,6 +36,7 @@ import SraView from "../views/SraView.vue";
 import ToolsView from "../views/ToolsView.vue";
 import VariantsView from "../views/VariantsView.vue";
 import { PORTAL_ROUTES } from "./routes";
+import { isJbrowseEnabled } from "../lib/deployment";
 
 // Public-portal routes (Checkpoint B). Route metadata lives in ./routes.ts so
 // the static-route generator can enumerate it without loading components.
@@ -77,6 +79,9 @@ const COMPONENTS = {
   login: LoginView,
 } as const;
 
+const jbrowseEnabled = isJbrowseEnabled();
+const JBROWSE_ROUTE_NAMES = new Set(["browser", "gbrowse"]);
+
 export const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
@@ -84,7 +89,13 @@ export const router = createRouter({
       (route): RouteRecordRaw => ({
         path: route.path,
         name: route.name,
-        component: COMPONENTS[route.componentKey],
+        // A core-only deployment does not run JBrowse. Its routes stay
+        // registered so a shared deep link reaches an explicit explanation
+        // instead of a broken iframe or an upstream 502.
+        component:
+          !jbrowseEnabled && JBROWSE_ROUTE_NAMES.has(route.name)
+            ? FeatureUnavailableView
+            : COMPONENTS[route.componentKey],
         // Spread into a fresh literal: vue-router's RouteMeta is an index
         // signature type, which a named interface does not satisfy directly.
         meta: { ...route.meta },

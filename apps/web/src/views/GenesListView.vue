@@ -193,7 +193,7 @@ const activeFilterCount = computed(
         </div>
       </form>
 
-      <div class="mt-6" role="region" aria-label="Gene results">
+      <div class="mt-6" role="region" :aria-label="t('genes.resultsAria')">
         <p v-if="isLoading" data-testid="genes-loading" class="text-sm opacity-70">
           {{ t("common.loading") }}
         </p>
@@ -257,7 +257,7 @@ const activeFilterCount = computed(
             </tbody>
           </table>
 
-          <nav class="mt-4 flex items-center gap-3" aria-label="Pagination">
+          <nav class="mt-4 flex items-center gap-3" :aria-label="t('common.pagination')">
             <Button
               :disabled="filters.page <= 1"
               data-testid="genes-prev-page"

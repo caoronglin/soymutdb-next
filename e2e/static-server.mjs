@@ -244,6 +244,15 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  // Mock featured news with the documented envelope: the homepage renders its
+  // empty state from a valid empty response. A malformed envelope is rejected
+  // by the client as an error (never silently empty, never a render crash).
+  if (req.method === "GET" && pathname === `${PREFIX}/api/v1/news/featured`) {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ featured: [], carousel: [] }));
+    return;
+  }
+
   // Mock news: an empty list is the honest offline answer (no fake headlines).
   if (req.method === "GET" && pathname.startsWith(`${PREFIX}/api/v1/news`)) {
     res.writeHead(200, { "Content-Type": "application/json" });

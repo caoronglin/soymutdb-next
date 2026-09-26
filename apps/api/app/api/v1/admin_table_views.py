@@ -15,7 +15,7 @@ Every mutation writes an audit log; nothing here can alter biological records.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, Depends, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.database import get_db
@@ -25,6 +25,7 @@ from ...models.auth import User
 from ...models.table_views import SpeciesInstance, TableViewTemplate
 from ...schemas.table_views import (
     SpeciesInstanceCreate,
+    SpeciesInstanceHealthResponse,
     SpeciesInstanceListResponse,
     SpeciesInstanceResponse,
     SpeciesInstanceUpdate,
@@ -34,6 +35,10 @@ from ...schemas.table_views import (
     TableViewTemplateUpdate,
 )
 from ...services import table_views_service as service
+from ...services.species_instance_health_service import (
+    check_species_instance_health,
+    is_instance_health_stale,
+)
 from .deps import get_current_user, get_user_roles
 
 router = APIRouter(prefix="/admin/table-views", tags=["admin-table-views"])
@@ -126,9 +131,17 @@ def _to_instance_response(instance: SpeciesInstance) -> SpeciesInstanceResponse:
         api_base_url=instance.api_base_url,
         jbrowse_base_url=instance.jbrowse_base_url,
         portal_base_url=instance.portal_base_url,
+        site_url=instance.portal_base_url,
         is_enabled=instance.is_enabled,
         is_local=instance.is_local,
         notes=instance.notes,
+        connection_state=(
+            "disabled" if not instance.is_enabled else instance.connection_state
+        ),
+        last_checked_at=instance.last_checked_at,
+        last_error_at=instance.last_error_at,
+        is_stale=is_instance_health_stale(instance),
+        remote_management="local" if instance.is_local else "registration_only",
         created_at=instance.created_at,
         updated_at=instance.updated_at,
     )
@@ -180,6 +193,23 @@ async def delete_species_instance(
     _require_admin(current_user)
     await service.delete_species_instance(db, instance_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@species_router.get("/{instance_id}/health", response_model=SpeciesInstanceHealthResponse)
+async def get_species_instance_health(
+    instance_id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> SpeciesInstanceHealthResponse:
+    """Probe the instance liveness endpoint only when deployment trust allows it."""
+    _require_admin(current_user)
+    return await check_species_instance_health(
+        db,
+        instance_id=instance_id,
+        actor_id=current_user.id,
+        ip_address=request.client.host if request.client else None,
+    )
 
 
 __all__ = ["router", "species_router"]

@@ -6,6 +6,7 @@ import { useRoute, useRouter } from "vue-router";
 import { ConfigProvider, Input, Tag, createThemeConfig } from "@soymutdb/ui-vue";
 
 import { mutantLinesQueryOptions } from "../lib/query-options";
+import { t } from "../lib/i18n";
 import { useSiteContextStore } from "../stores/site-context";
 
 // Public mutant-line browser (Phase F). Lists released mutant lines by public
@@ -52,15 +53,15 @@ function applyFilter() {
 <template>
   <ConfigProvider :theme="createThemeConfig({ dark: false })">
     <div class="mx-auto max-w-3xl p-8">
-      <p class="text-sm opacity-70"><RouterLink to="/" class="underline">Home</RouterLink></p>
-      <h1 class="mt-2 text-2xl font-semibold">Mutant Lines</h1>
+      <p class="text-sm opacity-70"><RouterLink to="/" class="underline">{{ t("nav.home") }}</RouterLink></p>
+      <h1 class="mt-2 text-2xl font-semibold">{{ t("mutantLines.title") }}</h1>
 
       <form class="mt-6 flex items-center gap-3" role="search" @submit.prevent="applyFilter">
-        <label class="text-sm opacity-70" for="mutagen">Exact mutagen</label>
+        <label class="text-sm opacity-70" for="mutagen">{{ t("mutantLines.exactMutagen") }}</label>
         <Input
           id="mutagen"
           v-model="input"
-          placeholder="e.g. EMS"
+          :placeholder="t('mutantLines.mutagenPlaceholder')"
           data-testid="mutagen-filter"
           @change="applyFilter"
         />
@@ -71,12 +72,12 @@ function applyFilter() {
       </div>
 
       <div v-else-if="isError" data-testid="mutants-error" class="mt-6 rounded border border-red-300 p-5">
-        <p class="font-medium">Could not load mutant lines.</p>
+        <p class="font-medium">{{ t("mutantLines.loadError") }}</p>
       </div>
 
       <div v-else data-testid="mutants-results" class="mt-6">
         <p v-if="lines.length === 0" data-testid="mutants-empty" class="text-sm opacity-70">
-          No public mutant lines<span v-if="mutagen"> for mutagen “{{ mutagen }}”</span>.
+          {{ t("mutantLines.emptyNoResult") }}<span v-if="mutagen"> {{ t("mutantLines.emptyForMutagen", { mutagen }) }}</span>.
         </p>
         <ul v-else class="grid gap-3">
           <li v-for="line in lines" :key="line.public_id">
@@ -86,7 +87,7 @@ function applyFilter() {
               :data-public-id="line.public_id"
               class="flex items-center gap-3 rounded-lg border p-4 transition-colors hover:border-primary"
             >
-              <Tag class="font-mono uppercase">mutant</Tag>
+              <Tag class="font-mono uppercase">{{ t("mutantLines.entityTag") }}</Tag>
               <span class="font-medium">{{ line.name }}</span>
               <span class="ml-auto font-mono text-sm opacity-70">{{ line.public_id }}</span>
             </RouterLink>

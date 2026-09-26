@@ -28,6 +28,9 @@ export default defineConfig({
   ],
   use: {
     baseURL,
+    // The specs assert the English catalog; pin the browser locale so the
+    // portal's language detection cannot follow the host and render zh.
+    locale: "en-US",
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
     viewport: { width: 1440, height: 900 },

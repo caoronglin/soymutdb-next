@@ -26,7 +26,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -87,11 +87,28 @@ class SpeciesInstance(Base):
         Boolean, default=False, server_default="false", nullable=False
     )
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    connection_state: Mapped[str] = mapped_column(
+        String(16), default="unknown", server_default="unknown", nullable=False
+    )
+    last_checked_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_error_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_error_code: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "connection_state IN ('unknown', 'healthy', 'unhealthy', 'disabled', 'unconfigured')",
+            name="ck_species_instances_connection_state",
+        ),
     )
 
 

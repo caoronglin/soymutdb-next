@@ -1,5 +1,18 @@
 @import "tailwindcss";
 
+/* Tailwind v4 needs theme mappings for semantic classes used across the portal. */
+@theme {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+}
+
 /*
  * SoyMutDB design tokens (shared with @soymutdb/ui-vue via
  * @soymutdb/ui-vue/design-tokens — brandCssVariables). Declared as CSS
@@ -9,12 +22,23 @@
   --smdb-primary: oklch(0.46 0.13 152);
   --smdb-primary-dark: oklch(0.70 0.12 151);
   --smdb-radius: 0.625rem;
+  --background: oklch(0.991 0.004 148);
+  --foreground: oklch(0.195 0.028 152);
+  --card: oklch(1 0 0);
+  --primary: var(--smdb-primary);
+  --primary-foreground: oklch(0.988 0.004 148);
+  --muted: oklch(0.968 0.012 148);
+  --muted-foreground: oklch(0.48 0.028 152);
+  --border: oklch(0.905 0.02 148);
+  --ring: oklch(0.55 0.14 152);
 }
 
 html,
 body,
 #app {
   margin: 0;
+  background: var(--background);
+  color: var(--foreground);
   font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei",
     "Noto Sans CJK SC", sans-serif;
 }

@@ -35,7 +35,7 @@ function resolveDevAllowedHosts(value: string | undefined): true | string[] {
 // Tailwind v4 is wired via postcss.config.mjs (not as a Vite plugin).
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, __dirname, "");
-    const apiProxyTarget = env.VITE_API_BASE_URL?.trim() || "http://localhost:8000";
+    const apiProxyTarget = env.VITE_API_BASE_URL?.trim() || "http://localhost:8010";
 
     // `_headers` ships literal placeholder origins, so the built artifact is
     // only usable after this plugin substitutes the real ones. Production must

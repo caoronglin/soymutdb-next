@@ -25,7 +25,7 @@
 #   SOYMUTDB_DEV_MODE        full | preview | api-preview   (default: full)
 #   SOYMUTDB_DEV_INSTALL     1 (default) to run pnpm install; 0 to skip
 #   SOYMUTDB_DEV_WEB_PORT    public portal port              (default: 5173)
-#   SOYMUTDB_DEV_API_PORT    FastAPI port                    (default: 8000)
+#   SOYMUTDB_DEV_API_PORT    FastAPI port                    (default: 8010)
 #   SOYMUTDB_DEV_LOG_DIR     where background logs land      (default: .dev-logs)
 #   SOYMUTDB_DEV_ALLOWED_HOSTS  extra Vite dev hosts (default: the CNB preview
 #                              domains, see step 1b)
@@ -60,7 +60,7 @@ cd "${REPO_ROOT}"
 MODE="${SOYMUTDB_DEV_MODE:-full}"
 INSTALL="${SOYMUTDB_DEV_INSTALL:-1}"
 WEB_PORT="${SOYMUTDB_DEV_WEB_PORT:-5173}"
-API_PORT="${SOYMUTDB_DEV_API_PORT:-8000}"
+API_PORT="${SOYMUTDB_DEV_API_PORT:-8010}"
 LOG_DIR="${SOYMUTDB_DEV_LOG_DIR:-${REPO_ROOT}/.dev-logs}"
 # Bind addresses. 0.0.0.0 because the CNB preview proxy connects from outside
 # the container's loopback; a developer who wants loopback-only can set these.

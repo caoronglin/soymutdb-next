@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 // Disposable smoke for the local minimal-mode deployment.
-// Requires: API uvicorn on 127.0.0.1:8000 and vite dev on 127.0.0.1:5173
+// Requires: API uvicorn on 127.0.0.1:8010 and vite dev on 127.0.0.1:5173
 // (VITE_DEPLOYMENT_MODE=minimal VITE_SEARCH_TEST_PREVIEW=true).
 // Both search routes submit by opening the parameterized URL in a new tab.
 

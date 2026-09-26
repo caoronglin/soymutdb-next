@@ -134,6 +134,49 @@ ALTER TABLE variant_facts ADD PROJECTION IF NOT EXISTS prj_by_region (
 -- ALTER TABLE variant_facts MATERIALIZE PROJECTION prj_by_region;
 
 -- ----------------------------------------------------------
+-- 3b. Import staging table (P1-03)
+-- The staging -> verify -> finalize protocol (ADR-0005) writes canonical rows
+-- here before a release-consistent rebuild. Same column set as variant_facts
+-- plus the import/batch identity; no projections or MVs (not queried
+-- analytically). Must exist in production DDL, not only in the test fixture,
+-- or the ON import path fails on a real engine.
+-- ----------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS variant_facts_staging (
+    variant_id       UInt64,
+    release_key      String,
+    assembly_key     String,
+    chromosome       LowCardinality(String),
+    position         UInt64,
+    ref_allele       String,
+    alt_allele       String,
+    variant_type     LowCardinality(String),
+    variant_subtype  LowCardinality(String) DEFAULT '',
+    length           UInt32 DEFAULT 0,
+    gene_id          LowCardinality(String),
+    gene_symbol      LowCardinality(String) DEFAULT '',
+    gene_surrogate_id UInt32 DEFAULT 0,
+    mutant_line_surrogate_id UInt32 DEFAULT 0,
+    mutant_line_name LowCardinality(String) DEFAULT '',
+    consequence      LowCardinality(String),
+    consequence_id   UInt32 DEFAULT 0,
+    impact           LowCardinality(String),
+    rs_id            String DEFAULT '',
+    quality_score    Float32 DEFAULT 0,
+    filter_status    LowCardinality(String) DEFAULT 'PASS',
+    read_depth       UInt32 DEFAULT 0,
+    allele_frequency Float32 DEFAULT 0,
+    hgvs_c           String DEFAULT '',
+    hgvs_p           String DEFAULT '',
+    zygosity         LowCardinality(String) DEFAULT 'unknown',
+    import_id        String,
+    batch_id         String
+) ENGINE = MergeTree()
+PARTITION BY (release_key, chromosome)
+ORDER BY (release_key, chromosome, position, variant_id)
+SETTINGS index_granularity = 8192;
+
+-- ----------------------------------------------------------
 -- 4. Materialized summary tables (8 views)
 -- ----------------------------------------------------------
 

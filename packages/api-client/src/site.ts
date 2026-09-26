@@ -1,5 +1,5 @@
 import { request } from "./client";
-import { authRequest } from "./auth";
+import { authRequest, http } from "./auth";
 
 /**
  * Typed site variants.  The build pipeline selects one variant explicitly;
@@ -14,6 +14,47 @@ function siteRequest<T>(path: string, variant: SiteVariant): Promise<T> {
   return variant === "internal"
     ? authRequest<T>(path, options)
     : request<T>(path, { ...options, auth: false });
+}
+
+/** Runtime brand snapshot for one explicitly selected site artifact. */
+export interface SiteBranding {
+  variant: SiteVariant;
+  name_zh: string;
+  name_en: string;
+  icon_url: string | null;
+}
+
+/** Fetch bilingual branding; internal reads retain the viewer auth boundary. */
+export function getSiteBranding(variant: SiteVariant = "external"): Promise<SiteBranding> {
+  return siteRequest<SiteBranding>("/site/branding", variant);
+}
+
+/** Versioned admin projection; asset IDs never leave the API contract. */
+export interface AdminSiteBranding {
+  variant: SiteVariant;
+  version: number;
+  values: Pick<SiteBranding, "name_zh" | "name_en" | "icon_url">;
+}
+
+export type SiteBrandingPatch = Partial<AdminSiteBranding["values"]>;
+
+export function getAdminSiteBranding(
+  variant: SiteVariant = "external",
+): Promise<AdminSiteBranding> {
+  return http.get<AdminSiteBranding>("/admin/settings/site-brand", {
+    params: { variant },
+  });
+}
+
+export function patchAdminSiteBranding(
+  variant: SiteVariant,
+  expectedVersion: number,
+  values: SiteBrandingPatch,
+): Promise<AdminSiteBranding> {
+  return http.patch<AdminSiteBranding>("/admin/settings/site-brand", {
+    params: { variant },
+    json: { expected_version: expectedVersion, values },
+  });
 }
 
 /** Editable About content (bilingual, all fields optional). */

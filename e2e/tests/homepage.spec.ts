@@ -17,19 +17,37 @@ test.describe("homepage — primary navigation", () => {
   test("renders the primary nav with the database entry points", async ({ page }) => {
     await gotoReady(page, `${BASE}/`);
 
-    const nav = page.locator('nav[aria-label="Primary"]').first();
+    // The Vue header groups the old flat links under labelled menus; the
+    // contract is that the groups exist in data-entry order and each menu
+    // opens to show its links.
+    const nav = page.locator('nav[aria-label="Primary navigation"]').first();
     await expect(nav).toBeVisible();
 
-    const labels = (await nav.locator("a").allTextContents()).map((label) => label.trim());
-    // The nav leads with the data entry points, then the resources.
-    const order = ["Explore", "Variants", "Mutant Lines", "Genome Browser", "BLAST", "Tools", "Downloads", "Resources"];
-    const positions = order.map((label) => labels.indexOf(label));
-    for (const [index, position] of positions.entries()) {
-      expect(position, `${order[index]} must be in the primary nav`).toBeGreaterThanOrEqual(0);
+    const groupLabels = (await nav.locator("button").allTextContents()).map((label) =>
+      label.trim(),
+    );
+    for (const label of ["Explore", "Tools", "Resources"]) {
+      expect(groupLabels, `${label} group must be in the primary nav`).toContain(label);
     }
-    // Data entry points come before the resources group.
-    expect(labels.indexOf("BLAST")).toBeLessThan(labels.indexOf("Downloads"));
-    expect(labels.indexOf("Tools")).toBeLessThan(labels.indexOf("Resources"));
+    // Data entry points come before the resources group, and downloads sits
+    // between them as a direct link.
+    const explore = (await nav.locator("button").first().boundingBox())?.x ?? 0;
+    const resources = (
+      await nav.locator('button:has-text("Resources")').first().boundingBox()
+    )?.x ?? 0;
+    expect(explore).toBeLessThan(resources);
+    await expect(nav.locator('a[href$="/downloads"]')).toBeVisible();
+
+    // Explore opens the biological entry points.
+    await nav.locator('button:has-text("Explore")').click();
+    for (const label of ["Genes", "Variants", "Mutant Lines", "Genome Browser"]) {
+      // Menu links carry role="menuitem" inside the ARIA menu.
+      await expect(nav.getByRole("menuitem", { name: label, exact: true })).toBeVisible();
+    }
+
+    // Tools opens the sequence/tooling entry points.
+    await nav.locator('button:has-text("Tools")').click();
+    await expect(nav.getByRole("menuitem", { name: "BLAST", exact: true })).toBeVisible();
   });
 });
 
@@ -70,6 +88,7 @@ test.describe("homepage — content sections", () => {
     // The news section renders either headlines (live API) or an empty state
     // (offline) — never fake data.
     await expect(page.getByText(/Latest news/i).first()).toBeVisible();
+    await expect(page.getByTestId("home-news-empty")).toBeVisible();
   });
 
   test("does not render a hero that displaces the database entry points", async ({ page }) => {

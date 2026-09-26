@@ -20,7 +20,7 @@ from sqlalchemy import select
 from app.core.site_variant import SiteVariant
 from app.models.genomic import Assembly, Chromosome, Gene, GeneAlias, GeneCrosswalk
 from app.models.variant import MutantLine
-from app.schemas.search import SearchResultType
+from app.schemas.search import MatchType, SearchResultType
 from app.services.search_service import SearchService
 
 
@@ -403,6 +403,9 @@ async def test_internal_search_returns_both_identities_and_matched_field(db_sess
         db_session, "SMPUB00002", release_id=None
     )
     by_name = await service.internal_search(db_session, "lab-2", release_id=None)
+    by_internal = await service.internal_search(
+        db_session, str(line.id), release_id=None
+    )
 
     assert [m.public_id for m in by_public.mutants] == ["SMPUB00002"]
     assert by_public.mutants[0].matched_field == "public_id"
@@ -412,6 +415,11 @@ async def test_internal_search_returns_both_identities_and_matched_field(db_sess
     assert by_name.mutants[0].matched_field == "name"
     assert by_name.mutants[0].public_id == "SMPUB00002"
     assert by_name.mutants[0].internal_id == str(line.id)
+
+    assert [m.public_id for m in by_internal.mutants] == ["SMPUB00002"]
+    assert by_internal.mutants[0].matched_field == "internal_id"
+    assert by_internal.mutants[0].internal_id == str(line.id)
+    assert by_internal.mutants[0].match_type == MatchType.EXACT
 
 
 @pytest.mark.asyncio
@@ -431,3 +439,95 @@ async def test_unpublished_mutant_is_visible_internally_only(db_session):
         db_session, "lab-embargo", types=[SearchResultType.MUTANT_LINE]
     )
     assert external.results == []
+
+
+@pytest.mark.asyncio
+async def test_suggest_fails_closed_without_active_release(client, db_session):
+    """P0-02: anonymous suggest never exposes data without a published release."""
+    draft = Release(
+        version="suggest-draft-only",
+        name="suggest draft only",
+        status=ReleaseStatus.DRAFT,
+    )
+    db_session.add(draft)
+    await db_session.flush()
+    assembly = Assembly(
+        name="suggest-draft-asm",
+        species="Glycine max",
+        version="v1",
+        release_id=draft.id,
+    )
+    db_session.add(assembly)
+    await db_session.flush()
+    await _add_gene(db_session, assembly, "SUGGDRAFTONLY", name="draft only gene")
+    await db_session.commit()
+
+    response = await client.get(
+        "/api/v1/search/suggest", params={"q": "SUGGDRAFTONLY"}
+    )
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+@pytest.mark.asyncio
+async def test_suggest_is_scoped_to_the_active_release(client, db_session):
+    """P0-02: a draft assembly accession is not suggested beside the active release."""
+    active_assembly, _active_release = await _create_active_assembly(
+        db_session, "suggest-active"
+    )
+    await _add_gene(db_session, active_assembly, "SUGGACTIVE01", name="active gene")
+
+    draft = Release(
+        version="suggest-draft-secondary",
+        name="suggest draft secondary",
+        status=ReleaseStatus.DRAFT,
+    )
+    db_session.add(draft)
+    await db_session.flush()
+    draft_assembly = Assembly(
+        name="suggest-draft-secondary-asm",
+        species="Glycine max",
+        version="v1",
+        release_id=draft.id,
+    )
+    db_session.add(draft_assembly)
+    await db_session.flush()
+    await _add_gene(db_session, draft_assembly, "SUGGDRAFT02", name="draft gene 2")
+    await db_session.commit()
+
+    response = await client.get("/api/v1/search/suggest", params={"q": "SUGG"})
+    assert response.status_code == 200
+    texts = {item["text"] for item in response.json()}
+    assert "SUGGACTIVE01" in texts
+    assert "SUGGDRAFT02" not in texts
+
+
+@pytest.mark.asyncio
+async def test_unscoped_ambiguity_is_judged_over_full_match_set(db_session):
+    """P0-03/ASM-04: a truncated page must not hide cross-assembly ambiguity."""
+    v4, shared_release = await _create_active_assembly(
+        db_session, "ambig-a4", version="v4"
+    )
+    v5 = Assembly(
+        name="ambig-a5",
+        species="Glycine max",
+        version="v5",
+        release_id=shared_release.id,
+    )
+    db_session.add(v5)
+    await db_session.flush()
+    await _add_gene(db_session, v4, "Glyma.01G000100", name="shared locus")
+    await _add_gene(db_session, v5, "Glyma.01G000100", name="shared locus")
+
+    service = SearchService()
+    response = await service.global_search(
+        db_session, "Glyma.01G000100", types=[SearchResultType.GENE], limit=1
+    )
+
+    # Only one row fits the page, but ambiguity is a property of the whole set.
+    assert len(response.results) == 1
+    assert response.ambiguous is True
+    assert response.by_assembly == {str(v4.id): 1, str(v5.id): 1}
+    # The hit carries a human-readable assembly label alongside the numeric id.
+    assert response.results[0].assembly_id in {v4.id, v5.id}
+    assert response.results[0].assembly

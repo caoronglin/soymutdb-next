@@ -154,6 +154,16 @@ def list_partitions(engine: ClickHouseEngine, import_id: str) -> list[tuple[str,
     return sorted({(str(r[0]), str(r[1])) for r in rows})
 
 
+def _imported_assemblies(engine: ClickHouseEngine, import_id: str) -> set[str]:
+    """Distinct assembly_key values present in this import's staged rows."""
+    rows = engine.query_rows(
+        f"SELECT DISTINCT assembly_key FROM {STAGING_TABLE} "
+        f"WHERE import_id = {{import_id:String}}",
+        params={"import_id": import_id},
+    )
+    return {str(r[0]) for r in rows}
+
+
 def conflicting_variant_ids(
     engine: ClickHouseEngine, import_id: str, limit: int = 10
 ) -> list[tuple[int, int]]:
@@ -191,8 +201,16 @@ def _carry_untouched_partitions(
     release_key: str,
     import_id: str,
     touched: set[str],
+    imported_assemblies: set[str],
 ) -> None:
-    """Copy the release's untouched base rows into staging before the rebuild.
+    """Copy the release's not-replaced base rows into staging before rebuild.
+
+    The physical partition is ``(release_key, chromosome)``, so v4 and v5 rows
+    for the same chromosome share a partition and a partition drop removes
+    both. Carrying must therefore exclude only the ``(assembly, chromosome)``
+    facts actually being replaced: for a touched chromosome, rows of an
+    assembly *not* in this import are carried too. Without this, importing v4
+    would delete v5's rows for the same chromosome.
 
     Several summaries (gene_impact_summary, release_dashboard,
     substitution_spectrum) carry no chromosome column, so their rows cannot be
@@ -204,19 +222,30 @@ def _carry_untouched_partitions(
     """
     columns = ", ".join(BASE_COLUMNS)
     carry_batch = deterministic_batch_id(import_id, -1)
-    for chromosome in sorted(_release_chromosomes(engine, release_key) - touched):
+    ordered_assemblies = sorted(imported_assemblies)
+    for chromosome in sorted(_release_chromosomes(engine, release_key)):
+        where = (
+            "release_key = {release_key:String} "
+            "AND chromosome = {chromosome:String}"
+        )
+        params: dict[str, str] = {
+            "import_id": import_id,
+            "batch_id": carry_batch,
+            "release_key": release_key,
+            "chromosome": chromosome,
+        }
+        if chromosome in touched and ordered_assemblies:
+            placeholders = ", ".join(
+                f"{{assembly_{i}:String}}" for i in range(len(ordered_assemblies))
+            )
+            where += f" AND assembly_key NOT IN ({placeholders})"
+            for i, assembly in enumerate(ordered_assemblies):
+                params[f"assembly_{i}"] = assembly
         engine.execute(
             f"INSERT INTO {STAGING_TABLE} ({columns}, import_id, batch_id) "
             f"SELECT {columns}, {{import_id:String}}, {{batch_id:String}} "
-            f"FROM {BASE_TABLE} "
-            f"WHERE release_key = {{release_key:String}} "
-            f"AND chromosome = {{chromosome:String}}",
-            params={
-                "import_id": import_id,
-                "batch_id": carry_batch,
-                "release_key": release_key,
-                "chromosome": chromosome,
-            },
+            f"FROM {BASE_TABLE} WHERE {where}",
+            params=params,
         )
 
 
@@ -287,9 +316,14 @@ def finalize_release(
         raise ConflictingVariantRowsError(conflicts)
 
     touched = {chromosome for _release, chromosome in partitions}
+    imported_assemblies = _imported_assemblies(engine, import_id)
     existing = _release_chromosomes(engine, release_key)
     _carry_untouched_partitions(
-        engine, release_key=release_key, import_id=import_id, touched=touched
+        engine,
+        release_key=release_key,
+        import_id=import_id,
+        touched=touched,
+        imported_assemblies=imported_assemblies,
     )
     _purge_release_summaries(engine, release_key)
     _drop_release_partitions(

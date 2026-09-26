@@ -63,11 +63,30 @@ export interface SpeciesInstance {
   api_base_url: string;
   jbrowse_base_url: string | null;
   portal_base_url: string | null;
+  /** Alias for portal_base_url used by the current admin UI. */
+  site_url: string | null;
   is_enabled: boolean;
   is_local: boolean;
+  connection_state: "unknown" | "healthy" | "unhealthy" | "disabled" | "unconfigured";
+  last_checked_at: string | null;
+  last_error_at: string | null;
+  is_stale: boolean;
+  remote_management: "local" | "registration_only";
   notes: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface SpeciesInstanceHealth {
+  id: number;
+  code: string;
+  connection_state: SpeciesInstance["connection_state"];
+  checked_at: string;
+  last_checked_at: string | null;
+  last_error_at: string | null;
+  is_stale: boolean;
+  error_code: string | null;
+  remote_management: SpeciesInstance["remote_management"];
 }
 
 export interface TableViewParams {
@@ -138,6 +157,7 @@ export function createSpeciesInstance(body: {
   api_base_url: string;
   jbrowse_base_url?: string | null;
   portal_base_url?: string | null;
+  site_url?: string | null;
   is_enabled?: boolean;
   is_local?: boolean;
   notes?: string | null;
@@ -147,11 +167,20 @@ export function createSpeciesInstance(body: {
 
 export function updateSpeciesInstance(
   instanceId: number,
-  body: Partial<SpeciesInstance>,
+  body: Partial<Pick<
+    SpeciesInstance,
+    "name" | "api_base_url" | "jbrowse_base_url" | "portal_base_url" | "site_url"
+      | "is_enabled" | "is_local" | "notes"
+  >>,
 ): Promise<SpeciesInstance> {
   return http.put<SpeciesInstance>(`/admin/species-instances/${instanceId}`, { json: body });
 }
 
 export function deleteSpeciesInstance(instanceId: number): Promise<void> {
   return http.delete<void>(`/admin/species-instances/${instanceId}`);
+}
+
+/** Run a bounded allowlisted liveness check; this never proxies admin calls. */
+export function checkSpeciesInstanceHealth(instanceId: number): Promise<SpeciesInstanceHealth> {
+  return http.get<SpeciesInstanceHealth>(`/admin/species-instances/${instanceId}/health`);
 }

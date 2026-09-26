@@ -20,7 +20,7 @@
 #
 # Prerequisites (real run):
 #   - mcp-server is running and reachable, e.g.:
-#       cd apps/mcp-server && SOYMUTDB_API_BASE=http://localhost:8000 \
+#       cd apps/mcp-server && SOYMUTDB_API_BASE=http://localhost:8010 \
 #         SOYMUTDB_MCP_API_TOKEN=... python -m mcp_server.server --host 0.0.0.0 --port 9000
 #   - nginx /mcp/ reverse proxy is configured (or set MCP_URL straight at
 #     the server): MCP_URL must be the streamable-HTTP endpoint <base>/mcp

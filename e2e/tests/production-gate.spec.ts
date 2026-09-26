@@ -123,9 +123,11 @@ test.describe("production gate — release subsystems reachable", () => {
     const jbrowseFrame = frames.find((f) =>
       /jbrowse|\/browser\//i.test(f.url() || ""),
     );
-    if (jbrowseFrame) {
-      await expect(jbrowseFrame.locator("body")).not.toBeEmpty({ timeout: 15_000 });
-    }
+    // BrowserView always embeds JBrowse as an iframe; a missing frame is a
+    // deploy/CSP regression, not a pass. The previous form only checked the
+    // frame when present, so a stripped iframe passed on the heading alone.
+    expect(jbrowseFrame, "JBrowse frame must be present on /browser").toBeTruthy();
+    await expect(jbrowseFrame!.locator("body")).not.toBeEmpty({ timeout: 15_000 });
   });
 
   test("admin console login page is reachable and renders", async ({ page, request }) => {

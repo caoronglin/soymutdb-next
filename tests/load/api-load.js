@@ -10,12 +10,12 @@ import { Rate } from "k6/metrics";
  *   k6 run tests/load/api-load.js
  *
  * Environment variables:
- *   BASE_URL - API base URL (default: http://localhost:8000)
+ *   BASE_URL - API base URL (default: http://localhost:8010)
  *   VUS      - Virtual users (default: 50)
  *   DURATION - Test duration (default: 1m)
  */
 
-const BASE_URL = __ENV.BASE_URL || "http://localhost:8000";
+const BASE_URL = __ENV.BASE_URL || "http://localhost:8010";
 const API_PREFIX = "/api/v1";
 
 export const errorRate = new Rate("errors");

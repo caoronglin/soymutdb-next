@@ -11,6 +11,7 @@ import {
 } from "@soymutdb/api-client";
 import { ConfigProvider, Input, Tag, createThemeConfig } from "@soymutdb/ui-vue";
 
+import { t } from "../lib/i18n";
 import { globalSearchQueryOptions } from "../lib/query-options";
 import { useSiteContextStore } from "../stores/site-context";
 
@@ -30,12 +31,20 @@ const types = computed<SearchResultType[] | undefined>(() =>
     ? (route.query.types.map(String) as SearchResultType[])
     : undefined,
 );
-const cursor = computed(() => (route.query.cursor ? String(route.query.cursor) : undefined));
+const routeCursor = computed(() => (route.query.cursor ? String(route.query.cursor) : undefined));
+// Cursor stack: Next pushes the returned cursor, Previous pops. Any change to
+// the query identity resets to page one because the old cursor no longer
+// applies to the new filter set.
+const cursorStack = ref<Array<string | undefined>>([routeCursor.value]);
+const cursor = computed(() => cursorStack.value[cursorStack.value.length - 1]);
 const assembly = computed(() => (route.query.assembly ? String(route.query.assembly) : undefined));
 const external = computed(
   () => route.query.external === "1" || route.query.external === "true",
 );
 const resultLimit = computed(() => (route.query.limit ? Number(route.query.limit) : 20));
+watch([q, types, assembly, resultLimit, external], () => {
+  cursorStack.value = [undefined];
+});
 
 const input = ref(q.value);
 const externalInput = ref(external.value);
@@ -79,7 +88,79 @@ const federated = computed<FederatedSearchResponse | undefined>(() =>
   searchData.value && "sources" in searchData.value ? searchData.value : undefined,
 );
 
-const retry = () => query.refetch();
+// P1-05: the internal search response carries a cursor; without controls the
+// next page was unreachable even though has_more/next_cursor were returned.
+const nextCursor = computed<string | null>(() =>
+  searchData.value && "results" in searchData.value ? searchData.value.next_cursor : null,
+);
+const hasMore = computed<boolean>(() =>
+  searchData.value && "results" in searchData.value
+    ? Boolean(searchData.value.has_more)
+    : false,
+);
+const canPrevious = computed(() => cursorStack.value.length > 1);
+const canNext = computed(() => hasMore.value && Boolean(nextCursor.value));
+
+// DB-CORE assembly contract: an unscoped query that matches several genome
+// versions is reported as ambiguous over the FULL result set (not the page),
+// and hits are grouped per assembly so no version is silently collapsed.
+const ambiguous = computed<boolean>(() =>
+  searchData.value && "results" in searchData.value
+    ? Boolean(searchData.value.ambiguous)
+    : false,
+);
+
+const resultGroups = computed<Array<{ label: string; items: SearchResult[] }>>(() => {
+  const items = results.value;
+  if (!ambiguous.value) return [{ label: "", items }];
+  const groups = new Map<string, SearchResult[]>();
+  for (const result of items) {
+    const label =
+      result.assembly ??
+      (result.assembly_id != null
+        ? String(result.assembly_id)
+        : t("search.unknownAssembly"));
+    const bucket = groups.get(label);
+    if (bucket) bucket.push(result);
+    else groups.set(label, [result]);
+  }
+  return [...groups.entries()].map(([label, groupItems]) => ({ label, items: groupItems }));
+});
+
+function retry() {
+  void query.refetch();
+}
+
+function nextPage(): void {
+  const next = nextCursor.value;
+  if (!next) return;
+  cursorStack.value = [...cursorStack.value, next];
+  void router.replace({ path: route.path, query: { ...route.query, cursor: next } });
+}
+
+function previousPage(): void {
+  if (cursorStack.value.length <= 1) return;
+  cursorStack.value = cursorStack.value.slice(0, -1);
+  const next = { ...route.query } as Record<string, string>;
+  if (cursor.value) next.cursor = cursor.value;
+  else delete next.cursor;
+  void router.replace({ path: route.path, query: next });
+}
+
+/** Map a source status code to a dictionary label; unknown codes stay visible. */
+function sourceStatusLabel(status: string): string {
+  const keys: Record<string, string> = {
+    ok: "search.sourceStatusOK",
+    empty: "search.sourceStatusEmpty",
+    timeout: "search.sourceStatusTimeout",
+    error: "search.sourceStatusError",
+    circuit_open: "search.sourceStatusCircuitOpen",
+    rate_limited: "search.sourceStatusRateLimited",
+  };
+  const key = keys[status];
+  if (key) return t(key);
+  return `${t("search.sourceUnknown")}: ${status}`;
+}
 
 function submit() {
   const next = input.value.trim();
@@ -97,19 +178,17 @@ function submit() {
 <template>
   <ConfigProvider :theme="createThemeConfig({ dark: false })">
     <div class="mx-auto max-w-3xl p-8">
-      <p class="text-sm opacity-70">Search</p>
-      <h1 class="mt-2 text-4xl font-semibold tracking-tight">Discover SoyMutDB</h1>
-      <p class="mt-3 text-sm opacity-70">
-        Search genes, variants, mutant lines, publications, and connected external sources.
-      </p>
+      <p class="text-sm opacity-70">{{ t("search.title") }}</p>
+      <h1 class="mt-2 text-4xl font-semibold tracking-tight">{{ t("nav.search") }}</h1>
+      <p class="mt-3 text-sm opacity-70">{{ t("search.subtitle") }}</p>
 
       <form class="mt-10 space-y-3" role="search" @submit.prevent="submit">
         <Input
           v-model="input"
           type="search"
           role="searchbox"
-          aria-label="Search"
-          placeholder="Search genes, variants, publications…"
+          :aria-label="t('search.title')"
+          :placeholder="t('search.placeholder')"
           data-testid="search-input"
         />
         <label class="inline-flex cursor-pointer items-center gap-2 text-sm opacity-70">
@@ -118,22 +197,22 @@ function submit() {
             data-testid="external-source-toggle"
             type="checkbox"
           />
-          Search external sources (NCBI · UniProt · Ensembl · EBI)
+          {{ t("search.externalSources") }}
         </label>
         <button type="submit" class="rounded-md border px-3 py-2 text-sm" data-testid="search-submit">
-          Search
+          {{ t("search.location.submit") }}
         </button>
       </form>
 
       <div v-if="!q" class="mt-12 text-sm opacity-70" data-testid="search-empty-prompt">
-        Enter a gene, variant, or publication to explore the database.
+        {{ t("search.enterQuery") }}
       </div>
 
       <div v-else-if="isError" class="mt-10 rounded border border-red-300 p-5" data-testid="search-error">
-        <p class="font-medium">Search failed</p>
-        <p class="text-sm opacity-70">Request ID: {{ errorRequestId }}</p>
+        <p class="font-medium">{{ t("search.searchFailed") }}</p>
+        <p class="text-sm opacity-70">{{ t("search.requestId") }}: {{ errorRequestId }}</p>
         <button type="button" class="mt-2 rounded-md border px-3 py-2 text-sm" @click="retry">
-          Retry
+          {{ t("common.retry") }}
         </button>
       </div>
 
@@ -142,15 +221,15 @@ function submit() {
       </div>
 
       <template v-else-if="federated">
-        <section data-testid="search-results" class="mt-10" aria-label="External search results">
+        <section data-testid="search-results" class="mt-10" :aria-label="t('search.externalResultsSection')">
           <div class="mb-4 text-sm opacity-70">
-            External results for <span class="font-mono">“{{ q }}”</span>
+            {{ t("search.externalResultsFor") }} <span class="font-mono">“{{ q }}”</span>
           </div>
           <div class="grid gap-6">
             <div v-for="source in federated.sources" :key="source.source">
               <div class="mb-2 flex items-center gap-2">
                 <h2 class="font-semibold uppercase">{{ source.source }}</h2>
-                <Tag>{{ source.status }}</Tag>
+                <Tag>{{ sourceStatusLabel(source.status) }}</Tag>
               </div>
               <p v-for="(hit, index) in source.hits" :key="`${hit.id ?? hit.title}-${index}`">
                 <a
@@ -165,42 +244,107 @@ function submit() {
                   <span class="font-medium">{{ hit.title }}</span>
                 </a>
               </p>
-              <p v-if="source.hits.length === 0" class="text-sm opacity-70">No results from this source.</p>
+              <p v-if="source.hits.length === 0" class="text-sm opacity-70">
+                {{ t("search.sourceEmpty") }}
+              </p>
             </div>
           </div>
         </section>
       </template>
 
-      <section v-else data-testid="search-results" class="mt-10" aria-label="Search results">
+      <section v-else data-testid="search-results" class="mt-10" :aria-label="t('search.resultsSection')">
         <div class="mb-4 flex items-center justify-between text-sm opacity-70">
-          <span>Results for <span class="font-mono">“{{ q }}”</span></span>
-          <span v-if="totalCount !== null">{{ totalCount }} results</span>
+          <span>{{ t("search.resultsFor") }} <span class="font-mono">“{{ q }}”</span></span>
+          <span v-if="totalCount !== null">{{ t("search.resultCount", { count: totalCount }) }}</span>
         </div>
         <p v-if="results.length === 0" data-testid="search-no-matches" class="text-sm opacity-70">
-          No records matched this query.
+          {{ t("search.noResults") }}
         </p>
-        <ul v-else class="grid gap-3">
-          <li v-for="result in results" :key="`${result.type}-${result.id}`">
-            <a
-              v-if="result.url"
-              :href="result.url"
-              data-testid="search-result-row"
-              :data-url="result.url"
-              class="flex items-center gap-3 rounded-lg border p-4 transition-colors hover:border-primary"
+        <div v-else class="grid gap-6">
+          <p
+            v-if="ambiguous"
+            data-testid="search-ambiguous-notice"
+            class="rounded border border-amber-300 p-3 text-sm"
+          >
+            {{ t("search.ambiguousNotice") }}
+          </p>
+          <div v-for="group in resultGroups" :key="group.label || 'all'">
+            <h3
+              v-if="group.label"
+              data-testid="search-assembly-group"
+              class="mb-2 text-sm font-semibold"
             >
-              <Tag class="font-mono uppercase">{{ result.type }}</Tag>
-              <span class="min-w-0 flex-1 truncate font-medium">{{ result.name ?? result.id }}</span>
-            </a>
-            <div
-              v-else
-              data-testid="search-result-disabled"
-              class="flex items-center gap-3 rounded-lg border p-4 opacity-60"
-            >
-              <Tag class="font-mono uppercase">{{ result.type }}</Tag>
-              <span class="min-w-0 flex-1 truncate font-medium">{{ result.name ?? result.id }}</span>
-            </div>
-          </li>
-        </ul>
+              {{ t("search.assemblyLabel") }}:
+              <span class="font-mono">{{ group.label }}</span>
+            </h3>
+            <ul class="grid gap-3">
+              <li v-for="result in group.items" :key="`${result.type}-${result.id}`">
+                <a
+                  v-if="result.url"
+                  :href="result.url"
+                  data-testid="search-result-row"
+                  :data-url="result.url"
+                  class="flex items-center gap-3 rounded-lg border p-4 transition-colors hover:border-primary"
+                >
+                  <Tag class="font-mono uppercase">{{ result.type }}</Tag>
+                  <span class="min-w-0 flex-1 truncate font-medium">{{ result.name ?? result.id }}</span>
+                  <span class="shrink-0 text-xs opacity-60" data-testid="search-result-meta">
+                    <template v-if="result.assembly || result.assembly_id != null">
+                      {{ t("search.assemblyLabel") }}
+                      {{ result.assembly ?? result.assembly_id }}
+                    </template>
+                    <template v-if="result.release_id != null">
+                      · {{ t("search.releaseLabel") }} {{ result.release_id }}
+                    </template>
+                    <template v-if="result.source">
+                      · {{ t("search.sourceLabel") }} {{ result.source }}
+                    </template>
+                  </span>
+                </a>
+                <div
+                  v-else
+                  data-testid="search-result-disabled"
+                  class="flex items-center gap-3 rounded-lg border p-4 opacity-60"
+                >
+                  <Tag class="font-mono uppercase">{{ result.type }}</Tag>
+                  <span class="min-w-0 flex-1 truncate font-medium">{{ result.name ?? result.id }}</span>
+                  <span class="shrink-0 text-xs opacity-60" data-testid="search-result-meta">
+                    <template v-if="result.assembly || result.assembly_id != null">
+                      {{ t("search.assemblyLabel") }}
+                      {{ result.assembly ?? result.assembly_id }}
+                    </template>
+                    <template v-if="result.release_id != null">
+                      · {{ t("search.releaseLabel") }} {{ result.release_id }}
+                    </template>
+                    <template v-if="result.source">
+                      · {{ t("search.sourceLabel") }} {{ result.source }}
+                    </template>
+                  </span>
+                </div>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div v-if="results.length > 0" class="mt-6 flex items-center gap-3">
+          <button
+            type="button"
+            class="min-h-10 rounded-md border px-3 text-sm disabled:opacity-50"
+            :disabled="!canPrevious"
+            data-testid="search-previous"
+            @click="previousPage"
+          >
+            {{ t("common.previous") }}
+          </button>
+          <button
+            type="button"
+            class="min-h-10 rounded-md border px-3 text-sm disabled:opacity-50"
+            :disabled="!canNext"
+            data-testid="search-next"
+            @click="nextPage"
+          >
+            {{ t("common.next") }}
+          </button>
+        </div>
       </section>
     </div>
   </ConfigProvider>

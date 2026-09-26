@@ -49,3 +49,24 @@ export function resolveJbrowseBaseUrl(value: unknown): string {
 export function applyDeploymentRelease(releaseId: string | null): void {
   setClientReleaseId(releaseId);
 }
+
+/**
+ * Optional-service feature gate.
+ *
+ * A core-only deployment ships the portal without services it does not run
+ * (JBrowse, BLAST, analyses, …). Absent or any value other than an explicit
+ * off-token keeps the service enabled, so existing deployments are unchanged;
+ * only an explicit ``0``/``false``/``off``/``no`` disables it.
+ */
+export function resolveFeatureFlag(value: unknown, defaultEnabled = true): boolean {
+  if (typeof value !== "string") return defaultEnabled;
+  const normalized = value.trim().toLowerCase();
+  if (["0", "false", "off", "no"].includes(normalized)) return false;
+  if (["1", "true", "on", "yes"].includes(normalized)) return true;
+  return defaultEnabled;
+}
+
+/** Whether the JBrowse genome browser is part of this deployment. */
+export function isJbrowseEnabled(): boolean {
+  return resolveFeatureFlag(import.meta.env.VITE_JBROWSE_ENABLED, true);
+}

@@ -27,6 +27,7 @@ from ...core.site_variant import legacy_section_for_variant
 from ...models.auth import User
 from ...models.system_settings import SystemSetting
 from ...schemas.error import ErrorResponse
+from ...schemas.site import AdminSiteBrandResponse, SiteBrandPatchRequest
 from ...schemas.settings import (
     SettingFieldSchema,
     SettingsDocumentResponse,
@@ -39,6 +40,8 @@ from ...schemas.settings import (
     SettingsValidateResponse,
 )
 from ...services import settings_service
+from ...services.site_brand_service import get_site_brand_document, patch_site_brand
+from ...core.site_variant import SiteVariant
 from .deps import get_current_user, get_user_roles
 
 router = APIRouter(prefix="/admin/settings", tags=["admin-settings"])
@@ -88,6 +91,41 @@ async def validate_settings(
     return SettingsValidateResponse(
         section=body.section,
         values=settings_service.validate_settings_values(body.section, body.values),
+    )
+
+
+@router.get("/site-brand", response_model=AdminSiteBrandResponse)
+async def get_admin_site_brand(
+    variant: SiteVariant = Query(default=SiteVariant.EXTERNAL),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> AdminSiteBrandResponse:
+    """Return the versioned, UI-facing brand values for one site variant."""
+    _require_admin(current_user)
+    return await get_site_brand_document(db, variant=variant)
+
+
+@router.patch(
+    "/site-brand",
+    response_model=AdminSiteBrandResponse,
+    responses={409: {"model": ErrorResponse, "description": "Settings version conflict"}},
+)
+async def patch_admin_site_brand(
+    body: SiteBrandPatchRequest,
+    request: Request,
+    variant: SiteVariant = Query(default=SiteVariant.EXTERNAL),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> AdminSiteBrandResponse:
+    """Apply an audited brand patch with optimistic version checking."""
+    _require_admin(current_user)
+    return await patch_site_brand(
+        db,
+        variant=variant,
+        expected_version=body.expected_version,
+        values=body.values,
+        actor_id=current_user.id,
+        ip_address=request.client.host if request.client else None,
     )
 
 

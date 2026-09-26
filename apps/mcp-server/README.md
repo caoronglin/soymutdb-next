@@ -44,7 +44,7 @@ Full machine-readable inventory in `mcp_server/manifest.py`
 ```bash
 pip install -e apps/mcp-server          # or: pip install fastmcp httpx uvicorn
 cd apps/mcp-server
-SOYMUTDB_API_BASE=http://localhost:8000 \
+SOYMUTDB_API_BASE=http://localhost:8010 \
 SOYMUTDB_MCP_API_TOKEN=... \
 python -m mcp_server.server --host 0.0.0.0 --port 9000
 ```
@@ -101,7 +101,7 @@ location = /mcp {
 
 | Variable                  | Default                 | Purpose |
 |---------------------------|-------------------------|---------|
-| `SOYMUTDB_API_BASE`       | `http://localhost:8000` | Internal API base URL |
+| `SOYMUTDB_API_BASE`       | `http://localhost:8010` | Internal API base URL |
 | `SOYMUTDB_MCP_API_TOKEN`  | *(empty)*               | Transport and internal API bearer token |
 
 ## Tests

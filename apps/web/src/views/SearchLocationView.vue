@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useQuery } from "@tanstack/vue-query";
 import { computed, ref, toValue, watch } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 
 import type {
   AssemblyInfo,
@@ -13,6 +13,7 @@ import { Button } from "@soymutdb/ui-vue";
 
 import ConfigurableTable, { type ConfigurableRow } from "../components/ConfigurableTable.vue";
 import PortalLayout from "../components/PortalLayout.vue";
+import { assemblyOptionLabel, resolveAssemblyParam } from "../lib/assembly-selection";
 import { t } from "../lib/i18n";
 import {
   assembliesQueryOptions,
@@ -34,6 +35,7 @@ import { useSiteContextStore } from "../stores/site-context";
 
 
 const route = useRoute();
+const router = useRouter();
 const site = useSiteContextStore();
 
 const initial = {
@@ -59,16 +61,41 @@ const isAssembliesError = computed(() => toValue(assembliesQuery.isError));
 const defaultAssembly = computed(
   () => assemblies.value.find((item) => item.is_default) ?? assemblies.value[0],
 );
-const linkedAssembly = computed(() =>
-  assemblies.value.find(
-    (item) => String(item.id) === initial.assembly || item.name === initial.assembly,
-  ),
+
+// The URL parameter is the stable id; a legacy name is resolved once and then
+// rewritten to the id so the link stays unambiguous on the next visit. An
+// unknown or shared name never silently falls back to the default assembly:
+// that would query another namespace and return plausible-looking wrong rows.
+const assemblyResolution = computed(() =>
+  resolveAssemblyParam(assemblies.value, initial.assembly),
+);
+const unknownAssembly = computed(
+  () =>
+    assemblyResolution.value.status === "unknown" ||
+    assemblyResolution.value.status === "ambiguous",
 );
 const formAssemblyId = computed(() => {
   if (draftAssemblyId.value) return draftAssemblyId.value;
-  const linked = linkedAssembly.value ?? defaultAssembly.value;
+  const resolution = assemblyResolution.value;
+  if (resolution.status === "unknown" || resolution.status === "ambiguous") return "";
+  const linked = resolution.status === "resolved" ? resolution.assembly : defaultAssembly.value;
   return linked ? String(linked.id) : "";
 });
+
+let canonicalized = false;
+watch(
+  [assemblyResolution, isLoadingAssemblies],
+  ([resolution, loading]) => {
+    if (canonicalized || loading) return;
+    if (resolution.status !== "resolved" || resolution.via !== "name") return;
+    canonicalized = true;
+    void router.replace({
+      path: route.path,
+      query: { ...route.query, assembly: String(resolution.assembly.id) },
+    });
+  },
+  { immediate: true },
+);
 
 const chromosomesQuery = useQuery(
   computed(() =>
@@ -113,6 +140,7 @@ watch(
 const query = useQuery(
   computed(() =>
     regionVariantsQueryOptions({
+      assemblyId: formAssemblyId.value || null,
       assemblyName: selectedAssembly.value?.name ?? null,
       chromosome: region.value || null,
       start: start.value ? Number(start.value) : null,
@@ -181,7 +209,7 @@ function submit() {
             @change="draftAssemblyId = ($event.target as HTMLSelectElement).value"
           >
             <option v-for="item in assemblies" :key="String(item.id)" :value="String(item.id)">
-              {{ item.name }}{{ item.is_default ? " · default" : "" }}
+              {{ assemblyOptionLabel(item) }}{{ item.is_default ? " · default" : "" }}
             </option>
           </select>
         </label>
@@ -218,17 +246,26 @@ function submit() {
             data-testid="location-end"
           />
         </label>
-        <Button html-type="submit" :disabled="!formAssemblyId" data-testid="location-submit">
+        <Button html-type="submit" :disabled="!formAssemblyId || unknownAssembly" data-testid="location-submit">
           {{ t("search.location.submit") }}
         </Button>
       </form>
       <p class="mt-2 text-xs opacity-60">{{ t("search.location.formatHint") }}</p>
 
+      <p
+        v-if="unknownAssembly"
+        role="alert"
+        data-testid="location-unknown-assembly"
+        class="mt-4 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700"
+      >
+        {{ assemblyResolution.status === "ambiguous" ? t("common.ambiguousAssembly") : t("common.unknownAssembly") }}
+      </p>
+
       <p v-if="isAssembliesError" data-testid="location-assemblies-error" class="mt-6 text-sm text-red-700">
         {{ t("common.errorDescription") }}
       </p>
 
-      <div class="mt-6" role="region" aria-label="Region search results">
+      <div class="mt-6" role="region" :aria-label="t('search.location.resultsAria')">
         <p v-if="isLoading" data-testid="location-loading" class="text-sm opacity-70">
           {{ t("common.loading") }}
         </p>

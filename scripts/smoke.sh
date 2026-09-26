@@ -148,6 +148,11 @@ smoke_contracts() {
   # rule did exactly that to packages/shared/src/build/) leaves every local
   # build green while a clean clone has no source for the import at all.
   "${PYTHON_BIN}" scripts/check_workspace_exports.py || rc=$?
+  # The app shells must declare a favicon that resolves in source and in the
+  # built tree; the admin console shipped without one and 404'd every load.
+  "${PYTHON_BIN}" scripts/check_app_shell_assets.py --self-test || rc=$?
+  # The visible-text budget may fall but never rise; new hardcoded strings fail.
+  "${PYTHON_BIN}" scripts/check_visible_i18n.py --self-test || rc=$?
   # nginx security-header fragments and the locations that must re-include
   # them. Not part of the frontend gate: the configs cover the API and data
   # planes too, so a backend-only change can break them.

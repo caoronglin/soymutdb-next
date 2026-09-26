@@ -5,6 +5,7 @@ import type { TableActions, TableColumn } from "@soymutdb/api-client";
 import { formatNumber } from "@soymutdb/shared/format";
 import { jbrowseUrl } from "@soymutdb/shared/genomics";
 import { createThemeConfig } from "@soymutdb/ui-vue";
+import { t } from "../lib/i18n";
 
 /**
  * Template-driven table.
@@ -125,7 +126,7 @@ function geneIdOf(row: ConfigurableRow): string | null {
               {{ column.label_en }}
             </th>
             <th v-if="actions?.jbrowse" scope="col" class="py-2">JBrowse 2</th>
-            <th v-if="actions?.genome_preview" scope="col" class="py-2">Gene</th>
+            <th v-if="actions?.genome_preview" scope="col" class="py-2">{{ t("genes.geneLabel") }}</th>
           </tr>
         </thead>
         <tbody>

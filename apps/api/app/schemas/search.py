@@ -81,6 +81,9 @@ class SearchResultItem(BaseModel):
     source: str = "internal"
     release_id: int | None = None
     assembly_id: int | None = None
+    # Human-readable assembly label (name + version) for display; the numeric
+    # ``assembly_id`` stays the machine key. Never derived from coordinates.
+    assembly: str | None = None
 
 
 class GlobalSearchResponse(BaseModel):
@@ -109,7 +112,7 @@ class InternalMutantSearchItem(BaseModel):
     public_id: str
     internal_id: str
     name: str
-    matched_field: str  # "public_id" | "name"
+    matched_field: str  # "public_id" | "internal_id" | "name"
     match_type: MatchType = MatchType.TEXT
     is_public: bool
     release_id: int | None = None

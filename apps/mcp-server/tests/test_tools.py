@@ -179,7 +179,7 @@ class TestGeneById:
             result = asyncio.run(server.gene_by_id("Glyma.01G000100"))
 
         assert captured["method"] == "GET"
-        assert captured["url"] == "http://localhost:8000/api/v1/genes/Glyma.01G000100"
+        assert captured["url"] == "http://localhost:8010/api/v1/genes/Glyma.01G000100"
         assert captured["params"] is None
         assert result["gene_id"] == "Glyma.01G000100"
         assert result["chromosome"] == "chr1"
@@ -265,7 +265,7 @@ class TestVariantByRegion:
             result = asyncio.run(server.variant_by_region("GmWm82.a2.v1", "chr1", 1000, 2000))
 
         assert captured["method"] == "GET"
-        assert captured["url"] == "http://localhost:8000/api/v1/variants/region"
+        assert captured["url"] == "http://localhost:8010/api/v1/variants/region"
         assert captured["params"] == {
             "assembly": "GmWm82.a2.v1",
             "chromosome": "chr1",
@@ -318,7 +318,7 @@ class TestNewsList:
         with _patch_client(handler):
             result = asyncio.run(server.news_list(category="news"))
 
-        assert captured["url"] == "http://localhost:8000/api/v1/news"
+        assert captured["url"] == "http://localhost:8010/api/v1/news"
         assert captured["params"] == {"page": 1, "page_size": 20, "category": "news"}
         assert result["total"] == 1
         assert result["items"][0]["title_en"] == "Hello"
@@ -357,7 +357,7 @@ class TestStatsSummary:
         with _patch_client(handler):
             result = asyncio.run(server.stats_summary())
 
-        assert captured["url"] == "http://localhost:8000/api/v1/stats/dashboard"
+        assert captured["url"] == "http://localhost:8010/api/v1/stats/dashboard"
         assert result["total_variants"] == 12345
         assert result["current_release"] == "v1.0"
 
@@ -384,7 +384,7 @@ class TestSeqFetch:
             result = asyncio.run(server.seqfetch(assembly="Wm82.v5", genes=["G1"]))
 
         assert captured["method"] == "POST"
-        assert captured["url"] == "http://localhost:8000/api/v1/tools/seqfetch"
+        assert captured["url"] == "http://localhost:8010/api/v1/tools/seqfetch"
         assert captured["json"] == {"assembly": "Wm82.v5", "genes": ["G1"]}
         assert result["sequence"] == ">G1\nACGT"
         assert result["assembly"] == "Wm82.v5"
@@ -434,7 +434,7 @@ class TestBlastSubmit:
             )
 
         assert captured["method"] == "POST"
-        assert captured["url"] == "http://localhost:8000/api/v1/blast/jobs"
+        assert captured["url"] == "http://localhost:8010/api/v1/blast/jobs"
         assert captured["json"] == {
             "program": "blastp",
             "query_sequence": "MEEPQSDPSV",

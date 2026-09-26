@@ -21,6 +21,7 @@ vi.mock("@soymutdb/api-client", async (importOriginal) => {
 
 import { getAssemblies, seqFetchGenes, seqFetchRegion } from "@soymutdb/api-client";
 import SeqFetchView from "./SeqFetchView.vue";
+import { setLanguage } from "../lib/i18n";
 
 const mockedAssemblies = vi.mocked(getAssemblies);
 const mockedSeqFetchGenes = vi.mocked(seqFetchGenes);
@@ -53,6 +54,7 @@ function mountView() {
 }
 
 beforeEach(() => {
+  setLanguage("en");
   mockedAssemblies.mockReset().mockResolvedValue(ASSEMBLIES);
   mockedSeqFetchGenes.mockReset();
   mockedSeqFetchRegion.mockReset();
