@@ -177,3 +177,5 @@ export function sortForStrandView<T extends AnnotatedInterval>(
     (a, b) => rank(a.strand) - rank(b.strand) || a.start - b.start || a.end - b.end,
   );
 }
+
+export * from "./viewport";
