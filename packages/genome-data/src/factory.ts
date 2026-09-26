@@ -6,6 +6,7 @@ import { FeatureReader } from "./readers/feature";
 import { IntervalFeatureReader } from "./readers/interval";
 import { QuantitativeReader } from "./readers/quantitative";
 import { SequenceReader } from "./readers/sequence";
+import { TextSearchReader } from "./readers/trix";
 import { VariantReader } from "./readers/variant";
 import type { TrackConfig } from "./types";
 
@@ -207,4 +208,62 @@ export function createTrackDataSource(
         "Unsupported track type \"" + track.type + "\" (track \"" + track.trackId + "\")",
       );
   }
+}
+
+/** JBrowse-shaped Trix text-search adapter (an aggregateTextSearchAdapters entry). */
+export interface TextSearchAdapterConfig {
+  readonly textSearchAdapterId: string;
+  readonly ixFilePath: unknown;
+  readonly ixxFilePath: unknown;
+  readonly assemblyNames?: readonly string[];
+}
+
+/** A text-search reader bound to exactly one assembly. */
+export interface TextSearchDataSource {
+  readonly sourceId: string;
+  readonly assemblyKey: string;
+  readonly reader: TextSearchReader;
+}
+
+function resolveTextSearchAssembly(
+  adapter: TextSearchAdapterConfig,
+  assemblies: readonly AssemblyContext[],
+): AssemblyContext {
+  const names = adapter.assemblyNames ?? [];
+  for (const name of names) {
+    const found = assemblies.find(
+      (assembly) => assembly.key === name || assembly.name === name,
+    );
+    if (found) return found;
+  }
+  throw new GenomeDataError(
+    "assembly-mismatch",
+    "Text-search adapter \"" + adapter.textSearchAdapterId +
+      "\" references an unknown assembly: " + (names.join(", ") || "(none)"),
+  );
+}
+
+/**
+ * Build an assembly-scoped text-search source from a configured adapter.
+ *
+ * Selection is explicit: the adapter must name an assembly present in
+ * `options.assemblies`; there is no implicit "first adapter" fallback. The
+ * returned reader owns its .ix/.ixx locations, and the assembly identity is
+ * surfaced so callers can label or scope results.
+ */
+export function createTextSearchDataSource(
+  adapter: TextSearchAdapterConfig,
+  options: CreateTrackDataSourceOptions,
+): TextSearchDataSource {
+  const assembly = resolveTextSearchAssembly(adapter, options.assemblies);
+  return {
+    sourceId: adapter.textSearchAdapterId,
+    assemblyKey: assembly.key,
+    reader: new TextSearchReader({
+      provider: options.provider,
+      trackId: adapter.textSearchAdapterId,
+      ix: asLocation(adapter.ixFilePath, "ixFilePath", adapter.textSearchAdapterId),
+      ixx: asLocation(adapter.ixxFilePath, "ixxFilePath", adapter.textSearchAdapterId),
+    }),
+  };
 }

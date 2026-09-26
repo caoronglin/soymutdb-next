@@ -159,6 +159,17 @@
       </div>
     </div>
 
+    <p
+      v-if="searchStatus"
+      class="px-4 pb-1.5 text-xs"
+      :class="searchTone === 'error' ? 'text-destructive' : 'text-muted-foreground'"
+      role="status"
+      aria-live="polite"
+      data-testid="locus-search-status"
+    >
+      {{ searchStatus }}
+    </p>
+
     <div
       class="flex items-center gap-3 border-t border-border bg-muted/30 px-4 py-1.5 text-xs text-muted-foreground"
     >
@@ -184,6 +195,9 @@ defineProps<{
   activeTracks: string[];
   isFullscreen: boolean;
   shareCopied: boolean;
+  /** Feedback from the last locus/gene search (e.g. a "not found" message). */
+  searchStatus?: string;
+  searchTone?: "info" | "error";
 }>();
 
 const emit = defineEmits<{

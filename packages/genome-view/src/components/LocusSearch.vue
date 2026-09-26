@@ -13,6 +13,16 @@
     <button class="locus-search__button" type="submit" :disabled="!canSubmit">
       {{ props.submitLabel }}
     </button>
+    <p
+      v-if="props.status"
+      class="locus-search__status"
+      :class="`locus-search__status--${props.statusTone}`"
+      role="status"
+      aria-live="polite"
+      data-testid="locus-search-status"
+    >
+      {{ props.status }}
+    </p>
   </form>
 </template>
 
@@ -24,11 +34,16 @@ const props = withDefaults(
     label?: string;
     placeholder?: string;
     submitLabel?: string;
+    /** Feedback shown under the box (e.g. a "not found" message). */
+    status?: string;
+    /** Visual tone for `status`; defaults to neutral info. */
+    statusTone?: "info" | "error";
   }>(),
   {
     label: "Location or gene",
     placeholder: "chr01:1-1000000 or gene ID",
     submitLabel: "Go",
+    statusTone: "info",
   },
 );
 
@@ -50,8 +65,19 @@ function onSubmit(): void {
 <style scoped>
 .locus-search {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
+}
+.locus-search__status {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: var(--text-caption, 0.75rem);
+  line-height: 1.4;
+  color: var(--muted-foreground, oklch(0.48 0.028 152));
+}
+.locus-search__status--error {
+  color: var(--destructive, oklch(0.58 0.22 27));
 }
 .locus-search__label {
   position: absolute;

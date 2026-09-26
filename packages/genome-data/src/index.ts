@@ -32,8 +32,11 @@ export type {
   VariantRecord,
 } from "./types";
 export {
+  createTextSearchDataSource,
   createTrackDataSource,
   type CreateTrackDataSourceOptions,
+  type TextSearchAdapterConfig,
+  type TextSearchDataSource,
   type TrackDataSource,
   type TrackDataSourceKind,
 } from "./factory";
@@ -73,6 +76,10 @@ export {
   type TextSearchReaderOptions,
   type TextSearchResult,
 } from "./readers/trix";
+export {
+  AssemblyRefNameLoader,
+  type AssemblyRefNameLoaderOptions,
+} from "./ref-names";
 export {
   classifyAllele,
   classifyVariantKind,

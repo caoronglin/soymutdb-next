@@ -136,6 +136,39 @@ export function buildAssembly(name: string): JBrowseAssembly {
     };
 }
 
+/** The three file locations a BgzipFastaAdapter needs to read chrom sizes. */
+export interface SequenceFileLocations {
+    readonly fasta: string;
+    readonly fai: string;
+    readonly gzi: string;
+}
+
+function adapterUri(value: unknown): string | null {
+    if (typeof value === "string") return value;
+    if (value && typeof value === "object") {
+        const uriValue = (value as { uri?: unknown }).uri;
+        if (typeof uriValue === "string") return uriValue;
+    }
+    return null;
+}
+
+/**
+ * Extract the FASTA/FAI/GZI URIs from an assembly's reference adapter.
+ *
+ * Returns null when the adapter is not a BgzipFastaAdapter with all three
+ * locations, so a caller can skip reference-name loading without failing the
+ * whole browser.
+ */
+export function sequenceFileLocations(assembly: JBrowseAssembly): SequenceFileLocations | null {
+    const adapter = assembly.sequence?.adapter as Record<string, unknown> | undefined;
+    if (!adapter || adapter.type !== "BgzipFastaAdapter") return null;
+    const fasta = adapterUri(adapter.fastaLocation);
+    const fai = adapterUri(adapter.faiLocation);
+    const gzi = adapterUri(adapter.gziLocation);
+    if (!fasta || !fai || !gzi) return null;
+    return { fasta, fai, gzi };
+}
+
 /** Reference sequence track (always available). */
 export const REFERENCE_TRACK: JBrowseTrack = {
     trackId: "reference_sequence",

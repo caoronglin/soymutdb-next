@@ -12,6 +12,8 @@
         :active-tracks="activeTracks"
         :is-fullscreen="isFullscreen"
         :share-copied="shareCopied"
+        :search-status="searchNotice?.message"
+        :search-tone="searchNotice?.tone"
         @navigate="handleNavigate"
         @share="handleShare"
         @toggle-fullscreen="toggleFullscreen"
@@ -51,9 +53,10 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, useTemplateRef, watch } from "vue";
-import { http } from "@soymutdb/api-client";
+import { http, searchGenes } from "@soymutdb/api-client";
 import {
-  TextSearchReader,
+  AssemblyRefNameLoader,
+  createTextSearchDataSource,
   UriFileProvider,
   uriLocation,
   type AssemblyContext,
@@ -72,6 +75,7 @@ import {
   DEFAULT_TRACKS,
   buildAssembly,
   buildJBrowseConfig,
+  sequenceFileLocations,
   type JBrowseAssembly,
   type JBrowseConfig,
   type JBrowseTrack,
@@ -85,7 +89,13 @@ import {
   toOneBased,
   toZeroBased,
   type DeepLinkParams,
+  type ParsedLocus,
 } from "./deep-link";
+import {
+  parseTextSearchLabel,
+  resolveLocusInput,
+  type GeneSearchHit,
+} from "./gene-search";
 import { parsePortalMessage, postToParent, type InitPayload } from "./bridge";
 
 /** JBrowse config payload returned by the API. */
@@ -143,6 +153,57 @@ const themeConfig = computed(() => createThemeConfig({ dark: isDark.value }));
 const containerRef = useTemplateRef<HTMLElement>("containerRef");
 const provider = new UriFileProvider();
 
+// Full reference-name lists come from the assembly FASTA index, loaded once per
+// assembly. Until that resolves (or if it fails) the current viewport reference
+// is the only declared name, so rendering never waits on this I/O.
+const refNameLoaders = new Map<string, AssemblyRefNameLoader>();
+const refNames = shallowRef<readonly string[] | null>(null);
+let refNameRequest = 0;
+
+function refNameLoaderFor(assembly: JBrowseAssembly): AssemblyRefNameLoader | null {
+  const locations = sequenceFileLocations(assembly);
+  if (!locations) return null;
+  let loader = refNameLoaders.get(assembly.name);
+  if (!loader) {
+    loader = new AssemblyRefNameLoader({
+      provider,
+      assembly: { key: assembly.name, name: assembly.name, aliases: assembly.aliases },
+      trackId: assembly.sequence.trackId,
+      fasta: uriLocation(locations.fasta),
+      fai: uriLocation(locations.fai),
+      gzi: uriLocation(locations.gzi),
+    });
+    refNameLoaders.set(assembly.name, loader);
+  }
+  return loader;
+}
+
+async function ensureRefNames(): Promise<void> {
+  const assembly = config.value.assemblies[0];
+  if (!assembly) {
+    refNames.value = null;
+    return;
+  }
+  const loader = refNameLoaderFor(assembly);
+  if (!loader) {
+    refNames.value = null;
+    return;
+  }
+  if (loader.cached) {
+    refNames.value = loader.cached;
+    return;
+  }
+  // Reset so a slow load for a newly selected assembly cannot keep the previous
+  // assembly's names in scope.
+  refNames.value = null;
+  const request = ++refNameRequest;
+  const fallback = viewport.refName ? [viewport.refName] : [];
+  const names = await loader.load(fallback);
+  if (request !== refNameRequest) return;
+  if (config.value.assemblies[0]?.name !== assembly.name) return;
+  refNames.value = names;
+}
+
 // Fetch the backend track config; fall back to the built-in defaults when the
 // API is unavailable so the browser still works.
 const rawConfig = ref<JBrowseConfigResponse | null>(null);
@@ -159,15 +220,19 @@ const browserModel = shallowRef<BrowserModel>({
   tracks: [],
 });
 
-function toAssemblies(assembly: JBrowseAssembly, refName: string): AssemblyContext[] {
+function toAssemblies(
+  assembly: JBrowseAssembly,
+  refNames: readonly string[],
+): AssemblyContext[] {
   return [
     {
       key: assembly.name,
       name: assembly.name,
       aliases: assembly.aliases,
-      // The host declares the reference it is querying; genome-data resolves
-      // every read inside exactly this assembly.
-      refNames: refName ? [refName] : [],
+      // The full chromosome list comes from the FASTA index; the viewport
+      // reference is only a fallback when that load fails, so every chromosome
+      // resolves inside exactly this assembly.
+      refNames: [...refNames],
     },
   ];
 }
@@ -218,13 +283,14 @@ async function loadConfig(): Promise<void> {
 // Rebuild the browser model whenever the config, visible tracks or reference
 // change. Unknown track types are skipped by GenomeBrowser itself.
 watch(
-  [config, activeTracks, () => viewport.refName],
+  [config, activeTracks, () => viewport.refName, refNames],
   () => {
     try {
       const assembly = config.value.assemblies[0] ?? DEFAULT_ASSEMBLY;
+      const names = refNames.value ?? (viewport.refName ? [viewport.refName] : []);
       browserModel.value = {
         assemblyKey: assembly.name,
-        assemblies: toAssemblies(assembly, viewport.refName),
+        assemblies: toAssemblies(assembly, names),
         tracks: selectTracks(config.value.tracks, activeTracks.value, assembly),
       };
       initError.value = null;
@@ -232,6 +298,16 @@ watch(
       initError.value =
         error instanceof Error ? error.message : "Failed to initialise genome browser";
     }
+  },
+  { immediate: true },
+);
+
+// Load the chromosome list once per assembly; failures degrade to the current
+// viewport reference rather than surfacing an error.
+watch(
+  config,
+  () => {
+    void ensureRefNames();
   },
   { immediate: true },
 );
@@ -245,62 +321,120 @@ function syncLocusFromViewport(): void {
   currentLocus.value = formatLocus({ refName: viewport.refName, start, end });
 }
 
-function applyLocus(locus: string): void {
-  const parsed = parseLocus(locus);
-  if (!parsed) {
-    void navToSearchResults(locus);
-    return;
+/** Search feedback shown under the locus box. */
+const searchNotice = ref<{ tone: "info" | "error"; message: string } | null>(null);
+
+/**
+ * Resolve the locus box input: coordinate strings navigate locally, everything
+ * else is treated as a gene identifier and resolved through lookupGene().
+ */
+async function applyLocus(input: string): Promise<void> {
+  const trimmed = input.trim();
+  if (!trimmed) return;
+  const result = await resolveLocusInput(trimmed, { lookupGene });
+  switch (result.kind) {
+    case "coordinate":
+      navigateToLocus(result.locus, { source: "coordinate" });
+      return;
+    case "gene":
+      navigateToLocus(result.gene, {
+        source: "gene",
+        label: result.gene.geneId ? `Gene ${result.gene.geneId}` : "Gene",
+      });
+      return;
+    case "not-found":
+      searchNotice.value = {
+        tone: "info",
+        message: `No gene or location found for "${result.query}"`,
+      };
+      return;
+    case "error":
+      searchNotice.value = {
+        tone: "error",
+        message: `Search failed for "${result.query}": ${result.message}`,
+      };
+      return;
   }
-  const [start, end] = toZeroBased(parsed.start, parsed.end);
-  viewport.gotoLocus(parsed.refName, start, end);
+}
+
+function navigateToLocus(
+  locus: ParsedLocus,
+  options: { source: "coordinate" | "gene"; label?: string },
+): void {
+  const [start, end] = toZeroBased(locus.start, locus.end);
+  viewport.gotoLocus(locus.refName, start, end);
+  currentLocus.value = formatLocus(locus);
+  searchNotice.value =
+    options.source === "gene"
+      ? { tone: "info", message: `${options.label ?? "Gene"} at ${formatLocus(locus)}` }
+      : null;
 }
 
 /**
- * Resolve a gene/feature search through the Trix index. The payload keeps the
- * location as an opaque string, so decode the first location-like token.
+ * Resolve a gene identifier. The API is authoritative; a Trix index configured
+ * for the current assembly is an offline fallback. The reader is built through
+ * genome-data's data-source factory, so adapter selection is explicit and
+ * assembly-scoped rather than an implicit "first adapter" default.
  */
-async function navToSearchResults(input: string): Promise<void> {
-  const adapter: TrixSearchAdapter | undefined = config.value.aggregateTextSearchAdapters?.[0];
-  if (!adapter) {
-    console.warn(`[JBrowse] No text-search index configured for "${input}"`);
-    return;
-  }
+async function lookupGene(query: string): Promise<GeneSearchHit | null> {
+  let apiError: unknown;
   try {
-    const reader = new TextSearchReader({
-      provider,
-      ix: uriLocation(adapter.ixFilePath.uri),
-      ixx: uriLocation(adapter.ixxFilePath.uri),
-      trackId: adapter.textSearchAdapterId,
-    });
-    const [hit] = await reader.search(input, 1);
-    const target = hit ? decodeTrixLocation(hit.label) : null;
-    if (target) applyLocus(target);
+    const response = await searchGenes({ q: query, page_size: 5 });
+    const gene = response.items[0];
+    if (gene) {
+      return {
+        gene_id: gene.gene_id,
+        chromosome: gene.chromosome,
+        start_pos: gene.start_pos,
+        end_pos: gene.end_pos,
+      };
+    }
   } catch (error) {
-    console.warn(`[JBrowse] Text search failed for "${input}"`, error);
+    apiError = error;
   }
+
+  const adapter = selectTextSearchAdapter(browserModel.value.assemblyKey);
+  if (adapter) {
+    try {
+      const source = createTextSearchDataSource(adapter, {
+        provider,
+        assemblies: browserModel.value.assemblies,
+      });
+      const [hit] = await source.reader.search(query, 1);
+      const decoded = hit ? parseTextSearchLabel(hit.label) : null;
+      if (decoded) {
+        return {
+          chromosome: decoded.refName,
+          start_pos: decoded.start,
+          end_pos: decoded.end,
+        };
+      }
+      return null;
+    } catch (error) {
+      if (apiError) throw apiError;
+      console.warn(`[JBrowse] Text search failed for "${query}"`, error);
+      return null;
+    }
+  }
+
+  if (apiError) throw apiError;
+  return null;
 }
 
-function decodeTrixLocation(label: string): string | null {
-  const normalized = label.replace(/\|/g, ",");
-  const match = normalized.match(/([A-Za-z0-9_.]+):([\d,]+)(?:\.\.|-)([\d,]+)/);
-  if (!match) return null;
-  const start = Number.parseInt(match[2].replace(/,/g, ""), 10);
-  const end = Number.parseInt(match[3].replace(/,/g, ""), 10);
-  if (Number.isNaN(start) || Number.isNaN(end)) return null;
-  return `${match[1]}:${start}-${end}`;
+/** Pick the text-search adapter that explicitly names the current assembly. */
+function selectTextSearchAdapter(assemblyName: string): TrixSearchAdapter | undefined {
+  const adapters = config.value.aggregateTextSearchAdapters ?? [];
+  return adapters.find((adapter) =>
+    (adapter.assemblyNames.length > 0 ? adapter.assemblyNames : [assemblyName]).includes(
+      assemblyName,
+    ),
+  );
 }
 
 function handleNavigate(): void {
   const trimmed = locusInput.value.trim();
   if (!trimmed) return;
-  const parsed = parseLocus(trimmed);
-  if (!parsed) {
-    void navToSearchResults(trimmed);
-    return;
-  }
-  const [start, end] = toZeroBased(parsed.start, parsed.end);
-  viewport.gotoLocus(parsed.refName, start, end);
-  currentLocus.value = formatLocus(parsed);
+  void applyLocus(trimmed);
 }
 
 // ---------------------------------------------------------------------------
@@ -378,8 +512,7 @@ function applyInit(payload: InitPayload | undefined): void {
 
   if (sameAssembly && sameTracks) {
     if (locus && locus !== currentLocus.value) {
-      applyLocus(locus);
-      currentLocus.value = locus;
+      void applyLocus(locus);
       locusInput.value = locus;
     }
     return;
@@ -388,8 +521,7 @@ function applyInit(payload: InitPayload | undefined): void {
   if (assembly) assemblyName.value = assembly;
   if (usableTracks && usableTracks.length > 0) activeTracks.value = usableTracks;
   if (locus) {
-    applyLocus(locus);
-    currentLocus.value = locus;
+    void applyLocus(locus);
     locusInput.value = locus;
   }
 }

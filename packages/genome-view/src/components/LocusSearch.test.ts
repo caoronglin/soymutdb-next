@@ -26,4 +26,28 @@ describe("LocusSearch", () => {
     await wrapper.find("form").trigger("submit");
     expect(wrapper.emitted("submit")).toBeUndefined();
   });
+
+  it("renders no status element by default", () => {
+    const wrapper = mount(LocusSearch, { props: { modelValue: "chr01" } });
+    expect(wrapper.find('[data-testid="locus-search-status"]').exists()).toBe(false);
+  });
+
+  it("shows a not-found status message to the user", () => {
+    const wrapper = mount(LocusSearch, {
+      props: { modelValue: "AT1G99999", status: 'No gene or location found for "AT1G99999"' },
+    });
+    const status = wrapper.find('[data-testid="locus-search-status"]');
+    expect(status.exists()).toBe(true);
+    expect(status.attributes("role")).toBe("status");
+    expect(status.text()).toContain("No gene or location found");
+    expect(status.classes()).toContain("locus-search__status--info");
+  });
+
+  it("renders an error-toned status", () => {
+    const wrapper = mount(LocusSearch, {
+      props: { modelValue: "AT1G01010", status: "Gene search is unavailable", statusTone: "error" },
+    });
+    const status = wrapper.find('[data-testid="locus-search-status"]');
+    expect(status.classes()).toContain("locus-search__status--error");
+  });
 });
