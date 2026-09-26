@@ -26,6 +26,13 @@ export const BRIDGE_SOURCE_BROWSER = "soymutdb-browser" as const;
 export const BRIDGE_SOURCE_JBROWSE = "soymutdb-jbrowse" as const;
 export const BRIDGE_VERSION = 1 as const;
 
+/** Documented message types; unknown types are rejected at the bridge. */
+export const BRIDGE_TYPES = ["ready", "error", "locus-change", "selection-change", "init"] as const;
+export type BridgeMessageType = (typeof BRIDGE_TYPES)[number];
+export function isBridgeMessageType(value: unknown): value is BridgeMessageType {
+    return typeof value === "string" && (BRIDGE_TYPES as readonly string[]).includes(value);
+}
+
 export type BridgeSource =
     | typeof BRIDGE_SOURCE_BROWSER
     | typeof BRIDGE_SOURCE_JBROWSE;
@@ -72,11 +79,12 @@ export function postToParent(
     parentOrigin: string,
 ): void {
     if (typeof window === "undefined" || window.parent === window) return;
+    // Stamp canonical source/version last so a caller cannot spoof them.
     window.parent.postMessage(
         {
+            ...envelope,
             source: BRIDGE_SOURCE_JBROWSE,
             version: BRIDGE_VERSION,
-            ...envelope,
         },
         parentOrigin,
     );
@@ -97,7 +105,7 @@ export function parsePortalMessage(
         return null;
     }
     const msg = event.data as Partial<BridgeEnvelope> | null | undefined;
-    if (!msg || typeof msg !== "object" || typeof msg.type !== "string") {
+    if (!msg || typeof msg !== "object" || !isBridgeMessageType(msg.type)) {
         console.warn("[JBrowse] Ignoring malformed bridge message", event.origin);
         return null;
     }
