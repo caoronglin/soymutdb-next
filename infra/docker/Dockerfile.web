@@ -39,6 +39,20 @@ ENV NODE_ENV=production
 # published tree is not doubled. See docs/ops/production-build.md.
 ENV SOYMUTDB_EMIT_GZ=1
 
+# The portal's CSP and JBrowse frame origin are baked at build time, so the
+# image build must supply the deployment origins the vite config requires
+# (otherwise the build fails closed with "VITE_API_BASE_URL is required").
+# Defaults match the offline CI fixture; override with `--build-arg` for a real
+# deployment.
+ARG VITE_API_BASE_URL=https://api.soymutdb.test
+ARG VITE_JBROWSE_BASE_URL=https://jbrowse.soymutdb.test
+ARG SOYMUTDB_PORTAL_ORIGIN=https://portal.soymutdb.test
+ARG SOYMUTDB_ADMIN_ORIGIN=https://admin.soymutdb.test
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL} \
+    VITE_JBROWSE_BASE_URL=${VITE_JBROWSE_BASE_URL} \
+    SOYMUTDB_PORTAL_ORIGIN=${SOYMUTDB_PORTAL_ORIGIN} \
+    SOYMUTDB_ADMIN_ORIGIN=${SOYMUTDB_ADMIN_ORIGIN}
+
 # Build the web frontend (includes SSG via vite build + code splitting)
 RUN pnpm --filter @soymutdb/web build
 

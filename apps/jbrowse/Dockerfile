@@ -23,6 +23,21 @@ RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
 FROM deps AS build
 COPY packages/ packages/
 COPY apps/jbrowse/ apps/jbrowse/
+
+# The JBrowse `_headers` injector bakes the API/data/embed origins into the CSP
+# and fails closed without them, so the image build must supply them. Defaults
+# match the offline CI fixture; override with `--build-arg` for a deployment.
+ARG VITE_API_BASE_URL=https://api.soymutdb.test
+ARG VITE_JBROWSE_DATA_URL=/jbrowse-data
+ARG VITE_BASE_URL=/
+ARG SOYMUTDB_PORTAL_ORIGIN=https://portal.soymutdb.test
+ARG SOYMUTDB_ADMIN_ORIGIN=https://admin.soymutdb.test
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL} \
+    VITE_JBROWSE_DATA_URL=${VITE_JBROWSE_DATA_URL} \
+    VITE_BASE_URL=${VITE_BASE_URL} \
+    SOYMUTDB_PORTAL_ORIGIN=${SOYMUTDB_PORTAL_ORIGIN} \
+    SOYMUTDB_ADMIN_ORIGIN=${SOYMUTDB_ADMIN_ORIGIN}
+
 RUN pnpm --filter @soymutdb/jbrowse build
 
 # ---- runtime stage: nginx serves the generated static assets ----------

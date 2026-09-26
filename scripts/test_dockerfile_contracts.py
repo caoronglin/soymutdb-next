@@ -275,6 +275,39 @@ def test_images_copy_every_workspace_path_dependency_before_sync() -> None:
                 )
 
 
+def test_static_app_images_supply_their_build_time_origins() -> None:
+    """The web/admin/jbrowse builds fail closed without their origins.
+
+    The vite configs and the JBrowse `_headers` injector require
+    `VITE_API_BASE_URL` (and the CSP/frame origins) at build time. A Dockerfile
+    that runs the build without them fails with:
+
+        Error: [jbrowse-headers] VITE_API_BASE_URL is required …
+
+    which is how the image build broke once the earlier compose and COPY
+    failures were cleared.
+    """
+    required = {
+        "infra/docker/Dockerfile.web": ("VITE_API_BASE_URL", "VITE_JBROWSE_BASE_URL"),
+        "infra/docker/Dockerfile.admin": ("VITE_API_BASE_URL",),
+        "apps/jbrowse/Dockerfile": (
+            "VITE_API_BASE_URL",
+            "VITE_JBROWSE_DATA_URL",
+            "SOYMUTDB_PORTAL_ORIGIN",
+            "SOYMUTDB_ADMIN_ORIGIN",
+        ),
+    }
+    for dockerfile, variables in required.items():
+        text = _instructions((ROOT / dockerfile).read_text(encoding="utf-8"))
+        build = text.index("pnpm --filter @soymutdb/")
+        for variable in variables:
+            assert variable in text, f"{dockerfile} never sets {variable}"
+            assert text.index(variable) < build, (
+                f"{dockerfile} only references {variable} after the app build; the "
+                "build would fail closed without it"
+            )
+
+
 def test_local_build_override_discards_the_release_image_requirement() -> None:
     compose = load_compose(COMPOSE)
     services = compose["services"]

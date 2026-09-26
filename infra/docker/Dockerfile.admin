@@ -38,6 +38,14 @@ ENV NODE_ENV=production
 # Container path only: nginx gzip_static serves the .gz siblings.
 ENV SOYMUTDB_EMIT_GZ=1
 
+# The admin console has no default API origin; the vite config fails closed
+# without one, so the image build must supply it. Defaults match the offline CI
+# fixture; override with `--build-arg` for a real deployment.
+ARG VITE_API_BASE_URL=https://api.soymutdb.test
+ARG SOYMUTDB_ADMIN_ORIGIN=https://admin.soymutdb.test
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL} \
+    SOYMUTDB_ADMIN_ORIGIN=${SOYMUTDB_ADMIN_ORIGIN}
+
 RUN pnpm --filter @soymutdb/admin build
 
 # Pre-compress static assets with gzip for gzip_static support.
