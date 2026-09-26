@@ -6,6 +6,10 @@ packages:
 # of mutating dependencies implicitly before every script.
 verifyDepsBeforeRun: warn
 
+# React is retired; do not auto-install the optional React peers declared by
+# @tanstack/charts, so react never re-enters the lockfile.
+autoInstallPeers: false
+
 # Shared platform versions. Consumers opt in with the `catalog:` protocol so a
 # framework-line change remains one reviewed workspace decision.
 catalog:
