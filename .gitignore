@@ -17,6 +17,9 @@ build/
 # `scripts/build-pages-artifact.sh` output consumed by the Pages publisher; it is
 # an upload input, never a committed tree.
 pages-dist/
+# `dist/` above matches only a directory named exactly `dist`, not the
+# `dist-internal` tree some build paths stage; ignore it explicitly.
+dist-internal/
 # `build/` above matches at any depth, so it silently swallowed
 # packages/shared/src/build/ — the shared CSP composer and inline-script hasher
 # that apps/web/scripts/finalize-csp.ts, apps/jbrowse/scripts/inject-headers-origins.ts

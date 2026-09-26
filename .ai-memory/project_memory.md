@@ -160,3 +160,24 @@ CNB 真实构建、Docker 镜像构建/Trivy/SBOM（本机无 daemon）、Playwr
 
 若 CNB 平台不可用或团队决定回落 GitHub-only：`git revert` 本次提交即可；所有 GitHub
 workflow 保留完整可用路径，未删除任何 job。
+
+## Implementation Record: 公开 mutant 入口 release 边界与内部 ID 检索
+
+**日期**: 2026-09-26
+**状态**: IMPLEMENTED_VERIFIED（PG-backed 1276 passed + contracts smoke 232 passed）；生产发布仍 No-Go
+
+- 公开 `/mutants` 列表/详情/phenotypes 统一依赖 `get_release_context`，可见条件为 `is_deleted=false AND is_public=true AND public_id IS NOT NULL AND release_id = <active published release>`；无 active release 时 503 fail-closed。draft、其他 published-but-inactive release、`release_id IS NULL` 的记录对公开面统一 404/不可见。
+- `/search/suggest` 不再把 `resolve_release_context` 失败降级为 `release_id=None`；无 active release 返回空列表（fail-closed），因此草稿 assembly 的 accession 永不进入匿名建议。
+- 授权 internal search 支持按 internal persistence key（纯十进制、int4 范围内）精确命中，响应 `matched_field="internal_id"`；external 搜索路径不含该匹配，匿名输入内部编号不泄漏。
+- 后续 Wave（P0-03/P1-01/02/03 assembly 与 VCF、P1-04/05 站点、P1-06/07 管理端、P0-06/P1-08 双 CI）见 `.ai-memory/handoff.md`。
+
+## Implementation Record: assembly 身份、危险歧义与 VCF 正确性
+
+**日期**: 2026-09-26
+**状态**: IMPLEMENTED_VERIFIED（PG-backed 1277 passed；worker 337 passed；chdb 跨 assembly 用例通过）
+
+- `compute_variant_id` 现为 `sha256(release|assembly|chr|pos|ref|alt)`；worker 与 `scripts/seed_release_data.py` 同步，v4/v5 同 locus 生成不同 id。
+- `finalize_release` 的 carry 保留「同染色体但非本次导入 assembly」的旧行，避免单 assembly 重导入删除另一 assembly；分区键仍为 (release, chromosome)，无需 DDL 变更。
+- VCF zygosity 读取被选中样本的 gt_type，而非固定 `gt_types[0]`。
+- 生产 ClickHouse DDL（`init.sql` 与升级脚本）新增 `variant_facts_staging`，并由 `infra/clickhouse/test_schema_contract.py` 与 fixture 漂移守卫约束。
+- 无 assembly 搜索的 `by_assembly/ambiguous` 按 release 全集分组；前端 SearchView 分组显示版本/release/来源，VariantsView 在 All assemblies 时显示人可读版本列；variant 查询键纳入 cursor。
