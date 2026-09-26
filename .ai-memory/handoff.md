@@ -144,3 +144,12 @@ HEAD `7bf002a29`；149 项未提交改动 + 41 untracked 保留未动。环境�
 - **功能矩阵**：`docs/dev/vue-migration-feature-gaps.md` 更新为 global 62 implemented / 1 documented-unavailable / 0 missing / 9 retired / 6 待复核；admin 功能路由 15→19。
 - **仍未完成**：lockfile 的 `@tanstack/charts` 可选 React peer（需提权 pnpm install）；live 部署态验证（CSS/CSP/SW/子路径、P0-06b Kind、P1-08 CI E2E、G10/G12）；BigWig/BigBed 离线 fixture；AlignmentsTrack；真实 Dashboard 指标/新闻预览回收站。
 
+
+## [21:40] 完成: lockfile React peer 彻底清除（联网重算）
+
+- **背景**: 之前离线重算被 pnpm 自校验阻断、在线重算在提权审批等待中超过 wall-clock。改为**后台提权作业**后 42.5s 完成。
+- **改动**: `pnpm-workspace.yaml` 加 `autoInstallPeers: false`；删除并联网重算 `pnpm-lock.yaml`。`react`/`react-dom`/`react-is` 已从安装图与 node_modules 移除；lockfile 中剩余 19 处 “react” 仅为 `@tanstack/charts` 自身的可选 peer 声明与 Vue 的 `@vue/reactivity` 名称。
+- **副作用**: 全量重解析在 semver 范围内顺带升级了根 dev 工具：eslint 10.9→10.11、turbo 2.10.11→2.11.4、globals 17.11→17.12、typescript-eslint 8.67→8.70.1。
+- **验证**: `pnpm install --frozen-lockfile` OK；smoke contracts PASS；根 eslint 全仓 sweep 0 error；逐包测试全绿——web 120、admin 63、jbrowse 33、api-client 129、shared 49、genome-data 98、genome-view 73、genome-view-model 23、charts 2、query-keys 10、ui-vue 4、i18n-core 7（合计约 711）。
+- **提交**: 5808f0391。
+
