@@ -51,16 +51,16 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     ? t(titleEntry.key, { defaultValue: titleEntry.defaultValue })
     : t("admin.shell.fallbackTitle", { defaultValue: "Admin" });
 
+  // Keep every admin destination visible by default. The former nested menu
+  // rendered only collapsed section labels, which looked like a blank sidebar
+  // until an operator discovered the tiny disclosure arrows.
   const proRoute = React.useMemo(() => ({
     path: "/",
-    routes: NAV_SECTIONS.map((section) => ({
-      name: t(section.labelKey, { defaultValue: section.label }),
-      routes: section.items.map((item) => ({
-        path: item.path,
-        name: t(item.labelKey, { defaultValue: item.label }),
-        icon: React.createElement(item.icon),
-      })),
-    })),
+    routes: NAV_SECTIONS.flatMap((section) => section.items.map((item) => ({
+      path: item.path,
+      name: t(item.labelKey, { defaultValue: item.label }),
+      icon: React.createElement(item.icon),
+    }))),
   }), [t]);
 
   const usageItems = [
@@ -127,7 +127,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       fixSiderbar
       location={{ pathname }}
       route={proRoute}
-      headerRender={() => <AdminHeader title={title} />}
+      headerRender={false}
       menuItemRender={(item, dom) =>
         item.path ? <a href={item.path}>{dom}</a> : dom
       }
@@ -135,9 +135,12 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       contentStyle={{ padding: 24, minHeight: "calc(100vh - 56px)" }}
       menu={{ locale: true }}
     >
-      <div className="mx-auto max-w-7xl space-y-6">
-        {pathname === "/" ? <AdminUsageGuide items={usageItems} /> : null}
-        {children}
+      <div className="w-full min-w-0 space-y-6">
+        <AdminHeader title={title} />
+        <div className="w-full min-w-0 space-y-6">
+          {pathname === "/" ? <AdminUsageGuide items={usageItems} /> : null}
+          {children}
+        </div>
       </div>
     </ProLayout>
   );
