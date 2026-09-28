@@ -260,9 +260,6 @@ overrides:
   '@remix-run/router': 1.23.3
   decode-uri-component: 0.5.0
 
-patchedDependencies:
-  antd@6.6.5: 7961cb715bbce66505399022b5b059aec40d2282011a343772a889d77dd28dfa
-
 importers:
 
   .:
@@ -299,7 +296,7 @@ importers:
         version: 5.6.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@ant-design/pro-components':
         specifier: 'catalog:'
-        version: 3.1.15-2(antd@6.6.5(patch_hash=7961cb715bbce66505399022b5b059aec40d2282011a343772a889d77dd28dfa)(date-fns@2.30.0)(moment@2.31.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(supports-color@10.2.2)
+        version: 3.1.15-2(antd@6.6.5(date-fns@2.30.0)(moment@2.31.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(supports-color@10.2.2)
       '@dnd-kit/core':
         specifier: ^6.1.0
         version: 6.3.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -383,7 +380,7 @@ importers:
         version: 4.7.20(@babel/core@7.29.7(supports-color@10.2.2))(@types/node@22.20.4)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(debug@4.4.3(supports-color@10.2.2))(jiti@2.7.0)(lightningcss@1.32.0)(rc-field-form@1.38.2(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(rollup@4.63.5)(supports-color@10.2.2)(tsx@4.23.15)(type-fest@4.41.0)(typescript@5.9.3)
       antd:
         specifier: 'catalog:'
-        version: 6.6.5(patch_hash=7961cb715bbce66505399022b5b059aec40d2282011a343772a889d77dd28dfa)(date-fns@2.30.0)(moment@2.31.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+        version: 6.6.5(date-fns@2.30.0)(moment@2.31.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       dayjs:
         specifier: ^1.11.0
         version: 1.11.23
@@ -504,7 +501,7 @@ importers:
     dependencies:
       '@ant-design/pro-components':
         specifier: 'catalog:'
-        version: 3.1.15-2(antd@6.6.5(patch_hash=7961cb715bbce66505399022b5b059aec40d2282011a343772a889d77dd28dfa)(date-fns@2.30.0)(moment@2.31.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(supports-color@10.2.2)
+        version: 3.1.15-2(antd@6.6.5(date-fns@2.30.0)(moment@2.31.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(supports-color@10.2.2)
       '@jbrowse/core':
         specifier: ^2.17.0
         version: 2.18.0(acb3a6c9e8c63b7d227fcdb27e31b443)
@@ -534,7 +531,7 @@ importers:
         version: 4.7.20(@babel/core@7.29.7(supports-color@10.2.2))(@types/node@22.20.4)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(debug@4.4.3(supports-color@10.2.2))(jiti@2.7.0)(lightningcss@1.32.0)(rc-field-form@1.38.2(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(rollup@4.63.5)(supports-color@10.2.2)(tsx@4.23.15)(type-fest@4.41.0)(typescript@5.9.3)
       antd:
         specifier: 'catalog:'
-        version: 6.6.5(patch_hash=7961cb715bbce66505399022b5b059aec40d2282011a343772a889d77dd28dfa)(date-fns@2.30.0)(moment@2.31.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+        version: 6.6.5(date-fns@2.30.0)(moment@2.31.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       buffer:
         specifier: ^6.0.3
         version: 6.0.3
@@ -595,7 +592,7 @@ importers:
         version: 5.6.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@ant-design/pro-components':
         specifier: 'catalog:'
-        version: 3.1.15-2(antd@6.6.5(patch_hash=7961cb715bbce66505399022b5b059aec40d2282011a343772a889d77dd28dfa)(date-fns@2.30.0)(moment@2.31.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(supports-color@10.2.2)
+        version: 3.1.15-2(antd@6.6.5(date-fns@2.30.0)(moment@2.31.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(supports-color@10.2.2)
       '@fontsource/fraunces':
         specifier: ^5.1.0
         version: 5.3.0
@@ -640,7 +637,7 @@ importers:
         version: 4.7.20(@babel/core@7.29.7(supports-color@10.2.2))(@types/node@22.20.4)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(debug@4.4.3(supports-color@10.2.2))(jiti@2.7.0)(lightningcss@1.32.0)(rc-field-form@1.38.2(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(rollup@4.63.5)(supports-color@10.2.2)(tsx@4.23.15)(type-fest@4.41.0)(typescript@5.9.3)
       antd:
         specifier: 'catalog:'
-        version: 6.6.5(patch_hash=7961cb715bbce66505399022b5b059aec40d2282011a343772a889d77dd28dfa)(date-fns@2.30.0)(moment@2.31.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+        version: 6.6.5(date-fns@2.30.0)(moment@2.31.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       cytoscape:
         specifier: ^3.34.1
         version: 3.34.3
@@ -952,7 +949,7 @@ importers:
     devDependencies:
       '@ant-design/pro-components':
         specifier: 'catalog:'
-        version: 3.1.15-2(antd@6.6.5(patch_hash=7961cb715bbce66505399022b5b059aec40d2282011a343772a889d77dd28dfa)(date-fns@2.30.0)(moment@2.31.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(supports-color@10.2.2)
+        version: 3.1.15-2(antd@6.6.5(date-fns@2.30.0)(moment@2.31.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(supports-color@10.2.2)
       '@types/react':
         specifier: 'catalog:'
         version: 19.3.0
@@ -961,7 +958,7 @@ importers:
         version: 19.3.0(@types/react@19.3.0)
       antd:
         specifier: 'catalog:'
-        version: 6.6.5(patch_hash=7961cb715bbce66505399022b5b059aec40d2282011a343772a889d77dd28dfa)(date-fns@2.30.0)(moment@2.31.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+        version: 6.6.5(date-fns@2.30.0)(moment@2.31.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       react:
         specifier: 'catalog:'
         version: 19.3.0
@@ -10127,7 +10124,7 @@ snapshots:
     transitivePeerDependencies:
       - rc-field-form
 
-  '@ant-design/pro-components@3.1.15-2(antd@6.6.5(patch_hash=7961cb715bbce66505399022b5b059aec40d2282011a343772a889d77dd28dfa)(date-fns@2.30.0)(moment@2.31.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(supports-color@10.2.2)':
+  '@ant-design/pro-components@3.1.15-2(antd@6.6.5(date-fns@2.30.0)(moment@2.31.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(supports-color@10.2.2)':
     dependencies:
       '@ant-design/cssinjs': 2.1.2(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@ant-design/cssinjs-utils': 2.1.2(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -10144,7 +10141,7 @@ snapshots:
       '@rc-component/table': 1.12.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@rc-component/util': 1.13.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@umijs/route-utils': 4.0.3
-      antd: 6.6.5(patch_hash=7961cb715bbce66505399022b5b059aec40d2282011a343772a889d77dd28dfa)(date-fns@2.30.0)(moment@2.31.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      antd: 6.6.5(date-fns@2.30.0)(moment@2.31.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       clsx: 2.1.1
       dayjs: 1.11.23
       lodash-es: 4.18.1
@@ -14558,7 +14555,7 @@ snapshots:
       react-dom: 19.3.0(react@19.3.0)
       scroll-into-view-if-needed: 2.2.31
 
-  antd@6.6.5(patch_hash=7961cb715bbce66505399022b5b059aec40d2282011a343772a889d77dd28dfa)(date-fns@2.30.0)(moment@2.31.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0):
+  antd@6.6.5(date-fns@2.30.0)(moment@2.31.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0):
     dependencies:
       '@ant-design/colors': 8.0.1
       '@ant-design/cssinjs': 2.1.2(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
