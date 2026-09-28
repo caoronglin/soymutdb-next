@@ -46,14 +46,14 @@ function HelpComponent() {
               <Rocket className="size-5" aria-hidden />
             </div>
             <Typography.Title className="mt-2 text-base">{get("help.gettingStarted", t("help.gettingStarted"))}</Typography.Title>
-            <Typography.Text>Quick start guide for new users</Typography.Text>
+            <Typography.Text>{t("help.quickStartDesc")}</Typography.Text>
           </div>
           <div className="mt-4">
             <ol className="list-decimal space-y-1.5 pl-4 text-sm text-muted-foreground">
-              <li>Search for genes or variants using the top search bar</li>
-              <li>Filter results by chromosome, type, or impact</li>
-              <li>View details or open in the genome browser</li>
-              <li>Download data or request seeds</li>
+              <li>{t("help.stepSearch")}</li>
+              <li>{t("help.stepFilter")}</li>
+              <li>{t("help.stepDetails")}</li>
+              <li>{t("help.stepDownload")}</li>
             </ol>
           </div>
         </Card>
@@ -64,13 +64,13 @@ function HelpComponent() {
               <BookOpen className="size-5" aria-hidden />
             </div>
             <Typography.Title className="mt-2 text-base">{get("help.documentation", t("help.documentation"))}</Typography.Title>
-            <Typography.Text>API reference and tutorials</Typography.Text>
+            <Typography.Text>{t("help.documentationDesc")}</Typography.Text>
           </div>
           <div className="mt-4">
             <ul className="space-y-1.5 text-sm text-muted-foreground">
-              <li>· REST API v1 reference</li>
-              <li>· JBrowse 2 configuration</li>
-              <li>· BLAST usage guide</li>
+              <li>· {t("help.restApi")}</li>
+              <li>· {t("help.jbrowseDocs")}</li>
+              <li>· {t("help.blastDocs")}</li>
             </ul>
           </div>
         </Card>
@@ -81,10 +81,10 @@ function HelpComponent() {
               <Mail className="size-5" aria-hidden />
             </div>
             <Typography.Title className="mt-2 text-base">{get("help.contact", t("help.contact"))}</Typography.Title>
-            <Typography.Text>Get support from the team</Typography.Text>
+            <Typography.Text>{t("help.contactDesc")}</Typography.Text>
           </div>
           <div className="mt-4">
-            <p className="text-sm text-muted-foreground">Email us at <span className="font-mono text-foreground">support@soymutdb.org</span> for questions about data access, technical issues, or collaboration.</p>
+            <p className="text-sm text-muted-foreground">{t("help.emailPrefix")} <span className="font-mono text-foreground">support@soymutdb.org</span> {t("help.emailSuffix")}</p>
           </div>
         </Card>
       </Stagger>
@@ -102,8 +102,8 @@ function HelpComponent() {
               {FAQS.map((faq, i) => (
                 <FaqItem
                   key={i}
-                  q={get("help.faq" + (i + 1) + ".q", faq.q)}
-                  a={get("help.faq" + (i + 1) + ".a", faq.a)}
+                  q={get("help.faq" + (i + 1) + ".q", t("help.faq" + (i + 1) + ".q", { defaultValue: faq.q }))}
+                  a={get("help.faq" + (i + 1) + ".a", t("help.faq" + (i + 1) + ".a", { defaultValue: faq.a }))}
                 />
               ))}
             </div>

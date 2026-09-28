@@ -9,10 +9,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import * as React from "react";
-import { Alert, Button, Form, Input, Result, Typography, type FormProps } from "@/lib/antd";
+import { Alert, Button, Card, Form, Input, Result, Typography, type FormProps } from "@/lib/antd";
 import { SendOutlined } from "@ant-design/icons";
 import { FadeUp } from "../components/route-motion";
 import { secureHttp } from "../lib/api";
+import { useQuery } from "@tanstack/react-query";
+import { fetchHomepageStats } from "@soymutdb/api-client";
 
 export const Route = createFileRoute("/seed-request")({
   component: SeedRequestComponent,
@@ -53,6 +55,14 @@ function SeedRequestComponent() {
   const [submitted, setSubmitted] = React.useState<SeedRequestResponse | null>(null);
   const [submitError, setSubmitError] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
+  const watchedGeneIds = Form.useWatch("geneIds", form) ?? "";
+  const requestedGeneCount = parseGeneIds(watchedGeneIds).length;
+  const overview = useQuery({
+    queryKey: ["seed-request", "public-overview"],
+    queryFn: fetchHomepageStats,
+    staleTime: 60_000,
+    retry: false,
+  });
 
   const onFinish: FormProps<SeedRequestFormValues>["onFinish"] = async (values) => {
     setSubmitError(null);
@@ -137,7 +147,8 @@ function SeedRequestComponent() {
         </p>
       </FadeUp>
 
-      <div className="mt-8 max-w-2xl rounded-xl border border-border bg-card p-6">
+      <div className="mt-8 grid items-start gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(18rem,.85fr)]">
+      <Card className="min-w-0 rounded-xl">
         {submitError ? (
           <Alert
             type="error"
@@ -226,6 +237,37 @@ function SeedRequestComponent() {
             {t("seedRequest.privacyNote")}
           </Typography.Paragraph>
         </Form>
+      </Card>
+
+      <aside aria-label={t("seedRequest.analysisTitle")}>
+        <Card className="border-dashed bg-transparent/60 backdrop-blur-sm">
+          <p className="eyebrow">{t("seedRequest.analysisEyebrow")}</p>
+          <Typography.Title level={4} className="mt-2">{t("seedRequest.analysisTitle")}</Typography.Title>
+          <Typography.Text type="secondary">{t("seedRequest.analysisDescription")}</Typography.Text>
+          <div className="mt-6 grid grid-cols-2 gap-3">
+            <div className="rounded-lg border border-border/70 bg-background/50 p-4">
+              <div className="text-xs text-muted-foreground">{t("seedRequest.selectedGenes")}</div>
+              <div className="mt-1 text-2xl font-semibold">{requestedGeneCount}<span className="text-sm text-muted-foreground"> / {MAX_GENE_IDS}</span></div>
+            </div>
+            <div className="rounded-lg border border-border/70 bg-background/50 p-4">
+              <div className="text-xs text-muted-foreground">{t("seedRequest.availableGenes")}</div>
+              <div className="mt-1 text-2xl font-semibold">{overview.data?.gene_count?.toLocaleString() ?? "—"}</div>
+            </div>
+            <div className="rounded-lg border border-border/70 bg-background/50 p-4">
+              <div className="text-xs text-muted-foreground">{t("seedRequest.availableReleases")}</div>
+              <div className="mt-1 text-2xl font-semibold">{overview.data?.release_count ?? "—"}</div>
+            </div>
+            <div className="rounded-lg border border-border/70 bg-background/50 p-4">
+              <div className="text-xs text-muted-foreground">{t("seedRequest.mutantLines")}</div>
+              <div className="mt-1 text-2xl font-semibold">{overview.data?.mutant_line_count?.toLocaleString() ?? "—"}</div>
+            </div>
+          </div>
+          <div className="mt-5 rounded-lg bg-muted/40 p-4 text-sm text-muted-foreground">
+            {t("seedRequest.analysisPrivacy")}
+          </div>
+          {overview.isError ? <button className="mt-3 text-xs text-muted-foreground underline" onClick={() => void overview.refetch()}>{t("common.retry")}</button> : null}
+        </Card>
+      </aside>
       </div>
     </div>
   );

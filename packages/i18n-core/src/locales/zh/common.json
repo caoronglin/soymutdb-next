@@ -465,7 +465,8 @@
     "jobName": "任务名称",
     "alignmentLength": "比对长度",
     "recentJobs": "最近任务",
-    "hitsAria": "BLAST 命中"
+    "hitsAria": "BLAST 命中",
+    "desc": "对已发布的参考基因组进行序列比对搜索。"
   },
   "releases": {
     "title": "数据版本",
@@ -510,7 +511,9 @@
     "preparing": "准备中…",
     "empty": "暂无下载内容。",
     "downloadFile": "下载 {{name}}",
-    "downloadCount": "{{count}} 次下载"
+    "downloadCount": "{{count}} 次下载",
+    "customExportTitle": "需要自定义导出？",
+    "customExportDescription": "可提交异步导出任务，按筛选条件导出最多 1000 万条变异记录。"
   },
   "fileViewer": {
     "singleFile": "单个文件",
@@ -1041,7 +1044,8 @@
       "nextActions": "后续操作",
       "pipelineHeadline": "让数据流水线保持运转",
       "pipelineDesc": "从真实的运维流程开始，而不是装饰性的管理页面。",
-      "openResourceCatalog": "打开资源目录"
+      "openResourceCatalog": "打开资源目录",
+      "trendUnavailable": "仪表盘趋势数据暂不可用。"
     },
     "dashboardStats": {
       "analyticsHeading": "访问统计",
@@ -1057,7 +1061,68 @@
     "blastDatabases": "BLAST 数据库",
     "seedRequests": "种子申请",
     "auditLogs": "审计日志",
-    "settings": "系统设置",
+    "settings": {
+      "title": "系统设置",
+      "domains": {
+        "site": {
+          "title": "站点信息",
+          "description": "站点名称、公开内容、首页和页脚配置。"
+        },
+        "appearance": {
+          "title": "外观",
+          "description": "主题色和门户展示默认值。"
+        },
+        "integrations": {
+          "title": "集成",
+          "description": "外部消息投递与服务配置。"
+        },
+        "security": {
+          "title": "安全",
+          "description": "会话和账户保护设置。"
+        },
+        "localization": {
+          "title": "本地化",
+          "description": "默认语言和站点变体内容。"
+        },
+        "advanced": {
+          "title": "高级设置",
+          "description": "数据、通知和文件预览配置。"
+        }
+      },
+      "sectionsLabel": "设置分区",
+      "overview": "设置概览",
+      "sections": {
+        "general": "常规",
+        "about_external": "关于（外网）",
+        "about_internal": "关于（内网）",
+        "home_external": "首页（外网）",
+        "home_internal": "首页（内网）",
+        "content_external": "站点内容（外网）",
+        "footer_external": "页脚（外网）",
+        "cdn": "CDN 配置",
+        "security": "安全",
+        "data": "数据与存储",
+        "email": "邮件与通知",
+        "file_preview": "文件预览"
+      },
+      "revision": {
+        "title": "版本历史",
+        "description": "恢复快照前，请先核对对应分区的历史记录。",
+        "section": "分区",
+        "loading": "正在加载版本历史…",
+        "loadError": "无法加载版本历史。",
+        "empty": "此分区尚无版本记录。",
+        "current": "当前",
+        "reason": "原因",
+        "restore": "恢复",
+        "restoreTitle": "将 {{section}} 恢复到 v{{version}}？",
+        "restoreDescription": "这会基于所选快照创建一条新的审计版本；当前值仍保留在历史中。",
+        "restoreConfirm": "恢复版本",
+        "reasonLabel": "恢复原因",
+        "reasonPlaceholder": "必填：请填写审计原因",
+        "restoreError": "无法恢复此版本；如果版本已变化，请刷新历史后重试。"
+      }
+    },
     "analyticsSettings": {
       "title": "分析设置",
       "description": "门户站点的访问统计（Cloudflare Web Analytics）。",
@@ -1134,7 +1199,42 @@
       "created": "导入已创建。",
       "error": "无法创建导入。"
     },
-    "content": "内容管理",
+    "content": {
+      "title": "内容管理",
+      "subtitle": "管理门户静态页面、新闻和文献，并查看完整版本历史。",
+      "cancel": "取消",
+      "save": "保存",
+      "edit": "编辑",
+      "delete": "删除",
+      "publication": {
+        "editTitle": "编辑文献",
+        "newTitle": "新建文献",
+        "titleEn": "标题（英文）*",
+        "titleZh": "标题（中文）",
+        "authorsEn": "作者（英文）*",
+        "authorsZh": "作者（中文）",
+        "journal": "期刊",
+        "year": "年份",
+        "doi": "DOI",
+        "pmid": "PMID",
+        "abstractEn": "摘要（英文）",
+        "abstractZh": "摘要（中文）",
+        "featured": "精选",
+        "created": "文献已创建",
+        "createFailed": "创建文献失败",
+        "updated": "文献已更新",
+        "updateFailed": "更新文献失败",
+        "deleted": "文献已删除",
+        "deleteFailed": "删除文献失败",
+        "title": "文献",
+        "subtitle": "管理发布到门户的双语参考文献。",
+        "new": "新建文献",
+        "loadError": "无法加载文献",
+        "empty": "暂无文献",
+        "deleteTitle": "删除文献",
+        "deleteConfirm": "确认删除这条文献吗？"
+      }
+    },
     "contentPages": {
       "subtitle": "创建、编辑并发布门户渲染的静态页面。草稿与已发布页面同列显示，发布始终是显式操作。",
       "newPage": "新建页面",
@@ -1280,11 +1380,7 @@
       "trashEmpty": "回收站为空。",
       "empty": "暂无文章，点击右上角新建第一篇。"
     },
-    "uploads": {
-      "selectFile": "点击或拖拽文件到此处",
-      "uploadFailed": "上传失败",
-      "sizeExceeded": "文件超过 {{size}} MB 大小限制"
-    },
+    "uploads": "媒体库",
     "about": {
       "title": "关于我们内容",
       "description": "可编辑的“关于我们”页面内容（由 GET /site/about 提供）。"
@@ -1369,7 +1465,47 @@
       "actor": "操作者",
       "resource": "资源",
       "readOnly": "只读",
-      "actionPlaceholder": "操作"
+      "actionPlaceholder": "操作",
+      "title": "审计日志",
+      "subtitle": "管理员操作的追加式记录，不可修改或删除。",
+      "details": "详情",
+      "accessCount": "访问次数",
+      "actionAll": "全部操作",
+      "actionCreate": "创建",
+      "actionDelete": "删除",
+      "actionExport": "导出",
+      "actionLogin": "登录",
+      "actionLogout": "退出登录",
+      "actionRoleChange": "角色变更",
+      "actionUpdate": "更新",
+      "activeUsers": "活跃用户",
+      "appendOnlyNote": "审计日志仅追加，记录不可修改或删除。",
+      "city": "城市",
+      "dateRangeSeparator": "至",
+      "emptyDescription": "尝试调整筛选条件。",
+      "emptyTitle": "暂无审计记录",
+      "endDateLabel": "结束日期",
+      "exportCsv": "导出 CSV",
+      "exporting": "正在导出…",
+      "exportPdf": "导出 PDF",
+      "ipAddress": "IP 地址",
+      "ipFilterPlaceholder": "筛选 IP 地址",
+      "loading": "正在加载审计记录…",
+      "noIpData": "暂无 IP 统计",
+      "periodDay": "天",
+      "periodMonth": "月",
+      "periodWeek": "周",
+      "recordsCount": "条记录",
+      "searchPlaceholder": "搜索操作人、资源或 IP",
+      "startDateLabel": "开始日期",
+      "statsPeriodDesc": "设置统计卡片和 IP 分布的聚合周期。",
+      "statsPeriodTitle": "统计周期",
+      "timestamp": "时间",
+      "topIpsCount": "个 IP",
+      "topIpsTitle": "热门 IP 地址",
+      "totalActions": "操作总数",
+      "totalLogins": "登录总数",
+      "uniqueIps": "独立 IP 数"
     },
     "publications": {
       "featured": "精选",
@@ -1384,7 +1520,6 @@
     "media": {
       "description": "新闻与页面引用的已上传素材；归档只从选择器中移除，不破坏已发布的引用。"
     },
-    "uploads": "媒体库",
     "shell": {
       "overview": "总览",
       "dataManagement": "数据管理",
@@ -1417,6 +1552,84 @@
       "notificationsAria": "通知（{{count}} 条未读）",
       "markAllRead": "全部标记为已读",
       "notificationsEmpty": "暂无通知"
+    },
+    "usage": {
+      "title": "使用说明",
+      "description": "查看操作步骤、API 绑定和数据库关系。",
+      "stepsLabel": "操作步骤",
+      "apiLabel": "API 绑定",
+      "databaseLabel": "数据库关系",
+      "workflowTitle": "标准管理工作流",
+      "workflowStep1": "使用管理员账号登录。",
+      "workflowStep2": "编辑前先加载当前资源。",
+      "workflowStep3": "通过绑定的 API 保存，并确认操作成功。",
+      "workflowStep4": "发布前检查审计记录或版本历史。",
+      "workflowNote": "管理端不会直接写入 PostgreSQL。",
+      "contentTitle": "内容与发布工作流",
+      "contentStep1": "分别编辑中英文内容。",
+      "contentStep2": "发布前预览服务端保存的数据。",
+      "contentStep3": "检查链接、图片、回退内容和页面布局。",
+      "contentStep4": "使用版本历史恢复静态页面。",
+      "contentNote": "公开页面读取发布快照，快照按版本隔离。",
+      "dataTitle": "导入、校验与发布工作流",
+      "dataStep1": "创建导入任务并等待校验。",
+      "dataStep2": "修复校验错误后再执行导入。",
+      "dataStep3": "从就绪的数据集创建发布版本。",
+      "dataStep4": "撤回版本时使用回滚并保留审计记录。",
+      "dataNote": "PostgreSQL 保存状态，对象存储保存文件，worker 执行长任务。",
+      "performanceTitle": "性能与故障边界",
+      "performanceStep1": "列表使用分页和搜索。",
+      "performanceStep2": "复用查询结果，只刷新发生变化的数据。",
+      "performanceStep3": "导入和分析任务由 worker 执行。",
+      "performanceStep4": "显示明确错误，不使用伪造数据。",
+      "performanceNote": "连接池、语句超时和缓存失效策略共同保护 API。"
+    },
+    "integrations": {
+      "wecom": {
+        "title": "企业微信机器人",
+        "description": "向企业微信群推送精简运维摘要；完整记录仍保留在需登录的管理表格中。",
+        "secretTitle": "密钥配置",
+        "secretDescription": "在 worker 的 secret 环境变量中配置 SOYMUTDB_WECOM_BOT_WEBHOOK。Webhook 不写入数据库，也不会由 API 返回。",
+        "eventsLabel": "推送事件",
+        "eventJobs": "任务完成/失败",
+        "eventSeeds": "新种子申请",
+        "eventReleases": "发布版本切换",
+        "privacy": "消息仅包含表格化摘要；不会发送申请人联系方式或原始错误内容。"
+      }
+    },
+    "importPage": {
+      "title": "数据导入",
+      "subtitle": "提交模块数据导入并查看历史任务。当前尚未开放生物数据专用导入器。",
+      "newImport": "新建导入",
+      "capabilitiesUnavailable": "导入能力不可用",
+      "templateDownload": "模块模板下载",
+      "moduleKey": "模块键",
+      "format": "格式",
+      "resumeDraft": "继续已保存的导入草稿",
+      "loadingDraft": "正在加载可信草稿…",
+      "draftUnavailable": "草稿不可用，或你已无权访问。",
+      "savedDrafts": "已保存的导入草稿",
+      "savedDraftsHint": "这里只显示由服务端从可信数据版本创建的草稿。",
+      "savedDraftsUnavailable": "草稿暂不可用，已有导入不受影响。",
+      "resume": "继续",
+      "noDrafts": "没有可继续的服务端导入草稿。",
+      "searchPlaceholder": "搜索导入任务…",
+      "importType": "导入类型",
+      "datasetId": "数据集 ID",
+      "datasetIdPlaceholder": "例如 17",
+      "source": "来源",
+      "localFile": "本地文件",
+      "s3Uri": "S3 URI（高级）",
+      "file": "文件",
+      "uploading": "正在上传…",
+      "filename": "文件名",
+      "s3FilePath": "S3 文件路径",
+      "s3FilePathPlaceholder": "s3://bucket-name/path/to/file.csv",
+      "releaseId": "发布版本 ID",
+      "releaseIdPlaceholder": "例如 42",
+      "moduleKeyPlaceholder": "例如 genes",
+      "checksum": "校验和",
+      "checksumPlaceholder": "源文件 SHA-256（必填）"
     }
   },
   "news": {
@@ -1484,7 +1697,7 @@
     "documentation": "文档",
     "faq": "常见问题",
     "contact": "联系支持",
-    "contactDesc": "如果以上内容没有解决你的问题，请通过项目邮箱联系维护团队。",
+    "contactDesc": "联系团队获取支持",
     "step1": "先选择基因组组装。检索、下载与位点都只属于一个组装，因此同一标识符在 v4 与 v5 中的坐标可以不同。",
     "step2": "按基因 ID、突变体公开 ID 或基因组区间检索。结果会标注染色体、坐标以及数据所属的 release。",
     "step3": "打开基因或突变体详情查看完整记录，再进入 JBrowse 2、下载或研究工具。",
@@ -1511,6 +1724,41 @@
     "q6": {
       "q": "数据多久更新一次？",
       "a": "发布版本与发布日期会在新闻与下载页公布；本帮助页不承诺固定的发布节奏。"
+    },
+    "quickStartDesc": "新用户快速入门",
+    "stepSearch": "使用顶部搜索栏查找基因或变异",
+    "stepFilter": "按染色体、类型或影响筛选结果",
+    "stepDetails": "查看详情，或在基因组浏览器中打开",
+    "stepDownload": "下载数据或申请种子",
+    "documentationDesc": "API 参考与使用教程",
+    "restApi": "REST API v1 参考",
+    "jbrowseDocs": "JBrowse 2 配置",
+    "blastDocs": "BLAST 使用指南",
+    "emailPrefix": "如有数据访问、技术问题或合作咨询，请发邮件至",
+    "emailSuffix": "。",
+    "faq1": {
+      "q": "如何搜索基因？",
+      "a": "使用页面顶部搜索栏，或前往基因页面按染色体、生物类型或关键词筛选。基因 ID 示例：Glyma.01G000100。"
+    },
+    "faq2": {
+      "q": "如何下载变异数据？",
+      "a": "前往下载页面查看当前发布版本提供的文件。使用前请核对文件格式、组装版本、数据版本和来源信息。"
+    },
+    "faq3": {
+      "q": "可以申请突变种子吗？",
+      "a": "打开种子申请页面，查看申请是否开放、资格要求和分发条款。"
+    },
+    "faq4": {
+      "q": "如何引用 SoyMutDB？",
+      "a": "请引用你实际使用的数据版本所附的引用信息和来源元数据。期刊引用或 DOI 仅在项目维护者核实后展示。"
+    },
+    "faq5": {
+      "q": "使用的是哪个基因组组装？",
+      "a": "组装版本属于搜索、记录、浏览器和下载的上下文。比较或合并基因组坐标前，请先核对页面显示的组装版本。"
+    },
+    "faq6": {
+      "q": "数据多久更新一次？",
+      "a": "新版本与发布日期会在新闻和下载页面公布。本帮助页面不承诺固定更新周期。"
     }
   },
   "tools": {
@@ -1790,9 +2038,16 @@
     "errorTitle": "提交失败",
     "errorSubmit": "提交时出错：{{message}}",
     "privacyNote": "您的联系方式仅用于处理本次申请，不会与第三方共享。",
-    "mutantLines": "基因 ID",
+    "mutantLines": "公开突变系",
     "success": "申请已提交",
-    "submitFailed": "提交失败"
+    "submitFailed": "提交失败",
+    "analysisEyebrow": "公开数据概览",
+    "analysisTitle": "申请概览",
+    "analysisDescription": "根据当前发布数据检查本次申请的基因范围。此区域只做透明预览，不会自动批准或创建下载。",
+    "selectedGenes": "已填写基因",
+    "availableGenes": "可检索基因",
+    "availableReleases": "可用版本",
+    "analysisPrivacy": "仅显示公开发布的汇总统计。提交后由管理员人工审核，联系信息不会发送到群机器人。"
   },
   "notifications": {
     "title": "消息通知",

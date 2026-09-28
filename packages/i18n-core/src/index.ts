@@ -13,6 +13,46 @@ import zh from "./locales/zh/common.json";
 export const SUPPORTED_LANGUAGES = ["en", "zh"] as const;
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
 
+/** Optional adapter for translating fallback copy when a locale key is absent.
+ * The core ships no network translator or credentials; applications may
+ * register a same-origin server-backed provider. Until then the original text
+ * is returned unchanged, so translation never blocks a page.
+ */
+export interface AutoTranslationRequest {
+  text: string;
+  sourceLanguage?: string;
+  targetLanguage: SupportedLanguage;
+  namespace?: string;
+  key?: string;
+}
+
+export interface AutoTranslationProvider {
+  translate(request: AutoTranslationRequest): Promise<string | null | undefined>;
+}
+
+let autoTranslationProvider: AutoTranslationProvider | undefined;
+
+export function configureAutoTranslationProvider(
+  provider: AutoTranslationProvider | undefined,
+): void {
+  autoTranslationProvider = provider;
+}
+
+export async function translateFallback(
+  request: AutoTranslationRequest,
+): Promise<string> {
+  if (!autoTranslationProvider || !request.text.trim()) return request.text;
+  try {
+    const translated = await autoTranslationProvider.translate(request);
+    return typeof translated === "string" && translated.trim()
+      ? translated
+      : request.text;
+  } catch {
+    // An optional translation service must never take down core UI.
+    return request.text;
+  }
+}
+
 export const DEFAULT_LANGUAGE: SupportedLanguage = "en";
 
 export const catalogs = { en, zh } as const;

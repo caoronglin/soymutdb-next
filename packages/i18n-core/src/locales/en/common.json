@@ -465,7 +465,8 @@
     "jobName": "Job name",
     "alignmentLength": "Alignment length",
     "recentJobs": "Recent jobs",
-    "hitsAria": "BLAST hits"
+    "hitsAria": "BLAST hits",
+    "desc": "Search sequence alignments against a published reference genome."
   },
   "releases": {
     "title": "Data Releases",
@@ -510,7 +511,9 @@
     "preparing": "Preparing…",
     "empty": "No downloads available.",
     "downloadFile": "Download {{name}}",
-    "downloadCount": "{{count}} downloads"
+    "downloadCount": "{{count}} downloads",
+    "customExportTitle": "Need a custom export?",
+    "customExportDescription": "Submit an async export job for filtered variant sets up to 10M records."
   },
   "fileViewer": {
     "singleFile": "Single file",
@@ -1041,7 +1044,8 @@
       "nextActions": "Next actions",
       "pipelineHeadline": "Keep the data pipeline moving",
       "pipelineDesc": "Start from the real operational workflows instead of decorative management pages.",
-      "openResourceCatalog": "Open Resource Catalog"
+      "openResourceCatalog": "Open Resource Catalog",
+      "trendUnavailable": "Dashboard trend data is unavailable."
     },
     "dashboardStats": {
       "analyticsHeading": "Visitor analytics",
@@ -1057,7 +1061,68 @@
     "blastDatabases": "BLAST Databases",
     "seedRequests": "Seed Requests",
     "auditLogs": "Audit Logs",
-    "settings": "System Settings",
+    "settings": {
+      "title": "System Settings",
+      "domains": {
+        "site": {
+          "title": "Site information",
+          "description": "Name, public content, homepage, and footer details."
+        },
+        "appearance": {
+          "title": "Appearance",
+          "description": "Theme colour and public presentation defaults."
+        },
+        "integrations": {
+          "title": "Integrations",
+          "description": "External delivery and service configuration."
+        },
+        "security": {
+          "title": "Security",
+          "description": "Session and account protection settings."
+        },
+        "localization": {
+          "title": "Localization",
+          "description": "Default language and site-variant content."
+        },
+        "advanced": {
+          "title": "Advanced",
+          "description": "Data, notification, and file-preview configuration."
+        }
+      },
+      "sectionsLabel": "Settings sections",
+      "overview": "Settings overview",
+      "sections": {
+        "general": "General",
+        "about_external": "About (external)",
+        "about_internal": "About (internal)",
+        "home_external": "Homepage (external)",
+        "home_internal": "Homepage (internal)",
+        "content_external": "Site content (external)",
+        "footer_external": "Footer (external)",
+        "cdn": "CDN configuration",
+        "security": "Security",
+        "data": "Data and storage",
+        "email": "Email and notifications",
+        "file_preview": "File preview"
+      },
+      "revision": {
+        "title": "Revision history",
+        "description": "Review a domain section before restoring an earlier audited snapshot.",
+        "section": "Section",
+        "loading": "Loading revision history…",
+        "loadError": "Unable to load revision history.",
+        "empty": "No revisions have been recorded for this section.",
+        "current": "current",
+        "reason": "Reason",
+        "restore": "Restore",
+        "restoreTitle": "Restore {{section}} to v{{version}}?",
+        "restoreDescription": "This creates a new audited revision from the selected snapshot. The current values remain available in history.",
+        "restoreConfirm": "Restore revision",
+        "reasonLabel": "Reason for restoration",
+        "reasonPlaceholder": "Required audit reason",
+        "restoreError": "Unable to restore this revision. Refresh history and retry if the version changed."
+      }
+    },
     "analyticsSettings": {
       "title": "Analytics Settings",
       "description": "Visitor statistics for the public portal via Cloudflare Web Analytics.",
@@ -1134,7 +1199,42 @@
       "created": "Import created.",
       "error": "Could not create the import."
     },
-    "content": "Content Management",
+    "content": {
+      "title": "Content Management",
+      "subtitle": "Manage static pages, news articles, and publications with full version history.",
+      "cancel": "Cancel",
+      "save": "Save",
+      "edit": "Edit",
+      "delete": "Delete",
+      "publication": {
+        "editTitle": "Edit publication",
+        "newTitle": "New publication",
+        "titleEn": "Title (English) *",
+        "titleZh": "Title (Chinese)",
+        "authorsEn": "Authors (English) *",
+        "authorsZh": "Authors (Chinese)",
+        "journal": "Journal",
+        "year": "Year",
+        "doi": "DOI",
+        "pmid": "PMID",
+        "abstractEn": "Abstract (English)",
+        "abstractZh": "Abstract (Chinese)",
+        "featured": "Featured",
+        "created": "Publication created",
+        "createFailed": "Failed to create publication",
+        "updated": "Publication updated",
+        "updateFailed": "Failed to update publication",
+        "deleted": "Publication deleted",
+        "deleteFailed": "Failed to delete publication",
+        "title": "Publications",
+        "subtitle": "Manage bilingual bibliography entries published to the public site.",
+        "new": "New publication",
+        "loadError": "Could not load publications",
+        "empty": "No publications yet",
+        "deleteTitle": "Delete publication",
+        "deleteConfirm": "Delete this publication?"
+      }
+    },
     "contentPages": {
       "subtitle": "Create, edit, and publish the static pages the portal renders. Drafts are listed alongside published pages, and publishing is always an explicit action.",
       "newPage": "New page",
@@ -1280,11 +1380,7 @@
       "trashEmpty": "The recycle bin is empty.",
       "empty": "No articles yet. Create the first one."
     },
-    "uploads": {
-      "selectFile": "Click or drag files here",
-      "uploadFailed": "Upload failed",
-      "sizeExceeded": "File exceeds the {{size}} MB limit"
-    },
+    "uploads": "Media Library",
     "about": {
       "title": "About Us Content",
       "description": "Editable 'About us' page content (served by GET /site/about)."
@@ -1365,11 +1461,51 @@
     "featureCapability": "capability",
     "featureDescription": "description",
     "audit": {
-      "action": "action",
-      "actor": "actor",
-      "resource": "resource",
-      "readOnly": "read-only",
-      "actionPlaceholder": "action"
+      "title": "Audit Logs",
+      "subtitle": "Append-only record of administrator actions. Records cannot be modified or deleted.",
+      "details": "Details",
+      "accessCount": "Access count",
+      "actionAll": "All actions",
+      "actionCreate": "Create",
+      "actionDelete": "Delete",
+      "actionExport": "Export",
+      "actionLogin": "Login",
+      "actionLogout": "Logout",
+      "actionRoleChange": "Role change",
+      "actionUpdate": "Update",
+      "activeUsers": "Active users",
+      "appendOnlyNote": "Audit logs are append-only and tamper-evident. Records cannot be modified or deleted.",
+      "city": "City",
+      "dateRangeSeparator": "to",
+      "emptyDescription": "Try adjusting the filters.",
+      "emptyTitle": "No audit records",
+      "endDateLabel": "End date",
+      "exportCsv": "Export CSV",
+      "exporting": "Exporting…",
+      "exportPdf": "Export PDF",
+      "ipAddress": "IP address",
+      "ipFilterPlaceholder": "Filter IP address",
+      "loading": "Loading audit records…",
+      "noIpData": "No IP statistics",
+      "periodDay": "Day",
+      "periodMonth": "Month",
+      "periodWeek": "Week",
+      "recordsCount": "records",
+      "resource": "Resource",
+      "searchPlaceholder": "Search actor, resource, or IP",
+      "startDateLabel": "Start date",
+      "statsPeriodDesc": "Set the aggregation window for summary cards and IP distribution.",
+      "statsPeriodTitle": "Stats period",
+      "timestamp": "Time",
+      "topIpsCount": "IPs",
+      "topIpsTitle": "Top IP addresses",
+      "totalActions": "Total actions",
+      "totalLogins": "Total logins",
+      "uniqueIps": "Unique IPs",
+      "action": "Action",
+      "actionPlaceholder": "Action",
+      "actor": "Actor",
+      "readOnly": "Read-only"
     },
     "publications": {
       "featured": "featured",
@@ -1384,7 +1520,6 @@
     "media": {
       "description": "Uploaded assets referenced by news and pages. Archiving removes an asset from the picker without breaking published references."
     },
-    "uploads": "Media Library",
     "shell": {
       "overview": "Overview",
       "dataManagement": "Data Management",
@@ -1417,6 +1552,84 @@
       "notificationsAria": "Notifications ({{count}} unread)",
       "markAllRead": "Mark all as read",
       "notificationsEmpty": "No notifications"
+    },
+    "usage": {
+      "title": "Usage guide",
+      "description": "Review workflows, API bindings, and database relationships.",
+      "stepsLabel": "Steps",
+      "apiLabel": "API binding",
+      "databaseLabel": "Database tables",
+      "workflowTitle": "Standard admin workflow",
+      "workflowStep1": "Sign in with an administrator account.",
+      "workflowStep2": "Load the current resource before editing.",
+      "workflowStep3": "Save through the bound API and wait for success.",
+      "workflowStep4": "Review audit or version history before publishing.",
+      "workflowNote": "The Admin UI never writes PostgreSQL directly.",
+      "contentTitle": "Content and publication workflow",
+      "contentStep1": "Edit the Chinese and English fields independently.",
+      "contentStep2": "Preview the saved server payload before publishing.",
+      "contentStep3": "Check links, images, fallback content, and layout.",
+      "contentStep4": "Use version history to restore static pages.",
+      "contentNote": "Public reads use snapshots scoped to the published release.",
+      "dataTitle": "Import, validation, and release workflow",
+      "dataStep1": "Create an import task and wait for validation.",
+      "dataStep2": "Resolve validation errors before ingestion.",
+      "dataStep3": "Build a release from ready datasets.",
+      "dataStep4": "Use rollback and audit evidence when withdrawing a release.",
+      "dataNote": "PostgreSQL owns state; object storage holds files and workers execute long jobs.",
+      "performanceTitle": "Performance and failure boundaries",
+      "performanceStep1": "Use pagination and search for lists.",
+      "performanceStep2": "Reuse query data and invalidate only changed resources.",
+      "performanceStep3": "Keep ingestion and analysis in workers.",
+      "performanceStep4": "Show explicit errors instead of fake values.",
+      "performanceNote": "Bounded pools, statement timeouts, and cache invalidation protect the API."
+    },
+    "integrations": {
+      "wecom": {
+        "title": "WeCom group bot",
+        "description": "Send compact operational summaries to a WeCom group. Full records remain in the authenticated admin tables.",
+        "secretTitle": "Secret configuration",
+        "secretDescription": "Configure SOYMUTDB_WECOM_BOT_WEBHOOK in the worker secret environment. The webhook is never stored in the database or returned by the API.",
+        "eventsLabel": "Events",
+        "eventJobs": "Job completion/failure",
+        "eventSeeds": "New seed request",
+        "eventReleases": "Release pointer change",
+        "privacy": "Messages contain table-like summaries only; applicant contact details and raw errors are never sent."
+      }
+    },
+    "importPage": {
+      "title": "Data Imports",
+      "subtitle": "Submit module data imports and monitor historical tasks. Specialized biological importers are not yet available.",
+      "newImport": "New Import",
+      "capabilitiesUnavailable": "Import capabilities unavailable",
+      "templateDownload": "Module template download",
+      "moduleKey": "Module Key",
+      "format": "Format",
+      "resumeDraft": "Resume saved import draft",
+      "loadingDraft": "Loading trusted draft state…",
+      "draftUnavailable": "This saved draft is unavailable or you no longer have access.",
+      "savedDrafts": "Saved Import Drafts",
+      "savedDraftsHint": "Only server-created drafts from trusted dataset versions appear here.",
+      "savedDraftsUnavailable": "Saved drafts are unavailable. Existing imports are unaffected.",
+      "resume": "Resume",
+      "noDrafts": "No server-backed import drafts are available to resume.",
+      "searchPlaceholder": "Search import tasks…",
+      "importType": "Import Type",
+      "datasetId": "Data Set ID",
+      "datasetIdPlaceholder": "e.g. 17",
+      "source": "Source",
+      "localFile": "Local file",
+      "s3Uri": "S3 URI (advanced)",
+      "file": "File",
+      "uploading": "Uploading…",
+      "filename": "Filename",
+      "s3FilePath": "S3 File Path",
+      "s3FilePathPlaceholder": "s3://bucket-name/path/to/file.csv",
+      "releaseId": "Release ID",
+      "releaseIdPlaceholder": "e.g. 42",
+      "moduleKeyPlaceholder": "e.g. genes",
+      "checksum": "Checksum",
+      "checksumPlaceholder": "SHA-256 of the source file (required)"
     }
   },
   "news": {
@@ -1484,7 +1697,7 @@
     "documentation": "Documentation",
     "faq": "Frequently Asked Questions",
     "contact": "Contact Support",
-    "contactDesc": "If the answers above do not resolve your question, contact the project maintainers by email.",
+    "contactDesc": "Get support from the team",
     "step1": "Pick a genome assembly. Every search, download and locus belongs to exactly one assembly, so the same identifier can look different across v4 and v5.",
     "step2": "Search by gene ID, mutant public ID, or a genomic region. Results carry the chromosome, coordinates, and the release they were read from.",
     "step3": "Open a gene or mutant line for the full record, then continue into JBrowse 2, downloads, or the research tools.",
@@ -1509,6 +1722,41 @@
       "a": "Sequence fetch, expression patterns and enrichment all require an explicit assembly, because a region or a gene list is otherwise ambiguous."
     },
     "q6": {
+      "q": "How often is the data updated?",
+      "a": "Release versions and publication dates are announced on the News and Downloads pages. SoyMutDB does not promise a fixed release cadence on this Help page."
+    },
+    "quickStartDesc": "Quick start guide for new users",
+    "stepSearch": "Search for genes or variants using the top search bar",
+    "stepFilter": "Filter results by chromosome, type, or impact",
+    "stepDetails": "View details or open in the genome browser",
+    "stepDownload": "Download data or request seeds",
+    "documentationDesc": "API reference and tutorials",
+    "restApi": "REST API v1 reference",
+    "jbrowseDocs": "JBrowse 2 configuration",
+    "blastDocs": "BLAST usage guide",
+    "emailPrefix": "Email us at",
+    "emailSuffix": "for questions about data access, technical issues, or collaboration.",
+    "faq1": {
+      "q": "How do I search for a gene?",
+      "a": "Use the search bar at the top of any page, or visit the Genes page to filter by chromosome, biotype, or keyword. Gene IDs follow the Glyma.01G000100 format."
+    },
+    "faq2": {
+      "q": "How do I download variant data?",
+      "a": "Visit the Downloads page for the files currently published for a release. Check each item's format, assembly, release, and provenance metadata before using it in an analysis."
+    },
+    "faq3": {
+      "q": "Can I request mutant seeds?",
+      "a": "Open the Seed Request page to see whether requests are currently enabled and to review the eligibility and distribution terms shown during submission."
+    },
+    "faq4": {
+      "q": "How do I cite SoyMutDB?",
+      "a": "Use the citation and provenance metadata published with the exact data release you used. A journal citation or DOI is shown only after it has been verified by the project maintainers."
+    },
+    "faq5": {
+      "q": "What genome assembly is used?",
+      "a": "The assembly is part of the search, record, browser, and download context. Confirm the displayed assembly before comparing or combining genomic coordinates."
+    },
+    "faq6": {
       "q": "How often is the data updated?",
       "a": "Release versions and publication dates are announced on the News and Downloads pages. SoyMutDB does not promise a fixed release cadence on this Help page."
     }
@@ -1790,9 +2038,16 @@
     "errorTitle": "Could not submit request",
     "errorSubmit": "Something went wrong while submitting: {{message}}",
     "privacyNote": "Your contact details are used solely to process this request and will not be shared with third parties.",
-    "mutantLines": "Gene IDs",
+    "mutantLines": "Public mutant lines",
     "success": "Request submitted",
-    "submitFailed": "Could not submit the request"
+    "submitFailed": "Could not submit the request",
+    "analysisEyebrow": "PUBLIC DATA OVERVIEW",
+    "analysisTitle": "Request overview",
+    "analysisDescription": "Review the requested gene scope against currently published data. This transparent preview does not approve the request or create a download.",
+    "selectedGenes": "Genes entered",
+    "availableGenes": "Searchable genes",
+    "availableReleases": "Available releases",
+    "analysisPrivacy": "Only public-release aggregates are shown. Requests are reviewed by an administrator; contact details are never sent to the group bot."
   },
   "notifications": {
     "title": "Notifications",

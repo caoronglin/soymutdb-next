@@ -1,9 +1,11 @@
-import { type ReactNode, useState, useCallback } from "react";
+import * as React from "react";
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { AdminSidebar } from "../components/admin-sidebar";
 import { AdminHeader } from "../components/admin-header";
 import { AdminUsageGuide } from "../components/admin-usage-guide";
 import { useRouterState } from "@tanstack/react-router";
+import { ProLayout } from "../lib/antd";
+import { NAV_SECTIONS } from "../components/admin-sidebar";
 
 interface AdminLayoutProps {
   children: ReactNode;
@@ -38,9 +40,6 @@ const PAGE_TITLES: Record<string, { key: string; defaultValue: string }> = {
  */
 export default function AdminLayout({ children }: AdminLayoutProps) {
   const { t } = useTranslation();
-  const [collapsed, setCollapsed] = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
-
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   // Exact match first, then longest-prefix match for sub-routes like /widgets/foo
   const titleEntry =
@@ -52,8 +51,17 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     ? t(titleEntry.key, { defaultValue: titleEntry.defaultValue })
     : t("admin.shell.fallbackTitle", { defaultValue: "Admin" });
 
-  const toggleCollapsed = useCallback(() => setCollapsed((p) => !p), []);
-  const toggleMobile = useCallback(() => setMobileOpen((p) => !p), []);
+  const proRoute = React.useMemo(() => ({
+    path: "/",
+    routes: NAV_SECTIONS.map((section) => ({
+      name: t(section.labelKey, { defaultValue: section.label }),
+      routes: section.items.map((item) => ({
+        path: item.path,
+        name: t(item.labelKey, { defaultValue: item.label }),
+        icon: React.createElement(item.icon),
+      })),
+    })),
+  }), [t]);
 
   const usageItems = [
     {
@@ -111,36 +119,26 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   ];
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
-      {/* Desktop sidebar */}
-      <div className="hidden lg:block">
-        <AdminSidebar collapsed={collapsed} onToggleCollapsed={toggleCollapsed} />
+    <ProLayout
+      title="SoyMutDB"
+      logo={false}
+      layout="side"
+      navTheme="light"
+      fixSiderbar
+      location={{ pathname }}
+      route={proRoute}
+      headerRender={() => <AdminHeader title={title} />}
+      menuItemRender={(item, dom) =>
+        item.path ? <a href={item.path}>{dom}</a> : dom
+      }
+      breadcrumbRender={false}
+      contentStyle={{ padding: 24, minHeight: "calc(100vh - 56px)" }}
+      menu={{ locale: true }}
+    >
+      <div className="mx-auto max-w-7xl space-y-6">
+        {pathname === "/" ? <AdminUsageGuide items={usageItems} /> : null}
+        {children}
       </div>
-
-      {/* Mobile sidebar overlay */}
-      {mobileOpen ? (
-        <div className="fixed inset-0 z-40 lg:hidden">
-          <div
-            className="absolute inset-0 bg-black/50"
-            onClick={() => setMobileOpen(false)}
-            aria-hidden
-          />
-          <div className="absolute left-0 top-0 h-full">
-            <AdminSidebar collapsed={false} onToggleCollapsed={() => setMobileOpen(false)} />
-          </div>
-        </div>
-      ) : null}
-
-      {/* Main content area */}
-      <div className="flex min-w-0 flex-1 flex-col">
-        <AdminHeader onToggleSidebar={toggleMobile} title={title} />
-        <main className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-7xl space-y-4 p-4 md:space-y-6 md:p-6">
-            <AdminUsageGuide items={usageItems} />
-            {children}
-          </div>
-        </main>
-      </div>
-    </div>
+    </ProLayout>
   );
 }

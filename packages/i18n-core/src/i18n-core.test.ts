@@ -3,6 +3,8 @@ import {
   DEFAULT_LANGUAGE,
   SUPPORTED_LANGUAGES,
   buildBaseI18nOptions,
+  configureAutoTranslationProvider,
+  translateFallback,
   catalogs,
   detectLanguage,
 } from "./index";
@@ -91,5 +93,28 @@ describe("i18n core", () => {
       collect(catalog, language, offences);
     }
     expect(offences).toEqual([]);
+  });
+});
+
+
+describe("auto-translation adapter seam", () => {
+  afterEach(() => configureAutoTranslationProvider(undefined));
+
+  it("returns the source fallback when no provider is configured", async () => {
+    expect(await translateFallback({ text: "Audit logs", targetLanguage: "zh" })).toBe("Audit logs");
+  });
+
+  it("uses the registered provider and passes locale/key context", async () => {
+    let received: unknown;
+    configureAutoTranslationProvider({
+      async translate(request) { received = request; return "审计日志"; },
+    });
+    expect(await translateFallback({ text: "Audit logs", targetLanguage: "zh", namespace: "common", key: "admin.audit.title" })).toBe("审计日志");
+    expect(received).toMatchObject({ targetLanguage: "zh", key: "admin.audit.title" });
+  });
+
+  it("falls back to source copy when a provider fails", async () => {
+    configureAutoTranslationProvider({ async translate() { throw new Error("offline"); } });
+    expect(await translateFallback({ text: "Manage releases", targetLanguage: "zh" })).toBe("Manage releases");
   });
 });

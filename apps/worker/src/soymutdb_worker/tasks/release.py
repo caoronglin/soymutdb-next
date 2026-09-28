@@ -16,6 +16,7 @@ from typing import Any
 
 from soymutdb_worker.main import celery_app
 from soymutdb_worker.shared import RELEASE_POINTER_CHANGED_TASK
+from soymutdb_worker.utils.wecom_bot import send_table as send_wecom_table
 
 logger = logging.getLogger(__name__)
 
@@ -31,10 +32,22 @@ def refresh_release_pointer(**kwargs: Any) -> dict[str, Any]:
     not perform network I/O; cache invalidation can be added behind the same
     contract once release-aware caches exist.
     """
+    release_id = kwargs.get("release_id")
+    previous_release_id = kwargs.get("previous_release_id")
     logger.info(
         "release_pointer_changed",
-        release_id=kwargs.get("release_id"),
-        previous_release_id=kwargs.get("previous_release_id"),
+        release_id=release_id,
+        previous_release_id=previous_release_id,
         request_id=kwargs.get("request_id"),
+    )
+    # Optional group-bot notice. The payload contains release identifiers only;
+    # the admin URL remains the authenticated source of the full release table.
+    send_wecom_table(
+        "SoyMutDB 发布版本已切换",
+        [
+            ("当前版本", release_id or "—"),
+            ("上一版本", previous_release_id or "—"),
+            ("事件", "active_release_changed"),
+        ],
     )
     return kwargs

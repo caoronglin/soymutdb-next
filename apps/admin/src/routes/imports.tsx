@@ -1,9 +1,10 @@
+import { useTranslation } from "react-i18next";
 import { CloudUploadOutlined, FileExcelOutlined, DatabaseOutlined, RedoOutlined, CloseCircleOutlined, CheckCircleOutlined, LoadingOutlined, DownloadOutlined } from "@ant-design/icons";
 import { Badge, Button, Input, Modal, Select, Typography } from "@/lib/antd";
 import { StatCard } from "../components/stat-card";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { http, apiBaseUrl, getAccessToken, capabilitiesApi, adminImportStudioApi, type ImportDraftListItemResponse, type ImportDraftResponse } from "@soymutdb/api-client";
+import { http, authRequestBlob, capabilitiesApi, adminImportStudioApi, type ImportDraftListItemResponse, type ImportDraftResponse } from "@soymutdb/api-client";
 import { cn } from "../lib/cn";
 import { DataTable, type DataTableColumn } from "../components/data-table";
 import { ImportPreviewTable } from "../components/import-preview-table";
@@ -116,6 +117,7 @@ export interface ImportsPageProps {
 }
 
 export default function ImportsPage({ initialUploadOpen = false }: ImportsPageProps) {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   // A resume link names a server-created draft; the legacy upload wizard never
   // supplies or recreates this identifier.
@@ -511,21 +513,13 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
     setTemplateDownloading(true);
     setTemplateError(null);
     try {
-      const url = `${apiBaseUrl}/admin/modules/${encodeURIComponent(key)}/template?format=${encodeURIComponent(templateFormat)}`;
-      const headers: Record<string, string> = {
-        Accept: "application/octet-stream, application/json",
-      };
-      const token = getAccessToken();
-      if (token) headers.Authorization = `Bearer ${token}`;
-
-      const res = await fetch(url, { headers, credentials: "include" });
-      if (!res.ok) {
-        throw new Error(`Template download failed (${res.status})`);
-      }
-      const blob = await res.blob();
-      const disposition = res.headers.get("content-disposition") ?? "";
-      const match = disposition.match(/filename="?([^";]+)"?/);
-      const filename = match?.[1] ?? `${key}.${templateFormat}`;
+      const path = `/admin/modules/${encodeURIComponent(key)}/template?format=${encodeURIComponent(templateFormat)}`;
+      // Binary downloads still go through the shared auth-aware client so
+      // refresh-on-401, CSRF, API origin, and credentials stay consistent.
+      const blob = await authRequestBlob(path, {
+        headers: { Accept: "application/octet-stream, application/json" },
+      });
+      const filename = `${key}.${templateFormat}`;
       const downloadUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = downloadUrl;
@@ -706,7 +700,7 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-wrap items-start justify-between gap-4"><div><Typography.Title level={2}>Data Imports</Typography.Title><Typography.Text type="secondary">Submit durable module data imports and monitor historical import tasks. Biological specialized importers are not yet available for submission.</Typography.Text></div><Button type="primary" onClick={openUploadDialog} disabled={!capabilitiesQuery.isSuccess} icon={<CloudUploadOutlined aria-hidden />} aria-label="New Import">New Import</Button></div>
+      <div className="flex flex-wrap items-start justify-between gap-4"><div><Typography.Title level={2}>{t("admin.importPage.title")}</Typography.Title><Typography.Text type="secondary">{t("admin.importPage.subtitle")}</Typography.Text></div><Button type="primary" onClick={openUploadDialog} disabled={!capabilitiesQuery.isSuccess} icon={<CloudUploadOutlined aria-hidden />} aria-label={t("admin.importPage.newImport")}>{t("admin.importPage.newImport")}</Button></div>
 
       {capabilitiesQuery.isPending ? (
         <p role="status" className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
@@ -716,7 +710,7 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
       {capabilitiesQuery.isError ? (
         <p
           role="alert"
-          aria-label="Import capabilities unavailable"
+          aria-label={t("admin.importPage.capabilitiesUnavailable")}
           className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
         >
           Unable to load import capabilities. Import actions remain unavailable.
@@ -732,11 +726,11 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
       <div className="rounded-lg border bg-card p-4">
         <div className="mb-3 flex items-center gap-2">
           <DatabaseOutlined className="size-4 text-muted-foreground" />
-          <span className="text-sm font-medium">Module template download</span>
+          <span className="text-sm font-medium">{t("admin.importPage.templateDownload")}</span>
         </div>
         <div className="flex flex-wrap items-end gap-3">
           <div className="space-y-1.5">
-            <label htmlFor="template-module-key">Module Key</label>
+            <label htmlFor="template-module-key">{t("admin.importPage.moduleKey")}</label>
             <Input
               id="template-module-key"
               value={templateModuleKey}
@@ -745,7 +739,7 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
             />
           </div>
           <div className="space-y-1.5">
-            <label htmlFor="template-format">Format</label>
+            <label htmlFor="template-format">{t("admin.importPage.format")}</label>
             <Select value={templateFormat} onChange={setTemplateFormat}>
 
 
@@ -802,9 +796,9 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
 
       {resumeDraftId ? (
         <section aria-labelledby="resume-draft-heading" className="rounded-lg border border-primary/30 bg-primary/5 p-4">
-          <Typography.Title id="resume-draft-heading" level={5} className="!mb-1">Resume saved import draft</Typography.Title>
-          {resumeDraftQuery.isPending ? <Typography.Text type="secondary">Loading trusted draft state…</Typography.Text> : null}
-          {resumeDraftQuery.isError ? <Typography.Text type="danger">This saved draft is unavailable or you no longer have access.</Typography.Text> : null}
+          <Typography.Title id="resume-draft-heading" level={5} className="!mb-1">{t("admin.importPage.resumeDraft")}</Typography.Title>
+          {resumeDraftQuery.isPending ? <Typography.Text type="secondary">{t("admin.importPage.loadingDraft")}</Typography.Text> : null}
+          {resumeDraftQuery.isError ? <Typography.Text type="danger">{t("admin.importPage.draftUnavailable")}</Typography.Text> : null}
           {resumeDraftQuery.data ? (
             <div className="text-sm">
               <Typography.Text strong>{resumeDraftQuery.data.filename}</Typography.Text>
@@ -824,30 +818,30 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
       <section aria-labelledby="import-drafts-heading" className="rounded-lg border p-4">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <Typography.Title id="import-drafts-heading" level={5} className="!mb-0">Saved Import Drafts</Typography.Title>
-            <Typography.Text type="secondary">Only server-created drafts from trusted dataset versions appear here.</Typography.Text>
+            <Typography.Title id="import-drafts-heading" level={5} className="!mb-0">{t("admin.importPage.savedDrafts")}</Typography.Title>
+            <Typography.Text type="secondary">{t("admin.importPage.savedDraftsHint")}</Typography.Text>
           </div>
-          <Button size="small" onClick={() => draftsQuery.refetch()} loading={draftsQuery.isFetching}>Refresh</Button>
+          <Button size="small" onClick={() => draftsQuery.refetch()} loading={draftsQuery.isFetching}>{t("common.retry")}</Button>
         </div>
-        {draftsQuery.isError ? <Typography.Text type="danger">Saved drafts are unavailable. Existing imports are unaffected.</Typography.Text> : null}
+        {draftsQuery.isError ? <Typography.Text type="danger">{t("admin.importPage.savedDraftsUnavailable")}</Typography.Text> : null}
         {draftsQuery.data?.length ? (
-          <ul className="mt-3 space-y-2" aria-label="Saved Import Drafts">
+          <ul className="mt-3 space-y-2" aria-label={t("admin.importPage.savedDrafts")}>
             {draftsQuery.data.map((draft) => (
               <li key={draft.id} className="flex items-center justify-between gap-3 rounded border p-2">
                 <div>
                   <Typography.Text strong>{draft.filename}</Typography.Text>
                   <Typography.Text type="secondary" className="ml-2 text-xs">{draft.status} · {draft.row_count} rows · {draft.column_count} columns</Typography.Text>
                 </div>
-                <Button size="small" href={`/imports?draft=${encodeURIComponent(draft.id)}`}>Resume</Button>
+                <Button size="small" href={`/imports?draft=${encodeURIComponent(draft.id)}`}>{t("admin.importPage.resume")}</Button>
               </li>
             ))}
           </ul>
-        ) : !draftsQuery.isLoading ? <Typography.Text type="secondary">No server-backed import drafts are available to resume.</Typography.Text> : null}
+        ) : !draftsQuery.isLoading ? <Typography.Text type="secondary">{t("admin.importPage.noDrafts")}</Typography.Text> : null}
       </section>
 
       {/* Search */}
       <Input
-        placeholder="Search import tasks..."
+        placeholder={t("admin.importPage.searchPlaceholder")}
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         className="max-w-xs"
@@ -871,7 +865,7 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
       <Modal open={showUpload} onCancel={() => setShowUpload(false)}>
         <div>
           <div>
-            <Typography.Title level={5}>New Import</Typography.Title>
+            <Typography.Title level={5}>{t("admin.importPage.newImport")}</Typography.Title>
             <Typography.Text type="secondary">
               CloudUploadOutlined a local file (browser-direct to object storage) or reference
               an already-uploaded S3 object.
@@ -881,9 +875,9 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
           <div className="space-y-4 py-2">
             {/* Import type */}
             <div className="space-y-1.5">
-              <label htmlFor="import-type">Import Type</label>
+              <label htmlFor="import-type">{t("admin.importPage.importType")}</label>
               <Select
-                aria-label="Import Type"
+                aria-label={t("admin.importPage.importType")}
                 value={uploadType}
                 onChange={(v) => setUploadType(v as ImportType)}
               >
@@ -903,13 +897,13 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
             </div>
 
             <div className="space-y-1.5">
-              <label htmlFor="import-data-set-id">Data Set ID</label>
+              <label htmlFor="import-data-set-id">{t("admin.importPage.datasetId")}</label>
               <Input
                 id="import-data-set-id"
                 type="number"
                 min="1"
                 inputMode="numeric"
-                placeholder="e.g. 17"
+                placeholder={t("admin.importPage.datasetIdPlaceholder")}
                 value={uploadDataSetId}
                 onChange={(e) => setUploadDataSetId(e.target.value)}
               />
@@ -920,22 +914,22 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
 
             {/* CloudUploadOutlined mode */}
             <div className="space-y-1.5">
-              <label htmlFor="import-mode">Source</label>
+              <label htmlFor="import-mode">{t("admin.importPage.source")}</label>
               <Select
                 value={effectiveUploadMode}
                 onChange={(v) => setUploadMode(v as "local" | "s3")}
               >
 
 
-                  <Select.Option value="local" disabled={!localUploadEnabled}>Local file</Select.Option>
-                  <Select.Option value="s3">S3 URI (advanced)</Select.Option>
+                  <Select.Option value="local" disabled={!localUploadEnabled}>{t("admin.importPage.localFile")}</Select.Option>
+                  <Select.Option value="s3">{t("admin.importPage.s3Uri")}</Select.Option>
 
               </Select>
             </div>
 
             {effectiveUploadMode === "local" ? (
               <div className="space-y-1.5">
-                <label>File</label>
+                <label>{t("admin.importPage.file")}</label>
                 <FileDropInput
                   file={uploadFile}
                   onSelect={(f) => {
@@ -960,7 +954,7 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
                         style={{ width: `${uploadProgress}%` }}
                       />
                     </div>
-                    <p className="text-xs text-muted-foreground">Uploading… {uploadProgress}%</p>
+                    <p className="text-xs text-muted-foreground">{t("admin.importPage.uploading")} {uploadProgress}%</p>
                   </div>
                 ) : null}
               </div>
@@ -968,7 +962,7 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
               <>
                 {/* Filename */}
                 <div className="space-y-1.5">
-                  <label htmlFor="import-filename">Filename</label>
+                  <label htmlFor="import-filename">{t("admin.importPage.filename")}</label>
                   <Input
                     id="import-filename"
                     placeholder={
@@ -986,10 +980,10 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
 
                 {/* S3 file path */}
                 <div className="space-y-1.5">
-                  <label htmlFor="import-filepath">S3 File Path</label>
+                  <label htmlFor="import-filepath">{t("admin.importPage.s3FilePath")}</label>
                   <Input
                     id="import-filepath"
-                    placeholder="s3://bucket-name/path/to/file.csv"
+                    placeholder={t("admin.importPage.s3FilePathPlaceholder")}
                     value={uploadFilePath}
                     onChange={(e) => setUploadFilePath(e.target.value)}
                   />
@@ -1004,13 +998,13 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
             {uploadType === "module_tsv" ? (
               <>
                 <div className="space-y-1.5">
-                  <label htmlFor="import-release-id">Release ID</label>
+                  <label htmlFor="import-release-id">{t("admin.importPage.releaseId")}</label>
                   <Input
                     id="import-release-id"
                     type="number"
                     min="1"
                     inputMode="numeric"
-                    placeholder="e.g. 42"
+                    placeholder={t("admin.importPage.releaseIdPlaceholder")}
                     value={uploadReleaseId}
                     onChange={(e) => setUploadReleaseId(e.target.value)}
                   />
@@ -1019,10 +1013,10 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
                   </p>
                 </div>
                 <div className="space-y-1.5">
-                  <label htmlFor="import-module-key">Module Key</label>
+                  <label htmlFor="import-module-key">{t("admin.importPage.moduleKey")}</label>
                   <Input
                     id="import-module-key"
-                    placeholder="genes"
+                    placeholder={t("admin.importPage.moduleKeyPlaceholder")}
                     value={uploadModuleKey}
                     onChange={(e) => {
                       setUploadModuleKey(e.target.value);
@@ -1035,10 +1029,10 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
                 </div>
                 {effectiveUploadMode === "s3" ? (
                   <div className="space-y-1.5">
-                    <label htmlFor="import-checksum">Checksum</label>
+                    <label htmlFor="import-checksum">{t("admin.importPage.checksum")}</label>
                     <Input
                       id="import-checksum"
-                      placeholder="sha256 of the source file (required)"
+                      placeholder={t("admin.importPage.checksumPlaceholder")}
                       value={uploadChecksum}
                       onChange={(e) => setUploadChecksum(e.target.value)}
                     />

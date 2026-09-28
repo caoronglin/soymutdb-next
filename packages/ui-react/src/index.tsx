@@ -74,6 +74,7 @@ export const BRAND_PRIMARY_OKLCH = brandTokens.primary;
 export const BRAND_PRIMARY_OKLCH_DARK = "oklch(0.55 0.14 152)";
 
 export type { ThemeConfig };
+export type { ProColumns } from "@ant-design/pro-components";
 export type { FormProps } from "antd/es/form";
 export type { MenuProps } from "antd/es/menu";
 export type { ColumnsType as TableColumnsType, TableProps } from "antd/es/table";

@@ -31,6 +31,7 @@ from soymutdb_worker.main import celery_app
 from soymutdb_worker.repositories import NotifyStore
 from soymutdb_worker.utils.db import get_db
 from soymutdb_worker.utils.notify import desktop_notify
+from soymutdb_worker.utils.wecom_bot import send_table as send_wecom_table
 
 logger = logging.getLogger(__name__)
 
@@ -221,6 +222,20 @@ def _dispatch(
             exc,
         )
         return
+
+    # Optional WeCom group-robot channel. Only send after the idempotent
+    # in-app insert succeeds; include a compact summary, never user PII or raw
+    # exception text. Missing webhook is an intentional no-op.
+    if inserted:
+        label = _JOB_LABELS.get(kind, kind)
+        send_wecom_table(
+            f"{label}任务{'完成' if succeeded else '失败'}",
+            [
+                ("任务类型", label),
+                ("任务编号", _short(job_id)),
+                ("状态", "成功" if succeeded else "失败"),
+            ],
+        )
 
     # Optional desktop channel (plyer) — best-effort, gated by env flag.
     try:

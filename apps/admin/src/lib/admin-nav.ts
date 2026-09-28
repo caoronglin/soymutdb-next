@@ -198,7 +198,7 @@ export const ADMIN_PAGE_TITLES: readonly { path: string; labelKey: string; label
   { path: "/table-templates", labelKey: "admin.tableViews", labelDefault: "Table Views" },
   { path: "/instances", labelKey: "admin.instances.title", labelDefault: "Species Instances" },
   { path: "/resource-catalog", labelKey: "admin.shell.resourceCatalog", labelDefault: "Resource Catalog" },
-  { path: "/content", labelKey: "admin.content", labelDefault: "Content Management" },
+  { path: "/content", labelKey: "admin.content.title", labelDefault: "Content Management" },
   { path: "/publications", labelKey: "publications.title", labelDefault: "Publications" },
   { path: "/news", labelKey: "admin.news.title", labelDefault: "News Management" },
   { path: "/media", labelKey: "admin.shell.media", labelDefault: "Media Library" },

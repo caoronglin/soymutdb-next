@@ -368,6 +368,8 @@ services:
     environment:
       <<: *app-env
       SOYMUTDB_DATABASE_URL: postgresql+psycopg://soymutdb:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/soymutdb
+      SOYMUTDB_WECOM_BOT_WEBHOOK: ${SOYMUTDB_WECOM_BOT_WEBHOOK:-}
+      SOYMUTDB_WECOM_BOT_WEBHOOK: ${SOYMUTDB_WECOM_BOT_WEBHOOK:-}
     command: >
       celery -A soymutdb_worker.main:celery_app worker --loglevel=info --queues=ingest,export,stats,cleanup,default --concurrency=${WORKER_DEFAULT_CONCURRENCY:-4} --max-tasks-per-child=100 --hostname=worker-default@%h
     # Prometheus /metrics (container network only, never published to host)
@@ -403,6 +405,8 @@ services:
     environment:
       <<: *app-env
       SOYMUTDB_DATABASE_URL: postgresql+psycopg://soymutdb:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/soymutdb
+      SOYMUTDB_WECOM_BOT_WEBHOOK: ${SOYMUTDB_WECOM_BOT_WEBHOOK:-}
+      SOYMUTDB_WECOM_BOT_WEBHOOK: ${SOYMUTDB_WECOM_BOT_WEBHOOK:-}
     command: >
       celery -A soymutdb_worker.main:celery_app worker --loglevel=info --queues=blast --concurrency=${WORKER_BLAST_CONCURRENCY:-2} --max-tasks-per-child=50 --hostname=worker-blast@%h
     # Prometheus /metrics (container network only, never published to host)
@@ -438,6 +442,8 @@ services:
     environment:
       <<: *app-env
       SOYMUTDB_DATABASE_URL: postgresql+psycopg://soymutdb:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/soymutdb
+      SOYMUTDB_WECOM_BOT_WEBHOOK: ${SOYMUTDB_WECOM_BOT_WEBHOOK:-}
+      SOYMUTDB_WECOM_BOT_WEBHOOK: ${SOYMUTDB_WECOM_BOT_WEBHOOK:-}
     command: >
       celery -A soymutdb_worker.main:celery_app worker --loglevel=info --queues=ingest,export,stats,cleanup,default --concurrency=${WORKER_INGESTION_CONCURRENCY:-2} --max-tasks-per-child=20 --hostname=worker-ingest@%h
     # Prometheus /metrics (container network only, never published to host)
@@ -473,6 +479,8 @@ services:
     environment:
       <<: *app-env
       SOYMUTDB_DATABASE_URL: postgresql+psycopg://soymutdb:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/soymutdb
+      SOYMUTDB_WECOM_BOT_WEBHOOK: ${SOYMUTDB_WECOM_BOT_WEBHOOK:-}
+      SOYMUTDB_WECOM_BOT_WEBHOOK: ${SOYMUTDB_WECOM_BOT_WEBHOOK:-}
     command: >
       celery -A soymutdb_worker.main:celery_app worker --loglevel=info
       --queues=analyses --concurrency=${WORKER_ANALYSES_CONCURRENCY:-2}

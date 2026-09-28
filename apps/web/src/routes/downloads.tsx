@@ -244,9 +244,9 @@ function DownloadsComponent() {
             <FileCheck2 className="size-5" aria-hidden />
           </div>
           <div className="flex-1">
-            <p className="font-medium">Need a custom export?</p>
+            <p className="font-medium">{t("downloads.customExportTitle")}</p>
             <p className="text-sm text-muted-foreground">
-              Submit an async export job for filtered variant sets up to 10M records.
+              {t("downloads.customExportDescription")}
             </p>
           </div>
           <Button variant="outlined">{t("common.submit")}</Button>

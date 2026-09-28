@@ -67,4 +67,5 @@ export type {
   ThemeConfig,
   UploadFile,
   UploadProps,
+  ProColumns,
 } from "@soymutdb/ui-react";

@@ -3,11 +3,15 @@ import { initReactI18next } from "react-i18next";
 import {
   DEFAULT_LANGUAGE,
   SUPPORTED_LANGUAGES,
+  configureAutoTranslationProvider,
+  translateFallback,
   buildBaseI18nOptions,
   detectLanguage,
   en,
   zh,
   type SupportedLanguage,
+  type AutoTranslationProvider,
+  type AutoTranslationRequest,
 } from "@soymutdb/i18n-core";
 
 /**
@@ -25,11 +29,15 @@ import {
 export {
   DEFAULT_LANGUAGE,
   SUPPORTED_LANGUAGES,
+  configureAutoTranslationProvider,
+  translateFallback,
   buildBaseI18nOptions,
   detectLanguage,
   en,
   zh,
   type SupportedLanguage,
+  type AutoTranslationProvider,
+  type AutoTranslationRequest,
 };
 
 /** Initialize i18next + react-i18next. Call once in the app entry before rendering. */

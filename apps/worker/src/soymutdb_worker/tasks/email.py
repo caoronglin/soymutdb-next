@@ -28,7 +28,8 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from soymutdb_worker.config import get_setting
 from soymutdb_worker.main import celery_app
-from soymutdb_worker.shared import JobPayload, SEED_REQUEST_EMAIL_TASK
+from soymutdb_worker.shared import SEED_REQUEST_EMAIL_TASK, JobPayload
+from soymutdb_worker.utils.wecom_bot import send_table as send_wecom_table
 
 logger = logging.getLogger(__name__)
 
@@ -284,6 +285,17 @@ def send_seed_request_email(
         subject=f"SoyMutDB — New seed request from {name}",
         context=context,
         cfg=cfg,
+    )
+
+    # Group-bot summary is deliberately PII-free. Detailed applicant data
+    # remains in the authenticated admin table and the email notification.
+    send_wecom_table(
+        "收到新的种子申请",
+        [
+            ("申请编号", request_id),
+            ("基因数量", len(gene_ids)),
+            ("状态", "待审核"),
+        ],
     )
 
     logger.info(
