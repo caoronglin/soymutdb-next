@@ -270,7 +270,7 @@ function GenesComponent() {
               aria-label={get("genes.search", t("genes.search"))}
               allowClear
               enterButton={false}
-              style={{ width: 240 }}
+              style={{ width: "min(360px, 80vw)" }}
             />
           </Form.Item>
           <Form.Item label={get("genes.chromosome", t("genes.chromosome"))} className="mb-0">
