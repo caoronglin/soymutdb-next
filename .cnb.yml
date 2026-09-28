@@ -98,6 +98,7 @@ main:
             - pnpm-lock.yaml
             - package.json
             - pnpm-workspace.yaml
+            - .npmrc
       # `services` is a PIPELINE-level key (grammar.md#pipeline-services):
       # a sibling of `stages`, `docker` and `env`. `postgres:16` is accepted
       # but starts NOTHING; on a Stage the whole key is silently dropped and
@@ -175,6 +176,7 @@ main:
             - pnpm-lock.yaml
             - package.json
             - pnpm-workspace.yaml
+            - .npmrc
       # `services` is a PIPELINE-level key (grammar.md#pipeline-services):
       # a sibling of `stages`, `docker` and `env`. `postgres:16` is accepted
       # but starts NOTHING; on a Stage the whole key is silently dropped and
@@ -690,6 +692,7 @@ $:
             - pnpm-lock.yaml
             - package.json
             - pnpm-workspace.yaml
+            - .npmrc
       # `services` is a PIPELINE-level key (grammar.md#pipeline-services):
       # a sibling of `stages`, `docker` and `env`. `postgres:16` is accepted
       # but starts NOTHING; on a Stage the whole key is silently dropped and

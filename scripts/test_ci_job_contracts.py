@@ -2292,6 +2292,29 @@ class DeliveryArchitectureTests(unittest.TestCase):
                 build["by"],
                 "the store warm-up must be rebuilt when the lockfile changes",
             )
+            # grammar.md: "未出现在 by 列表中的文件，在构建镜像时不会被 COPY 进
+            # 镜像（Dockerfile 本身除外）". A COPY of a path that is missing from
+            # `by` therefore dies while resolving the context --
+            #
+            #   failed to calculate checksum of ref ...: "/.npmrc": not found
+            #
+            # which is not a missing file in the repository but a missing entry
+            # in this list. Keep the two ends from drifting apart.
+            declared = set(build["by"])
+            copied = [
+                token
+                for line in lines
+                if line.startswith("COPY ")
+                for token in line.split()[1:-1]
+            ]
+            self.assertTrue(copied, "expected the frontend image to COPY its inputs")
+            for source in copied:
+                self.assertIn(
+                    source,
+                    declared,
+                    f"the frontend image COPYs {source}, but it is absent from "
+                    "docker.build.by and so never reaches the build context",
+                )
 
     def test_cloud_development_buttons_share_one_bootstrap(self) -> None:
         """The manual preview pipeline must not fork the environment prep.

@@ -131,30 +131,26 @@ RUN node --version \
 # `fetch` has no `--lockfile-only` option (that option belongs to `pnpm
 # install`), so keeping the command to the official fetch interface makes the
 # warm store real rather than a command that fails before the image is built.
-# The warm-up reads the checked-out lockfile, so the workspace manifests have to
-# exist in the image BEFORE it runs. They did not: the stage ran `pnpm fetch`
-# against an empty /workspace and the image build died with
+# The warm-up reads the checked-out lockfile, so the manifests have to exist in
+# the image BEFORE it runs. They did not: the stage ran `pnpm fetch` against an
+# empty /workspace, and every remote build died in Prepare with
 #
 #   ERR_PNPM_NO_LOCKFILE
 #
-# on every remote run, so the CNB verify pipeline never got past Prepare and no
-# gate ever executed. Copying the manifests (never the sources) keeps this layer
-# cached until a dependency actually changes.
+# before a single gate ran.
+#
+# Only files named in the pipeline's `docker.build.by` reach the build context --
+# grammar.md is explicit: "未出现在 by 列表中的文件，在构建镜像时不会被 COPY 进
+# 镜像（Dockerfile 本身除外）". So this COPY list and that `by` list have to agree;
+# `by` carries `.npmrc` for exactly this reason. `pnpm-workspace.yaml` is what
+# tells pnpm the lockfile is a workspace lockfile, and `.npmrc` keeps the fetch
+# on the pinned registry.
+#
+# The per-package manifests are deliberately NOT copied: the context does not
+# carry them, and `pnpm fetch` selects tarballs from the lockfile alone.
+# Verified with the pinned pnpm 12.5.1 -- these four files resolve the whole
+# lockfile, while an empty directory fails with ERR_PNPM_NO_LOCKFILE.
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc ./
-COPY apps/admin/package.json ./apps/admin/
-COPY apps/jbrowse/package.json ./apps/jbrowse/
-COPY apps/web/package.json ./apps/web/
-COPY packages/api-client/package.json ./packages/api-client/
-COPY packages/charts/package.json ./packages/charts/
-COPY packages/genome-data/package.json ./packages/genome-data/
-COPY packages/genome-view/package.json ./packages/genome-view/
-COPY packages/genome-view-model/package.json ./packages/genome-view-model/
-COPY packages/i18n/package.json ./packages/i18n/
-COPY packages/i18n-core/package.json ./packages/i18n-core/
-COPY packages/query-keys/package.json ./packages/query-keys/
-COPY packages/shared/package.json ./packages/shared/
-COPY packages/ui-react/package.json ./packages/ui-react/
-COPY packages/ui-vue/package.json ./packages/ui-vue/
 
 RUN set -eux; \
     mkdir -p /cache/pnpm-store; \
