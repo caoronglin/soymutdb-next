@@ -19,7 +19,34 @@ interface AuditLog {
   ipAddress: string;
   userAgent: string;
   status: "success" | "failure";
-  details: string | null;
+  /**
+   * Structured audit metadata. The API sends a JSON object for actions that
+   * carry structured context (`{ login_at, username }` for a login) and a plain
+   * string for legacy rows, so both shapes have to be accepted here.
+   */
+  details: AuditDetails | null;
+}
+
+type AuditDetails = string | Record<string, unknown>;
+
+/**
+ * Render `details` as text.
+ *
+ * React refuses an object child outright (error #31, "Objects are not valid as
+ * a React child"), which took the whole audit page down; and the previous
+ * `details.length` / `details.slice` calls are string methods that a structured
+ * value does not have. Flattening to a single line keeps the table compact and
+ * the `title` tooltip still shows the full payload.
+ */
+function formatAuditDetails(details: AuditDetails | null): string {
+  if (details === null || details === undefined) return "";
+  if (typeof details === "string") return details;
+  try {
+    return JSON.stringify(details);
+  } catch {
+    // Cyclic or non-serialisable payloads must not break the page.
+    return String(details);
+  }
 }
 
 interface AuditStats {
@@ -179,14 +206,16 @@ export default function AuditPage() {
     {
       key: "details",
       header: t("admin.audit.details", { defaultValue: "Details" }),
-      cell: (l) =>
-        l.details ? (
-          <span className="text-xs text-muted-foreground" title={l.details}>
-            {l.details.length > 60 ? `${l.details.slice(0, 60)}…` : l.details}
+      cell: (l) => {
+        const text = formatAuditDetails(l.details);
+        return text ? (
+          <span className="text-xs text-muted-foreground" title={text}>
+            {text.length > 60 ? `${text.slice(0, 60)}…` : text}
           </span>
         ) : (
           <span className="text-muted-foreground">—</span>
-        ),
+        );
+      },
     },
   ], [t]);
 

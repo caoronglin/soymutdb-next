@@ -6,6 +6,7 @@ The table name is hardcoded to ``variant_facts``.
 """
 
 from __future__ import annotations
+import math
 
 import functools
 import time
@@ -463,7 +464,17 @@ class ClickHouseService:
         if result.row_count == 0:
             return 0.0
         value = result.first_row[0]
-        return float(value or 0.0)
+        if value is None:
+            return 0.0
+        number = float(value)
+        # An ungrouped aggregate always returns exactly one row, so
+        # `row_count == 0` never fires for an empty window: ClickHouse answers
+        # `quantile()` over zero rows with NaN. `float(value or 0.0)` does not
+        # catch it either -- bool(nan) is True -- so NaN escaped into the
+        # response model, whose `ge=0` bound turned the admin dashboard into a
+        # 500. The docstring already promised 0.0 for "no events"; this makes
+        # that true.
+        return number if math.isfinite(number) else 0.0
     @_capability_guarded
     async def get_query_latency_series(
         self, days: int = 30
