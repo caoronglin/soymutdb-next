@@ -40,7 +40,7 @@ export default function ContentPage() {
     <div className="space-y-6">
       <div><Typography.Title level={2}>{t("admin.content.title", { defaultValue: "Content Management" })}</Typography.Title><Typography.Text type="secondary">{t("admin.content.subtitle", { defaultValue: "Manage static pages, news articles, and publications with full version history." })}</Typography.Text></div>
 
-      {isLegacyRoute && (
+      {isLegacyRoute ? (
         <>
           <div className="rounded-lg border border-border bg-muted/30 px-4 py-3">
             <span className="mr-2 rounded-full bg-muted px-2 py-1 text-xs font-medium">Legacy Pages</span>
@@ -50,39 +50,39 @@ export default function ContentPage() {
           </div>
           <StaticPageMigrationReport />
         </>
+      ) : (
+        <>
+          <div className="flex items-center gap-1 border-b border-border">
+            {(Object.keys(TYPE_CONFIG) as ContentType[]).map((typeKey) => {
+              const Icon = TYPE_CONFIG[typeKey].icon;
+              return (
+                <button
+                  key={typeKey}
+                  type="button"
+                  onClick={() => setTab(typeKey)}
+                  className={`flex items-center gap-1.5 border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+                    tab === typeKey
+                      ? "border-primary text-primary"
+                      : "border-transparent text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <Icon className="size-3.5" />
+                  {t(`admin.content.type_${typeKey}`, { defaultValue: TYPE_CONFIG[typeKey].label })}
+                </button>
+              );
+            })}
+          </div>
+          {tab === "page" && (
+            <PagesTab
+              PageFormDialog={PageFormDialog}
+              VersionHistoryDialog={VersionHistoryDialog}
+              VersionDetail={VersionDetail}
+            />
+          )}
+          {tab === "news" && <NewsPublicationTab type="news" />}
+          {tab === "publication" && <NewsPublicationTab type="publication" />}
+        </>
       )}
-
-      {/* Tabs */}
-      <div className="flex items-center gap-1 border-b border-border">
-        {(Object.keys(TYPE_CONFIG) as ContentType[]).map((typeKey) => {
-          const Icon = TYPE_CONFIG[typeKey].icon;
-          return (
-            <button
-              key={typeKey}
-              type="button"
-              onClick={() => setTab(typeKey)}
-              className={`flex items-center gap-1.5 border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
-                tab === typeKey
-                  ? "border-primary text-primary"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <Icon className="size-3.5" />
-              {t(`admin.content.type_${typeKey}`, { defaultValue: TYPE_CONFIG[typeKey].label })}
-            </button>
-          );
-        })}
-      </div>
-
-      {tab === "page" && (
-        <PagesTab
-          PageFormDialog={PageFormDialog}
-          VersionHistoryDialog={VersionHistoryDialog}
-          VersionDetail={VersionDetail}
-        />
-      )}
-      {tab === "news" && <NewsPublicationTab type="news" />}
-      {tab === "publication" && <NewsPublicationTab type="publication" />}
     </div>
   );
 }
