@@ -2248,6 +2248,30 @@ class DeliveryArchitectureTests(unittest.TestCase):
         # A hard-coded pnpm version would let the image warm a store with a
         # pnpm the pipeline never activates.
         self.assertIn(f"ARG PNPM_VERSION={PNPM_VERSION}", dockerfile)
+        # The warm-up is only real if the lockfile is IN the image when it runs.
+        # Asserting the command while the image had no manifests is what let
+        # every remote run die in Prepare with
+        #
+        #   ERR_PNPM_NO_LOCKFILE
+        #
+        # so the lockfile and the workspace file must be copied, and copied
+        # before the fetch.
+        lines = dockerfile.splitlines()
+        for required in ("pnpm-lock.yaml", "pnpm-workspace.yaml"):
+            self.assertTrue(
+                any(line.startswith("COPY ") and required in line for line in lines),
+                f"the pnpm warm-up needs {required} inside the image",
+            )
+        lockfile_copy = next(
+            line
+            for line in lines
+            if line.startswith("COPY ") and "pnpm-lock.yaml" in line
+        )
+        self.assertLess(
+            dockerfile.index(lockfile_copy),
+            dockerfile.index("pnpm fetch --ignore-scripts"),
+            "pnpm fetch runs before the lockfile is copied into the image",
+        )
 
         document = _cnb()
         frontend_builds = [
