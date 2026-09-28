@@ -1,4 +1,5 @@
 import tailwindcss from "@tailwindcss/postcss";
+import { resolve } from "node:path";
 import { defineConfig } from "@umijs/max";
 import {
   buildCsp,
@@ -16,7 +17,7 @@ const development = env.NODE_ENV === "development";
 const deploymentMode = env.VITE_DEPLOYMENT_MODE?.trim() || (development ? "development" : "standard");
 const siteVariant = resolveSiteVariant(env.VITE_SITE_VARIANT);
 const base = normalizeBasePath(env.VITE_BASE_URL);
-const allowInsecureDevOrigins = development;
+const allowInsecureDevOrigins = development || env.SOYMUTDB_LOCAL_TEST_PREVIEW_ENABLED === "true" || env.SOYMUTDB_LOCAL_TEST_PREVIEW_ENABLED === "1";
 const apiBaseUrl =
   env.VITE_API_BASE_URL?.trim() || (development ? "http://localhost:8010" : undefined);
 const apiOrigin = requireDeploymentOrigin(apiBaseUrl, "API", {
@@ -75,6 +76,14 @@ export default defineConfig({
     ...(siteVariant === "internal" ? [{ name: "robots", content: "noindex,nofollow" }] : []),
   ],
   headScripts,
+  // esbuild hoists each chunk's shared helpers to the TOP LEVEL of the
+  // emitted async chunk, so two chunks can both declare `var n = <spread>`
+  // in the global scope. The last chunk loaded then wins for BOTH, and
+  // antd's `{ ...optional }` called the unguarded helper ->
+  // "getOwnPropertyDescriptors(undefined)" -> blank page. Terser keeps
+  // helpers inside the module/chunk scope, so the collision cannot form.
+  jsMinifier: "terser",
+  plugins: [resolve(__dirname, "plugins/defer-html-scripts.cjs")],
   extraPostCSSPlugins: [tailwindcss()],
   mfsu: false,
   layout: false,

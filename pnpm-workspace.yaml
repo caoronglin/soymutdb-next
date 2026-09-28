@@ -95,3 +95,6 @@ catalogs:
     '@gmod/trix': 2.0.9
     '@gmod/vcf': 5.0.9
     generic-filehandle: 3.4.0
+
+patchedDependencies:
+  antd@6.6.5: patches/antd@6.6.5.patch

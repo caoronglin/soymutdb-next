@@ -1,0 +1,145 @@
+diff --git a/es/app/App.js b/es/app/App.js
+index fb34c05a64068138c76e491db96bb1b7ebf18302..3669d7e621fe5bc3ced4d0d7d71a3940b82f2e9f 100644
+--- a/es/app/App.js
++++ b/es/app/App.js
+@@ -33,14 +33,8 @@ const App = /*#__PURE__*/React.forwardRef((props, ref) => {
+   });
+   const appConfig = useContext(AppConfigContext);
+   const mergedAppConfig = React.useMemo(() => ({
+-    message: {
+-      ...appConfig.message,
+-      ...message
+-    },
+-    notification: {
+-      ...appConfig.notification,
+-      ...notification
+-    }
++    message: Object.assign({}, appConfig.message || {}, message || {}),
++    notification: Object.assign({}, appConfig.notification || {}, notification || {})
+   }), [message, notification, appConfig.message, appConfig.notification]);
+   const [messageApi, messageContextHolder] = useMessage(mergedAppConfig.message);
+   const [notificationApi, notificationContextHolder] = useNotification(mergedAppConfig.notification);
+@@ -60,21 +54,14 @@ const App = /*#__PURE__*/React.forwardRef((props, ref) => {
+   const Component = component === false ? React.Fragment : component;
+   const rootProps = {
+     className: clsx(contextClassName, customClassName),
+-    style: {
+-      ...contextStyle,
+-      ...style
+-    }
++    style: Object.assign({}, contextStyle || {}, style || {})
+   };
++  const componentProps = component === false ? undefined : Object.assign({}, rootProps, { ref });
+   return /*#__PURE__*/React.createElement(AppContext.Provider, {
+     value: memoizedContextValue
+   }, /*#__PURE__*/React.createElement(AppConfigContext.Provider, {
+     value: mergedAppConfig
+-  }, /*#__PURE__*/React.createElement(Component, {
+-    ...(component === false ? undefined : {
+-      ...rootProps,
+-      ref
+-    })
+-  }, ModalContextHolder, messageContextHolder, notificationContextHolder, children)));
++  }, /*#__PURE__*/React.createElement(Component, componentProps, ModalContextHolder, messageContextHolder, notificationContextHolder, children)));
+ });
+ if (process.env.NODE_ENV !== 'production') {
+   App.displayName = 'App';
+diff --git a/es/config-provider/context.js b/es/config-provider/context.js
+index c27c2100ad7dd47cb6aa111a2f59cfe916d4c3f9..51c41fabe87578d32e28a8862b8eba69a6174216 100644
+--- a/es/config-provider/context.js
++++ b/es/config-provider/context.js
+@@ -35,13 +35,12 @@ export function useComponentConfig(propName) {
+     renderEmpty
+   } = context;
+   const propValue = context[propName];
+-  return {
+-    classNames: EMPTY_OBJECT,
+-    styles: EMPTY_OBJECT,
+-    ...propValue,
+-    getPrefixCls,
+-    direction,
+-    getPopupContainer,
+-    renderEmpty
+-  };
++  // A component config is optional. Keep this safe even when a build transform
++  // lowers object spread to Object.getOwnPropertyDescriptors, which throws on
++  // undefined even though native `{ ...undefined }` is valid.
++  return Object.assign(
++    { classNames: EMPTY_OBJECT, styles: EMPTY_OBJECT },
++    propValue || EMPTY_OBJECT,
++    { getPrefixCls, direction, getPopupContainer, renderEmpty }
++  );
+ }
+\ No newline at end of file
+diff --git a/lib/app/App.js b/lib/app/App.js
+index 97b2d492577faaa7c6fb3249905f13876fcabd54..e2d6b696787e11aabbb4e68e64dd15c0a0041244 100644
+--- a/lib/app/App.js
++++ b/lib/app/App.js
+@@ -40,14 +40,8 @@ const App = /*#__PURE__*/_react.default.forwardRef((props, ref) => {
+   });
+   const appConfig = (0, _react.useContext)(_context2.AppConfigContext);
+   const mergedAppConfig = _react.default.useMemo(() => ({
+-    message: {
+-      ...appConfig.message,
+-      ...message
+-    },
+-    notification: {
+-      ...appConfig.notification,
+-      ...notification
+-    }
++    message: Object.assign({}, appConfig.message || {}, message || {}),
++    notification: Object.assign({}, appConfig.notification || {}, notification || {})
+   }), [message, notification, appConfig.message, appConfig.notification]);
+   const [messageApi, messageContextHolder] = (0, _useMessage.default)(mergedAppConfig.message);
+   const [notificationApi, notificationContextHolder] = (0, _useNotification.default)(mergedAppConfig.notification);
+@@ -67,21 +61,14 @@ const App = /*#__PURE__*/_react.default.forwardRef((props, ref) => {
+   const Component = component === false ? _react.default.Fragment : component;
+   const rootProps = {
+     className: (0, _clsx.clsx)(contextClassName, customClassName),
+-    style: {
+-      ...contextStyle,
+-      ...style
+-    }
++    style: Object.assign({}, contextStyle || {}, style || {})
+   };
++  const componentProps = component === false ? undefined : Object.assign({}, rootProps, { ref });
+   return /*#__PURE__*/_react.default.createElement(_context2.default.Provider, {
+     value: memoizedContextValue
+   }, /*#__PURE__*/_react.default.createElement(_context2.AppConfigContext.Provider, {
+     value: mergedAppConfig
+-  }, /*#__PURE__*/_react.default.createElement(Component, {
+-    ...(component === false ? undefined : {
+-      ...rootProps,
+-      ref
+-    })
+-  }, ModalContextHolder, messageContextHolder, notificationContextHolder, children)));
++  }, /*#__PURE__*/_react.default.createElement(Component, componentProps, ModalContextHolder, messageContextHolder, notificationContextHolder, children)));
+ });
+ if (process.env.NODE_ENV !== 'production') {
+   App.displayName = 'App';
+diff --git a/lib/config-provider/context.js b/lib/config-provider/context.js
+index 820bd582ff9ac9d3cf1c093e58e9b304e29cc958..aedcc76210d22c8a82041a8010cb4869161219d5 100644
+--- a/lib/config-provider/context.js
++++ b/lib/config-provider/context.js
+@@ -44,13 +44,12 @@ function useComponentConfig(propName) {
+     renderEmpty
+   } = context;
+   const propValue = context[propName];
+-  return {
+-    classNames: EMPTY_OBJECT,
+-    styles: EMPTY_OBJECT,
+-    ...propValue,
+-    getPrefixCls,
+-    direction,
+-    getPopupContainer,
+-    renderEmpty
+-  };
++  // A component config is optional. Keep this safe even when a build transform
++  // lowers object spread to Object.getOwnPropertyDescriptors, which throws on
++  // undefined even though native `{ ...undefined }` is valid.
++  return Object.assign(
++    { classNames: EMPTY_OBJECT, styles: EMPTY_OBJECT },
++    propValue || EMPTY_OBJECT,
++    { getPrefixCls, direction, getPopupContainer, renderEmpty }
++  );
+ }

@@ -1,4 +1,5 @@
 import tailwindcss from "@tailwindcss/postcss";
+import { resolve } from "node:path";
 import { defineConfig } from "@umijs/max";
 import { normalizeBasePath, requireDeploymentOrigin, resolveDevAllowedHosts } from "@soymutdb/shared/deployment";
 
@@ -10,7 +11,7 @@ const base = normalizeBasePath(env.VITE_BASE_URL);
 const apiBaseUrl =
   env.VITE_API_BASE_URL?.trim() || (development ? "http://localhost:8010" : undefined);
 const apiOrigin = requireDeploymentOrigin(apiBaseUrl, "Admin API", {
-  allowInsecureHttp: development,
+  allowInsecureHttp: development || env.SOYMUTDB_LOCAL_TEST_PREVIEW_ENABLED === "true" || env.SOYMUTDB_LOCAL_TEST_PREVIEW_ENABLED === "1",
 });
 const configuredDevHosts = resolveDevAllowedHosts(env.SOYMUTDB_DEV_ALLOWED_HOSTS);
 const csp = [
@@ -49,6 +50,14 @@ export default defineConfig({
     { path: "/*", component: "@/umi-entry" },
   ],
   metas: [{ "http-equiv": "Content-Security-Policy", content: csp }],
+  // esbuild hoists each chunk's shared helpers to the TOP LEVEL of the
+  // emitted async chunk, so two chunks can both declare `var n = <spread>`
+  // in the global scope. The last chunk loaded then wins for BOTH, and
+  // antd's `{ ...optional }` called the unguarded helper ->
+  // "getOwnPropertyDescriptors(undefined)" -> blank page. Terser keeps
+  // helpers inside the module/chunk scope, so the collision cannot form.
+  jsMinifier: "terser",
+  plugins: [resolve(__dirname, "plugins/defer-html-scripts.cjs")],
   extraPostCSSPlugins: [tailwindcss()],
   mfsu: false,
   layout: false,
