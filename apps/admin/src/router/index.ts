@@ -32,6 +32,8 @@ import TableTemplatesView from "../views/TableTemplatesView.vue";
 export const ADMIN_ROUTES: readonly RouteRecordRaw[] = [
   { path: "/login", name: "login", component: LoginView },
   { path: "/", name: "dashboard", component: DashboardView },
+  // Usage guide is a standalone page in the React console; legacy Vue entry redirects.
+  { path: "/guide", redirect: "/" },
   { path: "/releases", name: "releases", component: ReleasesView },
   { path: "/imports", name: "imports", component: ImportsView },
   { path: "/imports/new", name: "import-create", component: ImportCreateView },

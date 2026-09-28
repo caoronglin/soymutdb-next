@@ -24,6 +24,7 @@ export const NAV_SECTIONS: NavSection[] = [
     labelKey: "admin.shell.overview",
     items: [
       { path: "/", label: "Dashboard", labelKey: "admin.dashboard.title", icon: DashboardOutlined },
+      { path: "/guide", label: "Usage guide", labelKey: "admin.usage.title", icon: ReadOutlined },
     ],
   },
   {

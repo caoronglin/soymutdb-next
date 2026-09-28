@@ -23,6 +23,7 @@ import {
 
 // Lazy-loaded route components (code-splitting per route).
 const DashboardPage = lazy(() => import("./routes/index"));
+const UsageGuidePage = lazy(() => import("./routes/usage-guide"));
 const LegacyUnavailablePage = lazy(() => import("./routes/legacy-unavailable"));
 const ReleasesPage = lazy(() => import("./routes/releases"));
 const InstancesPage = lazy(() => import("./routes/instances"));
@@ -130,6 +131,12 @@ const dashboardRoute = createRoute({
   getParentRoute: () => authLayoutRoute,
   path: "/",
   component: () => withSuspense(DashboardPage),
+});
+
+const usageGuideRoute = createRoute({
+  getParentRoute: () => authLayoutRoute,
+  path: "/guide",
+  component: () => withSuspense(UsageGuidePage),
 });
 
 const releasesRoute = createRoute({
@@ -336,6 +343,7 @@ const routeTree = rootRoute.addChildren([
   loginRoute,
   authLayoutRoute.addChildren([
     dashboardRoute,
+    usageGuideRoute,
     releasesRoute,
     instancesRoute,
     resourceCatalogRoute,

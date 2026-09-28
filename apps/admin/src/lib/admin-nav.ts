@@ -39,6 +39,12 @@ export const ADMIN_NAV_SECTIONS: readonly AdminNavSection[] = [
         labelDefault: "Dashboard",
         icon: ["M4 13h6V4H4v9Zm10 7h6v-9h-6v9ZM4 20h6v-4H4v4Zm10-11h6V4h-6v5Z"],
       },
+      {
+        path: "/guide",
+        labelKey: "admin.usage.title",
+        labelDefault: "Usage guide",
+        icon: ["M5 4h14v16H5z", "M9 4v16"],
+      },
     ],
   },
   {
