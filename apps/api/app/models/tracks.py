@@ -92,6 +92,12 @@ class Track(Base, TimestampMixin, SoftDeleteMixin):
     assembly_id: Mapped[int] = mapped_column(
         ForeignKey("assemblies.id", ondelete="CASCADE"), nullable=False
     )
+    # Legacy databases already carry this nullable release pin.  Keep it in
+    # the ORM so release-scoped projections can fail closed instead of silently
+    # treating an unscoped track as belonging to the selected release.
+    release_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("releases.id", ondelete="SET NULL"), nullable=True
+    )
     category_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("track_categories.id", ondelete="SET NULL"), nullable=True
     )

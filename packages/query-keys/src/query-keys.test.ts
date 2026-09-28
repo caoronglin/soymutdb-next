@@ -2,23 +2,47 @@ import { describe, expect, it } from "vitest";
 import { queryKeys } from "./index";
 
 describe("queryKeys", () => {
-  it("shares one stable assemblies key across routes", () => {
+  it("keeps the bare assemblies prefix stable for invalidation", () => {
     expect(queryKeys.assemblies.all()).toEqual(["soymutdb", "assemblies"]);
+    // Context-scoped children stay beneath that prefix.
+    expect(queryKeys.assemblies.list({ releaseId: "2026.09", siteVariant: "external" }).slice(0, 2)).toEqual([
+      "soymutdb",
+      "assemblies",
+    ]);
   });
 
-  it("scopes chromosome keys beneath the assemblies prefix", () => {
-    expect(queryKeys.assemblies.chromosomes("wm82-v4")).toEqual([
+  it("scopes the assembly catalogue by release and site variant", () => {
+    const base = { releaseId: "2026.09", siteVariant: "external" as const };
+    const key = queryKeys.assemblies.list(base);
+    expect(queryKeys.assemblies.list({ ...base, releaseId: "2026.10" })).not.toEqual(key);
+    expect(queryKeys.assemblies.list({ ...base, siteVariant: "internal" })).not.toEqual(key);
+  });
+
+  it("scopes chromosome keys beneath the assemblies prefix and by context", () => {
+    const base = { releaseId: "2026.09", siteVariant: "external" as const };
+    expect(queryKeys.assemblies.chromosomes("wm82-v4", base)).toEqual([
       "soymutdb",
       "assemblies",
       "chromosomes",
       "wm82-v4",
+      "2026.09",
+      "external",
     ]);
-    expect(queryKeys.assemblies.chromosomes(undefined)).toEqual([
+    expect(queryKeys.assemblies.chromosomes(undefined, base)).toEqual([
       "soymutdb",
       "assemblies",
       "chromosomes",
       null,
+      "2026.09",
+      "external",
     ]);
+    // A release or site switch must not reuse the previous chromosomes.
+    expect(queryKeys.assemblies.chromosomes("wm82-v4", { ...base, releaseId: "2026.10" })).not.toEqual(
+      queryKeys.assemblies.chromosomes("wm82-v4", base),
+    );
+    expect(queryKeys.assemblies.chromosomes("wm82-v4", { ...base, siteVariant: "internal" })).not.toEqual(
+      queryKeys.assemblies.chromosomes("wm82-v4", base),
+    );
   });
 
   it("keeps gene details within their domain prefix", () => {
@@ -112,6 +136,14 @@ describe("queryKeys", () => {
     expect(queryKeys.genes.search({ ...base, siteVariant: "internal" })).not.toEqual(geneKey);
     // Pagination within the same context shares one cache entry.
     expect(queryKeys.genes.search({ ...base, page: 2 })).not.toEqual(geneKey);
+    // Every server-affecting filter/sort must key the cache: the route sends
+    // chromosome, biotype, page size and sort, so omitting them showed prior
+    // rows after a filter change.
+    expect(queryKeys.genes.search({ ...base, chromosome: "Chr02" })).not.toEqual(geneKey);
+    expect(queryKeys.genes.search({ ...base, biotype: "protein_coding" })).not.toEqual(geneKey);
+    expect(queryKeys.genes.search({ ...base, pageSize: 50 })).not.toEqual(geneKey);
+    expect(queryKeys.genes.search({ ...base, sortBy: "variant_count" })).not.toEqual(geneKey);
+    expect(queryKeys.genes.search({ ...base, sortDir: "desc" })).not.toEqual(geneKey);
   });
 
   it("scopes mutant caches by mutagen/release/site and keys detail by public id", () => {
@@ -149,7 +181,7 @@ describe("queryKeys", () => {
     expect(queryKeys.variants.list({ ...base, end: 3000 })).not.toEqual(key);
     expect(queryKeys.variants.list({ ...base, impact: "LOW" })).not.toEqual(key);
     expect(queryKeys.variants.list({ ...base, variantType: "SNP" })).not.toEqual(key);
-    expect(queryKeys.variants.list({ ...base, mutantLineId: "SM7QF3Z" })).not.toEqual(key);
+    expect(queryKeys.variants.list({ ...base, mutantLinePublicId: "SM7QF3Z" })).not.toEqual(key);
     // P1-04: the cursor is sent to the API, so it must key the cache too. A
     // cursor URL that happens to share a page index with page one otherwise
     // reads page one's cached rows.

@@ -8,8 +8,8 @@ import {
   type AssemblyInfo,
   type SeqFetchResponse,
 } from "@soymutdb/api-client";
-import { ConfigProvider, createThemeConfig } from "@soymutdb/ui-vue";
 
+import PortalLayout from "../components/PortalLayout.vue";
 import { assembliesQueryOptions } from "../lib/query-options";
 import { t } from "../lib/i18n";
 
@@ -139,8 +139,8 @@ function clearForm() {
 </script>
 
 <template>
-  <ConfigProvider :theme="createThemeConfig({ dark: false })">
-    <main class="mx-auto max-w-6xl p-8">
+  <PortalLayout>
+    <div class="mx-auto max-w-6xl px-4 py-8">
       <p class="text-sm opacity-70">
         <RouterLink to="/tools" class="underline">{{ t("home.tasks") }}</RouterLink>
       </p>
@@ -348,6 +348,6 @@ function clearForm() {
           </div>
         </section>
       </div>
-    </main>
-  </ConfigProvider>
+    </div>
+  </PortalLayout>
 </template>

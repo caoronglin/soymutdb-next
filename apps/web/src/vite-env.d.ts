@@ -1,17 +1,25 @@
-/// <reference types="vite/client" />
-
-// Deployment inputs consumed by the Vue portal. Declared explicitly so views
-// cannot read an unvalidated/untyped env value (or invent a differently named
-// variable such as VITE_JBROWSE_URL) without a type error.
 interface ImportMetaEnv {
+  readonly BASE_URL: string;
+  readonly PROD: boolean;
   readonly VITE_API_BASE_URL?: string;
   readonly VITE_BASE_URL?: string;
+  readonly VITE_DEMO_MODE?: string;
+  readonly VITE_DEPLOYMENT_MODE?: string;
   readonly VITE_JBROWSE_BASE_URL?: string;
   readonly VITE_JBROWSE_ENABLED?: string;
+  readonly VITE_JBROWSE_URL?: string;
   readonly VITE_SITE_VARIANT?: string;
   readonly VITE_SOYMUTDB_RELEASE_ID?: string;
+  readonly VITE_SW_ENABLED?: string;
 }
 
 interface ImportMeta {
   readonly env: ImportMetaEnv;
+}
+
+declare const __SOYMUTDB_INTERNAL_SITE__: boolean;
+
+declare module "pdfjs-dist/build/pdf.worker.min.mjs?url" {
+  const workerUrl: string;
+  export default workerUrl;
 }

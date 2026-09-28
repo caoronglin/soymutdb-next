@@ -43,8 +43,15 @@ RELEASE_SERVICES = {
 PLATFORM_CATALOG = {
     "typescript": "5.9.3",
     "vite": "6.4.3",
-    # Vue mainline (plan.md §2, Phase D): the migrated portal consumes these
-    # through the same reviewed catalog decision as the React platform.
+    "@umijs/max": "4.7.20",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "antd": "6.6.5",
+    "echarts": "5.5.1",
+    "@ant-design/pro-components": "3.1.15-2",
+    # Vue packages remain only while legacy sources/tests are being retired.
     "vue": "3.5.43",
     "@vitejs/plugin-vue": "6.0.9",
     "vitest": "3.2.7",
@@ -169,77 +176,56 @@ def workspace_catalog() -> dict:
 
 
 def test_frontend_platform_lines_remain_bounded() -> None:
-    """The React line and the Vue line both stay pinned, each where it is used.
-
-    `apps/web` is the Vue portal, so it carries no React dependency at all; the
-    React line is bounded where a React app actually ships (admin, JBrowse), and
-    the Vue line is bounded in the portal.
-    """
+    """All production frontends share the catalog-pinned React/Umi platform."""
     root_package = _json("package.json")
     workspace = yaml.safe_load((ROOT / "pnpm-workspace.yaml").read_text(encoding="utf-8"))
 
     assert root_package["devDependencies"]["typescript"].startswith("^5.9.")
-    # React is fully retired: no catalog entry, no override, no app dependency.
     assert "react" not in workspace.get("overrides", {})
     assert "react-dom" not in workspace.get("overrides", {})
-    assert "react" not in workspace["catalog"]
-    assert "react-dom" not in workspace["catalog"]
 
-    jbrowse = _json("apps/jbrowse/package.json")
-    for dependency in (
-        "react",
-        "react-dom",
-        "react-i18next",
-        "@jbrowse/react-linear-genome-view",
-        "@jbrowse/core",
-    ):
-        assert dependency not in jbrowse["dependencies"], (
-            f"apps/jbrowse still depends on {dependency}: the shell is Vue-only"
-        )
-    assert jbrowse["dependencies"]["vue"] == "catalog:"
-    assert jbrowse["devDependencies"]["typescript"].startswith("^5.9.")
-    assert jbrowse["devDependencies"]["vite"].startswith("^6.")
-
-    # The admin console is Vue now: the React line is bounded only where a React
-    # app actually ships (JBrowse).
-    admin = _json("apps/admin/package.json")
-    for dependency in ("react", "react-dom", "antd", "@tanstack/react-router", "@tiptap/react"):
-        assert dependency not in admin["dependencies"], (
-            f"apps/admin still depends on {dependency}: the console is Vue-only"
-        )
-    assert admin["dependencies"]["vue"] == "catalog:"
-
-    portal = _json("apps/web/package.json")
-    for dependency in ("react", "react-dom", "antd", "echarts", "@tanstack/react-router"):
-        assert dependency not in portal["dependencies"], (
-            f"apps/web still depends on {dependency}: the portal is Vue-only"
-        )
-    # The portal consumes Vue through the same reviewed catalog decision as the
-    # React line consumes React, so the assertion is on the catalog entry.
-    assert portal["dependencies"]["vue"] == "catalog:"
-    assert workspace["catalog"]["vue"] == "3.5.43"
-    assert portal["devDependencies"]["typescript"] == "catalog:"
-    assert portal["devDependencies"]["vite"] == "catalog:"
-    assert workspace["catalog"]["typescript"] == "5.9.3"
-    assert workspace["catalog"]["vite"] == "6.4.3"
-
-
-def test_tiptap_family_is_gone_with_the_react_editor() -> None:
-    """The tiptap rich-text editor is not part of the Vue console.
-
-    The React admin shipped a tiptap-based news editor and pinned the whole
-    `@tiptap/*` family above GHSA-j95f-988m-3j2f. The Vue console authors news as
-    Markdown (the portal sanitises it on render), so the family is removed rather
-    than carried: an unpinned advisory surface with no consumer is the worst of
-    both. If an editor is added back, this guard must come back with it.
-    """
-    for app in ("admin", "web"):
+    for app in ("web", "admin", "jbrowse"):
         package = _json(f"apps/{app}/package.json")
-        pins = [name for name in package["dependencies"] if name.startswith("@tiptap/")]
-        assert pins == [], f"apps/{app} should not depend on {pins}"
+        for dependency in (
+            "react",
+            "react-dom",
+            "antd",
+            "@ant-design/pro-components",
+            "@umijs/max",
+            "@soymutdb/ui-react",
+        ):
+            assert package["dependencies"].get(dependency) in ("catalog:", "workspace:*"), (
+                f"apps/{app} must use the shared React platform for {dependency}"
+            )
+        assert package["devDependencies"]["typescript"] == "catalog:"
 
-    catalog = workspace_catalog()
-    assert not [name for name in catalog if name.startswith("@tiptap/")]
+    assert workspace["catalog"]["react"] == "19.3.0"
+    assert workspace["catalog"]["react-dom"] == "19.3.0"
+    assert workspace["catalog"]["@umijs/max"] == "4.7.20"
+    assert workspace["catalog"]["antd"] == "6.6.5"
+    assert workspace["catalog"]["@ant-design/pro-components"] == "3.1.15-2"
+    # Vue packages are temporarily retained for legacy source/test retirement;
+    # none is a production dependency of the React applications.
+    for app in ("web", "admin", "jbrowse"):
+        package = _json(f"apps/{app}/package.json")
+        assert "vue" not in package["dependencies"], app
+
+
+def test_tiptap_family_is_pinned_for_the_react_admin_editor() -> None:
+    admin = _json("apps/admin/package.json")
+    pins = {
+        name: version
+        for name, version in admin["dependencies"].items()
+        if name.startswith("@tiptap/")
+    }
+    assert pins
+    assert set(pins.values()) == {"3.31.3"}
+    assert not [
+        name
+        for name in _json("apps/web/package.json")["dependencies"]
+        if name.startswith("@tiptap/")
+    ]
+
 
 def test_workspace_security_override_holds_the_js_yaml_floor() -> None:
     """The js-yaml floor must clear GHSA-2883-xcg3-v3hh.
@@ -266,34 +252,32 @@ def test_workspace_catalog_pins_platform_dependencies() -> None:
     assert workspace["catalog"] == PLATFORM_CATALOG
 
 
-def test_dependency_build_scripts_are_fail_closed_except_for_esbuild() -> None:
+def test_dependency_build_scripts_are_fail_closed_except_for_reviewed_tools() -> None:
     workspace = yaml.safe_load((ROOT / "pnpm-workspace.yaml").read_text(encoding="utf-8"))
 
-    # vue-demi's postinstall selects the installed Vue runtime for the VueUse
-    # line; everything else stays denied by default.
-    assert workspace["allowBuilds"] == {"esbuild": True, "vue-demi": True}
+    assert workspace["allowBuilds"] == {
+        "esbuild": True,
+        "core-js": False,
+        "core-js-pure": False,
+        "es5-ext": False,
+        "vue-demi": True,
+    }
 
 
 def test_antd_consumers_resolve_from_workspace_catalog() -> None:
-    """AntD stays a catalog decision for the React apps that still use it.
-
-    The portal moved to `@soymutdb/ui-vue` (Antdv Next behind a facade), so it no
-    longer resolves AntD at all — that is the point of the facade.
-    """
-    for app in ("web", "admin"):
+    for app in ("web", "admin", "jbrowse"):
         package = _json(f"apps/{app}/package.json")
-        assert "antd" not in package["dependencies"], app
-        assert "@soymutdb/ui-vue" in package["dependencies"], app
+        assert package["dependencies"]["antd"] == "catalog:", app
+        assert package["dependencies"]["@soymutdb/ui-react"] == "workspace:*", app
 
 
-def test_pro_components_dependency_is_removed_after_source_migration() -> None:
-    for app in ("web", "admin"):
+def test_pro_components_is_resolved_through_the_shared_facade() -> None:
+    for app in ("web", "admin", "jbrowse"):
         package = _json(f"apps/{app}/package.json")
-        assert "@ant-design/pro-components" not in package["dependencies"]
-    assert "@ant-design/pro-components" not in workspace_catalog()
-
-    admin_vite = (ROOT / "apps/admin/vite.config.ts").read_text(encoding="utf-8")
-    assert "@ant-design/pro-components" not in admin_vite
+        assert package["dependencies"]["@ant-design/pro-components"] == "catalog:", app
+    assert workspace_catalog()["@ant-design/pro-components"] == "3.1.15-2"
+    facade = (ROOT / "packages/ui-react/src/index.tsx").read_text(encoding="utf-8")
+    assert 'from "@ant-design/pro-components"' in facade
 
 
 def test_legacy_shared_ui_package_is_not_copied_into_ci_images() -> None:

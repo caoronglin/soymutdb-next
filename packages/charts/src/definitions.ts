@@ -1,22 +1,13 @@
 /**
- * Chart definitions for the portal.
+ * Public chart definitions used by the shared React chart facade.
  *
- * A definition is a TanStack Charts *spec*: the marks to draw plus the scales
- * they bind to. Keeping them here — rather than in the views — is what makes the
- * runtime swappable: a version bump, or a different chart library, changes this
- * module and nothing else.
- *
- * The data is bound into the mark when the definition is built, so a view
- * memoizes one definition per dataset (see `useChartDefinition`). Every chart in
- * the portal also renders its exact-value table; that lives in `ChartFigure`,
- * not here.
+ * The portal keeps charts behind this package so chart-runtime choices do not
+ * leak into route components. Every definition is an ECharts option and is
+ * paired with an exact-value table by `ChartFigure`.
  */
-import { areaY, barY, defineChart } from "@tanstack/charts";
-import { scaleBand } from "@tanstack/charts/scales/band";
-import { scaleLinear } from "@tanstack/charts/scales/linear";
-import type { ChartDefinition as RuntimeChartDefinition } from "@tanstack/vue-charts";
+import type { EChartsOption } from "echarts";
 
-export type ChartDefinition = RuntimeChartDefinition<never, never, never>;
+export type ChartDefinition = EChartsOption;
 
 /** A category/value pair — the shape every summary endpoint returns. */
 export interface CategoryValue {
@@ -37,9 +28,6 @@ export interface SeriesValue extends CategoryValue {
 
 export const CHART_HEIGHT = 280;
 
-/** Band scale for the categorical axis of every bar chart here. */
-const categoryScale = () => scaleBand<string>().padding(0.12);
-
 export interface CategoryChartOptions {
   /** Label for the numeric axis. */
   valueLabel?: string;
@@ -48,41 +36,65 @@ export interface CategoryChartOptions {
 }
 
 /**
- * A bar chart over one categorical field.
- *
- * `seriesKey: "series"` splits each category into a bar per series, which is how
- * the consequence/impact and mutagen charts read.
+ * A bar chart over one categorical field. With `seriesKey: "series"`, each
+ * named series is rendered as a separate bar group for every category.
  */
 export function categoryBarChart<TDatum extends CategoryValue>(
   data: readonly TDatum[],
   options: CategoryChartOptions = {},
 ): ChartDefinition {
-  return defineChart({
-    marks: [
-      barY(data, {
-        x: (datum: TDatum) => datum.category,
-        y: (datum: TDatum) => datum.value,
-        ...(options.seriesKey === "series"
-          ? ({ z: (datum: TDatum & Partial<SeriesValue>) => datum.series ?? "" } as never)
-          : {}),
-      }),
-    ],
-    scales: {
-      x: { scale: categoryScale },
-      y: { scale: scaleLinear, nice: true, grid: true, axis: { label: options.valueLabel ?? "" } },
+  const categories = [...new Set(data.map((datum) => datum.category))];
+  const grouped = options.seriesKey === "series";
+  const seriesNames = grouped
+    ? [...new Set(data.map((datum) => (datum as TDatum & Partial<SeriesValue>).series ?? ""))]
+    : [""];
+  const valuesByGroup = new Map<string, Map<string, number>>();
+
+  for (const datum of data) {
+    const seriesName = grouped ? (datum as TDatum & Partial<SeriesValue>).series ?? "" : "";
+    const values = valuesByGroup.get(seriesName) ?? new Map<string, number>();
+    values.set(datum.category, (values.get(datum.category) ?? 0) + datum.value);
+    valuesByGroup.set(seriesName, values);
+  }
+
+  return {
+    color: ["#2f855a", "#75a987", "#d89b47", "#6f8fa8", "#8f79a6"],
+    tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
+    ...(grouped ? { legend: { top: 4, type: "scroll" } } : {}),
+    grid: { left: 56, right: 24, top: grouped ? 46 : 20, bottom: 56, containLabel: true },
+    xAxis: {
+      type: "category",
+      data: categories,
+      axisLabel: { interval: 0, rotate: categories.length > 8 ? 30 : 0 },
     },
-  }) as unknown as ChartDefinition;
+    yAxis: { type: "value", name: options.valueLabel ?? "", nameLocation: "middle", nameGap: 42, min: 0 },
+    series: seriesNames.map((name) => ({
+      name,
+      type: "bar" as const,
+      data: categories.map((category) => valuesByGroup.get(name)?.get(category) ?? 0),
+      ...(grouped ? { barGap: "15%" } : {}),
+    })),
+  };
 }
 
-/** An area chart over a date-like x axis. */
+/** An area chart over ISO date strings. */
 export function trendAreaChart(data: readonly TrendPoint[]): ChartDefinition {
-  return defineChart({
-    marks: [areaY(data, { x: (datum: TrendPoint) => datum.date, y: (datum: TrendPoint) => datum.value })],
-    scales: {
-      x: { scale: scaleLinear, nice: true, grid: true, axis: { label: "Date" } },
-      y: { scale: scaleLinear, nice: true, grid: true, axis: { label: "Variants" } },
-    },
-  }) as unknown as ChartDefinition;
+  return {
+    color: ["#2f855a"],
+    tooltip: { trigger: "axis" },
+    grid: { left: 64, right: 24, top: 20, bottom: 48, containLabel: true },
+    xAxis: { type: "category", boundaryGap: false, data: data.map((datum) => datum.date) },
+    yAxis: { type: "value", name: "Variants", nameLocation: "middle", nameGap: 48, min: 0 },
+    series: [
+      {
+        name: "Variants",
+        type: "line",
+        smooth: false,
+        symbol: "circle",
+        symbolSize: 5,
+        areaStyle: { opacity: 0.22 },
+        data: data.map((datum) => datum.value),
+      },
+    ],
+  };
 }
-
-export { areaY, barY, defineChart, scaleBand, scaleLinear };

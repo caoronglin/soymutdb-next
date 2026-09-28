@@ -6,8 +6,19 @@ Endpoints:
 
 The live fetch uses httpx.AsyncClient with a 10-second timeout.  Results are
 cached in Redis keyed by accession so repeated loads are instant and we avoid
-hammering NCBI.  On cache miss + network failure we fall back to bundled
-sample data for the demo accession SRR30334525.
+hammering NCBI.
+
+No-fabrication contract
+-----------------------
+When the live fetch fails the endpoint returns **503**. It must never present
+bundled fixture data as the requested accession's record: the previous
+implementation answered ``SRR30334525`` from a fixture and synthesised an
+``"unknown"`` stub for any other accession, so a client could not distinguish
+real metadata from a placeholder.
+
+Bundled fixtures are served only when the deployment sets
+``SOYMUTDB_DEMO_FIXTURES_ENABLED=true`` *and* the request is for the fixture's
+own accession; responses are labelled ``source="demo"``.
 """
 from __future__ import annotations
 
@@ -20,8 +31,9 @@ from typing import Any
 import httpx
 from fastapi import APIRouter, HTTPException
 
+from ...core.config import get_settings
 from ...core.database import get_redis
-from ...widgets.data_sources.sample_data import SRA_SRR30334525, SOYBEAN_SRA_SAMPLES
+from ...widgets.data_sources.sample_data import SOYBEAN_SRA_SAMPLES, SRA_SRR30334525
 
 logger = logging.getLogger(__name__)
 
@@ -122,40 +134,49 @@ async def get_sra_run(accession: str) -> dict[str, Any]:
             pass
         return payload
 
-    # 3. Fallback — bundled sample data
-    if accession == "SRR30334525":
-        fallback = _enrich_run(dict(SRA_SRR30334525), accession)
+    # 3. Explicit demo mode only: the bundled fixture is served for its *own*
+    #    accession and labelled as demo data, never as the requested record.
+    if get_settings().demo_fixtures_enabled and accession == "SRR30334525":
         return {
-            "run": fallback,
+            "run": _enrich_run(dict(SRA_SRR30334525), accession),
             "accession": accession,
-            "source": "fallback",
+            "source": "demo",
             "cached": False,
-            "error": "Live NCBI fetch failed; showing bundled sample data",
+            "error": (
+                "Live NCBI fetch failed; serving the bundled demo fixture for "
+                "this accession (demo mode is enabled)."
+            ),
         }
 
-    # 4. Unknown accession + network failure — return a minimal stub
-    stub = {
-        "Run": accession,
-        "sra_url": f"https://trace.ncbi.nlm.nih.gov/Traces/sra?run={accession}",
-        "ScientificName": "unknown",
-        "LibraryStrategy": "unknown",
-        "Platform": "unknown",
-        "release_date_short": "",
-    }
-    return {
-        "run": stub,
-        "accession": accession,
-        "source": "stub",
-        "cached": False,
-        "error": "Unable to fetch metadata from NCBI and accession is not in local cache",
-    }
+    # 4. Live fetch failed and no fixture applies: fail closed. Returning a
+    #    synthesised record here would be indistinguishable from real metadata.
+    raise HTTPException(
+        status_code=503,
+        detail=(
+            f"SRA metadata for {accession} is temporarily unavailable "
+            "(upstream NCBI request failed). Retry shortly."
+        ),
+    )
 
 
-@router.get("/samples", summary="List curated SRA samples (default species: soybean)")
+@router.get("/samples", summary="List bundled demo SRA samples")
 async def list_soybean_samples() -> dict[str, Any]:
-    """Return a small curated list of SRA runs for the current default species
-    (soybean, Glycine max) for demo / quick-load purposes.  This is static data
-    bundled with the backend."""
+    """Return the bundled curated SRA runs, in explicit demo mode only.
+
+    This endpoint is static fixture data, not a release-scoped query, so it is
+    disabled unless ``SOYMUTDB_DEMO_FIXTURES_ENABLED=true``. Otherwise it
+    returned fabricated soybean/Zea records in production builds where a client
+    would reasonably treat them as database contents.
+    """
+    if not get_settings().demo_fixtures_enabled:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "Bundled SRA demo samples are disabled in this deployment; "
+                "query GET /sra/run/{accession} for live NCBI metadata."
+            ),
+        )
+
     enriched = []
     for s in SOYBEAN_SRA_SAMPLES:
         r = dict(s)
@@ -164,10 +185,10 @@ async def list_soybean_samples() -> dict[str, Any]:
         release = r.get("ReleaseDate", "")
         r["release_date_short"] = release[:10] if len(release) >= 10 else release
         enriched.append(r)
-    # Include the demo Zea mays run too so users can see it
     demo = _enrich_run(dict(SRA_SRR30334525), "SRR30334525")
     return {
         "samples": enriched,
         "demo": demo,
         "total": len(enriched) + 1,
+        "source": "demo",
     }

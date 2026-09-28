@@ -90,6 +90,11 @@ class Settings(BaseSettings):
     # baseline deployment after an explicit operator opt-in. Its routes also
     # require a loopback TCP peer; this flag never changes public search APIs.
     local_test_preview_enabled: bool = False
+    # Bundled demo fixtures (SRA sample runs, the demo Zea mays run) are only
+    # served when a deployment explicitly opts in. Without this flag a live
+    # upstream failure returns 503 instead of presenting fixture data as if it
+    # were the requested record.
+    demo_fixtures_enabled: bool = False
     api_v1_prefix: str = "/api/v1"
     debug: bool = False
 

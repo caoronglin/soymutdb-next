@@ -354,3 +354,347 @@ pre,
   background: var(--background);
   color: var(--foreground);
 }
+
+/* ==========================================================================
+   Admin shell + page composition primitives.
+
+   Every admin view is "page header (title + description + primary action) →
+   content card". These classes are the single definition of that structure;
+   they only consume the tokens above, so a theme change (including dark) cannot
+   leave one page behind. Declared in `components` so a Tailwind utility on the
+   same element still wins when a page genuinely needs to deviate.
+   ========================================================================== */
+@layer components {
+
+  /* ---- Page skeleton ---- */
+  .admin-page {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+
+  .admin-page-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem 1rem;
+  }
+
+  .admin-page-heading {
+    min-width: 0;
+    max-width: 48rem;
+  }
+
+  .admin-page-title {
+    font-family: var(--font-serif);
+    font-size: 1.375rem;
+    font-weight: 600;
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+  }
+
+  .admin-page-desc {
+    margin-top: 0.3rem;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    color: var(--muted-foreground);
+  }
+
+  .admin-page-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .admin-section-title {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--foreground);
+  }
+
+  .admin-section-desc {
+    margin-top: 0.2rem;
+    font-size: 0.8125rem;
+    color: var(--muted-foreground);
+  }
+
+  /* ---- Card ---- */
+  .admin-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--card);
+    color: var(--card-foreground);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .admin-card-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.5rem 1rem;
+    border-bottom: 1px solid var(--border);
+    padding: 0.875rem 1rem;
+  }
+
+  .admin-card-body {
+    padding: 1rem;
+  }
+
+  .admin-card-foot {
+    border-top: 1px solid var(--border);
+    padding: 0.75rem 1rem;
+  }
+
+  /* ---- Toolbar (filters, view switches) ---- */
+  .admin-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--muted);
+    padding: 0.75rem 1rem;
+  }
+
+  .admin-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    font-size: 0.8125rem;
+    color: var(--muted-foreground);
+  }
+
+  .admin-control {
+    min-height: 2.125rem;
+    border: 1px solid var(--input);
+    border-radius: var(--radius);
+    background: var(--background);
+    padding: 0.35rem 0.6rem;
+    font-size: 0.875rem;
+    color: var(--foreground);
+  }
+
+  .admin-control:disabled {
+    opacity: 0.6;
+  }
+
+  .admin-control--mono {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+  }
+
+  /* ---- Tables: one density for the whole console ---- */
+  .admin-table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--card);
+  }
+
+  .admin-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8125rem;
+  }
+
+  .admin-table>thead>tr {
+    background: var(--muted);
+  }
+
+  .admin-table th {
+    padding: 0.55rem 0.75rem;
+    text-align: left;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted-foreground);
+    white-space: nowrap;
+  }
+
+  .admin-table td {
+    padding: 0.6rem 0.75rem;
+    border-top: 1px solid var(--border);
+    vertical-align: top;
+  }
+
+  .admin-table tbody tr:hover {
+    background: color-mix(in oklab, var(--muted) 60%, transparent);
+  }
+
+  .admin-table-num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .admin-row-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .admin-link {
+    color: var(--primary);
+    font-size: 0.8125rem;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .admin-link--danger {
+    color: var(--destructive);
+  }
+
+  /* ---- States: loading / error / empty ---- */
+  .admin-state {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.4rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--muted);
+    padding: 0.9rem 1rem;
+    font-size: 0.875rem;
+    color: var(--muted-foreground);
+  }
+
+  .admin-state--error {
+    border-color: color-mix(in oklab, var(--destructive) 40%, var(--border));
+    background: color-mix(in oklab, var(--destructive) 8%, var(--card));
+    color: var(--destructive);
+  }
+
+  .admin-state--empty {
+    border-style: dashed;
+    background: transparent;
+  }
+
+  .admin-state-title {
+    font-weight: 600;
+    color: var(--foreground);
+  }
+
+  .admin-state--error .admin-state-title {
+    color: var(--destructive);
+  }
+
+  .admin-skeleton {
+    height: 3.25rem;
+    border-radius: var(--radius);
+  }
+
+  /* ---- Stat card ---- */
+  .admin-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--card);
+    padding: 1rem;
+  }
+
+  .admin-stat-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+
+  .admin-stat-label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted-foreground);
+  }
+
+  .admin-stat-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: var(--radius);
+    background: color-mix(in oklab, var(--primary) 12%, transparent);
+    color: var(--primary);
+  }
+
+  .admin-stat-value {
+    font-size: 1.75rem;
+    font-weight: 600;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .admin-stat-trend {
+    font-size: 0.75rem;
+    color: var(--muted-foreground);
+  }
+
+  .admin-stat-trend[data-positive="true"] {
+    color: var(--primary);
+  }
+
+  .admin-stat-trend[data-positive="false"] {
+    color: var(--destructive);
+  }
+
+  /* ---- Segmented control (variant switches) ---- */
+  .admin-segmented {
+    display: inline-flex;
+    gap: 0.25rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--muted);
+    padding: 0.25rem;
+  }
+
+  .admin-segmented>button {
+    border-radius: var(--radius);
+    padding: 0.3rem 0.75rem;
+    font-size: 0.8125rem;
+    color: var(--muted-foreground);
+  }
+
+  .admin-segmented>button[aria-selected="true"],
+  .admin-segmented>button[data-selected="true"] {
+    background: var(--card);
+    color: var(--foreground);
+    font-weight: 500;
+    box-shadow: var(--shadow-sm);
+  }
+
+  /* ---- Sidebar section heading ---- */
+  .admin-nav-section-label {
+    padding: 0 0.75rem 0.25rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: color-mix(in oklab, var(--muted-foreground) 80%, transparent);
+  }
+
+  /* ---- Async notification pill (unread count) ---- */
+  .admin-dot {
+    position: absolute;
+    top: 0.15rem;
+    right: 0.15rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1rem;
+    height: 1rem;
+    border-radius: 999px;
+    background: var(--destructive);
+    padding: 0 0.2rem;
+    font-size: 0.625rem;
+    font-weight: 700;
+    color: var(--destructive-foreground);
+  }
+}

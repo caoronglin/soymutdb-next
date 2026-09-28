@@ -12,11 +12,12 @@ accepted from TSV/page definitions (only env config).
 from __future__ import annotations
 
 import hashlib
+import json
 import time
 from pathlib import Path
 
 from .base import DeploymentRef, ValidationEvidence, verify_manifest
-from .http import post_json, request_json
+from .http import post_multipart, request_json
 
 
 class CloudflarePagesAdapter:
@@ -60,6 +61,10 @@ class CloudflarePagesAdapter:
         artifact = Path(deployment.artifact_path)
         files = _collect_files(artifact)
         db = _form_direct_upload(artifact, files)
+        if not files:
+            raise RuntimeError(
+                f"cloudflare deployment for {artifact} has no files to upload"
+            )
         # Create a deployment via the direct-upload endpoint.
         create_url = (
             f"https://api.cloudflare.com/client/v4/accounts/{self.account_id}"
@@ -90,8 +95,51 @@ class CloudflarePagesAdapter:
         return remote_id
 
 
-def _collect_files(artifact: Path) -> list[str]:
-    return sorted(str(p) for p in artifact.rglob("*") if p.is_file())
+#: Content types for the extensions the site build emits. Unknown extensions
+#: are sent as an opaque byte stream rather than guessed.
+_CONTENT_TYPES = {
+    ".html": "text/html; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+    ".js": "text/javascript; charset=utf-8",
+    ".mjs": "text/javascript; charset=utf-8",
+    ".json": "application/json",
+    ".svg": "image/svg+xml",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+    ".woff": "font/woff",
+    ".woff2": "font/woff2",
+    ".txt": "text/plain; charset=utf-8",
+    ".xml": "application/xml",
+    ".map": "application/json",
+}
+
+
+def _collect_files(artifact: Path) -> list[Path]:
+    """Relative file list of the artifact, manifest excluded.
+
+    Returns ``Path`` objects rooted at *artifact* so the uploader can read the
+    bytes; a list of absolute path *strings* (the previous behaviour) describes
+    files the remote API cannot access.
+    """
+    return sorted(
+        (p for p in artifact.rglob("*") if p.is_file() and p.name != "manifest.json"),
+        key=lambda p: p.relative_to(artifact).as_posix(),
+    )
+
+
+def _content_type(path: Path) -> str:
+    return _CONTENT_TYPES.get(path.suffix.lower(), "application/octet-stream")
+
+
+def _upload_files(artifact: Path, files: list[Path]) -> list[tuple[str, str, bytes, str]]:
+    """Read every file's bytes for a multipart direct upload."""
+    parts: list[tuple[str, str, bytes, str]] = []
+    for path in files:
+        rel = path.relative_to(artifact).as_posix()
+        parts.append(("files", rel, path.read_bytes(), _content_type(path)))
+    return parts
 
 
 def _digest(artifact: Path) -> str:
@@ -100,18 +148,34 @@ def _digest(artifact: Path) -> str:
     return manifest_digest_of_file(artifact / "manifest.json")
 
 
-def _form_direct_upload(artifact: Path, files: list[str]) -> dict:
-    hashes = {}
-    for f in files:
-        rel = str(Path(f).relative_to(artifact))
-        hashes[rel] = hashlib.sha256(Path(f).read_bytes()).hexdigest()
-    return {"files": hashes}
+def _form_direct_upload(artifact: Path, files: list[Path]) -> dict:
+    """Relative-path -> SHA-256 map, which is what direct upload validates."""
+    return {
+        path.relative_to(artifact).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in files
+    }
 
 
-def _upload(url: str, headers: dict, manifest_data: dict, files: list[str], artifact: Path) -> str:
-    # POST a JSON manifest + files. In tests, post_json is monkeypatched.
-    body = {"manifest": manifest_data, "files": files}
-    resp = post_json(url, headers=headers, body=body)
+def _upload(
+    url: str,
+    headers: dict,
+    manifest_data: dict,
+    files: list[Path],
+    artifact: Path,
+) -> str:
+    """Upload the artifact as ``multipart/form-data`` with real file bytes.
+
+    The previous implementation POSTed JSON containing absolute local paths and
+    hashes — a body the Cloudflare API cannot act on, so a "successful" upload
+    could not have deployed anything. This sends the manifest plus each file's
+    content.
+    """
+    resp = post_multipart(
+        url,
+        headers=headers,
+        fields={"manifest": json.dumps(manifest_data, sort_keys=True)},
+        files=_upload_files(artifact, files),
+    )
     result = resp.get("result") or {}
     deployment_id = result.get("id") or result.get("deployment_id")
     if not deployment_id:

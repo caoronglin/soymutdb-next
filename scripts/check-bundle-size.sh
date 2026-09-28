@@ -1,109 +1,170 @@
 #!/usr/bin/env bash
 # =============================================================================
-# SoyMutDB Web — G2 体积分块预算门禁 (docs/design/upgrade-plan.md §七)
+# SoyMutDB Web — Umi/Webpack bundle budgets (gzip sizes).
 #
-# 构建后检测 apps/web/dist/assets 下各 chunk 的 gzip 大小（硬门禁）：
-#   ui     (Antdv Next runtime) ≤ 120 KB  (UI_MAX_KB)
-#   vue    (Vue + Router + Pinia) ≤ 45 KB  (VUE_MAX_KB)
-#   query  (TanStack Vue Query)    ≤ 20 KB  (QUERY_MAX_KB)
-#   charts (TanStack Charts)       ≤ 60 KB  (CHARTS_MAX_KB)
-#   主入口 index  ≤ 160 KB  (ENTRY_MAX_KB)
+# The Umi build uses stable cache groups (react/ui/pro/query/charts) instead of
+# Vite's former Vue-specific manualChunks names. Route-only groups may be absent
+# after tree-shaking; every emitted group is still size-checked. Initial scripts
+# referenced by index.html and every individual JS asset have independent caps.
 #
-# 超限 exit 1（CI frontend job 硬门禁；本地也可直接跑）。
-# 未生成的 chunk（如试点期未 import pro-components）打印 SKIP，不计失败。
-# 阈值可用环境变量覆盖（ANTD_MAX_KB / PRO_MAX_KB / ENTRY_MAX_KB）。
-#
-#
-# 用法: bash scripts/check-bundle-size.sh [dist/assets 目录]
+# Usage: bash scripts/check-bundle-size.sh [dist/assets directory]
 # =============================================================================
-set -uo pipefail
+set -euo pipefail
 
-DIST_DIR="${1:-apps/web/dist/assets}"
-UI_MAX_KB="${UI_MAX_KB:-120}"
-VUE_MAX_KB="${VUE_MAX_KB:-45}"
-QUERY_MAX_KB="${QUERY_MAX_KB:-20}"
-CHARTS_MAX_KB="${CHARTS_MAX_KB:-60}"
-ENTRY_MAX_KB="${ENTRY_MAX_KB:-160}"
+DIST_DIR="${1:-apps/web/dist/external/assets}"
+ARTIFACT_ROOT="$(cd "$(dirname "$DIST_DIR")" && pwd)"
+INDEX_HTML="${ARTIFACT_ROOT}/index.html"
+UI_MAX_KB="${UI_MAX_KB:-320}"
+PRO_MAX_KB="${PRO_MAX_KB:-180}"
+REACT_MAX_KB="${REACT_MAX_KB:-100}"
+# Router stack (react-router + @tanstack/router) is its own Umi cache group so a
+# routing change and a React upgrade fail different budgets.
+ROUTER_MAX_KB="${ROUTER_MAX_KB:-100}"
+QUERY_MAX_KB="${QUERY_MAX_KB:-35}"
+CHARTS_MAX_KB="${CHARTS_MAX_KB:-370}"
+ENTRY_MAX_KB="${ENTRY_MAX_KB:-750}"
+CHUNK_MAX_KB="${CHUNK_MAX_KB:-600}"
 
-fail=0
+if ! command -v gzip >/dev/null 2>&1; then
+  echo "Umi bundle check: gzip is required to measure compressed artifact sizes" >&2
+  exit 1
+fi
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "Umi bundle check: python3 is required to read index.html script references" >&2
+  exit 1
+fi
+if [[ ! -d "$DIST_DIR" ]]; then
+  echo "Umi bundle check: assets directory is missing: $DIST_DIR" >&2
+  exit 1
+fi
+if [[ ! -s "$INDEX_HTML" ]]; then
+  echo "Umi bundle check: index.html is missing: $INDEX_HTML" >&2
+  exit 1
+fi
 
-size_kb() { # $1 = file
+shopt -s nullglob
+JS_ASSETS=("$DIST_DIR"/*.js)
+if [[ ${#JS_ASSETS[@]} -eq 0 ]]; then
+  echo "Umi bundle check: no JavaScript assets under $DIST_DIR" >&2
+  exit 1
+fi
+
+size_kb() {
   local bytes
   bytes=$(gzip -c -9 "$1" | wc -c)
-  # ceil(bytes / 1024)
   echo $(((bytes + 1023) / 1024))
 }
 
-check_chunk() { # $1 = 标签  $2 = glob  $3 = 阈值KB  $4 = chunk 名（输出用）
-  local label="$1" glob="$2" max_kb="$3" name="$4"
-  local matched=0
-  for f in "$DIST_DIR"/$glob; do
-    [ -e "$f" ] || continue
-    matched=1
-    local kb
-    kb=$(size_kb "$f")
-    local base
-    base=$(basename "$f")
-    if [ "$kb" -le "$max_kb" ]; then
-      printf '  PASS  %-4s %-6sKB/%s  %s\n' "$label" "$kb" "${max_kb}KB" "$base"
-    else
-      printf '  FAIL  %-4s %-6sKB/%s  %s\n' "$label" "$kb" "${max_kb}KB" "$base"
+fail=0
+check_group() { # $1=label $2=glob $3=limit KB $4=required|optional
+  local label="$1" glob="$2" max_kb="$3" required="$4"
+  local files=("$DIST_DIR"/$glob)
+  if [[ ${#files[@]} -eq 0 ]]; then
+    if [[ "$required" == "required" ]]; then
+      printf '  FAIL  %-8s no %s chunk emitted\n' "$label" "$glob"
       fail=1
+    else
+      printf '  SKIP  %-8s no %s chunk emitted (tree-shaken/not used)\n' "$label" "$glob"
     fi
-  done
-  if [ "$matched" -eq 0 ]; then
-    printf '  SKIP  %-4s (no %s chunk emitted — 页面尚未引用该库)\n' "$label" "$name"
+    return
   fi
-}
 
-
-# Guard the vendor/entry split the Vite config enforces. Splitting the design
-# system and the framework runtimes out of the entry is what keeps the entry
-# budget meaningful; a regression that folds everything back into index-*.js is
-# visible here without changing module assignment.
-require_single_chunk() { # $1 = label  $2 = glob
-  local label="$1" glob="$2" count=0
-  local f
-  for f in "$DIST_DIR"/$glob; do
-    [ -e "$f" ] || continue
-    count=$((count + 1))
+  local total=0 file kb
+  for file in "${files[@]}"; do
+    [[ -f "$file" ]] || continue
+    kb=$(size_kb "$file")
+    total=$((total + kb))
+    printf '  INFO  %-8s %sKB  %s\n' "$label" "$kb" "$(basename "$file")"
   done
-  if [ "$count" -eq 1 ]; then
-    printf '  PASS  %-8s single runtime chunk\n' "$label"
+  if [[ "$total" -le "$max_kb" ]]; then
+    printf '  PASS  %-8s total %sKB/%sKB\n' "$label" "$total" "$max_kb"
   else
-    printf '  FAIL  %-8s expected exactly one %s chunk, found %s\n' "$label" "$glob" "$count"
+    printf '  FAIL  %-8s total %sKB exceeds %sKB\n' "$label" "$total" "$max_kb"
     fail=1
   fi
 }
 
-if ! command -v gzip >/dev/null 2>&1; then
-  echo "G2 bundle check: gzip is required to measure compressed artifact sizes"
+# Resolve script tags from the built HTML rather than guessing Umi's entry name.
+INITIAL_OUTPUT=$(python3 - "$INDEX_HTML" "$ARTIFACT_ROOT" <<'PY'
+from html.parser import HTMLParser
+from pathlib import Path
+from urllib.parse import urlsplit
+import sys
+
+html_path = Path(sys.argv[1])
+root = Path(sys.argv[2])
+
+class Scripts(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.sources = []
+    def handle_starttag(self, tag, attrs):
+        if tag.lower() == "script":
+            src = dict(attrs).get("src", "")
+            if src:
+                self.sources.append(src)
+
+parser = Scripts()
+parser.feed(html_path.read_text(encoding="utf-8"))
+found = []
+for source in parser.sources:
+    url = urlsplit(source)
+    if url.scheme or url.netloc:
+        continue
+    basename = Path(url.path).name
+    if not basename:
+        continue
+    direct = root / url.path.lstrip("/")
+    candidates = [direct] if direct.is_file() else list(root.rglob(basename))
+    candidates = [path.resolve() for path in candidates if path.is_file()]
+    if candidates:
+        found.append(candidates[0])
+    else:
+        print(f"index.html references a missing local script: {source}", file=sys.stderr)
+        sys.exit(2)
+for path in dict.fromkeys(found):
+    print(path)
+PY
+)
+mapfile -t INITIAL_FILES <<<"$INITIAL_OUTPUT"
+if [[ ${#INITIAL_FILES[@]} -eq 0 || -z "${INITIAL_FILES[0]}" ]]; then
+  echo "Umi bundle check: index.html contains no resolvable local script entry" >&2
   exit 1
 fi
 
-if [ ! -d "$DIST_DIR" ]; then
-  echo "G2 bundle check: dist 目录不存在（$DIST_DIR）— 请先构建 apps/web"
-  exit 1
+INITIAL_TOTAL=0
+for file in "${INITIAL_FILES[@]}"; do
+  kb=$(size_kb "$file")
+  INITIAL_TOTAL=$((INITIAL_TOTAL + kb))
+  printf '  INFO  entry    %sKB  %s\n' "$kb" "$(basename "$file")"
+done
+if [[ "$INITIAL_TOTAL" -le "$ENTRY_MAX_KB" ]]; then
+  printf '  PASS  entry    total %sKB/%sKB\n' "$INITIAL_TOTAL" "$ENTRY_MAX_KB"
+else
+  printf '  FAIL  entry    total %sKB exceeds %sKB\n' "$INITIAL_TOTAL" "$ENTRY_MAX_KB"
+  fail=1
 fi
 
-echo "G2 bundle size budget (gzip):"
-echo "  dir = $DIST_DIR"
-echo "  thresholds: ui<=${UI_MAX_KB}KB  vue<=${VUE_MAX_KB}KB  query<=${QUERY_MAX_KB}KB  charts<=${CHARTS_MAX_KB}KB  entry<=${ENTRY_MAX_KB}KB"
+printf 'Umi bundle size budgets (gzip): dir=%s\n' "$DIST_DIR"
+check_group "react"   'react.*.js'   "$REACT_MAX_KB" required
+check_group "router"  'router.*.js'  "$ROUTER_MAX_KB" required
+check_group "ui"      'ui.*.js'      "$UI_MAX_KB" required
+check_group "query"   'query.*.js'   "$QUERY_MAX_KB" required
+check_group "pro"     'pro.*.js'     "$PRO_MAX_KB" optional
+check_group "charts"  'charts.*.js'  "$CHARTS_MAX_KB" required
 
-require_single_chunk "ui-runtime"     "ui-*.js"
-require_single_chunk "vue-runtime"    "vue-*.js"
-require_single_chunk "query-runtime"  "query-*.js"
-require_single_chunk "charts-runtime" "charts-*.js"
+for file in "${JS_ASSETS[@]}"; do
+  kb=$(size_kb "$file")
+  if [[ "$kb" -le "$CHUNK_MAX_KB" ]]; then
+    printf '  PASS  chunk    %sKB/%sKB  %s\n' "$kb" "$CHUNK_MAX_KB" "$(basename "$file")"
+  else
+    printf '  FAIL  chunk    %sKB exceeds %sKB  %s\n' "$kb" "$CHUNK_MAX_KB" "$(basename "$file")"
+    fail=1
+  fi
+done
 
-check_chunk "ui"     "ui-*.js"     "$UI_MAX_KB"    "design system"
-check_chunk "vue"    "vue-*.js"    "$VUE_MAX_KB"   "framework runtime"
-check_chunk "query"  "query-*.js"  "$QUERY_MAX_KB"  "vue-query"
-check_chunk "charts" "charts-*.js" "$CHARTS_MAX_KB" "charts"
-check_chunk "entry"  "index-*.js"  "$ENTRY_MAX_KB" "app entry"
-
-if [ "$fail" -ne 0 ]; then
-  echo "G2 bundle check: FAILED — 超阈值的 chunk 见上，需拆分或优化（阈值可用环境变量覆盖）"
+if [[ "$fail" -ne 0 ]]; then
+  echo "Umi bundle check: FAILED — split or optimize the oversized bundle(s)" >&2
   exit 1
 fi
-echo "G2 bundle check: OK"
-exit 0
+echo "Umi bundle check: OK"

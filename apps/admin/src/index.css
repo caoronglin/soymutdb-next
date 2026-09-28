@@ -1,0 +1,349 @@
+@import "tailwindcss";
+
+/* NOTE: @fontsource/* 字体 CSS 已移至 src/main.tsx 以 JS import 方式引入。
+   Tailwind v4 postcss 内联 node_modules CSS 时会错误改写其内部
+   url(./files/...) 相对路径：产物 CSS 仍写 `./files/jetbrains-mono-*.woff2`，
+   而 assets/files/ 从未被 emit → 管理端等宽字体 404。
+   改为 JS import 后由 Vite 按各 CSS 模块自身路径解析，字体正常打包。
+   （web 端同一问题、同一修法，见 apps/web/src/index.css 的同名注释。） */
+
+/* AntD 6 layer order (docs/design/upgrade-plan.md §二, oracle R1) — antd
+   styles sit below Tailwind's theme/design/base/components/utilities layers
+   so widget/header styling is not overridden by antd. Must include the
+   `design` layer. */
+@layer antd, theme, design, base, components, utilities;
+
+@theme {
+    --font-sans: "HarmonyOS Sans SC", ui-sans-serif, system-ui, sans-serif;
+    --font-serif: "HarmonyOS Sans SC", ui-sans-serif, system-ui, sans-serif;
+    /* Alias so Admin utility classes using `font-display` resolve consistently. */
+    --font-display: "HarmonyOS Sans SC", ui-sans-serif, system-ui, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
+
+    --radius: 0.55rem;
+
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+    --color-popover: var(--popover);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-secondary: var(--secondary);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-border: var(--border);
+    --color-input: var(--input);
+    --color-ring: var(--ring);
+    --color-destructive: var(--destructive);
+    --color-destructive-foreground: var(--destructive-foreground);
+
+    --color-chart-1: var(--chart-1);
+    --color-chart-2: var(--chart-2);
+    --color-chart-3: var(--chart-3);
+    --color-chart-4: var(--chart-4);
+    --color-chart-5: var(--chart-5);
+
+    --color-impact-high: var(--impact-high);
+    --color-impact-moderate: var(--impact-moderate);
+    --color-impact-low: var(--impact-low);
+    --color-impact-modifier: var(--impact-modifier);
+}
+
+:root {
+    color-scheme: light;
+    --radius: 0.625rem;
+    --radius-lg: 0.875rem;
+    --radius-xl: 1.125rem;
+    --background: oklch(0.991 0.004 148);
+    --foreground: oklch(0.195 0.028 152);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.195 0.028 152);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.195 0.028 152);
+    --primary: oklch(0.46 0.13 152);
+    --primary-foreground: oklch(0.988 0.004 148);
+    --primary-glow: oklch(0.46 0.13 152 / 0.35);
+    --primary-gradient-start: oklch(0.52 0.14 150);
+    --primary-gradient-end: oklch(0.40 0.12 154);
+    --secondary: oklch(0.955 0.028 148);
+    --secondary-foreground: oklch(0.29 0.07 152);
+    --muted: oklch(0.968 0.012 148);
+    --muted-foreground: oklch(0.48 0.028 152);
+    --accent: oklch(0.928 0.048 148);
+    --accent-foreground: oklch(0.28 0.075 152);
+    --border: oklch(0.905 0.02 148);
+    --input: oklch(0.905 0.02 148);
+    --ring: oklch(0.55 0.14 152);
+    --destructive: oklch(0.58 0.22 27);
+    --destructive-foreground: oklch(0.988 0.004 148);
+    --chart-1: oklch(0.55 0.14 152);
+    --chart-2: oklch(0.66 0.12 150);
+    --chart-3: oklch(0.76 0.09 148);
+    --chart-4: oklch(0.85 0.06 146);
+    --chart-5: oklch(0.46 0.11 156);
+    --impact-high: oklch(0.58 0.22 27);
+    --impact-moderate: oklch(0.72 0.16 65);
+    --impact-low: oklch(0.60 0.13 240);
+    --impact-modifier: oklch(0.62 0.025 152);
+    --shadow-sm: 0 1px 2px oklch(0.15 0.03 150 / 0.05);
+    --shadow-md: 0 1px 2px oklch(0.15 0.03 150 / 0.04), 0 8px 24px -12px oklch(0.15 0.03 150 / 0.12);
+    --shadow-lg: 0 2px 4px oklch(0.15 0.03 150 / 0.04), 0 12px 32px -12px oklch(0.15 0.03 150 / 0.16);
+    --code-bg: oklch(0.26 0.015 250);
+    --code-fg: oklch(0.92 0.01 148);
+}
+
+[data-theme="dark"],
+.dark {
+    color-scheme: dark;
+    --background: oklch(0.155 0.014 152);
+    --foreground: oklch(0.955 0.01 148);
+    --card: oklch(0.195 0.018 152);
+    --card-foreground: oklch(0.955 0.01 148);
+    --popover: oklch(0.215 0.018 152);
+    --popover-foreground: oklch(0.955 0.01 148);
+    --primary: oklch(0.70 0.12 151);
+    --primary-foreground: oklch(0.155 0.014 152);
+    --primary-glow: oklch(0.70 0.12 151 / 0.25);
+    --primary-gradient-start: oklch(0.74 0.12 150);
+    --primary-gradient-end: oklch(0.64 0.11 154);
+    --secondary: oklch(0.26 0.03 152);
+    --secondary-foreground: oklch(0.955 0.01 148);
+    --muted: oklch(0.23 0.018 152);
+    --muted-foreground: oklch(0.68 0.025 152);
+    --accent: oklch(0.29 0.045 151);
+    --accent-foreground: oklch(0.955 0.01 148);
+    --border: oklch(0.30 0.02 152);
+    --input: oklch(0.30 0.02 152);
+    --ring: oklch(0.70 0.12 151);
+    --destructive: oklch(0.62 0.22 27);
+    --destructive-foreground: oklch(0.955 0.01 148);
+    --chart-1: oklch(0.70 0.12 151);
+    --chart-2: oklch(0.74 0.11 150);
+    --chart-3: oklch(0.79 0.09 148);
+    --chart-4: oklch(0.85 0.06 146);
+    --chart-5: oklch(0.62 0.10 156);
+    --impact-high: oklch(0.65 0.22 27);
+    --impact-moderate: oklch(0.78 0.16 65);
+    --impact-low: oklch(0.68 0.13 240);
+    --impact-modifier: oklch(0.70 0.025 152);
+    --shadow-sm: 0 1px 2px oklch(0 0 0 / 0.25);
+    --shadow-md: 0 1px 2px oklch(0 0 0 / 0.20), 0 8px 24px -12px oklch(0 0 0 / 0.45);
+    --shadow-lg: 0 2px 4px oklch(0 0 0 / 0.20), 0 12px 32px -12px oklch(0 0 0 / 0.50);
+    --code-bg: oklch(0.18 0.012 250);
+    --code-fg: oklch(0.90 0.01 148);
+}
+
+html,
+body {
+    height: 100%;
+}
+
+body {
+    margin: 0;
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "cv11", "ss01";
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--font-serif);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+code,
+kbd,
+samp,
+pre,
+.font-mono {
+    font-family: var(--font-mono);
+}
+
+:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--muted);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--muted-foreground);
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+/* Admin layout helpers */
+.admin-sidebar-scroll {
+    scrollbar-width: thin;
+}
+
+/* Sidebar active item — inset accent bar */
+.admin-nav-item[data-active="true"] {
+    box-shadow: inset 2.5px 0 0 var(--primary);
+}
+
+/* Running progress bar — animated stripes (disabled under reduced-motion
+   by the global animation-duration override) */
+@keyframes progress-stripes {
+    from {
+        background-position: 1rem 0;
+    }
+
+    to {
+        background-position: 0 0;
+    }
+}
+
+.progress-running {
+    background-image: linear-gradient(45deg,
+            oklch(1 0 0 / 0.28) 25%,
+            transparent 25%,
+            transparent 50%,
+            oklch(1 0 0 / 0.28) 50%,
+            oklch(1 0 0 / 0.28) 75%,
+            transparent 75%,
+            transparent);
+    background-size: 1rem 1rem;
+    animation: progress-stripes 0.9s linear infinite;
+}
+
+/* Fade-in animation for route transitions */
+@keyframes admin-fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.route-fade-in {
+    animation: admin-fade-in 0.2s ease-out;
+}
+
+/* Skeleton shimmer */
+@keyframes shimmer {
+    0% {
+        background-position: -200% 0;
+    }
+
+    100% {
+        background-position: 200% 0;
+    }
+}
+
+.shimmer {
+    background: linear-gradient(90deg,
+            var(--muted) 25%,
+            var(--border) 50%,
+            var(--muted) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+}
+
+/* Card hover lift — transform only, no layout shift */
+.card-lift {
+    transition:
+        transform 300ms ease,
+        box-shadow 300ms ease,
+        border-color 300ms ease;
+    will-change: transform;
+}
+
+.card-lift:hover {
+    transform: translateY(-2px);
+    box-shadow:
+        0 1px 2px rgb(0 0 0 / 0.04),
+        0 8px 24px -12px rgb(0 0 0 / 0.12);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .shimmer {
+        animation: none;
+    }
+
+    .card-lift {
+        transition: none;
+    }
+
+    .card-lift:hover {
+        transform: none;
+        box-shadow: none;
+    }
+}
+
+/* View Transitions API — smooth route-change crossfade */
+::view-transition-old(root) {
+    animation: vt-fade-out 220ms ease both;
+}
+::view-transition-new(root) {
+    animation: vt-fade-in 220ms ease both;
+}
+@keyframes vt-fade-out { from { opacity: 1 } to { opacity: 0 } }
+@keyframes vt-fade-in  { from { opacity: 0 } to { opacity: 1 } }
+@media (prefers-reduced-motion: reduce) {
+    ::view-transition-old(root), ::view-transition-new(root) { animation: none !important; }
+}
+
+/* HarmonyOS Sans SC — local fonts (public/fonts/harmonyos), Latin + CJK.
+   Placed after @theme: Tailwind 4 requires @theme to follow @import directly. */
+@font-face {
+    font-family: "HarmonyOS Sans SC";
+    src: url("../public/fonts/harmonyos/HarmonyOS-Sans-SC-Regular.woff2") format("woff2");
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
+@font-face {
+    font-family: "HarmonyOS Sans SC";
+    src: url("../public/fonts/harmonyos/HarmonyOS-Sans-SC-Medium.woff2") format("woff2");
+    font-weight: 500;
+    font-style: normal;
+    font-display: swap;
+}
+@font-face {
+    font-family: "HarmonyOS Sans SC";
+    src: url("../public/fonts/harmonyos/HarmonyOS-Sans-SC-Bold.woff2") format("woff2");
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+}

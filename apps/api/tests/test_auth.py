@@ -11,7 +11,7 @@ Refresh-token contract (server-side sessions):
   (``soymutdb_refresh``, Path=/api/v1/auth) — never in JSON.
 - ``refresh`` rotates the token server-side; reusing a rotated token
   revokes the whole session family (401).
-- ``refresh`` and ``logout`` require a trusted Origin/Referer header.
+- ``login``, ``refresh`` and ``logout`` require a trusted Origin/Referer header.
 
 .. note:: these tests need a real PostgreSQL (testcontainers) — the
    docker-free equivalents live in ``tests/test_auth_sessions.py``.
@@ -32,6 +32,7 @@ COOKIE_PATH = "/api/v1/auth"
 # round-trips need a host with a dot.
 BASE_URL = "http://test.local"
 SAME_ORIGIN = "http://test.local"
+CLIENT_ORIGIN = "http://test"
 
 
 @pytest_asyncio.fixture
@@ -132,6 +133,7 @@ class TestLogin:
         # Login
         response = await client.post(
             f"{AUTH_PREFIX}/login",
+            headers={"Origin": CLIENT_ORIGIN},
             json={"username": "login@example.com", "password": "TestPass123!"},
         )
         assert response.status_code == 200
@@ -159,6 +161,7 @@ class TestLogin:
 
         response = await client.post(
             f"{AUTH_PREFIX}/login",
+            headers={"Origin": CLIENT_ORIGIN},
             json={"username": "wrongpw@example.com", "password": "WrongPass456!"},
         )
         assert response.status_code == 401
@@ -167,6 +170,7 @@ class TestLogin:
         """Login with non-existent email returns 401."""
         response = await client.post(
             f"{AUTH_PREFIX}/login",
+            headers={"Origin": CLIENT_ORIGIN},
             json={"username": "nobody@example.com", "password": "TestPass123!"},
         )
         assert response.status_code == 401
@@ -175,6 +179,7 @@ class TestLogin:
         """Login with missing fields returns 422."""
         response = await client.post(
             f"{AUTH_PREFIX}/login",
+            headers={"Origin": CLIENT_ORIGIN},
             json={"username": "test@example.com"},
         )
         assert response.status_code == 422
@@ -192,6 +197,7 @@ class TestRefresh:
         await cookie_client.post(f"{AUTH_PREFIX}/register", json=payload)
         login_resp = await cookie_client.post(
             f"{AUTH_PREFIX}/login",
+            headers={"Origin": SAME_ORIGIN},
             json={"username": email, "password": "TestPass123!"},
         )
         assert login_resp.status_code == 200
@@ -300,6 +306,7 @@ class TestMe:
         await client.post(f"{AUTH_PREFIX}/register", json=payload)
         login_resp = await client.post(
             f"{AUTH_PREFIX}/login",
+            headers={"Origin": CLIENT_ORIGIN},
             json={"username": "me@example.com", "password": "TestPass123!"},
         )
         token = login_resp.json()["access_token"]
@@ -327,6 +334,7 @@ class TestChangePassword:
         await client.post(f"{AUTH_PREFIX}/register", json=payload)
         login_resp = await client.post(
             f"{AUTH_PREFIX}/login",
+            headers={"Origin": CLIENT_ORIGIN},
             json={"username": "changepw@example.com", "password": "TestPass123!"},
         )
         token = login_resp.json()["access_token"]
@@ -350,6 +358,7 @@ class TestChangePassword:
         await client.post(f"{AUTH_PREFIX}/register", json=payload)
         login_resp = await client.post(
             f"{AUTH_PREFIX}/login",
+            headers={"Origin": CLIENT_ORIGIN},
             json={"username": "wrongcur@example.com", "password": "TestPass123!"},
         )
         token = login_resp.json()["access_token"]
@@ -389,6 +398,7 @@ class TestLogout:
         await cookie_client.post(f"{AUTH_PREFIX}/register", json=payload)
         login_resp = await cookie_client.post(
             f"{AUTH_PREFIX}/login",
+            headers={"Origin": SAME_ORIGIN},
             json={"username": "logout@example.com", "password": "TestPass123!"},
         )
         token = login_resp.json()["access_token"]
@@ -417,6 +427,7 @@ class TestLogout:
         await cookie_client.post(f"{AUTH_PREFIX}/register", json=payload)
         login_resp = await cookie_client.post(
             f"{AUTH_PREFIX}/login",
+            headers={"Origin": SAME_ORIGIN},
             json={"username": "logoutorigin@example.com", "password": "TestPass123!"},
         )
         token = login_resp.json()["access_token"]

@@ -4,8 +4,9 @@ import { useQuery } from "@tanstack/vue-query";
 import { computed, toValue } from "vue";
 import { useRoute } from "vue-router";
 
-import { ConfigProvider, Tag, createThemeConfig } from "@soymutdb/ui-vue";
+import { Tag } from "@soymutdb/ui-vue";
 
+import PortalLayout from "../components/PortalLayout.vue";
 import { newsDetailQueryOptions } from "../lib/query-options";
 import { t } from "../lib/i18n";
 
@@ -43,8 +44,8 @@ const listQuery = computed(() => (lang.value === "zh" ? { lang: "zh" } : {}));
 </script>
 
 <template>
-  <ConfigProvider :theme="createThemeConfig({ dark: false })">
-    <div class="mx-auto max-w-3xl p-8">
+  <PortalLayout>
+    <div class="mx-auto max-w-3xl px-4 py-8">
       <p class="text-sm opacity-70">
         <RouterLink :to="{ path: '/news', query: listQuery }" class="underline">
           {{ t("nav.news") }}
@@ -72,5 +73,5 @@ const listQuery = computed(() => (lang.value === "zh" ? { lang: "zh" } : {}));
         {{ t("news.articleNotFound") }}
       </div>
     </div>
-  </ConfigProvider>
+  </PortalLayout>
 </template>

@@ -12,9 +12,12 @@ import {
   type BlastJob,
 } from "@soymutdb/api-client";
 import { Button } from "@soymutdb/ui-vue";
+import { compactGeneId } from "@soymutdb/shared/genomics";
 
 import PortalLayout from "../components/PortalLayout.vue";
+import { isJbrowseEnabled, resolveJbrowseBaseUrl } from "../lib/deployment";
 import { t } from "../lib/i18n";
+import { useSiteContent } from "../lib/site-content";
 
 /**
  * BLAST — sequence homology search against a named database.
@@ -24,6 +27,11 @@ import { t } from "../lib/i18n";
  * cannot silently return an empty or ambiguous result).
  */
 const PROGRAMMES = ["blastn", "blastp", "blastx", "tblastn", "tblastx"] as const;
+
+// Operator-editable copy (admin `content.*` rows). `get` returns the stored
+// override or the localized `t(...)` fallback; an unedited deployment keeps
+// today's exact strings.
+const { get } = useSiteContent();
 
 const sequence = ref("");
 const programme = ref<string>("blastn");
@@ -41,6 +49,7 @@ const databasesQuery = useQuery({
 });
 const databases = computed<BlastDatabase[]>(() => toValue(databasesQuery.data) ?? []);
 const activeDatabases = computed(() => databases.value.filter((item) => item.is_active));
+const databasesLoading = computed(() => toValue(databasesQuery.isLoading));
 
 const jobsQuery = useQuery({
   queryKey: ["blast", "jobs", 1, 5],
@@ -70,6 +79,45 @@ const hitsQuery = useQuery(
 const hits = computed<BlastHit[]>(() => toValue(hitsQuery.data)?.items ?? []);
 const isSubmitting = computed(() => toValue(submitMutation.isPending));
 
+const selectedJob = computed<BlastJob | undefined>(() => {
+  const id = selectedJobId.value;
+  if (!id) return undefined;
+  return (
+    jobs.value.find((job) => job.id === id) ??
+    (toValue(submitMutation.data)?.id === id ? toValue(submitMutation.data) : undefined)
+  );
+});
+
+/**
+ * React parity (blast.tsx `assemblyForJob`): the job stores the database *name*,
+ * so map it back to the assembly that database belongs to — name match first,
+ * then id match — before building a JBrowse deep link.
+ */
+function assemblyForJob(job: BlastJob | undefined): string | undefined {
+  if (!job) return undefined;
+  const byName = databases.value.find((item) => item.name === job.database);
+  if (byName?.assembly_name) return byName.assembly_name;
+  return databases.value.find((item) => String(item.id) === String(job.database))?.assembly_name ?? undefined;
+}
+
+/** Hit → gene-ID search (`/search/genes?q=…&run=true`, React's gene column). */
+function hitGeneHref(hit: BlastHit): string | undefined {
+  const geneId = hit.subject_id?.trim();
+  if (!geneId) return undefined;
+  return `/search/genes?${new URLSearchParams({ q: geneId, run: "true" }).toString()}`;
+}
+
+/** Hit → JBrowse 2 locus (`subject_id:start..end`, React's gbrowse column). */
+function hitJbrowseHref(hit: BlastHit): string | undefined {
+  // A core-only deployment runs no genome browser: never link into a dead frame.
+  if (!isJbrowseEnabled()) return undefined;
+  if (!hit.subject_id || hit.subject_start == null || hit.subject_end == null) return undefined;
+  const params = new URLSearchParams({ loc: `${hit.subject_id}:${hit.subject_start}..${hit.subject_end}` });
+  const assembly = assemblyForJob(selectedJob.value);
+  if (assembly) params.set("assembly", assembly);
+  return `${resolveJbrowseBaseUrl(import.meta.env.VITE_JBROWSE_BASE_URL)}?${params.toString()}`;
+}
+
 function submit() {
   const trimmed = sequence.value.trim();
   if (!trimmed || !database.value) return;
@@ -92,31 +140,33 @@ function submit() {
 
       <form class="mt-6 grid gap-4 lg:grid-cols-[2fr_1fr]" @submit.prevent="submit">
         <label class="text-sm opacity-70">
-          {{ t("blast.inputSequence") }}
+          {{ get("blast.input", t("blast.inputSequence")) }}
           <textarea
             v-model="sequence"
             rows="8"
             class="mt-1 w-full rounded-md border bg-background p-3 font-mono text-sm"
-            :placeholder="t('blast.sequencePlaceholder')"
+            :placeholder="get('blast.sequencePlaceholder', t('blast.sequencePlaceholder'))"
             data-testid="blast-sequence"
           />
         </label>
         <div class="grid content-start gap-3">
           <label class="text-sm opacity-70">
-            {{ t("blast.searchType") }}
+            {{ get("blast.searchType", t("blast.searchType")) }}
             <select v-model="programme" class="mt-1 w-full rounded-md border bg-background px-2 py-1.5" data-testid="blast-program">
               <option v-for="item in PROGRAMMES" :key="item" :value="item">{{ item }}</option>
             </select>
           </label>
           <label class="text-sm opacity-70">
-            {{ t("blast.database") }}
+            {{ get("blast.database", t("blast.database")) }}
             <select
               v-model="database"
               class="mt-1 w-full rounded-md border bg-background px-2 py-1.5"
               :disabled="activeDatabases.length === 0"
               data-testid="blast-database"
             >
-              <option value="" disabled>{{ t("blast.databasePlaceholder") }}</option>
+              <option value="" disabled>
+                {{ databasesLoading ? get("ui.loading", t("common.loading")) : get("blast.databasePlaceholder", t("blast.databasePlaceholder")) }}
+              </option>
               <option v-for="item in activeDatabases" :key="String(item.id)" :value="String(item.id)">
                 {{ item.name }} ({{ item.db_type }})
               </option>
@@ -135,12 +185,12 @@ function submit() {
             <input v-model="maxHits" type="number" min="1" class="mt-1 w-full rounded-md border bg-background px-2 py-1.5" />
           </label>
           <Button html-type="submit" :disabled="isSubmitting || !sequence.trim() || !database" data-testid="blast-submit">
-            {{ isSubmitting ? t("blast.running") : t("blast.submit") }}
+            {{ isSubmitting ? t("blast.running") : get("blast.submit", t("blast.submit")) }}
           </Button>
         </div>
       </form>
 
-      <p v-if="submitMutation.isError" class="mt-4 text-sm text-red-700" data-testid="blast-error" role="alert">
+      <p v-if="toValue(submitMutation.isError)" class="mt-4 text-sm text-red-700" data-testid="blast-error" role="alert">
         {{ t("common.error") }}
       </p>
       <p v-if="submittedJobId" class="mt-4 text-sm opacity-70" data-testid="blast-submitted">
@@ -161,20 +211,25 @@ function submit() {
       <section class="mt-8" :aria-label="t('blast.hitsAria')">
         <h2 class="text-lg font-medium">{{ t("blast.hits") }}</h2>
         <p v-if="!selectedJobId" data-testid="blast-hits-empty" class="mt-2 text-sm opacity-70">
-          {{ t("blast.noJobs") }}
+          {{ get("ui.noResults", t("blast.noJobs")) }}
         </p>
-        <p v-else-if="hitsQuery.isLoading" class="mt-2 text-sm opacity-70">{{ t("common.loading") }}</p>
+        <p v-else-if="toValue(hitsQuery.isLoading)" class="mt-2 text-sm opacity-70">{{ t("common.loading") }}</p>
         <p v-else-if="hits.length === 0" data-testid="blast-hits-none" class="mt-2 text-sm opacity-70">
-          {{ t("blast.noHits") }}
+          {{ get("ui.noResults", t("blast.noHits")) }}
         </p>
         <table v-else class="mt-2 w-full text-sm" data-testid="blast-hits-table">
           <thead class="text-left opacity-60">
             <tr>
-              <th class="py-2">{{ t("blast.hitSubject") }}</th>
-              <th class="py-2">{{ t("blast.identity") }}</th>
+              <th class="py-2">{{ get("blast.hitSequenceId", t("blast.hitSequenceId")) }}</th>
+              <th class="py-2">{{ get("blast.hitCoverage", t("blast.hitCoverage")) }}</th>
               <th class="py-2">{{ t("blast.alignmentLength") }}</th>
-              <th class="py-2">{{ t("blast.hitEValue") }}</th>
+              <th class="py-2">{{ get("blast.hitEValue", t("blast.hitEValue")) }}</th>
               <th class="py-2">{{ t("blast.hitScore") }}</th>
+              <!-- React parity: the hit table also exposes the two jumps the
+                   Vue port was missing — into the gene-ID search and into the
+                   JBrowse locus for the hit's coordinates. -->
+              <th class="py-2">{{ get("blast.hitGeneId", t("blast.hitGeneId")) }}</th>
+              <th class="py-2">{{ t("blast.actions.gbrowse") }}</th>
             </tr>
           </thead>
           <tbody>
@@ -184,6 +239,31 @@ function submit() {
               <td class="py-2 font-mono text-xs">{{ hit.alignment_length }}</td>
               <td class="py-2 font-mono text-xs">{{ hit.evalue }}</td>
               <td class="py-2 font-mono text-xs">{{ hit.bit_score }}</td>
+              <td class="py-2">
+                <RouterLink
+                  v-if="hitGeneHref(hit)"
+                  :to="hitGeneHref(hit)!"
+                  class="text-primary underline"
+                  :title="hit.subject_id"
+                  :data-testid="`blast-hit-gene-${index}`"
+                >
+                  {{ compactGeneId(hit.subject_id, 18) }}
+                </RouterLink>
+                <span v-else class="opacity-60">{{ t("blast.actions.geneSearch") }}</span>
+              </td>
+              <td class="py-2">
+                <a
+                  v-if="hitJbrowseHref(hit)"
+                  :href="hitJbrowseHref(hit)!"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="text-primary underline"
+                  :data-testid="`blast-hit-gbrowse-${index}`"
+                >
+                  {{ t("blast.actions.gbrowse") }}
+                </a>
+                <span v-else class="opacity-60" :data-testid="`blast-hit-gbrowse-unavailable-${index}`">—</span>
+              </td>
             </tr>
           </tbody>
         </table>

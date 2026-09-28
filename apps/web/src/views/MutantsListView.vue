@@ -3,8 +3,15 @@ import { useQuery } from "@tanstack/vue-query";
 import { computed, ref, toValue, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
-import { ConfigProvider, Input, Tag, createThemeConfig } from "@soymutdb/ui-vue";
+import { Button, Input, Tag } from "@soymutdb/ui-vue";
 
+import PortalLayout from "../components/PortalLayout.vue";
+import PageHeader from "../components/table/PageHeader.vue";
+import DataTable from "../components/table/DataTable.vue";
+import FilterCard from "../components/table/FilterCard.vue";
+import FilterField from "../components/table/FilterField.vue";
+import type { TableColumn } from "../components/table/table-types";
+import StateBlock from "../components/states/StateBlock.vue";
 import { mutantLinesQueryOptions } from "../lib/query-options";
 import { t } from "../lib/i18n";
 import { useSiteContextStore } from "../stores/site-context";
@@ -48,52 +55,104 @@ function applyFilter() {
     query: next ? { mutagen: next } : {},
   });
 }
+
+function clearFilter() {
+  input.value = "";
+  void router.replace({ path: "/mutants", query: {} });
+}
+
+const columns: TableColumn[] = [
+  { id: "name", header: t("mutantLines.lineName"), primary: true },
+  { id: "cultivar", header: t("mutantLines.cultivarLabel") },
+  { id: "mutagen", header: t("mutantLines.mutagenLabel") },
+  { id: "variant_count", header: t("mutantLines.variantCount"), numeric: true, align: "right" },
+];
 </script>
 
 <template>
-  <ConfigProvider :theme="createThemeConfig({ dark: false })">
-    <div class="mx-auto max-w-3xl p-8">
-      <p class="text-sm opacity-70"><RouterLink to="/" class="underline">{{ t("nav.home") }}</RouterLink></p>
-      <h1 class="mt-2 text-2xl font-semibold">{{ t("mutantLines.title") }}</h1>
+  <PortalLayout>
+    <div class="container-prose py-10 md:py-14">
+      <PageHeader
+        :eyebrow="t('nav.mutantLines')"
+        :title="t('mutantLines.title')"
+        :description="t('mutantLines.subtitle')"
+      />
 
-      <form class="mt-6 flex items-center gap-3" role="search" @submit.prevent="applyFilter">
-        <label class="text-sm opacity-70" for="mutagen">{{ t("mutantLines.exactMutagen") }}</label>
-        <Input
-          id="mutagen"
-          v-model="input"
-          :placeholder="t('mutantLines.mutagenPlaceholder')"
-          data-testid="mutagen-filter"
-          @change="applyFilter"
+      <FilterCard @submit="applyFilter">
+        <FilterField :label="t('mutantLines.exactMutagen')" for-id="mutagen-filter">
+          <Input
+            id="mutagen-filter"
+            v-model:value="input"
+            class="w-full max-w-xs"
+            :placeholder="t('mutantLines.mutagenPlaceholder')"
+            data-testid="mutagen-filter"
+            @change="applyFilter"
+          />
+        </FilterField>
+
+        <template #actions>
+          <Button type="primary" data-testid="mutants-filter-apply" @click="applyFilter">
+            {{ t("common.apply") }}
+          </Button>
+          <Button v-if="mutagen" data-testid="mutants-filter-clear" @click="clearFilter">
+            {{ t("common.clear") }}
+          </Button>
+        </template>
+      </FilterCard>
+
+      <section class="mt-4" :aria-label="t('mutantLines.results')">
+        <StateBlock
+          v-if="isLoading"
+          data-testid="mutants-loading"
+          variant="loading"
+          :title="t('common.loading')"
         />
-      </form>
-
-      <div v-if="isLoading" data-testid="mutants-loading" class="mt-6 grid gap-3">
-        <div v-for="index in 4" :key="index" class="h-16 w-full rounded bg-black/5" />
-      </div>
-
-      <div v-else-if="isError" data-testid="mutants-error" class="mt-6 rounded border border-red-300 p-5">
-        <p class="font-medium">{{ t("mutantLines.loadError") }}</p>
-      </div>
-
-      <div v-else data-testid="mutants-results" class="mt-6">
-        <p v-if="lines.length === 0" data-testid="mutants-empty" class="text-sm opacity-70">
-          {{ t("mutantLines.emptyNoResult") }}<span v-if="mutagen"> {{ t("mutantLines.emptyForMutagen", { mutagen }) }}</span>.
-        </p>
-        <ul v-else class="grid gap-3">
-          <li v-for="line in lines" :key="line.public_id">
-            <RouterLink
-              :to="{ path: `/mutants/${line.public_id}` }"
-              data-testid="mutant-row"
-              :data-public-id="line.public_id"
-              class="flex items-center gap-3 rounded-lg border p-4 transition-colors hover:border-primary"
-            >
-              <Tag class="font-mono uppercase">{{ t("mutantLines.entityTag") }}</Tag>
-              <span class="font-medium">{{ line.name }}</span>
-              <span class="ml-auto font-mono text-sm opacity-70">{{ line.public_id }}</span>
-            </RouterLink>
-          </li>
-        </ul>
-      </div>
+        <StateBlock
+          v-else-if="isError"
+          data-testid="mutants-error"
+          variant="error"
+          :title="t('mutantLines.loadError')"
+        />
+        <template v-else>
+          <p v-if="lines.length === 0" data-testid="mutants-empty" class="text-sm text-muted-foreground">
+            {{ t("mutantLines.emptyNoResult") }}
+            <span v-if="mutagen"> {{ t("mutantLines.emptyForMutagen", { mutagen }) }}</span>.
+          </p>
+          <DataTable
+            v-else
+            data-testid="mutants-results"
+            :columns="columns"
+            :rows="lines"
+            responsive
+            :aria-label="t('mutantLines.results')"
+            :row-key="(row) => row.public_id"
+            :row-attrs="(row) => ({ 'data-testid': 'mutant-row', 'data-public-id': row.public_id })"
+            :emptyTitle="t('mutantLines.noResults')"
+          >
+            <template #cell-name="{ row }">
+              <RouterLink
+                :to="{ path: `/mutants/${row.public_id}` }"
+                class="link-underline font-medium text-primary"
+              >
+                {{ row.name }}
+              </RouterLink>
+              <!-- The public identifier is the stable, shareable identity of the
+                   row (DB-CORE-2): it stays visible next to the display name. -->
+              <span class="mt-0.5 block font-mono text-xs text-muted-foreground">
+                {{ row.public_id }}
+              </span>
+            </template>
+            <template #cell-cultivar="{ row }">{{ row.cultivar ?? "—" }}</template>
+            <template #cell-mutagen="{ row }">
+              <Tag v-if="row.mutagen" class="font-mono text-[10px]">{{ row.mutagen }}</Tag>
+              <span v-else class="text-muted-foreground">—</span>
+            </template>
+            <template #cell-variant_count="{ row }">
+              {{ row.variant_count == null ? "—" : row.variant_count.toLocaleString() }}
+            </template>
+          </DataTable>
+        </template>
+      </section>
     </div>
-  </ConfigProvider>
+  </PortalLayout>
 </template>

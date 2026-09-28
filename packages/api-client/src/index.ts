@@ -32,6 +32,8 @@ export {
   clearLegacyTokens,
   setAccessToken,
   AUTH_REFRESH_PATH,
+  getCurrentUser,
+  type CurrentUser,
 } from "./auth";
 
 export { attachCsrf } from "./csrf";
@@ -64,6 +66,8 @@ export * from "./admin-settings";
 export * from "./admin-content";
 export * from "./admin-analytics";
 export * from "./page-definitions";
+// Personal, per-user reads (no RBAC gate) — authenticated for every signed-in user.
+export * from "./notifications";
 
 export * from "./capabilities";
 export * from "./table-views";

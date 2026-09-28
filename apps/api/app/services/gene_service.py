@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.exceptions import NotFoundError, ValidationError
 from ..models.genomic import Assembly, Chromosome, Gene, Transcript
+from ..models.variant import VariantSummary
 from ..schemas.genomic import (
     AssemblyResponse,
     ChromosomeResponse,
@@ -24,12 +25,46 @@ from .release_context import (
 )
 
 
+def _public_transcript_id(tx: Transcript) -> str:
+    """Stable, non-persistence identifier for a public transcript.
+
+    The previous implementation returned ``str(tx.id)`` (a BIGSERIAL primary
+    key) to anonymous callers, which leaked an internal row identity and made
+    the value enumerate-able. The accession/name the annotation already
+    publishes is the public identity; the surrogate key stays internal and is
+    only used as a last-resort discriminator when an annotation has no name.
+    """
+    if tx.name:
+        return str(tx.name)
+    return f"transcript-{tx.gene.accession}-{tx.start}-{tx.end}-{tx.strand}"
+
+
 def _cursor_filters(params: GeneListParams) -> dict[str, str]:
     return params.model_dump(
         mode="json",
         exclude={"cursor", "limit", "page", "page_size"},
         exclude_none=True,
     )
+
+
+def _order_by(params: GeneListParams):
+    """Validated ORDER BY list for the gene list.
+
+    Only columns from the closed allowlist reach SQL; the keyset cursor is
+    defined for the default ``(accession, gene_pk)`` order, so any other sort
+    uses the page-based contract (enforced in ``list_genes``).
+    """
+    descending = params.sort_dir == "desc"
+    column = {
+        "gene_id": Gene.accession,
+        "symbol": Gene.name,
+        "variant_count": func.count(VariantSummary.id),
+    }[params.sort_by]
+    primary = column.desc() if descending else column.asc()
+    # gene_pk is the stable tiebreaker; keep it aligned with the primary
+    # direction so equal keys do not interleave across pages.
+    tie = Gene.gene_pk.desc() if descending else Gene.gene_pk.asc()
+    return [primary, tie]
 
 
 def encode_cursor(
@@ -89,11 +124,27 @@ class GeneService:
         *,
         release_context: ReleaseContext,
     ) -> GeneListResponse:
-        """Return a cursor-paginated list of genes."""
+        """Return a cursor-paginated list of genes.
+
+        Each row carries the number of variant summaries linked to the gene
+        *within the resolved release and assembly*. The count previously came
+        back as ``0`` for every row (the React table rendered an always-empty
+        column) and an unscoped count would have spanned draft releases.
+        """
+        variant_count = func.count(VariantSummary.id).label("variant_count")
         stmt = (
-            select(Gene)
+            select(Gene, variant_count)
             .join(Assembly, Gene.assembly_id == Assembly.id)
+            .outerjoin(
+                VariantSummary,
+                and_(
+                    VariantSummary.gene_id == Gene.gene_pk,
+                    VariantSummary.release_id == release_context.release_id,
+                    VariantSummary.assembly_id == Gene.assembly_id,
+                ),
+            )
             .where(Assembly.release_id == release_context.release_id)
+            .group_by(Gene.gene_pk)
         )
 
         if params.assembly_id is not None:
@@ -123,11 +174,28 @@ class GeneService:
         page_size = params.page_size or params.limit
         total = 0
         if params.page is not None:
-            count_stmt = select(func.count()).select_from(stmt.order_by(None).subquery())
+            # Count the filtered gene set, not the grouped variant projection:
+            # a gene with no linked variants still belongs in the total.
+            count_stmt = select(func.count()).select_from(
+                stmt.order_by(None).with_only_columns(Gene.gene_pk).subquery()
+            )
             total = int(await db.scalar(count_stmt) or 0)
 
         # Keyset pagination on (accession, gene_pk) — accessions repeat
-        # across assemblies, the surrogate key is the stable tiebreaker.
+        # across assemblies, the surrogate key is the stable tiebreaker. The
+        # cursor encodes that one order, so it is only honoured for the default
+        # sort; silently replaying it under a different ORDER BY would skip or
+        # repeat rows.
+        if params.cursor and (params.sort_by != "gene_id" or params.sort_dir != "asc"):
+            raise ValidationError(
+                "Cursor pagination is only available for the default gene order "
+                "(sort_by=gene_id, sort_dir=asc); use page/page_size instead.",
+                details={
+                    "code": "cursor_requires_default_order",
+                    "sort_by": params.sort_by,
+                    "sort_dir": params.sort_dir,
+                },
+            )
         if params.cursor:
             last_accession, last_pk = decode_cursor(
                 params.cursor,
@@ -144,13 +212,14 @@ class GeneService:
                 )
             )
 
-        stmt = stmt.order_by(Gene.accession.asc(), Gene.gene_pk.asc())
+        stmt = stmt.order_by(*_order_by(params))
         if params.page is not None:
             stmt = stmt.offset((params.page - 1) * page_size).limit(page_size)
         else:
             stmt = stmt.limit(params.limit + 1)
         result = await db.execute(stmt)
-        genes = list(result.scalars().all())
+        rows = list(result.all())
+        genes = [gene for gene, _count in rows]
 
         has_more = (
             len(genes) > params.limit
@@ -160,7 +229,9 @@ class GeneService:
         if has_more and params.page is None:
             genes = genes[: params.limit]
 
-        items = [self._gene_to_response(g) for g in genes]
+        items = [
+            self._gene_to_response(gene, count) for gene, count in rows[: len(genes)]
+        ]
         next_cursor = (
             encode_cursor(
                 genes[-1].accession,
@@ -237,6 +308,23 @@ class GeneService:
         ]
         aliases = [a.alias for a in gene.aliases]
 
+        # The detail header renders this as the gene's variant total. It must be
+        # scoped to the resolved release *and* the resolved assembly: an
+        # unscoped count would include draft/other-release rows, and a
+        # hardcoded 0 (the previous behaviour) made the UI stat meaningless.
+        variant_count = int(
+            await db.scalar(
+                select(func.count())
+                .select_from(VariantSummary)
+                .where(
+                    VariantSummary.gene_id == gene.gene_pk,
+                    VariantSummary.release_id == release_context.release_id,
+                    VariantSummary.assembly_id == gene.assembly_id,
+                )
+            )
+            or 0
+        )
+
         return GeneDetail(
             id=str(gene.accession),
             gene_id=str(gene.accession),
@@ -253,7 +341,7 @@ class GeneService:
             description=gene.description,
             transcripts=transcripts,
             aliases=aliases,
-            variant_count=0,
+            variant_count=variant_count,
             created_at=gene.created_at,
             updated_at=gene.updated_at,
         )
@@ -286,6 +374,38 @@ class GeneService:
         for gene in result.scalars().all():
             mapping.setdefault(gene.accession, []).append(gene)
         return mapping
+
+    async def resolve_released_gene(
+        self,
+        db: AsyncSession,
+        accession: str,
+        *,
+        release_context: ReleaseContext,
+        assembly_id: int | None = None,
+    ) -> Gene:
+        """Resolve one accession inside the published release, or fail closed.
+
+        Accessions repeat across assemblies, so an accession matching more than
+        one *released* assembly is an explicit disambiguation error rather than
+        a silent pick. Shared by the expression/homolog routes so the boundary
+        rule has exactly one implementation.
+        """
+        resolved = await self.find_by_accessions(
+            db,
+            [accession],
+            release_context=release_context,
+            assembly_id=assembly_id,
+        )
+        matches = resolved.get(accession, [])
+        if not matches:
+            raise NotFoundError(f"Gene {accession} not found")
+        if len(matches) > 1:
+            raise ValidationError(
+                f"Gene {accession} exists in multiple assemblies; "
+                "supply an explicit assembly_id",
+                details={"code": "ambiguous_assembly"},
+            )
+        return matches[0]
 
     async def list_assemblies(
         self, db: AsyncSession, *, release_id: int
@@ -335,7 +455,7 @@ class GeneService:
     # ------------------------------------------------------------------ #
 
     @staticmethod
-    def _gene_to_response(gene: Gene) -> GeneResponse:
+    def _gene_to_response(gene: Gene, variant_count: int = 0) -> GeneResponse:
         return GeneResponse(
             id=str(gene.accession),
             gene_id=str(gene.accession),
@@ -351,12 +471,13 @@ class GeneService:
             end_pos=gene.end,
             strand=gene.strand,
             description=gene.description,
+            variant_count=variant_count,
         )
 
     @staticmethod
     def _transcript_to_response(tx: Transcript) -> TranscriptResponse:
         return TranscriptResponse(
-            id=str(tx.id),
+            id=_public_transcript_id(tx),
             gene_id=str(tx.gene.accession),
             name=tx.name,
             biotype=tx.biotype,
@@ -366,7 +487,7 @@ class GeneService:
             is_canonical=tx.is_canonical,
             exons=[
                 ExonResponse(
-                    id=str(e.id),
+                    id=f"{_public_transcript_id(tx)}.exon{e.order}",
                     start=e.start,
                     end=e.end,
                     order=e.order,

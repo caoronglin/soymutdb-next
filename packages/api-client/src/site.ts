@@ -105,7 +105,29 @@ export function getSiteFooter(variant: SiteVariant = "external"): Promise<SiteFo
  */
 export type SiteContent = Record<string, string>;
 
+export interface SiteContentOptions {
+  /**
+   * Ask for the stored rows only, instead of every registered key filled with
+   * its English registered default.
+   *
+   * The portal is bilingual, so "the server value always wins" would replace a
+   * Chinese page's copy with the English default as soon as the request
+   * resolves. Override-only mode lets the caller render
+   * `override ?? its own locale-aware string`, which keeps an unedited
+   * deployment byte-identical to today and makes an operator's edit win in
+   * every locale.
+   */
+  onlyOverrides?: boolean;
+}
+
 /** Fetch the editable site-content map for one explicit site variant. */
-export function getSiteContent(variant: SiteVariant = "external"): Promise<SiteContent> {
-  return siteRequest<SiteContent>("/site/content", variant);
+export function getSiteContent(
+  variant: SiteVariant = "external",
+  options: SiteContentOptions = {},
+): Promise<SiteContent> {
+  const params: Record<string, string | boolean> = { variant };
+  if (options.onlyOverrides) params.only_overrides = true;
+  return variant === "internal"
+    ? authRequest<SiteContent>("/site/content", { params })
+    : request<SiteContent>("/site/content", { params, auth: false });
 }

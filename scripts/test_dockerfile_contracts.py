@@ -278,7 +278,7 @@ def test_images_copy_every_workspace_path_dependency_before_sync() -> None:
 def test_static_app_images_supply_their_build_time_origins() -> None:
     """The web/admin/jbrowse builds fail closed without their origins.
 
-    The vite configs and the JBrowse `_headers` injector require
+    The Umi configs and the JBrowse `_headers` finalizer require
     `VITE_API_BASE_URL` (and the CSP/frame origins) at build time. A Dockerfile
     that runs the build without them fails with:
 

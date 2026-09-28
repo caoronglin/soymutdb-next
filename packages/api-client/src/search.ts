@@ -118,6 +118,8 @@ export interface SearchParams {
   cursor?: string;
   limit?: number;
   assembly_id?: number;
+  /** Explicit release scope for pinned public searches. */
+  release_id?: number;
 }
 
 export function globalSearch(

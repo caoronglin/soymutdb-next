@@ -29,9 +29,19 @@ import {
     type RequestOptions,
 } from "./client";
 import { attachCsrf } from "./csrf";
+import type { components } from "./generated/openapi";
 
 /** Refresh endpoint (resolves to <apiBaseUrl>/auth/refresh). */
 export const AUTH_REFRESH_PATH = "/auth/refresh";
+
+/**
+ * Public representation of the authenticated user (`GET /auth/me`).
+ *
+ * `role_name` is absent/null on legacy rows and `is_superuser` is the only
+ * implicit escalation. The shape is owned by the generated OpenAPI schema,
+ * never re-declared here.
+ */
+export type CurrentUser = components["schemas"]["UserResponse"];
 
 /** Legacy persisted-token keys removed during the one-time migration. */
 const LEGACY_TOKEN_KEYS = [
@@ -276,6 +286,18 @@ export const http = {
             method: "GET",
         }),
 };
+
+/**
+ * Fetch the currently authenticated user's profile (`GET /auth/me`).
+ *
+ * Goes through the coordinated `http` layer, so the Bearer header is attached
+ * and an expired access token is transparently refreshed once. An anonymous
+ * session still rejects with the 401 (after the refresh attempt) — the caller
+ * decides whether that means "anonymous" (the portal does).
+ */
+export function getCurrentUser(): Promise<CurrentUser> {
+    return http.get<CurrentUser>("/auth/me");
+}
 
 /**
  * Test hook — resets singleton state (in-flight refresh, logout event

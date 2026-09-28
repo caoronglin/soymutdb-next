@@ -6,6 +6,7 @@ import { http } from "@soymutdb/api-client";
 
 import PortalLayout from "../components/PortalLayout.vue";
 import { t } from "../lib/i18n";
+import { useSiteContent } from "../lib/site-content";
 
 /**
  * Guide — the static NCBI-style retrieval guide served by
@@ -25,6 +26,8 @@ interface StaticPage {
 }
 
 const GUIDE_SLUG = "ncbi-database-guide";
+
+const { get } = useSiteContent();
 
 const query = useQuery({
   queryKey: ["content", "pages", GUIDE_SLUG],
@@ -71,6 +74,11 @@ function scrollToTop() {
 <template>
   <PortalLayout>
     <div class="mx-auto max-w-4xl px-4 py-8" @scroll.passive="onScroll">
+      <!-- React renders `get("nav.guide", …)` as a small badge above the page
+           heading and keeps the API page title as the <h1> (guide.tsx: a Tag
+           carrying nav.guide, then `<h1>{title}</h1>`). Mirror that split rather
+           than moving the nav label into the heading and dropping the title. -->
+      <p class="eyebrow">{{ get("nav.guide", t("nav.guide")) }}</p>
       <h1 class="text-2xl font-semibold">{{ page?.title_en ?? t("docs.gettingStarted") }}</h1>
 
       <p v-if="isPending" data-testid="guide-loading" class="mt-6 text-sm opacity-70">

@@ -19,7 +19,7 @@
 # Usage:
 #   bash scripts/check-production-artifact.sh [dist-dir] [--allow-demo]
 #
-#   dist-dir     default apps/web/dist   the static tree to scan
+#   dist-dir     default apps/web/dist/external   the public static tree to scan
 #   --allow-demo permit demo/flagship markers (use for the gh-pages DEMO
 #                artifact, never for a production release). Still rejects
 #                placeholder origins / loopback binds.
@@ -30,7 +30,7 @@
 # =============================================================================
 set -uo pipefail
 
-DIST_DIR="${1:-apps/web/dist}"
+DIST_DIR="${1:-apps/web/dist/external}"
 ALLOW_DEMO=0
 for arg in "$@"; do
   case "$arg" in

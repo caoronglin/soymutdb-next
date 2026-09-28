@@ -23,32 +23,31 @@ source of truth the build scripts consult.
 
 ### 2. The portal ships no embedded fallback data
 
-The React portal embedded demonstration fixtures and silently fell back to them
-when the API was unreachable, which is how a demo page could be promoted as a
-release. The Vue portal (`apps/web`) has no fallback-data module at all: every
-page drives its table from the API and renders an explicit empty/error state
-when the API is unavailable. There is therefore no silent-fallback path to guard
-— the guard that remains is the deployment-origin check in the Vite config,
-which aborts the build when no API/JBrowse origin is configured, and the strict
-artifact scan that rejects demo fixtures and placeholder origins.
+The React portal has no fallback-data module in its production route graph:
+pages use the API client and render explicit empty/error states when the API is
+unavailable. There is therefore no silent-fallback path to guard — the guard
+that remains is the deployment-origin check in the Umi config, which aborts the
+build when no API/JBrowse origin is configured, and the strict artifact scan
+that rejects demo fixtures and placeholder origins.
 
 ### 3. CSP finalization fails closed
 
-`apps/web/scripts/finalize-csp.ts` is appended to the web `build` chain and runs
-after the last HTML writer. It refuses to continue when `dist/_headers` is
-missing or carries no `Content-Security-Policy` line, because an artifact whose
-site-wide policy is unknown is worse than no artifact at all. See
-`docs/dev/configurable-table-views.md` for the same fail-closed reasoning on the
-column-template resolution path.
+`apps/web/scripts/finalize-csp.ts` (using the shared policy in `csp.ts`) runs
+after Umi output and static-route generation for each site variant. It refuses
+to continue when the variant's `_headers` is missing or carries no
+`Content-Security-Policy` line, then synchronizes the policy in emitted HTML. See `docs/dev/configurable-table-views.md` for the same
+fail-closed reasoning on the column-template resolution path.
 
 ### 4. Release manifest (real release_id + SHA-256)
 
-`apps/web/scripts/release-manifest.ts` is appended to the web `build` chain. In
+`apps/web/scripts/release-manifest.ts` runs for each Web site variant after the
+static routes, CSP, compression, and service worker are finalized. In
 `production` it:
 
 1. requires a real `SOYMUTDB_RELEASE_ID`,
-2. walks the final `dist/` tree and writes `manifest.json` (per-file SHA-256 +
-   release metadata) and a fixed-format `SHA256SUMS` file.
+2. walks that variant's final `dist/{external,internal}/` tree and writes
+   `manifest.json` (per-file SHA-256 + release metadata) and a fixed-format
+   `SHA256SUMS` file.
 
 In `demo`/`standard`/`minimal` mode it is a no-op. `SOYMUTDB_RELEASE_ID` is
 added to `turbo.json` build env so the cache is invalidated when the release id
@@ -58,11 +57,11 @@ changes.
 
 ```bash
 # Strict production gate — rejects demo fixtures + placeholder origins.
-bash scripts/check-production-artifact.sh apps/web/dist
+bash scripts/check-production-artifact.sh apps/web/dist/external
 
 # Lighter gate for the gh-pages DEMO artifact — permits demo fixtures but still
 # rejects placeholder origins baked into deployment-facing HTML.
-bash scripts/check-production-artifact.sh apps/web/dist --allow-demo
+bash scripts/check-production-artifact.sh apps/web/dist/external --allow-demo
 ```
 
 Always blocked: `api.example.com`, `jbrowse.example.com`, `change-me`, and
@@ -85,12 +84,12 @@ Notes on false positives:
 
 ## `admin` / `jbrowse` sub-path support
 
-- `apps/admin/vite.config.ts` reads `VITE_BASE_URL` and sets `base`, so the
-  console can be served from `admin.soymutdb.org` or a protected custom origin
-  instead of the domain root.
-- `apps/jbrowse/vite.config.ts` already reads `VITE_BASE_URL` for `base`. When
-  deploying under a sub-path, also set `VITE_JBROWSE_DATA_URL` to the matching
-  prefix so the embedded data URLs resolve correctly.
+- `apps/admin/config/config.ts` reads `VITE_BASE_URL` and sets Umi's `base` and
+  `publicPath`, so the console can be served from `admin.soymutdb.org` or a
+  protected custom origin instead of the domain root.
+- `apps/jbrowse/config/config.ts` reads `VITE_BASE_URL` for Umi's `base` and
+  `publicPath`. When deploying under a sub-path, also set
+  `VITE_JBROWSE_DATA_URL` to the matching prefix so embedded data URLs resolve.
 
 ## Origins substituted into `_headers` at build time
 

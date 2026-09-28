@@ -34,7 +34,8 @@ export interface VariantDetail extends VariantSummary {
   amino_acid_ref?: string;
   amino_acid_alt?: string;
   codon_change?: string;
-  mutant_line_id?: string;
+  /** Public mutant-line identifier; the internal key is never exposed. */
+  mutant_line_public_id?: string;
   genotype?: string;
   zygosity?: string;
   read_depth?: number;
@@ -74,7 +75,14 @@ export interface VariantFilterParams {
   ref?: string;
   alt?: string;
   gene_id?: string;
-  mutant_line_id?: string;
+  /**
+   * Public mutant-line identifier (e.g. `SM7K3ZQ9P2AX`).
+   *
+   * Sent as `mutant_line_public_id`: the server resolves it to the line's
+   * internal key inside the pinned release. A numeric/internal value is
+   * rejected with 422, so never pass a persistence key here.
+   */
+  mutant_line_public_id?: string;
   variant_type?: VariantType;
   consequence?: string;
   impact?: VariantImpact;

@@ -4,8 +4,14 @@ import { computed, toValue } from "vue";
 import { useRoute } from "vue-router";
 
 import type { PhenotypeResponse } from "@soymutdb/api-client";
-import { ConfigProvider, Tag, createThemeConfig } from "@soymutdb/ui-vue";
+import { Tag } from "@soymutdb/ui-vue";
 
+import PortalLayout from "../components/PortalLayout.vue";
+import AppIcon from "../components/table/AppIcon.vue";
+import DataTable from "../components/table/DataTable.vue";
+import PageHeader from "../components/table/PageHeader.vue";
+import type { TableColumn } from "../components/table/table-types";
+import StateBlock from "../components/states/StateBlock.vue";
 import {
   mutantLinePhenotypesQueryOptions,
   mutantLineQueryOptions,
@@ -56,101 +62,176 @@ const phenotypesError = computed(() => toValue(phenotypesQuery.isError));
 const phenotypes = computed<PhenotypeResponse[]>(() => toValue(phenotypesQuery.data) ?? []);
 
 function displayValue(value: string | null): string {
-  return value ?? "—";
+  return value?.trim() ? value : "—";
 }
+
+const phenotypeColumns: TableColumn[] = [
+  { id: "trait_category", header: t("mutantLines.categoryLabel"), primary: true },
+  { id: "trait_name", header: t("genes.transcriptName") },
+  { id: "trait_value", header: t("mutantLines.valueLabel") },
+  { id: "unit", header: t("common.unit") },
+  { id: "description", header: t("mutantLines.description") },
+];
 </script>
 
 <template>
-  <ConfigProvider :theme="createThemeConfig({ dark: false })">
-    <div class="mx-auto max-w-3xl p-8">
-      <p class="text-sm opacity-70"><RouterLink to="/mutants" class="underline">{{ t("mutantLines.title") }}</RouterLink></p>
+  <PortalLayout>
+    <div class="container-prose py-10 md:py-14">
+      <RouterLink
+        to="/mutants"
+        class="link-underline inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+      >
+        <AppIcon name="arrow-left" class="size-4" />
+        {{ t("mutantLines.title") }}
+      </RouterLink>
 
-      <div v-if="isLoading" data-testid="mutant-loading" class="mt-6 h-24 animate-pulse rounded bg-black/5" />
-      <div v-else-if="isError" data-testid="mutant-error" class="mt-6 rounded border border-red-300 p-5">
-        <p class="font-medium">{{ t("mutantLines.unavailable") }}</p>
-      </div>
+      <StateBlock
+        v-if="isLoading"
+        data-testid="mutant-loading"
+        variant="loading"
+        :title="t('common.loading')"
+        :rows="6"
+        class="mt-6"
+      />
+      <StateBlock
+        v-else-if="isError"
+        data-testid="mutant-error"
+        variant="error"
+        :title="t('mutantLines.unavailable')"
+        class="mt-6"
+      />
 
-      <article v-else-if="line" data-testid="mutant-detail" class="mt-4">
-        <div class="flex items-center gap-2">
-          <Tag class="font-mono uppercase">{{ t("mutantLines.entityTag") }}</Tag>
-          <h1 class="text-2xl font-semibold" data-testid="mutant-name">{{ line.name }}</h1>
-          <span class="ml-auto font-mono text-sm opacity-70" data-testid="mutant-public-id">
-            {{ line.public_id }}
-          </span>
-        </div>
+      <article v-else-if="line" data-testid="mutant-detail" class="mt-6">
+        <PageHeader :eyebrow="t('nav.mutantLines')">
+          <template #badges>
+            <Tag class="font-mono text-[10px] uppercase">{{ t("mutantLines.entityTag") }}</Tag>
+            <span
+              class="font-mono text-sm text-muted-foreground"
+              data-testid="mutant-public-id"
+            >{{ line.public_id }}</span>
+          </template>
+          <template #title>
+            <span data-testid="mutant-name">{{ line.name }}</span>
+          </template>
+        </PageHeader>
 
-        <dl class="mt-4 grid grid-cols-2 gap-2 text-sm">
-          <dt class="opacity-70">{{ t("mutantLines.mutagenLabel") }}</dt>
-          <dd data-testid="mutant-mutagen">{{ line.mutagen ?? "—" }}</dd>
-          <dt class="opacity-70">{{ t("mutantLines.cultivarLabel") }}</dt>
-          <dd>{{ line.cultivar ?? "—" }}</dd>
-          <dt class="opacity-70">{{ t("mutantLines.generationLabel") }}</dt>
-          <dd>{{ line.generation ?? "—" }}</dd>
-          <dt class="opacity-70">{{ t("mutantLines.speciesLabel") }}</dt>
-          <dd>{{ line.species }}</dd>
-          <dt class="opacity-70">{{ t("mutantLines.linkedVariants") }}</dt>
-          <dd>{{ line.variant_count }}</dd>
-        </dl>
-
-        <p v-if="line.phenotype_summary" class="mt-4 text-sm">{{ line.phenotype_summary }}</p>
-        <p v-if="line.description" class="mt-2 text-sm opacity-80">{{ line.description }}</p>
-
-        <section
-          class="mt-8"
-          aria-labelledby="mutant-phenotypes"
-          data-testid="mutant-phenotypes"
+        <RouterLink
+          v-if="line.variant_count > 0"
+          :to="{ path: '/variants', query: { mutant_line_id: line.public_id } }"
+          class="link-underline mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-primary"
         >
-          <h2 id="mutant-phenotypes" class="text-lg font-medium">{{ t("mutantLines.phenotypeObservations") }}</h2>
-          <p class="mt-1 text-xs opacity-60">
-            {{ t("mutantLines.phenotypeNote") }}
-          </p>
+          {{ t("mutantLines.variants") }}
+          <AppIcon name="arrow-right" class="size-4" />
+        </RouterLink>
+
+        <section class="mt-8" aria-labelledby="mutant-line-details">
+          <h2 id="mutant-line-details" class="font-display text-2xl font-semibold">
+            {{ t("mutantLines.generalInfo") }}
+          </h2>
+          <dl class="mt-4 grid gap-px overflow-hidden rounded-xl border bg-border sm:grid-cols-2">
+            <div class="bg-card px-4 py-3">
+              <dt class="text-xs uppercase tracking-wide text-muted-foreground">
+                {{ t("mutantLines.speciesLabel") }}
+              </dt>
+              <dd class="mt-1 text-sm">{{ line.species }}</dd>
+            </div>
+            <div class="bg-card px-4 py-3">
+              <dt class="text-xs uppercase tracking-wide text-muted-foreground">
+                {{ t("mutantLines.cultivarLabel") }}
+              </dt>
+              <dd class="mt-1 text-sm">{{ displayValue(line.cultivar) }}</dd>
+            </div>
+            <div class="bg-card px-4 py-3">
+              <dt class="text-xs uppercase tracking-wide text-muted-foreground">
+                {{ t("mutantLines.mutagenLabel") }}
+              </dt>
+              <dd class="mt-1 text-sm" data-testid="mutant-mutagen">{{ displayValue(line.mutagen) }}</dd>
+            </div>
+            <div class="bg-card px-4 py-3">
+              <dt class="text-xs uppercase tracking-wide text-muted-foreground">
+                {{ t("mutantLines.generationLabel") }}
+              </dt>
+              <dd class="mt-1 text-sm">{{ displayValue(line.generation) }}</dd>
+            </div>
+            <div class="bg-card px-4 py-3">
+              <dt class="text-xs uppercase tracking-wide text-muted-foreground">
+                {{ t("mutantLines.linkedVariants") }}
+              </dt>
+              <dd class="mt-1 font-mono text-sm tabular-nums">{{ line.variant_count }}</dd>
+            </div>
+            <div class="bg-card px-4 py-3 sm:col-span-2">
+              <dt class="text-xs uppercase tracking-wide text-muted-foreground">
+                {{ t("mutantLines.description") }}
+              </dt>
+              <dd class="mt-1 text-sm">{{ displayValue(line.description) }}</dd>
+            </div>
+            <div class="bg-card px-4 py-3 sm:col-span-2">
+              <dt class="text-xs uppercase tracking-wide text-muted-foreground">
+                {{ t("mutantLines.phenotypeObservations") }}
+              </dt>
+              <dd class="mt-1 text-sm">{{ displayValue(line.phenotype_summary) }}</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section class="mt-10" aria-labelledby="mutant-phenotypes">
+          <h2 id="mutant-phenotypes" class="font-display text-2xl font-semibold">
+            {{ t("mutantLines.phenotypeObservations") }}
+          </h2>
           <p
-            v-if="phenotypesLoading"
-            data-testid="phenotypes-loading"
-            class="mt-3 text-sm opacity-70"
+            class="mt-4 flex items-start gap-2 rounded-xl border border-border bg-muted/50 px-4 py-3 text-sm text-muted-foreground"
+            data-testid="phenotypes-boundary"
           >
-            {{ t("mutantLines.phenotypesLoading") }}
+            <AppIcon name="info" class="mt-0.5 size-4" />
+            <span>{{ t("mutantLines.phenotypeNote") }}</span>
           </p>
-          <p
-            v-else-if="phenotypesError"
-            data-testid="phenotypes-error"
-            class="mt-3 text-sm opacity-70"
-          >
-            {{ t("mutantLines.phenotypesError") }}
-          </p>
-          <p
-            v-else-if="phenotypes.length === 0"
-            data-testid="phenotypes-empty"
-            class="mt-3 text-sm opacity-70"
-          >
-            {{ t("mutantLines.phenotypesEmpty") }}
-          </p>
-          <table v-else class="mt-3 w-full text-sm" data-testid="phenotypes-table">
-            <thead class="text-left opacity-60">
-              <tr>
-                <th>{{ t("mutantLines.categoryLabel") }}</th>
-                <th>{{ t("genes.transcriptName") }}</th>
-                <th>{{ t("mutantLines.valueLabel") }}</th>
-                <th>{{ t("common.unit") }}</th>
-                <th>{{ t("mutantLines.description") }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="phenotype in phenotypes" :key="phenotype.id" data-testid="phenotype-row">
-                <td>{{ phenotype.trait_category }}</td>
-                <td>{{ phenotype.trait_name }}</td>
-                <td>{{ displayValue(phenotype.trait_value) }}</td>
-                <td>{{ displayValue(phenotype.unit) }}</td>
-                <td>{{ displayValue(phenotype.description) }}</td>
-              </tr>
-            </tbody>
-          </table>
+          <div class="mt-5">
+            <StateBlock
+              v-if="phenotypesLoading"
+              data-testid="phenotypes-loading"
+              variant="loading"
+              :title="t('mutantLines.phenotypesLoading')"
+            />
+            <StateBlock
+              v-else-if="phenotypesError"
+              data-testid="phenotypes-error"
+              variant="error"
+              :title="t('mutantLines.phenotypesError')"
+            />
+            <StateBlock
+              v-else-if="phenotypes.length === 0"
+              data-testid="phenotypes-empty"
+              variant="empty"
+              icon="beaker"
+              :title="t('mutantLines.phenotypesEmpty')"
+            />
+            <DataTable
+              v-else
+              data-testid="phenotypes-table"
+              :columns="phenotypeColumns"
+              :rows="phenotypes"
+              :row-key="(row) => row.id"
+              :row-attrs="() => ({ 'data-testid': 'phenotype-row' })"
+              :aria-label="t('mutantLines.phenotypeObservations')"
+            >
+              <template #cell-trait_value="{ row }">{{ displayValue(row.trait_value) }}</template>
+              <template #cell-unit="{ row }">{{ displayValue(row.unit) }}</template>
+              <template #cell-description="{ row }">{{ displayValue(row.description) }}</template>
+            </DataTable>
+          </div>
         </section>
 
         <!-- DB-CORE-2: no internal identifier is ever rendered on the public site. -->
       </article>
 
-      <div v-else data-testid="mutant-empty" class="mt-6 text-sm opacity-70">{{ t("mutantLines.notFound") }}</div>
+      <StateBlock
+        v-else
+        data-testid="mutant-empty"
+        variant="empty"
+        icon="beaker"
+        :title="t('mutantLines.notFound')"
+        class="mt-6"
+      />
     </div>
-  </ConfigProvider>
+  </PortalLayout>
 </template>

@@ -169,6 +169,12 @@ class BlastJobResponse(BaseModel):
     completed_at: datetime | None = None
     error_message: str | None = None
     result_url: str | None = None
+    #: Release/assembly provenance of the searched database, resolved through
+    #: the job's database row. A stored result must state which release and
+    #: assembly it was computed against, otherwise it is indistinguishable from
+    #: one produced by a different coordinate namespace.
+    release_id: int | None = None
+    assembly_name: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -251,5 +257,8 @@ class BlastDatabaseResponse(BaseModel):
     assembly_name: str | None = None
     assembly_version: str | None = None
     assembly_is_default: bool | None = None
+    #: Published release the database's assembly belongs to. Surfaced so a
+    #: client can prove the list is release-scoped.
+    release_id: int | None = None
 
     model_config = {"from_attributes": True}

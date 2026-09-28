@@ -195,7 +195,7 @@ OCI digest 引用、blue/green 外部适配器合同），但对应真实后端�
 
 | Gate | 描述 | 通过标准 | 负责人 | 证据 |
 | --- | --- | --- | --- | --- |
-| G7 | Admin/JBrowse 子路径/独立 origin | `apps/admin/vite.config.ts` 支持 `VITE_BASE_URL`，可部署到 `admin.soymutdb.org` 或受保护 origin；`apps/jbrowse` 生产 base 正确 | frontend-platform | 配置 + 构建（t6） |
+| G7 | Admin/JBrowse 子路径/独立 origin | `apps/admin/config/config.ts` 与 `apps/jbrowse/config/config.ts` 通过 Umi `base`/`publicPath` 支持 `VITE_BASE_URL`；React replatform 产物及 origin 隔离待构建验证 | frontend-platform | 配置 + 双站/子路径构建验证（t6，待迁移完成） |
 | G8 | 生产 E2E 硬门禁 | `e2e/playwright-production.config.ts` + production spec：不接受 API 404/405、不接受示例数据、不接受 localhost/example.com、必须验证真实 Release/JBrowse/Admin 登录 | frontend-platform | 本地/CI E2E 结果（t6） |
 | G9 | Demo 与生产 E2E 分离 | 公开 Demo smoke 与生产 E2E 分开，生产 E2E 跑在 staging/production | frontend-platform | workflow 拆分（t6） |
 

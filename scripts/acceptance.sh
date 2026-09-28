@@ -31,7 +31,7 @@
 #
 # Profiles
 #   contracts  default; no external prerequisites
-#   static     needs a built tree (apps/web/dist or --static-dir)
+#   static     needs a built tree (apps/web/dist/external or --static-dir)
 #   runtime    needs SOYMUTDB_DATABASE_URL pointing at a DISPOSABLE PostgreSQL
 #   e2e        needs e2e/node_modules + Playwright browsers
 #   images     needs a Docker daemon
@@ -156,9 +156,9 @@ write_digest() {
     printf 'package_manager=%s\n' "${SOYMUTDB_PACKAGE_MANAGER:-$(node -e 'process.stdout.write(require("./package.json").packageManager)' 2>/dev/null || echo unknown)}"
     printf 'node=%s\n' "$(node --version 2>/dev/null || echo unavailable)"
     printf 'python=%s\n' "$("${PYTHON_BIN}" --version 2>&1 || echo unavailable)"
-    if [[ -f apps/web/dist/index.html ]]; then
+    if [[ -f apps/web/dist/external/index.html ]]; then
       printf 'web_artifact_digest=sha256:%s\n' \
-        "$(find apps/web/dist -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum | cut -d ' ' -f 1)"
+        "$(find apps/web/dist/external -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum | cut -d ' ' -f 1)"
     fi
   } >"${manifest}.raw"
 
@@ -183,10 +183,10 @@ if [[ "${PROFILE}" == "full" ]]; then
     block_layer backend "requires apps/api/.venv and SOYMUTDB_DATABASE_URL (disposable PostgreSQL)"
   fi
 
-  if [[ -d apps/web/dist || -n "${STATIC_DIR}" ]]; then
+  if [[ -d apps/web/dist/external || -n "${STATIC_DIR}" ]]; then
     run_layer static acceptance_static
   else
-    block_layer static "no built tree at apps/web/dist (build it with the build-pages-artifact job, or the ci:verify script)"
+    block_layer static "no external site artifact at apps/web/dist/external (build it with the build-pages-artifact job, or the ci:verify script)"
   fi
 
   if [[ -x apps/api/.venv/bin/python && -n "${SOYMUTDB_DATABASE_URL:-}" ]]; then
@@ -200,10 +200,10 @@ else
       run_layer contracts acceptance_contracts
       ;;
     static)
-      if [[ -d apps/web/dist || -n "${STATIC_DIR}" ]]; then
+      if [[ -d apps/web/dist/external || -n "${STATIC_DIR}" ]]; then
         run_layer static acceptance_static
       else
-        block_layer static "no built tree at apps/web/dist (build it with the build-pages-artifact job, or the ci:verify script)"
+        block_layer static "no external site artifact at apps/web/dist/external (build it with the build-pages-artifact job, or the ci:verify script)"
       fi
       ;;
     runtime)

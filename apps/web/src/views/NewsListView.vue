@@ -4,8 +4,9 @@ import { computed, toValue } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
 import type { NewsSummary } from "@soymutdb/api-client";
-import { ConfigProvider, Tag, createThemeConfig } from "@soymutdb/ui-vue";
+import { Tag } from "@soymutdb/ui-vue";
 
+import PortalLayout from "../components/PortalLayout.vue";
 import { newsListQueryOptions } from "../lib/query-options";
 import { t } from "../lib/i18n";
 
@@ -85,8 +86,8 @@ function goToPage(next: number) {
 </script>
 
 <template>
-  <ConfigProvider :theme="createThemeConfig({ dark: false })">
-    <div class="mx-auto max-w-3xl p-8">
+  <PortalLayout>
+    <div class="mx-auto max-w-6xl px-4 py-8">
       <p class="text-sm opacity-70"><RouterLink to="/" class="underline">{{ t("nav.home") }}</RouterLink></p>
       <h1 class="mt-2 text-2xl font-semibold">{{ t("news.title") }}</h1>
       <p class="mt-2 text-sm opacity-70">
@@ -163,5 +164,5 @@ function goToPage(next: number) {
         </nav>
       </section>
     </div>
-  </ConfigProvider>
+  </PortalLayout>
 </template>

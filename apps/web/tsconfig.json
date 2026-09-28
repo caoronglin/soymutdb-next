@@ -15,7 +15,28 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
-    "types": ["vite/client"]
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": { "@/*": ["src/*"] }
   },
-  "include": ["src"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.d.ts", "config/**/*.ts"],
+  "exclude": [
+    "node_modules",
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx",
+    "src/main.ts",
+    "src/router/index.ts",
+    "src/stores/**",
+    "src/test/**",
+    "src/views/**",
+    "src/lib/branding.ts",
+    "src/lib/current-user.ts",
+    "src/lib/motion.ts",
+    "src/lib/notifications.ts",
+    "src/lib/page-definition.ts",
+    "src/lib/site-content.ts",
+    "src/lib/theme.ts",
+    "src/lib/use-analysis-job-form.ts",
+    "src/regression/**"
+  ]
 }

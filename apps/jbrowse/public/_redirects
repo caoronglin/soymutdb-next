@@ -2,12 +2,8 @@
 # SoyMutDB Genome Browser (apps/jbrowse) — Cloudflare Pages redirects
 # Docs: https://developers.cloudflare.com/pages/configuration/redirects/
 #
-# SPA fallback: any request that does NOT match a real static file is served
-# index.html so client-side routes (deep links, session params) work with a
-# hard reload. Real static files (index.html, /assets/* hashed files) are
-# served before this catch-all — mirrors Pages' built-in SPA behavior when
-# no top-level 404.html exists. Verified post-deploy with:
-#   curl -sI https://<site>/assets/<hash>.js (expect 200, immutable cache)
-#   curl -sI https://<site>/some/spa/deep/link  (expect 200, index.html)
+# SPA fallback: rely on Cloudflare Pages' built-in fallback when no top-level
+# 404.html exists. Do not add `/* /index.html 200`: Pages redirect ordering can
+# shadow real static files such as hashed Umi bundles and return HTML as JS.
+# Deep links are served by index.html and resolved by the Umi/TanStack client.
 # ============================================================================
-/* /index.html 200

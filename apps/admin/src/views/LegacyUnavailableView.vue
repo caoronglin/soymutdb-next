@@ -1,8 +1,98 @@
+<template>
+  <div class="admin-page">
+    <AdminPageHeader
+      :title="t('admin.legacyUnavailable.title')"
+      :description="t('admin.legacyUnavailable.description')"
+      testid="legacy-unavailable"
+    />
+
+    <AdminCard>
+      <div class="grid gap-3 text-sm">
+        <p class="rounded-md border border-border bg-muted px-3 py-2 font-mono text-xs">
+          {{ t("admin.legacyUnavailable.requested") }}: {{ route.path }}
+        </p>
+        <p v-if="reasonKey" data-testid="legacy-unavailable-reason">
+          <span class="text-muted-foreground">{{ t("admin.legacyUnavailable.reason") }}:</span>
+          {{ t(reasonKey) }}
+        </p>
+        <p>
+          <span class="text-muted-foreground">{{ t("admin.legacyUnavailable.status") }}:</span>
+          <span data-testid="legacy-unavailable-status">{{ t(statusKey) }}</span>
+        </p>
+        <p v-if="referenceTo || referenceHref">
+          <RouterLink
+            v-if="referenceTo"
+            :to="referenceTo"
+            class="admin-link"
+            data-testid="legacy-unavailable-reference"
+          >
+            {{ t(referenceLabelKey) }}
+          </RouterLink>
+          <a
+            v-else
+            :href="referenceHref"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="admin-link"
+            data-testid="legacy-unavailable-reference"
+          >
+            {{ t(referenceLabelKey) }}
+          </a>
+        </p>
+      </div>
+
+      <template #footer>
+        <div class="flex flex-wrap gap-3">
+          <RouterLink
+            to="/"
+            class="inline-flex min-h-9 items-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground"
+            data-testid="legacy-unavailable-home"
+          >
+            {{ t("admin.legacyUnavailable.backToDashboard") }}
+          </RouterLink>
+          <RouterLink
+            v-if="route.path.startsWith('/settings')"
+            to="/settings"
+            class="inline-flex min-h-9 items-center rounded-md border border-border px-3 text-sm"
+            data-testid="legacy-unavailable-settings"
+          >
+            {{ t("admin.settings") }}
+          </RouterLink>
+          <RouterLink
+            v-if="route.path.startsWith('/content')"
+            to="/content/pages"
+            class="inline-flex min-h-9 items-center rounded-md border border-border px-3 text-sm"
+            data-testid="legacy-unavailable-content"
+          >
+            {{ t("admin.contentPages.title") }}
+          </RouterLink>
+          <RouterLink
+            v-if="route.path.startsWith('/news')"
+            to="/news"
+            class="inline-flex min-h-9 items-center rounded-md border border-border px-3 text-sm"
+            data-testid="legacy-unavailable-news"
+          >
+            {{ t("admin.news.title") }}
+          </RouterLink>
+          <RouterLink
+            v-if="route.path.startsWith('/imports')"
+            to="/imports"
+            class="inline-flex min-h-9 items-center rounded-md border border-border px-3 text-sm"
+            data-testid="legacy-unavailable-imports"
+          >
+            {{ t("admin.imports") }}
+          </RouterLink>
+        </div>
+      </template>
+    </AdminCard>
+  </div>
+</template>
+
 <script setup lang="ts">
 import { useRoute } from "vue-router";
 
-import { ConfigProvider, createThemeConfig } from "@soymutdb/ui-vue";
-
+import AdminCard from "../components/AdminCard.vue";
+import AdminPageHeader from "../components/AdminPageHeader.vue";
 import { t } from "../lib/i18n";
 
 /**
@@ -15,9 +105,9 @@ import { t } from "../lib/i18n";
  * unavailable in this build, and offers the routes that are restored. It does
  * not pretend to load data and it writes nothing.
  *
- * Route entries may pass `reasonKey`/`statusKey`/`referenceHref` to turn a
- * generic placeholder into a documented disposition; the ADR-0009 retired
- * routes keep the defaults.
+ * Route entries may pass `reasonKey`/`statusKey`/`referenceTo`/`referenceHref`
+ * to turn a generic placeholder into a documented disposition; the ADR-0009
+ * retired routes keep the defaults.
  */
 withDefaults(
   defineProps<{
@@ -43,79 +133,3 @@ withDefaults(
 
 const route = useRoute();
 </script>
-
-<template>
-  <ConfigProvider :theme="createThemeConfig({ dark: false })">
-    <div class="max-w-2xl py-10" data-testid="legacy-unavailable">
-      <h1 class="text-xl font-semibold">{{ t("admin.legacyUnavailable.title") }}</h1>
-      <p class="mt-2 text-sm opacity-70">{{ t("admin.legacyUnavailable.description") }}</p>
-      <p class="mt-3 rounded-md border border-border bg-muted px-3 py-2 font-mono text-xs">
-        {{ t("admin.legacyUnavailable.requested") }}: {{ route.path }}
-      </p>
-      <p v-if="reasonKey" class="mt-3 text-sm" data-testid="legacy-unavailable-reason">
-        <span class="opacity-70">{{ t("admin.legacyUnavailable.reason") }}:</span>
-        {{ t(reasonKey) }}
-      </p>
-      <p class="mt-3 text-sm">
-        <span class="opacity-70">{{ t("admin.legacyUnavailable.status") }}:</span>
-        <span data-testid="legacy-unavailable-status">{{ t(statusKey) }}</span>
-      </p>
-      <p v-if="referenceTo || referenceHref" class="mt-3 text-sm">
-        <RouterLink v-if="referenceTo" :to="referenceTo" class="text-primary underline" data-testid="legacy-unavailable-reference">
-          {{ t(referenceLabelKey) }}
-        </RouterLink>
-        <a
-          v-else
-          :href="referenceHref"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="text-primary underline"
-          data-testid="legacy-unavailable-reference"
-        >
-          {{ t(referenceLabelKey) }}
-        </a>
-      </p>
-      <div class="mt-5 flex flex-wrap gap-3">
-        <RouterLink
-          to="/"
-          class="inline-flex min-h-10 items-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground"
-          data-testid="legacy-unavailable-home"
-        >
-          {{ t("admin.legacyUnavailable.backToDashboard") }}
-        </RouterLink>
-        <RouterLink
-          v-if="route.path.startsWith('/settings')"
-          to="/settings"
-          class="inline-flex min-h-10 items-center rounded-md border border-border px-3 text-sm"
-          data-testid="legacy-unavailable-settings"
-        >
-          {{ t("admin.settings") }}
-        </RouterLink>
-        <RouterLink
-          v-if="route.path.startsWith('/content')"
-          to="/content"
-          class="inline-flex min-h-10 items-center rounded-md border border-border px-3 text-sm"
-          data-testid="legacy-unavailable-content"
-        >
-          {{ t("admin.content") }}
-        </RouterLink>
-        <RouterLink
-          v-if="route.path.startsWith('/news')"
-          to="/news"
-          class="inline-flex min-h-10 items-center rounded-md border border-border px-3 text-sm"
-          data-testid="legacy-unavailable-news"
-        >
-          {{ t("admin.news.title") }}
-        </RouterLink>
-        <RouterLink
-          v-if="route.path.startsWith('/imports')"
-          to="/imports"
-          class="inline-flex min-h-10 items-center rounded-md border border-border px-3 text-sm"
-          data-testid="legacy-unavailable-imports"
-        >
-          {{ t("admin.imports") }}
-        </RouterLink>
-      </div>
-    </div>
-  </ConfigProvider>
-</template>

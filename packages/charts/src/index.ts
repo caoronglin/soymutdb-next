@@ -1,12 +1,9 @@
 /**
  * Public surface of `@soymutdb/charts`.
  *
- * Consumers import from here, never from `@tanstack/*` directly: the exact
- * version pin and the chart vocabulary both live behind this package.
+ * Consumers import from here, never from the chart runtime directly.
  */
-import ChartFigure from "./ChartFigure.vue";
-
-export { ChartFigure };
+export { ChartFigure, type ChartFigureProps } from "./ChartFigure";
 export {
   categoryBarChart,
   CHART_HEIGHT,

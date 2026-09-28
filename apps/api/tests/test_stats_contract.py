@@ -11,7 +11,7 @@ required.  They verify:
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -28,8 +28,9 @@ from app.api.v1.stats import (
     release_statistics,
     variant_type_summary,
 )
+from app.services.release_context import ReleaseContext
 
-NOW = datetime(2026, 8, 1, tzinfo=timezone.utc)
+NOW = datetime(2026, 8, 1, tzinfo=UTC)
 
 
 class FakeResult:
@@ -75,12 +76,13 @@ def _release_row(version: str, days_ago: int, variant_count: int) -> FakeResult:
 
 
 @pytest.mark.asyncio
-async def test_dashboard_stats_uses_one_count_query_and_real_users():
+async def test_dashboard_stats_uses_one_count_query_and_omits_user_population():
     db = FakeDB(
         results=[
-            # counts: genes, mutant lines, phenotypes, assemblies, active users
-            FakeResult(rows=[(10, 4, 3, 2, 7)]),
-            FakeResult(scalar_one_or_none=None),  # latest release
+            # counts: genes, mutant lines, phenotypes, assemblies
+            # (the account population is no longer part of this aggregate)
+            FakeResult(rows=[(10, 4, 3, 2)]),
+            FakeResult(scalar_one_or_none=None),  # resolved release row
         ]
     )
     with patch.object(
@@ -88,12 +90,19 @@ async def test_dashboard_stats_uses_one_count_query_and_real_users():
         "get_dashboard_stats",
         new=AsyncMock(return_value={"total_variants": 42}),
     ):
-        result = await stats_module._load_dashboard_stats(db)
+        result = await stats_module._load_dashboard_stats(db, 7)
 
     assert result["total_genes"] == 10
-    assert result["total_users"] == 7
+    # The anonymous dashboard must not disclose the account population; the
+    # real count is now reachable only through an admin-scoped endpoint.
+    assert result["total_users"] == 0
     assert db.execute.await_count == 2
     assert db.scalar.await_count == 0
+
+
+def _release_context(release_id: int = 7) -> ReleaseContext:
+    """Published release every stats aggregate is now scoped to."""
+    return ReleaseContext(release_id=release_id, assembly_id=3, assembly="Wm82.a4.v1")
 
 
 @pytest.mark.asyncio
@@ -199,7 +208,7 @@ class TestHomepageStats:
 class TestVariantTypeSummary:
     async def test_groups_and_combines_indel_buckets(self):
         db = FakeDB(results=[FakeResult(rows=[("SNP", 5), ("INS", 2), ("DEL", 1), ("SV", 4)])])
-        result = await variant_type_summary(db=db)
+        result = await variant_type_summary(db=db, release_context=_release_context())
         assert [(item.name, item.value) for item in result] == [
             ("SNP", 5),
             ("Indel", 3),
@@ -208,7 +217,7 @@ class TestVariantTypeSummary:
 
     async def test_empty_table_returns_empty_list(self):
         db = FakeDB(results=[FakeResult(rows=[])])
-        assert await variant_type_summary(db=db) == []
+        assert await variant_type_summary(db=db, release_context=_release_context()) == []
 
 
 @pytest.mark.asyncio
@@ -217,7 +226,7 @@ class TestImpactSummary:
         db = FakeDB(
             results=[FakeResult(rows=[("HIGH", 3), ("MODIFIER", 50)])]
         )
-        result = await impact_summary(db=db)
+        result = await impact_summary(db=db, release_context=_release_context())
         assert [(item.impact, item.count) for item in result] == [
             ("HIGH", 3),
             ("MODIFIER", 50),
@@ -225,7 +234,7 @@ class TestImpactSummary:
 
     async def test_empty_returns_empty_list(self):
         db = FakeDB(results=[FakeResult(rows=[])])
-        assert await impact_summary(db=db) == []
+        assert await impact_summary(db=db, release_context=_release_context()) == []
 
 
 @pytest.mark.asyncio
@@ -242,7 +251,7 @@ class TestChromosomeDensitySummary:
                 )
             ]
         )
-        result = await chromosome_density_summary(db=db)
+        result = await chromosome_density_summary(db=db, release_context=_release_context())
         by_name = {item.chromosome: item for item in result}
         assert by_name["Gm01"].variant_count == 15
         assert by_name["Gm01"].snp_count == 10
@@ -255,7 +264,7 @@ class TestChromosomeDensitySummary:
 
     async def test_zero_length_chromosome_has_zero_density(self):
         db = FakeDB(results=[FakeResult(rows=[("Gm00", 0, "SNP", 7)])])
-        result = await chromosome_density_summary(db=db)
+        result = await chromosome_density_summary(db=db, release_context=_release_context())
         assert result[0].variant_count == 7
         assert result[0].density_per_kb == 0.0
 
@@ -311,7 +320,7 @@ class TestReleaseStatistics:
 class TestMutagenStatistics:
     async def test_groups_by_mutagen(self):
         db = FakeDB(results=[FakeResult(rows=[("EMS", 7), ("NaN", 2)])])
-        result = await mutagen_statistics(db=db)
+        result = await mutagen_statistics(db=db, release_context=_release_context())
         assert [(item.mutagen, item.count) for item in result] == [("EMS", 7), ("NaN", 2)]
 
 
@@ -336,6 +345,7 @@ class TestChromosomeDensityEndpoint:
             ),
         ):
             result = await chromosome_density(
+                release_context=_release_context(),
                 assembly="GmWm82.a4.v1", chromosome="chr01", bin_size=1000
             )
         assert result.total_variants == 8
@@ -348,6 +358,7 @@ class TestChromosomeDensityEndpoint:
             new=AsyncMock(return_value=[]),
         ):
             result = await chromosome_density(
+                release_context=_release_context(),
                 assembly="GmWm82.a4.v1", chromosome="chr01", bin_size=1000
             )
         assert result.bins == []
@@ -364,5 +375,6 @@ class TestChromosomeDensityEndpoint:
         ):
             with pytest.raises(ServiceUnavailableError):
                 await chromosome_density(
+                    release_context=_release_context(),
                     assembly="GmWm82.a4.v1", chromosome="chr01", bin_size=1000
                 )

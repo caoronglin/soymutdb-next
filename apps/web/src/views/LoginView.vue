@@ -6,6 +6,7 @@ import { useQueryClient } from "@tanstack/vue-query";
 import { ApiError, request, setAccessToken } from "@soymutdb/api-client";
 
 import { currentLanguage, setLanguage, t } from "../lib/i18n";
+import { markSessionEstablished } from "../lib/current-user";
 import { safeRedirect } from "../lib/redirect";
 
 interface LoginResponse {
@@ -40,6 +41,9 @@ async function submit() {
     if (!response.access_token) throw new Error("Login response omitted access token");
 
     setAccessToken(response.access_token);
+    // A fresh session is exactly when the `GET /auth/me` probe becomes safe:
+    // `lib/current-user.ts` only asks once a session is known to exist.
+    markSessionEstablished(true);
     queryClient.removeQueries({ queryKey: ["current-user"], exact: true });
     await router.push(redirectTarget.value);
   } catch (error) {

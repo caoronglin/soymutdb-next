@@ -29,14 +29,14 @@ import TableTemplatesView from "../views/TableTemplatesView.vue";
  * would then fail every request with 401. The API enforces the role itself; the
  * guard is a UX affordance, never the authorization boundary.
  */
-export const ADMIN_ROUTES: readonly (RouteRecordRaw & { navKey?: string })[] = [
+export const ADMIN_ROUTES: readonly RouteRecordRaw[] = [
   { path: "/login", name: "login", component: LoginView },
-  { path: "/", name: "dashboard", component: DashboardView, navKey: "admin.dashboard" },
-  { path: "/releases", name: "releases", component: ReleasesView, navKey: "admin.releases" },
-  { path: "/imports", name: "imports", component: ImportsView, navKey: "admin.imports" },
+  { path: "/", name: "dashboard", component: DashboardView },
+  { path: "/releases", name: "releases", component: ReleasesView },
+  { path: "/imports", name: "imports", component: ImportsView },
   { path: "/imports/new", name: "import-create", component: ImportCreateView },
   { path: "/imports/:taskId", name: "import-detail", component: ImportDetailView },
-  { path: "/content", name: "content", component: StaticPagesView, navKey: "admin.content" },
+  { path: "/content", name: "content", component: StaticPagesView },
   { path: "/content/pages", name: "content-pages", component: StaticPagesView },
   {
     path: "/content/pages/:pageId",
@@ -44,14 +44,14 @@ export const ADMIN_ROUTES: readonly (RouteRecordRaw & { navKey?: string })[] = [
     redirect: (to) => ({ path: "/content", query: { edit: String(to.params.pageId) } }),
   },
   { path: "/content/legacy", name: "content-legacy", component: ContentLegacyMigrationView },
-  { path: "/table-templates", name: "table-templates", component: TableTemplatesView, navKey: "admin.tableViews" },
-  { path: "/publications", name: "publications", component: PublicationsAdminView, navKey: "publications.title" },
-  { path: "/news", name: "news", component: NewsAdminView, navKey: "admin.news.title" },
-  { path: "/media", name: "media", component: MediaView, navKey: "admin.uploads" },
-  { path: "/audit", name: "audit", component: AuditView, navKey: "admin.auditLogs" },
-  { path: "/features", name: "features", component: FeaturesView, navKey: "admin.features" },
-  { path: "/instances", name: "instances", component: () => import("../views/SpeciesInstancesView.vue"), navKey: "admin.instances.title" },
-  { path: "/settings", name: "settings", component: SettingsView, navKey: "admin.settings" },
+  { path: "/table-templates", name: "table-templates", component: TableTemplatesView },
+  { path: "/publications", name: "publications", component: PublicationsAdminView },
+  { path: "/news", name: "news", component: NewsAdminView },
+  { path: "/media", name: "media", component: MediaView },
+  { path: "/audit", name: "audit", component: AuditView },
+  { path: "/features", name: "features", component: FeaturesView },
+  { path: "/instances", name: "instances", component: () => import("../views/SpeciesInstancesView.vue") },
+  { path: "/settings", name: "settings", component: SettingsView },
   { path: "/settings/brand", name: "settings-brand", component: () => import("../views/SiteBrandSettingsView.vue") },
   { path: "/analytics-settings", name: "analytics-settings", component: AnalyticsSettingsView },
 

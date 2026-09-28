@@ -22,6 +22,15 @@ class SeedRequestCreate(BaseModel):
     email: EmailStr
     institution: Annotated[str, Field(min_length=1, max_length=512)]
     country: Annotated[str, Field(min_length=1, max_length=128)]
+    #: Free-text gene identifiers supplied by the requester.
+    #:
+    #: These are **not** resolved to released records: a public submission has
+    #: no assembly/release context, and the same accession can denote different
+    #: loci in v4 and v5. They are stored and emailed verbatim as the
+    #: requester's own description of what they want, and the curator resolves
+    #: them against a specific release when processing the request. Do not add
+    #: release-scoped validation here without also carrying assembly/release in
+    #: the payload.
     gene_ids: list[str] = Field(min_length=1, max_length=MAX_GENE_IDS)
     notes: Annotated[str | None, Field(max_length=5000)] = None
 

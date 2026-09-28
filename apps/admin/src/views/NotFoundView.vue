@@ -1,15 +1,19 @@
-<script setup lang="ts">
-import { ConfigProvider, createThemeConfig } from "@soymutdb/ui-vue";
+<template>
+  <div class="admin-page">
+    <AdminPageHeader
+      :title="t('common.notFound')"
+      :description="t('common.notFoundDescription')"
+    >
+      <template #actions>
+        <RouterLink to="/" class="admin-link" data-testid="not-found-home">
+          {{ t("common.goHome") }}
+        </RouterLink>
+      </template>
+    </AdminPageHeader>
+  </div>
+</template>
 
+<script setup lang="ts">
+import AdminPageHeader from "../components/AdminPageHeader.vue";
 import { t } from "../lib/i18n";
 </script>
-
-<template>
-  <ConfigProvider :theme="createThemeConfig({ dark: false })">
-    <div class="py-10">
-      <h1 class="text-xl font-semibold">{{ t("common.notFound") }}</h1>
-      <p class="mt-2 text-sm opacity-70">{{ t("common.notFoundDescription") }}</p>
-      <RouterLink to="/" class="mt-4 inline-block underline">{{ t("common.goHome") }}</RouterLink>
-    </div>
-  </ConfigProvider>
-</template>

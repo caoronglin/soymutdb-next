@@ -1,3 +1,203 @@
+<template>
+  <div class="admin-page">
+    <AdminPageHeader :title="t('publications.title')" :description="t('admin.publications.subtitle', { defaultValue: 'Peer-reviewed references attached to this database.' })">
+      <template #actions>
+        <Button size="small" data-testid="publications-new" @click="reset">
+          {{ t("common.reset") }}
+        </Button>
+      </template>
+    </AdminPageHeader>
+
+    <div class="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
+      <div class="grid content-start gap-4">
+        <form class="admin-toolbar" role="search" @submit.prevent="page = 1">
+          <label class="admin-field flex-1">
+            {{ t("common.search") }}
+            <input
+              v-model="search"
+              class="admin-control"
+              :placeholder="t('common.search')"
+              data-testid="publications-search"
+            />
+          </label>
+          <Button html-type="submit" size="small">{{ t("common.apply") }}</Button>
+        </form>
+
+        <AdminState v-if="query.isPending.value" state="loading" testid="publications-loading" />
+        <AdminState
+          v-else-if="query.isError.value"
+          state="error"
+          testid="publications-error"
+          :title="t('common.errorDescription')"
+        >
+          <template #actions>
+            <Button size="small" @click="query.refetch()">{{ t("common.retry") }}</Button>
+          </template>
+        </AdminState>
+        <AdminState
+          v-else-if="items.length === 0"
+          state="empty"
+          testid="publications-empty"
+          :title="t('publications.noPublications')"
+        />
+
+        <AdminCard v-else>
+          <div class="admin-table-wrap">
+            <table class="admin-table" data-testid="publications-table">
+              <thead>
+                <tr>
+                  <th scope="col">{{ t("publications.title") }}</th>
+                  <th scope="col">{{ t("publications.year") }}</th>
+                  <th scope="col">{{ t("common.actions") }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in items" :key="row.id" data-testid="publication-row">
+                  <td>
+                    {{ row.title }}
+                    <AdminStatusTag v-if="row.is_featured" status="default" />
+                    <p class="mt-0.5 text-xs text-muted-foreground">{{ row.authors }}</p>
+                  </td>
+                  <td class="text-xs text-muted-foreground">{{ row.year ?? "—" }}</td>
+                  <td>
+                    <div class="admin-row-actions">
+                      <button
+                        type="button"
+                        class="admin-link"
+                        :data-testid="'publication-edit-' + row.id"
+                        @click="edit(row)"
+                      >
+                        {{ t("common.edit") }}
+                      </button>
+                      <button
+                        type="button"
+                        class="admin-link admin-link--danger"
+                        :data-testid="'publication-delete-' + row.id"
+                        @click="pendingDelete = row"
+                      >
+                        {{ t("common.delete") }}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <template #footer>
+            <Pager v-model="page" :last-page="lastPage" testid-prefix="publications" />
+          </template>
+        </AdminCard>
+      </div>
+
+      <AdminCard
+        :title="form.id ? t('common.edit') : t('admin.publications.new', { defaultValue: 'New publication' })"
+        testid="publication-editor"
+      >
+        <form class="grid gap-3" @submit.prevent="saveMutation.mutate()">
+          <label class="admin-field">
+            {{ t("publications.title") }}
+            <input v-model="form.title" required class="admin-control" data-testid="publication-title" />
+          </label>
+          <label class="admin-field">
+            {{ t("publications.authors") }}
+            <input v-model="form.authors" required class="admin-control" data-testid="publication-authors" />
+          </label>
+          <div class="grid gap-3 sm:grid-cols-2">
+            <label class="admin-field">
+              {{ t("publications.journal") }}
+              <input v-model="form.journal" class="admin-control" data-testid="publication-journal" />
+            </label>
+            <label class="admin-field">
+              {{ t("publications.year") }}
+              <input
+                v-model="form.year"
+                class="admin-control"
+                inputmode="numeric"
+                data-testid="publication-year"
+              />
+            </label>
+          </div>
+          <div class="grid gap-3 sm:grid-cols-2">
+            <label class="admin-field">
+              {{ t("publications.doi") }}
+              <input v-model="form.doi" class="admin-control admin-control--mono" data-testid="publication-doi" />
+            </label>
+            <label class="admin-field">
+              {{ t("admin.publications.pmid", { defaultValue: "PMID" }) }}
+              <input v-model="form.pmid" class="admin-control admin-control--mono" data-testid="publication-pmid" />
+            </label>
+          </div>
+          <label class="admin-field">
+            {{ t("admin.publications.abstract", { defaultValue: "Abstract" }) }}
+            <textarea v-model="form.abstract" rows="4" class="admin-control" data-testid="publication-abstract" />
+          </label>
+          <label class="flex items-center gap-2 text-sm">
+            <input v-model="form.is_featured" type="checkbox" data-testid="publication-featured" />
+            {{ t("admin.publications.featured") }}
+          </label>
+
+          <p
+            v-if="errorMessage"
+            role="alert"
+            class="admin-state admin-state--error"
+            data-testid="publication-error"
+          >
+            {{ errorMessage }}
+          </p>
+
+          <div class="flex gap-2">
+            <Button
+              type="primary"
+              html-type="submit"
+              :disabled="saveMutation.isPending.value"
+              data-testid="publication-save"
+            >
+              {{ t("common.save") }}
+            </Button>
+            <Button html-type="button" data-testid="publication-reset" @click="reset">
+              {{ t("common.reset") }}
+            </Button>
+          </div>
+        </form>
+      </AdminCard>
+    </div>
+
+    <!-- Delete is a dialog, not an inline strip: the row is cited by DOI
+         elsewhere, so the confirmation has to be the operator's focus. -->
+    <div
+      v-if="pendingDelete"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4"
+      data-testid="publication-delete-confirm"
+      @mousedown.self="pendingDelete = null"
+    >
+      <div role="alertdialog" aria-labelledby="publication-delete-heading" class="w-full max-w-md rounded-xl border border-border bg-popover p-4 shadow-2xl">
+        <h2 id="publication-delete-heading" class="admin-section-title">
+          {{ t("admin.publications.deleteTitle", { defaultValue: "Delete publication" }) }}
+        </h2>
+        <p class="mt-2 text-sm">
+          {{ pendingDelete.title }}
+          <span v-if="pendingDelete.doi" class="ms-1 font-mono text-xs">DOI {{ pendingDelete.doi }}</span>
+        </p>
+        <div class="mt-4 flex gap-2">
+          <Button
+            danger
+            size="small"
+            data-testid="publication-delete-confirm-button"
+            :disabled="deleteMutation.isPending.value"
+            @click="deleteMutation.mutate(pendingDelete.id)"
+          >
+            {{ t("common.confirm") }}
+          </Button>
+          <Button size="small" data-testid="publication-delete-cancel" @click="pendingDelete = null">
+            {{ t("common.cancel") }}
+          </Button>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
 <script setup lang="ts">
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed, reactive, ref, toValue } from "vue";
@@ -9,17 +209,21 @@ import {
   updateAdminPublication,
   type Publication,
 } from "@soymutdb/api-client";
-import { Button, ConfigProvider, Tag, createThemeConfig } from "@soymutdb/ui-vue";
+import { Button } from "@soymutdb/ui-vue";
 
+import AdminCard from "../components/AdminCard.vue";
+import AdminPageHeader from "../components/AdminPageHeader.vue";
+import AdminState from "../components/AdminState.vue";
+import AdminStatusTag from "../components/AdminStatusTag.vue";
+import Pager from "../components/AdminPager.vue";
 import { t } from "../lib/i18n";
 
 /**
  * Publications CRUD.
  *
- * Delete asks for confirmation and states what will be removed: the row is
- * cited by DOI elsewhere, so an accidental delete is not "just a row". A create
- * or update failure leaves the form values in place so the operator does not
- * retype the abstract to retry.
+ * Delete states what will be removed: the row is cited by DOI elsewhere, so an
+ * accidental delete is not "just a row". A create or update failure leaves the
+ * form values in place so the operator does not retype the abstract to retry.
  */
 interface PublicationForm {
   id: string | null;
@@ -57,15 +261,15 @@ const form = reactive<PublicationForm>(emptyForm());
 
 const query = useQuery({
   queryKey: computed(() => ["admin", "publications", page.value, search.value]),
-  queryFn: () => listAdminPublications({ page: page.value, page_size: 20, search: search.value || undefined }),
-  staleTime: 15_000,
+  queryFn: () =>
+    listAdminPublications({ page: page.value, page_size: 20, search: search.value || undefined }),
 });
 
 const items = computed(() => toValue(query.data)?.items ?? []);
 const total = computed(() => toValue(query.data)?.total ?? 0);
 const lastPage = computed(() => Math.max(1, Math.ceil(total.value / 20)));
 
-function edit(row: Publication) {
+function edit(row: Publication): void {
   form.id = row.id;
   form.title = row.title;
   form.title_zh = row.title_zh ?? "";
@@ -76,9 +280,10 @@ function edit(row: Publication) {
   form.pmid = row.pmid ?? "";
   form.abstract = row.abstract ?? "";
   form.is_featured = row.is_featured;
+  errorMessage.value = "";
 }
 
-function reset() {
+function reset(): void {
   Object.assign(form, emptyForm());
   errorMessage.value = "";
 }
@@ -118,153 +323,3 @@ const deleteMutation = useMutation({
   },
 });
 </script>
-
-<template>
-  <ConfigProvider :theme="createThemeConfig({ dark: false })">
-    <div class="grid gap-8 lg:grid-cols-[1.4fr_1fr]">
-      <section>
-        <h1 class="text-xl font-semibold">{{ t("publications.title") }}</h1>
-
-        <form class="mt-4 flex gap-2" role="search" @submit.prevent="page = 1">
-          <input
-            v-model="search"
-            class="w-64 rounded-md border bg-background px-2 py-1.5 text-sm"
-            :placeholder="t('common.search')"
-            data-testid="publications-search"
-          />
-          <Button html-type="submit" size="small">{{ t("common.apply") }}</Button>
-        </form>
-
-        <p v-if="query.isPending.value" class="mt-4 text-sm opacity-70">{{ t("common.loading") }}</p>
-        <p v-else-if="query.isError.value" class="mt-4 text-sm text-red-700">
-          {{ t("common.errorDescription") }}
-        </p>
-        <p v-else-if="items.length === 0" data-testid="publications-empty" class="mt-4 text-sm opacity-70">
-          {{ t("publications.noPublications") }}
-        </p>
-        <table v-else class="mt-4 w-full text-sm" data-testid="publications-table">
-          <thead class="text-left opacity-60">
-            <tr>
-              <th scope="col" class="py-2">{{ t("publications.title") }}</th>
-              <th scope="col" class="py-2">{{ t("publications.year") }}</th>
-              <th scope="col" class="py-2">{{ t("common.actions") }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="row in items" :key="row.id" class="border-t" data-testid="publication-row">
-              <td class="py-2">
-                {{ row.title }}
-                <Tag v-if="row.is_featured" color="gold">{{ t("admin.publications.featured") }}</Tag>
-              </td>
-              <td class="py-2 text-xs opacity-70">{{ row.year ?? "—" }}</td>
-              <td class="py-2">
-                <button type="button" class="underline" :data-testid="'publication-edit-' + row.id" @click="edit(row)">
-                  {{ t("common.edit") }}
-                </button>
-                <button
-                  type="button"
-                  class="ms-3 underline text-red-700"
-                  :data-testid="'publication-delete-' + row.id"
-                  @click="pendingDelete = row"
-                >
-                  {{ t("common.delete") }}
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-
-        <nav v-if="items.length" class="mt-4 flex items-center gap-3" :aria-label="t('common.pagination')">
-          <button
-            type="button"
-            class="rounded-md border px-3 py-1.5 text-sm disabled:opacity-50"
-            :disabled="page <= 1"
-            @click="page -= 1"
-          >
-            {{ t("common.previous") }}
-          </button>
-          <span class="text-sm opacity-70">{{ page }} / {{ lastPage }}</span>
-          <button
-            type="button"
-            class="rounded-md border px-3 py-1.5 text-sm disabled:opacity-50"
-            :disabled="page >= lastPage"
-            @click="page += 1"
-          >
-            {{ t("common.next") }}
-          </button>
-        </nav>
-
-        <div
-          v-if="pendingDelete"
-          role="alertdialog"
-          aria-labelledby="delete-heading"
-          class="mt-4 rounded-md border border-red-400 p-4"
-          data-testid="publication-delete-confirm"
-        >
-          <h2 id="delete-heading" class="text-sm font-medium">{{ t("common.delete") }}</h2>
-          <p class="mt-1 text-sm opacity-80">
-            {{ pendingDelete.title }}
-            <span v-if="pendingDelete.doi" class="ms-1 font-mono text-xs">DOI {{ pendingDelete.doi }}</span>
-          </p>
-          <div class="mt-3 flex gap-2">
-            <Button
-              size="small"
-              data-testid="publication-delete-confirm-button"
-              :disabled="deleteMutation.isPending.value"
-              @click="deleteMutation.mutate(pendingDelete.id)"
-            >
-              {{ t("common.confirm") }}
-            </Button>
-            <Button size="small" data-testid="publication-delete-cancel" @click="pendingDelete = null">
-              {{ t("common.cancel") }}
-            </Button>
-          </div>
-        </div>
-      </section>
-
-      <section class="rounded-lg border p-4">
-        <h2 class="text-sm font-medium">
-          {{ form.id ? t("common.edit") : t("common.save") }}
-        </h2>
-        <form class="mt-3 grid gap-3" @submit.prevent="saveMutation.mutate()">
-          <label class="text-sm opacity-70">
-            {{ t("publications.title") }}
-            <input v-model="form.title" required class="mt-1 w-full rounded-md border bg-background px-2 py-1.5" data-testid="publication-title" />
-          </label>
-          <label class="text-sm opacity-70">
-            {{ t("publications.authors") }}
-            <input v-model="form.authors" required class="mt-1 w-full rounded-md border bg-background px-2 py-1.5" data-testid="publication-authors" />
-          </label>
-          <div class="grid grid-cols-2 gap-3">
-            <label class="text-sm opacity-70">
-              {{ t("publications.journal") }}
-              <input v-model="form.journal" class="mt-1 w-full rounded-md border bg-background px-2 py-1.5" />
-            </label>
-            <label class="text-sm opacity-70">
-              {{ t("publications.year") }}
-              <input v-model="form.year" inputmode="numeric" class="mt-1 w-full rounded-md border bg-background px-2 py-1.5" />
-            </label>
-          </div>
-          <label class="text-sm opacity-70">
-            {{ t("publications.doi") }}
-            <input v-model="form.doi" class="mt-1 w-full rounded-md border bg-background px-2 py-1.5 font-mono text-xs" data-testid="publication-doi" />
-          </label>
-          <label class="flex items-center gap-2 text-sm">
-            <input v-model="form.is_featured" type="checkbox" data-testid="publication-featured" />
-            {{ t("admin.publications.featured") }}
-          </label>
-          <p v-if="errorMessage" role="alert" class="text-sm text-red-700" data-testid="publication-error">
-            {{ errorMessage }}
-          </p>
-          <div class="flex gap-2">
-            <Button html-type="submit" :disabled="saveMutation.isPending.value" data-testid="publication-save">
-              {{ t("common.save") }}
-            </Button>
-            <Button data-testid="publication-reset" @click="reset">{{ t("common.reset") }}</Button>
-          </div>
-          <p class="text-xs opacity-60">{{ t("common.total") }}: {{ total }}</p>
-        </form>
-      </section>
-    </div>
-  </ConfigProvider>
-</template>

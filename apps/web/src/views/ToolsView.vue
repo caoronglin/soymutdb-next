@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { ConfigProvider, createThemeConfig } from "@soymutdb/ui-vue";
+import PortalLayout from "../components/PortalLayout.vue";
 import { t } from "../lib/i18n";
 </script>
 
 <template>
-  <ConfigProvider :theme="createThemeConfig({ dark: false })">
-    <main class="mx-auto max-w-4xl p-8">
+  <PortalLayout>
+    <div class="mx-auto max-w-4xl px-4 py-8">
       <RouterLink to="/" class="text-sm underline opacity-70">{{ t("nav.home") }}</RouterLink>
       <h1 class="mt-2 text-2xl font-semibold">{{ t("tools.title") }}</h1>
       <p class="mt-2 max-w-2xl text-sm opacity-70">
@@ -47,6 +47,6 @@ import { t } from "../lib/i18n";
         </p>
         <span class="mt-3 inline-block text-sm underline">{{ t("tools.open") }}</span>
       </RouterLink>
-    </main>
-  </ConfigProvider>
+    </div>
+  </PortalLayout>
 </template>

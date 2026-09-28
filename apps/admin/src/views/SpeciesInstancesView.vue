@@ -1,3 +1,312 @@
+<template>
+  <div class="admin-page">
+    <AdminPageHeader
+      :title="t('admin.instances.title')"
+      :description="t('admin.instances.description')"
+    >
+      <template #meta>
+        <div class="mt-3 flex flex-wrap items-center gap-2 text-xs">
+          <span class="text-muted-foreground">{{ t("admin.instances.context") }}:</span>
+          <span class="font-medium" data-testid="instances-current">
+            {{ currentInstance?.name ?? "—" }}
+          </span>
+          <Tag v-if="isRemote" color="gold">{{ t("admin.instances.registrationOnly") }}</Tag>
+        </div>
+        <p v-if="isRemote" class="mt-2 text-xs text-amber-800" data-testid="instances-remote-disabled">
+          {{ t("admin.instances.adminDisabled") }}
+        </p>
+        <p class="mt-2 text-xs text-muted-foreground" data-testid="instances-api-invariant">
+          {{ t("admin.instances.apiInvariant") }}
+        </p>
+      </template>
+      <template #actions>
+        <Button type="primary" data-testid="instances-new" @click="openCreate">
+          {{ t("admin.instances.create") }}
+        </Button>
+      </template>
+    </AdminPageHeader>
+
+    <p v-if="noticeMessage" class="admin-state" data-testid="instances-notice">
+      {{ noticeMessage }}
+    </p>
+    <p v-if="errorMessage" role="alert" class="admin-state admin-state--error" data-testid="instances-error">
+      {{ errorMessage }}
+    </p>
+
+    <AdminCard
+      v-if="editorOpen"
+      :title="editingId === null ? t('admin.instances.create') : t('admin.instances.edit')"
+      testid="instance-editor"
+    >
+      <template #actions>
+        <span v-if="editingId !== null" class="font-mono text-xs text-muted-foreground">
+          #{{ editingId }}
+        </span>
+      </template>
+
+      <form class="grid gap-3 sm:grid-cols-2" @submit.prevent="saveMutation.mutate()">
+        <label class="admin-field">
+          <span>{{ t("admin.instances.code") }}</span>
+          <input
+            v-model="draft.code"
+            type="text"
+            required
+            :disabled="editingId !== null"
+            maxlength="32"
+            class="admin-control admin-control--mono"
+            data-testid="instance-code"
+          />
+        </label>
+        <label class="admin-field">
+          <span>{{ t("admin.instances.name") }}</span>
+          <input
+            v-model="draft.name"
+            type="text"
+            required
+            maxlength="128"
+            class="admin-control"
+            data-testid="instance-name"
+          />
+        </label>
+        <label class="admin-field">
+          <span>{{ t("admin.instances.species") }}</span>
+          <input
+            v-model="draft.species"
+            type="text"
+            required
+            maxlength="128"
+            class="admin-control"
+            data-testid="instance-species"
+          />
+        </label>
+        <label class="admin-field">
+          <span>{{ t("admin.instances.apiUrl") }}</span>
+          <input
+            v-model="draft.api_base_url"
+            type="url"
+            required
+            class="admin-control admin-control--mono"
+            data-testid="instance-api-url"
+          />
+        </label>
+        <label class="admin-field">
+          <span>{{ t("admin.instances.portalUrl") }}</span>
+          <input
+            v-model="draft.site_url"
+            type="url"
+            class="admin-control admin-control--mono"
+            data-testid="instance-site-url"
+          />
+        </label>
+        <label class="admin-field">
+          <span>{{ t("admin.instances.jbrowseUrl") }}</span>
+          <input
+            v-model="draft.jbrowse_base_url"
+            type="url"
+            class="admin-control admin-control--mono"
+            data-testid="instance-jbrowse-url"
+          />
+        </label>
+        <label class="admin-field sm:col-span-2">
+          <span>{{ t("admin.instances.notes") }}</span>
+          <textarea v-model="draft.notes" rows="2" class="admin-control" data-testid="instance-notes" />
+        </label>
+        <label class="flex items-center gap-2 text-sm">
+          <input v-model="draft.is_enabled" type="checkbox" data-testid="instance-enabled" />
+          {{ t("admin.instances.enabled") }}
+        </label>
+        <label v-if="editingId === null" class="flex items-center gap-2 text-sm">
+          <input v-model="draft.is_local" type="checkbox" data-testid="instance-local" />
+          {{ t("admin.instances.local") }}
+        </label>
+
+        <p
+          v-if="editorIsLocal"
+          class="rounded-md border border-border bg-muted px-3 py-2 text-xs text-muted-foreground sm:col-span-2"
+          data-testid="instance-local-hint"
+        >
+          {{ t("admin.instances.localHint") }}
+        </p>
+        <p
+          v-else-if="editingId === null && !draft.is_local"
+          class="rounded-md border border-border bg-muted px-3 py-2 text-xs text-muted-foreground sm:col-span-2"
+          data-testid="instance-remote-hint"
+        >
+          {{ t("admin.instances.remoteHint") }}
+        </p>
+        <p
+          class="rounded-md border border-border bg-muted px-3 py-2 text-xs text-muted-foreground sm:col-span-2"
+          data-testid="instance-target-note"
+        >
+          {{ t("admin.instances.targetNote") }}
+        </p>
+
+        <div class="flex gap-2 sm:col-span-2">
+          <Button
+            type="primary"
+            html-type="submit"
+            :disabled="saveMutation.isPending.value"
+            data-testid="instance-save"
+          >
+            {{ saveMutation.isPending.value ? t("common.loading") : t("common.save") }}
+          </Button>
+          <Button html-type="button" data-testid="instance-cancel" @click="closeEditor">
+            {{ t("common.cancel") }}
+          </Button>
+        </div>
+      </form>
+    </AdminCard>
+
+    <p
+      v-if="deleteTarget"
+      class="admin-state admin-state--error"
+      data-testid="instance-delete-confirm"
+    >
+      <span class="font-medium">{{ t("admin.instances.deleteConfirmTitle") }}</span>
+      <span>{{ t("admin.instances.deleteConfirmBody") }}</span>
+      <span class="font-mono text-xs">{{ deleteTarget.name }} · {{ deleteTarget.code }}</span>
+      <span class="admin-page-actions mt-1">
+        <Button
+          type="primary"
+          danger
+          size="small"
+          :disabled="deleteMutation.isPending.value"
+          data-testid="instance-delete-confirm-button"
+          @click="deleteMutation.mutate(deleteTarget.id)"
+        >
+          {{ t("common.delete") }}
+        </Button>
+        <Button size="small" data-testid="instance-delete-cancel" @click="deleteTarget = null">
+          {{ t("common.cancel") }}
+        </Button>
+      </span>
+    </p>
+
+    <AdminState v-if="query.isPending.value" state="loading" testid="instances-loading" :rows="4" />
+    <AdminState
+      v-else-if="query.isError.value"
+      state="error"
+      testid="instances-load-error"
+      :title="t('common.errorDescription')"
+    >
+      <template #actions>
+        <Button size="small" data-testid="instances-retry" @click="query.refetch()">
+          {{ t("common.retry") }}
+        </Button>
+      </template>
+    </AdminState>
+    <AdminState
+      v-else-if="instances.length === 0"
+      state="empty"
+      testid="instances-empty"
+      :title="t('admin.instances.empty')"
+    />
+
+    <AdminCard v-else>
+      <div class="admin-table-wrap">
+        <table class="admin-table" data-testid="instances-table">
+          <thead>
+            <tr>
+              <th scope="col">{{ t("admin.instances.name") }}</th>
+              <th scope="col">{{ t("admin.instances.species") }}</th>
+              <th scope="col">{{ t("admin.instances.apiUrl") }}</th>
+              <th scope="col">{{ t("admin.instances.connection") }}</th>
+              <th scope="col">{{ t("admin.instances.lastChecked") }}</th>
+              <th scope="col">{{ t("common.actions") }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="instance in instances" :key="instance.id" data-testid="instance-row">
+              <td>
+                <p class="font-medium">{{ instance.name }}</p>
+                <p class="font-mono text-xs text-muted-foreground">{{ instance.code }}</p>
+                <div class="mt-1 flex flex-wrap gap-1">
+                  <Tag v-if="instance.is_local" color="blue">{{ t("admin.instances.local") }}</Tag>
+                  <Tag v-if="currentInstance?.code === instance.code" color="green">
+                    {{ t("admin.instances.currentFlag") }}
+                  </Tag>
+                  <Tag v-if="!instance.is_enabled" color="default">
+                    {{ t("admin.instances.disabled") }}
+                  </Tag>
+                </div>
+              </td>
+              <td>{{ instance.species }}</td>
+              <td>
+                <span class="font-mono text-xs">{{ instance.api_base_url }}</span>
+                <a
+                  v-if="safeUrl(instance.portal_base_url ?? instance.site_url)"
+                  :href="safeUrl(instance.portal_base_url ?? instance.site_url) ?? undefined"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="admin-link mt-1 block text-xs"
+                  :data-testid="'instance-open-' + instance.id"
+                >
+                  {{ t("admin.instances.openPortal") }}
+                </a>
+              </td>
+              <td>
+                <AdminStatusTag
+                  :status="instance.connection_state"
+                  :label="stateLabel(instance.connection_state)"
+                />
+              </td>
+              <td class="text-xs text-muted-foreground">{{ formatDate(instance.last_checked_at) }}</td>
+              <td>
+                <div class="admin-row-actions">
+                  <Button
+                    size="small"
+                    html-type="button"
+                    :data-testid="'instance-edit-' + instance.id"
+                    @click="openEdit(instance)"
+                  >
+                    {{ t("common.edit") }}
+                  </Button>
+                  <Button
+                    size="small"
+                    html-type="button"
+                    :disabled="currentInstance?.code === instance.code"
+                    :data-testid="'instance-select-' + instance.id"
+                    @click="setCurrent(instance)"
+                  >
+                    {{
+                      currentInstance?.code === instance.code
+                        ? t("admin.instances.currentFlag")
+                        : t("admin.instances.setCurrent")
+                    }}
+                  </Button>
+                  <Button
+                    size="small"
+                    html-type="button"
+                    :disabled="checkingId === instance.id"
+                    :data-testid="'instance-check-' + instance.id"
+                    @click="checkHealth(instance)"
+                  >
+                    {{
+                      checkingId === instance.id
+                        ? t("admin.instances.checking")
+                        : t("admin.instances.checkConnection")
+                    }}
+                  </Button>
+                  <Button
+                    size="small"
+                    html-type="button"
+                    :disabled="instance.is_local"
+                    :title="instance.is_local ? t('admin.instances.localHint') : undefined"
+                    :data-testid="'instance-delete-' + instance.id"
+                    @click="deleteTarget = instance"
+                  >
+                    {{ t("common.delete") }}
+                  </Button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </AdminCard>
+  </div>
+</template>
+
 <script setup lang="ts">
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed, reactive, ref, toValue } from "vue";
@@ -11,8 +320,12 @@ import {
   type SpeciesInstance,
 } from "@soymutdb/api-client";
 import { formatDate } from "@soymutdb/shared/format";
-import { Button, ConfigProvider, Tag, createThemeConfig } from "@soymutdb/ui-vue";
+import { Button, Tag } from "@soymutdb/ui-vue";
 
+import AdminCard from "../components/AdminCard.vue";
+import AdminPageHeader from "../components/AdminPageHeader.vue";
+import AdminState from "../components/AdminState.vue";
+import AdminStatusTag from "../components/AdminStatusTag.vue";
 import { t } from "../lib/i18n";
 import { useInstanceContext } from "../lib/instance-context";
 
@@ -52,7 +365,6 @@ const draft = reactive({
 const query = useQuery({
   queryKey: ["admin", "species-instances"],
   queryFn: listSpeciesInstances,
-  staleTime: 30_000,
   retry: false,
 });
 
@@ -112,8 +424,8 @@ const saveMutation = useMutation({
       notes: draft.notes.trim() || null,
       is_enabled: draft.is_enabled,
     };
-    // `code` and `is_local` are registration-time identities: the update
-    // endpoint does not accept them, so an existing row keeps both.
+    // `code` and `is_local` are registration-time identities: the update endpoint
+    // does not accept them, so an existing row keeps both.
     return editingId.value === null
       ? createSpeciesInstance({ code: draft.code.trim(), is_local: draft.is_local, ...fields })
       : updateSpeciesInstance(editingId.value, fields);
@@ -187,330 +499,4 @@ function stateLabel(state: SpeciesInstance["connection_state"]): string {
   if (state === "unconfigured") return t("admin.instances.unconfigured");
   return t("common.unknown");
 }
-
-function stateColor(state: SpeciesInstance["connection_state"]): string {
-  if (state === "healthy") return "green";
-  if (state === "unhealthy") return "red";
-  if (state === "unconfigured") return "gold";
-  return "default";
-}
 </script>
-
-<template>
-  <ConfigProvider :theme="createThemeConfig({ dark: false })">
-    <div>
-      <div class="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 class="text-xl font-semibold">{{ t("admin.instances.title") }}</h1>
-          <p class="mt-1 max-w-2xl text-sm opacity-70">{{ t("admin.instances.description") }}</p>
-        </div>
-        <Button type="primary" data-testid="instances-new" @click="openCreate">
-          {{ t("admin.instances.create") }}
-        </Button>
-      </div>
-
-      <div
-        class="mt-3 flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs"
-      >
-        <span class="opacity-70">{{ t("admin.instances.context") }}:</span>
-        <span class="font-medium" data-testid="instances-current">
-          {{ currentInstance?.name ?? "—" }}
-        </span>
-        <Tag v-if="isRemote" color="gold">{{ t("admin.instances.registrationOnly") }}</Tag>
-      </div>
-      <p v-if="isRemote" class="mt-2 text-xs text-amber-800" data-testid="instances-remote-disabled">
-        {{ t("admin.instances.adminDisabled") }}
-      </p>
-      <p class="mt-2 text-xs text-muted-foreground" data-testid="instances-api-invariant">
-        {{ t("admin.instances.apiInvariant") }}
-      </p>
-
-      <p
-        v-if="noticeMessage"
-        data-testid="instances-notice"
-        class="mt-4 rounded-md border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-800"
-      >
-        {{ noticeMessage }}
-      </p>
-      <p
-        v-if="errorMessage"
-        data-testid="instances-error"
-        class="mt-4 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700"
-      >
-        {{ errorMessage }}
-      </p>
-
-      <section
-        v-if="editorOpen"
-        class="mt-4 rounded-lg border border-border bg-card p-4"
-        data-testid="instance-editor"
-      >
-        <h2 class="text-sm font-medium">
-          {{ editingId === null ? t("admin.instances.create") : t("admin.instances.edit") }}
-          <span v-if="editingId !== null" class="ms-2 font-mono text-xs opacity-70">
-            #{{ editingId }}
-          </span>
-        </h2>
-
-        <form class="mt-3 grid gap-3 sm:grid-cols-2" @submit.prevent="saveMutation.mutate()">
-          <label class="text-sm">
-            <span class="opacity-70">{{ t("admin.instances.code") }}</span>
-            <input
-              v-model="draft.code"
-              type="text"
-              required
-              :disabled="editingId !== null"
-              maxlength="32"
-              class="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs disabled:opacity-60"
-              data-testid="instance-code"
-            />
-          </label>
-          <label class="text-sm">
-            <span class="opacity-70">{{ t("admin.instances.name") }}</span>
-            <input
-              v-model="draft.name"
-              type="text"
-              required
-              maxlength="128"
-              class="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
-              data-testid="instance-name"
-            />
-          </label>
-          <label class="text-sm">
-            <span class="opacity-70">{{ t("admin.instances.species") }}</span>
-            <input
-              v-model="draft.species"
-              type="text"
-              required
-              maxlength="128"
-              class="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
-              data-testid="instance-species"
-            />
-          </label>
-          <label class="text-sm">
-            <span class="opacity-70">{{ t("admin.instances.apiUrl") }}</span>
-            <input
-              v-model="draft.api_base_url"
-              type="url"
-              required
-              class="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs"
-              data-testid="instance-api-url"
-            />
-          </label>
-          <label class="text-sm">
-            <span class="opacity-70">{{ t("admin.instances.portalUrl") }}</span>
-            <input
-              v-model="draft.site_url"
-              type="url"
-              class="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs"
-              data-testid="instance-site-url"
-            />
-          </label>
-          <label class="text-sm">
-            <span class="opacity-70">{{ t("admin.instances.jbrowseUrl") }}</span>
-            <input
-              v-model="draft.jbrowse_base_url"
-              type="url"
-              class="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs"
-              data-testid="instance-jbrowse-url"
-            />
-          </label>
-          <label class="text-sm sm:col-span-2">
-            <span class="opacity-70">{{ t("admin.instances.notes") }}</span>
-            <textarea
-              v-model="draft.notes"
-              rows="2"
-              class="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
-              data-testid="instance-notes"
-            />
-          </label>
-          <label class="flex items-center gap-2 text-sm">
-            <input
-              v-model="draft.is_enabled"
-              type="checkbox"
-              data-testid="instance-enabled"
-            />
-            {{ t("admin.instances.enabled") }}
-          </label>
-          <label v-if="editingId === null" class="flex items-center gap-2 text-sm">
-            <input
-              v-model="draft.is_local"
-              type="checkbox"
-              data-testid="instance-local"
-            />
-            {{ t("admin.instances.local") }}
-          </label>
-
-          <p
-            v-if="editorIsLocal"
-            class="rounded-md border border-border bg-muted px-2 py-1.5 text-xs text-muted-foreground sm:col-span-2"
-            data-testid="instance-local-hint"
-          >
-            {{ t("admin.instances.localHint") }}
-          </p>
-          <p
-            v-else-if="editingId === null && !draft.is_local"
-            class="rounded-md border border-border bg-muted px-2 py-1.5 text-xs text-muted-foreground sm:col-span-2"
-            data-testid="instance-remote-hint"
-          >
-            {{ t("admin.instances.remoteHint") }}
-          </p>
-          <p
-            class="rounded-md border border-border bg-muted px-2 py-1.5 text-xs text-muted-foreground sm:col-span-2"
-            data-testid="instance-target-note"
-          >
-            {{ t("admin.instances.targetNote") }}
-          </p>
-
-          <div class="flex gap-2 sm:col-span-2">
-            <Button
-              type="primary"
-              html-type="submit"
-              :disabled="saveMutation.isPending.value"
-              data-testid="instance-save"
-            >
-              {{ saveMutation.isPending.value ? t("common.loading") : t("common.save") }}
-            </Button>
-            <Button html-type="button" data-testid="instance-cancel" @click="closeEditor">
-              {{ t("common.cancel") }}
-            </Button>
-          </div>
-        </form>
-      </section>
-
-      <section
-        v-if="deleteTarget"
-        class="mt-4 rounded-lg border border-red-300 bg-red-50 p-4"
-        data-testid="instance-delete-confirm"
-      >
-        <p class="text-sm font-medium text-red-800">{{ t("admin.instances.deleteConfirmTitle") }}</p>
-        <p class="mt-1 text-sm text-red-700">{{ t("admin.instances.deleteConfirmBody") }}</p>
-        <p class="mt-1 font-mono text-xs text-red-700">
-          {{ deleteTarget.name }} · {{ deleteTarget.code }}
-        </p>
-        <div class="mt-2 flex gap-2">
-          <Button
-            type="primary"
-            danger
-            :disabled="deleteMutation.isPending.value"
-            data-testid="instance-delete-confirm-button"
-            @click="deleteMutation.mutate(deleteTarget.id)"
-          >
-            {{ t("common.delete") }}
-          </Button>
-          <Button html-type="button" data-testid="instance-delete-cancel" @click="deleteTarget = null">
-            {{ t("common.cancel") }}
-          </Button>
-        </div>
-      </section>
-
-      <p v-if="query.isPending.value" data-testid="instances-loading" class="mt-4 text-sm opacity-70">
-        {{ t("common.loading") }}
-      </p>
-      <p
-        v-else-if="query.isError.value"
-        data-testid="instances-load-error"
-        class="mt-4 text-sm text-red-700"
-      >
-        {{ t("common.errorDescription") }}
-      </p>
-      <p
-        v-else-if="instances.length === 0"
-        data-testid="instances-empty"
-        class="mt-4 text-sm opacity-70"
-      >
-        {{ t("admin.instances.empty") }}
-      </p>
-      <table v-else class="mt-4 w-full text-sm" data-testid="instances-table">
-        <thead class="text-left opacity-60">
-          <tr>
-            <th scope="col" class="py-2">{{ t("admin.instances.name") }}</th>
-            <th scope="col" class="py-2">{{ t("admin.instances.species") }}</th>
-            <th scope="col" class="py-2">{{ t("admin.instances.apiUrl") }}</th>
-            <th scope="col" class="py-2">{{ t("admin.instances.connection") }}</th>
-            <th scope="col" class="py-2">{{ t("admin.instances.lastChecked") }}</th>
-            <th scope="col" class="py-2">{{ t("common.actions") }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="instance in instances"
-            :key="instance.id"
-            class="border-t border-border align-top"
-            data-testid="instance-row"
-          >
-            <td class="py-2">
-              <p class="font-medium">{{ instance.name }}</p>
-              <p class="font-mono text-xs opacity-70">{{ instance.code }}</p>
-              <Tag v-if="instance.is_local" color="blue">{{ t("admin.instances.local") }}</Tag>
-              <Tag v-if="currentInstance?.code === instance.code" color="green">
-                {{ t("admin.instances.currentFlag") }}
-              </Tag>
-              <Tag v-if="!instance.is_enabled" color="default">{{ t("admin.instances.disabled") }}</Tag>
-            </td>
-            <td class="py-2">{{ instance.species }}</td>
-            <td class="py-2">
-              <span class="font-mono text-xs">{{ instance.api_base_url }}</span>
-              <a
-                v-if="safeUrl(instance.portal_base_url ?? instance.site_url)"
-                :href="safeUrl(instance.portal_base_url ?? instance.site_url) ?? undefined"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="mt-1 block text-xs text-primary underline"
-                :data-testid="'instance-open-' + instance.id"
-              >
-                {{ t("admin.instances.openPortal") }}
-              </a>
-            </td>
-            <td class="py-2">
-              <Tag :color="stateColor(instance.connection_state)">
-                {{ stateLabel(instance.connection_state) }}
-              </Tag>
-            </td>
-            <td class="py-2 text-xs opacity-70">{{ formatDate(instance.last_checked_at) }}</td>
-            <td class="py-2">
-              <div class="flex flex-wrap gap-2">
-                <Button
-                  size="small"
-                  html-type="button"
-                  :data-testid="'instance-edit-' + instance.id"
-                  @click="openEdit(instance)"
-                >
-                  {{ t("common.edit") }}
-                </Button>
-                <Button
-                  size="small"
-                  html-type="button"
-                  :disabled="currentInstance?.code === instance.code"
-                  :data-testid="'instance-select-' + instance.id"
-                  @click="setCurrent(instance)"
-                >
-                  {{ currentInstance?.code === instance.code ? t("admin.instances.currentFlag") : t("admin.instances.setCurrent") }}
-                </Button>
-                <Button
-                  size="small"
-                  html-type="button"
-                  :disabled="!instance.is_enabled || checkingId === instance.id"
-                  :data-testid="'instance-check-' + instance.id"
-                  @click="checkHealth(instance)"
-                >
-                  {{ checkingId === instance.id ? t("admin.instances.checking") : t("admin.instances.checkConnection") }}
-                </Button>
-                <Button
-                  size="small"
-                  html-type="button"
-                  :disabled="instance.is_local"
-                  :title="instance.is_local ? t('admin.instances.localHint') : undefined"
-                  :data-testid="'instance-delete-' + instance.id"
-                  @click="deleteTarget = instance"
-                >
-                  {{ t("common.delete") }}
-                </Button>
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </ConfigProvider>
-</template>

@@ -49,7 +49,11 @@ async def list_mutant_lines(
     variant_count = func.count(VariantSummary.id).label("variant_count")
     stmt = (
         select(MutantLine, variant_count)
-        .outerjoin(VariantSummary, VariantSummary.mutant_line_id == MutantLine.id)
+        .outerjoin(
+            VariantSummary,
+            (VariantSummary.mutant_line_id == MutantLine.id)
+            & (VariantSummary.release_id == release_context.release_id),
+        )
         .where(*_visible_public_conditions(release_context.release_id))
         .group_by(MutantLine.id)
         .order_by(func.lower(MutantLine.public_id), MutantLine.id)
@@ -75,7 +79,11 @@ async def get_mutant_line(
     variant_count = func.count(VariantSummary.id).label("variant_count")
     result = await db.execute(
         select(MutantLine, variant_count)
-        .outerjoin(VariantSummary, VariantSummary.mutant_line_id == MutantLine.id)
+        .outerjoin(
+            VariantSummary,
+            (VariantSummary.mutant_line_id == MutantLine.id)
+            & (VariantSummary.release_id == release_context.release_id),
+        )
         .where(
             func.upper(MutantLine.public_id) == normalize_public_id(public_id),
             *_visible_public_conditions(release_context.release_id),

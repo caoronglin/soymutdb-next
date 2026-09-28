@@ -1,6 +1,6 @@
 # SoyMutDB — Cloudflare Pages 与 Tunnel 部署
 
-Cloudflare Pages 是受支持的**可选生产静态托管**方案：三个前端应用以纯静态 `dist` 发布；API 与基因组数据仍由自管后端提供。若启用 Cloudflare Tunnel，则仅把该专用 API origin 接入 Cloudflare，不使用 Workers / Pages Functions / KV / D1 / Queues。
+Cloudflare Pages 是受支持的**可选生产静态托管**方案：React 19/Umi Max 4 前端以纯静态产物发布；门户分成 external 与 internal 两个独立 artifact，Admin/JBrowse 使用各自 Umi build；API 与基因组数据仍由自管后端提供。若启用 Cloudflare Tunnel，则仅把该专用 API origin 接入 Cloudflare，不使用 Workers / Pages Functions / KV / D1 / Queues。
 
 GitHub Pages（`.github/workflows/ci.yml` 生成 `pages-demo-dist` → `.github/workflows/pages.yml` 校验后推送 `gh-pages`）仅是公开 demo 发布渠道，不承载生产认证、管理端或生产 API。Pages 工作流绝不重建源码：它下载触发 CI 的同一静态树，校验 `SHA256SUMS`、复制后再次比较完整文件清单和 SHA-256，再更新 `gh-pages`。生产部署可选择 Cloudflare Pages；两者不能共享生产环境变量、CORS 白名单或 Cookie 配置。
 
@@ -28,7 +28,7 @@ GitHub Pages（`.github/workflows/ci.yml` 生成 `pages-demo-dist` → `.github/
 # 非生产本地验证（internal canonical URL 使用保留域名）。
 # demo 模式让 SSG 样本离线生成；standard 模式会调用真实 API 抓取发布数据，
 # 因此本地/CI 验收必须显式提供 VITE_API_BASE_URL 与 VITE_JBROWSE_BASE_URL，
-# 否则 vite.config 的 requireDeploymentOrigin 会按设计 fail-closed。
+# 否则 apps/web/config/config.ts 的 requireDeploymentOrigin 会按设计 fail-closed。
 VITE_DEPLOYMENT_MODE=demo \
 VITE_API_BASE_URL=https://api.soymutdb.test \
 VITE_JBROWSE_BASE_URL=https://jbrowse.soymutdb.test \
@@ -57,11 +57,12 @@ python3 scripts/check_site_artifact_isolation.py \
 ```
                          ┌──────────────────────────────────────────────┐
   浏览器 ──► Cloudflare Pages（静态 dist，无 Functions）                 │
-  │         ├─ soymutdb-web     (apps/web/dist)     门户（SSG + SPA）    │
-  │         ├─ soymutdb-jbrowse (apps/jbrowse/dist) JBrowse 2 基因组浏览器 │
-  │         └─ soymutdb-admin   (apps/admin/dist)   管理端（可选）        │
+  │         ├─ soymutdb-web     (apps/web/dist/external) 公开门户（SSG） │
+  │         ├─ soymutdb-internal(apps/web/dist/internal) 内部门户（隔离）│
+  │         ├─ soymutdb-jbrowse (apps/jbrowse/dist)      JBrowse 2       │
+  │         └─ soymutdb-admin   (apps/admin/dist)        管理端（可选）   │
   │                                                                      │
-  │         HTTPS  + _headers（安全头/CSP/缓存）+ _redirects（SPA fallback）
+  │         HTTPS  + _headers（安全头/CSP/缓存）+ site-specific deep-link fallback
   │                                                                      │
   └───────────────► API 公共 origin: https://<API_PUBLIC_ORIGIN>          │
                     └─ Cloudflare Tunnel → cloudflared → tunnel-origin    │
@@ -75,7 +76,7 @@ python3 scripts/check_site_artifact_isolation.py \
 - Preview build 的 `VITE_API_BASE_URL` **只能指向 staging API，禁止连生产**。
 - `tunnel-origin` 是 Compose 内部 origin；`cloudflare-tunnel` profile 只负责运行 Tunnel 链路。两者不是前端站点，也不替代 Pages。
 - 认证依赖 HttpOnly refresh cookie（`Path=/api/v1/auth`、`Secure`）。带凭据的 CORS 不支持通配 origin —— 后端 `SOYMUTDB_CORS_ORIGINS` 必须**精确列出**每个允许的前端 origin（生产域名 + 固定 preview/staging origin），`*` 会被拒绝。
-- 本仓库中 `_headers` / `_redirects` 是**静态文件**，生产与 preview 共享同一份 —— preview 联调时需要临时把 CSP 占位符换成 staging origin（见 §7）。
+- 本仓库中 `_headers` / `_redirects` 是**静态文件**，生产与 preview 共享同一份 —— preview 联调时需要临时把 CSP 占位符换成 staging origin（见 §7）。Umi apps 不使用会覆盖哈希静态资源的 `/* /index.html 200` 通配重写；portal 的可预渲染路径由 build-sites 写成真实 HTML，未知路径按 Pages 404 fallback 处理。
 
 ---
 
@@ -84,17 +85,18 @@ python3 scripts/check_site_artifact_isolation.py \
 | 文件 | 作用 |
 | --- | --- |
 | `apps/{web,jbrowse,admin}/public/_headers` | Cloudflare Pages 自定义响应头（安全头、CSP、缓存策略） |
-| `apps/{web,jbrowse,admin}/public/_redirects` | SPA fallback `/* /index.html 200` |
-| `apps/{web,jbrowse,admin}/.env.example` | 各应用 build 期环境变量说明（生产 / preview 两组） |
-| `apps/web/index.html`、`apps/web/scripts/base-template.ts` | 门户 `<meta>` CSP（与 `_headers` 的 CSP 保持同一份内容） |
+| `apps/{web,jbrowse}/public/_redirects` | 应用各自的 deep-link/404 说明；不使用会影射所有资源的通配重写 |
+| `apps/{web,admin,jbrowse}/.env.example` | 各应用 build 期环境变量说明（生产 / preview 两组） |
+| `apps/{web,admin,jbrowse}/config/config.ts` | Umi base/publicPath、构建期 CSP meta 与输出目录配置 |
 
-Vite 构建无需改动：三个应用均使用默认 `base: '/'`（Pages 自定义域名部署在根路径）与默认 `public/` 目录（`_headers`/`_redirects` 会自动复制进 `dist/`）。
+Umi Max 4 构建把 `_headers` 等 public 文件复制到 dist；Web 的 `build-sites.ts` 为
+external/internal 分别设置 `base` 与 `publicPath`，公共 Pages 默认根路径。
 
 ### 2.1 缓存策略（`_headers`）
 
 | 路径 | Cache-Control | 说明 |
 | --- | --- | --- |
-| `/assets/*` | `public, max-age=31536000, immutable` | Vite 产物带内容 hash，可永久缓存 1 年 |
+| `/assets/*` | `public, max-age=31536000, immutable` | Umi 产物带内容 hash，可永久缓存 1 年 |
 | `/`、`/*.html` | `public, max-age=0, must-revalidate` | HTML 始终重新校验（与 Pages 默认行为一致，显式声明） |
 | 其他（SSG 无扩展名路径等） | Pages 默认 `public, max-age=0, must-revalidate` | `/*` 规则故意不写 Cache-Control，避免与 `/assets/*` 规则合并成逗号拼接的非法值 |
 
@@ -115,8 +117,8 @@ Content-Security-Policy: <见下>
 
 | 应用 | CSP 要点 |
 | --- | --- |
-| web | `script-src 'self' 'unsafe-inline'`（SSG 页含内联 bootstrap/主题脚本）；`style-src 'self' 'unsafe-inline'`（Vite 内联样式）；`img-src 'self' data: https:`；`connect-src 'self' https://api.example.com`；`frame-src 'self' https://jbrowse.example.com`（/browse 页 iframe 嵌入 jbrowse） |
-| jbrowse | `script-src 'self'`（纯 Vite SPA，无内联脚本）；`worker-src 'self' blob:`；`img-src 'self' data: blob: https:`；`connect-src 'self' https://api.example.com`；`frame-ancestors 'self' https://portal.example.com https://admin.example.com`（允许门户/管理端嵌入） |
+| web | `script-src 'self' 'unsafe-inline'`（保留 portal 静态内容所需的内联 bootstrap）；`style-src 'self' 'unsafe-inline'`（AntD/runtime styles）；`img-src 'self' data: https:`；`connect-src 'self' https://api.example.com`；`frame-src 'self' https://jbrowse.example.com`（/browse 页 iframe 嵌入 jbrowse） |
+| jbrowse | `script-src 'self'`（Umi SPA，无内联脚本）；`worker-src 'self' blob:`;`img-src 'self' data: blob: https:`;`connect-src 'self' https://api.example.com`;`frame-ancestors 'self' https://portal.example.com https://admin.example.com`(允许门户/管理端嵌入) |
 | admin | `script-src 'self'`；`connect-src 'self' https://api.example.com`；`frame-ancestors 'none'`（禁止被嵌入，与 nginx `X-Frame-Options: DENY` 一致） |
 
 > **meta CSP 与 header CSP 同时生效（取交集）**：门户的 `<meta>` CSP（`index.html` 与 SSG 模板 `base-template.ts`）已与 `_headers` 保持同一份文本。修改其中一处必须同步另一处；只改 header 而漏改 meta，`frame-src`/`connect-src` 会被 meta 的 `default-src 'self'` 截断，iframe 嵌入 jbrowse 将静默失败。

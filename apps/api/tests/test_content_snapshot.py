@@ -160,9 +160,15 @@ class TestReleaseAwareSnapshot:
         self._orig_build = content_module._build_snapshot
         self._seen: dict = {}
 
-        async def recording_build(db, *, release_id=None, page_definition_version=None):
+        async def recording_build(
+            db, *, release_id=None, page_definition_version=None, variant=None
+        ):
+            # `variant` is part of the builder contract: the route must forward
+            # the explicitly selected site variant so an internal build cannot
+            # receive external content.
             self._seen["release_id"] = release_id
             self._seen["page_definition_version"] = page_definition_version
+            self._seen["variant"] = variant
             return _FIXTURE_SNAPSHOT
 
         content_module._build_snapshot = recording_build
@@ -188,6 +194,9 @@ class TestReleaseAwareSnapshot:
         assert self._seen["release_id"] == 7
         assert self._seen["page_definition_version"] == 3
         assert "release_id" not in resp.json()  # fixture has no release_id key
+        # The default variant is forwarded explicitly rather than defaulted
+        # inside the service.
+        assert self._seen["variant"] == "external"
 
 
 class _SnapshotRows:

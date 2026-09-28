@@ -4,6 +4,7 @@
 // share one ruleset.
 import js from "@eslint/js";
 import globals from "globals";
+import reactHooks from "eslint-plugin-react-hooks";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
@@ -12,6 +13,7 @@ export default tseslint.config(
             "**/node_modules/**",
             "**/dist/**",
             "**/.turbo/**",
+            "**/.umi*/**",
             "**/coverage/**",
             "**/public/**",
             "**/*.gen.ts",
@@ -50,6 +52,42 @@ export default tseslint.config(
             "no-empty": ["error", { allowEmptyCatch: true }],
             // 生产代码禁止 console.log/console.info（保留 warn/error 用于错误边界与安全告警）。
             "no-console": ["warn", { allow: ["warn", "error"] }],
+        },
+    },
+    {
+        // Node-side scripts (.mjs/.cjs tooling such as the locale-key checkers)
+        // run in Node, not the browser; without these globals `process` and
+        // `console` are reported as undefined by `no-undef`.
+        files: ["**/*.{mjs,cjs}"],
+        languageOptions: {
+            globals: {
+                ...globals.node,
+            },
+        },
+    },
+    {
+        // React hook correctness. Only the two rules the codebase already
+        // annotates are enabled: the plugin's newer compiler-oriented rules
+        // (static-components / use-memo / preserve-manual-memoization) would
+        // flag the in-flight React migration wholesale, which is a separate
+        // change. Registering the plugin is what makes the existing
+        // `react-hooks/*` annotations meaningful instead of "rule not found".
+        files: ["**/*.{tsx,jsx}", "apps/*/src/**/*.ts"],
+        plugins: { "react-hooks": reactHooks },
+        rules: {
+            "react-hooks/rules-of-hooks": "error",
+            "react-hooks/exhaustive-deps": "warn",
+        },
+    },
+    {
+        // Test harnesses deliberately drive hooks from plain helper functions
+        // (`setup()`, `mountSearch()`) and from Vue composables share-named
+        // `useX`. `rules-of-hooks` cannot see through that indirection and
+        // reports false positives, so it is scoped out of tests only — the
+        // production rule above stays enabled.
+        files: ["**/*.test.{ts,tsx}", "**/*.spec.{ts,tsx}", "**/test/**", "**/test-utils/**"],
+        rules: {
+            "react-hooks/rules-of-hooks": "off",
         },
     },
     {

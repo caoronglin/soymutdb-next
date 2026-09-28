@@ -46,6 +46,7 @@ from ..schemas.blast import (
 from ..utils.s3 import generate_presigned_url
 from .job_service import build_job_payload
 from .outbox_service import create_outbox_event
+from .release_context import ReleaseContext
 
 settings = get_settings()
 
@@ -105,9 +106,24 @@ def _worker_parameters(params: BlastParameters) -> dict:
 class BlastService:
     """BLAST job management service."""
 
-    async def list_databases(self, db: AsyncSession) -> list[BlastDatabaseResponse]:
+    async def list_databases(
+        self,
+        db: AsyncSession,
+        *,
+        release_context: ReleaseContext,
+    ) -> list[BlastDatabaseResponse]:
+        """List active databases whose assembly is in the published release.
+
+        Without the release join this listed every active row, including the
+        databases of draft releases whose data has not been published.
+        """
         result = await db.execute(
-            select(BlastDatabase).where(BlastDatabase.is_active.is_(True))
+            select(BlastDatabase)
+            .join(Assembly, BlastDatabase.assembly_id == Assembly.id)
+            .where(
+                BlastDatabase.is_active.is_(True),
+                Assembly.release_id == release_context.release_id,
+            )
         )
         rows: list[BlastDatabaseResponse] = []
         for bd in result.scalars().all():
@@ -129,39 +145,58 @@ class BlastService:
                     assembly_is_default=(
                         assembly.is_default if assembly is not None else None
                     ),
+                    release_id=(
+                        assembly.release_id if assembly is not None else None
+                    ),
                 )
             )
         return rows
 
     @staticmethod
     async def _get_active_database(
-        db: AsyncSession, *conditions: ColumnElement[bool]
+        db: AsyncSession,
+        release_context: ReleaseContext,
+        *conditions: ColumnElement[bool],
     ) -> BlastDatabase | None:
-        """Fetch a single active database row matching *conditions*.
+        """Fetch one active database row in the published release.
 
-        The active ``blast_databases`` rows are the database whitelist:
-        anything not matching is refused here (defense in depth on top of
-        the schema-level name format check).
+        The active ``blast_databases`` rows of the *resolved release* are the
+        database whitelist: anything not matching is refused here (defense in
+        depth on top of the schema-level name format check). The release join
+        is what stops a job from targeting another release's database.
         """
         result = await db.execute(
-            select(BlastDatabase).where(
-                BlastDatabase.is_active.is_(True), *conditions
+            select(BlastDatabase)
+            .join(Assembly, BlastDatabase.assembly_id == Assembly.id)
+            .where(
+                BlastDatabase.is_active.is_(True),
+                Assembly.release_id == release_context.release_id,
+                *conditions,
             )
         )
         return result.scalar_one_or_none()
 
     async def _resolve_database(
-        self, db: AsyncSession, request: BlastSubmitRequest
+        self,
+        db: AsyncSession,
+        request: BlastSubmitRequest,
+        *,
+        release_context: ReleaseContext,
     ) -> BlastDatabase:
-        """Resolve the target database from the request.
+        """Resolve the target database within the published release.
 
         Priority: ``database_id`` → ``database`` (name) → configured default
-        (``settings.blast_default_db``) → default assembly (``is_default``).
+        (``settings.blast_default_db``) → the release's default assembly.
         Both ``database_id`` and ``database`` may be given; they must agree.
+
+        Every branch is constrained to the resolved release's assemblies, so a
+        job can never target a database that belongs to a draft or another
+        release — including through the "default" fallbacks, which previously
+        picked any ``Assembly.is_default`` row across all releases.
         """
         if request.database_id is not None:
             blast_db = await self._get_active_database(
-                db, BlastDatabase.id == request.database_id
+                db, release_context, BlastDatabase.id == request.database_id
             )
             if blast_db is None:
                 raise NotFoundError(
@@ -176,7 +211,7 @@ class BlastService:
 
         if request.database is not None:
             blast_db = await self._get_active_database(
-                db, BlastDatabase.name == request.database
+                db, release_context, BlastDatabase.name == request.database
             )
             if blast_db is None:
                 raise NotFoundError(
@@ -185,21 +220,24 @@ class BlastService:
             return blast_db
 
         # Neither identifier given: fall back to the configured default
-        # database, then to the default assembly (multi-genome deployments).
+        # database, then to the release's default assembly.
         if settings.blast_default_db:
             blast_db = await self._get_active_database(
-                db, BlastDatabase.name == settings.blast_default_db
+                db, release_context, BlastDatabase.name == settings.blast_default_db
             )
             if blast_db is not None:
                 return blast_db
 
         assembly_result = await db.execute(
-            select(Assembly).where(Assembly.is_default.is_(True))
+            select(Assembly).where(
+                Assembly.is_default.is_(True),
+                Assembly.release_id == release_context.release_id,
+            )
         )
         assembly = assembly_result.scalars().first()
         if assembly is not None:
             blast_db = await self._get_active_database(
-                db, BlastDatabase.assembly_id == assembly.id
+                db, release_context, BlastDatabase.assembly_id == assembly.id
             )
             if blast_db is not None:
                 return blast_db
@@ -214,15 +252,20 @@ class BlastService:
         db: AsyncSession,
         user_id: uuid.UUID,
         request: BlastSubmitRequest,
+        *,
+        release_context: ReleaseContext,
     ) -> BlastJobResponse:
         """Create a BLAST job and queue its dispatch via the transactional outbox.
 
         Business record + outbox event are committed atomically; no Celery
-        broker round-trip happens inside this transaction.
+        broker round-trip happens inside this transaction. The searched
+        database is resolved inside ``release_context``.
         """
-        # Validate the database exists and is active (the active-DB table is
-        # the database whitelist).
-        blast_db = await self._resolve_database(db, request)
+        # Validate the database exists, is active, and belongs to the
+        # published release (the active-DB table is the database whitelist).
+        blast_db = await self._resolve_database(
+            db, request, release_context=release_context
+        )
 
         # Program ↔ database-type compatibility.
         allowed_types = _PROGRAM_DB_TYPES.get(request.program)
@@ -270,6 +313,11 @@ class BlastService:
                 "word_size": request.parameters.word_size,
                 "max_target_seqs": request.parameters.max_target_seqs,
                 "parameters": worker_params,
+                # Provenance: the worker (and any later reader of the result)
+                # must know which release/assembly namespace was searched.
+                "release_key": release_context.release_key,
+                "assembly": release_context.assembly,
+                "assembly_id": blast_db.assembly_id,
             },
             idempotency_key=f"blast:{job.id}",
             max_attempts=settings.blast_max_attempts,
@@ -449,6 +497,10 @@ class BlastService:
     @staticmethod
     def _job_to_response(job: BlastJob) -> BlastJobResponse:
         database = getattr(job, "database", None)
+        # Provenance is read through the database row (the job stores only the
+        # database id): a stored result must state which release and assembly it
+        # was computed against.
+        assembly = getattr(database, "assembly", None) if database is not None else None
         return BlastJobResponse(
             job_id=str(job.id),
             status=BlastSchemaJobStatus(job.status),
@@ -463,4 +515,6 @@ class BlastService:
             completed_at=job.completed_at,
             error_message=job.error_message,
             result_url=job.result_path,
+            release_id=(assembly.release_id if assembly is not None else None),
+            assembly_name=(assembly.name if assembly is not None else None),
         )

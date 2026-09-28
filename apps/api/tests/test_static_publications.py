@@ -56,6 +56,9 @@ class _FakeDb:
         self.counters: dict[str, object] = {}
         self.audit: list = []
         self.outbox: list = []
+        # Releases the request gate resolves against. A publication request is
+        # only allowed for a release in a published state.
+        self.releases: list = [_release(1, "published")]
         self._seq = 0
 
     def _next_id(self) -> int:
@@ -90,10 +93,17 @@ class _FakeDb:
             return _Result(vals)
         if "static_publications" in text:
             return _Result(list(self.publications))
+        if "releases" in text:
+            return _Result(list(self.releases))
         return _Result([])
 
     async def scalar(self, stmt):
         return None
+
+
+def _release(release_id: int, status: str):
+    """Minimal release row for the publication request gate."""
+    return SimpleNamespace(id=release_id, status=status, version=f"v{release_id}")
 
 
 def _pub(pub_id: int, target: str, status: str, release_id: int = 1) -> StaticPublication:

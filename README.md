@@ -38,10 +38,10 @@
 
 | 层 | 技术 | 边界 |
 |----|------|------|
-| Public Web | SSG HTML + Vue 3（Vue Router + Pinia + @tanstack/vue-query） | 纯静态；无服务端渲染 HTML（`apps/web/package.json`） |
+| Public Web | React 19 + Umi Max 4、TanStack Router/Query、Ant Design 6；external/internal 分离 SSG | 纯静态双站制品；迁移和交付契约尚未验收（`apps/web/package.json`） |
 | API | FastAPI（Python） | 消毒 HTML 片段 + JSON；OpenAPI 是唯一契约 |
-| Admin | Vue 3 + Vite（Web-only，部署于 `/soymutdb-admin/`） | 静态托管 + 受保护 Admin API（JWT）（`apps/admin/package.json`） |
-| JBrowse | Vue 3 壳，复用 `@soymutdb/genome-view` + `@soymutdb/genome-data`（`apps/jbrowse/src/App.vue`） | 静态托管于 `/soymutdb-jbrowse/`；core profile 下可选 |
+| Admin | React 19 + Umi Max 4、Ant Design 6 + ProComponents v3 | 静态托管 + 受保护 Admin API（JWT）（`apps/admin/package.json`） |
+| JBrowse | React + Umi Max 4 壳，使用 `@jbrowse/react-linear-genome-view` | 静态托管于 `/soymutdb-jbrowse/`；core profile 下可选 |
 | Worker | Celery（多队列） | ingest/export/stats/cleanup/blast/analyses；直连数据层（窄 SQLAlchemy Core） |
 
 前端代码不直连数据库；数据统一经 API / worker 层。Tauri 桌面壳与 Rust 热路径（`core-rs`）已清理移除，当前仅保留 Web-only Admin。
@@ -200,28 +200,25 @@ SOYMUTDB_JBROWSE_ENABLED=0 bash scripts/build-pages-artifact.sh  # Pages 制品�
 
 ## 非主路径（已废弃/已放弃，仅保留参考）
 
-- `deploy/cloudflare.md` — 旧 Cloudflare Pages 静态托管方案（已改为 GitHub Pages）。
+- `deploy/cloudflare.md` — Cloudflare Pages 可选静态托管手册；GitHub Pages 仅承载公开 demo。
 - `deploy/conda/no-docker-data-layer.md` — 完全无 Docker 数据层探索（conda 裸进程备选）。
 
 ## Project layout
 
 ```
 apps/
-├── web/               # 公共 SSG 门户（Vue 3 + Vite + Vue Router）
-│   ├── src/
-│   │   ├── router/          # 显式路由表（routes.ts）+ 视图绑定（index.ts）
-│   │   ├── views/           # 页面级 Vue 组件（HomeView、SearchView、...）
-│   │   ├── components/      # Vue 组件（site-header 五导航等）
-│   │   ├── stores/          # Pinia 状态（release/assembly/site 上下文）
-│   │   └── lib/             # deployment、i18n、feature gating、SSG 客户端
-│   ├── scripts/             # SSG 构建脚本（tsx/js）：generate-static-routes/finalize-csp/gen-sw/release-manifest…
-│   └── dist/                # 生成静态输出（含 dist/releases/<release-id>/<digest>/）
+├── web/               # React 19 + Umi Max 4 公共 SSG 门户（external/internal）
+│   ├── src/routes/          # TanStack Router file routes
+│   ├── src/components/      # React 页面组件与可复用 UI
+│   ├── src/lib/             # deployment、i18n、query/cache、SSG 客户端
+│   ├── scripts/             # 双站 build、静态路由、CSP、SW、release manifest
+│   └── dist/{external,internal}/ # 隔离的静态输出
 │
-├── admin/             # Admin 控制台（Vue 3 + Vite，Web-only）
+├── admin/             # React 19 + Umi Max 4 管理控制台
 │   └── src/
-│       ├── views/           # 管理页（dashboard、导入、发布、内容、设置、...）
+│       ├── routes/          # React 管理页（dashboard、导入、发布、内容、设置）
 │       ├── components/      # 可复用 UI 组件
-│       └── lib/             # api-client 封装、实例连接器、主题等
+│       └── lib/             # api-client 封装、实例上下文、主题等
 │
 ├── api/               # FastAPI 后端（Python 3.13+）
 │   └── app/
@@ -240,14 +237,14 @@ apps/
 │       ├── publication/     # 三适配器（local/github_pages/cloudflare_pages）
 │       ├── repositories.py / tables.py / utils/
 │
-├── jbrowse/           # Vue 3 壳，复用 @soymutdb/genome-view + @soymutdb/genome-data（src/App.vue）
+├── jbrowse/           # React + Umi 壳，使用 @jbrowse/react-linear-genome-view（src/App.tsx）
 └── mcp-server/        # MCP server（Python）
 
 packages/
 ├── api-client/        # 类型化 Fetch API client（+ 生成的 openapi.d.ts）
-├── charts/            # Vue 图表组件
+├── charts/            # React/ECharts 图表 facade
 ├── genome-data/       # 基因组数据源/适配器（@soymutdb/genome-data）
-├── genome-view/       # 基因组视图组件（Vue，@soymutdb/genome-view）
+├── genome-view/       # 旧 Vue 基因组视图组件（待迁移清理）
 ├── genome-view-model/ # 浏览器 viewport 状态模型
 ├── i18n-core/         # en/zh 字典与 i18next 绑定
 ├── import-protocol/   # 导入任务契约

@@ -70,84 +70,45 @@ export function fetchHomepageStats(): Promise<HomepageStats> {
 // `fetchReleaseStatistics` was removed: it targeted `/stats/releases`, which the
 // API does not serve. Per-release counts come from `listReleases()` rows.
 
-export function fetchVariantTypeSummary(
-  releaseId?: string,
-): Promise<VariantTypeSummaryItem[]> {
-  return http.get<VariantTypeSummaryItem[]>("/stats/summary/variant-types", {
-    params: { release_id: releaseId },
-  });
+/**
+ * Variant-type summary for the release this client is pinned to.
+ *
+ * There is no per-call release parameter: the server scope comes from the
+ * `X-SoyMutDB-Release` header that `setReleaseId()` installs, so a caller
+ * cannot widen the read by passing a different id.
+ */
+export function fetchVariantTypeSummary(): Promise<VariantTypeSummaryItem[]> {
+  return http.get<VariantTypeSummaryItem[]>("/stats/summary/variant-types");
 }
 
-export function fetchImpactSummary(
-  releaseId?: string,
-): Promise<ImpactSummaryItem[]> {
-  return http.get<ImpactSummaryItem[]>("/stats/summary/impact", {
-    params: { release_id: releaseId },
-  });
+/** Impact summary for the client's pinned release. */
+export function fetchImpactSummary(): Promise<ImpactSummaryItem[]> {
+  return http.get<ImpactSummaryItem[]>("/stats/summary/impact");
 }
 
-export function fetchMutagenStatistics(
-  releaseId?: string,
-): Promise<MutagenCount[]> {
-  return http.get<MutagenCount[]>("/stats/mutagens", {
-    params: { release_id: releaseId },
-  });
+/** Mutant lines per mutagen for the client's pinned release. */
+export function fetchMutagenStatistics(): Promise<MutagenCount[]> {
+  return http.get<MutagenCount[]>("/stats/mutagens");
 }
 
-export function fetchChromosomeDensity(
-  releaseId?: string,
-): Promise<ChromosomeDensity[]> {
-  return http.get<ChromosomeDensity[]>("/stats/chromosome-density", {
-    params: { release_id: releaseId },
-  });
+/** Per-chromosome variant density for the client's pinned release. */
+export function fetchChromosomeDensity(): Promise<ChromosomeDensity[]> {
+  return http.get<ChromosomeDensity[]>("/stats/chromosome-density");
 }
 
-export function fetchSubstitutionSpectrum(
-  releaseId?: string,
-): Promise<SubstitutionSpectrumItem[]> {
-  return http.get<SubstitutionSpectrumItem[]>("/stats/substitution-spectrum", {
-    params: { release_id: releaseId },
-  });
-}
-
-export function fetchQualityDistribution(
-  releaseId?: string,
-): Promise<QualityDistributionItem[]> {
-  return http.get<QualityDistributionItem[]>("/stats/quality-distribution", {
-    params: { release_id: releaseId },
-  });
-}
-
-export function fetchEffectDistribution(
-  releaseId?: string,
-): Promise<EffectDistributionItem[]> {
-  return http.get<EffectDistributionItem[]>("/stats/effect-distribution", {
-    params: { release_id: releaseId },
-  });
-}
-
-export function fetchMutantLineVariantCounts(
-  limit = 20,
-  releaseId?: string,
-): Promise<MutantLineVariantCount[]> {
-  return http.get<MutantLineVariantCount[]>("/stats/mutant-line-variants", {
-    params: { limit, release_id: releaseId },
-  });
-}
-
-export function fetchDiscoveryTrend(
-  days = 30,
-  releaseId?: string,
-): Promise<DiscoveryTrendItem[]> {
+/** Cumulative discovery trend across published releases. */
+export function fetchDiscoveryTrend(days = 30): Promise<DiscoveryTrendItem[]> {
   return http.get<DiscoveryTrendItem[]>("/stats/discovery-trend", {
-    params: { days, release_id: releaseId },
+    params: { days },
   });
 }
 
-export function fetchFunctionalSummary(
-  releaseId?: string,
-): Promise<FunctionalSummary> {
-  return http.get<FunctionalSummary>("/stats/functional-summary", {
-    params: { release_id: releaseId },
-  });
-}
+
+// Removed: `fetchSubstitutionSpectrum`, `fetchQualityDistribution`,
+// `fetchEffectDistribution`, `fetchMutantLineVariantCounts` and
+// `fetchFunctionalSummary` targeted `/stats/{substitution-spectrum,
+// quality-distribution,effect-distribution,mutant-line-variants,
+// functional-summary}`. None of those routes exist in the API (see
+// apps/api/app/api/v1/stats.py), so every call was a guaranteed 404 dressed up
+// as a typed client method. Add the endpoint and the client together.
+

@@ -17,6 +17,9 @@
     "about": "关于我们",
     "language": "切换语言",
     "theme": "切换主题",
+    "quickSearch": "快速搜索",
+    "repository": "源代码仓库",
+    "adminConsole": "管理控制台",
     "profile": "个人中心",
     "mySeeds": "我的种子",
     "myBlast": "我的 BLAST",
@@ -43,7 +46,7 @@
   },
   "home": {
     "subtitle": "大豆突变体数据库",
-    "heroTitle": "搜索基因、变异与突变系",
+    "heroTitle": "探索多物种突变的未知疆域",
     "heroSubtitle": "按明确的基因组组装和数据版本，检索已发布的公开记录。",
     "searchPlaceholder": "搜索基因 ID、变异或突变系公开编号…",
     "databaseTitle": "SoyMutDB 数据库",
@@ -77,7 +80,28 @@
     "selectedAssembly": "组装版本",
     "defaultAssembly": "默认",
     "newsSubtitle": "SoyMutDB 项目已发布的动态。",
-    "noNews": "暂无已发布的新闻动态。"
+    "noNews": "暂无已发布的新闻动态。",
+    "heroEyebrow": "SOYMUTDB · MULTI-SPECIES",
+    "heroPrimary": "开始探索",
+    "heroSecondary": "了解更多",
+    "heroSlide2": "从染色体到全局表型",
+    "heroSlide2Desc": "覆盖多物种参考基因组与突变集合，支持基因、位点、BLAST 多维检索。",
+    "heroSlide3": "突变特征一览无余",
+    "heroSlide3Desc": "以表格与可视化呈现染色体、突变类型、基因位点与 JBrowse 2 跳转。",
+    "searchExamples": "支持基因 ID、染色体位点、变异 ID 与关键词。",
+    "searchEmptyHint": "请输入检索关键词。",
+    "databaseEyebrow": "SOYMUTDB DATABASE",
+    "featuredTools": "搜索工具",
+    "openTool": "进入",
+    "newsUnavailable": "最新动态暂不可用",
+    "newsRetry": "请稍后重试，当前没有使用演示数据替代。",
+    "resourceNav": "资源导览",
+    "resourceDownloads": "数据下载",
+    "resourceDownloadsDesc": "下载参考基因组、变异与注释数据。",
+    "resourceGuide": "使用指南",
+    "resourceGuideDesc": "快速上手与检索帮助。",
+    "resourcePublications": "文献 / 出版物",
+    "resourcePublicationsDesc": "SoyMutDB 相关文献。"
   },
   "genes": {
     "title": "基因搜索",
@@ -706,7 +730,8 @@
     "terms": "服务条款",
     "copyright": "© {{year}} SoyMutDB. 保留所有权利。",
     "builtWithCare": "为多物种植物研究而生",
-    "label": "页脚"
+    "label": "页脚",
+    "version": "v2.0.0"
   },
   "analytics": {
     "title": "可视化分析",
@@ -729,6 +754,8 @@
   },
   "search": {
     "title": "全局搜索",
+    "internalResults": "内部结果",
+    "matchedField": "命中字段",
     "testPreview": {
       "siteCount": "{{count}} 个未发布测试位点",
       "siteCountColumn": "测试位点数",
@@ -764,6 +791,7 @@
       "submit": "搜索",
       "resultsFor": "搜索结果",
       "noResults": "未找到基因",
+      "resultsRetry": "接口没有返回结果集，请稍后重试。",
       "colAssembly": "基因组版本",
       "colChromosome": "染色体号",
       "colMutation": "突变特征",
@@ -803,6 +831,7 @@
       "formatHint": "区域格式：染色体号 : 起始–终止",
       "submit": "搜索",
       "noResults": "该区域内未找到变异",
+      "resultsRetry": "接口没有返回结果集，请稍后重试。",
       "found": "找到 {{count}} 个变异",
       "colAssembly": "基因组版本",
       "colChromosome": "染色体号",
@@ -995,7 +1024,25 @@
       "capabilityUnavailable": "当前实例未启用此导入能力。",
       "disabled": "已停用"
     },
-    "dashboard": "仪表盘",
+    "dashboard": {
+      "title": "仪表盘",
+      "systemOverview": "系统总览",
+      "totalTeam": "团队成员",
+      "activeReleases": "活跃发布版本",
+      "totalVariants": "变异总数",
+      "queryP95": "查询 P95（毫秒）",
+      "genes": "基因",
+      "mutantLines": "突变系",
+      "seedAccessions": "种子编号",
+      "metricsSubtitle": "SoyMutDB 平台的实时指标。",
+      "metricsUnavailable": "指标不可用",
+      "metricsUnavailableDesc": "指标接口没有响应；下方的发布版本与内容接口不受影响。",
+      "retry": "重试",
+      "nextActions": "后续操作",
+      "pipelineHeadline": "让数据流水线保持运转",
+      "pipelineDesc": "从真实的运维流程开始，而不是装饰性的管理页面。",
+      "openResourceCatalog": "打开资源目录"
+    },
     "dashboardStats": {
       "analyticsHeading": "访问统计",
       "windowLabel": "时间窗口（天）",
@@ -1133,6 +1180,7 @@
     "activeReleases": "活跃版本",
     "news": {
       "title": "新闻管理",
+      "formHelp": "中英双语 Markdown 文章；保存不会顺带发布。",
       "trash": "已删除文章",
       "restore": "恢复",
       "purge": "永久删除",
@@ -1324,7 +1372,51 @@
       "actionPlaceholder": "操作"
     },
     "publications": {
-      "featured": "精选"
+      "featured": "精选",
+      "subtitle": "与本数据库关联的同行评审文献。",
+      "new": "新建文献",
+      "pmid": "PMID",
+      "abstract": "摘要",
+      "deleteTitle": "删除文献"
+    },
+    "importsHint": "该部署已接收的全部导入任务，按状态在服务端过滤。",
+    "releasesHint": "API 提供的全部发布版本，以及产生它的导入与源文件。",
+    "media": {
+      "description": "新闻与页面引用的已上传素材；归档只从选择器中移除，不破坏已发布的引用。"
+    },
+    "uploads": "媒体库",
+    "shell": {
+      "overview": "总览",
+      "dataManagement": "数据管理",
+      "content": "内容",
+      "presentation": "呈现",
+      "administration": "系统管理",
+      "resourceCatalog": "资源目录",
+      "media": "媒体库",
+      "widgets": "组件",
+      "layoutEditor": "布局编辑器",
+      "widgetPreview": "组件预览",
+      "widgetHealth": "组件健康",
+      "navigationAria": "管理端导航",
+      "expandSidebar": "展开侧栏",
+      "collapseSidebar": "收起侧栏",
+      "collapse": "收起",
+      "toggleSidebarAria": "切换侧栏",
+      "openCommandPalette": "打开命令面板",
+      "commandPalette": "命令面板",
+      "commandPlaceholder": "搜索命令或已发布基因…",
+      "commandEmpty": "没有匹配的命令或基因。",
+      "commandGeneUnavailable": "基因建议暂不可用；命令搜索仍可使用。",
+      "commandHint": "↑ ↓ 移动，Enter 执行。输入 3 个字符后开始给出基因建议。",
+      "toggleThemeToDark": "切换到深色主题",
+      "toggleThemeToLight": "切换到浅色主题",
+      "userMenuAria": "用户菜单",
+      "profile": "个人资料",
+      "signOut": "退出登录",
+      "notifications": "通知",
+      "notificationsAria": "通知（{{count}} 条未读）",
+      "markAllRead": "全部标记为已读",
+      "notificationsEmpty": "暂无通知"
     }
   },
   "news": {
@@ -1386,6 +1478,13 @@
     "noPublications": "暂无文献"
   },
   "help": {
+    "title": "帮助中心",
+    "subtitle": "查找答案并学习如何使用 SoyMutDB",
+    "gettingStarted": "快速开始",
+    "documentation": "文档",
+    "faq": "常见问题",
+    "contact": "联系支持",
+    "contactDesc": "如果以上内容没有解决你的问题，请通过项目邮箱联系维护团队。",
     "step1": "先选择基因组组装。检索、下载与位点都只属于一个组装，因此同一标识符在 v4 与 v5 中的坐标可以不同。",
     "step2": "按基因 ID、突变体公开 ID 或基因组区间检索。结果会标注染色体、坐标以及数据所属的 release。",
     "step3": "打开基因或突变体详情查看完整记录，再进入 JBrowse 2、下载或研究工具。",
@@ -1408,6 +1507,10 @@
     "q5": {
       "q": "研究工具需要什么？",
       "a": "序列提取、表达谱与富集分析都要求显式指定组装，否则区间或基因列表存在歧义。"
+    },
+    "q6": {
+      "q": "数据多久更新一次？",
+      "a": "发布版本与发布日期会在新闻与下载页公布；本帮助页不承诺固定的发布节奏。"
     }
   },
   "tools": {
@@ -1619,6 +1722,42 @@
     "exppatternCard": "在一个选定组装内比较最多 50 个基因的文库表达。",
     "enrichmentCard": "使用组装范围注释运行过表征或排序富集分析。"
   },
+  "commandPalette": {
+    "label": "快速搜索",
+    "placeholder": "搜索页面、基因、变异…",
+    "inputLabel": "搜索",
+    "close": "关闭",
+    "results": "结果",
+    "empty": "未找到与“{{query}}”匹配的结果",
+    "searchLabel": "搜索“{{query}}”",
+    "hintNavigate": "移动",
+    "hintSelect": "选择",
+    "hintOpen": "打开",
+    "browser": {
+      "label": "打开基因组浏览器",
+      "description": "跳转到 JBrowse 浏览器"
+    },
+    "genes": {
+      "label": "浏览基因",
+      "description": "检索基因模型"
+    },
+    "variants": {
+      "label": "检索变异",
+      "description": "查询 SNP / INDEL 目录"
+    },
+    "blast": {
+      "label": "BLAST 检索",
+      "description": "序列相似性比对"
+    },
+    "downloads": {
+      "label": "下载数据",
+      "description": "批量下载 VCF / FASTA"
+    },
+    "help": {
+      "label": "帮助与文档",
+      "description": "使用指南与教程"
+    }
+  },
   "seedRequest": {
     "title": "种子申请",
     "subtitle": "申请种子材料",
@@ -1640,6 +1779,8 @@
     "geneIdsHint": "每次申请最多 {{max}} 个基因 ID，可用空格或逗号分隔。",
     "errorNoGenes": "请至少输入一个基因 ID",
     "errorTooManyGenes": "基因 ID 过多——请控制在 {{max}} 个以内",
+    "purpose": "申请用途",
+    "purposePlaceholder": "研究用途、预期使用方式……",
     "notes": "备注（可选）",
     "notesPlaceholder": "研究用途、预期使用方式、寄送备注……",
     "submit": "提交申请",
@@ -1655,6 +1796,7 @@
   },
   "notifications": {
     "title": "消息通知",
+    "titleWithCount": "消息通知（{{count}} 条未读）",
     "empty": "暂无通知",
     "markAllRead": "全部已读",
     "blastCompleted": "BLAST 任务已完成",
@@ -1666,6 +1808,13 @@
   },
   "analyses": {
     "title": "分析流程",
+    "gate": {
+      "checking": "正在校验权限…",
+      "title": "需要研究权限",
+      "description": "分析模块运行 fastp / scanpy 流程，仅对研究者及以上账户开放。请使用研究者账户登录后提交分析任务。",
+      "signIn": "登录",
+      "backHome": "返回首页"
+    },
     "subtitle": "对自有数据运行读段质控与单细胞聚类",
     "noJobs": "暂无分析任务",
     "submit": "提交任务",

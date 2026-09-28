@@ -17,6 +17,9 @@
     "about": "About",
     "language": "Toggle Language",
     "theme": "Toggle Theme",
+    "quickSearch": "Quick search",
+    "repository": "Source repository",
+    "adminConsole": "Admin console",
     "profile": "Profile",
     "mySeeds": "My Seeds",
     "myBlast": "My BLAST",
@@ -43,7 +46,7 @@
   },
   "home": {
     "subtitle": "Soybean mutant database",
-    "heroTitle": "Search genes, variants and mutant lines",
+    "heroTitle": "Explore the unknown frontier of multi-species mutations",
     "heroSubtitle": "Explore released public records with clear assembly and release context.",
     "searchPlaceholder": "Search gene IDs, variants, or mutant public IDs…",
     "databaseTitle": "SoyMutDB database",
@@ -77,7 +80,28 @@
     "selectedAssembly": "Assembly",
     "defaultAssembly": "Default",
     "newsSubtitle": "Published updates from the SoyMutDB project.",
-    "noNews": "No published news is available yet."
+    "noNews": "No published news is available yet.",
+    "heroEyebrow": "SOYMUTDB · MULTI-SPECIES",
+    "heroPrimary": "Start exploring",
+    "heroSecondary": "Learn more",
+    "heroSlide2": "From chromosomes to phenotypes",
+    "heroSlide2Desc": "Reference genomes and mutation sets across species, searchable by gene, locus and BLAST.",
+    "heroSlide3": "Mutation features at a glance",
+    "heroSlide3Desc": "Tables and visualisations for chromosomes, variant types, gene loci and JBrowse 2 jumps.",
+    "searchExamples": "Supports gene IDs, chromosome loci, variant IDs and keywords.",
+    "searchEmptyHint": "Enter a search term.",
+    "databaseEyebrow": "SOYMUTDB DATABASE",
+    "featuredTools": "Search tools",
+    "openTool": "Enter",
+    "newsUnavailable": "Latest updates unavailable",
+    "newsRetry": "Please retry later; no demo data is substituted.",
+    "resourceNav": "Resource guide",
+    "resourceDownloads": "Data downloads",
+    "resourceDownloadsDesc": "Download reference genomes, variants and annotation data.",
+    "resourceGuide": "User guide",
+    "resourceGuideDesc": "Quick start and search help.",
+    "resourcePublications": "Publications",
+    "resourcePublicationsDesc": "SoyMutDB-related literature."
   },
   "genes": {
     "title": "Gene Search",
@@ -706,7 +730,8 @@
     "terms": "Terms of Service",
     "copyright": "© {{year}} SoyMutDB. All rights reserved.",
     "builtWithCare": "Built for multi-species plant research",
-    "label": "Footer"
+    "label": "Footer",
+    "version": "v2.0.0"
   },
   "analytics": {
     "title": "Visual Analytics",
@@ -729,6 +754,8 @@
   },
   "search": {
     "title": "Global Search",
+    "internalResults": "Internal results",
+    "matchedField": "matched",
     "testPreview": {
       "siteCount": "{{count}} unpublished test sites",
       "siteCountColumn": "Test sites",
@@ -764,6 +791,7 @@
       "submit": "Search",
       "resultsFor": "Results for",
       "noResults": "No genes found",
+      "resultsRetry": "The API did not return a result set. Please retry later.",
       "colAssembly": "Genome version",
       "colChromosome": "Chromosome",
       "colMutation": "Mutation feature",
@@ -803,6 +831,7 @@
       "formatHint": "Region format: chromosome : start–end",
       "submit": "Search",
       "noResults": "No variants found in this region",
+      "resultsRetry": "The API did not return a result set. Please retry later.",
       "found": "{{count}} variants found",
       "colAssembly": "Genome version",
       "colChromosome": "Chromosome",
@@ -995,7 +1024,25 @@
       "capabilityUnavailable": "This import capability is unavailable on the current instance.",
       "disabled": "Disabled"
     },
-    "dashboard": "Dashboard",
+    "dashboard": {
+      "title": "Dashboard",
+      "systemOverview": "System Overview",
+      "totalTeam": "Team Members",
+      "activeReleases": "Active Releases",
+      "totalVariants": "Total Variants",
+      "queryP95": "Query P95 (ms)",
+      "genes": "Genes",
+      "mutantLines": "Mutant Lines",
+      "seedAccessions": "Seed Accessions",
+      "metricsSubtitle": "Real-time metrics for the SoyMutDB platform.",
+      "metricsUnavailable": "Metrics unavailable",
+      "metricsUnavailableDesc": "The metrics endpoints did not answer; the release and content APIs below are unaffected.",
+      "retry": "Retry",
+      "nextActions": "Next actions",
+      "pipelineHeadline": "Keep the data pipeline moving",
+      "pipelineDesc": "Start from the real operational workflows instead of decorative management pages.",
+      "openResourceCatalog": "Open Resource Catalog"
+    },
     "dashboardStats": {
       "analyticsHeading": "Visitor analytics",
       "windowLabel": "Window (days)",
@@ -1133,6 +1180,7 @@
     "activeReleases": "Active Releases",
     "news": {
       "title": "News Management",
+      "formHelp": "Bilingual Markdown articles. Saving never publishes as a side effect.",
       "trash": "Deleted articles",
       "restore": "Restore",
       "purge": "Permanently delete",
@@ -1324,7 +1372,51 @@
       "actionPlaceholder": "action"
     },
     "publications": {
-      "featured": "featured"
+      "featured": "featured",
+      "subtitle": "Peer-reviewed references attached to this database.",
+      "new": "New publication",
+      "pmid": "PMID",
+      "abstract": "Abstract",
+      "deleteTitle": "Delete publication"
+    },
+    "importsHint": "Every import task this deployment has accepted, server-filtered by status.",
+    "releasesHint": "Every release the API serves, with the imports and source files that produced it.",
+    "media": {
+      "description": "Uploaded assets referenced by news and pages. Archiving removes an asset from the picker without breaking published references."
+    },
+    "uploads": "Media Library",
+    "shell": {
+      "overview": "Overview",
+      "dataManagement": "Data Management",
+      "content": "Content",
+      "presentation": "Presentation",
+      "administration": "Administration",
+      "resourceCatalog": "Resource Catalog",
+      "media": "Media Library",
+      "widgets": "Widgets",
+      "layoutEditor": "Layout Editor",
+      "widgetPreview": "Widget Preview",
+      "widgetHealth": "Widget Health",
+      "navigationAria": "Admin navigation",
+      "expandSidebar": "Expand sidebar",
+      "collapseSidebar": "Collapse sidebar",
+      "collapse": "Collapse",
+      "toggleSidebarAria": "Toggle sidebar",
+      "openCommandPalette": "Open command palette",
+      "commandPalette": "Commands",
+      "commandPlaceholder": "Search commands or published genes…",
+      "commandEmpty": "No matching command or gene.",
+      "commandGeneUnavailable": "Gene suggestions are unavailable; command search still works.",
+      "commandHint": "↑ ↓ to move, Enter to run. Gene suggestions start after 3 characters.",
+      "toggleThemeToDark": "Switch to dark theme",
+      "toggleThemeToLight": "Switch to light theme",
+      "userMenuAria": "User menu",
+      "profile": "Profile",
+      "signOut": "Sign out",
+      "notifications": "Notifications",
+      "notificationsAria": "Notifications ({{count}} unread)",
+      "markAllRead": "Mark all as read",
+      "notificationsEmpty": "No notifications"
     }
   },
   "news": {
@@ -1386,6 +1478,13 @@
     "noPublications": "No publications available"
   },
   "help": {
+    "title": "Help Center",
+    "subtitle": "Find answers and learn how to use SoyMutDB",
+    "gettingStarted": "Getting Started",
+    "documentation": "Documentation",
+    "faq": "Frequently Asked Questions",
+    "contact": "Contact Support",
+    "contactDesc": "If the answers above do not resolve your question, contact the project maintainers by email.",
     "step1": "Pick a genome assembly. Every search, download and locus belongs to exactly one assembly, so the same identifier can look different across v4 and v5.",
     "step2": "Search by gene ID, mutant public ID, or a genomic region. Results carry the chromosome, coordinates, and the release they were read from.",
     "step3": "Open a gene or mutant line for the full record, then continue into JBrowse 2, downloads, or the research tools.",
@@ -1408,6 +1507,10 @@
     "q5": {
       "q": "What do the research tools need?",
       "a": "Sequence fetch, expression patterns and enrichment all require an explicit assembly, because a region or a gene list is otherwise ambiguous."
+    },
+    "q6": {
+      "q": "How often is the data updated?",
+      "a": "Release versions and publication dates are announced on the News and Downloads pages. SoyMutDB does not promise a fixed release cadence on this Help page."
     }
   },
   "tools": {
@@ -1619,6 +1722,42 @@
     "exppatternCard": "Compare expression across libraries for up to 50 genes in one selected assembly.",
     "enrichmentCard": "Run over-representation or ranked enrichment analysis with assembly-scoped annotations."
   },
+  "commandPalette": {
+    "label": "Quick search",
+    "placeholder": "Search pages, genes, variants…",
+    "inputLabel": "Search",
+    "close": "Close",
+    "results": "Results",
+    "empty": "No results for “{{query}}”",
+    "searchLabel": "Search for “{{query}}”",
+    "hintNavigate": "navigate",
+    "hintSelect": "select",
+    "hintOpen": "to open",
+    "browser": {
+      "label": "Open Genome Browser",
+      "description": "Navigate to the JBrowse viewer"
+    },
+    "genes": {
+      "label": "Browse Genes",
+      "description": "Search gene models"
+    },
+    "variants": {
+      "label": "Search Variants",
+      "description": "Query the SNP / INDEL catalog"
+    },
+    "blast": {
+      "label": "BLAST Search",
+      "description": "Sequence similarity search"
+    },
+    "downloads": {
+      "label": "Download Data",
+      "description": "Bulk VCF / FASTA downloads"
+    },
+    "help": {
+      "label": "Help & Documentation",
+      "description": "User guides & tutorials"
+    }
+  },
   "seedRequest": {
     "title": "Seed Request",
     "subtitle": "Request seed material",
@@ -1640,6 +1779,8 @@
     "geneIdsHint": "Up to {{max}} gene IDs per request. Whitespace or comma separated.",
     "errorNoGenes": "Please enter at least one gene ID",
     "errorTooManyGenes": "Too many gene IDs — please keep it to {{max}} or fewer",
+    "purpose": "Purpose of the request",
+    "purposePlaceholder": "Research purpose, expected usage…",
     "notes": "Notes (optional)",
     "notesPlaceholder": "Research purpose, expected usage, shipping remarks…",
     "submit": "Submit request",
@@ -1655,6 +1796,7 @@
   },
   "notifications": {
     "title": "Notifications",
+    "titleWithCount": "Notifications ({{count}} unread)",
     "empty": "No notifications yet",
     "markAllRead": "Mark all read",
     "blastCompleted": "BLAST job completed",
@@ -1666,6 +1808,13 @@
   },
   "analyses": {
     "title": "Analysis Pipelines",
+    "gate": {
+      "checking": "Checking access…",
+      "title": "Research access required",
+      "description": "The Analyze module runs fastp / scanpy pipelines and is available to researcher accounts and above. Sign in with a researcher account to submit analysis jobs.",
+      "signIn": "Sign in",
+      "backHome": "Back to home"
+    },
     "subtitle": "Run read QC and single-cell clustering on your own data",
     "noJobs": "No analysis jobs yet",
     "submit": "Submit job",

@@ -1075,3 +1075,18 @@ input.ant-input,
   font-style: normal;
   font-display: swap;
 }
+
+/* ---------------------------------------------------------------------------
+ * Home hero parity (Vue migration, 2026-08) — additive only: no existing token
+ * or rule above is renamed or removed. Sizes the full-bleed fluid hero so the
+ * React hero geometry survives on short viewports.
+ * ------------------------------------------------------------------------- */
+.home-hero {
+  min-height: 28rem;
+}
+
+@media (max-width: 767px) {
+  .home-hero {
+    min-height: 0;
+  }
+}

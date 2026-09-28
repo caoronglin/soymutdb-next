@@ -3,7 +3,6 @@
  * Search tools catalog — the /search hub's entry cards for the standalone
  * research tools. Links only; each tool owns its own assembly-scoped request.
  */
-import { jbrowseUrl } from "@soymutdb/shared/genomics";
 import { Button } from "@soymutdb/ui-vue";
 
 import PortalLayout from "../components/PortalLayout.vue";
@@ -37,7 +36,13 @@ const TOOLS = [
       </ul>
 
       <div class="mt-8">
-        <Button data-testid="search-tools-gbrowse" @click="$router.push(jbrowseUrl({ chromosome: 'chr01' }))">
+        <!--
+          Route through the assembly picker instead of deep-linking JBrowse
+          with a bare locus: /browser requires an explicit assembly + release,
+          so a context-free link now renders "context unavailable" rather than
+          silently opening the v4 namespace.
+        -->
+        <Button data-testid="search-tools-gbrowse" @click="$router.push('/search/gbrowse')">
           {{ t("search.gbrowse.open") }}
         </Button>
       </div>

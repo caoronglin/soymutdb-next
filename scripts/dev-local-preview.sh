@@ -6,7 +6,7 @@
 # absolute API origin and a browser that is not on this host cannot reach
 # 127.0.0.1. One origin also means a single tunnel exposes a complete demo.
 #
-#   :PORT/            portal   (apps/web/dist)  + /api/v1
+#   :PORT/            portal   (apps/web/dist/external)  + /api/v1
 #   :ADMIN_PORT/      console  (apps/admin/dist) + /api/v1
 #
 # Separate ports, not a subpath: the portal and the console are separate

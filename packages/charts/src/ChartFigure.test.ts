@@ -1,68 +1,112 @@
-// @vitest-environment jsdom
-import { mount } from "@vue/test-utils";
-import { describe, expect, it, vi } from "vitest";
+import * as React from "react";
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ChartFigure, categoryBarChart, trendAreaChart } from "./index";
 
-import { ChartFigure, categoryBarChart } from "./index";
-
-// The chart runtime needs a measured viewport, which jsdom does not provide; the
-// graphic's own rendering is the runtime's contract, not this package's. What
-// this suite must prove is the accessible wrapper: name, description, the exact
-// value table, and the empty state.
-vi.mock("@tanstack/vue-charts", () => ({
-  Chart: {
-    props: ["definition", "data", "height"],
-    template: '<svg :data-height="height" :data-points="data.length" />',
+vi.mock("echarts", () => ({
+  init: () => {
+    throw new Error("mock chart renderer failure");
   },
 }));
 
-interface Row {
+interface TestDatum {
   category: string;
   value: number;
 }
 
-const DATA: readonly Row[] = [
-  { category: "chr01", value: 12 },
-  { category: "chr02", value: 0 },
-];
+let roots: Array<{ root: Root; host: HTMLDivElement }> = [];
 
-function mountFigure(data: readonly Row[] = DATA) {
-  return mount(ChartFigure, {
-    props: {
-      definition: categoryBarChart(data),
-      data,
-      label: "Variants per chromosome",
-      description: "Number of variants observed on each chromosome.",
-      tableColumns: ["Chromosome", "Variants"],
-      tableRow: (datum: Row) => [datum.category, String(datum.value)],
-    },
+async function render(element: React.ReactElement) {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  roots.push({ root, host });
+  await act(async () => {
+    root.render(element);
+    await new Promise((resolve) => setTimeout(resolve, 0));
   });
+  return host;
 }
 
-describe("ChartFigure", () => {
-  it("renders the exact values in a table, not only in the graphic", () => {
-    const wrapper = mountFigure();
+beforeEach(() => {
+  (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+});
 
-    // The graphic carries an accessible name and description.
-    expect(wrapper.get('[role="img"]').attributes("aria-label")).toBe("Variants per chromosome");
-    expect(wrapper.get('[role="img"]').attributes("aria-describedby")).toBe("chart-description");
-    expect(wrapper.get("#chart-description").text()).toContain("Number of variants");
+afterEach(async () => {
+  await act(async () => {
+    for (const { root, host } of roots) {
+      root.unmount();
+      host.remove();
+    }
+  });
+  roots = [];
+});
 
-    // ...and the same numbers are readable without seeing the SVG.
-    const values = wrapper.get('[data-testid="chart-values"]');
-    expect(values.findAll("tbody tr")).toHaveLength(2);
-    expect(values.text()).toContain("chr01");
-    expect(values.text()).toContain("12");
-    // A zero is a zero, not a blank: an absent value and a measured zero must
-    // never look the same.
-    expect(values.text()).toContain("0");
-    wrapper.unmount();
+describe("chart definitions", () => {
+  it("builds a categorical bar chart with readable categories and values", () => {
+    const definition = categoryBarChart<TestDatum>([
+      { category: "missense", value: 4 },
+      { category: "frameshift", value: 2 },
+    ]);
+    expect(definition.xAxis).toMatchObject({ type: "category", data: ["missense", "frameshift"] });
+    expect(definition.series).toEqual([
+      { name: "", type: "bar", data: [4, 2] },
+    ]);
   });
 
-  it("renders an empty state instead of a placeholder series", () => {
-    const wrapper = mountFigure([]);
+  it("groups bars by named series", () => {
+    const definition = categoryBarChart(
+      [
+        { category: "leaf", value: 3, series: "v4" },
+        { category: "leaf", value: 5, series: "v5" },
+      ],
+      { seriesKey: "series" },
+    );
+    expect(definition.series).toEqual([
+      { name: "v4", type: "bar", data: [3], barGap: "15%" },
+      { name: "v5", type: "bar", data: [5], barGap: "15%" },
+    ]);
+  });
 
-    expect(wrapper.get('[data-testid="chart-empty"]').text()).toContain("No data");
-    expect(wrapper.find('[role="img"]').exists()).toBe(false);
-    wrapper.unmount();
+  it("uses a categorical date axis for trends", () => {
+    const definition = trendAreaChart([{ date: "2026-09-26", value: 2 }]);
+    expect(definition.xAxis).toMatchObject({ type: "category", data: ["2026-09-26"] });
+    expect(definition.series).toMatchObject([{ type: "line", data: [2], areaStyle: { opacity: 0.22 } }]);
+  });
+});
+
+describe("ChartFigure", () => {
+  it("shows an empty state instead of creating an empty chart", async () => {
+    const host = await render(
+      React.createElement(ChartFigure<TestDatum>, {
+        definition: categoryBarChart([]),
+        data: [],
+        label: "Variant types",
+        tableColumns: ["Type", "Count"],
+        tableRow: (datum) => [datum.category, String(datum.value)],
+      }),
+    );
+
+    expect(host.querySelector('[data-testid="chart-empty"]')?.textContent).toContain("No data");
+    expect(host.querySelector('[data-testid="chart-values"]')).toBeNull();
+  });
+
+  it("keeps the exact-value table available when the chart runtime fails", async () => {
+    const host = await render(
+      React.createElement(ChartFigure<TestDatum>, {
+        definition: categoryBarChart([{ category: "missense", value: 4 }]),
+        data: [{ category: "missense", value: 4 }],
+        label: "Variant types",
+        description: "Variant counts by consequence",
+        tableColumns: ["Type", "Count"],
+        tableRow: (datum) => [datum.category, String(datum.value)],
+      }),
+    );
+
+    expect(host.querySelector('[data-testid="chart-unavailable"]')?.textContent).toContain("could not be drawn");
+    expect(host.querySelector('[data-testid="chart-values"]')?.textContent).toContain("missense");
+    expect(host.querySelector('[data-testid="chart-values"]')?.textContent).toContain("4");
+    expect(host.querySelector('[role="img"]')?.getAttribute("aria-describedby")).toBeTruthy();
   });
 });

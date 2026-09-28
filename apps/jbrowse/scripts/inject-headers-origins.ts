@@ -22,10 +22,7 @@
  * `.invalid`/`.test` origins the other frontend gates already use, so the shared
  * verification script keeps working offline.
  *
- * Registered as a Vite plugin in apps/jbrowse/vite.config.ts. This file
- * deliberately has no `#!` line: Vite bundles the config with its imports
- * inlined, and a hashbang in an inlined module is a syntax error, not a
- * stripped comment.
+ * Called by the Umi post-build step after the static assets have been emitted.
  */
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -145,13 +142,3 @@ export function injectHeadersOrigins(options: InjectOptions, headersPath = HEADE
   writeFileSync(headersPath, headers.replace(HEADERS_CSP_RE, (_m, prefix: string) => `${prefix}${policy}`), "utf8");
 }
 
-/** Vite plugin wrapper. */
-export function jbrowseDeploymentHeaders(options: InjectOptions) {
-  return {
-    name: "soymutdb-jbrowse-deployment-headers",
-    apply: "build" as const,
-    closeBundle() {
-      injectHeadersOrigins(options);
-    },
-  };
-}

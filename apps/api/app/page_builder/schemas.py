@@ -32,6 +32,15 @@ class PageDefinitionDetail(PageDefinitionSummary):
     pass
 
 
+class PublicPageDefinitionResponse(BaseModel):
+    """Public payload for a published definition without persistence metadata."""
+
+    route: str
+    version: int
+    status: PageDefinitionStatusEnum
+    definition: dict[str, Any]
+
+
 class PublishedPageDefinitionRoute(BaseModel):
     """Minimal public SSG payload for a safely routable published definition."""
 
@@ -173,6 +182,7 @@ __all__ = [
     "PageDefinitionResponse",
     "PageDefinitionStatusEnum",
     "PageDefinitionSummary",
+    "PublicPageDefinitionResponse",
     "PageDefinitionUpdate",
     "PageDefinitionVersionResponse",
     "PublishedPageDefinitionRoute",

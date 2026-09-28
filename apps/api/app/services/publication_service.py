@@ -31,6 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.task_contract import STATIC_PUBLISH_TASK
 from ..models.auth import AuditLog
+from ..models.content import Release, ReleaseStatus
 from ..models.publication import (
     PublicationCounter,
     PublicationStatus,
@@ -102,6 +103,30 @@ def _parse_target(target: str | PublicationTarget) -> PublicationTarget:
         raise PublicationError(f"unknown publication target: {target}") from exc
 
 
+async def _require_published_page_version(
+    db: AsyncSession, version: int
+) -> None:
+    """Refuse a page-definition version that is not published.
+
+    Imported lazily so this service keeps working in a deployment where the
+    page-builder tables are absent (the feature flag gates the routes).
+    """
+    from ..models.page_builder import PageDefinitionStatus, PageDefinitionVersion
+
+    row = (
+        await db.execute(
+            select(PageDefinitionVersion).where(
+                PageDefinitionVersion.version == version,
+                PageDefinitionVersion.status == PageDefinitionStatus.PUBLISHED,
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise PublicationError(
+            f"Page-definition version {version} does not exist or is not published"
+        )
+
+
 async def request_publication(
     db: AsyncSession,
     *,
@@ -110,6 +135,7 @@ async def request_publication(
     actor_id: str | None,
     page_definition_version: int | None = None,
     request_id: str | None = None,
+    build_artifact_url: str | None = None,
 ) -> StaticPublication:
     """Allocate a publication request and enqueue the build task.
 
@@ -118,6 +144,25 @@ async def request_publication(
     well before any network I/O in the worker.
     """
     target_enum = _parse_target(target)
+
+    # Gate the request on authoritative release state. The request used to
+    # accept any positive integer and enqueue a build labelled with it, so a
+    # draft/unknown id could be "published" as a real artifact. Only a release
+    # that reached a published state may be built.
+    release = (
+        await db.execute(select(Release).where(Release.id == release_id))
+    ).scalar_one_or_none()
+    if release is None:
+        raise PublicationError(f"Release {release_id} does not exist")
+    if release.status != ReleaseStatus.PUBLISHED:
+        raise PublicationError(
+            f"Release {release_id} is {release.status}; only a published "
+            "release can be built into a static artifact"
+        )
+
+    if page_definition_version is not None:
+        await _require_published_page_version(db, page_definition_version)
+
     lease = await _acquire_lease(db, target_enum)
     new_id = await _get_counter(db, target_enum)
 
@@ -127,6 +172,7 @@ async def request_publication(
         status=PublicationStatus.REQUESTED.value,
         release_id=release_id,
         page_definition_version=page_definition_version,
+        build_artifact_url=build_artifact_url,
         requested_by=actor_id,
         superseded_by_publication_id=None,
     )
@@ -145,6 +191,7 @@ async def request_publication(
             "publication_id": new_id,
             "release_id": release_id,
             "page_definition_version": page_definition_version,
+            "build_artifact_url": build_artifact_url,
         },
     ))
 
@@ -160,6 +207,9 @@ async def request_publication(
             "release_id": release_id,
             "page_definition_version": page_definition_version,
             "request_id": request_id,
+            # Also persisted on the row (see migration 0043) so the audit trail
+            # identifies the source tree, not just the resulting digest.
+            "build_artifact_url": build_artifact_url,
         },
     )
     await db.flush()

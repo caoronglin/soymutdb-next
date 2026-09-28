@@ -484,27 +484,27 @@ def test_pages_deploys_an_explicit_public_demo() -> None:
 
 
 def test_jbrowse_honors_its_pages_base_path() -> None:
-    config = (ROOT / "apps/jbrowse/vite.config.ts").read_text(encoding="utf-8")
+    config = (ROOT / "apps/jbrowse/config/config.ts").read_text(encoding="utf-8")
+    entry = (ROOT / "apps/jbrowse/src/umi-entry.tsx").read_text(encoding="utf-8")
 
-    assert "loadEnv" in config
-    assert "base:" in config
-    assert "VITE_BASE_URL" in config
+    assert "normalizeBasePath(env.VITE_BASE_URL)" in config
+    assert "publicPath: base" in config
+    assert 'component: "@/umi-entry"' in config
+    assert "SOYMUTDB_PORTAL_ORIGIN" in config
+    assert "ReactApp" in entry
 
 
-def test_web_vite_entry_is_not_prefixed_by_deployment_base() -> None:
-    """The entry must stay root-relative so Vite `base` controls every asset URL.
+def test_web_umi_entry_preserves_deployment_base_and_csp() -> None:
+    """Umi's configured base is the single knob for every built asset URL."""
+    config = (ROOT / "apps/web/config/config.ts").read_text(encoding="utf-8")
+    entry = (ROOT / "apps/web/src/umi-entry.tsx").read_text(encoding="utf-8")
 
-    A hand-prefixed entry (`/soymutdb-next/src/main.ts`) would break the
-    root-domain deployment and the subpath deployment alike, because the base is
-    the single knob both the asset URLs and `createWebHistory` already read.
-    """
-    index = (ROOT / "apps/web/index.html").read_text(encoding="utf-8")
-
-    assert 'src="/src/main.ts"' in index
-    assert "%BASE_URL%" not in index
-    # The CSP meta the finalizer rewrites must exist, or a build that never ran
-    # the finalizer would still pass the artifact-header gate.
-    assert 'http-equiv="Content-Security-Policy"' in index
+    assert "normalizeBasePath(env.VITE_BASE_URL)" in config
+    assert "publicPath: base" in config
+    assert 'component: "@/umi-entry"' in config
+    assert '"http-equiv": "Content-Security-Policy"' in config
+    assert "ReactApp" in entry
+    assert "main.ts" not in entry
 
 
 def test_pages_accepts_publication_dispatch_inputs() -> None:
@@ -549,6 +549,9 @@ def test_pages_publishes_the_exact_verified_static_tree_without_rebuilding() -> 
     publisher = _cnb_pipeline("publish")
 
     assert "pages-dist" in pages
+    assert "cp -r apps/web/dist/external/." in pages
+    assert "cp -r apps/web/dist/." not in pages
+    assert "never copy the sibling internal artifact" in pages
     assert "SHA256SUMS" in pages
     assert "sha256sum -c SHA256SUMS" in verifier
     # The verify pipeline builds, self-verifies, and uploads the artifact under

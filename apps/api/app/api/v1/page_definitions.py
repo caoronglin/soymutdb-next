@@ -26,27 +26,22 @@ from ...models.page_builder import (
 from ...page_builder import service as page_service
 from ...page_builder.schemas import (
     PageDefinitionStatusEnum,
-    PageDefinitionVersionResponse,
+    PublicPageDefinitionResponse,
     PublishedPageDefinitionRoute,
 )
 
 router = APIRouter(prefix="/page-definitions", tags=["page-definitions"])
 
 
-def _version_to_response(
+def _version_to_public_response(
+    route: str,
     v: PageDefinitionVersion,
-) -> PageDefinitionVersionResponse:
-    return PageDefinitionVersionResponse(
-        id=v.id,
-        page_id=v.page_id,
+) -> PublicPageDefinitionResponse:
+    return PublicPageDefinitionResponse(
+        route=route,
         version=v.version,
         status=PageDefinitionStatusEnum(v.status),
         definition=v.definition,
-        edited_by=v.edited_by,
-        edit_comment=v.edit_comment,
-        published_at=v.published_at,
-        created_at=v.created_at,
-        updated_at=v.updated_at,
     )
 
 
@@ -90,12 +85,12 @@ async def get_published_routes(
     return routes
 
 
-@router.get("/{route:path}", response_model=PageDefinitionVersionResponse)
+@router.get("/{route:path}", response_model=PublicPageDefinitionResponse)
 async def get_page_definition(
     route: str,
     version: uuid.UUID | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
-) -> PageDefinitionVersionResponse:
+) -> PublicPageDefinitionResponse:
     """Return a published definition for *route* (optionally pinned version)."""
     # Normalise the leading slash (APIRouter strips it for ``{route:path}``).
     norm_route = route if route.startswith("/") else f"/{route}"
@@ -117,14 +112,14 @@ async def get_page_definition(
             raise NotFoundError(
                 f"Published version {version} not found for route {norm_route!r}"
             )
-        return _version_to_response(published)
+        return _version_to_public_response(norm_route, published)
 
     published = await page_service.get_published(db, route=norm_route)
     if published is None:
         raise NotFoundError(
             f"No published definition for route {norm_route!r}"
         )
-    return _version_to_response(published)
+    return _version_to_public_response(norm_route, published)
 
 
 __all__ = ["router"]

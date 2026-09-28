@@ -675,6 +675,11 @@ export interface paths {
          *     Returns JSON (public SoyMutDB search) when the client sends
          *     ``Accept: application/json`` or ``?format=json``.  Otherwise returns a
          *     sanitized HTML fragment built from federated external search results.
+         *
+         *     An explicit ``release_id`` query parameter is the request's release
+         *     scope and is used verbatim (published or not), so two releases can never
+         *     share a cache entry or response. Without it the active published release
+         *     is resolved.
          */
         get: operations["global_search_api_v1_search_get"];
         put?: never;
@@ -1317,7 +1322,7 @@ export interface paths {
         };
         /**
          * List Mutant Lines
-         * @description List public mutant lines.
+         * @description List public mutant lines from the active published release.
          */
         get: operations["list_mutant_lines_api_v1_mutants_get"];
         put?: never;
@@ -1360,7 +1365,7 @@ export interface paths {
         };
         /**
          * Get Phenotypes
-         * @description List phenotypes for a public mutant line.
+         * @description List phenotypes for a public mutant line in the active release.
          */
         get: operations["get_phenotypes_api_v1_mutants__public_id__phenotypes_get"];
         put?: never;
@@ -3419,6 +3424,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/settings/site-brand": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Admin Site Brand
+         * @description Return the versioned, UI-facing brand values for one site variant.
+         */
+        get: operations["get_admin_site_brand_api_v1_admin_settings_site_brand_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Patch Admin Site Brand
+         * @description Apply an audited brand patch with optimistic version checking.
+         */
+        patch: operations["patch_admin_site_brand_api_v1_admin_settings_site_brand_patch"];
+        trace?: never;
+    };
     "/api/v1/admin/settings/{section}/document": {
         parameters: {
             query?: never;
@@ -3638,6 +3667,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/species-instances/{instance_id}/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Species Instance Health
+         * @description Probe the instance liveness endpoint only when deployment trust allows it.
+         */
+        get: operations["get_species_instance_health_api_v1_admin_species_instances__instance_id__health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/uploads/presign": {
         parameters: {
             query?: never;
@@ -3844,6 +3893,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/site/branding": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Site Branding
+         * @description Return a bilingual brand snapshot for one explicit site artifact.
+         */
+        get: operations["get_site_branding_api_v1_site_branding_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/site/about": {
         parameters: {
             query?: never;
@@ -3913,11 +3982,16 @@ export interface paths {
         };
         /**
          * Get Site Content
-         * @description Return all editable frontend labels for one explicit site variant.
+         * @description Return the editable frontend labels for one explicit site variant.
          *
          *     The response is intentionally flat for compatibility with the existing
          *     useSiteContent contract. The namespace and authorization boundary remain
          *     server-side, so variant=internal cannot be enumerated anonymously.
+         *
+         *     ``only_overrides=true`` returns just the stored rows: a caller then renders
+         *     ``value ?? its own locale-aware default`` and an unedited deployment keeps
+         *     looking exactly as it does today. The default (``false``) keeps the original
+         *     "every registered key, default-filled" shape for existing consumers.
          */
         get: operations["get_site_content_api_v1_site_content_get"];
         put?: never;
@@ -4315,6 +4389,20 @@ export interface components {
             plugins: {
                 [key: string]: components["schemas"]["AdminPluginResponse"];
             };
+        };
+        /**
+         * AdminSiteBrandResponse
+         * @description Versioned admin view; values are adapted from the settings registry.
+         */
+        AdminSiteBrandResponse: {
+            /**
+             * Variant
+             * @enum {string}
+             */
+            variant: "external" | "internal";
+            /** Version */
+            version: number;
+            values: components["schemas"]["SiteBrandValues"];
         };
         /**
          * AlleleFreqRequest
@@ -4834,6 +4922,33 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+        };
+        /**
+         * CrossVersionLink
+         * @description An explicit, provenance-bearing cross-assembly relation of a gene hit.
+         *
+         *     Attached to the matched gene's result item only; a linked gene never
+         *     becomes an extra result row (so ``total_count``/pagination are unchanged)
+         *     and the matched hit keeps its own ``match_type`` (e.g. ``exact``). The
+         *     relation is only ever read from ``gene_crosswalks``; string similarity
+         *     alone never produces one. ``match_type`` here is the value that finally
+         *     gives ``MatchType.CROSS_VERSION`` a producer.
+         */
+        CrossVersionLink: {
+            /** Gene Accession */
+            gene_accession: string;
+            /** Assembly Id */
+            assembly_id?: number | null;
+            /** Assembly Name */
+            assembly_name?: string | null;
+            /** Assembly Version */
+            assembly_version?: string | null;
+            /** Relation Type */
+            relation_type: string;
+            /** Provenance Source */
+            provenance_source: string;
+            /** @default cross-version */
+            match_type: components["schemas"]["MatchType"];
         };
         /** DashboardStats */
         DashboardStats: {
@@ -8074,6 +8189,10 @@ export interface components {
             release_id?: number | null;
             /** Assembly Id */
             assembly_id?: number | null;
+            /** Assembly */
+            assembly?: string | null;
+            /** Cross Version */
+            cross_version?: components["schemas"]["CrossVersionLink"][];
         };
         /**
          * SearchResultType
@@ -8198,7 +8317,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "string" | "color" | "integer" | "boolean" | "enum" | "email" | "url";
+            kind: "string" | "color" | "integer" | "boolean" | "enum" | "email" | "url" | "uuid";
             default: components["schemas"]["SettingValue"] | null;
             /**
              * Permission
@@ -8359,6 +8478,53 @@ export interface components {
             /** Request Id */
             request_id?: string | null;
         };
+        /** SiteBrandPatchRequest */
+        SiteBrandPatchRequest: {
+            /** Expected Version */
+            expected_version: number;
+            values: components["schemas"]["SiteBrandPatchValues"];
+        };
+        /**
+         * SiteBrandPatchValues
+         * @description Sparse site-brand patch. An explicit null icon clears the selection.
+         */
+        SiteBrandPatchValues: {
+            /** Name Zh */
+            name_zh?: string | null;
+            /** Name En */
+            name_en?: string | null;
+            /** Icon Url */
+            icon_url?: string | null;
+        };
+        /**
+         * SiteBrandResponse
+         * @description Brand values for one explicitly selected public site variant.
+         */
+        SiteBrandResponse: {
+            /** Name Zh */
+            name_zh: string;
+            /** Name En */
+            name_en: string;
+            /** Icon Url */
+            icon_url?: string | null;
+            /**
+             * Variant
+             * @enum {string}
+             */
+            variant: "external" | "internal";
+        };
+        /**
+         * SiteBrandValues
+         * @description Bilingual display names and a verified media-library icon URL.
+         */
+        SiteBrandValues: {
+            /** Name Zh */
+            name_zh: string;
+            /** Name En */
+            name_en: string;
+            /** Icon Url */
+            icon_url?: string | null;
+        };
         /**
          * SiteVariant
          * @description The two independently generated SoyMutDB site artifacts.
@@ -8391,6 +8557,36 @@ export interface components {
             is_local: boolean;
             /** Notes */
             notes?: string | null;
+        };
+        /** SpeciesInstanceHealthResponse */
+        SpeciesInstanceHealthResponse: {
+            /** Id */
+            id: number;
+            /** Code */
+            code: string;
+            /**
+             * Connection State
+             * @enum {string}
+             */
+            connection_state: "unknown" | "healthy" | "unhealthy" | "disabled" | "unconfigured";
+            /**
+             * Checked At
+             * Format: date-time
+             */
+            checked_at: string;
+            /** Last Checked At */
+            last_checked_at?: string | null;
+            /** Last Error At */
+            last_error_at?: string | null;
+            /** Is Stale */
+            is_stale: boolean;
+            /** Error Code */
+            error_code?: string | null;
+            /**
+             * Remote Management
+             * @enum {string}
+             */
+            remote_management: "local" | "registration_only";
         };
         /** SpeciesInstanceListResponse */
         SpeciesInstanceListResponse: {
@@ -8427,6 +8623,28 @@ export interface components {
             notes?: string | null;
             /** Id */
             id: number;
+            /** Site Url */
+            site_url?: string | null;
+            /**
+             * Connection State
+             * @default unknown
+             * @enum {string}
+             */
+            connection_state: "unknown" | "healthy" | "unhealthy" | "disabled" | "unconfigured";
+            /** Last Checked At */
+            last_checked_at?: string | null;
+            /** Last Error At */
+            last_error_at?: string | null;
+            /**
+             * Is Stale
+             * @default true
+             */
+            is_stale: boolean;
+            /**
+             * Remote Management
+             * @enum {string}
+             */
+            remote_management: "local" | "registration_only";
             /**
              * Created At
              * Format: date-time
@@ -8971,6 +9189,8 @@ export interface components {
             id?: string | null;
             /** Assembly Id */
             assembly_id?: string | null;
+            /** Assembly */
+            assembly?: string | null;
             /** Variant Id */
             variant_id?: string | null;
             /** Chromosome */
@@ -9090,6 +9310,8 @@ export interface components {
             id?: string | null;
             /** Assembly Id */
             assembly_id?: string | null;
+            /** Assembly */
+            assembly?: string | null;
             /** Variant Id */
             variant_id?: string | null;
             /** Chromosome */
@@ -10946,6 +11168,8 @@ export interface operations {
                 cursor?: string | null;
                 limit?: number;
                 assembly_id?: number | null;
+                /** @description Explicit release scope. Used verbatim (published or not); defaults to the active published release. */
+                release_id?: number | null;
                 /** @description 'json' or 'html' */
                 format?: string | null;
             };
@@ -12176,8 +12400,11 @@ export interface operations {
             query?: {
                 mutagen?: string | null;
                 limit?: number;
+                release_id?: number | null;
             };
-            header?: never;
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -12214,8 +12441,12 @@ export interface operations {
     };
     get_mutant_line_api_v1_mutants__public_id__get: {
         parameters: {
-            query?: never;
-            header?: never;
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
             path: {
                 public_id: string;
             };
@@ -12254,8 +12485,12 @@ export interface operations {
     };
     get_phenotypes_api_v1_mutants__public_id__phenotypes_get: {
         parameters: {
-            query?: never;
-            header?: never;
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
             path: {
                 public_id: string;
             };
@@ -17250,6 +17485,99 @@ export interface operations {
             };
         };
     };
+    get_admin_site_brand_api_v1_admin_settings_site_brand_get: {
+        parameters: {
+            query?: {
+                variant?: components["schemas"]["SiteVariant"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSiteBrandResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    patch_admin_site_brand_api_v1_admin_settings_site_brand_patch: {
+        parameters: {
+            query?: {
+                variant?: components["schemas"]["SiteVariant"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SiteBrandPatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSiteBrandResponse"];
+                };
+            };
+            /** @description Settings version conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     get_settings_document_api_v1_admin_settings__section__document_get: {
         parameters: {
             query?: never;
@@ -17941,6 +18269,46 @@ export interface operations {
             };
         };
     };
+    get_species_instance_health_api_v1_admin_species_instances__instance_id__health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                instance_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpeciesInstanceHealthResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     create_upload_presign_api_v1_admin_uploads_presign_post: {
         parameters: {
             query?: never;
@@ -18354,6 +18722,46 @@ export interface operations {
             };
         };
     };
+    get_site_branding_api_v1_site_branding_get: {
+        parameters: {
+            query?: {
+                variant?: components["schemas"]["SiteVariant"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteBrandResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     get_about_content_api_v1_site_about_get: {
         parameters: {
             query?: {
@@ -18478,6 +18886,8 @@ export interface operations {
         parameters: {
             query?: {
                 variant?: components["schemas"]["SiteVariant"];
+                /** @description Return only the keys this variant has a stored value for, instead of every registered key filled with its (English) registered default. A bilingual portal needs the distinction: without it, consuming the endpoint would replace a locale-specific string with the English default on every page load. */
+                only_overrides?: boolean;
             };
             header?: never;
             path?: never;

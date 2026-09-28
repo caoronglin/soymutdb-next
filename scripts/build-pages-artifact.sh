@@ -5,8 +5,8 @@
 # Produces `pages-dist/` from source in one place so the CNB verify pipeline and
 # the GitHub mirror workflow cannot produce different bytes for the same commit.
 #
-# Layout (matches the published site):
-#   pages-dist/                    <- apps/web/dist
+# Layout (matches the published external site):
+#   pages-dist/                    <- apps/web/dist/external (never internal)
 #   pages-dist/soymutdb-jbrowse/   <- apps/jbrowse/dist
 #   pages-dist/404.html            <- copy of index.html for SPA fallbacks
 #   pages-dist/.nojekyll           <- required to keep underscore paths
@@ -73,7 +73,9 @@ fi
 echo "3) assemble ${PAGES_OUTPUT_DIR}"
 rm -rf "${PAGES_OUTPUT_DIR}"
 mkdir -p "${PAGES_OUTPUT_DIR}"
-cp -r apps/web/dist/. "${PAGES_OUTPUT_DIR}/"
+# Pages is the public deployment boundary: publish only the explicitly built
+# external variant and never copy the sibling internal artifact into this tree.
+cp -r apps/web/dist/external/. "${PAGES_OUTPUT_DIR}/"
 if [[ "${JBROWSE_ENABLED}" == "1" ]]; then
   mkdir -p "${PAGES_OUTPUT_DIR}/soymutdb-jbrowse"
   cp -r apps/jbrowse/dist/. "${PAGES_OUTPUT_DIR}/soymutdb-jbrowse/"

@@ -11,6 +11,12 @@ vi.mock("@soymutdb/ui-vue", () => ({
   createThemeConfig: () => ({}),
 }));
 
+// The portal shell is exercised by its own coverage; stub it so these
+// assertions stay focused on the view and do not need pinia/header wiring.
+vi.mock("../components/PortalLayout.vue", () => ({
+  default: { template: "<div><slot /></div>" },
+}));
+
 vi.mock("@soymutdb/api-client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@soymutdb/api-client")>();
   return { ...actual, listNews: vi.fn() };

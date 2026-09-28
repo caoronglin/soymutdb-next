@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/vue-query";
 import { computed, ref, toValue, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
-import type { AssemblyInfo, GeneSummary } from "@soymutdb/api-client";
+import type { AssemblyInfo, GeneSummary, TableColumn } from "@soymutdb/api-client";
 import { Button } from "@soymutdb/ui-vue";
 
 import ConfigurableTable, { type ConfigurableRow } from "../components/ConfigurableTable.vue";
@@ -15,6 +15,7 @@ import {
   geneSearchQueryOptions,
   tableViewQueryOptions,
 } from "../lib/query-options";
+import { useSiteContent } from "../lib/site-content";
 import { useSiteContextStore } from "../stores/site-context";
 
 /**
@@ -32,6 +33,7 @@ import { useSiteContextStore } from "../stores/site-context";
 const route = useRoute();
 const router = useRouter();
 const site = useSiteContextStore();
+const { get } = useSiteContent();
 
 const initial = {
   q: typeof route.query.q === "string" ? route.query.q : "",
@@ -113,6 +115,30 @@ const tableView = useQuery(computed(() => tableViewQueryOptions("genes")));
 const viewColumns = computed(() => toValue(tableView.data)?.columns ?? []);
 const viewActions = computed(() => toValue(tableView.data)?.actions);
 
+/**
+ * Template column key → admin-editable header key.
+ *
+ * The API owns the column set, but the built-in gene-search columns are the
+ * ones React let an operator retitle (`search.genes.colAssembly` …), so the
+ * template headers are translated through the same keys before the table sees
+ * them (ConfigurableTable stays a pure renderer).
+ */
+const COLUMN_CONTENT_KEYS: Record<string, string> = {
+  assembly_name: "search.genes.colAssembly",
+  chromosome: "search.genes.colChromosome",
+  position: "search.genes.colPosition",
+  variant_count: "search.genes.colMutation",
+  gene_id: "search.genes.colGeneId",
+  jbrowse: "search.genes.colGbrowse",
+};
+
+const columns = computed<TableColumn[]>(() =>
+  viewColumns.value.map((column) => {
+    const key = COLUMN_CONTENT_KEYS[column.key];
+    return key ? { ...column, label_en: get(key, t(key)) } : column;
+  }),
+);
+
 const query = useQuery(
   computed(() =>
     geneSearchQueryOptions({
@@ -140,8 +166,10 @@ function submit() {
 <template>
   <PortalLayout>
     <div class="mx-auto max-w-7xl px-4 py-8">
-      <h1 class="text-2xl font-semibold">{{ t("search.genes.title") }}</h1>
-      <p class="mt-1 max-w-2xl text-sm opacity-70">{{ t("search.genes.subtitle") }}</p>
+      <h1 class="text-2xl font-semibold">{{ get("search.genes.title", t("search.genes.title")) }}</h1>
+      <p class="mt-1 max-w-2xl text-sm opacity-70">
+        {{ get("search.genes.subtitle", t("search.genes.subtitle")) }}
+      </p>
 
       <form
         class="mt-6 grid gap-4 sm:grid-cols-[2fr_1fr_auto] sm:items-end"
@@ -153,13 +181,13 @@ function submit() {
           <input
             v-model="geneIdsRaw"
             class="mt-1 w-full rounded-md border bg-background px-2 py-1.5 font-mono"
-            :placeholder="t('search.genes.geneIdPlaceholder')"
+            :placeholder="get('search.genes.geneIdPlaceholder', t('search.genes.geneIdPlaceholder'))"
             :aria-describedby="'search-genes-hint'"
             data-testid="search-genes-input"
           />
         </label>
         <label class="text-sm opacity-70">
-          {{ t("search.genes.assembly") }}
+          {{ get("search.genes.assembly", t("search.genes.assembly")) }}
           <select
             class="mt-1 w-full rounded-md border bg-background px-2 py-1.5"
             :value="formAssemblyId"
@@ -167,16 +195,19 @@ function submit() {
             data-testid="search-genes-assembly"
             @change="draftAssemblyId = ($event.target as HTMLSelectElement).value"
           >
+            <option value="" disabled>
+              {{ get("search.genes.assemblyPlaceholder", t("search.genes.assemblyPlaceholder")) }}
+            </option>
             <option v-for="item in assemblies" :key="String(item.id)" :value="String(item.id)">
               {{ assemblyOptionLabel(item) }}{{ item.is_default ? " · default" : "" }}
             </option>
           </select>
         </label>
         <Button html-type="submit" :disabled="!formAssemblyId || unknownAssembly" data-testid="search-genes-submit">
-          {{ t("search.genes.submit") }}
+          {{ get("ui.searchButton", t("search.genes.submit")) }}
         </Button>
         <p id="search-genes-hint" class="text-xs opacity-60 sm:col-span-2">
-          {{ t("search.genes.geneIdHint") }}
+          {{ get("search.genes.geneIdHint", t("search.genes.geneIdHint")) }}
         </p>
       </form>
 
@@ -200,7 +231,7 @@ function submit() {
           {{ t("common.loading") }}
         </p>
         <p v-else-if="isError" data-testid="search-genes-error" class="text-sm text-red-700">
-          {{ t("common.errorDescription") }}
+          {{ get("ui.errorRetry", t("search.genes.resultsRetry")) }}
         </p>
         <p v-else-if="!submitted" data-testid="search-genes-idle" class="text-sm opacity-70">
           {{ t("search.genes.subtitle") }}
@@ -218,7 +249,7 @@ function submit() {
             as empty.
           -->
           <ConfigurableTable
-            :columns="viewColumns"
+            :columns="columns"
             :actions="viewActions"
             :rows="items as unknown as ConfigurableRow[]"
             :assembly-name="selectedAssembly?.name ?? null"
@@ -226,7 +257,7 @@ function submit() {
             data-testid="search-genes-table"
           />
           <p v-if="items.length === 0" data-testid="search-genes-empty" class="mt-3 text-sm opacity-70">
-            {{ t("search.genes.noResults") }}
+            {{ get("ui.noResults", t("search.genes.noResults")) }}
           </p>
         </template>
       </div>

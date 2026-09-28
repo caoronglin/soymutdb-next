@@ -97,6 +97,12 @@ pnpm turbo run lint
 step "Typecheck"
 pnpm turbo run typecheck
 
+step "Vue retirement (shipped React/Umi entry graphs)"
+# The repository still contains legacy Vue source; this asserts each app's
+# *shipped* entry graph is free of it, so a React file re-importing a .vue
+# component fails the gate instead of only misbehaving at runtime.
+node scripts/check-react-entry-graph.mjs
+
 step "Page Builder registry contract"
 python3 scripts/check_page_registry.py
 

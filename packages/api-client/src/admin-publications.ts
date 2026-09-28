@@ -4,16 +4,27 @@
  *
  * Contract (apps/api/app/api/v1/admin_publications.py + apps/api/app/schemas/content.py):
  *   GET    /api/v1/admin/publications                  -> PublicationListResponse
- *   POST   /api/v1/admin/publications   PublicationCreate    -> Publication (201)
- *   PUT    /api/v1/admin/publications/{id} PublicationUpdate  -> Publication
+ *   POST   /api/v1/admin/publications   PublicationCreate    -> AdminPublication (201)
+ *   PUT    /api/v1/admin/publications/{id} PublicationUpdate  -> AdminPublication
  *   DELETE /api/v1/admin/publications/{id}               -> 204
  */
 
 import { http } from "./auth";
 import type { Publication } from "./publications";
 
+/**
+ * Admin projection: the public `Publication` plus the persistence key the
+ * management routes address by (`PUT`/`DELETE /admin/publications/{id}`).
+ *
+ * The public DTO has no `id` — publications are located by DOI externally — so
+ * the admin surface has its own type rather than reusing the public one.
+ */
+export interface AdminPublication extends Publication {
+  id: string;
+}
+
 export interface PublicationListResponse {
-  items: Publication[];
+  items: AdminPublication[];
   total: number;
   page: number;
   page_size: number;
@@ -55,15 +66,17 @@ export function listAdminPublications(
   });
 }
 
-export function createAdminPublication(payload: PublicationCreate): Promise<Publication> {
-  return http.post<Publication>("/admin/publications", { json: payload });
+export function createAdminPublication(
+  payload: PublicationCreate
+): Promise<AdminPublication> {
+  return http.post<AdminPublication>("/admin/publications", { json: payload });
 }
 
 export function updateAdminPublication(
   id: number | string,
   payload: PublicationUpdate
-): Promise<Publication> {
-  return http.put<Publication>(`/admin/publications/${id}`, { json: payload });
+): Promise<AdminPublication> {
+  return http.put<AdminPublication>(`/admin/publications/${id}`, { json: payload });
 }
 
 export function deleteAdminPublication(id: number | string): Promise<void> {

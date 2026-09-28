@@ -14,9 +14,29 @@
 export const queryKeys = {
   all: ["soymutdb"] as const,
   assemblies: {
+    // Bare prefix: invalidation (`queryKeys.assemblies.all()`) must stay a
+    // prefix of every context-scoped child key below.
     all: () => [...queryKeys.all, "assemblies"] as const,
-    chromosomes: (assemblyId: string | number | undefined) =>
-      [...queryKeys.assemblies.all(), "chromosomes", assemblyId ?? null] as const,
+    // The assembly catalogue itself is release- and site-scoped: switching
+    // either must not reuse the previous deployment's assembly list.
+    list: (context?: { releaseId?: string | null; siteVariant?: "external" | "internal" }) =>
+      [
+        ...queryKeys.assemblies.all(),
+        "list",
+        context?.releaseId ?? null,
+        context?.siteVariant ?? null,
+      ] as const,
+    chromosomes: (
+      assemblyId: string | number | undefined,
+      context?: { releaseId?: string | null; siteVariant?: "external" | "internal" },
+    ) =>
+      [
+        ...queryKeys.assemblies.all(),
+        "chromosomes",
+        assemblyId ?? null,
+        context?.releaseId ?? null,
+        context?.siteVariant ?? null,
+      ] as const,
   },
   news: {
     all: () => [...queryKeys.all, "news"] as const,
@@ -83,7 +103,12 @@ export const queryKeys = {
     search: (context: {
       q: string | undefined;
       assemblyId: string | undefined;
+      chromosome?: string | undefined;
+      biotype?: string | undefined;
       page: number;
+      pageSize?: number;
+      sortBy?: string | undefined;
+      sortDir?: string | undefined;
       releaseId: string | null;
       siteVariant: "external" | "internal";
     }) =>
@@ -92,7 +117,12 @@ export const queryKeys = {
         "search",
         context.q ?? null,
         context.assemblyId ?? null,
+        context.chromosome ?? null,
+        context.biotype ?? null,
         context.page,
+        context.pageSize ?? null,
+        context.sortBy ?? null,
+        context.sortDir ?? null,
         context.releaseId,
         context.siteVariant,
       ] as const,
@@ -170,7 +200,8 @@ export const queryKeys = {
       end?: number | null;
       impact?: string | null;
       variantType?: string | null;
-      mutantLineId?: string | null;
+      /** Public mutant-line identifier; the internal key never keys a cache. */
+      mutantLinePublicId?: string | null;
     }) =>
       [
         ...queryKeys.variants.all(),
@@ -185,7 +216,7 @@ export const queryKeys = {
         context.end ?? null,
         context.impact ?? null,
         context.variantType ?? null,
-        context.mutantLineId ?? null,
+        context.mutantLinePublicId ?? null,
       ] as const,
   },
 } as const;

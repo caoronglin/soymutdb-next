@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.config import get_settings
@@ -48,6 +48,12 @@ settings = get_settings()
 router = APIRouter(prefix="/analyses", tags=["analyses"])
 service = AnalysesService()
 
+
+def _private(response: Response) -> None:
+    response.headers["Cache-Control"] = "private, no-store"
+    response.headers["Vary"] = "Authorization"
+
+
 #: All analyses endpoints require researcher (or higher; admin included).
 _RESEARCHER_OR_HIGHER = [Depends(require_role(RoleName.RESEARCHER))]
 
@@ -58,6 +64,7 @@ _RESEARCHER_OR_HIGHER = [Depends(require_role(RoleName.RESEARCHER))]
     dependencies=_RESEARCHER_OR_HIGHER,
 )
 async def list_analysis_jobs(
+    response: Response,
     limit: int = Query(default=50, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -67,6 +74,7 @@ async def list_analysis_jobs(
     Only jobs owned by the caller are returned; anonymous/lower-role callers
     get 401/403 through the unified error envelope.
     """
+    _private(response)
     return await service.list_jobs(db, current_user.id, limit)
 
 
@@ -77,6 +85,7 @@ async def list_analysis_jobs(
 )
 async def create_upload(
     request: AnalysesUploadRequest,
+    response: Response,
     current_user: User = Depends(get_current_user),
 ) -> AnalysesUploadResponse:
     """Request a pre-signed upload URL for an analysis input file.
@@ -84,6 +93,7 @@ async def create_upload(
     Returns a POST action valid for 1 hour plus the object key the client must
     send back at submit time.  Nothing is persisted yet.
     """
+    _private(response)
     upload_session_id = uuid.uuid4()
     object_key = build_upload_key(
         current_user.id, upload_session_id, request.filename
@@ -113,6 +123,7 @@ async def create_upload(
 async def submit_analysis(
     analysis_type: AnalysisType,
     request: AnalysesSubmitRequest,
+    response: Response,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> AnalysesSubmitResponse:
@@ -121,6 +132,7 @@ async def submit_analysis(
     Validates that every input key belongs to the caller, checks the parameter
     whitelist, then creates the job row + outbox event in one transaction.
     """
+    _private(response)
     for object_key in request.input_objects:
         try:
             validate_analysis_input_key(object_key, current_user.id)
@@ -139,6 +151,7 @@ async def submit_analysis(
 )
 async def get_analysis_job(
     job_id: uuid.UUID,
+    response: Response,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> AnalysesJobResponse:
@@ -147,6 +160,7 @@ async def get_analysis_job(
     ``result`` is ``null`` until the job completes; completed jobs carry the
     worker-written summary.
     """
+    _private(response)
     return await service.get_job(db, job_id, current_user.id, get_user_roles(current_user))
 
 
@@ -157,6 +171,7 @@ async def get_analysis_job(
 )
 async def download_analysis_object(
     job_id: uuid.UUID,
+    response: Response,
     object_key: str = Query(..., min_length=1),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -166,6 +181,7 @@ async def download_analysis_object(
     The key must live under ``analyses/{job_id}/``; anything outside that
     prefix (including other jobs' objects) is rejected.
     """
+    _private(response)
     return await service.get_download_url(
         db, job_id, object_key, current_user.id, get_user_roles(current_user)
     )

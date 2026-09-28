@@ -7,6 +7,8 @@
 > 本轮审计起点：`ec12ee611f7fd8baae1600c3dffe93aa25c16575`
 > PR：#1 `refactor: Vue mainline + pnpm 12 + P2-3 import protocol (Phase C/A/B/D/F)`
 > 原则：先关闭 PR #1 correctness / CI / runtime gate，再继续新功能。未通过 Gate 的能力不得以“本地可用”替代真实交付证据。
+>
+> **2026-09-27 前端方向变更**：React 19 + Umi Max 4 + Ant Design 6 + ProComponents v3 重平台设计见 `docs/superpowers/specs/2026-09-27-react-pro-v6-replatform-design.md`。这项决定取代本文早期的“Vue mainline”前端方向；本文其余记录保留为历史证据，不应当作当前 React 迁移已完成或已验收。
 
 ---
 

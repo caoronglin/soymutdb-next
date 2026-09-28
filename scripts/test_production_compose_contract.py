@@ -171,9 +171,10 @@ def test_dockerignore_excludes_generated_output_without_hiding_sources() -> None
 
     # 1. Generated output stays out of the context.
     for generated in (
-        "apps/web/dist/index.html",
+        "apps/web/dist/external/index.html",
+        "apps/web/dist/internal/index.html",
         "apps/admin/dist/index.html",
-        "apps/jbrowse/dist/main.js",
+        "apps/jbrowse/dist/index.html",
         "node_modules/react/index.js",
         "apps/web/coverage/index.html",
     ):
@@ -183,22 +184,26 @@ def test_dockerignore_excludes_generated_output_without_hiding_sources() -> None
     #    surfaces as `COPY failed: ... excluded by .dockerignore`.
     for source in (
         "apps/web/package.json",
-        "apps/web/src/main.ts",
+        "apps/web/src/umi-entry.tsx",
+        "apps/web/config/config.ts",
         "apps/web/scripts/generate-static-routes.ts",
-        "apps/web/vite.config.ts",
         "apps/admin/package.json",
-        "apps/admin/src/main.tsx",
+        "apps/admin/src/umi-entry.tsx",
         "apps/api/pyproject.toml",
         "apps/api/uv.lock",
         "apps/api/app/main.py",
         "apps/worker/pyproject.toml",
         "apps/jbrowse/Dockerfile",
-        "apps/jbrowse/index.html",
+        "apps/jbrowse/src/umi-entry.tsx",
+        "apps/jbrowse/config/config.ts",
         "apps/jbrowse/public/_headers",
         "packages/shared/package.json",
         "packages/shared/src/index.ts",
         "packages/api-client/package.json",
         "packages/i18n-core/package.json",
+        "packages/i18n/package.json",
+        "packages/ui-react/package.json",
+        "packages/query-keys/package.json",
         "infra/docker/precompress.sh",
         "infra/docker/web-nginx.conf",
         "package.json",

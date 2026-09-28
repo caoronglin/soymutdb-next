@@ -1,11 +1,99 @@
+<template>
+  <div class="admin-page">
+    <AdminPageHeader :title="t('admin.importCreate.title')" :description="t('admin.importCreate.hint')">
+      <template #meta>
+        <RouterLink to="/imports" class="admin-link mt-2 inline-block" data-testid="import-create-back">
+          ← {{ t("admin.importDetail.back") }}
+        </RouterLink>
+      </template>
+    </AdminPageHeader>
+
+    <AdminCard class="max-w-2xl">
+      <form class="grid gap-3" @submit.prevent="createMutation.mutate()">
+        <label class="admin-field">
+          {{ t("admin.importCreate.filename") }}
+          <input
+            v-model="form.filename"
+            required
+            class="admin-control admin-control--mono"
+            data-testid="import-create-filename"
+          />
+        </label>
+        <label class="admin-field">
+          {{ t("admin.importCreate.type") }}
+          <select v-model="form.type" class="admin-control" data-testid="import-create-type">
+            <option v-for="value in IMPORT_TYPES" :key="value" :value="value">{{ value }}</option>
+          </select>
+        </label>
+        <label class="admin-field">
+          {{ t("admin.importCreate.objectKey") }}
+          <input
+            v-model="form.objectKey"
+            class="admin-control admin-control--mono"
+            data-testid="import-create-object-key"
+          />
+        </label>
+        <div class="grid gap-3 sm:grid-cols-2">
+          <label class="admin-field">
+            {{ t("admin.importCreate.assembly") }}
+            <input
+              v-model="form.assembly"
+              class="admin-control"
+              data-testid="import-create-assembly"
+            />
+          </label>
+          <label class="admin-field">
+            {{ t("admin.importCreate.releaseId") }}
+            <input
+              v-model="form.releaseId"
+              type="number"
+              min="1"
+              class="admin-control"
+              data-testid="import-create-release"
+            />
+          </label>
+        </div>
+
+        <p
+          v-if="errorMessage"
+          role="alert"
+          class="admin-state admin-state--error"
+          data-testid="import-create-error"
+        >
+          {{ errorMessage }}
+        </p>
+
+        <div class="flex gap-2">
+          <Button
+            type="primary"
+            html-type="submit"
+            :disabled="createMutation.isPending.value"
+            data-testid="import-create-submit"
+          >
+            {{ createMutation.isPending.value ? t("common.loading") : t("admin.importCreate.submit") }}
+          </Button>
+          <RouterLink
+            to="/imports"
+            class="inline-flex min-h-9 items-center rounded-md border border-border px-3 text-sm"
+          >
+            {{ t("common.cancel") }}
+          </RouterLink>
+        </div>
+      </form>
+    </AdminCard>
+  </div>
+</template>
+
 <script setup lang="ts">
 import { useMutation } from "@tanstack/vue-query";
 import { reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 
 import { adminImportsApi, type ImportTask } from "@soymutdb/api-client";
-import { Button, ConfigProvider, createThemeConfig } from "@soymutdb/ui-vue";
+import { Button } from "@soymutdb/ui-vue";
 
+import AdminCard from "../components/AdminCard.vue";
+import AdminPageHeader from "../components/AdminPageHeader.vue";
 import { t } from "../lib/i18n";
 
 /**
@@ -60,61 +148,3 @@ const createMutation = useMutation({
   },
 });
 </script>
-
-<template>
-  <ConfigProvider :theme="createThemeConfig({ dark: false })">
-    <div class="max-w-xl">
-      <RouterLink to="/imports" class="text-sm opacity-70" data-testid="import-create-back">
-        ← {{ t("admin.importDetail.back") }}
-      </RouterLink>
-      <h1 class="mt-2 text-xl font-semibold">{{ t("admin.importCreate.title") }}</h1>
-      <p class="mt-2 text-sm opacity-70">{{ t("admin.importCreate.hint") }}</p>
-
-      <form class="mt-4 grid gap-3" @submit.prevent="createMutation.mutate()">
-        <label class="text-sm opacity-70">
-          {{ t("admin.importCreate.filename") }}
-          <input
-            v-model="form.filename"
-            required
-            class="mt-1 w-full rounded-md border bg-background px-2 py-1.5 font-mono text-xs"
-            data-testid="import-create-filename"
-          />
-        </label>
-        <label class="text-sm opacity-70">
-          {{ t("admin.importCreate.type") }}
-          <select
-            v-model="form.type"
-            class="mt-1 w-full rounded-md border bg-background px-2 py-1.5"
-            data-testid="import-create-type"
-          >
-            <option v-for="value in IMPORT_TYPES" :key="value" :value="value">{{ value }}</option>
-          </select>
-        </label>
-        <label class="text-sm opacity-70">
-          {{ t("admin.importCreate.objectKey") }}
-          <input
-            v-model="form.objectKey"
-            class="mt-1 w-full rounded-md border bg-background px-2 py-1.5 font-mono text-xs"
-            data-testid="import-create-object-key"
-          />
-        </label>
-        <label class="text-sm opacity-70">
-          {{ t("admin.importCreate.assembly") }}
-          <input v-model="form.assembly" class="mt-1 w-full rounded-md border bg-background px-2 py-1.5" data-testid="import-create-assembly" />
-        </label>
-        <label class="text-sm opacity-70">
-          {{ t("admin.importCreate.releaseId") }}
-          <input v-model="form.releaseId" type="number" min="1" class="mt-1 w-full rounded-md border bg-background px-2 py-1.5" data-testid="import-create-release" />
-        </label>
-        <p v-if="errorMessage" role="alert" class="text-sm text-red-700" data-testid="import-create-error">
-          {{ errorMessage }}
-        </p>
-        <div>
-          <Button html-type="submit" :disabled="createMutation.isPending.value" data-testid="import-create-submit">
-            {{ t("admin.importCreate.submit") }}
-          </Button>
-        </div>
-      </form>
-    </div>
-  </ConfigProvider>
-</template>

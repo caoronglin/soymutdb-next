@@ -30,7 +30,8 @@
     },
     "./build/csp": {
       "types": "./src/build/csp.ts",
-      "import": "./src/build/csp.ts"
+      "import": "./src/build/csp.ts",
+      "require": "./src/build/csp.ts"
     },
     "./build/csp-hash": {
       "types": "./src/build/csp-hash.ts",
@@ -50,7 +51,8 @@
     },
     "./deployment": {
       "types": "./src/deployment.ts",
-      "import": "./src/deployment.ts"
+      "import": "./src/deployment.ts",
+      "require": "./src/deployment.ts"
     }
   },
   "main": "./src/index.ts",

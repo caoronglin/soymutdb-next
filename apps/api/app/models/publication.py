@@ -131,8 +131,12 @@ class StaticPublication(Base, TimestampMixin):
     page_definition_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
     #: SHA-256 of the canonicalized manifest.json (``release_service.manifest_digest``).
     manifest_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    #: Immutable artifact location (S3 object key or local path).
+    #: Immutable location of the *built* artifact (S3 object key or local path).
     artifact_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: Immutable reference of the *input* the build was produced from (the SSG
+    #: output tree/archive). Nullable: a request without one is allowed and the
+    #: worker then fails closed rather than publishing a synthetic page.
+    build_artifact_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     #: Remote deployment identifier recorded by the target (run id / commit / deploy id).
     remote_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     #: Previous published publication on the same target (rollback relation).

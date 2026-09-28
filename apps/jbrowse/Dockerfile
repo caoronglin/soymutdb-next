@@ -12,6 +12,8 @@ COPY package.json pnpm-workspace.yaml turbo.json pnpm-lock.yaml ./
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/api-client/package.json packages/api-client/package.json
 COPY packages/i18n-core/package.json packages/i18n-core/package.json
+COPY packages/i18n/package.json packages/i18n/package.json
+COPY packages/ui-react/package.json packages/ui-react/package.json
 COPY packages/query-keys/package.json packages/query-keys/package.json
 COPY packages/charts/package.json packages/charts/package.json
 COPY packages/ui-vue/package.json packages/ui-vue/package.json
@@ -29,7 +31,7 @@ FROM deps AS build
 COPY packages/ packages/
 COPY apps/jbrowse/ apps/jbrowse/
 
-# The JBrowse `_headers` injector bakes the API/data/embed origins into the CSP
+# The JBrowse Umi build bakes the API/data/embed origins into the CSP
 # and fails closed without them, so the image build must supply them. Defaults
 # match the offline CI fixture; override with `--build-arg` for a deployment.
 ARG VITE_API_BASE_URL=https://api.soymutdb.test

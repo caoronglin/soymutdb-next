@@ -6,9 +6,8 @@
  *
  * The build chain is
  *
- *   vite build → ssg-build → generate-samples → fetch-content-snapshot
- *     → ssg-content → embed-page-definitions → **finalize-csp**
- *     → gzip-compress → gen-sw → release-manifest
+ *   Umi Max build → generate-static-routes → **finalize-csp**
+ *     → optional gzip-compress → gen-sw → release-manifest
  *
  * Every step before this one *creates* HTML, and several of them inject inline
  * `<script>` blocks of their own. A hash computed any earlier would be a hash of
@@ -34,7 +33,7 @@
  * That is deliberate: the alternative is an artifact that looks fine and is
  * either wider or narrower than intended.
  *
- * Usage:  tsx scripts/finalize-csp.ts      (run by the portal build / build:sites)
+ * Usage:  tsx scripts/finalize-csp.ts      (run for each variant by build-sites.ts)
  * Env:    SOYMUTDB_DIST_DIR   output directory (default `dist`)
  */
 

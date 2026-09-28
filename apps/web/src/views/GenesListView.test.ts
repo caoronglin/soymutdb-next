@@ -6,17 +6,19 @@ import { flushPromises } from "@vue/test-utils";
 
 import { mountPortalView } from "../test/mount-portal-view";
 
-import { searchGenes } from "@soymutdb/api-client";
+import { searchGenes, getSiteContent } from "@soymutdb/api-client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { setLanguage, t } from "../lib/i18n";
 import GenesListView from "./GenesListView.vue";
 
 vi.mock("@soymutdb/api-client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@soymutdb/api-client")>();
-  return { ...actual, searchGenes: vi.fn(), getAssemblies: vi.fn() };
+  return { ...actual, searchGenes: vi.fn(), getAssemblies: vi.fn(), getSiteContent: vi.fn() };
 });
 
 const mocked = vi.mocked(searchGenes);
+const mockedSiteContent = vi.mocked(getSiteContent);
 
 function row(geneId: string) {
   return {
@@ -37,6 +39,8 @@ function row(geneId: string) {
 }
 
 beforeEach(() => {
+  setLanguage("en");
+  mockedSiteContent.mockReset().mockResolvedValue({});
   mocked.mockReset().mockResolvedValue({
     items: [row("Glyma.01G000100")],
     total: 1,
@@ -110,6 +114,40 @@ describe("GenesListView", () => {
 
     expect(wrapper.find('[data-testid="genes-empty"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="gene-row"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("renders today's localized title/subtitle when no override is stored", async () => {
+    const { wrapper } = mountPortalView(GenesListView, { path: "/genes" });
+    await flushPromises();
+
+    expect(wrapper.get(".eyebrow").text()).toBe(t("genes.title"));
+    expect(wrapper.get("h1").text()).toBe(t("genes.subtitle"));
+    wrapper.unmount();
+  });
+
+  it("keeps Chinese copy (not the English default) when the override map is empty", async () => {
+    setLanguage("zh");
+    const { wrapper } = mountPortalView(GenesListView, { path: "/genes" });
+    await flushPromises();
+
+    expect(wrapper.get(".eyebrow").text()).toBe(t("genes.title"));
+    expect(wrapper.get("h1").text()).toBe(t("genes.subtitle"));
+    expect(wrapper.get("h1").text()).not.toBe("Browse gene models, annotations and homologs");
+    wrapper.unmount();
+  });
+
+  it("renders a stored title/subtitle override under the active language", async () => {
+    mockedSiteContent.mockResolvedValue({
+      "genes.title": "运营基因标题",
+      "genes.subtitle": "运营基因副标题",
+    });
+    setLanguage("zh");
+    const { wrapper } = mountPortalView(GenesListView, { path: "/genes" });
+    await flushPromises();
+
+    expect(wrapper.get(".eyebrow").text()).toBe("运营基因标题");
+    expect(wrapper.get("h1").text()).toBe("运营基因副标题");
     wrapper.unmount();
   });
 });

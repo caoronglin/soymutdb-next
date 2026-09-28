@@ -6,6 +6,7 @@ import { useRoute, useRouter } from "vue-router";
 import type {
   AssemblyInfo,
   ChromosomeInfo,
+  TableColumn,
   VariantSummary,
 } from "@soymutdb/api-client";
 
@@ -22,6 +23,7 @@ import {
   tableViewQueryOptions,
   REGION_SEARCH_MAX_RESULTS,
 } from "../lib/query-options";
+import { useSiteContent } from "../lib/site-content";
 import { useSiteContextStore } from "../stores/site-context";
 
 /**
@@ -37,6 +39,7 @@ import { useSiteContextStore } from "../stores/site-context";
 const route = useRoute();
 const router = useRouter();
 const site = useSiteContextStore();
+const { get } = useSiteContent();
 
 const initial = {
   assembly: typeof route.query.assembly === "string" ? route.query.assembly : "",
@@ -160,6 +163,30 @@ const items = computed<VariantSummary[]>(() => toValue(query.data) ?? []);
 const tableView = useQuery(computed(() => tableViewQueryOptions("variants")));
 const viewColumns = computed(() => toValue(tableView.data)?.columns ?? []);
 const viewActions = computed(() => toValue(tableView.data)?.actions);
+
+/**
+ * Template column key → admin-editable header key, with the page's own i18n
+ * fallback. React reused the `search.genes.col*` content keys on this page but
+ * fell back to `search.location.col*` copy; the same keys are reused here so an
+ * operator retitles one column for both search pages at once.
+ */
+const COLUMN_CONTENT_KEYS: Record<string, { key: string; fallback: string }> = {
+  assembly_name: { key: "search.genes.colAssembly", fallback: "search.location.colAssembly" },
+  chromosome: { key: "search.genes.colChromosome", fallback: "search.location.colChromosome" },
+  position: { key: "search.genes.colPosition", fallback: "search.location.colPosition" },
+  impact: { key: "search.genes.colMutation", fallback: "search.location.colMutation" },
+  variant_type: { key: "search.genes.colMutation", fallback: "search.location.colMutation" },
+  gene_id: { key: "search.genes.colGeneId", fallback: "search.location.colGeneId" },
+  jbrowse: { key: "search.genes.colGbrowse", fallback: "search.location.colGbrowse" },
+};
+
+const columns = computed<TableColumn[]>(() =>
+  viewColumns.value.map((column) => {
+    const entry = COLUMN_CONTENT_KEYS[column.key];
+    return entry ? { ...column, label_en: get(entry.key, t(entry.fallback)) } : column;
+  }),
+);
+
 const isLoading = computed(() => toValue(query.isLoading));
 const isError = computed(() => toValue(query.isError));
 
@@ -191,8 +218,10 @@ function submit() {
 <template>
   <PortalLayout>
     <div class="mx-auto max-w-7xl px-4 py-8">
-      <h1 class="text-2xl font-semibold">{{ t("search.location.title") }}</h1>
-      <p class="mt-1 max-w-2xl text-sm opacity-70">{{ t("search.location.subtitle") }}</p>
+      <h1 class="text-2xl font-semibold">{{ get("search.location.title", t("search.location.title")) }}</h1>
+      <p class="mt-1 max-w-2xl text-sm opacity-70">
+        {{ get("search.location.subtitle", t("search.location.subtitle")) }}
+      </p>
 
       <form
         class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5 lg:items-end"
@@ -200,7 +229,7 @@ function submit() {
         @submit.prevent="submit"
       >
         <label class="text-sm opacity-70">
-          {{ t("search.location.assembly") }}
+          {{ get("search.location.assembly", t("search.location.assembly")) }}
           <select
             class="mt-1 w-full rounded-md border bg-background px-2 py-1.5"
             :value="formAssemblyId"
@@ -214,7 +243,7 @@ function submit() {
           </select>
         </label>
         <label class="text-sm opacity-70">
-          {{ t("search.location.chromosome") }}
+          {{ get("search.location.chromosome", t("search.location.chromosome")) }}
           <select
             class="mt-1 w-full rounded-md border bg-background px-2 py-1.5"
             v-model="chromosome"
@@ -227,27 +256,29 @@ function submit() {
           </select>
         </label>
         <label class="text-sm opacity-70">
-          {{ t("search.location.start") }}
+          {{ get("search.location.start", t("search.location.start")) }}
           <input
             v-model="start"
             type="number"
             min="1"
             class="mt-1 w-full rounded-md border bg-background px-2 py-1.5 font-mono"
+            :aria-label="get('search.location.start', t('search.location.start'))"
             data-testid="location-start"
           />
         </label>
         <label class="text-sm opacity-70">
-          {{ t("search.location.end") }}
+          {{ get("search.location.end", t("search.location.end")) }}
           <input
             v-model="end"
             type="number"
             min="1"
             class="mt-1 w-full rounded-md border bg-background px-2 py-1.5 font-mono"
+            :aria-label="get('search.location.end', t('search.location.end'))"
             data-testid="location-end"
           />
         </label>
         <Button html-type="submit" :disabled="!formAssemblyId || unknownAssembly" data-testid="location-submit">
-          {{ t("search.location.submit") }}
+          {{ get("search.location.submit", t("search.location.submit")) }}
         </Button>
       </form>
       <p class="mt-2 text-xs opacity-60">{{ t("search.location.formatHint") }}</p>
@@ -270,7 +301,7 @@ function submit() {
           {{ t("common.loading") }}
         </p>
         <p v-else-if="isError" data-testid="location-error" class="text-sm text-red-700">
-          {{ t("common.errorDescription") }}
+          {{ get("ui.errorRetry", t("search.location.resultsRetry")) }}
         </p>
         <p v-else-if="!region" data-testid="location-idle" class="text-sm opacity-70">
           {{ t("search.location.formatHint") }}
@@ -280,11 +311,11 @@ function submit() {
             {{ t("search.location.found", { count: items.length }) }}
           </p>
           <p v-if="items.length === 0" data-testid="location-empty" class="text-sm opacity-70">
-            {{ t("search.location.noResults") }}
+            {{ get("ui.noResults", t("search.location.noResults")) }}
           </p>
           <ConfigurableTable
             v-else
-            :columns="viewColumns"
+            :columns="columns"
             :actions="viewActions"
             :rows="items as unknown as ConfigurableRow[]"
             :assembly-name="selectedAssembly?.name ?? null"

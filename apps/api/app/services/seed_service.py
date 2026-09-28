@@ -3,58 +3,111 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..core.exceptions import NotFoundError, ValidationError
+from ..core.exceptions import NotFoundError
+from ..core.public_ids import normalize_public_id
 from ..models.seed import SeedInventory, SeedRequest, SeedRequestStatus
+from ..models.variant import MutantLine
 from ..schemas.seed import (
     SeedInventoryResponse,
     SeedRequestCreate,
     SeedRequestResponse,
     SeedRequestUpdate,
 )
+from ..services.release_context import ReleaseContext
 
 
 class SeedService:
-    """Seed inventory and request management."""
+    """Seed inventory and request management.
+
+    Public reads are bound to the resolved published release and address rows by
+    their public locators. ``seed_inventory`` has no release column of its own —
+    it hangs off ``mutant_lines`` — so scoping means joining the line and
+    filtering ``MutantLine.release_id``.
+    """
 
     async def list_inventory(
-        self, db: AsyncSession, mutant_line_id: int | None = None
+        self,
+        db: AsyncSession,
+        *,
+        release_context: ReleaseContext,
+        mutant_line_public_id: str | None = None,
     ) -> list[SeedInventoryResponse]:
-        stmt = select(SeedInventory)
-        if mutant_line_id is not None:
-            stmt = stmt.where(SeedInventory.mutant_line_id == mutant_line_id)
+        stmt = (
+            select(SeedInventory)
+            .join(MutantLine, SeedInventory.mutant_line_id == MutantLine.id)
+            .where(MutantLine.release_id == release_context.release_id)
+        )
+        if mutant_line_public_id is not None:
+            stmt = stmt.where(
+                func.upper(MutantLine.public_id)
+                == normalize_public_id(mutant_line_public_id)
+            )
         result = await db.execute(stmt)
         return [self._inv_to_response(i) for i in result.scalars().all()]
 
     async def get_inventory(
-        self, db: AsyncSession, inventory_id: int
+        self,
+        db: AsyncSession,
+        seed_lot: str,
+        *,
+        release_context: ReleaseContext,
     ) -> SeedInventoryResponse:
+        """Look a lot up by its public lot label, not its persistence key."""
         result = await db.execute(
-            select(SeedInventory).where(SeedInventory.id == inventory_id)
+            select(SeedInventory)
+            .join(MutantLine, SeedInventory.mutant_line_id == MutantLine.id)
+            .where(
+                SeedInventory.seed_lot == seed_lot,
+                MutantLine.release_id == release_context.release_id,
+            )
         )
         inv = result.scalar_one_or_none()
         if inv is None:
-            raise NotFoundError(f"Seed inventory {inventory_id} not found")
+            raise NotFoundError(f"Seed lot {seed_lot!r} not found")
         return self._inv_to_response(inv)
 
-    async def create_request(
-        self, db: AsyncSession, request: SeedRequestCreate
-    ) -> SeedRequestResponse:
-        """Submit a new seed request."""
-        ml_id = int(request.mutant_line_id)
-        # Verify mutant line exists.
-        from ..models.variant import MutantLine
+    @staticmethod
+    async def _resolve_line(
+        db: AsyncSession,
+        public_id: str,
+        *,
+        release_context: ReleaseContext,
+    ) -> int:
+        """Resolve a public mutant id to its internal key in the release."""
+        from ..core.public_ids import normalize_public_id
 
-        ml_result = await db.execute(
-            select(MutantLine).where(MutantLine.id == ml_id)
+        candidate = normalize_public_id(public_id)
+        if not candidate.startswith("SM"):
+            raise NotFoundError(f"Mutant line {public_id} not found")
+        result = await db.execute(
+            select(MutantLine.id).where(
+                func.upper(MutantLine.public_id) == candidate,
+                MutantLine.is_deleted.is_(False),
+                MutantLine.is_public.is_(True),
+                MutantLine.release_id == release_context.release_id,
+            )
         )
-        if ml_result.scalar_one_or_none() is None:
-            raise NotFoundError(f"Mutant line {ml_id} not found")
+        line_id = result.scalar_one_or_none()
+        if line_id is None:
+            raise NotFoundError(f"Mutant line {public_id} not found")
+        return int(line_id)
+
+    async def create_request(
+        self,
+        db: AsyncSession,
+        request: SeedRequestCreate,
+        *,
+        release_context: ReleaseContext,
+    ) -> SeedRequestResponse:
+        """Submit a new seed request against a released, public mutant line."""
+        ml_id = await self._resolve_line(
+            db, request.mutant_line_public_id, release_context=release_context
+        )
 
         seed_req = SeedRequest(
             id=uuid.uuid4(),
@@ -65,7 +118,7 @@ class SeedService:
             purpose=request.purpose,
             quantity_requested=request.quantity_grams,
             status=SeedRequestStatus.PENDING,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         db.add(seed_req)
         await db.commit()
@@ -99,7 +152,7 @@ class SeedService:
 
         seed_req.status = update.status
         seed_req.reviewer_id = reviewer_id
-        seed_req.reviewed_at = datetime.now(timezone.utc)
+        seed_req.reviewed_at = datetime.now(UTC)
         if update.tracking_number is not None:
             seed_req.tracking_number = update.tracking_number
         if update.notes is not None:
@@ -114,9 +167,9 @@ class SeedService:
 
     @staticmethod
     def _inv_to_response(inv: SeedInventory) -> SeedInventoryResponse:
+        line = getattr(inv, "mutant_line", None)
         return SeedInventoryResponse(
-            id=str(inv.id),
-            mutant_line_id=str(inv.mutant_line_id),
+            mutant_line_public_id=(line.public_id if line is not None else ""),
             seed_lot=inv.seed_lot,
             quantity_grams=float(inv.quantity_grams),
             location=inv.location,
@@ -129,9 +182,10 @@ class SeedService:
 
     @staticmethod
     def _req_to_response(req: SeedRequest) -> SeedRequestResponse:
+        line = getattr(req, "mutant_line", None)
         return SeedRequestResponse(
             id=str(req.id),
-            mutant_line_id=str(req.mutant_line_id),
+            mutant_line_public_id=(line.public_id if line is not None else ""),
             status=req.status,
             quantity_requested=float(req.quantity_requested)
             if req.quantity_requested

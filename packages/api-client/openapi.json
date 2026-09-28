@@ -2379,7 +2379,7 @@
           "search"
         ],
         "summary": "Global search (JSON or HTML fragment)",
-        "description": "Global search endpoint.\n\nReturns JSON (public SoyMutDB search) when the client sends\n``Accept: application/json`` or ``?format=json``.  Otherwise returns a\nsanitized HTML fragment built from federated external search results.",
+        "description": "Global search endpoint.\n\nReturns JSON (public SoyMutDB search) when the client sends\n``Accept: application/json`` or ``?format=json``.  Otherwise returns a\nsanitized HTML fragment built from federated external search results.\n\nAn explicit ``release_id`` query parameter is the request's release\nscope and is used verbatim (published or not), so two releases can never\nshare a cache entry or response. Without it the active published release\nis resolved.",
         "operationId": "global_search_api_v1_search_get",
         "parameters": [
           {
@@ -2477,6 +2477,25 @@
               ],
               "title": "Assembly Id"
             }
+          },
+          {
+            "name": "release_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Explicit release scope. Used verbatim (published or not); defaults to the active published release.",
+              "title": "Release Id"
+            },
+            "description": "Explicit release scope. Used verbatim (published or not); defaults to the active published release."
           },
           {
             "name": "format",
@@ -4406,7 +4425,7 @@
           "mutants"
         ],
         "summary": "List Mutant Lines",
-        "description": "List public mutant lines.",
+        "description": "List public mutant lines from the active published release.",
         "operationId": "list_mutant_lines_api_v1_mutants_get",
         "parameters": [
           {
@@ -4435,6 +4454,40 @@
               "minimum": 1,
               "default": 50,
               "title": "Limit"
+            }
+          },
+          {
+            "name": "release_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
             }
           }
         ],
@@ -4494,6 +4547,40 @@
               "type": "string",
               "title": "Public Id"
             }
+          },
+          {
+            "name": "release_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
+            }
           }
         ],
         "responses": {
@@ -4537,7 +4624,7 @@
           "mutants"
         ],
         "summary": "Get Phenotypes",
-        "description": "List phenotypes for a public mutant line.",
+        "description": "List phenotypes for a public mutant line in the active release.",
         "operationId": "get_phenotypes_api_v1_mutants__public_id__phenotypes_get",
         "parameters": [
           {
@@ -4547,6 +4634,40 @@
             "schema": {
               "type": "string",
               "title": "Public Id"
+            }
+          },
+          {
+            "name": "release_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
             }
           }
         ],
@@ -12539,6 +12660,141 @@
         ]
       }
     },
+    "/api/v1/admin/settings/site-brand": {
+      "get": {
+        "tags": [
+          "admin-settings"
+        ],
+        "summary": "Get Admin Site Brand",
+        "description": "Return the versioned, UI-facing brand values for one site variant.",
+        "operationId": "get_admin_site_brand_api_v1_admin_settings_site_brand_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "variant",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/SiteVariant",
+              "default": "external"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminSiteBrandResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-idempotent": true
+      },
+      "patch": {
+        "tags": [
+          "admin-settings"
+        ],
+        "summary": "Patch Admin Site Brand",
+        "description": "Apply an audited brand patch with optimistic version checking.",
+        "operationId": "patch_admin_site_brand_api_v1_admin_settings_site_brand_patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "variant",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/SiteVariant",
+              "default": "external"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SiteBrandPatchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminSiteBrandResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Settings version conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/settings/{section}/document": {
       "get": {
         "tags": [
@@ -13513,6 +13769,65 @@
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-idempotent": true
+      }
+    },
+    "/api/v1/admin/species-instances/{instance_id}/health": {
+      "get": {
+        "tags": [
+          "admin-species-instances"
+        ],
+        "summary": "Get Species Instance Health",
+        "description": "Probe the instance liveness endpoint only when deployment trust allows it.",
+        "operationId": "get_species_instance_health_api_v1_admin_species_instances__instance_id__health_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "instance_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Instance Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpeciesInstanceHealthResponse"
+                }
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -14523,6 +14838,65 @@
         "x-idempotent": true
       }
     },
+    "/api/v1/site/branding": {
+      "get": {
+        "tags": [
+          "site"
+        ],
+        "summary": "Get Site Branding",
+        "description": "Return a bilingual brand snapshot for one explicit site artifact.",
+        "operationId": "get_site_branding_api_v1_site_branding_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "variant",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/SiteVariant",
+              "default": "external"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteBrandResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-idempotent": true
+      }
+    },
     "/api/v1/site/about": {
       "get": {
         "tags": [
@@ -14706,7 +15080,7 @@
           "site"
         ],
         "summary": "Get Site Content",
-        "description": "Return all editable frontend labels for one explicit site variant.\n\nThe response is intentionally flat for compatibility with the existing\nuseSiteContent contract. The namespace and authorization boundary remain\nserver-side, so variant=internal cannot be enumerated anonymously.",
+        "description": "Return the editable frontend labels for one explicit site variant.\n\nThe response is intentionally flat for compatibility with the existing\nuseSiteContent contract. The namespace and authorization boundary remain\nserver-side, so variant=internal cannot be enumerated anonymously.\n\n``only_overrides=true`` returns just the stored rows: a caller then renders\n``value ?? its own locale-aware default`` and an unedited deployment keeps\nlooking exactly as it does today. The default (``false``) keeps the original\n\"every registered key, default-filled\" shape for existing consumers.",
         "operationId": "get_site_content_api_v1_site_content_get",
         "security": [
           {
@@ -14722,6 +15096,18 @@
               "$ref": "#/components/schemas/SiteVariant",
               "default": "external"
             }
+          },
+          {
+            "name": "only_overrides",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Return only the keys this variant has a stored value for, instead of every registered key filled with its (English) registered default. A bilingual portal needs the distinction: without it, consuming the endpoint would replace a locale-specific string with the English default on every page load.",
+              "default": false,
+              "title": "Only Overrides"
+            },
+            "description": "Return only the keys this variant has a stored value for, instead of every registered key filled with its (English) registered default. A bilingual portal needs the distinction: without it, consuming the endpoint would replace a locale-specific string with the English default on every page load."
           }
         ],
         "responses": {
@@ -15981,6 +16367,35 @@
           "plugins"
         ],
         "title": "AdminPluginsResponse"
+      },
+      "AdminSiteBrandResponse": {
+        "properties": {
+          "variant": {
+            "type": "string",
+            "enum": [
+              "external",
+              "internal"
+            ],
+            "title": "Variant"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Version"
+          },
+          "values": {
+            "$ref": "#/components/schemas/SiteBrandValues"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "variant",
+          "version",
+          "values"
+        ],
+        "title": "AdminSiteBrandResponse",
+        "description": "Versioned admin view; values are adapted from the settings registry."
       },
       "AlleleFreqRequest": {
         "properties": {
@@ -17394,6 +17809,67 @@
           "created_at"
         ],
         "title": "ContentVersionResponse"
+      },
+      "CrossVersionLink": {
+        "properties": {
+          "gene_accession": {
+            "type": "string",
+            "title": "Gene Accession"
+          },
+          "assembly_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assembly Id"
+          },
+          "assembly_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assembly Name"
+          },
+          "assembly_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assembly Version"
+          },
+          "relation_type": {
+            "type": "string",
+            "title": "Relation Type"
+          },
+          "provenance_source": {
+            "type": "string",
+            "title": "Provenance Source"
+          },
+          "match_type": {
+            "$ref": "#/components/schemas/MatchType",
+            "default": "cross-version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "gene_accession",
+          "relation_type",
+          "provenance_source"
+        ],
+        "title": "CrossVersionLink",
+        "description": "An explicit, provenance-bearing cross-assembly relation of a gene hit.\n\nAttached to the matched gene's result item only; a linked gene never\nbecomes an extra result row (so ``total_count``/pagination are unchanged)\nand the matched hit keeps its own ``match_type`` (e.g. ``exact``). The\nrelation is only ever read from ``gene_crosswalks``; string similarity\nalone never produces one. ``match_type`` here is the value that finally\ngives ``MatchType.CROSS_VERSION`` a producer."
       },
       "DashboardStats": {
         "properties": {
@@ -25436,6 +25912,24 @@
               }
             ],
             "title": "Assembly Id"
+          },
+          "assembly": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assembly"
+          },
+          "cross_version": {
+            "items": {
+              "$ref": "#/components/schemas/CrossVersionLink"
+            },
+            "type": "array",
+            "title": "Cross Version"
           }
         },
         "type": "object",
@@ -25703,7 +26197,8 @@
               "boolean",
               "enum",
               "email",
-              "url"
+              "url",
+              "uuid"
             ],
             "title": "Kind"
           },
@@ -26144,6 +26639,140 @@
         "title": "SignedUrlResponse",
         "description": "Pre-signed URL response with RBAC-validated access."
       },
+      "SiteBrandPatchRequest": {
+        "properties": {
+          "expected_version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Version"
+          },
+          "values": {
+            "$ref": "#/components/schemas/SiteBrandPatchValues"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "expected_version",
+          "values"
+        ],
+        "title": "SiteBrandPatchRequest"
+      },
+      "SiteBrandPatchValues": {
+        "properties": {
+          "name_zh": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name Zh"
+          },
+          "name_en": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name En"
+          },
+          "icon_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2048
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon Url"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "SiteBrandPatchValues",
+        "description": "Sparse site-brand patch. An explicit null icon clears the selection."
+      },
+      "SiteBrandResponse": {
+        "properties": {
+          "name_zh": {
+            "type": "string",
+            "title": "Name Zh"
+          },
+          "name_en": {
+            "type": "string",
+            "title": "Name En"
+          },
+          "icon_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon Url"
+          },
+          "variant": {
+            "type": "string",
+            "enum": [
+              "external",
+              "internal"
+            ],
+            "title": "Variant"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name_zh",
+          "name_en",
+          "variant"
+        ],
+        "title": "SiteBrandResponse",
+        "description": "Brand values for one explicitly selected public site variant."
+      },
+      "SiteBrandValues": {
+        "properties": {
+          "name_zh": {
+            "type": "string",
+            "title": "Name Zh"
+          },
+          "name_en": {
+            "type": "string",
+            "title": "Name En"
+          },
+          "icon_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name_zh",
+          "name_en"
+        ],
+        "title": "SiteBrandValues",
+        "description": "Bilingual display names and a verified media-library icon URL."
+      },
       "SiteVariant": {
         "type": "string",
         "enum": [
@@ -26235,6 +26864,92 @@
           "api_base_url"
         ],
         "title": "SpeciesInstanceCreate"
+      },
+      "SpeciesInstanceHealthResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "connection_state": {
+            "type": "string",
+            "enum": [
+              "unknown",
+              "healthy",
+              "unhealthy",
+              "disabled",
+              "unconfigured"
+            ],
+            "title": "Connection State"
+          },
+          "checked_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Checked At"
+          },
+          "last_checked_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Checked At"
+          },
+          "last_error_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error At"
+          },
+          "is_stale": {
+            "type": "boolean",
+            "title": "Is Stale"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "remote_management": {
+            "type": "string",
+            "enum": [
+              "local",
+              "registration_only"
+            ],
+            "title": "Remote Management"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "code",
+          "connection_state",
+          "checked_at",
+          "is_stale",
+          "remote_management"
+        ],
+        "title": "SpeciesInstanceHealthResponse"
       },
       "SpeciesInstanceListResponse": {
         "properties": {
@@ -26333,6 +27048,66 @@
             "type": "integer",
             "title": "Id"
           },
+          "site_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Site Url"
+          },
+          "connection_state": {
+            "type": "string",
+            "enum": [
+              "unknown",
+              "healthy",
+              "unhealthy",
+              "disabled",
+              "unconfigured"
+            ],
+            "title": "Connection State",
+            "default": "unknown"
+          },
+          "last_checked_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Checked At"
+          },
+          "last_error_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error At"
+          },
+          "is_stale": {
+            "type": "boolean",
+            "title": "Is Stale",
+            "default": true
+          },
+          "remote_management": {
+            "type": "string",
+            "enum": [
+              "local",
+              "registration_only"
+            ],
+            "title": "Remote Management"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -26352,6 +27127,7 @@
           "species",
           "api_base_url",
           "id",
+          "remote_management",
           "created_at",
           "updated_at"
         ],
@@ -27735,6 +28511,17 @@
             ],
             "title": "Assembly Id"
           },
+          "assembly": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assembly"
+          },
           "variant_id": {
             "anyOf": [
               {
@@ -28198,6 +28985,17 @@
               }
             ],
             "title": "Assembly Id"
+          },
+          "assembly": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assembly"
           },
           "variant_id": {
             "anyOf": [

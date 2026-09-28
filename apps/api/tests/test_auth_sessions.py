@@ -141,6 +141,7 @@ class FakeAuthDB:
         self.user = user
         self.tokens: dict[str, RefreshToken] = {}
         self.added: list[object] = []
+        self.execute_calls = 0
         self.commits = 0
         self.rollbacks = 0
         self._lock = _ReentrantAsyncLock()
@@ -148,6 +149,7 @@ class FakeAuthDB:
     # -- session API -------------------------------------------------------
 
     async def execute(self, query: object) -> _FakeResult:
+        self.execute_calls += 1
         if isinstance(query, Select):
             entity = query.column_descriptions[0]["entity"]
             pairs = _criteria_pairs(query)
@@ -267,10 +269,40 @@ async def auth_env() -> AsyncGenerator[tuple[AsyncClient, FakeAuthDB]]:
 async def login(client: AsyncClient, user: User) -> Response:
     response = await client.post(
         f"{AUTH_PREFIX}/login",
+        headers={"Origin": SAME_ORIGIN},
         json={"username": user.email, "password": "TestPass123!"},
     )
     assert response.status_code == 200
     return response
+
+
+# ---------------------------------------------------------------------------
+# Registration feature gate
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+class TestRegistration:
+    async def test_registration_disabled_before_database_work(self, auth_env, monkeypatch):
+        client, db = auth_env
+        from app.api.v1 import auth as auth_routes
+
+        monkeypatch.setattr(auth_routes.settings, "feature_registration_enabled", False)
+        response = await client.post(
+            f"{AUTH_PREFIX}/register",
+            json={
+                "username": "disableduser",
+                "email": "disabled@example.com",
+                "password": "TestPass123!",
+                "full_name": "Disabled User",
+            },
+        )
+
+        assert response.status_code == 503
+        data = response.json()
+        assert data["error"]["code"] == "service_unavailable"
+        assert data["error"]["message"] == "Registration is currently disabled"
+        assert db.execute_calls == 0
 
 
 # ---------------------------------------------------------------------------
@@ -310,9 +342,23 @@ class TestLoginCookie:
         client, _db = auth_env
         response = await client.post(
             f"{AUTH_PREFIX}/login",
+            headers={"Origin": SAME_ORIGIN},
             json={"username": _db.user.email, "password": "WrongPass456!"},
         )
         assert response.status_code == 401
+
+    async def test_login_cross_origin_rejected_before_database_work(self, auth_env):
+        client, db = auth_env
+        response = await client.post(
+            f"{AUTH_PREFIX}/login",
+            headers={"Origin": "https://evil.example"},
+            json={"username": db.user.email, "password": "TestPass123!"},
+        )
+
+        assert response.status_code == 401
+        assert db.execute_calls == 0
+        assert db.commits == 0
+        assert db.records() == []
 
 
 # ---------------------------------------------------------------------------

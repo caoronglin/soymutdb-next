@@ -11,8 +11,10 @@ import { defineConfig } from "@playwright/test";
  * own base and its own spec.
  *
  * Target the internal deployment with INTERNAL_BASE_URL (e.g.
- * https://internal.soymutdb.test/). When it is unset every test SKIPS rather
- * than testing the wrong environment.
+ * https://internal.soymutdb.test/). When it is unset the config falls back to
+ * the built internal artifact served locally at the origin root by
+ * e2e/static-server.mjs, so the suite runs with no deployed stack; it never
+ * tests the wrong environment silently.
  *
  * Run (from e2e/):
  *   INTERNAL_BASE_URL=https://internal.soymutdb.test/ \
@@ -21,7 +23,9 @@ import { defineConfig } from "@playwright/test";
  * Discover without a browser:
  *   npx playwright test -c playwright-internal.config.ts --list
  */
-const baseURL = (process.env.INTERNAL_BASE_URL ?? "").trim();
+const OFFLINE_BASE = "http://localhost:4175/";
+const explicitBase = (process.env.INTERNAL_BASE_URL ?? "").trim();
+const baseURL = explicitBase || OFFLINE_BASE;
 
 export default defineConfig({
   testDir: "./tests",
@@ -36,7 +40,7 @@ export default defineConfig({
     ["html", { open: "never", outputFolder: "playwright-report-internal" }],
   ],
   use: {
-    baseURL: baseURL || undefined,
+    baseURL,
     // The internal catalog and test ids are English; pin the browser locale so
     // host detection cannot switch i18n and surprise the assertions.
     locale: "en-US",
@@ -45,4 +49,13 @@ export default defineConfig({
     viewport: { width: 1440, height: 900 },
   },
   outputDir: "test-results-internal",
+  webServer: explicitBase
+    ? undefined
+    : {
+        // Serve the internal artifact at the origin ROOT (its baked base is /).
+        command: "node static-server.mjs ../apps/web/dist/internal 4175 /",
+        url: OFFLINE_BASE,
+        reuseExistingServer: !process.env.CI,
+        timeout: 30_000,
+      },
 });

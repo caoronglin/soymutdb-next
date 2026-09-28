@@ -7,8 +7,8 @@ import {
   type AssemblyInfo,
   type ExpPatternResponse,
 } from "@soymutdb/api-client";
-import { ConfigProvider, createThemeConfig } from "@soymutdb/ui-vue";
 
+import PortalLayout from "../components/PortalLayout.vue";
 import { assembliesQueryOptions } from "../lib/query-options";
 import { t } from "../lib/i18n";
 
@@ -150,8 +150,8 @@ function onAssemblyChange(event: Event) {
 </script>
 
 <template>
-  <ConfigProvider :theme="createThemeConfig({ dark: false })">
-    <main class="mx-auto grid max-w-7xl gap-8 p-6 md:p-8" data-testid="exppattern-page">
+  <PortalLayout>
+    <div class="mx-auto grid max-w-7xl gap-8 px-4 py-8" data-testid="exppattern-page">
       <header class="grid gap-2">
         <RouterLink to="/tools" class="text-sm underline opacity-70">{{ t("home.tasks") }}</RouterLink>
         <h1 class="text-2xl font-semibold">{{ t("tools.exppattern.title") }}</h1>
@@ -293,6 +293,6 @@ function onAssemblyChange(event: Event) {
           </div>
         </article>
       </section>
-    </main>
-  </ConfigProvider>
+    </div>
+  </PortalLayout>
 </template>

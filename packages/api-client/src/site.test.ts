@@ -3,6 +3,7 @@ import { request } from "./client";
 import {
   getAdminSiteBranding,
   getSiteBranding,
+  getSiteContent,
   patchAdminSiteBranding,
 } from "./site";
 
@@ -73,5 +74,39 @@ describe("site branding client contract", () => {
       params: { variant: "external" },
       json: { expected_version: 2, values: { icon_url: null } },
     });
+  });
+
+  it("asks for the full content map by default", async () => {
+    mockPublicRequest.mockResolvedValueOnce({ "hero.title": "Default" });
+
+    await getSiteContent("external");
+
+    expect(mockPublicRequest).toHaveBeenCalledWith("/site/content", {
+      params: { variant: "external" },
+      auth: false,
+    });
+  });
+
+  it("can ask for overrides only, so a locale default is not clobbered", async () => {
+    mockPublicRequest.mockResolvedValueOnce({ "hero.title": "运营改过的标题" });
+
+    const content = await getSiteContent("external", { onlyOverrides: true });
+
+    expect(mockPublicRequest).toHaveBeenCalledWith("/site/content", {
+      params: { variant: "external", only_overrides: true },
+      auth: false,
+    });
+    expect(content).toEqual({ "hero.title": "运营改过的标题" });
+  });
+
+  it("keeps the internal content read on the authenticated transport", async () => {
+    mockAuthRequest.mockResolvedValueOnce({});
+
+    await getSiteContent("internal", { onlyOverrides: true });
+
+    expect(mockAuthRequest).toHaveBeenCalledWith("/site/content", {
+      params: { variant: "internal", only_overrides: true },
+    });
+    expect(mockPublicRequest).not.toHaveBeenCalled();
   });
 });

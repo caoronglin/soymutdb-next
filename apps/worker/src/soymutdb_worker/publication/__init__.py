@@ -28,6 +28,9 @@ def get_adapter(target: str) -> PublicationAdapter:
                 "GITHUB_PAGES_REPO", get_setting("GITHUB_REPOSITORY", None)
             ),
             api_origin=get_setting("GITHUB_API_ORIGIN", "https://api.github.com"),
+            artifact_url_template=get_setting(
+                "GITHUB_PAGES_ARTIFACT_URL_TEMPLATE", None
+            ),
         )
     if target == "cloudflare_pages":
         from .cloudflare_pages import CloudflarePagesAdapter

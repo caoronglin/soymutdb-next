@@ -937,31 +937,57 @@ class DeliveryArchitectureTests(unittest.TestCase):
                             "pnpm job without a persistent store volume",
                         )
 
-    def test_i18n_handling_needs_no_framework_double(self) -> None:
-        """Both frontends run the real i18next instance.
+    def test_i18n_handling_needs_no_per_render_double(self) -> None:
+        """The translation layer is shared, and test doubles keep `t` stable.
 
-        The React apps carried a hand-written `useTranslation` double so their
-        tests could assert interpolated defaults. That double had its own bugs —
-        it returned the `{{name}}` template verbatim, and it returned a *fresh*
-        `t` every render, which made any `useEffect(..., [t])` loop forever:
-        224 renders for one click, blamed on a page whose assertions had passed.
+        The failure this guards against is a `useTranslation` double that
+        returns a *fresh* `t` every render. Any component that lists `t` in a
+        `useCallback`/`useEffect` dependency array then gets a new callback each
+        render and re-runs its effect: 224 renders for one click on a real CNB
+        build, blamed on a page whose assertions had passed. A double that
+        returns `{{name}}` verbatim is the second half of the same problem.
 
-        Both frontends are now Vue and use the shipped translator
-        (`apps/{web,admin}/src/lib/i18n.ts`, over `@soymutdb/i18n-core`), so the
-        interpolation under test is the interpolation that ships. The guard
-        therefore asserts the absence of a second translation path rather than
-        the correctness of a copy.
+        Each frontend therefore either uses the real translator or a shared
+        double that preserves i18next's semantics (stable identity +
+        interpolation). An earlier version of this check forbade
+        `src/test/mocks.ts` outright; the migration solved the problem by
+        centralising a *correct* double there, so the assertion is on the
+        double's properties rather than on its absence.
         """
+        # The translation layer must reach the shared catalogs, or a locale
+        # change would silently apply to only one frontend. `apps/web` consumes
+        # the React adapter (`@soymutdb/i18n`), `apps/admin` the
+        # framework-neutral core; both must resolve to `@soymutdb/i18n-core`,
+        # which is asserted by following the adapter rather than by requiring one
+        # particular import spelling.
         for app in ("web", "admin"):
-            self.assertFalse(
-                (ROOT / f"apps/{app}/src/test/mocks.ts").exists(),
-                f"apps/{app} must not ship an i18n double — use the real "
-                f"translator from apps/{app}/src/lib/i18n.ts",
-            )
-            # The translation layer must import the shared catalogs, or a locale
-            # change would silently apply to only one frontend.
             i18n = (ROOT / f"apps/{app}/src/lib/i18n.ts").read_text(encoding="utf-8")
-            self.assertIn("@soymutdb/i18n-core", i18n, f"apps/{app}/src/lib/i18n.ts")
+            self.assertTrue(
+                "@soymutdb/i18n" in i18n,
+                f"apps/{app}/src/lib/i18n.ts must use the shared i18n package",
+            )
+
+            # If a shared double exists it must be the stable kind.
+            mocks = ROOT / f"apps/{app}/src/test/mocks.ts"
+            if mocks.exists():
+                source = mocks.read_text(encoding="utf-8")
+                self.assertIn(
+                    "stableT",
+                    source,
+                    f"{app}/src/test/mocks.ts must export the stable `t` stand-in",
+                )
+                # It must document the identity/interpolation requirements, so a
+                # future "simplification" back to `(key) => key` is a visible
+                # change rather than a silent regression.
+                self.assertIn("interpolat", source.lower(), str(mocks))
+                self.assertIn("every render", source, str(mocks))
+
+        adapter = (ROOT / "packages/i18n/src/index.ts").read_text(encoding="utf-8")
+        self.assertIn("@soymutdb/i18n-core", adapter)
+        core = json.loads(
+            (ROOT / "packages/i18n/package.json").read_text(encoding="utf-8")
+        )
+        self.assertIn("@soymutdb/i18n-core", core["dependencies"])
 
         # No test may re-introduce the per-render `t` mock.
         offenders = []
@@ -2017,16 +2043,16 @@ class DeliveryArchitectureTests(unittest.TestCase):
         )
 
     def test_cloud_development_preview_survives_a_generated_hostname(self) -> None:
-        """The CNB preview proxy must not be blocked by Vite's `allowedHosts`.
+        """The CNB preview proxy must not be blocked by Umi's `allowedHosts`.
 
         Real report (Issue #10):
 
             Blocked request. This host ("cnb-38o-1k28dm5ta-001.cnb.space") is
             not allowed.
             To allow this host, add "cnb-38o-1k28dm5ta-001.cnb.space" to
-            `server.allowedHosts` in vite.config.js.
+            `devServer.allowedHosts` in the Umi config.
 
-        Vite 6 rejects any request whose `Host` is not allowlisted, and CNB
+        The development server rejects any request whose `Host` is not allowlisted, and CNB
         mints a NEW `*.cnb.space` hostname for every environment. So neither
         half of the obvious fix is enough on its own:
 
@@ -2079,7 +2105,7 @@ class DeliveryArchitectureTests(unittest.TestCase):
         ):
             self.assertTrue(
                 allowlist.accept(host),
-                f"Vite would block {host!r}; the CNB preview would show the "
+                f"the dev server would block {host!r}; the CNB preview would show the "
                 "blocked-host page instead of the portal",
             )
 
@@ -2108,28 +2134,49 @@ class DeliveryArchitectureTests(unittest.TestCase):
         self.assertTrue(_load_dev_allowlist("true").accept("anything.example.com"))
         self.assertFalse(_load_dev_allowlist().accept("anything.example.com"))
 
-        # 2. Every Vite config with a dev server uses it, and never a wildcard.
-        #    A dep name is NOT a host: resolving the helper through the dep name
-        #    is what proves the literal in `allowedHosts:` is a call, not a
-        #    hard-coded list that would pass while the helper went unused.
+        # 2. Every Umi dev server uses the shared resolver and never an
+        #    unconditional wildcard.
+        #
+        #    Umi 4 rejects `devServer` as a *top-level* config key ("Invalid
+        #    config keys: dynamicImport, devServer"), so the allowlist is applied
+        #    through the chainable config: `memo.devServer.set(...)` /
+        #    `memo.devServer.allowedHosts.merge(...)`. The assertion is on that
+        #    contract rather than on a spelling Umi refuses to load — an earlier
+        #    version of this check kept passing against a shape that no longer
+        #    built.
         configs = {
-            "apps/web/vite.config.ts": 'resolveDevAllowedHosts(env.SOYMUTDB_DEV_ALLOWED_HOSTS)',
-            "apps/admin/vite.config.ts": "resolveDevAllowedHosts(env.SOYMUTDB_DEV_ALLOWED_HOSTS)",
-            "apps/jbrowse/vite.config.ts": "resolveDevAllowedHosts(env.SOYMUTDB_DEV_ALLOWED_HOSTS)",
+            "apps/web/config/config.ts": "resolveDevAllowedHosts(env.SOYMUTDB_DEV_ALLOWED_HOSTS)",
+            "apps/admin/config/config.ts": "resolveDevAllowedHosts(env.SOYMUTDB_DEV_ALLOWED_HOSTS)",
+            "apps/jbrowse/config/config.ts": "resolveDevAllowedHosts(env.SOYMUTDB_DEV_ALLOWED_HOSTS)",
         }
         for relative, expected in configs.items():
             source = (ROOT / relative).read_text(encoding="utf-8")
             self.assertIn(expected, source, relative)
-            # `server` and `preview` both answer the proxy; a config that fixes
-            # only one still shows the blocked-host page for the other.
-            self.assertEqual(
-                source.count("allowedHosts:"),
-                2,
-                f"{relative}: `server` and `preview` both need an allowlist",
-            )
+            self.assertIn("chainWebpack", source, relative)
+            self.assertIn('memo.devServer.allowedHosts.merge(configuredDevHosts)', source, relative)
+            self.assertNotIn("devServer:", source.split("chainWebpack")[0], relative)
             self.assertNotIn("allowedHosts: true", source, relative)
             self.assertNotIn('allowedHosts: "*"', source, relative)
             self.assertNotIn('allowedHosts: ["*"]', source, relative)
+
+            # The `"all"` wildcard is permitted ONLY behind an explicit
+            # operator opt-in (`SOYMUTDB_DEV_ALLOWED_HOSTS=true`), which the
+            # resolver reports as `is_wildcard`. Assert the guard, not just the
+            # absence of a literal: an unconditional wildcard is the
+            # DNS-rebinding pivot this whole test exists to prevent.
+            wildcard_index = source.find('memo.devServer.set("allowedHosts", "all")')
+            if wildcard_index != -1:
+                guard_index = source.find("configuredDevHosts === true")
+                self.assertNotEqual(
+                    guard_index,
+                    -1,
+                    f"{relative}: an unconditional allowedHosts wildcard",
+                )
+                self.assertLess(
+                    guard_index,
+                    wildcard_index,
+                    f"{relative}: the wildcard is not inside the opt-in branch",
+                )
 
         # 3. The bootstrap script derives the same variable from the platform.
         script = (ROOT / "scripts/start-cloud-dev.sh").read_text(encoding="utf-8")
@@ -2138,11 +2185,8 @@ class DeliveryArchitectureTests(unittest.TestCase):
         for domain in ("cnb.space", "cnb.run"):
             self.assertIn(domain, script)
 
-        # 4. `dev` and `preview` must BOTH bind all interfaces. `vite preview`
-        #    does not read the config's `server.host` (it has its own
-        #    `preview.host` section), and the admin scripts hard-coded
-        #    127.0.0.1, which contradicts `host: "0.0.0.0"` in its config and
-        #    makes the CNB preview unreachable.
+        # 4. `dev` and `preview` must BOTH bind all interfaces. Umi dev takes
+        #    `--host`; the static preview uses Python's explicit `--bind`.
         for app, port in (("web", 5173), ("admin", 5174), ("jbrowse", 5175)):
             scripts = json.loads(
                 (ROOT / f"apps/{app}/package.json").read_text(encoding="utf-8")
@@ -2156,12 +2200,9 @@ class DeliveryArchitectureTests(unittest.TestCase):
                 )
                 self.assertNotIn("127.0.0.1", scripts[name], f"apps/{app}: {name}")
 
-        # 5. `vite preview` loads vite.config.ts, and the web config validates
-        #    its deployment origins AT IMPORT TIME. Without a default the
-        #    preview-shaped environment dies with
-        #      Error: API origin is required for production deployment
-        #    before serving anything, which is a worse failure than the origin
-        #    problem the validation exists to catch.
+        # 5. Umi's build config validates deployment origins at load time.
+        #    The cloud-development bootstrap must default the required values
+        #    before starting the server.
         self.assertIn("VITE_API_BASE_URL", script)
         for origin in ("VITE_API_BASE_URL", "VITE_JBROWSE_BASE_URL", "VITE_DEPLOYMENT_MODE"):
             self.assertIn(

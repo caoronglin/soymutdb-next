@@ -336,13 +336,12 @@ api_tests_run() {
 # -----------------------------------------------------------------------------
 # dependency-governance — graphs + fail-closed audits
 # -----------------------------------------------------------------------------
-# Knip loads `apps/web/vite.config.ts` to resolve the Vitest project graph, and
-# that config *validates its own deployment origins at import time*: an unset
-# VITE_API_BASE_URL throws
+# Knip loads the Umi app config to resolve the Vitest project graph, and that
+# config validates deployment origins at import time: an unset VITE_API_BASE_URL throws
 #
 #   Error: API origin is required for production deployment
 #     at requireDeploymentOrigin (apps/web/src/lib/deployment.ts:87)
-#     at /workspace/apps/web/vite.config.ts:91
+#     at /workspace/apps/web/config/config.ts
 #
 # before Knip analyses a single file. The gate then dies with a bare Node stack
 # trace and `knip: failed (analyzer_exit_nonzero)`, which reads as an unused-code

@@ -43,6 +43,15 @@ class _PgResult:
     def scalars(self) -> _ScalarRows:
         return _ScalarRows(self._rows)
 
+    def all(self) -> list[Any]:
+        """Row-tuple access, mirroring SQLAlchemy's ``Result.all()``.
+
+        Services that select ``(entity, aggregate)`` pairs read rows through
+        this method, so the fake result must expose it or those queries look
+        like a driver error instead of a test-double gap.
+        """
+        return self._rows
+
     def scalar_one_or_none(self):
         return self._rows[0] if self._rows else None
 

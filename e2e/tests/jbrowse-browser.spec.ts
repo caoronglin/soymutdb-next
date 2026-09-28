@@ -1,16 +1,19 @@
 /**
- * Vue JBrowse shell E2E — standalone shell chrome + portal "/browser" embed.
+ * React JBrowse shell E2E — standalone shell chrome + portal "/browser" embed.
  *
  * Coverage
  * --------
- *  1. Standalone shell (apps/jbrowse, the Vue rewrite of the old React shell):
- *     header wordmark, the three-option assembly <select>, the locus-search
- *     placeholder, the share + fullscreen controls, the locus/active-tracks/
- *     assembly summary bar, the ruler + track container, and the footer text.
+ *  1. Standalone shell (apps/jbrowse, the React rewrite of the old Vue shell):
+ *     header wordmark, the Ant Design assembly Select, the locus-search input,
+ *     the share + fullscreen controls, the locus/active-tracks/assembly summary
+ *     bar, the JBrowse view container, and the footer text.
  *  2. Portal embed (apps/web "/browser"): the JBrowse <iframe> is mounted with
  *     the portal origin, the postMessage bridge reaches its "ready" state
  *     (observable as [data-testid="browser-ready"]), and the frame document is
- *     the real Vue shell rather than a CSP-blocked / error stub.
+ *     the real React shell rather than a CSP-blocked / error stub.
+ *  3. Fail-closed context: a /browser deep link without an explicit assembly and
+ *     release renders the neutral [data-testid="browser-missing-context"] state
+ *     and mounts no iframe, rather than silently showing the v4 namespace.
  *
  * How to run — requires a DEPLOYED stack (it cannot run in this offline repo)
  * --------------------------------------------------------------------------
@@ -19,16 +22,15 @@
  *   - apps/web built with VITE_JBROWSE_BASE_URL=<JBROWSE_BASE_URL> and a CSP
  *     frame-src that allows that origin, served at PORTAL_BASE_URL;
  *   - the shell origin serves /jbrowse-data with the REAL files its config
- *     references: Wm82_v4.0.fa.gz (+ .fai/.gzi), Wm82_v4.0.chrom.sizes,
- *     variants.vcf.gz (+ .tbi), structural_variants.vcf.gz (+ .tbi),
- *     genes.gff3.gz (+ .tbi), repeats.bb, gc_content.bw and the Trix index
- *     genes.ix / genes.ixx / genes_meta.json. The shell chrome assertions need
- *     only the built app; the ruler/track container assertions see track bodies
- *     report load errors if the data is absent, which is why this suite is a
+ *     references (the assembly FASTA + .fai/.gzi, chrom.sizes, the variant /
+ *     annotation track files and the Trix index). The chrome assertions need
+ *     only the built app; the view-container assertion additionally requires
+ *     the release-scoped config to load, which is why this suite is a
  *     deployed-stack gate rather than an offline one.
- *   - seeded API releases so the portal /browser page and the shell's
- *     /tracks/jbrowse-config endpoint answer normally (the shell falls back to
- *     its built-in config, but the portal page itself still needs its API).
+ *   - a seeded API with a PUBLISHED release so /genes/assemblies and
+ *     /tracks/jbrowse-config answer normally. The shell does NOT fall back to a
+ *     built-in assembly: without a resolvable release+assembly it shows an
+ *     explicit unavailable state, and this suite reports that as a failure.
  *
  * Command (from e2e/):
  *
@@ -37,7 +39,7 @@
  *     npx playwright test -c playwright-jbrowse.config.ts
  *
  * JBROWSE_BASE_URL gates the standalone tests and PORTAL_BASE_URL gates the
- * embed test; a missing value reports the dependent tests as SKIPPED instead of
+ * embed tests; a missing value reports the dependent tests as SKIPPED instead of
  * silently testing the wrong environment. SMOKE_JBROWSE_BASE_URL and
  * SMOKE_BASE_URL are accepted as fallbacks.
  *
@@ -51,7 +53,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { gotoReady } from "./helpers";
 
-/** Standalone Vue shell base, e.g. "https://jbrowse.soymutdb.test/". */
+/** Standalone React shell base, e.g. "https://jbrowse.soymutdb.test/". */
 const SHELL_BASE_URL =
   process.env.JBROWSE_BASE_URL ?? process.env.SMOKE_JBROWSE_BASE_URL ?? "";
 
@@ -60,17 +62,18 @@ const PORTAL_BASE_URL =
   process.env.PORTAL_BASE_URL ?? process.env.SMOKE_BASE_URL ?? "";
 
 /**
- * The three assemblies the shell must offer, in render order. Mirrors
- * apps/jbrowse/src/components/AppHeader.vue.
+ * Default active tracks (reference_sequence, gene_models, variants_v4).
+ * Mirrors apps/jbrowse/src/config.ts `DEFAULT_TRACKS`.
  */
-const ASSEMBLY_OPTIONS = [
-  { value: "Wm82v4.0", label: "Wm82 v4.0" },
-  { value: "Wm82.a4.v1", label: "Wm82.a4.v1" },
-  { value: "Wm82.a2.v1", label: "Wm82.a2.v1" },
-] as const;
-
-/** Default active tracks (reference_sequence, gene_models, variants_v4). */
 const DEFAULT_ACTIVE_TRACK_COUNT = 3;
+
+/**
+ * Assembly/locus used by the deep-link assertions. The shell resolves the
+ * assembly *name* against the published release's assembly list, so the value
+ * must exist in the deployed release (override with E2E_JBROWSE_ASSEMBLY).
+ */
+const DEEP_LINK_ASSEMBLY = process.env.E2E_JBROWSE_ASSEMBLY ?? "Wm82v4.0";
+const DEEP_LINK_LOCUS = "chr01:1-1000";
 
 /** Resolve a path under a base that may carry a sub-path prefix. */
 function underBase(base: string, path = ""): string {
@@ -84,40 +87,34 @@ async function gotoShell(page: Page, path = ""): Promise<void> {
   await expect(page.locator("header")).toBeVisible();
 }
 
-test.describe("Vue JBrowse shell — standalone chrome", () => {
+test.describe("React JBrowse shell — standalone chrome", () => {
   test("renders the wordmark, assembly select, locus search, actions and footer", async ({
     page,
   }) => {
-    test.skip(!SHELL_BASE_URL, "set JBROWSE_BASE_URL to the deployed Vue JBrowse shell");
+    test.skip(!SHELL_BASE_URL, "set JBROWSE_BASE_URL to the deployed React JBrowse shell");
     await gotoShell(page);
 
     const header = page.locator("header");
     await expect(header.getByText("SoyMutDB", { exact: true })).toBeVisible();
     await expect(header.getByText("Genome Browser", { exact: true })).toBeVisible();
 
-    // The assembly <select> carries exactly the three real assembly namespaces.
+    // Ant Design renders a combobox, not a native <select>. The option list is
+    // whatever the published release exposes (no hardcoded trio), so the
+    // assertion is that a selectable control exists and is operable.
     const assembly = page.getByLabel("Select reference assembly");
     await expect(assembly).toBeVisible();
-    await expect(assembly).toHaveValue(ASSEMBLY_OPTIONS[0].value);
-    await expect(assembly.locator("option")).toHaveCount(ASSEMBLY_OPTIONS.length);
-    expect(
-      await assembly.locator("option").evaluateAll((options) =>
-        options.map((option) => ({
-          value: (option as HTMLOptionElement).value,
-          label: (option.textContent ?? "").trim(),
-        })),
-      ),
-    ).toEqual(ASSEMBLY_OPTIONS.map(({ value, label }) => ({ value, label })));
+    await assembly.click();
+    const options = page.getByRole("option");
+    await expect(options.first()).toBeVisible();
+    expect(await options.count()).toBeGreaterThan(0);
+    await page.keyboard.press("Escape");
 
-    // Locus search: the placeholder is the documented input contract.
-    await expect(page.getByPlaceholder("chr01:1-1000000 or gene ID")).toBeVisible();
+    // Locus search: the accessible name is the input contract.
     await expect(page.getByLabel("Genomic location or gene search")).toBeVisible();
 
     // Share + fullscreen controls are icon buttons, so they are asserted by
-    // their accessible name (and title) rather than by an icon.
-    const share = page.getByRole("button", { name: "Share current view" });
-    await expect(share).toBeVisible();
-    await expect(share).toHaveAttribute("title", "Share this view");
+    // their accessible name rather than by an icon.
+    await expect(page.getByRole("button", { name: "Share current view" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Enter fullscreen" })).toBeVisible();
 
     const footer = page.locator("footer");
@@ -130,7 +127,7 @@ test.describe("Vue JBrowse shell — standalone chrome", () => {
   test("summary bar reports the default locus, active tracks and assembly", async ({
     page,
   }) => {
-    test.skip(!SHELL_BASE_URL, "set JBROWSE_BASE_URL to the deployed Vue JBrowse shell");
+    test.skip(!SHELL_BASE_URL, "set JBROWSE_BASE_URL to the deployed React JBrowse shell");
     await gotoShell(page);
 
     const header = page.locator("header");
@@ -138,29 +135,35 @@ test.describe("Vue JBrowse shell — standalone chrome", () => {
     await expect(
       header.getByText(DEFAULT_ACTIVE_TRACK_COUNT + " active tracks"),
     ).toBeVisible();
-    await expect(header.getByText("Assembly: Wm82v4.0")).toBeVisible();
+    // The assembly is resolved from the release (or adopted as its default) and
+    // is always rendered — an empty label would mean no context was resolved.
+    await expect(header.getByText(/^Assembly: .+/)).toBeVisible();
   });
 
   test("a deep link restores the locus into the search box and summary bar", async ({
     page,
   }) => {
-    test.skip(!SHELL_BASE_URL, "set JBROWSE_BASE_URL to the deployed Vue JBrowse shell");
-    await gotoShell(page, "?locus=chr01:1-1000");
-
-    await expect(page.getByPlaceholder("chr01:1-1000000 or gene ID")).toHaveValue(
-      "chr01:1-1000",
+    test.skip(!SHELL_BASE_URL, "set JBROWSE_BASE_URL to the deployed React JBrowse shell");
+    await gotoShell(
+      page,
+      `?assembly=${encodeURIComponent(DEEP_LINK_ASSEMBLY)}&locus=${encodeURIComponent(DEEP_LINK_LOCUS)}`,
     );
-    await expect(page.locator("header").getByText("chr01:1-1000")).toBeVisible();
+
+    await expect(page.getByLabel("Genomic location or gene search")).toHaveValue(DEEP_LINK_LOCUS);
+    await expect(page.locator("header").getByText(DEEP_LINK_LOCUS)).toBeVisible();
+    await expect(page.locator("header").getByText(`Assembly: ${DEEP_LINK_ASSEMBLY}`)).toBeVisible();
   });
 
-  test("renders the genome ruler and track container", async ({ page }) => {
-    test.skip(!SHELL_BASE_URL, "set JBROWSE_BASE_URL to the deployed Vue JBrowse shell");
-    await gotoShell(page);
+  test("renders the JBrowse view container without the unavailable state", async ({ page }) => {
+    test.skip(!SHELL_BASE_URL, "set JBROWSE_BASE_URL to the deployed React JBrowse shell");
+    await gotoShell(page, `?assembly=${encodeURIComponent(DEEP_LINK_ASSEMBLY)}`);
 
+    // @jbrowse/react-linear-genome-view owns its internal DOM, so the shell
+    // contract is the container plus "not in the unavailable state": the
+    // previous implementation fell back to a renamed v4 assembly here, and the
+    // replacement must instead reach a real view for a resolvable assembly.
     await expect(page.locator("main.jbrowse-container")).toBeVisible();
-    await expect(page.getByTestId("genome-ruler")).toBeVisible();
-    await expect(page.getByTestId("genome-tracks")).toBeVisible();
-    await expect(page.getByTestId("genome-ruler")).toContainText("chr01");
+    await expect(page.getByTestId("jbrowse-unavailable")).toHaveCount(0);
   });
 });
 
@@ -168,9 +171,15 @@ test.describe("Portal /browser — JBrowse iframe embed", () => {
   test("mounts the shell iframe and reaches the bridge ready state", async ({ page }) => {
     test.skip(!PORTAL_BASE_URL, "set PORTAL_BASE_URL to the deployed portal");
 
+    // The portal route now requires explicit context; pass the assembly (and a
+    // release when the deployed portal is not pinned at build time).
+    const release = process.env.E2E_RELEASE_ID;
+    const params = new URLSearchParams({ assembly: DEEP_LINK_ASSEMBLY });
+    if (release) params.set("release", release);
+
     // Reuse the shared SPA handoff helper: the portal's prerendered markup is
-    // inert until Vue commits, so interacting before data-app-ready is unsafe.
-    await gotoReady(page, underBase(PORTAL_BASE_URL, "browser"));
+    // inert until React commits, so interacting before data-app-ready is unsafe.
+    await gotoReady(page, `${underBase(PORTAL_BASE_URL, "browser")}?${params.toString()}`);
 
     const iframe = page.getByTestId("browser-iframe");
     await expect(iframe).toBeVisible();
@@ -191,11 +200,25 @@ test.describe("Portal /browser — JBrowse iframe embed", () => {
     await expect(page.getByTestId("browser-timeout")).toHaveCount(0);
     await expect(page.getByTestId("browser-error")).toHaveCount(0);
 
-    // Prove the frame document is the real Vue shell, not a blocked stub.
+    // Prove the frame document is the real React shell, not a blocked stub.
     await expect(
       page
         .frameLocator('[data-testid="browser-iframe"]')
         .getByText("SoyMutDB", { exact: true }),
     ).toBeVisible({ timeout: 15_000 });
+  });
+
+  test("a context-free /browser deep link fails closed instead of opening v4", async ({
+    page,
+  }) => {
+    test.skip(!PORTAL_BASE_URL, "set PORTAL_BASE_URL to the deployed portal");
+
+    await gotoReady(page, underBase(PORTAL_BASE_URL, "browser"));
+
+    // No assembly/release context: the route must NOT silently select a genome
+    // namespace (that was the v4 fallback defect). It renders the neutral state
+    // and never mounts the JBrowse frame.
+    await expect(page.getByTestId("browser-missing-context")).toBeVisible();
+    await expect(page.getByTestId("browser-iframe")).toHaveCount(0);
   });
 });

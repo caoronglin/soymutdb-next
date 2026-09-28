@@ -10,9 +10,7 @@ notifications are personal).  Responses use the unified error envelope
 
 from __future__ import annotations
 
-import uuid
-
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.database import get_db
@@ -32,6 +30,7 @@ router = APIRouter(prefix="/notifications", tags=["notifications"])
 
 @router.get("", response_model=NotificationListResponse)
 async def list_notifications(
+    response: Response,
     limit: int = Query(default=20, ge=1, le=50),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -40,6 +39,8 @@ async def list_notifications(
 
     ``total`` / ``unread_count`` reflect the full set (not just the page).
     """
+    response.headers["Cache-Control"] = "private, no-store"
+    response.headers["Vary"] = "Authorization"
     items, total, unread = await notification_service.list_notifications(
         db, current_user.id, limit=limit
     )
@@ -52,10 +53,13 @@ async def list_notifications(
 
 @router.get("/unread-count", response_model=UnreadCountResponse)
 async def get_unread_count(
+    response: Response,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> UnreadCountResponse:
     """Return the caller's unread notification count (bell badge)."""
+    response.headers["Cache-Control"] = "private, no-store"
+    response.headers["Vary"] = "Authorization"
     count = await notification_service.unread_count(db, current_user.id)
     return UnreadCountResponse(unread_count=count)
 
@@ -63,6 +67,7 @@ async def get_unread_count(
 @router.post("/read", response_model=MarkReadResponse, status_code=status.HTTP_200_OK)
 async def mark_notifications_read(
     request: MarkReadRequest,
+    response: Response,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> MarkReadResponse:
@@ -70,6 +75,8 @@ async def mark_notifications_read(
 
     ``ids`` are always scoped to the caller; foreign ids are ignored.
     """
+    response.headers["Cache-Control"] = "private, no-store"
+    response.headers["Vary"] = "Authorization"
     marked = await notification_service.mark_read(
         db,
         current_user.id,

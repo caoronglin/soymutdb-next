@@ -35,7 +35,7 @@
   Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'; frame-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; object-src 'none'; worker-src 'self' blob:
 
 # ---------------------------------------------------------------------------
-# Hashed build assets — Vite emits /assets/<name>-<hash>.<ext>.
+# Hashed build assets — Umi/webpack emits content-hashed bundles under /assets/.
 # ---------------------------------------------------------------------------
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
@@ -64,7 +64,7 @@
 # The policy above is the conservative pre-finalization default: same-origin
 # only, no placeholder origin. It is a REAL policy rather than a sentinel token
 # so that a partial build (for example `build:ui`, which runs only
-# `vite build`) publishes a narrower working policy instead of an invalid header
+# `max build`) publishes a narrower working policy instead of an invalid header
 # or an empty one. A cross-origin deployment built that way fails loudly at
 # runtime, and scripts/check_artifact_headers.py fails the build that produced
 # it, because the finalized policy must carry the configured origin AND the

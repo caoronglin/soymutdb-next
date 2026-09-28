@@ -31,14 +31,28 @@
  */
 import { expect, test, type Page } from "@playwright/test";
 
-import { gotoReady, trackErrors } from "./helpers";
+import { gotoReady, mockEntityApis, trackErrors } from "./helpers";
 
 /** Deployed portal base, e.g. "https://soymutdb.test/". */
-const PORTAL_BASE_URL = (
+const EXPLICIT_PORTAL_BASE = (
   process.env.PORTAL_BASE_URL ??
   process.env.SMOKE_BASE_URL ??
   ""
 ).trim();
+
+/**
+ * Offline fallback target (built public artifact + in-browser API mocks) used
+ * when no deployed base was supplied. Matches playwright-entity-detail.config.ts.
+ */
+const OFFLINE_PORTAL_BASE = "http://localhost:4176/soymutdb-next/";
+
+const PORTAL_BASE_URL = EXPLICIT_PORTAL_BASE || OFFLINE_PORTAL_BASE;
+
+/**
+ * True when running against the local artifact: the lists/detail then need the
+ * deterministic mocks, because the static server serves no release rows.
+ */
+const OFFLINE = EXPLICIT_PORTAL_BASE === "";
 
 /** Optional pinned identifiers; when unset each test derives one from a list. */
 const MUTANT_PUBLIC_ID = (process.env.ENTITY_MUTANT_PUBLIC_ID ?? "").trim();
@@ -95,6 +109,7 @@ test.describe("entity detail — deployed portal", () => {
     test.skip(!PORTAL_BASE_URL, SKIP_NO_BASE);
 
     const errors = trackErrors(page);
+    if (OFFLINE) await mockEntityApis(page);
 
     let publicId = MUTANT_PUBLIC_ID;
     if (!publicId) {
@@ -134,6 +149,7 @@ test.describe("entity detail — deployed portal", () => {
     test.skip(!PORTAL_BASE_URL, SKIP_NO_BASE);
 
     const errors = trackErrors(page);
+    if (OFFLINE) await mockEntityApis(page);
 
     let variantId = VARIANT_ID;
     if (!variantId) {
@@ -185,6 +201,7 @@ test.describe("entity detail — deployed portal", () => {
     test.skip(!PORTAL_BASE_URL, SKIP_NO_BASE);
 
     const errors = trackErrors(page);
+    if (OFFLINE) await mockEntityApis(page);
 
     let geneHref: string;
     if (GENE_ID) {

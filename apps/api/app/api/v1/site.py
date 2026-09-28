@@ -222,14 +222,29 @@ async def get_footer_content(
 async def get_site_content(
     response: Response,
     variant: SiteVariant = Query(default=SiteVariant.EXTERNAL),
+    only_overrides: bool = Query(
+        default=False,
+        description=(
+            "Return only the keys this variant has a stored value for, instead of "
+            "every registered key filled with its (English) registered default. A "
+            "bilingual portal needs the distinction: without it, consuming the "
+            "endpoint would replace a locale-specific string with the English "
+            "default on every page load."
+        ),
+    ),
     db: AsyncSession = Depends(get_db),
     current_user: User | None = Depends(get_optional_user),
 ) -> dict[str, str]:
-    """Return all editable frontend labels for one explicit site variant.
+    """Return the editable frontend labels for one explicit site variant.
 
     The response is intentionally flat for compatibility with the existing
     useSiteContent contract. The namespace and authorization boundary remain
     server-side, so variant=internal cannot be enumerated anonymously.
+
+    ``only_overrides=true`` returns just the stored rows: a caller then renders
+    ``value ?? its own locale-aware default`` and an unedited deployment keeps
+    looking exactly as it does today. The default (``false``) keeps the original
+    "every registered key, default-filled" shape for existing consumers.
     """
     _ensure_variant_access(variant, current_user)
     _set_cache_policy(response, variant)
@@ -240,6 +255,10 @@ async def get_site_content(
         variant=variant,
         keys=(definition.key for definition in _CONTENT_DEFINITIONS),
     )
+    if only_overrides:
+        # ``_variant_values`` only ever returns keys that have a stored row
+        # (variant namespace, or the legacy non-variant row during migration).
+        return dict(values)
     return {
         definition.key: values.get(
             definition.key,

@@ -8,6 +8,12 @@ vi.mock("@soymutdb/ui-vue", () => ({
   createThemeConfig: () => ({}),
 }));
 
+// The portal shell is exercised by its own coverage; stub it so these
+// assertions stay focused on the view and do not need pinia/header wiring.
+vi.mock("../components/PortalLayout.vue", () => ({
+  default: { template: "<div><slot /></div>" },
+}));
+
 import ToolsView from "./ToolsView.vue";
 
 describe("ToolsView", () => {

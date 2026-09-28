@@ -25,7 +25,7 @@
 # Usage
 #   bash scripts/smoke.sh                     # every layer that can run here
 #   bash scripts/smoke.sh --profile contracts
-#   bash scripts/smoke.sh --profile static --static-dir apps/web/dist
+#   bash scripts/smoke.sh --profile static --static-dir apps/web/dist/external
 #   bash scripts/smoke.sh --list
 #
 # Exit codes
@@ -171,10 +171,10 @@ smoke_contracts() {
 smoke_static() {
   local dir="${STATIC_DIR}"
   if [[ -z "${dir}" ]]; then
-    if [[ -d apps/web/dist ]]; then
-      dir="apps/web/dist"
+    if [[ -d apps/web/dist/external ]]; then
+      dir="apps/web/dist/external"
     else
-      echo "no built artifact at apps/web/dist" >&2
+      echo "no external site artifact at apps/web/dist/external" >&2
       return 1
     fi
   fi
@@ -265,7 +265,7 @@ if should_run contracts; then
 fi
 
 if should_run static; then
-  if [[ -d apps/web/dist || -n "${STATIC_DIR}" ]]; then
+  if [[ -d apps/web/dist/external || -n "${STATIC_DIR}" ]]; then
     run_layer static smoke_static
   else
     skip_layer static "no built artifact (run: pnpm build:web)"

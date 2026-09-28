@@ -6,6 +6,7 @@
 // build-time defaults until (and if) the snapshot arrives.
 import { watchEffect } from "vue";
 
+import AppErrorBoundary from "./components/AppErrorBoundary.vue";
 import { DEFAULT_FAVICON_HREF, useSiteBranding } from "./lib/branding";
 
 const { displayName, iconUrl } = useSiteBranding();
@@ -29,5 +30,9 @@ watchEffect(() => {
 </script>
 
 <template>
-  <RouterView />
+  <!-- One boundary for every route: a thrown render error shows the fallback
+       with a retry instead of unmounting the app into a blank page. -->
+  <AppErrorBoundary v-slot="{ attempt }">
+    <RouterView :key="attempt" />
+  </AppErrorBoundary>
 </template>

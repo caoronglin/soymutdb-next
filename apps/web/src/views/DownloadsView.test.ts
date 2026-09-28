@@ -11,19 +11,34 @@ vi.mock("@soymutdb/ui-vue", () => ({
   createThemeConfig: () => ({}),
 }));
 
+// The portal shell is exercised by its own coverage; stub it so these
+// assertions stay focused on the view and do not need pinia/header wiring.
+vi.mock("../components/PortalLayout.vue", () => ({
+  default: { template: "<div><slot /></div>" },
+}));
+
 vi.mock("@soymutdb/api-client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@soymutdb/api-client")>();
-  return { ...actual, getDownloadFiles: vi.fn(), getDownloadUrl: vi.fn() };
+  return {
+    ...actual,
+    getDownloadFiles: vi.fn(),
+    getDownloadUrl: vi.fn(),
+    getSiteContent: vi.fn(),
+  };
 });
 
-import { getDownloadFiles, getDownloadUrl } from "@soymutdb/api-client";
+import { getDownloadFiles, getDownloadUrl, getSiteContent } from "@soymutdb/api-client";
+import { setLanguage, t } from "../lib/i18n";
 import DownloadsView from "./DownloadsView.vue";
 
 const mocked = vi.mocked(getDownloadFiles);
 const mockedUrl = vi.mocked(getDownloadUrl);
+const mockedSiteContent = vi.mocked(getSiteContent);
 beforeEach(() => {
+  setLanguage("en");
   mocked.mockReset();
   mockedUrl.mockReset();
+  mockedSiteContent.mockReset().mockResolvedValue({});
 });
 
 function mountView() {
@@ -145,6 +160,32 @@ describe("DownloadsView (Phase F)", () => {
     await flushPromises();
     await flushPromises();
     expect(wrapper.find('[data-testid="downloads-empty"]').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it("renders today's localized title/subtitle when no override is stored", async () => {
+    mocked.mockResolvedValue([]);
+    const wrapper = mountView();
+    await flushPromises();
+    await flushPromises();
+
+    expect(wrapper.get("h1").text()).toBe(t("downloads.title"));
+    expect(wrapper.text()).toContain(t("downloads.subtitle"));
+    wrapper.unmount();
+  });
+
+  it("renders a stored title/subtitle override", async () => {
+    mockedSiteContent.mockResolvedValue({
+      "downloads.title": "运营下载标题",
+      "downloads.subtitle": "运营下载副标题",
+    });
+    mocked.mockResolvedValue([]);
+    const wrapper = mountView();
+    await flushPromises();
+    await flushPromises();
+
+    expect(wrapper.get("h1").text()).toBe("运营下载标题");
+    expect(wrapper.text()).toContain("运营下载副标题");
     wrapper.unmount();
   });
 });

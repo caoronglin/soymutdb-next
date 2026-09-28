@@ -36,6 +36,8 @@ from datetime import UTC, datetime
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..core.sanitize import sanitize_rich_html
+from ..core.site_variant import SiteVariant, variant_section
 from ..models.content import NewsArticle, Publication, StaticPage
 from ..models.system_settings import SystemSetting
 from ..schemas.content import PublicationResponse, StaticPageResponse
@@ -79,6 +81,7 @@ class ContentSnapshotService:
         release_id: int | None = None,
         page_definition_version: int | None = None,
         source_checksums: dict[str, str] | None = None,
+        variant: SiteVariant = SiteVariant.EXTERNAL,
     ) -> dict:
         """Return the full snapshot payload (JSON-serialisable).
 
@@ -140,11 +143,12 @@ class ContentSnapshotService:
                 "items": items,
             },
             "news_detail": news_detail,
-            "about": await self._load_about(db),
+            "about": await self._load_about(db, variant=variant),
             "publications": await self._load_publications(db),
             # Unpublished pages are deliberately omitted: emitting a null or
             # draft record would let SSG retain stale public output.
             "static_pages": await self._load_static_pages(db),
+            "site_variant": variant.value,
         }
 
         # Release-aware metadata: present for explicit builds, absent for the
@@ -158,15 +162,50 @@ class ContentSnapshotService:
 
         return snapshot
 
-    async def _load_about(self, db: AsyncSession) -> dict[str, str | None]:
-        """Load the ``about.*`` settings (missing keys degrade to None)."""
-        prefix = "about."
-        stmt = select(SystemSetting).where(
-            SystemSetting.key.in_([f"{prefix}{k}" for k in _ABOUT_KEYS])
-        )
-        rows = (await db.execute(stmt)).scalars().all()
-        values: dict[str, str] = {row.key[len(prefix):]: row.value for row in rows}
-        return {key: values.get(key) for key in _ABOUT_KEYS}
+    async def _load_about(
+        self,
+        db: AsyncSession,
+        *,
+        variant: SiteVariant = SiteVariant.EXTERNAL,
+    ) -> dict[str, str | None]:
+        """Load variant-scoped ``about.*`` settings with legacy fallback.
+
+        The variant namespace is authoritative; the legacy non-variant keys are
+        read only so a deployment can switch to the variant build before an
+        administrator saves the first variant revision. Both are fetched in one
+        round trip and the variant value wins when present.
+        """
+        selected_section = variant_section("about", variant)
+        legacy_section = "about"
+        selected_keys = {key: f"{selected_section}.{key}" for key in _ABOUT_KEYS}
+        legacy_keys = {key: f"{legacy_section}.{key}" for key in _ABOUT_KEYS}
+        rows = (
+            await db.execute(
+                select(SystemSetting).where(
+                    SystemSetting.key.in_(
+                        sorted({*selected_keys.values(), *legacy_keys.values()})
+                    )
+                )
+            )
+        ).scalars().all()
+        raw_values = {row.key: row.value for row in rows}
+
+        values: dict[str, str | None] = {
+            key: raw_values.get(selected_keys[key], raw_values.get(legacy_keys[key]))
+            for key in _ABOUT_KEYS
+        }
+        # Defence in depth: published content must not become an unsanitized
+        # HTML source for SSG simply because a legacy write skipped the CMS
+        # sanitizer. `/site/about` sanitizes on read; the snapshot must match.
+        rich_keys = {"content_en", "content_zh"}
+        return {
+            key: (
+                sanitize_rich_html(value)
+                if key in rich_keys and value is not None
+                else value
+            )
+            for key, value in values.items()
+        }
 
     async def _load_publications(self, db: AsyncSession) -> list[dict[str, object]]:
         """Return the newest publications (year desc, id desc) as dicts."""
@@ -178,7 +217,8 @@ class ContentSnapshotService:
         rows = (await db.execute(stmt)).scalars().all()
         return [
             PublicationResponse(
-                id=str(p.id),
+                # The DOI is the public locator; the persistence key is not part
+                # of the snapshot contract (see content.py).
                 title=p.title,
                 title_zh=p.title_zh,
                 authors=p.authors,
@@ -205,10 +245,14 @@ class ContentSnapshotService:
             .limit(SNAPSHOT_MAX_PAGES)
         )
         rows = (await db.execute(stmt)).scalars().all()
-        return [
-            StaticPageResponse.model_validate(page).model_dump(mode="json")
-            for page in rows
-        ]
+        pages: list[dict[str, object]] = []
+        for page in rows:
+            payload = StaticPageResponse.model_validate(page).model_dump(mode="json")
+            payload["content_en"] = sanitize_rich_html(str(payload.get("content_en") or ""))
+            if payload.get("content_zh") is not None:
+                payload["content_zh"] = sanitize_rich_html(str(payload["content_zh"]))
+            pages.append(payload)
+        return pages
 
 
 __all__ = [

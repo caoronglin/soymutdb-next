@@ -30,10 +30,24 @@
  */
 import { expect, test } from "@playwright/test";
 
-import { gotoReady, trackErrors } from "./helpers";
+import {
+  gotoReady,
+  mockEntityApis,
+  trackErrors,
+  MOCK_MUTANT_INTERNAL_ID,
+  MOCK_MUTANT_PUBLIC_ID,
+} from "./helpers";
 
 /** Deployed internal variant base. The internal artifact is served at "/". */
-const INTERNAL_BASE_URL = (process.env.INTERNAL_BASE_URL ?? "").trim();
+const EXPLICIT_INTERNAL_BASE = (process.env.INTERNAL_BASE_URL ?? "").trim();
+
+/** Offline fallback: the built internal artifact served at root by static-server. */
+const OFFLINE_INTERNAL_BASE = "http://localhost:4175/";
+
+const INTERNAL_BASE_URL = EXPLICIT_INTERNAL_BASE || OFFLINE_INTERNAL_BASE;
+
+/** True when no deployed base was supplied (mocks provide the API rows). */
+const OFFLINE = EXPLICIT_INTERNAL_BASE === "";
 
 /** Optional public base, used to prove the two variants are separate. */
 const PUBLIC_BASE_URL = (
@@ -156,5 +170,116 @@ test.describe("internal site variant — separate origin/base path", () => {
       errors,
       "the internal-only surfaces must render without unexpected console errors or pageerrors",
     ).toEqual([]);
+  });
+
+  test("authenticates at the root /login, then an internal-id search reaches the detail", async ({
+    page,
+  }) => {
+    test.skip(!INTERNAL_BASE_URL, SKIP_NO_BASE);
+
+    const errors = trackErrors(page);
+    // Cross-origin mocked API (the internal artifact bakes an absolute API
+    // origin); mockEntityApis also answers the CORS preflight.
+    const captured = OFFLINE ? await mockEntityApis(page) : [];
+
+    // The internal login is the root-relative /login route, and the post-login
+    // redirect is an internal path.
+    await gotoReady(page, underBase(INTERNAL_BASE_URL, "login?redirect=%2Fsearch"));
+    await expect(page.getByTestId("login-form")).toBeVisible();
+
+    const loginResponse = page.waitForResponse(
+      (response) => response.request().method() === "POST" && /\/auth\/login$/.test(new URL(response.url()).pathname),
+    );
+    await page.getByTestId("login-email").fill("researcher@example.org");
+    await page.getByTestId("login-password").fill("correct-horse-battery-staple");
+    await page.getByTestId("login-submit").click();
+    expect((await loginResponse).status()).toBe(200);
+
+    // Post-login the SPA is on the internal search route (never the public
+    // /soymutdb-next prefix).
+    await expect(page).toHaveURL(/\/search$/);
+
+    // -----------------------------------------------------------------------
+    // OPT2-04: trigger the search through REAL UI input — no `?q=` deep link.
+    //
+    // `pressSequentially` types character by character, so the browser emits a
+    // real `input` event per keystroke (unlike `fill`, which sets the value in
+    // one shot). There are two search fields on this page and the spec types
+    // into both, because they behave differently on the built artifact:
+    //
+    //   * `search-input` is the SearchView form's antdv `Input`. It is bound
+    //     with plain `v-model`, while antdv-next Input only declares
+    //     `value` / `update:value` and emits no `update:modelValue` — so real
+    //     keystrokes reach the DOM but never the view's `input` ref, and that
+    //     form's submit leaves `q` unset.
+    //   * `portal-search-input` is the header omnibox, a native
+    //     `<input v-model>`; typing there drives `PortalHeader.submitSearch()`,
+    //     which does `router.push({ path: "/search", query: { q } })`. This is
+    //     the field that performs the navigation, so the flow no longer needs
+    //     the deep link.
+    // -----------------------------------------------------------------------
+    const formInput = page.getByTestId("search-input");
+    await formInput.click();
+    await formInput.pressSequentially(MOCK_MUTANT_INTERNAL_ID, { delay: 10 });
+    await expect(formInput).toHaveValue(MOCK_MUTANT_INTERNAL_ID);
+
+    const omnibox = page.getByTestId("portal-search-input");
+    await omnibox.click();
+    await omnibox.pressSequentially(MOCK_MUTANT_INTERNAL_ID, { delay: 10 });
+    await expect(omnibox).toHaveValue(MOCK_MUTANT_INTERNAL_ID);
+    await page.getByTestId("portal-search-submit").click();
+
+    // The header component navigated itself onto the URL-backed search state.
+    await expect
+      .poll(() => new URL(page.url()).searchParams.get("q"), {
+        message: "real typed input must navigate to /search with a q= search state",
+        timeout: 15_000,
+      })
+      .toBe(MOCK_MUTANT_INTERNAL_ID);
+    expect(new URL(page.url()).pathname).toBe("/search");
+
+    if (OFFLINE) {
+      await expect
+        .poll(
+          () =>
+            captured.some(
+              (entry) =>
+                /\/search(\/internal)?$/.test(entry.pathname) &&
+                entry.search.includes(`query=${MOCK_MUTANT_INTERNAL_ID}`),
+            ),
+          { message: "the internal search must query by the private internal id" },
+        )
+        .toBe(true);
+    }
+
+    const row = page.getByTestId("search-result-row").first();
+    await expect(row).toBeVisible({ timeout: 15_000 });
+    await expect(row).toHaveAttribute("data-url", `/mutants/${MOCK_MUTANT_PUBLIC_ID}`);
+    // The internal result surfaces the private identifier alongside the public id.
+    await expect(row).toContainText(MOCK_MUTANT_INTERNAL_ID);
+
+    // The internal-only result section renders BOTH identities and a copy
+    // control per identifier (the surface the internal login exists for).
+    const internalRow = page.getByTestId("search-internal-row").first();
+    await expect(internalRow).toBeVisible();
+    const publicIdCell = internalRow.getByTestId("internal-public-id");
+    const internalIdCell = internalRow.getByTestId("internal-internal-id");
+    await expect(publicIdCell).toHaveText(MOCK_MUTANT_PUBLIC_ID);
+    await expect(publicIdCell).toHaveAttribute("data-id-value", MOCK_MUTANT_PUBLIC_ID);
+    await expect(internalIdCell).toHaveText(MOCK_MUTANT_INTERNAL_ID);
+    await expect(internalIdCell).toHaveAttribute("data-id-value", MOCK_MUTANT_INTERNAL_ID);
+    const copyPublicId = internalRow.getByTestId("copy-public-id");
+    const copyInternalId = internalRow.getByTestId("copy-internal-id");
+    await expect(copyPublicId).toHaveAttribute("data-copy-value", MOCK_MUTANT_PUBLIC_ID);
+    await expect(copyInternalId).toHaveAttribute("data-copy-value", MOCK_MUTANT_INTERNAL_ID);
+    await copyInternalId.click();
+    await expect(copyInternalId).toHaveText(/copied/i);
+
+    await row.click();
+    await expect(page).toHaveURL(new RegExp(`/mutants/${MOCK_MUTANT_PUBLIC_ID}$`));
+    await expect(page.getByTestId("mutant-detail")).toBeVisible();
+    await expect(page.getByTestId("mutant-public-id")).toHaveText(MOCK_MUTANT_PUBLIC_ID);
+
+    expect(errors, "the internal search -> detail flow must stay free of script errors").toEqual([]);
   });
 });

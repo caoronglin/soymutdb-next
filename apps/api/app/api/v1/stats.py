@@ -4,6 +4,23 @@ Every endpoint aggregates **real data** from PostgreSQL and/or ClickHouse.
 When a data source is unavailable (e.g. ClickHouse not provisioned) the
 endpoint degrades gracefully: it logs a warning and returns the empty
 structure (zeros / empty lists) — never fabricated values.
+
+Release scope
+-------------
+Statistics are biological aggregates, so a public aggregate is only meaningful
+when it is bound to one published release:
+
+* endpoints formerly accepted an arbitrary ``release_id`` and never checked its
+  status, so a draft release's aggregates were readable;
+* ``/dashboard`` and the PG aggregates counted every row in the table,
+  including draft/other-release records;
+* ``/dashboard`` also exposed the total account count anonymously;
+* ``/releases`` defaulted to listing every release, drafted or rolled back.
+
+Every endpoint therefore resolves ``ReleaseContext`` (which accepts only a
+published release, or the active published pointer) and filters its queries by
+that release. Cache keys carry the resolved release so one release's aggregate
+can never be served for another.
 """
 
 from __future__ import annotations
@@ -16,7 +33,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from structlog import get_logger
 
 from ...core.database import get_db
-from ...models.auth import User
 from ...models.content import Release, ReleaseStatus
 from ...models.genomic import Assembly, Chromosome, Gene
 from ...models.seed import SeedInventory
@@ -36,6 +52,7 @@ from ...schemas.analytics import (
 )
 from ...services.cache import get_or_set
 from ...services.clickhouse_service import ClickHouseService
+from ...services.release_context import ReleaseContext, get_release_context
 
 logger = get_logger(__name__)
 
@@ -72,10 +89,14 @@ async def _variant_type_counts_from_pg(
     return {str(variant_type): int(count) for variant_type, count in rows}
 
 
-async def _variant_type_summary_from_ch() -> dict[str, int] | None:
-    """Best-effort variant-type counts from ClickHouse (None when unavailable)."""
+async def _variant_type_summary_from_ch(release_key: str | None = None) -> dict[str, int] | None:
+    """Best-effort variant-type counts from ClickHouse (None when unavailable).
+
+    ``release_key`` scopes the aggregate to one release; callers on a public
+    surface must pass it (see the dashboard loader).
+    """
     try:
-        return await ch_service.get_dashboard_stats()
+        return await ch_service.get_dashboard_stats(release_key=release_key)
     except Exception:
         logger.warning("stats_clickhouse_unavailable", component="variant_type_summary")
         return None
@@ -86,18 +107,34 @@ async def _variant_type_summary_from_ch() -> dict[str, int] | None:
 # ---------------------------------------------------------------------------
 
 
-async def _load_dashboard_stats(db: AsyncSession) -> dict:
-    """Compute dashboard aggregates (loader for the Redis cache)."""
+async def _load_dashboard_stats(db: AsyncSession, release_id: int) -> dict:
+    """Compute dashboard aggregates for one published release.
+
+    Gene/mutant/phenotype/assembly counts are joined to the release's
+    assemblies so draft or other-release rows cannot be counted. The anonymous
+    dashboard does not expose the account population at all (``total_users``
+    stays 0), because that is internal operational data.
+    """
     # Keep dashboard counts in one round-trip: these independent scalar
     # subqueries avoid five sequential pool checkouts on every cache refresh.
+    release_assembly_ids = select(Assembly.id).where(Assembly.release_id == release_id)
     count_result = await db.execute(
         select(
-            select(func.count(Gene.gene_pk)).scalar_subquery(),
-            select(func.count(MutantLine.id)).scalar_subquery(),
-            select(func.count(Phenotype.id)).scalar_subquery(),
-            select(func.count(Assembly.id)).scalar_subquery(),
-            select(func.count(User.id))
-            .where(User.is_deleted.is_(False))
+            select(func.count(Gene.gene_pk))
+            .where(Gene.assembly_id.in_(release_assembly_ids))
+            .scalar_subquery(),
+            select(func.count(MutantLine.id))
+            .where(MutantLine.release_id == release_id)
+            .scalar_subquery(),
+            select(func.count(Phenotype.id))
+            .where(
+                Phenotype.mutant_line_id.in_(
+                    select(MutantLine.id).where(MutantLine.release_id == release_id)
+                )
+            )
+            .scalar_subquery(),
+            select(func.count(Assembly.id))
+            .where(Assembly.release_id == release_id)
             .scalar_subquery(),
         )
     )
@@ -106,20 +143,14 @@ async def _load_dashboard_stats(db: AsyncSession) -> dict:
         total_mutant_lines,
         total_phenotypes,
         assemblies_count,
-        total_users,
     ) = count_result.one()
 
-    # Current release version.
-    release_result = await db.execute(
-        select(Release)
-        .where(Release.status == ReleaseStatus.ACTIVE)
-        .order_by(Release.published_at.desc())
-        .limit(1)
-    )
+    # The release row is the resolved published release (not "newest active").
+    release_result = await db.execute(select(Release).where(Release.id == release_id))
     current_release = release_result.scalar_one_or_none()
 
-    # Total variants from ClickHouse (best-effort).
-    ch_stats = await _variant_type_summary_from_ch() or {}
+    # Total variants from ClickHouse, scoped to the same release (best-effort).
+    ch_stats = await _variant_type_summary_from_ch(release_key=str(release_id)) or {}
     total_variants = int(ch_stats.get("total_variants", 0))
 
     return DashboardStats(
@@ -127,7 +158,8 @@ async def _load_dashboard_stats(db: AsyncSession) -> dict:
         total_genes=int(total_genes or 0),
         total_mutant_lines=int(total_mutant_lines or 0),
         total_phenotypes=int(total_phenotypes or 0),
-        total_users=int(total_users or 0),
+        # Anonymous operational metric: never the real account population.
+        total_users=0,
         assemblies_count=int(assemblies_count or 0),
         current_release=current_release.version if current_release else None,
         last_updated=datetime.now(timezone.utc),  # noqa: UP017
@@ -137,16 +169,20 @@ async def _load_dashboard_stats(db: AsyncSession) -> dict:
 @router.get("/dashboard", response_model=DashboardStats)
 async def dashboard_stats(
     db: AsyncSession = Depends(get_db),
+    release_context: ReleaseContext = Depends(get_release_context),
 ) -> DashboardStats:
-    """High-level database statistics for the dashboard.
+    """High-level database statistics for the resolved published release.
 
     Read-hot aggregation cached in Redis (default TTL) via cache-aside;
-    a Redis failure degrades to a direct aggregation.
+    a Redis failure degrades to a direct aggregation. The cache key carries the
+    release so one release's aggregate is never served for another.
     """
+    release_id = release_context.release_id
     payload = await get_or_set(
         "stats:dashboard",
         ttl=None,
-        loader=lambda: _load_dashboard_stats(db),
+        params={"release_id": release_id},
+        loader=lambda: _load_dashboard_stats(db, release_id),
     )
     return DashboardStats(**payload)
 
@@ -243,11 +279,18 @@ async def _load_homepage_stats(db: AsyncSession) -> dict:
 
 @router.get("/variant-types", response_model=VariantTypeDistribution)
 async def variant_type_distribution(
+    release_context: ReleaseContext = Depends(get_release_context),
     assembly: str | None = Query(default=None),
 ) -> VariantTypeDistribution:
-    """Variant type distribution (SNP/INS/DEL/MNV/SV)."""
+    """Variant type distribution (SNP/INS/DEL/MNV/SV) for a published release.
+
+    The ClickHouse aggregate is bound to the resolved release; previously it
+    scanned every release's facts.
+    """
     try:
-        dist = await ch_service.get_variant_type_distribution(assembly=assembly)
+        dist = await ch_service.get_variant_type_distribution(
+            assembly=assembly, release_key=release_context.release_key
+        )
     except Exception:
         logger.warning("stats_clickhouse_unavailable", component="variant_types")
         dist = {}
@@ -276,14 +319,17 @@ async def variant_type_distribution(
 )
 async def variant_type_summary(
     db: AsyncSession = Depends(get_db),
-    release_id: int | None = Query(default=None),
+    release_context: ReleaseContext = Depends(get_release_context),
 ) -> list[VariantTypeSummaryItem]:
     """Variant type distribution as ``[{name, value}]`` for charts.
 
-    Aggregated from the PostgreSQL ``variant_summaries`` table.  Zero-count
-    buckets are omitted so charts can fall back to other data sources.
+    Aggregated from the PostgreSQL ``variant_summaries`` table, scoped to the
+    resolved published release. Zero-count buckets are omitted so charts can
+    fall back to other data sources.
     """
-    pg_counts = await _variant_type_counts_from_pg(db, release_id=release_id)
+    pg_counts = await _variant_type_counts_from_pg(
+        db, release_id=release_context.release_id
+    )
     items = [
         VariantTypeSummaryItem(
             name=name, value=sum(pg_counts.get(key, 0) for key in keys)
@@ -300,16 +346,17 @@ async def variant_type_summary(
 )
 async def impact_summary(
     db: AsyncSession = Depends(get_db),
-    release_id: int | None = Query(default=None),
+    release_context: ReleaseContext = Depends(get_release_context),
 ) -> list[ImpactSummaryItem]:
-    """Variant counts grouped by impact class (HIGH/MODERATE/LOW/MODIFIER)."""
+    """Variant counts grouped by impact class, scoped to the published release."""
     stmt = (
         select(VariantSummary.impact, func.count())
-        .where(VariantSummary.impact.is_not(None))
+        .where(
+            VariantSummary.impact.is_not(None),
+            VariantSummary.release_id == release_context.release_id,
+        )
         .group_by(VariantSummary.impact)
     )
-    if release_id is not None:
-        stmt = stmt.where(VariantSummary.release_id == release_id)
     rows = (await db.execute(stmt)).all()
     counts = {str(impact): int(count) for impact, count in rows}
 
@@ -327,7 +374,7 @@ async def impact_summary(
 )
 async def chromosome_density_summary(
     db: AsyncSession = Depends(get_db),
-    release_id: int | None = Query(default=None),
+    release_context: ReleaseContext = Depends(get_release_context),
 ) -> list[ChromosomeDensitySummary]:
     """Variant density per chromosome, aggregated from PostgreSQL.
 
@@ -338,6 +385,7 @@ async def chromosome_density_summary(
     loader returns ``[]`` which is memoised until the TTL expires instead of
     re-running the aggregate per request.
     """
+    release_id = release_context.release_id
     payload = await get_or_set(
         "stats:chromosome-density",
         ttl=None,
@@ -408,13 +456,15 @@ async def _load_chromosome_density_summary(
 )
 async def discovery_trend(
     db: AsyncSession = Depends(get_db),
+    release_context: ReleaseContext = Depends(get_release_context),
     days: int = Query(default=30, ge=1, le=3650),
-    release_id: int | None = Query(default=None),
 ) -> list[DiscoveryTrendPoint]:
-    """Cumulative variant counts across published releases.
+    """Cumulative variant counts across *published* releases.
 
     Each published release contributes ``new_variants`` (= its recorded
-    ``variant_count``) and a running cumulative total.
+    ``variant_count``) and a running cumulative total. Draft and rolled-back
+    releases are excluded, and the trend is anchored on the resolved published
+    release rather than an arbitrary caller-supplied id.
     """
     since = datetime.now(timezone.utc) - timedelta(days=days)  # noqa: UP017
     stmt = (
@@ -426,8 +476,6 @@ async def discovery_trend(
         )
         .order_by(Release.published_at.asc())
     )
-    if release_id is not None:
-        stmt = stmt.where(Release.id == release_id)
 
     rows = (await db.execute(stmt)).all()
     points: list[DiscoveryTrendPoint] = []
@@ -452,32 +500,36 @@ async def discovery_trend(
 )
 async def release_statistics(
     db: AsyncSession = Depends(get_db),
-    only_active: bool = Query(default=False),
 ) -> list[ReleaseSummary]:
-    """Statistics per release (version, date, variant/gene/line counts).
+    """Statistics per *published* release (version, date, counts).
 
-    Read-hot query cached in Redis (default TTL) keyed by ``only_active``;
-    a Redis failure degrades to a direct query.  An empty release list is
-    cached as well (anti-penetration) so a freshly seeded database does not
-    re-run the query on every request.
+    Public callers may only see releases that reached a published state:
+    previously the default (``only_active=false``) listed every release,
+    including drafts and rolled-back ones. A rollback is deliberately excluded
+    because its counts no longer describe the served data.
+
+    Read-hot query cached in Redis (default TTL); a Redis failure degrades to a
+    direct query. An empty release list is cached as well (anti-penetration) so
+    a freshly seeded database does not re-run the query on every request.
     """
     payload = await get_or_set(
         "stats:releases",
         ttl=None,
-        params={"only_active": only_active},
-        loader=lambda: _load_release_statistics(db, only_active),
+        loader=lambda: _load_release_statistics(db),
     )
     return [ReleaseSummary.model_validate(item) for item in payload]
 
 
-async def _load_release_statistics(
-    db: AsyncSession, only_active: bool
-) -> list[dict]:
+async def _load_release_statistics(db: AsyncSession) -> list[dict]:
     """Compute per-release statistics (loader for the Redis cache)."""
-    stmt = select(Release).where(Release.published_at.is_not(None))
-    if only_active:
-        stmt = stmt.where(Release.status == ReleaseStatus.ACTIVE.value)
-    stmt = stmt.order_by(Release.published_at.desc())
+    stmt = (
+        select(Release)
+        .where(
+            Release.published_at.is_not(None),
+            Release.status == ReleaseStatus.ACTIVE.value,
+        )
+        .order_by(Release.published_at.desc())
+    )
 
     releases = (await db.execute(stmt)).scalars().all()
     result: list[ReleaseSummary] = []
@@ -504,17 +556,19 @@ async def _load_release_statistics(
 )
 async def mutagen_statistics(
     db: AsyncSession = Depends(get_db),
-    release_id: int | None = Query(default=None),
+    release_context: ReleaseContext = Depends(get_release_context),
 ) -> list[MutagenCount]:
-    """Number of mutant lines per mutagen (real PostgreSQL aggregation)."""
+    """Number of mutant lines per mutagen, scoped to the published release."""
     stmt = (
         select(MutantLine.mutagen, func.count())
-        .where(MutantLine.mutagen.is_not(None), MutantLine.is_deleted.is_(False))
+        .where(
+            MutantLine.mutagen.is_not(None),
+            MutantLine.is_deleted.is_(False),
+            MutantLine.release_id == release_context.release_id,
+        )
         .group_by(MutantLine.mutagen)
         .order_by(func.count().desc())
     )
-    if release_id is not None:
-        stmt = stmt.where(MutantLine.release_id == release_id)
 
     rows = (await db.execute(stmt)).all()
     return [
@@ -526,22 +580,25 @@ async def mutagen_statistics(
 
 @router.get("/density", response_model=ChromosomeDensity)
 async def chromosome_density(
+    release_context: ReleaseContext = Depends(get_release_context),
     assembly: str = Query(..., description="Assembly name (required)"),
     chromosome: str = Query(...),
     bin_size: int = Query(default=1_000_000, ge=1000),
 ) -> ChromosomeDensity:
-    """Variant density across a chromosome.
+    """Variant density across a chromosome in the published release.
 
     Density is computed entirely from the ClickHouse projection, so an
     unavailable projection is reported as capability-unavailable (503). The
     response model also requires a concrete ``chromosome_length``: fabricating
     ``0`` here would both violate the contract and present an empty chromosome
-    as a real result.
+    as a real result. The query is bound to the resolved release, so bins can
+    never mix drafts into a published density.
     """
     bins = await ch_service.get_chromosome_density(
         assembly=assembly,
         chromosome=chromosome,
         bin_size=bin_size,
+        release_key=release_context.release_key,
     )
 
     total = sum(b["count"] for b in bins)

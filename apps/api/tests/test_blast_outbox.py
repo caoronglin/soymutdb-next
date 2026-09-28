@@ -16,6 +16,7 @@ from app.models.blast import BlastDatabase, BlastJob, BlastJobStatus
 from app.models.outbox import OutboxEvent, OutboxEventStatus
 from app.schemas.blast import BlastParameters, BlastProgram, BlastSubmitRequest
 from app.services.blast_service import BlastService
+from app.services.release_context import ReleaseContext
 
 
 class _Scalars:
@@ -66,6 +67,11 @@ class FakeDbSession:
         pass
 
 
+def _context(release_id: int = 7) -> ReleaseContext:
+    """Published release the fake session's rows belong to."""
+    return ReleaseContext(release_id=release_id, assembly_id=1, assembly="Wm82.a2.v1")
+
+
 def _make_request() -> BlastSubmitRequest:
     return BlastSubmitRequest(
         program=BlastProgram.BLASTN,
@@ -92,7 +98,9 @@ async def test_submit_job_writes_job_and_outbox_event_in_one_transaction() -> No
     session = FakeDbSession(blast_db=_make_db())
     service = BlastService()
 
-    response = await service.submit_job(session, uuid.uuid4(), _make_request())
+    response = await service.submit_job(
+            session, uuid.uuid4(), _make_request(), release_context=_context()
+        )
 
     # One transaction: job + outbox event committed together, broker untouched.
     assert session.commits == 1
@@ -127,7 +135,9 @@ async def test_submit_job_rejects_missing_or_inactive_database() -> None:
     service = BlastService()
 
     try:
-        await service.submit_job(session, uuid.uuid4(), _make_request())
+        await service.submit_job(
+            session, uuid.uuid4(), _make_request(), release_context=_context()
+        )
     except NotFoundError:
         pass
     else:

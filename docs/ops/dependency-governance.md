@@ -17,14 +17,14 @@ A vulnerability exception is not currently required by the Python audit commands
 
 ## Job environment
 
-`knip` resolves the workspace graph by loading `apps/web/vite.config.ts`, and that
-config validates its own deployment origins at import time. Left unset,
+`knip` resolves the workspace graph while loading `apps/web/config/config.ts`
+(Umi), which validates deployment origins at import time. Left unset,
 `VITE_API_BASE_URL` throws before Knip analyses a single file:
 
 ```
 Error: API origin is required for production deployment
-  at requireDeploymentOrigin (apps/web/src/lib/deployment.ts:87)
-  at /workspace/apps/web/vite.config.ts:91
+  at requireDeploymentOrigin (packages/shared/src/deployment.ts)
+  at /workspace/apps/web/config/config.ts
 ```
 
 The analyzer then exits non-zero and the summary reads `knip: failed
@@ -32,7 +32,7 @@ The analyzer then exits non-zero and the summary reads `knip: failed
 unused-code finding. `scripts/ci-job-steps.sh` therefore exports the same demo
 fixture origins the offline frontend build uses (`frontend_build_demo`,
 `SOYMUTDB_CI_DEMO_*`) before either `pnpm deps:graphs` or `pnpm deps:audit`, so
-the setting does not depend on the provider configuring it separately.
+the setting does not depend on the provider configuring it separately. The checked-in config is the Umi Max config; the removed Vite configs are not part of the application build.
 
 ## JS security floors
 

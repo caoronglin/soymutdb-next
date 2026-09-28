@@ -1,5 +1,5 @@
 /**
- * Typed TanStack Vue Query factories for the portal's server state.
+ * Typed TanStack React Query factories for the portal's server state.
  *
  * The shared `@soymutdb/query-keys` package owns the cache identity; this layer
  * co-locates each key with its query function, stale time, and the deployment
@@ -12,12 +12,11 @@
  * derived from the same object the request is built from.
  */
 
-import { infiniteQueryOptions, queryOptions } from "@tanstack/vue-query";
+import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
 
 import {
   fetchChromosomeDensity,
   fetchDiscoveryTrend,
-  fetchEffectDistribution,
   fetchImpactSummary,
   fetchMutagenStatistics,
   fetchVariantTypeSummary,
@@ -216,7 +215,7 @@ export function regionVariantsQueryOptions(
 export function chromosomeDensityQueryOptions(context: DeploymentContext) {
   return queryOptions({
     queryKey: ["analytics", "chromosome-density", context.releaseId, context.siteVariant],
-    queryFn: () => fetchChromosomeDensity(context.releaseId ?? undefined),
+    queryFn: () => fetchChromosomeDensity(),
     staleTime: 5 * 60_000,
   });
 }
@@ -224,7 +223,7 @@ export function chromosomeDensityQueryOptions(context: DeploymentContext) {
 export function variantTypeSummaryQueryOptions(context: DeploymentContext) {
   return queryOptions({
     queryKey: ["analytics", "variant-types", context.releaseId, context.siteVariant],
-    queryFn: () => fetchVariantTypeSummary(context.releaseId ?? undefined),
+    queryFn: () => fetchVariantTypeSummary(),
     staleTime: 5 * 60_000,
   });
 }
@@ -232,15 +231,7 @@ export function variantTypeSummaryQueryOptions(context: DeploymentContext) {
 export function impactSummaryQueryOptions(context: DeploymentContext) {
   return queryOptions({
     queryKey: ["analytics", "impact", context.releaseId, context.siteVariant],
-    queryFn: () => fetchImpactSummary(context.releaseId ?? undefined),
-    staleTime: 5 * 60_000,
-  });
-}
-
-export function effectDistributionQueryOptions(context: DeploymentContext) {
-  return queryOptions({
-    queryKey: ["analytics", "effect-distribution", context.releaseId, context.siteVariant],
-    queryFn: () => fetchEffectDistribution(context.releaseId ?? undefined),
+    queryFn: () => fetchImpactSummary(),
     staleTime: 5 * 60_000,
   });
 }
@@ -248,7 +239,7 @@ export function effectDistributionQueryOptions(context: DeploymentContext) {
 export function mutagenStatisticsQueryOptions(context: DeploymentContext) {
   return queryOptions({
     queryKey: ["analytics", "mutagens", context.releaseId, context.siteVariant],
-    queryFn: () => fetchMutagenStatistics(context.releaseId ?? undefined),
+    queryFn: () => fetchMutagenStatistics(),
     staleTime: 5 * 60_000,
   });
 }
@@ -256,7 +247,7 @@ export function mutagenStatisticsQueryOptions(context: DeploymentContext) {
 export function discoveryTrendQueryOptions(context: DeploymentContext & { days: number }) {
   return queryOptions({
     queryKey: ["analytics", "discovery-trend", context.days, context.releaseId, context.siteVariant],
-    queryFn: () => fetchDiscoveryTrend(context.days, context.releaseId ?? undefined),
+    queryFn: () => fetchDiscoveryTrend(context.days),
     staleTime: 5 * 60_000,
   });
 }
@@ -309,7 +300,9 @@ export function geneExpressionQueryOptions(
         cursor: pageParam,
         limit: GENE_DATA_PAGE_SIZE,
       }),
-    initialPageParam: undefined as number | undefined,
+    // The expression cursor is an opaque release/filter-bound token, so the
+    // page parameter is a string (it used to be a raw ExpressionData.id).
+    initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) =>
       lastPage.has_more ? (lastPage.next_cursor ?? undefined) : undefined,
     enabled: context.enabled ?? true,
@@ -377,7 +370,8 @@ export interface VariantFilters {
   end?: number;
   impact?: string;
   variantType?: string;
-  mutantLineId?: string;
+  /** Public mutant-line identifier (never the internal key). */
+  mutantLinePublicId?: string;
 }
 export function variantsQueryOptions(
   context: DeploymentContext & VariantFilters & { page: number; limit: number; cursor?: string; assemblyName?: string | null },
@@ -394,7 +388,7 @@ export function variantsQueryOptions(
       end: context.end ?? null,
       impact: context.impact ?? null,
       variantType: context.variantType ?? null,
-      mutantLineId: context.mutantLineId ?? null,
+      mutantLinePublicId: context.mutantLinePublicId ?? null,
     }),
     queryFn: () =>
       searchVariants({
@@ -405,7 +399,7 @@ export function variantsQueryOptions(
         start: context.start,
         end: context.end,
         variant_type: (context.variantType || undefined) as never,
-        mutant_line_id: context.mutantLineId || undefined,
+        mutant_line_public_id: context.mutantLinePublicId || undefined,
         impact: (context.impact || undefined) as never,
         cursor: context.cursor,
         limit: context.limit,

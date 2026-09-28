@@ -9,12 +9,14 @@ from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.config import get_settings
-from ..core.exceptions import NotFoundError
+from ..core.exceptions import NotFoundError, ValidationError
 from ..core.security import RoleName, has_role
 from ..models.auth import ProjectMember
+from ..models.genomic import Assembly
 from ..models.tracks import Track, TrackCategory, TrackStatus, TrackVisibility
 from ..schemas.content import SignedUrlResponse
 from .presign import DOWNLOAD_EXPIRES_IN, generate_download_url
+from .release_context import ReleaseContext
 
 settings = get_settings()
 
@@ -119,22 +121,53 @@ class TrackService:
     async def get_jbrowse_config(
         self,
         db: AsyncSession,
-        assembly_name: str = "Wm82v4.0",
+        assembly_id: int,
         *,
+        release_context: ReleaseContext,
         user_id: uuid.UUID | None = None,
         user_roles: list[str] | None = None,
     ) -> dict[str, Any]:
-        """Build a JBrowse 2 configuration response for the standalone browser.
+        """Build a release- and assembly-scoped JBrowse configuration.
 
-        Queries the database for ready, non-deleted tracks belonging to the
-        requested assembly and converts them to JBrowse track format. The
-        assembly metadata is returned as a simple name-only object — the
-        frontend JBrowse app has full assembly adapter configuration built in
-        as defaults.
+        A release owns one canonical assembly.  Both identities are required
+        and are checked in the database query, so an assembly name can never
+        select tracks from a different release (or silently fall back to the
+        historical v4 assembly).  ``release_context`` comes from the
+        published-release dependency at the API boundary; the service also
+        fails closed when a direct caller supplies an incomplete context.
         """
-        # Query tracks joined to assemblies filtered by assembly name.
-        from ..models.genomic import Assembly
-        from ..models.tracks import TrackStatus
+        if assembly_id < 1:
+            raise ValidationError("assembly_id must be a positive integer")
+        if release_context.assembly_id is None:
+            raise ValidationError(
+                "The selected published release has no assembly identity",
+                details={"code": "missing_assembly"},
+            )
+        if int(release_context.assembly_id) != assembly_id:
+            raise ValidationError(
+                "assembly_id does not belong to the selected release",
+                details={
+                    "code": "assembly_release_mismatch",
+                    "release_id": release_context.release_id,
+                    "assembly_id": assembly_id,
+                },
+            )
+
+        # Resolve the full assembly row inside the selected release.  The
+        # release predicate is essential: names are display labels and are not
+        # sufficient to identify a coordinate namespace.
+        assembly_result = await db.execute(
+            select(Assembly).where(
+                Assembly.id == assembly_id,
+                Assembly.release_id == release_context.release_id,
+            )
+        )
+        assembly = assembly_result.scalar_one_or_none()
+        if assembly is None:
+            raise NotFoundError(
+                f"Assembly {assembly_id} is not available in release "
+                f"{release_context.release_id}"
+            )
 
         roles = user_roles or []
         project_ids = await self._project_ids_for_user(db, user_id, roles)
@@ -144,7 +177,10 @@ class TrackService:
             .where(
                 Track.is_deleted.is_(False),
                 Track.status == TrackStatus.READY,
-                Assembly.name == assembly_name,
+                Track.release_id == release_context.release_id,
+                Track.assembly_id == assembly_id,
+                Assembly.id == assembly_id,
+                Assembly.release_id == release_context.release_id,
             )
         )
         visibility_filter = self._visibility_filter(user_id, roles, project_ids)
@@ -157,11 +193,18 @@ class TrackService:
             if self._can_view_track(track, user_id, roles, project_ids)
         ]
 
-        jbrowse_tracks = [self._track_to_jbrowse(t, assembly_name) for t in tracks]
-
+        assembly_config = self._assembly_to_jbrowse(assembly)
         return {
-            "assembly": {"name": assembly_name},
-            "tracks": jbrowse_tracks,
+            "release": {
+                "id": release_context.release_id,
+                "assembly_id": assembly.id,
+            },
+            "release_id": release_context.release_id,
+            "assembly": assembly_config,
+            "assembly_id": assembly.id,
+            "tracks": [
+                self._track_to_jbrowse(track, assembly.name) for track in tracks
+            ],
         }
 
     # ------------------------------------------------------------------ #
@@ -278,6 +321,44 @@ class TrackService:
             "status": track.status,
             "created_at": track.created_at.isoformat() if track.created_at else None,
         }
+
+    @staticmethod
+    def _assembly_to_jbrowse(assembly: Assembly) -> dict[str, Any]:
+        """Serialize an assembly without inventing a reference fallback.
+
+        ``fasta_url``/``fai_url`` are optional in the legacy schema.  When both
+        are present, expose them as a JBrowse reference adapter; when either is
+        absent, leave the sequence configuration absent so the client reports
+        an incomplete assembly instead of silently loading Wm82 v4 data.
+        """
+        fasta_url = getattr(assembly, "fasta_url", None)
+        fai_url = getattr(assembly, "fai_url", None)
+        payload: dict[str, Any] = {
+            "id": assembly.id,
+            "name": assembly.name,
+            "version": getattr(assembly, "version", None),
+            "species": getattr(assembly, "species", None),
+            "description": getattr(assembly, "description", None),
+            "fasta_url": fasta_url,
+            "fai_url": fai_url,
+        }
+        if fasta_url and fai_url:
+            payload["sequence"] = {
+                "trackId": f"reference_sequence_{assembly.id}",
+                "type": "ReferenceSequenceTrack",
+                "adapter": {
+                    "type": "BgzipFastaAdapter",
+                    "fastaLocation": {
+                        "uri": fasta_url,
+                        "locationType": "UriLocation",
+                    },
+                    "faiLocation": {
+                        "uri": fai_url,
+                        "locationType": "UriLocation",
+                    },
+                },
+            }
+        return payload
 
     @classmethod
     def _track_to_jbrowse(

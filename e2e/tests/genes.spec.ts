@@ -1,27 +1,16 @@
 /**
  * Genes search E2E — six-column result order + JBrowse 2 deep link.
  *
- * The gene search table renders only after a submitted/auto-run query with an
- * assembly context. e2e/static-server.mjs returns an empty envelope by default,
- * so the offline suite asserts the empty state. The JBrowse 2 deep-link test is
- * gated on a real target: either the opt-in offline fixture
- * (GENES_JBROWSE_FIXTURE=1, same static server) or a live stack query
- * (GENES_JBROWSE_QUERY=<gene id>). That is a conditional skip with the concrete
- * missing prerequisite, never a compile-time no-op.
+ * The result table renders only after a submitted/auto-run query. The default
+ * static server returns an empty envelope, so the empty-state test asserts the
+ * honest "no rows" answer; the deep-link test installs deterministic in-browser
+ * API mocks (helpers.mockEntityApis) so a real row exists and the JBrowse action
+ * can be exercised end to end — no unconditional `test.skip`.
  */
 import { test, expect } from "@playwright/test";
-import { gotoReady } from "./helpers";
+import { gotoReady, mockEntityApis, MOCK_ASSEMBLY, MOCK_GENE_ID } from "./helpers";
 
 const BASE = "/soymutdb-next";
-
-/** Opt-in deterministic offline fixture served by e2e/static-server.mjs. */
-const JBROWSE_FIXTURE_ENABLED = process.env.GENES_JBROWSE_FIXTURE === "1";
-/** Deterministic fixture query; keep in step with e2e/static-server.mjs. */
-const JBROWSE_FIXTURE_QUERY = "SMDB-E2E-GENE-1";
-/** Live-stack query override (a gene id the target actually serves). */
-const JBROWSE_LIVE_QUERY = (process.env.GENES_JBROWSE_QUERY ?? "").trim();
-/** The query this run can resolve rows for, or "" when no target is available. */
-const JBROWSE_QUERY = JBROWSE_FIXTURE_ENABLED ? JBROWSE_FIXTURE_QUERY : JBROWSE_LIVE_QUERY;
 
 test.describe("genes — form and URL state", () => {
   test("gene ID form restores q from URL", async ({ page }) => {
@@ -51,26 +40,14 @@ test.describe("genes — result column order", () => {
   test("renders no row when the API returns none", async ({ page }) => {
     await gotoReady(page, `${BASE}/search/genes?q=Glyma.01G000100&run=1`);
     await expect(page.getByTestId("search-genes-empty")).toBeVisible();
-    await expect(page.getByTestId("search-gene-row")).toHaveCount(0);
+    await expect(page.getByTestId("configurable-row")).toHaveCount(0);
   });
 
-  test("JBrowse 2 action opens an assembly-scoped locus deep link in a new tab", async ({
-    page,
-  }) => {
-    // Conditional, not unconditional: the target must return a gene row with a
-    // JBrowse action. Skip only when neither the offline fixture nor a live
-    // stack query was supplied, and name the missing prerequisite.
-    test.skip(
-      !JBROWSE_QUERY,
-      "set GENES_JBROWSE_FIXTURE=1 (offline fixture in e2e/static-server.mjs) " +
-        "or GENES_JBROWSE_QUERY=<gene id> (live stack that returns rows) " +
-        "to exercise the JBrowse 2 deep link",
-    );
-
-    await gotoReady(
-      page,
-      `${BASE}/search/genes?q=${encodeURIComponent(JBROWSE_QUERY)}&run=1`,
-    );
+  test("JBrowse 2 action opens an assembly-scoped locus deep link", async ({ page }) => {
+    // Deterministic offline data: one gene row carrying assembly/coordinates, so
+    // the action is guaranteed to exist and its contract can be asserted exactly.
+    await mockEntityApis(page);
+    await gotoReady(page, `${BASE}/search/genes?q=${encodeURIComponent(MOCK_GENE_ID)}&run=1`);
 
     // The action is the row's anchor (ConfigurableTable emits
     // `jbrowse-link-<index>`), not a button; target it precisely so the
@@ -86,23 +63,20 @@ test.describe("genes — result column order", () => {
     const locus = deepLink.searchParams.get("loc");
     // DB-CORE-3/4: the deep link must carry the assembly context, never an
     // assembly-less locus that would resolve to another coordinate namespace.
-    expect(assembly, "the deep link must carry the assembly context").toBeTruthy();
-    expect(locus, "the deep link must carry a chromosome:start-end locus").toMatch(
-      /^[^:\s]+:\d+-\d+$/,
-    );
+    expect(assembly).toBe(MOCK_ASSEMBLY.name);
+    expect(locus).toMatch(/^[^:\s]+:\d+-\d+$/);
+    expect(locus).toBe("chr01:100-200");
 
-    if (JBROWSE_FIXTURE_ENABLED) {
-      // The fixture pins these values, so assert them exactly when offline.
-      expect(assembly).toBe("Wm82.a4.v1");
-      expect(locus).toBe("chr01:12345-12345");
-    }
-
-    // Clicking opens the same deep link in a new tab.
-    const [popup] = await Promise.all([page.waitForEvent("popup"), link.click()]);
-    await popup.waitForURL((url) => url.pathname === "/browser", { timeout: 10_000 });
-    const popupUrl = new URL(popup.url());
-    expect(popupUrl.searchParams.get("assembly")).toBe(assembly);
-    expect(popupUrl.searchParams.get("loc")).toBe(locus);
-    await popup.close();
+    // Follow the deep link into the portal browser route and prove the locus is
+    // carried into the JBrowse shell URL (the shell iframe itself is not served
+    // by the offline static server, so the frame *src* is the contract here).
+    await gotoReady(page, `${BASE}${href}`);
+    await expect(page.getByTestId("browser-locus-input")).toHaveValue("chr01:100-200");
+    // The assembly is echoed in the browser header (the <select> only offers
+    // chromosome options, so it is not a reliable assembly assertion).
+    await expect(page.getByText(`${MOCK_ASSEMBLY.name} · chr01:100-200`)).toBeVisible();
+    const frame = page.getByTestId("browser-iframe");
+    await expect(frame).toHaveAttribute("src", /assembly=Wm82\.a4\.v1/);
+    await expect(frame).toHaveAttribute("src", /locus=chr01%3A100-200/);
   });
 });

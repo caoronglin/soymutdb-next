@@ -25,8 +25,7 @@
   Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'; base-uri 'self'; form-action 'self'; object-src 'none'; frame-ancestors 'none'
 
 # ---------------------------------------------------------------------------
-# Hashed build assets (Vite emits everything under /assets/ with a content
-# hash in the filename) — safe to cache immutable for 1 year.
+# Hashed Umi/webpack assets under /assets/ — safe to cache immutable for 1 year.
 # ---------------------------------------------------------------------------
 /assets/*
   Cache-Control: public, max-age=31536000, immutable

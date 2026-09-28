@@ -100,7 +100,6 @@ test.describe("primer design — genome mode (seqfetch mock)", () => {
     await expect(page.getByText("F1/R1")).toBeVisible({ timeout: 15_000 });
 
     // Gbrowse cross-link: window.open stub captures the target URL.
-    let openedUrl = "";
     await page.addInitScript(() => {
       window.open = (url: string) => {
         (window as unknown as { __openedUrl: string }).__openedUrl = url;
@@ -117,7 +116,7 @@ test.describe("primer design — genome mode (seqfetch mock)", () => {
     await expect(page.getByText("F1/R1")).toBeVisible({ timeout: 15_000 });
 
     await page.getByRole("button", { name: /gbrowse/i }).first().click();
-    openedUrl = await page.evaluate(
+    const openedUrl = await page.evaluate(
       () => (window as unknown as { __openedUrl: string }).__openedUrl,
     );
     expect(openedUrl).toContain("/browser?assembly=");

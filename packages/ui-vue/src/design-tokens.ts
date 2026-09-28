@@ -13,9 +13,9 @@ export const brandTokens = {
   primaryDark: "oklch(0.70 0.12 151)",
   /** Base radius (rem), matches the AntD token. */
   radius: 10,
-  /** Font stack shared by body/display text. */
+  /** Font stack shared by body/display text (matches the apps' --font-sans). */
   fontFamily:
-    'system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif',
+    '"HarmonyOS Sans SC", ui-sans-serif, system-ui, sans-serif',
 } as const;
 
 export type BrandTokens = typeof brandTokens;

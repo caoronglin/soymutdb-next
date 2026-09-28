@@ -72,7 +72,14 @@ class NewsCreate(BaseModel):
 
 
 class PublicationResponse(BaseModel):
-    id: str
+    """Public publication projection.
+
+    The persistence key is not part of the contract: a publication is addressed
+    by its DOI (``/content/publications/{doi}``), which is the identifier the
+    scholarly record itself uses. Rows without a DOI are still listed but have
+    no detail locator.
+    """
+
     title: str
     title_zh: str | None = None
     authors: str
@@ -138,11 +145,29 @@ class PublicationUpdate(BaseModel):
         return v
 
 
+class AdminPublicationResponse(PublicationResponse):
+    """Admin projection: adds the persistence key the admin routes address by.
+
+    The public DTO deliberately has no ``id`` (publications are located by DOI),
+    but ``PUT``/``DELETE /admin/publications/{id}`` operate on the key, so the
+    authenticated management surface needs it. Admin-only, never served
+    anonymously.
+    """
+
+    id: str
+
+
 class PublicationListResponse(BaseModel):
     items: list[PublicationResponse] = Field(default_factory=list)
     total: int = 0
     page: int = 1
     page_size: int = 20
+
+
+class AdminPublicationListResponse(PublicationListResponse):
+    """Admin list: items carry the persistence key the CRUD routes address by."""
+
+    items: list[AdminPublicationResponse] = Field(default_factory=list)
 
 
 class PageStatus(StrEnum):

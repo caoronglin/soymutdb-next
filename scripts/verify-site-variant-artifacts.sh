@@ -19,7 +19,13 @@
 # same commit as the public artifact, so a leak cannot ride a later deploy.
 #
 # Usage: bash scripts/verify-site-variant-artifacts.sh
-# Env:   SOYMUTDB_INTERNAL_SITE_URL  internal canonical origin (default: a
+#   One command, no preconditions: the script builds both variants, then scans
+#   the emitted trees and verifies isolation (exit 0 only when all pass).
+# Env:   SOYMUTDB_SITE_VARIANTS_PREBUILT=1
+#                                    reuse apps/web/dist/{external,internal}
+#                                    instead of building (the CI frontend gate
+#                                    already built them in the same run).
+#        SOYMUTDB_INTERNAL_SITE_URL  internal canonical origin (default: a
 #                                    reserved .invalid host, never a real one)
 # =============================================================================
 set -euo pipefail
@@ -32,8 +38,18 @@ cd "${REPO_ROOT}"
 # verification, so CI is cleared for the child process only.
 unset CI
 
-# The site variants default to internal noindex; the sentinel is the marker the
-# external artifact must never contain.
+# Vite's Rust transforms (oxc, lightningcss, tailwind oxide) size rayon's global
+# thread pool from the visible CPU count. On a many-core host with a small
+# thread budget, that pool can fail to initialise with `EAGAIN` before the build
+# starts (`rayon-core ... The global thread pool has not been initialized.
+# Resource temporarily unavailable`, exit 134). Capping the pool keeps the
+# single-command `build -> scan -> verify` path hermetic on such hosts; an
+# explicit caller value still wins, and CI's core count is unaffected.
+export RAYON_NUM_THREADS="${RAYON_NUM_THREADS:-4}"
+
+# The site variants default to internal noindex; the marker is also checked by
+# grep below. The scan sentinel set itself is owned by the Python checker so
+# the two can never drift apart; this run adds the deployment-specific origin.
 NOINDEX_MARKER="noindex, nofollow, noarchive"
 INTERNAL_SITE_URL="${SOYMUTDB_INTERNAL_SITE_URL:-https://internal.soymutdb.invalid}"
 
@@ -68,9 +84,20 @@ if [[ -e apps/web/dist/internal/data/content.json ]]; then
 fi
 
 echo "[site-variants] external artifact must not contain internal-only values"
+# Pull the shared default sentinels from the checker (single source of truth),
+# then add the internal origin this run actually built with. `--sentinel`
+# stays repeatable and a lone `--sentinel` still means "scan only this value".
+mapfile -t SITE_SENTINELS < <(
+  python3 scripts/check_site_artifact_isolation.py --print-default-sentinels
+)
+SITE_SENTINELS+=("${INTERNAL_SITE_URL}")
+sentinel_args=()
+for sentinel in "${SITE_SENTINELS[@]}"; do
+  sentinel_args+=(--sentinel "${sentinel}")
+done
 python3 scripts/check_site_artifact_isolation.py \
   --external-root apps/web/dist/external \
   --internal-root apps/web/dist/internal \
-  --sentinel "${NOINDEX_MARKER}"
+  "${sentinel_args[@]}"
 
 echo "[site-variants] portal dual-site artifacts are built and isolated"

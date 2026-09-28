@@ -19,11 +19,12 @@ import {
   getAssemblies,
   getAssemblyChromosomes,
   getSiteBranding,
+  getSiteContent,
   getTableView,
   searchRegionVariants,
 } from "@soymutdb/api-client";
 import SearchLocationView from "./SearchLocationView.vue";
-import { setLanguage } from "../lib/i18n";
+import { setLanguage, t } from "../lib/i18n";
 
 vi.mock("@soymutdb/api-client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@soymutdb/api-client")>();
@@ -32,6 +33,7 @@ vi.mock("@soymutdb/api-client", async (importOriginal) => {
     getAssemblies: vi.fn(),
     getAssemblyChromosomes: vi.fn(),
     getSiteBranding: vi.fn(),
+    getSiteContent: vi.fn(),
     getTableView: vi.fn(),
     searchRegionVariants: vi.fn(),
   };
@@ -55,6 +57,7 @@ beforeEach(() => {
     name_en: "SoyMutDB",
     icon_url: null,
   });
+  vi.mocked(getSiteContent).mockReset().mockResolvedValue({});
   vi.mocked(getTableView).mockReset().mockResolvedValue({
     kind: "variants",
     species: "Glycine max",
@@ -157,5 +160,98 @@ describe("region search assembly deep links", () => {
     await flushPromises();
 
     expect(router.currentRoute.value.query.assembly).toBe("6");
+  });
+});
+
+describe("region search editable content", () => {
+  it("renders the i18n title, start label and aria-label without overrides", async () => {
+    const { wrapper } = await mountLocation({});
+
+    expect(wrapper.get("h1").text()).toBe(t("search.location.title"));
+    const startInput = wrapper.get('[data-testid="location-start"]');
+    expect(startInput.attributes("aria-label")).toBe(t("search.location.start"));
+    wrapper.unmount();
+  });
+
+  it("renders the operator override for the page title", async () => {
+    vi.mocked(getSiteContent).mockResolvedValue({
+      "search.location.title": "运营位置检索",
+    } as never);
+
+    const { wrapper } = await mountLocation({});
+
+    expect(wrapper.get("h1").text()).toBe("运营位置检索");
+    wrapper.unmount();
+  });
+
+  it("renders the operator override on the start aria-label", async () => {
+    vi.mocked(getSiteContent).mockResolvedValue({ "search.location.start": "运营起始" } as never);
+
+    const { wrapper } = await mountLocation({});
+
+    expect(wrapper.get('[data-testid="location-start"]').attributes("aria-label")).toBe("运营起始");
+    wrapper.unmount();
+  });
+
+  it("renders the operator override for the empty-result message", async () => {
+    vi.mocked(getSiteContent).mockResolvedValue({ "ui.noResults": "运营无结果" } as never);
+
+    const { wrapper } = await mountLocation({
+      assembly: "5",
+      chromosome: "Chr01",
+      start: "1",
+      end: "2",
+      run: "1",
+    });
+
+    expect(wrapper.get('[data-testid="location-empty"]').text()).toBe("运营无结果");
+    wrapper.unmount();
+  });
+
+  it("retitles a template column through its content key", async () => {
+    vi.mocked(searchRegionVariants).mockResolvedValue([
+      { variant_id: "v1", chromosome: "Chr01", position: 5, impact: "HIGH", gene_id: "G1" },
+    ] as never);
+    vi.mocked(getTableView).mockResolvedValue({
+      kind: "variants",
+      species: "Glycine max",
+      site_variant: "external",
+      release_id: null,
+      template_id: null,
+      template_name: "builtin",
+      is_builtin_default: true,
+      columns: [{ key: "impact", label_zh: "影响", label_en: "Impact", visible: true }],
+      actions: { jbrowse: false, genome_preview: false },
+    } as never);
+    vi.mocked(getSiteContent).mockResolvedValue({
+      "search.genes.colMutation": "运营变异",
+    } as never);
+
+    const { wrapper } = await mountLocation({
+      assembly: "5",
+      chromosome: "Chr01",
+      start: "1",
+      end: "2",
+      run: "1",
+    });
+
+    expect(wrapper.get("thead th").text()).toBe("运营变异");
+    wrapper.unmount();
+  });
+
+  it("uses the ui.errorRetry override when the region query fails", async () => {
+    vi.mocked(getSiteContent).mockResolvedValue({ "ui.errorRetry": "运营重试" } as never);
+    vi.mocked(searchRegionVariants).mockRejectedValue(new Error("boom"));
+
+    const { wrapper } = await mountLocation({
+      assembly: "5",
+      chromosome: "Chr01",
+      start: "1",
+      end: "2",
+      run: "1",
+    });
+
+    expect(wrapper.get('[data-testid="location-error"]').text()).toBe("运营重试");
+    wrapper.unmount();
   });
 });

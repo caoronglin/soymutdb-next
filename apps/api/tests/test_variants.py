@@ -237,6 +237,7 @@ class TestExportVariants:
         await client.post("/api/v1/auth/register", json=payload)
         login_resp = await client.post(
             "/api/v1/auth/login",
+            headers={"Origin": "http://test"},
             json={"email": "viewer@example.com", "password": "TestPass123!"},
         )
         token = login_resp.json()["access_token"]

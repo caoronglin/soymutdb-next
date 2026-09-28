@@ -60,9 +60,12 @@ class _EmptyAdapter:
 
 
 # --------------------------------------------------------------------------- GAP-3
-def test_scoped_key_requires_explicit_site_variant() -> None:
-    with pytest.raises(TypeError):
-        SearchCache.make_key("Glyma", ("ncbi",))  # type: ignore[call-arg]
+def test_unscoped_key_keeps_the_legacy_shape() -> None:
+    """Omitting the whole scope must stay byte-compatible with the old key."""
+    key = SearchCache.make_key("Glyma", ("ncbi",))
+    assert key == SearchCache.make_key("Glyma", ("ncbi",), site_variant=None)
+    assert key.startswith("search:")
+    assert not key.startswith("search:external:")
 
 
 def test_scoped_key_separates_site_variant_namespaces() -> None:

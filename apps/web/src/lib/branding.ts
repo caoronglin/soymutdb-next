@@ -8,8 +8,9 @@
  * variant is `private, no-store` on the API side; this module never caches it
  * anywhere but the in-memory query cache.
  */
-import { computed, type ComputedRef } from "vue";
+import { computed, onMounted, onUnmounted, ref, type ComputedRef } from "vue";
 import { useQuery } from "@tanstack/vue-query";
+import i18n from "@soymutdb/i18n";
 
 import { getSiteBranding, type SiteBranding } from "@soymutdb/api-client";
 import type { SupportedLanguage } from "@soymutdb/i18n-core";
@@ -53,9 +54,15 @@ export function useSiteBranding(variant?: SiteVariant): SiteBrandingState {
     staleTime: 10 * 60_000,
     retry: false,
   });
+  const language = ref(currentLanguage.value);
+  const onLanguageChanged = (next: string) => {
+    language.value = next as SupportedLanguage;
+  };
+  onMounted(() => i18n.on("languageChanged", onLanguageChanged));
+  onUnmounted(() => i18n.off("languageChanged", onLanguageChanged));
 
   const displayName = computed(() =>
-    resolveBrandName(query.data.value, currentLanguage.value),
+    resolveBrandName(query.data.value, language.value),
   );
   const iconUrl = computed(() => query.data.value?.icon_url?.trim() || null);
 

@@ -7,10 +7,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@soymutdb/ui-vue", () => ({
   ConfigProvider: { template: "<div><slot /></div>" },
+  Button: {
+    props: ["disabled", "type", "htmlType", "size"],
+    emits: ["click"],
+    template:
+      '<button :type="htmlType ?? type ?? \'button\'" :disabled="disabled" @click="$emit(\'click\', $event)"><slot /></button>',
+  },
   Input: {
     template:
-      "<input :value=\"modelValue\" @input=\"$emit('update:modelValue', $event.target.value)\" />",
-    props: ["modelValue"],
+      "<input :value=\"value\" @input=\"$emit('update:value', $event.target.value)\" />",
+    props: ["value"],
   },
   Tag: { template: "<span><slot /></span>" },
   createThemeConfig: () => ({}),

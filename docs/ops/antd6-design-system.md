@@ -20,7 +20,7 @@ This document records the Ant Design 6 rules used by the public portal and Admin
 - [Card](https://ant.design/components/card)
 - [Modal](https://ant.design/components/modal)
 
-The repository pins Ant Design `6.6.1` through the workspace catalog. Imports must go through the explicit facades `apps/web/src/lib/antd.ts` and `apps/admin/src/lib/antd.ts` unless a documented native semantic element is more appropriate (for example, a data table's `thead`/`tbody`).
+The repository pins Ant Design `6.6.5` and ProComponents v3 `3.1.15-2` through the workspace catalog. The React 19 applications use Umi Max 4 and import through the shared `packages/ui-react` facade and app-level barrels `apps/web/src/lib/antd.ts` / `apps/admin/src/lib/antd.ts`, unless a documented native semantic element is more appropriate (for example, a data table's `thead`/`tbody`).
 
 ## 2. Token and value contract
 
@@ -77,13 +77,15 @@ Implementation and tests:
 ## 6. Acceptance commands
 
 ```bash
-cd /mnt/data02/T25ronglin/code/web
-./node_modules/.bin/tsc --noEmit -p apps/web/tsconfig.json
-./node_modules/.bin/tsc --noEmit -p apps/admin/tsconfig.json
-cd apps/admin && ./node_modules/.bin/vitest run
-cd apps/admin && ./node_modules/.bin/vite build
-cd /mnt/data02/T25ronglin/code/web
-cd e2e && npm run test:visual
+pnpm --filter @soymutdb/web typecheck
+pnpm --filter @soymutdb/admin typecheck
+pnpm --filter @soymutdb/admin test
+# Umi config requires explicit demo origins when producing a local build.
+VITE_DEPLOYMENT_MODE=demo \
+VITE_API_BASE_URL=https://api.soymutdb.test \
+VITE_JBROWSE_BASE_URL=https://jbrowse.soymutdb.test \
+  pnpm --filter @soymutdb/admin build
+cd e2e && pnpm run test:visual
 ```
 
 The public visual gate covers `/`, `/search/genes`, `/search/location`, `/search/gbrowse`, and `/blast` at 1440x900, 1024x768, and 390x844. The second-round evidence at `e2e/visual-artifacts/20260824T150817Z/report.json` has 15/15 passing metrics and `undersized=0`; the related acceptance record is `docs/ops/evidence/visual-layout-t49-20260824T150817Z.md`.

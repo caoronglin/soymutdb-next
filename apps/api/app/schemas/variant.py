@@ -105,6 +105,9 @@ class VariantFilterParams(BaseModel):
     ref: str | None = Field(default=None, min_length=1, max_length=4096)
     alt: str | None = Field(default=None, min_length=1, max_length=4096)
     gene_id: str | None = None
+    #: Internal surrogate of the mutant line, set by the API *after* resolving a
+    #: public identifier. It is never accepted directly from a client and never
+    #: serialised into a response.
     mutant_line_id: str | None = None
     variant_type: VariantType | None = None
     consequence: ConsequenceType | None = None

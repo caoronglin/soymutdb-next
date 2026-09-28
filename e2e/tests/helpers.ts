@@ -7,7 +7,7 @@
  * `<html data-app-ready>`, so a spec must wait for it before interacting —
  * otherwise a click can land on the static fallback and be silently discarded.
  */
-import { expect, type Page } from "@playwright/test";
+import { expect, type Page, type Request } from "@playwright/test";
 
 /**
  * Wait until the SPA owns the document. Fails with a clear message instead of
@@ -66,3 +66,305 @@ export function trackErrors(
   });
   return errors;
 }
+
+// ---------------------------------------------------------------------------
+// Deterministic biological mocks (no backend required)
+// ---------------------------------------------------------------------------
+
+/**
+ * The single assembly every mocked request is scoped to. The id and the name
+ * are intentionally different strings so a spec can prove the id scopes the
+ * request while the name is what the UI renders and the deep link carries.
+ */
+export const MOCK_ASSEMBLY = Object.freeze({
+  id: "1",
+  name: "Wm82.a4.v1",
+  species: "Glycine max",
+  version: "a4.v1",
+  is_default: true,
+});
+
+export const MOCK_GENE_ID = "Glyma.01G000100";
+export const MOCK_MUTANT_PUBLIC_ID = "SMDB-00001";
+export const MOCK_MUTANT_INTERNAL_ID = "INT-MUT-000001";
+export const MOCK_VARIANT_ID = "Wm82.a4.v1_01_000123";
+
+/** One gene result row. `position`/`end_position` drive the JBrowse action. */
+const MOCK_GENE_ROW = Object.freeze({
+  id: "101",
+  gene_id: MOCK_GENE_ID,
+  symbol: null,
+  name: "Mock gene 1",
+  biotype: "protein_coding",
+  assembly_id: MOCK_ASSEMBLY.id,
+  assembly_name: MOCK_ASSEMBLY.name,
+  chromosome: "chr01",
+  start_pos: 100,
+  end_pos: 200,
+  strand: "+",
+  description: "A deterministic offline gene row.",
+  variant_count: 2,
+  high_impact_variants: 1,
+  // ConfigurableTable's JBrowse action reads these raw keys directly; the API
+  // list schema carries them so the action is not silently rendered as "—".
+  position: 100,
+  end_position: 200,
+});
+
+const MOCK_MUTANT_ROW = Object.freeze({
+  public_id: MOCK_MUTANT_PUBLIC_ID,
+  name: "Mock mutant line 1",
+  mutagen: "EMS",
+  cultivar: "Williams 82",
+  variant_count: 3,
+});
+
+const MOCK_VARIANT_ROW = Object.freeze({
+  variant_id: MOCK_VARIANT_ID,
+  chromosome: "chr01",
+  position: 150,
+  ref_allele: "A",
+  alt_allele: "G",
+  variant_type: "SNV",
+  impact: "HIGH",
+  consequence: "missense_variant",
+  gene_id: MOCK_GENE_ID,
+  assembly: MOCK_ASSEMBLY.name,
+  assembly_id: MOCK_ASSEMBLY.id,
+  release_id: "7",
+});
+
+/** A request captured by {@link mockEntityApis}, for context-consistency checks. */
+export interface CapturedApiRequest {
+  method: string;
+  pathname: string;
+  search: string;
+  releaseHeader: string | null;
+  authorizationHeader: string | null;
+  request: Request;
+}
+
+/** Paths/streams this mock owns; anything else falls through to the network. */
+function isMockedApiRequest(url: URL): boolean {
+  if (url.pathname.includes("/api/v1/")) return true;
+  // The internal artifact bakes an origin-only API base (no /api/v1), so match
+  // that host explicitly instead of assuming a path shape.
+  if (url.hostname === "api.internal.soymutdb.test") return true;
+  return false;
+}
+
+/**
+ * Serve the entity list/search/detail APIs from an in-browser route so real
+ * result rows, their detail links and the detail payloads render with no
+ * backend. Every mocked request is recorded so a spec can assert that the
+ * assembly / release context did not change between the search and the detail
+ * hop.
+ *
+ * The handler is path-based, not origin-based: the public artifact mounts the
+ * API under its deployment sub-path while the internal artifact bakes an
+ * absolute origin. Cross-origin (internal) requests get CORS headers and an
+ * OPTIONS preflight, since the browser enforces CORS even for fulfilled routes.
+ */
+export async function mockEntityApis(page: Page): Promise<CapturedApiRequest[]> {
+  const captured: CapturedApiRequest[] = [];
+
+  await page.route(/.*/, async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (!isMockedApiRequest(url)) {
+      await route.fallback();
+      return;
+    }
+
+    captured.push({
+      method: request.method(),
+      pathname: url.pathname,
+      search: url.search,
+      releaseHeader: request.headers()["x-soymutdb-release"] ?? null,
+      authorizationHeader: request.headers()["authorization"] ?? null,
+      request,
+    });
+
+    const origin = request.headers()["origin"];
+    const cors: Record<string, string> = {
+      "access-control-allow-origin": origin ?? "*",
+      "access-control-allow-credentials": "true",
+      "access-control-allow-headers": "authorization,content-type,x-soymutdb-release",
+      "access-control-allow-methods": "GET,POST,OPTIONS",
+      vary: "Origin",
+    };
+
+    if (request.method() === "OPTIONS") {
+      return route.fulfill({ status: 204, headers: cors });
+    }
+
+    const json = (body: unknown, status = 200) =>
+      route.fulfill({
+        status,
+        contentType: "application/json",
+        headers: cors,
+        body: JSON.stringify(body),
+      });
+
+    const path = url.pathname;
+
+    // --- auth ---
+    if (path.endsWith("/auth/login")) {
+      return json({ access_token: "e2e-access-token", expires_in: 900 });
+    }
+
+    // --- genome catalog ---
+    if (path.endsWith("/genes/assemblies")) return json([MOCK_ASSEMBLY]);
+    if (/\/genes\/assemblies\/[^/]+\/chromosomes$/.test(path)) {
+      return json([{ id: "1", assembly_id: MOCK_ASSEMBLY.id, name: "chr01", length: 100000, order: 0 }]);
+    }
+
+    // --- table templates ---
+    const tableKind = /\/table-views\/([a-z_]+)$/.exec(path)?.[1];
+    if (tableKind) {
+      const columns: Record<string, Array<[string, string]>> = {
+        genes: [
+          ["assembly_name", "Genome version"],
+          ["chromosome", "Chromosome"],
+          ["position", "Position"],
+          ["variant_count", "Mutation feature"],
+          ["gene_id", "Gene ID"],
+        ],
+        mutant_lines: [
+          ["public_id", "Mutant line"],
+          ["name", "Name"],
+          ["mutagen", "Mutagen"],
+        ],
+        variants: [
+          ["variant_id", "Variant ID"],
+          ["chromosome", "Chromosome"],
+          ["position", "Position"],
+          ["gene_id", "Gene ID"],
+        ],
+      };
+      return json({
+        kind: tableKind,
+        columns: (columns[tableKind] ?? columns.variants).map(([key, label_en]) => ({
+          key,
+          label_zh: label_en,
+          label_en,
+          visible: true,
+        })),
+        actions: { jbrowse: true, genome_preview: false },
+      });
+    }
+
+    // --- gene search / detail / related ---
+    if (/\/genes\/[^/]+$/.test(path) && !path.endsWith("/genes/assemblies")) {
+      return json({
+        ...MOCK_GENE_ROW,
+        source: "mock",
+        extra: {},
+        annotations: [],
+        transcripts: [],
+        snp_count: 1,
+        missense_count: 1,
+      });
+    }
+    if (path.endsWith("/genes")) {
+      return json({
+        items: [MOCK_GENE_ROW],
+        next_cursor: null,
+        has_more: false,
+        page: 1,
+        page_size: 20,
+        total: 1,
+        total_pages: 1,
+      });
+    }
+    if (path.includes("/expression/genes/")) {
+      return json({ gene_id: MOCK_GENE_ID, expressions: [], next_cursor: null, has_more: false });
+    }
+    if (path.includes("/homologs/genes/")) {
+      return json({ gene_id: MOCK_GENE_ID, homologs: [], next_cursor: null, has_more: false });
+    }
+
+    // --- mutant list / detail / phenotypes ---
+    if (/\/mutants\/[^/]+\/phenotypes$/.test(path)) return json([]);
+    if (/\/mutants\/[^/]+$/.test(path)) {
+      return json({
+        ...MOCK_MUTANT_ROW,
+        species: "Glycine max",
+        description: "A deterministic offline mutant line.",
+        generation: "M3",
+        phenotype_summary: null,
+        is_public: true,
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
+      });
+    }
+    if (path.endsWith("/mutants")) return json([MOCK_MUTANT_ROW]);
+
+    // --- variant list / detail ---
+    if (/\/variants\/[^/]+$/.test(path)) {
+      return json({ ...MOCK_VARIANT_ROW, end_position: 150, length: 1 });
+    }
+    if (path.endsWith("/variants")) {
+      return json({
+        items: [MOCK_VARIANT_ROW],
+        cursor: null,
+        next_cursor: null,
+        has_more: false,
+        total_count: 1,
+      });
+    }
+
+    // --- omnibox search (public shape; internal uses the same contract today) ---
+    if (path.endsWith("/search/internal")) {
+      return json({
+        query: url.searchParams.get("query") ?? "",
+        mutants: [
+          {
+            entity_type: "mutant_line",
+            public_id: MOCK_MUTANT_PUBLIC_ID,
+            internal_id: MOCK_MUTANT_INTERNAL_ID,
+            name: MOCK_MUTANT_ROW.name,
+            matched_field: "internal_id",
+            match_type: "exact",
+            is_public: true,
+            release_id: 7,
+            url: `/mutants/${MOCK_MUTANT_PUBLIC_ID}`,
+          },
+        ],
+        genes: [],
+        total_count: 1,
+      });
+    }
+    if (path.endsWith("/search")) {
+      return json({
+        query: url.searchParams.get("query") ?? "",
+        results: [
+          {
+            type: "mutant_line",
+            id: MOCK_MUTANT_PUBLIC_ID,
+            name: `${MOCK_MUTANT_ROW.name} (${MOCK_MUTANT_INTERNAL_ID})`,
+            url: `/mutants/${MOCK_MUTANT_PUBLIC_ID}`,
+            assembly: MOCK_ASSEMBLY.name,
+            release_id: 7,
+          },
+        ],
+        by_type: { mutant_line: 1 },
+        cursor: null,
+        next_cursor: null,
+        has_more: false,
+        total_count: 1,
+      });
+    }
+
+    // --- news ---
+    if (path.endsWith("/news/featured")) return json({ featured: [], carousel: [] });
+    if (path.endsWith("/news")) return json({ items: [], total: 0 });
+
+    return json({}, 404);
+  });
+
+  return captured;
+}
+
+/** Backwards-compatible alias for the gene-only suites. */
+export const mockGeneApis = mockEntityApis;

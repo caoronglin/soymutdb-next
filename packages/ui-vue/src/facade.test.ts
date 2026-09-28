@@ -48,6 +48,15 @@ describe("ui-vue facade re-export surface (plan D4)", () => {
     it("imports the design system only from antdv-next", () => {
         expect(indexSource).toContain('from "antdv-next"');
     });
+
+    // Regression guard: AntD derives its colour ramp with tinycolor, which
+    // cannot parse oklch — seeding colorPrimary with oklch silently yields a
+    // near-black primary on every Button/Tag/Link. The React portal hit this
+    // and seeded with hex; the Vue facade must keep doing the same.
+    it("seeds colorPrimary with hex, never oklch", () => {
+        expect(indexSource).toContain("colorPrimary: BRAND_PRIMARY_HEX");
+        expect(indexSource).not.toMatch(/colorPrimary:\s*BRAND_PRIMARY_OKLCH/);
+    });
 });
 
 describe("shared design tokens", () => {

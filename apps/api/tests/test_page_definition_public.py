@@ -114,8 +114,21 @@ async def test_public_http_endpoint_returns_published_version(app, db_session):
         after = await ac.get("/api/v1/page-definitions/public-page")
         assert after.status_code == 200
         body = after.json()
+        assert set(body) == {"route", "version", "status", "definition"}
+        assert body["route"] == "/public-page"
+        assert body["version"] == req.version
         assert body["status"] == "published"
         assert body["definition"]["root"]["props"]["content"] == "<p>public page</p>"
+        for internal_field in (
+            "id",
+            "page_id",
+            "edited_by",
+            "edit_comment",
+            "published_at",
+            "created_at",
+            "updated_at",
+        ):
+            assert internal_field not in body
 
 @pytest.mark.asyncio
 async def test_published_routes_endpoint_exposes_only_ssg_safe_published_pages(db_session):

@@ -24,6 +24,12 @@ from app.schemas.blast import (
     validate_sequence_charset,
 )
 from app.services.blast_service import BlastService, _worker_parameters
+from app.services.release_context import ReleaseContext
+
+
+def _context(release_id: int = 7) -> ReleaseContext:
+    """Published release the fake session's rows belong to."""
+    return ReleaseContext(release_id=release_id, assembly_id=1, assembly="Wm82.a2.v1")
 
 
 def _make_request(**overrides: Any) -> BlastSubmitRequest:
@@ -169,7 +175,7 @@ class TestSequenceLength:
         with pytest.raises(AppValidationError, match="exceeds max length"):
             asyncio.run(
                 blast_service.BlastService().submit_job(
-                    session, uuid.uuid4(), request
+                    session, uuid.uuid4(), request, release_context=_context()
                 )
             )
 
@@ -181,7 +187,9 @@ class TestSequenceLength:
 
 class TestProgramDatabaseCompatibility:
     async def _submit(self, session: FakeDbSession, request: BlastSubmitRequest):
-        return await BlastService().submit_job(session, uuid.uuid4(), request)
+        return await BlastService().submit_job(
+            session, uuid.uuid4(), request, release_context=_context()
+        )
 
     def test_blastn_against_nucl_db_ok(self) -> None:
         import asyncio
@@ -296,7 +304,9 @@ class TestParameters:
         request = _make_request(
             parameters=BlastParameters(gap_open=5, dust=False, percent_identity=90.0)
         )
-        asyncio.run(BlastService().submit_job(session, uuid.uuid4(), request))
+        asyncio.run(BlastService().submit_job(
+            session, uuid.uuid4(), request, release_context=_context()
+        ))
         job = next(obj for obj in session.added if isinstance(obj, BlastJob))
         assert job.status == BlastJobStatus.PENDING
         params = job.parameters or {}

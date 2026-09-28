@@ -1,3 +1,217 @@
+<template>
+  <div class="admin-page">
+    <AdminPageHeader :title="t('admin.tableViews')" :description="t('admin.tableViewsHint')">
+      <template #actions>
+        <Button size="small" data-testid="templates-new" @click="startNew">
+          {{ t("admin.newTemplate") }}
+        </Button>
+      </template>
+    </AdminPageHeader>
+
+    <form class="admin-toolbar">
+      <label class="admin-field">
+        {{ t("admin.table") }}
+        <select v-model="kind" class="admin-control" data-testid="templates-kind">
+          <option v-for="value in TABLE_KINDS" :key="value" :value="value">{{ value }}</option>
+        </select>
+      </label>
+      <label class="admin-field">
+        {{ t("admin.species") }}
+        <select v-model="species" class="admin-control" data-testid="templates-species">
+          <option value="Glycine max">Glycine max</option>
+          <option value="Zea mays">Zea mays</option>
+        </select>
+      </label>
+      <label class="admin-field">
+        {{ t("admin.siteVariant") }}
+        <select v-model="siteVariant" class="admin-control" data-testid="templates-variant">
+          <option value="external">external</option>
+          <option value="internal">internal</option>
+        </select>
+      </label>
+    </form>
+
+    <AdminState v-if="query.isPending.value" state="loading" testid="templates-loading" />
+    <AdminState
+      v-else-if="query.isError.value"
+      state="error"
+      testid="templates-error"
+      :title="t('common.errorDescription')"
+    >
+      <template #actions>
+        <Button size="small" @click="query.refetch()">{{ t("common.retry") }}</Button>
+      </template>
+    </AdminState>
+    <AdminState
+      v-else-if="templates.length === 0"
+      state="empty"
+      testid="templates-empty"
+      :title="t('admin.noTemplates')"
+    />
+
+    <AdminCard v-else>
+      <div class="admin-table-wrap">
+        <table class="admin-table" data-testid="templates-table">
+          <thead>
+            <tr>
+              <th scope="col">{{ t("admin.templateName") }}</th>
+              <th scope="col">{{ t("admin.columns") }}</th>
+              <th scope="col">{{ t("common.status") }}</th>
+              <th scope="col">{{ t("common.actions") }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="template in templates" :key="template.id" data-testid="template-row">
+              <td>{{ template.name }}</td>
+              <td class="font-mono text-xs">
+                {{
+                  template.columns
+                    .filter((column) => column.visible)
+                    .map((column) => column.key)
+                    .join(", ")
+                }}
+              </td>
+              <td>
+                <AdminStatusTag v-if="template.is_default" status="default" />
+                <span v-if="template.release_id" class="ms-1 text-xs text-muted-foreground">
+                  release {{ template.release_id }}
+                </span>
+              </td>
+              <td>
+                <div class="admin-row-actions">
+                  <button
+                    type="button"
+                    class="admin-link"
+                    :data-testid="'template-edit-' + template.id"
+                    @click="selectTemplate(template)"
+                  >
+                    {{ t("common.edit") }}
+                  </button>
+                  <button
+                    v-if="!template.is_default"
+                    type="button"
+                    class="admin-link"
+                    :data-testid="'template-default-' + template.id"
+                    @click="promoteMutation.mutate(template.id)"
+                  >
+                    {{ t("admin.setDefault") }}
+                  </button>
+                  <button
+                    type="button"
+                    class="admin-link admin-link--danger"
+                    :data-testid="'template-delete-' + template.id"
+                    @click="deleteMutation.mutate(template.id)"
+                  >
+                    {{ t("common.delete") }}
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </AdminCard>
+
+    <AdminCard
+      :title="selectedId ? t('common.edit') : t('admin.newTemplate')"
+      testid="template-editor"
+    >
+      <div class="grid gap-4">
+        <label class="admin-field max-w-md">
+          {{ t("admin.templateName") }}
+          <input v-model="draftName" class="admin-control" data-testid="template-name" />
+        </label>
+
+        <fieldset class="grid gap-2">
+          <legend class="admin-field">{{ t("admin.columns") }}</legend>
+          <p v-if="draftColumns.length === 0" class="text-xs text-muted-foreground">
+            {{ t("admin.noTemplates") }}
+          </p>
+          <div
+            v-for="(column, index) in draftColumns"
+            :key="column.key"
+            class="flex flex-wrap items-center gap-2 text-sm"
+            :data-testid="'template-column-' + column.key"
+          >
+            <input v-model="column.visible" type="checkbox" :data-testid="'template-visible-' + column.key" />
+            <span class="font-mono text-xs">{{ column.key }}</span>
+            <button
+              type="button"
+              class="admin-link"
+              :disabled="index === 0"
+              :aria-label="`${column.key} up`"
+              @click="move(index, -1)"
+            >
+              ↑
+            </button>
+            <button
+              type="button"
+              class="admin-link"
+              :disabled="index === draftColumns.length - 1"
+              :aria-label="`${column.key} down`"
+              @click="move(index, 1)"
+            >
+              ↓
+            </button>
+            <button
+              type="button"
+              class="admin-link admin-link--danger"
+              :aria-label="`${column.key} remove`"
+              @click="draftColumns = draftColumns.filter((_, position) => position !== index)"
+            >
+              ×
+            </button>
+          </div>
+        </fieldset>
+
+        <div v-if="availableCandidates.length" class="flex flex-wrap gap-2">
+          <button
+            v-for="candidate in availableCandidates"
+            :key="candidate.key"
+            type="button"
+            class="rounded-md border border-dashed border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted"
+            :data-testid="'template-add-' + candidate.key"
+            @click="addColumn(candidate.key)"
+          >
+            + {{ candidate.label }}
+          </button>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-4 text-sm">
+          <label class="flex items-center gap-2">
+            <input v-model="draftActions.jbrowse" type="checkbox" data-testid="template-action-jbrowse" />
+            JBrowse 2
+          </label>
+          <label class="flex items-center gap-2">
+            <input v-model="draftActions.genome_preview" type="checkbox" data-testid="template-action-genome" />
+            {{ t("admin.genomePreview") }}
+          </label>
+        </div>
+
+        <p
+          v-if="errorMessage"
+          role="alert"
+          class="admin-state admin-state--error"
+          data-testid="templates-save-error"
+        >
+          {{ errorMessage }}
+        </p>
+
+        <div>
+          <Button
+            type="primary"
+            :disabled="draftColumns.length === 0 || saveMutation.isPending.value"
+            data-testid="template-save"
+            @click="saveMutation.mutate()"
+          >
+            {{ t("common.save") }}
+          </Button>
+        </div>
+      </div>
+    </AdminCard>
+  </div>
+</template>
+
 <script setup lang="ts">
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed, reactive, ref, toValue } from "vue";
@@ -12,8 +226,12 @@ import {
   type TableKind,
   type TableViewTemplate,
 } from "@soymutdb/api-client";
-import { Button, ConfigProvider, Tag, createThemeConfig } from "@soymutdb/ui-vue";
+import { Button } from "@soymutdb/ui-vue";
 
+import AdminCard from "../components/AdminCard.vue";
+import AdminPageHeader from "../components/AdminPageHeader.vue";
+import AdminState from "../components/AdminState.vue";
+import AdminStatusTag from "../components/AdminStatusTag.vue";
 import { t } from "../lib/i18n";
 
 /**
@@ -82,21 +300,26 @@ const CANDIDATES: Record<TableKind, Array<{ key: string; label: string }>> = {
 const query = useQuery({
   queryKey: computed(() => ["admin", "table-templates", kind.value]),
   queryFn: () => listTableViewTemplates({ kind: kind.value }),
-  staleTime: 15_000,
 });
 
 const templates = computed<TableViewTemplate[]>(() => toValue(query.data)?.items ?? []);
 const candidates = computed(() => CANDIDATES[kind.value] ?? []);
+const availableCandidates = computed(() =>
+  candidates.value.filter(
+    (candidate) => !draftColumns.value.some((column) => column.key === candidate.key),
+  ),
+);
 
-function selectTemplate(template: TableViewTemplate) {
+function selectTemplate(template: TableViewTemplate): void {
   selectedId.value = template.id;
   draftName.value = template.name;
   draftColumns.value = template.columns.map((column) => ({ ...column }));
   draftActions.jbrowse = template.actions.jbrowse;
   draftActions.genome_preview = template.actions.genome_preview;
+  errorMessage.value = "";
 }
 
-function startNew() {
+function startNew(): void {
   selectedId.value = null;
   draftName.value = "";
   // The default is the built-in order for this kind, with the homolog columns
@@ -111,9 +334,10 @@ function startNew() {
     }));
   draftActions.jbrowse = true;
   draftActions.genome_preview = kind.value === "mutation_sites";
+  errorMessage.value = "";
 }
 
-function addColumn(key: string) {
+function addColumn(key: string): void {
   const candidate = candidates.value.find((item) => item.key === key);
   if (!candidate) return;
   draftColumns.value.push({
@@ -124,7 +348,7 @@ function addColumn(key: string) {
   });
 }
 
-function move(index: number, delta: number) {
+function move(index: number, delta: number): void {
   const next = index + delta;
   if (next < 0 || next >= draftColumns.value.length) return;
   const columns = [...draftColumns.value];
@@ -173,164 +397,3 @@ const deleteMutation = useMutation({
   },
 });
 </script>
-
-<template>
-  <ConfigProvider :theme="createThemeConfig({ dark: false })">
-    <div>
-      <h1 class="text-xl font-semibold">{{ t("admin.tableViews") }}</h1>
-      <p class="mt-1 max-w-3xl text-sm opacity-70">{{ t("admin.tableViewsHint") }}</p>
-
-      <div class="mt-4 flex flex-wrap items-end gap-3">
-        <label class="text-sm opacity-70">
-          {{ t("admin.table") }}
-          <select v-model="kind" class="ms-2 rounded-md border bg-background px-2 py-1.5" data-testid="templates-kind">
-            <option v-for="value in TABLE_KINDS" :key="value" :value="value">{{ value }}</option>
-          </select>
-        </label>
-        <label class="text-sm opacity-70">
-          {{ t("admin.species") }}
-          <select v-model="species" class="ms-2 rounded-md border bg-background px-2 py-1.5" data-testid="templates-species">
-            <option value="Glycine max">Glycine max</option>
-            <option value="Zea mays">Zea mays</option>
-          </select>
-        </label>
-        <label class="text-sm opacity-70">
-          {{ t("admin.siteVariant") }}
-          <select v-model="siteVariant" class="ms-2 rounded-md border bg-background px-2 py-1.5" data-testid="templates-variant">
-            <option value="external">external</option>
-            <option value="internal">internal</option>
-          </select>
-        </label>
-        <Button size="small" data-testid="templates-new" @click="startNew">{{ t("admin.newTemplate") }}</Button>
-      </div>
-
-      <p v-if="query.isPending.value" class="mt-4 text-sm opacity-70">{{ t("common.loading") }}</p>
-      <p v-else-if="query.isError.value" data-testid="templates-error" class="mt-4 text-sm text-red-700">
-        {{ t("common.errorDescription") }}
-      </p>
-      <p v-else-if="templates.length === 0" data-testid="templates-empty" class="mt-4 text-sm opacity-70">
-        {{ t("admin.noTemplates") }}
-      </p>
-      <table v-else class="mt-4 w-full text-sm" data-testid="templates-table">
-        <thead class="text-left opacity-60">
-          <tr>
-            <th scope="col" class="py-2">{{ t("admin.templateName") }}</th>
-            <th scope="col" class="py-2">{{ t("admin.columns") }}</th>
-            <th scope="col" class="py-2">{{ t("common.status") }}</th>
-            <th scope="col" class="py-2">{{ t("common.actions") }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="template in templates" :key="template.id" class="border-t" data-testid="template-row">
-            <td class="py-2">{{ template.name }}</td>
-            <td class="py-2 font-mono text-xs">
-              {{ template.columns.filter((column) => column.visible).map((column) => column.key).join(", ") }}
-            </td>
-            <td class="py-2">
-              <Tag v-if="template.is_default" color="green">default</Tag>
-              <Tag v-if="template.release_id" color="gold">release {{ template.release_id }}</Tag>
-            </td>
-            <td class="py-2">
-              <button type="button" class="underline" :data-testid="'template-edit-' + template.id" @click="selectTemplate(template)">
-                {{ t("common.edit") }}
-              </button>
-              <button
-                v-if="!template.is_default"
-                type="button"
-                class="ms-3 underline"
-                :data-testid="'template-default-' + template.id"
-                @click="promoteMutation.mutate(template.id)"
-              >
-                {{ t("admin.setDefault") }}
-              </button>
-              <button
-                type="button"
-                class="ms-3 underline text-red-700"
-                :data-testid="'template-delete-' + template.id"
-                @click="deleteMutation.mutate(template.id)"
-              >
-                {{ t("common.delete") }}
-              </button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-
-      <section class="mt-8 rounded-lg border p-4" data-testid="template-editor">
-        <h2 class="text-sm font-medium">{{ selectedId ? t("common.edit") : t("admin.newTemplate") }}</h2>
-        <div class="mt-3 grid gap-3">
-          <label class="text-sm opacity-70">
-            {{ t("admin.templateName") }}
-            <input v-model="draftName" class="mt-1 w-full max-w-md rounded-md border bg-background px-2 py-1.5" data-testid="template-name" />
-          </label>
-
-          <fieldset class="grid gap-2">
-            <legend class="text-sm opacity-70">{{ t("admin.columns") }}</legend>
-            <div
-              v-for="(column, index) in draftColumns"
-              :key="column.key"
-              class="flex items-center gap-2 text-sm"
-              :data-testid="'template-column-' + column.key"
-            >
-              <input v-model="column.visible" type="checkbox" :data-testid="'template-visible-' + column.key" />
-              <span class="font-mono text-xs">{{ column.key }}</span>
-              <button type="button" class="underline" :disabled="index === 0" @click="move(index, -1)">↑</button>
-              <button
-                type="button"
-                class="underline"
-                :disabled="index === draftColumns.length - 1"
-                @click="move(index, 1)"
-              >
-                ↓
-              </button>
-              <button
-                type="button"
-                class="underline text-red-700"
-                @click="draftColumns = draftColumns.filter((_, position) => position !== index)"
-              >
-                ×
-              </button>
-            </div>
-          </fieldset>
-
-          <div class="flex flex-wrap gap-2">
-            <button
-              v-for="candidate in candidates.filter((item) => !draftColumns.some((column) => column.key === item.key))"
-              :key="candidate.key"
-              type="button"
-              class="rounded-md border px-2 py-1 text-xs"
-              :data-testid="'template-add-' + candidate.key"
-              @click="addColumn(candidate.key)"
-            >
-              + {{ candidate.label }}
-            </button>
-          </div>
-
-          <div class="flex items-center gap-4 text-sm">
-            <label class="flex items-center gap-2">
-              <input v-model="draftActions.jbrowse" type="checkbox" data-testid="template-action-jbrowse" />
-              JBrowse 2
-            </label>
-            <label class="flex items-center gap-2">
-              <input v-model="draftActions.genome_preview" type="checkbox" data-testid="template-action-genome" />
-              {{ t("admin.genomePreview") }}
-            </label>
-          </div>
-
-          <p v-if="errorMessage" role="alert" class="text-sm text-red-700" data-testid="templates-save-error">
-            {{ errorMessage }}
-          </p>
-          <div class="flex gap-2">
-            <Button
-              :disabled="draftColumns.length === 0 || saveMutation.isPending.value"
-              data-testid="template-save"
-              @click="saveMutation.mutate()"
-            >
-              {{ t("common.save") }}
-            </Button>
-          </div>
-        </div>
-      </section>
-    </div>
-  </ConfigProvider>
-</template>

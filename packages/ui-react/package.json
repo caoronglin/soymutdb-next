@@ -1,0 +1,36 @@
+{
+  "name": "@soymutdb/ui-react",
+  "version": "2.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared React 19, Ant Design 6 and ProComponents v3 facade for SoyMutDB",
+  "exports": {
+    ".": {
+      "types": "./src/index.tsx",
+      "import": "./src/index.tsx"
+    }
+  },
+  "main": "./src/index.tsx",
+  "types": "./src/index.tsx",
+  "files": [
+    "src"
+  ],
+  "peerDependencies": {
+    "@ant-design/pro-components": "catalog:",
+    "antd": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:"
+  },
+  "devDependencies": {
+    "@ant-design/pro-components": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "antd": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "typescript": "catalog:"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

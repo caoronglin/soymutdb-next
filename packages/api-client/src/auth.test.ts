@@ -16,6 +16,7 @@ import {
   setAccessToken,
   __resetAuthStateForTests,
   AUTH_REFRESH_PATH,
+  getCurrentUser,
 } from "./auth";
 import { getAccessToken, setAuthTokens, clearAuth, ApiError } from "./client";
 
@@ -399,8 +400,7 @@ describe("auth coordination", () => {
     expect(getAccessToken()).toBeNull();
   });
 
-  it("errors never expose tokens in the message", async () => {
-    setAuthTokens("secret-token");
+  it("errors never expose tokens in the message", async () => {    setAuthTokens("secret-token");
     installFetchMock({
       refreshResponse: () =>
         jsonResponse(
@@ -422,5 +422,61 @@ describe("auth coordination", () => {
       // replace it), so the correlation id is the original request's.
       expect(apiErr.request_id).toBe("r1");
     }
+  });
+});
+
+describe("getCurrentUser", () => {
+  beforeEach(() => {
+    __resetAuthStateForTests();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    __resetAuthStateForTests();
+  });
+
+  it("parses the profile from GET /auth/me and carries the bearer token", async () => {
+    setAccessToken("access-token");
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      async (input: string | URL | Request, init?: RequestInit) => {
+        calls.push({ url: String(input), init: init ?? {} });
+        return jsonResponse({
+          id: "u1",
+          username: "rui",
+          email: "rui@example.org",
+          full_name: null,
+          is_active: true,
+          is_superuser: false,
+          role_name: "researcher",
+        });
+      },
+    );
+
+    const user = await getCurrentUser();
+
+    expect(user.role_name).toBe("researcher");
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe("/api/v1/auth/me");
+    expect(calls[0].init.method).toBe("GET");
+    expect((calls[0].init.headers as Headers).get("Authorization")).toBe(
+      "Bearer access-token",
+    );
+  });
+
+  it("rejects with the 401 for an anonymous session after one refresh attempt", async () => {
+    const { refreshCalls } = installFetchMock({
+      refreshResponse: () =>
+        jsonResponse(
+          { error: { code: "invalid_token", message: "nope" }, request_id: "r1" },
+          401,
+        ),
+      failures: 1,
+    });
+
+    await expect(getCurrentUser()).rejects.toMatchObject({ status: 401 });
+    // One refresh attempt is made (the token may simply be expired), then the
+    // original 401 propagates so the caller can treat it as anonymous.
+    expect(refreshCalls()).toHaveLength(1);
   });
 });

@@ -1,5 +1,5 @@
 /**
- * Deployment-context resolution for the Vue portal (DB-CORE-5 / review R1).
+ * Deployment-context resolution for the React portal (DB-CORE-5 / review R1).
  *
  * Every value here is a build/runtime deployment decision, never inferred from
  * the host, IP, cookies, or user agent:
@@ -17,8 +17,14 @@
 
 import { setReleaseId as setClientReleaseId } from "@soymutdb/api-client";
 
+export {
+  buildJbrowseLocusUrl,
+  isMinimalDeploymentMode,
+  resolveAppUrl,
+} from "@soymutdb/shared/deployment";
+
 // normalizeBasePath and resolveSiteVariant live in zero-dependency modules so
-// the Vite config can import them without loading the api-client; re-exported
+// the Umi config can import them without loading the api-client; re-exported
 // here for the views and tests that already read them from the deployment
 // context.
 export { normalizeBasePath } from "./base-path";

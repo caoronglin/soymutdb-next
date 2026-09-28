@@ -4,7 +4,6 @@ import { computed } from "vue";
 import type { TableActions, TableColumn } from "@soymutdb/api-client";
 import { formatNumber } from "@soymutdb/shared/format";
 import { jbrowseUrl } from "@soymutdb/shared/genomics";
-import { createThemeConfig } from "@soymutdb/ui-vue";
 import { t } from "../lib/i18n";
 
 /**
@@ -117,8 +116,7 @@ function geneIdOf(row: ConfigurableRow): string | null {
 </script>
 
 <template>
-  <ConfigProvider :theme="createThemeConfig({ dark: false })">
-    <div data-testid="configurable-table">
+  <div data-testid="configurable-table">
       <table class="w-full text-sm" :aria-label="caption ?? 'Results'">
         <thead class="text-left opacity-60">
           <tr>
@@ -179,5 +177,4 @@ function geneIdOf(row: ConfigurableRow): string | null {
         </tbody>
       </table>
     </div>
-  </ConfigProvider>
 </template>

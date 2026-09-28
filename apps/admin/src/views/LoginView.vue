@@ -1,10 +1,71 @@
+<template>
+  <main class="flex min-h-screen items-center justify-center bg-background px-4 py-12">
+    <div class="w-full max-w-sm">
+      <div class="flex items-center gap-3">
+        <span
+          class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm"
+        >
+          <AdminBrandMark />
+        </span>
+        <div class="min-w-0">
+          <p class="truncate font-serif text-base font-semibold">SoyMutDB</p>
+          <p class="truncate text-xs text-muted-foreground">
+            {{ t("admin.title", { defaultValue: "Admin Console" }) }}
+          </p>
+        </div>
+      </div>
+
+      <AdminCard class="mt-4">
+        <p class="text-sm text-muted-foreground">{{ t("loginPage.adminHint") }}</p>
+
+        <form class="mt-4 grid gap-4" @submit.prevent="submit">
+          <label class="admin-field">
+            {{ t("auth.username") }}
+            <input
+              v-model="identifier"
+              class="admin-control"
+              autocomplete="username"
+              data-testid="admin-identifier"
+            />
+          </label>
+          <label class="admin-field">
+            {{ t("auth.password") }}
+            <input
+              v-model="password"
+              class="admin-control"
+              type="password"
+              autocomplete="current-password"
+              data-testid="admin-password"
+            />
+          </label>
+
+          <p
+            v-if="errorMessage"
+            role="alert"
+            class="admin-state admin-state--error"
+            data-testid="admin-login-error"
+          >
+            {{ errorMessage }}
+          </p>
+
+          <Button type="primary" html-type="submit" :disabled="isPending" data-testid="admin-login-submit">
+            {{ isPending ? t("common.loading") : t("auth.loginButton") }}
+          </Button>
+        </form>
+      </AdminCard>
+    </div>
+  </main>
+</template>
+
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
 import { ApiError } from "@soymutdb/api-client";
-import { Button, ConfigProvider, createThemeConfig } from "@soymutdb/ui-vue";
+import { Button } from "@soymutdb/ui-vue";
 
+import AdminBrandMark from "../components/AdminBrandMark.vue";
+import AdminCard from "../components/AdminCard.vue";
 import { useAuth } from "../lib/auth";
 import { t } from "../lib/i18n";
 
@@ -28,11 +89,12 @@ const isPending = ref(false);
 
 const redirectTarget = computed(() => {
   const value = route.query.redirect;
+  // Only an in-app absolute path is safe: `//host` would leave the console.
   if (typeof value !== "string" || !value.startsWith("/") || value.startsWith("//")) return "/";
   return value;
 });
 
-async function submit() {
+async function submit(): Promise<void> {
   if (isPending.value) return;
   isPending.value = true;
   errorMessage.value = "";
@@ -49,40 +111,3 @@ async function submit() {
   }
 }
 </script>
-
-<template>
-  <ConfigProvider :theme="createThemeConfig({ dark: false })">
-    <main class="mx-auto max-w-sm px-4 py-16">
-      <h1 class="text-2xl font-semibold">{{ t("admin.title") }}</h1>
-      <p class="mt-1 text-sm opacity-70">{{ t("loginPage.adminHint") }}</p>
-
-      <form class="mt-6 grid gap-4" @submit.prevent="submit">
-        <label class="text-sm opacity-70">
-          {{ t("auth.username") }}
-          <input
-            v-model="identifier"
-            autocomplete="username"
-            class="mt-1 w-full rounded-md border bg-background px-2 py-1.5"
-            data-testid="admin-identifier"
-          />
-        </label>
-        <label class="text-sm opacity-70">
-          {{ t("auth.password") }}
-          <input
-            v-model="password"
-            type="password"
-            autocomplete="current-password"
-            class="mt-1 w-full rounded-md border bg-background px-2 py-1.5"
-            data-testid="admin-password"
-          />
-        </label>
-        <p v-if="errorMessage" role="alert" data-testid="admin-login-error" class="text-sm text-red-700">
-          {{ errorMessage }}
-        </p>
-        <Button html-type="submit" :disabled="isPending" data-testid="admin-login-submit">
-          {{ isPending ? t("common.loading") : t("auth.loginButton") }}
-        </Button>
-      </form>
-    </main>
-  </ConfigProvider>
-</template>

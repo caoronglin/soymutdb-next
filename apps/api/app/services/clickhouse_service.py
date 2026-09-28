@@ -326,8 +326,18 @@ class ClickHouseService:
         return dict(zip(columns, result.first_row))
 
     @_capability_guarded
-    async def get_dashboard_stats(self) -> dict[str, Any]:
-        """Aggregate dashboard statistics."""
+    async def get_dashboard_stats(self, release_key: str | None = None) -> dict[str, Any]:
+        """Aggregate dashboard statistics for one release.
+
+        ``release_key`` is required for a public aggregate: without it the
+        query spans every release's facts, so a dashboard could show
+        unpublished variant counts. It is a bound parameter, never interpolated.
+        """
+        where = ""
+        parameters: dict[str, Any] = {}
+        if release_key is not None:
+            where = "WHERE release_key = %(release_key)s"
+            parameters["release_key"] = release_key
         query = f"""
         SELECT
             count() AS total_variants,
@@ -339,9 +349,10 @@ class ClickHouseService:
             sum(if(variant_type = 'MNV', 1, 0)) AS mnv_count,
             sum(if(variant_type = 'SV', 1, 0)) AS sv_count
         FROM {VARIANT_FACTS_TABLE}
+        {where}
         """
         client = await self._get_client()
-        result = await client.query(query)
+        result = await client.query(query, parameters=parameters)
         if result.row_count == 0:
             return {}
         columns = result.column_names
@@ -349,18 +360,31 @@ class ClickHouseService:
 
     @_capability_guarded
     async def get_variant_type_distribution(
-        self, assembly: str | None = None
+        self, assembly: str | None = None, release_key: str | None = None
     ) -> dict[str, int]:
-        """Return variant type distribution."""
+        """Return variant type distribution for one release.
+
+        ``release_key`` is required on public surfaces: without it the
+        aggregate spans every release's facts.
+        """
         client = await self._get_client()
-        if assembly is not None:
+        if assembly is not None or release_key is not None:
+            clauses = []
+            parameters: dict[str, Any] = {}
+            if assembly is not None:
+                clauses.append("assembly_key = %(assembly)s")
+                parameters["assembly"] = assembly
+            if release_key is not None:
+                clauses.append("release_key = %(release_key)s")
+                parameters["release_key"] = release_key
+            where = " AND ".join(clauses)
             query = f"""
             SELECT variant_type, count() AS cnt
             FROM {VARIANT_FACTS_TABLE}
-            WHERE assembly_key = %(assembly)s
+            WHERE {where}
             GROUP BY variant_type
             """
-            result = await client.query(query, parameters={"assembly": assembly})
+            result = await client.query(query, parameters=parameters)
         else:
             query = f"""
             SELECT variant_type, count() AS cnt
@@ -376,8 +400,16 @@ class ClickHouseService:
         assembly: str,
         chromosome: str,
         bin_size: int = 1_000_000,
+        release_key: str | None = None,
     ) -> list[dict[str, Any]]:
-        """Compute variant density bins for a chromosome."""
+        """Compute variant density bins for a chromosome in one release.
+
+        ``release_key`` is required on public surfaces: an unbounded density
+        mixes every release's facts for the same assembly/chromosome.
+        """
+        release_clause = ""
+        if release_key is not None:
+            release_clause = "AND release_key = %(release_key)s"
         query = f"""
         SELECT
             intDiv(position - 1, %(bin_size)s) * %(bin_size)s + 1 AS bin_start,
@@ -385,6 +417,7 @@ class ClickHouseService:
         FROM {VARIANT_FACTS_TABLE}
         WHERE assembly_key = %(assembly)s
           AND chromosome = %(chromosome)s
+          {release_clause}
         GROUP BY bin_start
         ORDER BY bin_start
         """
@@ -392,6 +425,7 @@ class ClickHouseService:
             "assembly": assembly,
             "chromosome": chromosome,
             "bin_size": bin_size,
+            **({"release_key": release_key} if release_key is not None else {}),
         }
         client = await self._get_client()
         result = await client.query(query, parameters=qp)

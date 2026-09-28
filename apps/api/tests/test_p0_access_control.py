@@ -14,7 +14,7 @@ from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from httpx import ASGITransport, AsyncClient
 from pydantic import ValidationError as PydanticValidationError
 
@@ -27,10 +27,12 @@ from app.core.exceptions import (
     AuthenticationError,
     NotFoundError,
     SoyMutDBError,
+    ValidationError,
     soy_mut_db_exception_handler,
 )
 from app.core.security import RoleName, has_role
 from app.models.auth import Role, User
+from app.models.genomic import Assembly
 from app.models.tracks import (
     FileFormat,
     Track,
@@ -40,6 +42,7 @@ from app.models.tracks import (
 )
 from app.schemas.auth import UserCreate
 from app.services import track_service as track_service_module
+from app.services.release_context import ReleaseContext
 from app.services.track_service import TrackService
 
 
@@ -248,6 +251,40 @@ async def test_seed_request_list_requires_seed_manager_capability(
     assert response.status_code == expected_status
 
 
+def _make_assembly(
+    assembly_id: int = 1,
+    *,
+    release_id: int = 7,
+    name: str = "Wm82v5.0",
+    fasta_url: str | None = None,
+    fai_url: str | None = None,
+) -> Assembly:
+    return Assembly(
+        id=assembly_id,
+        name=name,
+        species="Glycine max",
+        version=name.rsplit("v", maxsplit=1)[-1],
+        description=None,
+        fasta_url=fasta_url,
+        fai_url=fai_url,
+        is_default=False,
+        release_id=release_id,
+    )
+
+
+def _release_context(
+    *,
+    release_id: int = 7,
+    assembly_id: int | None = 1,
+    assembly: str = "Wm82v5.0",
+) -> ReleaseContext:
+    return ReleaseContext(
+        release_id=release_id,
+        assembly_id=assembly_id,
+        assembly=assembly,
+    )
+
+
 def _make_track(
     track_id: int,
     visibility: TrackVisibility,
@@ -265,6 +302,7 @@ def _make_track(
         track_type=TrackType.ANNOTATION,
         file_format=FileFormat.BED,
         assembly_id=1,
+        release_id=7,
         category_id=None,
         category=None,
         file_url=f"tracks/track-{track_id}.bed.gz",
@@ -280,9 +318,15 @@ def _make_track(
 
 
 class _TrackSession:
-    def __init__(self, tracks: list[Track], project_ids: set[int] | None = None) -> None:
+    def __init__(
+        self,
+        tracks: list[Track],
+        project_ids: set[int] | None = None,
+        assemblies: list[Assembly] | None = None,
+    ) -> None:
         self.tracks = tracks
         self.project_ids = project_ids or set()
+        self.assemblies = [_make_assembly()] if assemblies is None else assemblies
         self.statements: list[Any] = []
 
     async def execute(self, stmt: Any) -> _Result:
@@ -290,8 +334,19 @@ class _TrackSession:
         sql = str(stmt)
         if "FROM project_members" in sql:
             return _Result(sorted(self.project_ids))
+        if "FROM assemblies" in sql and "FROM tracks" not in sql:
+            return _Result(list(self.assemblies))
         if "FROM tracks" in sql:
-            return _Result(list(self.tracks))
+            rows = list(self.tracks)
+            if "tracks.release_id" in sql:
+                rows = [
+                    track
+                    for track in rows
+                    if track.release_id == 7
+                ]
+            if "tracks.assembly_id" in sql:
+                rows = [track for track in rows if track.assembly_id == 1]
+            return _Result(rows)
         return _Result([])
 
 
@@ -315,7 +370,8 @@ async def test_anonymous_track_surfaces_return_only_public_tracks(monkeypatch) -
 
     config = await service.get_jbrowse_config(
         _TrackSession([public, private, project]),
-        assembly_name="Wm82v4.0",
+        assembly_id=1,
+        release_context=_release_context(),
         user_id=None,
         user_roles=[],
     )
@@ -420,7 +476,8 @@ async def test_jbrowse_config_presigns_main_and_index_objects(monkeypatch) -> No
 
     config = await TrackService().get_jbrowse_config(
         _TrackSession([track]),
-        assembly_name="Wm82v4.0",
+        assembly_id=1,
+        release_context=_release_context(),
         user_id=None,
         user_roles=[],
     )
@@ -566,15 +623,38 @@ async def test_track_routes_forward_optional_user_access_context(monkeypatch) ->
     monkeypatch.setattr(track_routes, "service", mocked_service)
     db = object()
 
+    # Anonymous list/detail responses vary by Authorization and may be shared
+    # only in their public projection.
+    list_response = Response()
     await track_routes.list_tracks(
-        db=db, assembly_id=None, category_id=None, current_user=None
+        response=list_response,
+        db=db,
+        assembly_id=None,
+        category_id=None,
+        current_user=None,
     )
+    assert list_response.headers["Vary"] == "Authorization"
+    assert list_response.headers["Cache-Control"].startswith("public")
+
+    response = Response()
     await track_routes.get_jbrowse_config(
-        assembly="Wm82v4.0", db=db, current_user=None
+        response=response,
+        assembly_id=1,
+        db=db,
+        release_context=_release_context(),
+        current_user=None,
     )
+    assert response.headers["Cache-Control"].startswith("public")
+    assert response.headers["Vary"] == "Authorization"
 
     owner = _make_user(RoleName.VIEWER)
-    await track_routes.get_track(track_id=5, db=db, current_user=owner)
+    detail_response = Response()
+    await track_routes.get_track(
+        track_id=5, response=detail_response, db=db, current_user=owner
+    )
+    # An authenticated projection (owner/visibility) is never shareable.
+    assert detail_response.headers["Cache-Control"] == "private, no-store"
+    assert detail_response.headers["Vary"] == "Authorization"
 
     mocked_service.list_tracks.assert_awaited_once_with(
         db,
@@ -585,7 +665,8 @@ async def test_track_routes_forward_optional_user_access_context(monkeypatch) ->
     )
     mocked_service.get_jbrowse_config.assert_awaited_once_with(
         db,
-        assembly_name="Wm82v4.0",
+        assembly_id=1,
+        release_context=_release_context(),
         user_id=None,
         user_roles=[],
     )
@@ -595,3 +676,104 @@ async def test_track_routes_forward_optional_user_access_context(monkeypatch) ->
         user_id=owner.id,
         user_roles=[RoleName.VIEWER.value],
     )
+
+
+@pytest.mark.asyncio
+async def test_jbrowse_config_binds_release_and_assembly_identity(monkeypatch) -> None:
+    track = _make_track(30, TrackVisibility.PUBLIC)
+    session = _TrackSession(
+        [track],
+        assemblies=[
+            _make_assembly(
+                assembly_id=1,
+                release_id=7,
+                name="Wm82v5.0",
+                fasta_url="https://data.example/Wm82_v5.fa.gz",
+                fai_url="https://data.example/Wm82_v5.fa.gz.fai",
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        track_service_module,
+        "generate_download_url",
+        lambda object_key, **kwargs: f"https://minio.example/{object_key}",
+    )
+
+    config = await TrackService().get_jbrowse_config(
+        session,
+        assembly_id=1,
+        release_context=_release_context(),
+        user_id=None,
+        user_roles=[],
+    )
+
+    assert config["release_id"] == 7
+    assert config["assembly_id"] == 1
+    assert config["release"] == {"id": 7, "assembly_id": 1}
+    assert config["assembly"]["id"] == 1
+    assert config["assembly"]["name"] == "Wm82v5.0"
+    assert config["assembly"]["sequence"]["adapter"]["fastaLocation"]["uri"].endswith(
+        "Wm82_v5.fa.gz"
+    )
+    assert [item["trackId"] for item in config["tracks"]] == ["track_30"]
+    sql = "\\n".join(str(statement) for statement in session.statements)
+    assert "assemblies.release_id" in sql
+    assert "tracks.assembly_id" in sql
+
+
+@pytest.mark.asyncio
+async def test_jbrowse_config_rejects_missing_or_cross_release_assembly() -> None:
+    service = TrackService()
+
+    with pytest.raises(ValidationError, match="no assembly identity"):
+        await service.get_jbrowse_config(
+            _TrackSession([]),
+            assembly_id=1,
+            release_context=_release_context(assembly_id=None),
+            user_id=None,
+            user_roles=[],
+        )
+
+    with pytest.raises(ValidationError, match="does not belong"):
+        await service.get_jbrowse_config(
+            _TrackSession([]),
+            assembly_id=2,
+            release_context=_release_context(assembly_id=1),
+            user_id=None,
+            user_roles=[],
+        )
+
+
+@pytest.mark.asyncio
+async def test_jbrowse_config_rejects_assembly_not_in_release() -> None:
+    session = _TrackSession([], assemblies=[])
+
+    with pytest.raises(NotFoundError, match="not available in release 7"):
+        await TrackService().get_jbrowse_config(
+            session,
+            assembly_id=1,
+            release_context=_release_context(),
+            user_id=None,
+            user_roles=[],
+        )
+
+
+@pytest.mark.asyncio
+async def test_authenticated_jbrowse_config_is_private_and_not_cacheable(monkeypatch) -> None:
+    user = _make_user(RoleName.VIEWER)
+    mocked_service = SimpleNamespace(
+        get_jbrowse_config=AsyncMock(return_value={"assembly": {}, "tracks": []}),
+    )
+    monkeypatch.setattr(track_routes, "service", mocked_service)
+    response = Response()
+
+    await track_routes.get_jbrowse_config(
+        response=response,
+        assembly_id=1,
+        db=object(),
+        release_context=_release_context(),
+        current_user=user,
+    )
+
+    assert response.headers["Cache-Control"] == "private, no-store"
+    assert response.headers["Vary"] == "Authorization"

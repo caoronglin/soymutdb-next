@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from ..core.compat import StrEnum
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
+
+from ..core.compat import StrEnum
 
 
 class SeedAvailability(StrEnum):
@@ -24,8 +25,15 @@ class SeedRequestStatus(StrEnum):
 
 
 class SeedInventoryResponse(BaseModel):
-    id: str
-    mutant_line_id: str
+    """Public seed-inventory projection.
+
+    ``seed_lot`` is the public locator (the lot label the collection uses) and
+    ``mutant_line_public_id`` is the line's public identifier. The inventory row
+    id and the mutant line's internal key are persistence details and are not
+    part of the external contract.
+    """
+
+    mutant_line_public_id: str
     seed_lot: str
     quantity_grams: float
     location: str | None = None
@@ -39,7 +47,10 @@ class SeedInventoryResponse(BaseModel):
 
 
 class SeedRequestCreate(BaseModel):
-    mutant_line_id: str
+    #: Public mutant-line identifier (e.g. ``SM7K3ZQ9P2AX``). Resolved to the
+    #: line's internal key server-side inside the published release; a numeric
+    #: or otherwise internal value is rejected.
+    mutant_line_public_id: str
     quantity_grams: float = Field(..., gt=0.0, le=500.0)
     requester_name: str = Field(..., min_length=1, max_length=255)
     requester_email: EmailStr
@@ -56,8 +67,14 @@ class SeedRequestCreate(BaseModel):
 
 
 class SeedRequestResponse(BaseModel):
+    """Public seed-request projection: the line is identified publicly.
+
+    ``id`` is the request's own opaque UUID (it is the requester's tracking
+    handle), never the line's internal key.
+    """
+
     id: str
-    mutant_line_id: str
+    mutant_line_public_id: str
     status: SeedRequestStatus
     quantity_requested: float | None = None
     requester_name: str

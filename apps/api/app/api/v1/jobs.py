@@ -54,6 +54,8 @@ _POLL_INTERVAL_SECONDS = 2.0
 _UPDATE_WINDOW_SECONDS = 30
 #: Cap on pushed rows per cycle (defensive; one user rarely has more).
 _MAX_EVENTS_PER_CYCLE = 100
+#: Bound a polling connection so abandoned clients cannot hold a DB task forever.
+_MAX_STREAM_SECONDS = 30 * 60
 
 
 def _blast_updated_at():
@@ -172,8 +174,9 @@ async def job_events(
     """
 
     async def event_stream() -> AsyncIterator[str]:
+        deadline = asyncio.get_running_loop().time() + _MAX_STREAM_SECONDS
         try:
-            while True:
+            while asyncio.get_running_loop().time() < deadline:
                 if await request.is_disconnected():
                     return
                 try:
@@ -193,6 +196,7 @@ async def job_events(
                     yield ": ping\n\n"
 
                 await asyncio.sleep(_POLL_INTERVAL_SECONDS)
+            yield 'event: stream_end\ndata: {"reason":"max_lifetime"}\n\n'
         except asyncio.CancelledError:
             # Client disconnected (or server shutting down) — stop cleanly.
             raise
@@ -201,7 +205,8 @@ async def job_events(
         event_stream(),
         media_type="text/event-stream",
         headers={
-            "Cache-Control": "no-cache",
+            "Cache-Control": "private, no-store",
+            "Vary": "Authorization",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
         },

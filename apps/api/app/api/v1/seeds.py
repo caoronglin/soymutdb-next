@@ -17,6 +17,7 @@ from ...schemas.seed import (
     SeedRequestStatus,
     SeedRequestUpdate,
 )
+from ...services.release_context import ReleaseContext, get_release_context
 from ...services.seed_service import SeedService
 from .deps import get_current_user, require_role
 
@@ -27,19 +28,39 @@ service = SeedService()
 @router.get("/inventory", response_model=list[SeedInventoryResponse])
 async def list_inventory(
     db: AsyncSession = Depends(get_db),
-    mutant_line_id: int | None = Query(default=None),
+    release_context: ReleaseContext = Depends(get_release_context),
+    mutant_line_public_id: str | None = Query(
+        default=None,
+        description="Public mutant-line identifier (e.g. SM7K3ZQ9P2AX).",
+    ),
 ) -> list[SeedInventoryResponse]:
-    """List seed inventory."""
-    return await service.list_inventory(db, mutant_line_id=mutant_line_id)
+    """List seed inventory for the resolved published release.
+
+    Rows are bound to a released mutant line; the previous version listed every
+    lot in the table, including drafts and other releases, and identified the
+    line by its internal key.
+    """
+    return await service.list_inventory(
+        db,
+        release_context=release_context,
+        mutant_line_public_id=mutant_line_public_id,
+    )
 
 
-@router.get("/inventory/{inventory_id}", response_model=SeedInventoryResponse)
+@router.get("/inventory/{seed_lot}", response_model=SeedInventoryResponse)
 async def get_inventory(
-    inventory_id: int,
+    seed_lot: str,
     db: AsyncSession = Depends(get_db),
+    release_context: ReleaseContext = Depends(get_release_context),
 ) -> SeedInventoryResponse:
-    """Get seed inventory detail."""
-    return await service.get_inventory(db, inventory_id)
+    """Get a seed lot by its public lot label within the published release.
+
+    The inventory row's persistence key is not a locator: a request for it (or
+    for a lot outside the release) returns the same not-found response.
+    """
+    return await service.get_inventory(
+        db, seed_lot, release_context=release_context
+    )
 
 
 @router.post(
@@ -50,9 +71,16 @@ async def get_inventory(
 async def create_seed_request(
     request: SeedRequestCreate,
     db: AsyncSession = Depends(get_db),
+    release_context: ReleaseContext = Depends(get_release_context),
 ) -> SeedRequestResponse:
-    """Submit a seed request (open to all)."""
-    return await service.create_request(db, request)
+    """Submit a seed request (open to all).
+
+    The requested line is addressed by its public identifier and must exist in
+    the resolved published release; a numeric/internal value is refused.
+    """
+    return await service.create_request(
+        db, request, release_context=release_context
+    )
 
 
 @router.get(

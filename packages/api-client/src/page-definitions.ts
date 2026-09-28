@@ -15,16 +15,11 @@ import type {
  */
 
 export interface PageDefinitionVersionPayload {
-  id: string;
-  page_id: string;
+  /** Public route/version/status contract; persistence/editor metadata is omitted. */
+  route: string;
   version: number;
   status: PageDefinitionStatus;
   definition: PageDefinition;
-  edited_by: string | null;
-  edit_comment: string | null;
-  published_at: string | null;
-  created_at: string;
-  updated_at: string;
 }
 
 /**

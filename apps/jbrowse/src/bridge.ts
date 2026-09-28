@@ -98,6 +98,14 @@ export function parsePortalMessage(
     event: MessageEvent,
     expectedParentOrigin: string,
 ): BridgeEnvelope | null {
+    if (
+        typeof window !== "undefined" &&
+        window.parent !== window &&
+        event.source !== window.parent
+    ) {
+        console.warn("[JBrowse] Ignoring message from a non-parent window");
+        return null;
+    }
     if (event.origin !== expectedParentOrigin) {
         console.warn(
             `[JBrowse] Ignoring message from unexpected origin: ${event.origin} (expected ${expectedParentOrigin})`,

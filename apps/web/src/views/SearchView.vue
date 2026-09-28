@@ -5,12 +5,19 @@ import { useRoute, useRouter } from "vue-router";
 
 import {
   type FederatedSearchResponse,
+  type InternalSearchResponse,
   type SearchResponse,
   type SearchResult,
   type SearchResultType,
+  internalSearch,
 } from "@soymutdb/api-client";
-import { ConfigProvider, Input, Tag, createThemeConfig } from "@soymutdb/ui-vue";
+import { Button, Input, Tag } from "@soymutdb/ui-vue";
 
+import PortalLayout from "../components/PortalLayout.vue";
+import AppIcon from "../components/table/AppIcon.vue";
+import PageHeader from "../components/table/PageHeader.vue";
+import type { IconName } from "../components/table/table-types";
+import StateBlock from "../components/states/StateBlock.vue";
 import { t } from "../lib/i18n";
 import { globalSearchQueryOptions } from "../lib/query-options";
 import { useSiteContextStore } from "../stores/site-context";
@@ -20,6 +27,17 @@ import { useSiteContextStore } from "../stores/site-context";
 // scoped cache key (DB-CORE-6), public-identifier-only results (DB-CORE-2), and
 // disabled rows for hits without a canonical URL (never a fake "#" link).
 const EXTERNAL_SOURCES = ["ncbi", "uniprot", "ensembl", "ebi"] as const;
+
+/** Leading glyph per entity type; unknown types fall back to a document. */
+const RESULT_ICONS: Record<string, IconName> = {
+  gene: "dna",
+  variant: "dna",
+  mutant_line: "beaker",
+};
+
+function resultIcon(type: string): IconName {
+  return RESULT_ICONS[type] ?? "file-text";
+}
 
 const route = useRoute();
 const router = useRouter();
@@ -66,6 +84,106 @@ const query = useQuery(
     }),
   ),
 );
+
+// OPT-05: internal-site search hits the authorized `/search/internal` endpoint,
+// which is the ONLY source of the private `internal_id`. It runs independently
+// of the public path so an external site is byte-for-byte unchanged, and it is
+// keyed by the same release/site context so the two can never drift.
+const internalQuery = useQuery(
+  computed(() => ({
+    queryKey: [
+      "search-internal",
+      q.value,
+      resultLimit.value,
+      site.releaseId,
+      site.siteVariant,
+    ] as const,
+    queryFn: () => internalSearch(q.value, { limit: resultLimit.value }),
+    enabled: site.isInternal && Boolean(q.value.trim()),
+    staleTime: 30_000,
+  })),
+);
+const internalData = computed<InternalSearchResponse | undefined>(() =>
+  toValue(internalQuery.data),
+);
+
+interface InternalRow {
+  publicId: string;
+  internalId: string;
+  name: string;
+  type: string;
+  url?: string | null;
+  matchedField: string;
+}
+
+// Normalize the two entity shapes (mutant `public_id` / gene `gene_id`) into one
+// renderable row so a binding swap flips every assertion below.
+const internalRows = computed<InternalRow[]>(() => {
+  const data = internalData.value;
+  if (!data) return [];
+  const rows: InternalRow[] = [];
+  for (const mutant of data.mutants ?? []) {
+    rows.push({
+      publicId: mutant.public_id,
+      internalId: mutant.internal_id,
+      name: mutant.name,
+      type: mutant.entity_type,
+      url: mutant.url,
+      matchedField: mutant.matched_field,
+    });
+  }
+  for (const gene of data.genes ?? []) {
+    rows.push({
+      publicId: gene.gene_id,
+      internalId: gene.internal_id,
+      name: gene.name ?? gene.gene_id,
+      type: gene.entity_type,
+      url: gene.url,
+      matchedField: gene.matched_field,
+    });
+  }
+  return rows;
+});
+
+// Copy affordance per id. `navigator.clipboard` is absent in jsdom and can be
+// denied in insecure contexts, so it falls back to a hidden textarea and never
+// throws into the render path.
+const copiedId = ref<string | null>(null);
+
+async function copyId(value: string): Promise<void> {
+  copiedId.value = value;
+  try {
+    const clipboard = typeof navigator !== "undefined" ? navigator.clipboard : undefined;
+    if (clipboard?.writeText) {
+      await clipboard.writeText(value);
+      return;
+    }
+  } catch {
+    /* permission denied / no secure context — use the DOM fallback */
+  }
+  legacyCopy(value);
+}
+
+function legacyCopy(value: string): void {
+  try {
+    if (typeof document === "undefined") return;
+    const el = document.createElement("textarea");
+    el.value = value;
+    el.setAttribute("readonly", "");
+    el.style.position = "absolute";
+    el.style.left = "-9999px";
+    document.body.appendChild(el);
+    el.select();
+    try {
+      document.execCommand("copy");
+    } catch {
+      /* best effort — the value stays selectable on screen */
+    }
+    document.body.removeChild(el);
+  } catch {
+    /* clipboard is best-effort; never break the row */
+  }
+}
 
 // vue-query v5 returns a reactive object whose fields are nested refs; the
 // template does not auto-unwrap those, so expose explicit (top-level) computeds.
@@ -176,53 +294,150 @@ function submit() {
 </script>
 
 <template>
-  <ConfigProvider :theme="createThemeConfig({ dark: false })">
-    <div class="mx-auto max-w-3xl p-8">
-      <p class="text-sm opacity-70">{{ t("search.title") }}</p>
-      <h1 class="mt-2 text-4xl font-semibold tracking-tight">{{ t("nav.search") }}</h1>
-      <p class="mt-3 text-sm opacity-70">{{ t("search.subtitle") }}</p>
+  <PortalLayout>
+    <div class="container-prose py-10 md:py-14">
+      <PageHeader
+        :eyebrow="t('search.title')"
+        :title="t('nav.search')"
+        :description="t('search.subtitle')"
+      />
 
-      <form class="mt-10 space-y-3" role="search" @submit.prevent="submit">
-        <Input
-          v-model="input"
-          type="search"
-          role="searchbox"
-          :aria-label="t('search.title')"
-          :placeholder="t('search.placeholder')"
-          data-testid="search-input"
-        />
-        <label class="inline-flex cursor-pointer items-center gap-2 text-sm opacity-70">
+      <form class="mt-8 max-w-2xl space-y-3" role="search" @submit.prevent="submit">
+        <div class="relative">
+          <AppIcon
+            name="search"
+            class="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-muted-foreground"
+          />
+          <Input
+            v-model:value="input"
+            type="search"
+            role="searchbox"
+            class="h-12 pl-12"
+            :aria-label="t('search.title')"
+            :placeholder="t('search.placeholder')"
+            data-testid="search-input"
+          />
+        </div>
+        <label class="inline-flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
           <input
             v-model="externalInput"
             data-testid="external-source-toggle"
             type="checkbox"
           />
+          <AppIcon name="globe" class="size-4" />
           {{ t("search.externalSources") }}
         </label>
-        <button type="submit" class="rounded-md border px-3 py-2 text-sm" data-testid="search-submit">
+        <Button type="primary" html-type="submit" data-testid="search-submit">
           {{ t("search.location.submit") }}
-        </button>
+        </Button>
       </form>
 
-      <div v-if="!q" class="mt-12 text-sm opacity-70" data-testid="search-empty-prompt">
-        {{ t("search.enterQuery") }}
-      </div>
+      <!-- Internal site only: authorized result set with BOTH identities and a
+           copy control per id (OPT-05). Standalone from the public chain below
+           so the external path is unchanged. -->
+      <section
+        v-if="site.isInternal && q && internalRows.length > 0"
+        data-testid="search-internal-results"
+        class="mt-10"
+        :aria-label="t('search.internalResults')"
+      >
+        <div class="mb-4 text-sm text-muted-foreground">
+          {{ t("nav.internalBadge") }} · <span class="font-mono">“{{ q }}”</span>
+        </div>
+        <ul class="grid gap-3">
+          <li v-for="row in internalRows" :key="`${row.type}-${row.internalId}`">
+            <div data-testid="search-internal-row" class="rounded-xl border bg-card p-4 shadow-sm">
+              <div class="flex flex-wrap items-center gap-3">
+                <span
+                  class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-foreground"
+                >
+                  <AppIcon :name="resultIcon(row.type)" class="size-4" />
+                </span>
+                <Tag class="font-mono uppercase">{{ row.type }}</Tag>
+                <a v-if="row.url" :href="row.url" class="link-underline font-medium text-primary">{{ row.name }}</a>
+                <span v-else class="font-medium">{{ row.name }}</span>
+                <span class="text-xs text-muted-foreground">
+                  {{ t("search.matchedField") }}:
+                  <span class="font-mono">{{ row.matchedField }}</span>
+                </span>
+              </div>
+              <div class="mt-3 grid gap-1 text-xs">
+                <div class="flex items-center gap-2">
+                  <span class="text-muted-foreground">public_id</span>
+                  <span
+                    class="font-mono"
+                    data-testid="internal-public-id"
+                    :data-id-value="row.publicId"
+                  >{{ row.publicId }}</span>
+                  <button
+                    type="button"
+                    class="inline-flex items-center gap-1 rounded border border-border px-2 py-1 transition-colors hover:bg-accent"
+                    data-testid="copy-public-id"
+                    :data-copy-value="row.publicId"
+                    @click="copyId(row.publicId)"
+                  >
+                    <AppIcon :name="copiedId === row.publicId ? 'check' : 'copy'" class="size-3" />
+                    {{ copiedId === row.publicId ? "copied" : "copy" }}
+                  </button>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="text-muted-foreground">internal_id</span>
+                  <span
+                    class="font-mono"
+                    data-testid="internal-internal-id"
+                    :data-id-value="row.internalId"
+                  >{{ row.internalId }}</span>
+                  <button
+                    type="button"
+                    class="inline-flex items-center gap-1 rounded border border-border px-2 py-1 transition-colors hover:bg-accent"
+                    data-testid="copy-internal-id"
+                    :data-copy-value="row.internalId"
+                    @click="copyId(row.internalId)"
+                  >
+                    <AppIcon :name="copiedId === row.internalId ? 'check' : 'copy'" class="size-3" />
+                    {{ copiedId === row.internalId ? "copied" : "copy" }}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </li>
+        </ul>
+      </section>
 
-      <div v-else-if="isError" class="mt-10 rounded border border-red-300 p-5" data-testid="search-error">
-        <p class="font-medium">{{ t("search.searchFailed") }}</p>
-        <p class="text-sm opacity-70">{{ t("search.requestId") }}: {{ errorRequestId }}</p>
-        <button type="button" class="mt-2 rounded-md border px-3 py-2 text-sm" @click="retry">
-          {{ t("common.retry") }}
-        </button>
-      </div>
+      <StateBlock
+        v-if="!q"
+        data-testid="search-empty-prompt"
+        class="mt-12"
+        variant="empty"
+        icon="search"
+        :title="t('search.enterQuery')"
+      />
 
-      <div v-else-if="isLoading && !searchData" class="mt-10 grid gap-3" data-testid="search-loading">
-        <div v-for="index in 5" :key="index" class="h-20 w-full rounded bg-black/5" />
-      </div>
+      <StateBlock
+        v-else-if="isError"
+        data-testid="search-error"
+        variant="error"
+        class="mt-10"
+        :title="t('search.searchFailed')"
+        :description="`${t('search.requestId')}: ${errorRequestId}`"
+      >
+        <template #action>
+          <Button data-testid="search-retry" @click="retry">{{ t("common.retry") }}</Button>
+        </template>
+      </StateBlock>
+
+      <StateBlock
+        v-else-if="isLoading && !searchData"
+        data-testid="search-loading"
+        variant="loading"
+        class="mt-10"
+        :title="t('search.searching')"
+        :rows="5"
+      />
 
       <template v-else-if="federated">
         <section data-testid="search-results" class="mt-10" :aria-label="t('search.externalResultsSection')">
-          <div class="mb-4 text-sm opacity-70">
+          <div class="mb-4 text-sm text-muted-foreground">
             {{ t("search.externalResultsFor") }} <span class="font-mono">“{{ q }}”</span>
           </div>
           <div class="grid gap-6">
@@ -238,13 +453,19 @@ function submit() {
                   :data-url="hit.url"
                   :aria-disabled="!hit.url"
                   :tabindex="hit.url ? undefined : -1"
-                  class="flex items-center gap-3 rounded-lg border p-4"
+                  class="flex items-center gap-3 rounded-xl border bg-card p-4 shadow-sm"
                   :class="{ 'cursor-not-allowed opacity-60': !hit.url }"
                 >
-                  <span class="font-medium">{{ hit.title }}</span>
+                  <span
+                    class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"
+                  >
+                    <AppIcon name="external" class="size-4" />
+                  </span>
+                  <span class="min-w-0 flex-1 truncate font-medium">{{ hit.title }}</span>
+                  <AppIcon name="arrow-right" class="size-4 shrink-0 text-muted-foreground" />
                 </a>
               </p>
-              <p v-if="source.hits.length === 0" class="text-sm opacity-70">
+              <p v-if="source.hits.length === 0" class="text-sm text-muted-foreground">
                 {{ t("search.sourceEmpty") }}
               </p>
             </div>
@@ -253,20 +474,25 @@ function submit() {
       </template>
 
       <section v-else data-testid="search-results" class="mt-10" :aria-label="t('search.resultsSection')">
-        <div class="mb-4 flex items-center justify-between text-sm opacity-70">
+        <div class="mb-4 flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
           <span>{{ t("search.resultsFor") }} <span class="font-mono">“{{ q }}”</span></span>
           <span v-if="totalCount !== null">{{ t("search.resultCount", { count: totalCount }) }}</span>
         </div>
-        <p v-if="results.length === 0" data-testid="search-no-matches" class="text-sm opacity-70">
-          {{ t("search.noResults") }}
-        </p>
+        <StateBlock
+          v-if="results.length === 0"
+          data-testid="search-no-matches"
+          variant="empty"
+          icon="search"
+          :title="t('search.noResults')"
+        />
         <div v-else class="grid gap-6">
           <p
             v-if="ambiguous"
             data-testid="search-ambiguous-notice"
-            class="rounded border border-amber-300 p-3 text-sm"
+            class="flex items-start gap-2 rounded-xl border border-impact-moderate/40 bg-impact-moderate/10 p-3 text-sm"
           >
-            {{ t("search.ambiguousNotice") }}
+            <AppIcon name="alert" class="mt-0.5 size-4" />
+            <span>{{ t("search.ambiguousNotice") }}</span>
           </p>
           <div v-for="group in resultGroups" :key="group.label || 'all'">
             <h3
@@ -284,10 +510,26 @@ function submit() {
                   :href="result.url"
                   data-testid="search-result-row"
                   :data-url="result.url"
-                  class="flex items-center gap-3 rounded-lg border p-4 transition-colors hover:border-primary"
+                  class="flex items-center gap-3 rounded-xl border bg-card p-4 shadow-sm transition-colors hover:border-primary"
                 >
+                  <span
+                    class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-foreground"
+                  >
+                    <AppIcon :name="resultIcon(result.type)" class="size-4" />
+                  </span>
                   <Tag class="font-mono uppercase">{{ result.type }}</Tag>
-                  <span class="min-w-0 flex-1 truncate font-medium">{{ result.name ?? result.id }}</span>
+                  <span class="min-w-0 flex-1 truncate font-medium">{{ result.name ?? result.public_id ?? result.id }}</span>
+                  <!-- OPT-06: optional, defensive. An older payload omits both. -->
+                  <Tag
+                    v-if="result.match_type"
+                    data-testid="search-result-match-type"
+                    class="shrink-0 font-mono text-xs"
+                  >{{ result.match_type }}</Tag>
+                  <span
+                    v-if="result.cross_version?.length"
+                    data-testid="search-cross-version"
+                    class="shrink-0 text-xs opacity-60"
+                  >{{ result.cross_version.map((link) => link.gene_accession).join(", ") }}</span>
                   <span
                     class="shrink-0 font-mono text-xs opacity-70"
                     data-testid="search-result-public-id"
@@ -309,14 +551,31 @@ function submit() {
                       · {{ t("search.sourceLabel") }} {{ result.source }}
                     </template>
                   </span>
+                  <AppIcon name="arrow-right" class="size-4 shrink-0 text-muted-foreground" />
                 </a>
                 <div
                   v-else
                   data-testid="search-result-disabled"
-                  class="flex items-center gap-3 rounded-lg border p-4 opacity-60"
+                  class="flex items-center gap-3 rounded-xl border bg-card p-4 opacity-60"
                 >
+                  <span
+                    class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"
+                  >
+                    <AppIcon :name="resultIcon(result.type)" class="size-4" />
+                  </span>
                   <Tag class="font-mono uppercase">{{ result.type }}</Tag>
-                  <span class="min-w-0 flex-1 truncate font-medium">{{ result.name ?? result.id }}</span>
+                  <span class="min-w-0 flex-1 truncate font-medium">{{ result.name ?? result.public_id ?? result.id }}</span>
+                  <!-- OPT-06: optional, defensive. An older payload omits both. -->
+                  <Tag
+                    v-if="result.match_type"
+                    data-testid="search-result-match-type"
+                    class="shrink-0 font-mono text-xs"
+                  >{{ result.match_type }}</Tag>
+                  <span
+                    v-if="result.cross_version?.length"
+                    data-testid="search-cross-version"
+                    class="shrink-0 text-xs opacity-60"
+                  >{{ result.cross_version.map((link) => link.gene_accession).join(", ") }}</span>
                   <span
                     class="shrink-0 font-mono text-xs opacity-70"
                     data-testid="search-result-public-id"
@@ -338,32 +597,23 @@ function submit() {
                       · {{ t("search.sourceLabel") }} {{ result.source }}
                     </template>
                   </span>
+                  <AppIcon name="arrow-right" class="size-4 shrink-0 text-muted-foreground" />
                 </div>
               </li>
             </ul>
           </div>
         </div>
-        <div v-if="results.length > 0" class="mt-6 flex items-center gap-3">
-          <button
-            type="button"
-            class="min-h-10 rounded-md border px-3 text-sm disabled:opacity-50"
-            :disabled="!canPrevious"
-            data-testid="search-previous"
-            @click="previousPage"
-          >
+        <div v-if="results.length > 0" class="mt-6 flex flex-wrap items-center gap-3">
+          <Button :disabled="!canPrevious" data-testid="search-previous" @click="previousPage">
+            <AppIcon name="chevron-left" class="mr-1 inline size-4" />
             {{ t("common.previous") }}
-          </button>
-          <button
-            type="button"
-            class="min-h-10 rounded-md border px-3 text-sm disabled:opacity-50"
-            :disabled="!canNext"
-            data-testid="search-next"
-            @click="nextPage"
-          >
+          </Button>
+          <Button :disabled="!canNext" data-testid="search-next" @click="nextPage">
             {{ t("common.next") }}
-          </button>
+            <AppIcon name="chevron-right" class="ml-1 inline size-4" />
+          </Button>
         </div>
       </section>
     </div>
-  </ConfigProvider>
+  </PortalLayout>
 </template>

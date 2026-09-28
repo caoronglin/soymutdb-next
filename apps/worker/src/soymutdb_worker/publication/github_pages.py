@@ -24,11 +24,18 @@ class GithubPagesAdapter:
     target = "github_pages"
 
     def __init__(
-        self, token: str | None, repository: str | None, api_origin: str | None = None
+        self,
+        token: str | None,
+        repository: str | None,
+        api_origin: str | None = None,
+        artifact_url_template: str | None = None,
     ) -> None:
         self.token = token
         self.repository = repository
         self.api_origin = api_origin or "https://api.github.com"
+        #: ``str.format`` template with ``{publication_id}``/``{digest}``, e.g.
+        #: ``https://artifacts.example/soymutdb/{publication_id}/{digest}.tar.gz``.
+        self.artifact_url_template = artifact_url_template
 
     def _check_configured(self) -> None:
         if not self.token or not self.repository:
@@ -42,18 +49,49 @@ class GithubPagesAdapter:
         }
 
     def stage(self, publication_id: int, artifact: object) -> DeploymentRef:
-        # GitHub Pages stage == no-op marker: the workflow downloads the
-        # artifact from the immutable artifact URL recorded in metadata.
+        """Record the immutable artifact the workflow will fetch.
+
+        GitHub Pages staging is a marker: the ``pages.yml`` workflow downloads
+        the artifact itself. That means the *metadata* has to carry a fetchable
+        immutable URL and the publication id — the previous version returned an
+        empty ``metadata`` dict, so ``promote`` dispatched a workflow with
+        ``publication_id=""`` and ``artifact_url=""`` and the run could not
+        identify what to deploy.
+        """
         self._check_configured()
-        # ``artifact`` is a local Path here; digest is computed on the fly.
         from pathlib import Path
 
         artifact_path = Path(artifact) if not isinstance(artifact, Path) else artifact
+        manifest_digest = _digest(artifact_path)
+
+        # The immutable location the workflow will download. Without it the
+        # dispatch would be unactionable, so fail here rather than send empty
+        # inputs downstream.
+        artifact_url = self._artifact_url(publication_id, manifest_digest)
         return DeploymentRef(
             target=self.target,
-            ref="",
-            manifest_digest=_digest(artifact_path),
+            ref=f"github:{publication_id}:{manifest_digest[:12]}",
+            manifest_digest=manifest_digest,
             artifact_path=str(artifact_path),
+            metadata={
+                "publication_id": str(publication_id),
+                "artifact_url": artifact_url,
+                "manifest_digest": manifest_digest,
+            },
+        )
+
+    def _artifact_url(self, publication_id: int, manifest_digest: str) -> str:
+        """Immutably address the staged artifact for the workflow to fetch."""
+        template = (self.artifact_url_template or "").strip()
+        if not template:
+            raise RuntimeError(
+                "github_pages target requires an artifact URL template "
+                "(SOYMUTDB_GITHUB_PAGES_ARTIFACT_URL_TEMPLATE) so the workflow "
+                "can fetch the immutable artifact; refusing to dispatch empty "
+                "workflow inputs"
+            )
+        return template.format(
+            publication_id=publication_id, digest=manifest_digest
         )
 
     def verify(self, deployment: DeploymentRef) -> ValidationEvidence:

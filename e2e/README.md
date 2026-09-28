@@ -84,6 +84,26 @@ Point at any environment (staging, local dist preview):
 SMOKE_BASE_URL=http://localhost:4173 npx playwright test
 ```
 
+### Sandbox / CI note: browser lookup follows `XDG_CACHE_HOME`
+
+Playwright resolves its browser downloads through the OS cache dir, so if a
+script redirects `XDG_CACHE_HOME` (as the pnpm sandbox helper
+`.validation/*/pnpmenv.sh` does) **without** also pointing at the real browser
+store, every browser test fails to launch with:
+
+```
+Error: browserType.launch: Executable doesn't exist at
+  <XDG_CACHE_HOME>/ms-playwright/chromium_headless_shell-<rev>/...
+```
+
+That is a host/tooling failure, not a product regression — it turns an entire
+suite red in one step. Set the browser path explicitly when you redirect the
+cache:
+
+```bash
+export PLAYWRIGHT_BROWSERS_PATH="${HOME}/.cache/ms-playwright"
+```
+
 ## Demo vs. Production E2E separation
 
 There are **two independent browser suites**; do not conflate them:

@@ -86,6 +86,9 @@ const LOGIN_TEST_CREDENTIALS = Object.freeze({
   password: "correct-horse-battery-staple",
 });
 
+// Kept for reference: the historical 404 rule also matched bare route names
+// (`/genes/...`), which shadows the SPA's own detail routes. The fallback now
+// keys on the `/api/` sub-path instead — see the fallback block below.
 const API_PATH_RE =
   /^\/(api|auth|stats|genes|variants|news|site|blast|tools|analyses|gwas|notifications|seed-requests|content|expression|homolog|releases|sra|downloads|mutants|health|admin|widget)\//;
 
@@ -363,9 +366,14 @@ const server = createServer(async (req, res) => {
 
   let file = join(ROOT, normalize(pathname).replace(/^\/+/, ""));
   if (!existsSync(file) || statSync(file).isDirectory()) {
-    // SPA fallback: index.html for unknown extensionless routes; real 404
-    // for assets and API-shaped paths (mirrors GitHub Pages behaviour).
-    if (pathname.startsWith("/assets/") || API_PATH_RE.test(pathname)) {
+    // SPA fallback: index.html for unknown extensionless routes; real 404 for
+    // assets and API paths (mirrors GitHub Pages behaviour).
+    //
+    // Only `/api/*` counts as an API path here: the artifact's API base is the
+    // `/api/v1` sub-path, so a bare detail route such as `/genes/<accession>`
+    // or `/mutants/<public_id>` must fall back to the SPA document instead of
+    // being mistaken for a missing API endpoint.
+    if (pathname.startsWith("/assets/") || pathname.startsWith("/api/")) {
       res.writeHead(404, { "Content-Type": "text/plain" });
       res.end("not found");
       return;

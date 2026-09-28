@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...core.database import get_db, get_redis
 from ...core.exceptions import ServiceUnavailableError
 from ...core.features import FeatureFlagService
+from ...core.security import RoleName
 from ...core.site_variant import SiteVariant
 from ...models.auth import AuditLog
 from ...schemas.search import (
@@ -31,12 +32,16 @@ from ...schemas.search import (
     InternalSearchResponse,
     SearchResultType,
 )
-from ...search import ExternalSearchAggregator, ExternalSearchResponse, SearchSource, render_search_html
+from ...search import (
+    ExternalSearchAggregator,
+    ExternalSearchResponse,
+    SearchSource,
+    render_search_html,
+)
 from ...search.cache import SearchCache
-from ...services.release_context import resolve_release_context
+from ...services.release_context import ReleaseContext, get_release_context, resolve_release_context
 from ...services.search_service import SearchService
 from .deps import require_role
-from ...core.security import RoleName
 
 logger = structlog.get_logger(__name__)
 
@@ -121,21 +126,22 @@ def _external_html_cache_key(
     query: str,
     sources: list[SearchSource],
     *,
+    release_id: int | None = None,
     assembly_id: int | None,
     limit_per_source: int,
 ) -> str:
     """Scope the federated HTML-fragment cache like the structured cache.
 
-    The external site variant is fixed for this route; the requested assembly
-    and the per-source result limit are part of the scope.  Federated
-    providers are release-independent, so no release id is available at this
-    call site and the key intentionally hashes it as null rather than
-    inventing one.
+    The external site variant is fixed for this route; the resolved release,
+    the requested assembly and the per-source result limit are part of the
+    scope, so neither a release change, nor a v4/v5 switch, nor a different
+    result limit can reuse another scope's fragment.
     """
     return SearchCache.make_key(
         query,
         tuple(source.value for source in sources),
         site_variant=SiteVariant.EXTERNAL,
+        release_id=release_id,
         assembly_id=assembly_id,
         filters={"limit_per_source": limit_per_source},
     )
@@ -151,6 +157,7 @@ def _external_html_cache_key(
 async def global_search(
     request: Request,
     db: AsyncSession = Depends(get_db),
+    release_context: ReleaseContext = Depends(get_release_context),
     q: str = Query(..., min_length=1, max_length=500, alias="query"),
     types: list[SearchResultType] | None = Query(default=None),
     sources: list[str] | None = Query(
@@ -160,6 +167,14 @@ async def global_search(
     cursor: str | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=50),
     assembly_id: int | None = Query(default=None, ge=1),
+    release_id: int | None = Query(
+        default=None,
+        ge=1,
+        description=(
+            "Explicit release scope. Used verbatim (published or not); "
+            "defaults to the active published release."
+        ),
+    ),
     format: str | None = Query(default=None, alias="format", description="'json' or 'html'"),
     accept: str | None = Header(default=None, alias="accept"),
 ) -> Response:
@@ -168,7 +183,13 @@ async def global_search(
     Returns JSON (public SoyMutDB search) when the client sends
     ``Accept: application/json`` or ``?format=json``.  Otherwise returns a
     sanitized HTML fragment built from federated external search results.
+
+    The release query/header pin is resolved through the published release
+    context dependency before either the catalog or federated search runs.
+    Draft and otherwise unavailable release ids are rejected; without a pin,
+    the active published release is selected.
     """
+    resolved_release_id = release_context.release_id
     if _want_json(accept, format):
         if sources:
             if not await FeatureFlagService.is_enabled(db, "search.external"):
@@ -177,6 +198,7 @@ async def global_search(
             aggregator = ExternalSearchAggregator(
                 get_redis(),
                 site_variant=SiteVariant.EXTERNAL,
+                release_id=resolved_release_id,
                 assembly_id=assembly_id,
             )
             ext_resp = await aggregator.search(
@@ -184,7 +206,10 @@ async def global_search(
                 sources=selected_sources,
                 limit_per_source=max(3, min(10, limit)),
             )
-            return JSONResponse(content=_external_json_payload(ext_resp))
+            return JSONResponse(
+                content=_external_json_payload(ext_resp),
+                headers={"Vary": "Accept"},
+            )
         # ---- Public SoyMutDB search (legacy / programmatic clients) --------
         resp = await service.global_search(
             db,
@@ -194,28 +219,32 @@ async def global_search(
             limit=limit,
             assembly_id=assembly_id,
             site_variant=SiteVariant.EXTERNAL,
+            release_id=resolved_release_id,
         )
         payload = resp if isinstance(resp, dict) else resp.model_dump()
-        return JSONResponse(content=payload)
+        return JSONResponse(content=payload, headers={"Vary": "Accept"})
 
     # ---- External federated search -> HTML fragment -----------------------
     if not await FeatureFlagService.is_enabled(db, "search.external"):
         raise HTTPException(status_code=503, detail="External search is currently disabled")
     selected_sources = _parse_sources(sources)
     per_source_limit = max(3, min(10, limit))
+    release_id = resolved_release_id
 
     redis = get_redis()
     aggregator = ExternalSearchAggregator(
         redis,
         site_variant=SiteVariant.EXTERNAL,
+        release_id=release_id,
         assembly_id=assembly_id,
     )
 
     # Cache-key for the rendered HTML fragment.  It shares the aggregator's
-    # biological scope (site variant, assembly, query, sources, limit).
+    # biological scope (site variant, release, assembly, query, sources, limit).
     cache_key = _external_html_cache_key(
         q,
         selected_sources,
+        release_id=release_id,
         assembly_id=assembly_id,
         limit_per_source=per_source_limit,
     )
@@ -226,7 +255,11 @@ async def global_search(
     cached_html = await cache.get(cache_key + ":html")
     if cached_html:
         logger.debug("external_search.html_cache_hit", query=q)
-        return Response(content=cached_html, media_type="text/html; charset=utf-8")
+        return Response(
+            content=cached_html,
+            media_type="text/html; charset=utf-8",
+            headers={"Vary": "Accept"},
+        )
 
     start = time.perf_counter()
     ext_resp = await aggregator.search(
@@ -244,7 +277,11 @@ async def global_search(
     # Cache the rendered fragment for 5 minutes.
     await cache.set(cache_key + ":html", html)
 
-    return Response(content=html, media_type="text/html; charset=utf-8")
+    return Response(
+        content=html,
+        media_type="text/html; charset=utf-8",
+        headers={"Vary": "Accept"},
+    )
 
 
 # ------------------------------------------------------------------- suggest
@@ -253,10 +290,17 @@ async def suggest(
     db: AsyncSession = Depends(get_db),
     q: str = Query(..., min_length=1, max_length=100),
     limit: int = Query(default=5, ge=1, le=20),
+    release_id: int | None = Query(default=None, ge=1),
+    pinned_release_id: int | None = Header(default=None, alias="X-SoyMutDB-Release", ge=1),
 ) -> list[dict]:
-    """Autocomplete suggestions (internal DB only, release-scoped)."""
+    """Autocomplete suggestions scoped to the requested published release."""
+    if release_id is not None and pinned_release_id is not None and release_id != pinned_release_id:
+        raise HTTPException(
+            status_code=422, detail="Conflicting release ids were provided"
+        )
+    requested_release_id = release_id if release_id is not None else pinned_release_id
     try:
-        release_context = await resolve_release_context(db)
+        release_context = await resolve_release_context(db, requested_release_id)
     except ServiceUnavailableError:
         # Fail closed: without a published release there is no release-scoped
         # suggestion set. Returning an unscoped list would expose draft

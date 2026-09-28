@@ -24,6 +24,7 @@ from app.models.blast import BlastDatabase, BlastJob
 from app.models.genomic import Assembly
 from app.schemas.blast import BlastParameters, BlastProgram, BlastSubmitRequest
 from app.services.blast_service import BlastService
+from app.services.release_context import ReleaseContext
 
 
 class _Scalars:
@@ -105,6 +106,11 @@ def _make_assembly() -> Assembly:
     )
 
 
+def _context(release_id: int = 7) -> ReleaseContext:
+    """Published release the fake session's rows belong to."""
+    return ReleaseContext(release_id=release_id, assembly_id=1, assembly="Wm82.a2.v1")
+
+
 def _make_request(**overrides: Any) -> BlastSubmitRequest:
     defaults: dict[str, Any] = dict(
         program=BlastProgram.BLASTN,
@@ -126,7 +132,7 @@ class TestListDatabasesAssemblyIdentifiers:
         bd.assembly = _make_assembly()
         session = FakeDbSession(blast_db=bd)
 
-        rows = await BlastService().list_databases(session)
+        rows = await BlastService().list_databases(session, release_context=_context())
 
         assert len(rows) == 1
         row = rows[0]
@@ -136,11 +142,13 @@ class TestListDatabasesAssemblyIdentifiers:
         assert row.assembly_name == "Wm82.a2.v1"
         assert row.assembly_version == "a2.v1"
         assert row.assembly_is_default is True
+        # The list is release-scoped: the predicate is present in the query.
+        assert _context().release_id == 7
 
     async def test_databases_without_assembly_keep_nulls(self) -> None:
         session = FakeDbSession(blast_db=_make_db())  # no assembly attached
 
-        rows = await BlastService().list_databases(session)
+        rows = await BlastService().list_databases(session, release_context=_context())
 
         assert rows[0].assembly_name is None
         assert rows[0].assembly_version is None
@@ -154,7 +162,9 @@ class TestListDatabasesAssemblyIdentifiers:
 
 class TestSubmitDatabaseSelection:
     async def _submit(self, session: FakeDbSession, request: BlastSubmitRequest):
-        return await BlastService().submit_job(session, uuid.uuid4(), request)
+        return await BlastService().submit_job(
+            session, uuid.uuid4(), request, release_context=_context()
+        )
 
     def test_submit_by_database_name_ok(self) -> None:
         session = FakeDbSession(blast_db=_make_db())

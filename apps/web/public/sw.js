@@ -2,7 +2,7 @@
  * SoyMutDB Service Worker — 静态资源缓存
  *
  * 构建期由 apps/web/scripts/gen-sw.js 处理（构建链最后一步）：
- *   CACHE_VERSION 常量     → 缓存版本号（构建时间戳 + precache 清单内容 hash）
+ *   CACHE_VERSION 常量     → 缓存版本号（site variant + 时间戳 + precache 清单 hash）
  *   PRECACHE_MANIFEST 常量 → precache 文件清单（dist/assets 下全部构建产物，相对路径）
  *   两处均为占位符替换，最终产物见 dist/sw.js
  *
@@ -12,20 +12,26 @@
  *   3. 导航请求 (mode=navigate) → network-first，离线回退缓存 / 兜底首页（SSG 页离线可用）
  *   4. 其他静态资源             → stale-while-revalidate（先缓存后刷新）
  *
- * 部署注意：站点托管在 gh-pages 子路径（如 https://caoronglin.github.io/soymutdb-next/）
- * 所有路径均以 registration.scope 为基准动态解析，跨域请求一律放行。
+ * 部署注意：Web external/internal 各自注册独立 scope；所有路径均以
+ * registration.scope 为基准解析，跨域请求一律放行。
  */
 "use strict";
 
 /* ============================ 构建期注入 ============================ */
 const CACHE_VERSION = "__CACHE_VERSION__";
 const PRECACHE_MANIFEST = __PRECACHE_MANIFEST__;
+// 站点变体（external | internal）。DB-CORE-5 要求两个变体的 service worker
+// 命名空间彼此隔离：外部站与内网站的导航 HTML 内容不同（内网站含私有记录），
+// 一旦两者落在同一 origin，共享的运行时缓存就会把内网页面回给外部访问者。
+// 变体由 gen-sw.js 在构建期注入，不依赖 origin 这一层隐含前提。
+const SW_NAMESPACE = "__SW_NAMESPACE__";
 
 /* ============================ 缓存名 ============================ */
 // 静态缓存随版本号整体轮换（hash 资源 immutable，旧版本在 activate 时删除）
 const PRECACHE_CACHE = `soymutdb-static-v${CACHE_VERSION}`;
-// 运行时缓存（导航 HTML / 非 hash 静态资源），跨版本保留，内容逐项刷新
-const RUNTIME_CACHE = "soymutdb-runtime";
+// 运行时缓存（导航 HTML / 非 hash 静态资源），跨版本保留，内容逐项刷新；
+// 名字带变体前缀，两个变体互不可见、互不清理。
+const RUNTIME_CACHE = `soymutdb-runtime-${SW_NAMESPACE}`;
 
 /* ============================ 生命周期 ============================ */
 
@@ -53,7 +59,14 @@ self.addEventListener("activate", (event) => {
             .then((keys) =>
                 Promise.all(
                     keys
-                        .filter((k) => k.startsWith("soymutdb-static-v") && k !== PRECACHE_CACHE)
+                        // 只清理本变体的旧静态缓存：CACHE_VERSION 以变体名开头
+                        // （`${SITE_VARIANT}-${version}`），因此这个前缀不会碰到
+                        // 另一个变体的缓存。
+                        .filter(
+                            (k) =>
+                                k.startsWith(`soymutdb-static-v${SW_NAMESPACE}`) &&
+                                k !== PRECACHE_CACHE,
+                        )
                         .map((k) => caches.delete(k)),
                 ),
             )
@@ -63,9 +76,9 @@ self.addEventListener("activate", (event) => {
 
 /* ============================ fetch 策略 ============================ */
 
-// Vite 产物形如 /assets/index-D3f4x7a9.js / /assets/antd-9zY2kLm1.css ——
-// 文件名内含 8+ 位内容 hash，immutable，可安全 cache-first。
-const HASHED_ASSET_RE = /\/assets\/[^/]+-[A-Za-z0-9_-]{8,}\.[a-z0-9]+$/;
+// Umi/Webpack 产物形如 /assets/ui.abcdef12.js 或 /assets/ui.abcdef12.async.js；
+// 兼容旧 Vite 的 name-hash 格式。内容 hash 资源 immutable，可安全 cache-first。
+const HASHED_ASSET_RE = /\/assets\/[^/]+[._-][A-Za-z0-9_-]{8,}(?:\.async)?\.[a-z0-9]+$/;
 
 /** 相对路径（相对 SW scope，即部署前缀）→ 完整 URL。 */
 function scopeUrl(rel) {
@@ -84,7 +97,8 @@ async function cachePut(cacheName, request, response) {
 
 /** 策略 2：cache-first —— hash 资源命中即返回；未命中走网络并回填缓存。 */
 async function cacheFirst(request) {
-    const cached = await caches.match(request);
+    const cache = await caches.open(PRECACHE_CACHE);
+    const cached = await cache.match(request);
     if (cached) return cached;
     const response = await fetch(request);
     if (response.ok) {
@@ -95,6 +109,7 @@ async function cacheFirst(request) {
 
 /** 策略 3：network-first —— 在线优先（HTML 永远最新）；离线回退缓存，兜底首页。 */
 async function networkFirst(request) {
+    const cache = await caches.open(RUNTIME_CACHE);
     try {
         const response = await fetch(request);
         if (response.ok) {
@@ -103,11 +118,11 @@ async function networkFirst(request) {
         return response;
     } catch {
         // 离线：先试该请求自身缓存，再试 scope 根页（index.html / SSG 入口）
-        const cached = await caches.match(request);
+        const cached = await cache.match(request);
         if (cached) return cached;
-        const root = await caches.match(scopeUrl("./index.html"));
+        const root = await cache.match(scopeUrl("./index.html"));
         if (root) return root;
-        const scopeRoot = await caches.match(new URL(self.registration.scope).href);
+        const scopeRoot = await cache.match(new URL(self.registration.scope).href);
         if (scopeRoot) return scopeRoot;
         return Response.error();
     }
@@ -145,8 +160,16 @@ self.addEventListener("fetch", (event) => {
 
     const { pathname } = url;
 
-    // 策略 1：API 请求 network only（dev 下 /api 走 vite proxy，生产走跨域源）
-    if (pathname.includes("/api/")) return;
+    // 策略 1：API 请求 network only —— 永不拦截、永不写入共享缓存。
+    // 理由：API 响应携带后端自己的 Cache-Control 语义（内部站 viewer 变体是
+    // `private, no-store`），一旦落进 runtime 缓存，登出/切换身份后就会命中旧
+    // 数据；且会话态响应不能与静态资源共用「命中即返回」的假设。
+    //
+    // 按「完整路径段」判定而非 includes("/api/")：后者漏掉裸 /api（无尾斜杠），
+    // 而 /api 恰好是 VITE_API_BASE_URL 可以是的最小形态，一旦漏判就掉进策略 4
+    // 被写进 soymutdb-runtime。正则同时覆盖子路径部署下的 /<base>/api/v1/...。
+    // 跨域 API 源在更上面的 origin 判断已经放行，这里是同源 API 的兜底。
+    if (/(?:^|\/)api(?:\/|$)/.test(pathname)) return;
 
     // 策略 2：assets 下 hash 文件 → cache-first
     if (HASHED_ASSET_RE.test(pathname)) {

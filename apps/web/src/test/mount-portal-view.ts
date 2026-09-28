@@ -11,6 +11,13 @@ vi.mock("@soymutdb/ui-vue", () => ({
   createThemeConfig: () => ({}),
   // Antdv Next primitives used by the portal pages. Mounted as thin native
   // elements so a test asserts the app contract, not the component library.
+  //
+  // The `value` + `update:value` pair is the REAL antdv-next contract: the
+  // library declares no `modelValue` on any component, so a stub that answers
+  // `v-model` is a stub that lies. It hid a shipped bug where the global search
+  // box and the mutagen filter were bound with a bare `v-model` and therefore
+  // never updated their ref. Keep these stubs faithful; the static guard in
+  // `src/regression/antdv-input-binding.test.ts` keeps the templates honest.
   Button: {
     props: ["disabled", "type", "htmlType", "size"],
     emits: ["click"],
@@ -18,17 +25,22 @@ vi.mock("@soymutdb/ui-vue", () => ({
       '<button :type="htmlType ?? type ?? \'button\'" :disabled="disabled" @click="$emit(\'click\', $event)"><slot /></button>',
   },
   Input: {
-    props: ["modelValue", "placeholder", "type", "disabled"],
-    emits: ["update:modelValue"],
+    props: ["value", "placeholder", "type", "disabled"],
+    emits: ["update:value"],
     template:
-      '<input :value="modelValue" :type="type ?? \'text\'" :placeholder="placeholder" :disabled="disabled" @input="$emit(\'update:modelValue\', ($event.target as HTMLInputElement).value)" />',
+      '<input :value="value" :type="type ?? \'text\'" :placeholder="placeholder" :disabled="disabled" @input="$emit(\'update:value\', ($event.target as HTMLInputElement).value)" />',
   },
   Select: {
-    props: ["modelValue", "options"],
-    emits: ["update:modelValue", "change"],
+    props: ["value", "options"],
+    emits: ["update:value", "change"],
     template:
-      '<select :value="modelValue" @change="$emit(\'update:modelValue\', ($event.target as HTMLSelectElement).value); $emit(\'change\', $event)"><option /><slot /></select>',
+      '<select :value="value" @change="$emit(\'update:value\', ($event.target as HTMLSelectElement).value); $emit(\'change\', $event)"><option /><slot /></select>',
   },
+  Card: {
+    props: ["title", "hoverable", "size", "bordered"],
+    template: '<div><slot name="extra" /><slot /></div>',
+  },
+  Space: { props: ["size", "direction", "wrap", "align"], template: '<div><slot /></div>' },
   Tag: { props: ["color"], template: '<span><slot /></span>' },
   Table: { template: '<table><slot /></table>' },
   Empty: { template: '<div><slot /></div>' },

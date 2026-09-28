@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.database import get_db
@@ -32,6 +32,12 @@ from .deps import get_current_user, get_user_roles, require_role
 router = APIRouter(prefix="/gwas", tags=["gwas"])
 service = GwasService()
 
+
+def _private(response: Response) -> None:
+    response.headers["Cache-Control"] = "private, no-store"
+    response.headers["Vary"] = "Authorization"
+
+
 #: All GWAS endpoints require researcher (or higher; admin included).
 _RESEARCHER_OR_HIGHER = [Depends(require_role(RoleName.RESEARCHER))]
 
@@ -43,6 +49,7 @@ _RESEARCHER_OR_HIGHER = [Depends(require_role(RoleName.RESEARCHER))]
 )
 async def create_upload(
     request: GwasUploadRequest,
+    response: Response,
     current_user: User = Depends(get_current_user),
 ) -> GwasUploadResponse:
     """Request a pre-signed upload URL for a GWAS input file.
@@ -50,6 +57,7 @@ async def create_upload(
     Returns a PUT URL valid for 1 hour plus the object key the client must
     send back at submit time.  Nothing is persisted yet.
     """
+    _private(response)
     return GwasUploadResponse(
         **service.create_upload(current_user.id, request.filename)
     )
@@ -63,6 +71,7 @@ async def create_upload(
 )
 async def submit_gwas_job(
     request: GwasSubmitRequest,
+    response: Response,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> GwasJobResponse:
@@ -72,6 +81,7 @@ async def submit_gwas_job(
     method whitelist and the parameter whitelist, then creates the job row +
     outbox event in one transaction (pending).
     """
+    _private(response)
     return await service.submit_job(db, current_user.id, request)
 
 
@@ -82,6 +92,7 @@ async def submit_gwas_job(
 )
 async def get_gwas_job(
     job_id: uuid.UUID,
+    response: Response,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> GwasJobResponse:
@@ -90,6 +101,7 @@ async def get_gwas_job(
     ``result`` is ``null`` until the job completes; completed jobs carry the
     worker-written summary (MinIO object keys + association statistics).
     """
+    _private(response)
     return await service.get_job(db, job_id, current_user.id, get_user_roles(current_user))
 
 
@@ -100,6 +112,7 @@ async def get_gwas_job(
 )
 async def get_gwas_results(
     job_id: uuid.UUID,
+    response: Response,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> GwasResultResponse:
@@ -109,4 +122,5 @@ async def get_gwas_results(
     expose the Manhattan data JSON, the QQ data JSON and the self-contained
     ``Manhattan_QQ.html`` report.
     """
+    _private(response)
     return await service.get_result(db, job_id, current_user.id, get_user_roles(current_user))

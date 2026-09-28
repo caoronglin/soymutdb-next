@@ -11,17 +11,6 @@ import { gotoReady } from "./helpers";
 
 const BASE = "/soymutdb-next";
 
-/** Install a window.open stub that records the opened URL. */
-async function captureWindowOpen(page: Page): Promise<void> {
-  await page.addInitScript(() => {
-    (window as unknown as { __opened: string | null }).__opened = null;
-    window.open = ((url?: string) => {
-      (window as unknown as { __opened: string | null }).__opened = url ?? null;
-      return null;
-    }) as typeof window.open;
-  });
-}
-
 /** The form control, rather than the similarly named results landmark. */
 function geneIdInput(page: Page) {
   return page.getByTestId("search-genes-input");

@@ -45,6 +45,17 @@ class FakeRedis:
         self.store[key] = value
 
 
+#: Release every stats cache test is scoped to.
+_STATS_RELEASE_ID = 7
+
+
+def _stats_release_context(release_id: int = _STATS_RELEASE_ID):
+    """Published-release context the stats endpoints now resolve server-side."""
+    from app.services.release_context import ReleaseContext
+
+    return ReleaseContext(release_id=release_id, assembly_id=3, assembly="Wm82.a4.v1")
+
+
 class TestMakeCacheKey:
     def test_no_params_uses_name_only(self) -> None:
         assert make_cache_key("stats:homepage") == "cache:stats:homepage"
@@ -346,14 +357,15 @@ class TestEndpointCacheIntegration:
         monkeypatch.setattr(stats_module, "get_or_set", _fake_get_or_set)
 
         result = await stats_module.chromosome_density_summary(
-            db, release_id=None
+            db, release_context=_stats_release_context()
         )
 
         assert isinstance(result, list)
         assert isinstance(result[0], ChromosomeDensitySummary)
         assert result[0].chromosome == "Gm01"
         assert called["name"] == "stats:chromosome-density"
-        assert called["params"] == {"release_id": None}
+        # The release is resolved server-side, never supplied by the caller.
+        assert called["params"] == {"release_id": _STATS_RELEASE_ID}
 
     async def test_chromosome_density_cache_key_includes_release(self, monkeypatch) -> None:
         """Distinct ``release_id`` values must produce distinct cache keys."""
@@ -368,10 +380,14 @@ class TestEndpointCacheIntegration:
         monkeypatch.setattr(stats_module, "get_or_set", _fake_get_or_set)
         db = AsyncMock()
 
-        await stats_module.chromosome_density_summary(db, release_id=None)
-        await stats_module.chromosome_density_summary(db, release_id=7)
+        await stats_module.chromosome_density_summary(
+            db, release_context=_stats_release_context(7)
+        )
+        await stats_module.chromosome_density_summary(
+            db, release_context=_stats_release_context(9)
+        )
 
-        assert seen == [{"release_id": None}, {"release_id": 7}]
+        assert seen == [{"release_id": 7}, {"release_id": 9}]
 
     async def test_release_statistics_cache_hit_skips_db(self, monkeypatch) -> None:
         from app.api.v1 import stats as stats_module
@@ -400,13 +416,14 @@ class TestEndpointCacheIntegration:
 
         monkeypatch.setattr(stats_module, "get_or_set", _fake_get_or_set)
 
-        result = await stats_module.release_statistics(db, only_active=False)
+        result = await stats_module.release_statistics(db)
 
         assert isinstance(result, list)
         assert isinstance(result[0], ReleaseSummary)
         assert result[0].release_version == "v4.0"
         assert called["name"] == "stats:releases"
-        assert called["params"] == {"only_active": False}
+        # The published-only filter is unconditional, so it is not a cache key.
+        assert called["params"] is None
 
     async def test_featured_news_cache_hit_skips_db(self, monkeypatch) -> None:
         from app.api.v1 import news as news_module

@@ -335,17 +335,26 @@ class SearchService:
         limit: int = 20,
         assembly_id: int | None = None,
         site_variant: SiteVariant = SiteVariant.EXTERNAL,
+        release_id: int | None = None,
     ) -> GlobalSearchResponse:
         """Search across multiple entity types with a short-lived cache.
 
         External responses are cached per (site, release, assembly, query,
         types, cursor, limit). Internal responses bypass the cache so
         authorized rows can never be served to a different scope.
+
+        ``release_id`` is the request's explicit release scope. When it is
+        supplied it is used verbatim -- including for a release that is not
+        published yet, whose assemblies/mutant lines are still queryable at
+        the SQL level -- so two different releases can never share a response.
+        When it is ``None`` the active published release is resolved and used
+        instead.
         """
         limit = max(1, min(int(limit), 100))
         active_types = _normalize_active_types(types)
-        context = await resolve_release_context(db)
-        release_id = context.release_id
+        if release_id is None:
+            context = await resolve_release_context(db)
+            release_id = context.release_id
         # NOTE: an absent assembly_id deliberately searches every assembly
         # of the release; hits are labelled per assembly and the response
         # reports ambiguity. It is never defaulted behind the caller's back.
@@ -951,6 +960,7 @@ class SearchService:
             conditions = [
                 MutantLine.is_public.is_(True),
                 MutantLine.is_deleted.is_(False),
+                # Redundant-by-design defence: the ILIKE below already drops NULL public_id.
                 MutantLine.public_id.is_not(None),
                 MutantLine.release_id == release_id,
                 MutantLine.public_id.ilike(pattern, escape="\\"),

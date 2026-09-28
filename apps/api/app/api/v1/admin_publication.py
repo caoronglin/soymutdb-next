@@ -16,8 +16,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.database import get_db
-from ...core.features import FeatureFlagService
 from ...core.exceptions import AuthorizationError
+from ...core.features import FeatureFlagService
 from ...core.security import RoleName, has_role
 from ...models.auth import User
 from ...models.publication import StaticPublication
@@ -71,9 +71,13 @@ async def request(
     """Allocate a publication request for a target and enqueue the build."""
     _require_admin(current_user)
     target_key = getattr(payload.target, "value", payload.target)
-    if target_key == "github_pages" and not await FeatureFlagService.is_enabled(db, "publication.github_pages"):
+    if target_key == "github_pages" and not await FeatureFlagService.is_enabled(
+        db, "publication.github_pages"
+    ):
         raise HTTPException(status_code=503, detail="GitHub Pages publication is disabled")
-    if target_key == "cloudflare_pages" and not await FeatureFlagService.is_enabled(db, "publication.cloudflare_pages"):
+    if target_key == "cloudflare_pages" and not await FeatureFlagService.is_enabled(
+        db, "publication.cloudflare_pages"
+    ):
         raise HTTPException(status_code=503, detail="Cloudflare Pages publication is disabled")
     try:
         pub = await request_publication(
@@ -82,6 +86,7 @@ async def request(
             release_id=payload.release_id,
             actor_id=str(current_user.id),
             page_definition_version=payload.page_definition_version,
+            build_artifact_url=payload.build_artifact_url,
         )
     except PublicationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

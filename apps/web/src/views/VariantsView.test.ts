@@ -7,13 +7,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@soymutdb/ui-vue", () => ({
   ConfigProvider: { template: "<div><slot /></div>" },
+  Button: {
+    props: ["disabled", "type", "htmlType", "size"],
+    emits: ["click"],
+    template:
+      '<button :type="htmlType ?? type ?? \'button\'" :disabled="disabled" @click="$emit(\'click\', $event)"><slot /></button>',
+  },
   Tag: { template: "<span><slot /></span>" },
   createThemeConfig: () => ({}),
 }));
 
-import { getAssemblies, getSiteBranding, searchVariants } from "@soymutdb/api-client";
+import { getAssemblies, getSiteBranding, getSiteContent, searchVariants } from "@soymutdb/api-client";
 import VariantsView from "./VariantsView.vue";
-import { setLanguage } from "../lib/i18n";
+import { setLanguage, t } from "../lib/i18n";
 
 vi.mock("@soymutdb/api-client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@soymutdb/api-client")>();
@@ -21,6 +27,7 @@ vi.mock("@soymutdb/api-client", async (importOriginal) => {
     ...actual,
     getAssemblies: vi.fn(),
     getSiteBranding: vi.fn(),
+    getSiteContent: vi.fn(),
     getReleaseId: () => "2026.09",
     searchVariants: vi.fn(),
   };
@@ -40,10 +47,12 @@ const EMPTY_PAGE = {
 };
 
 const mockedSearch = vi.mocked(searchVariants);
+const mockedSiteContent = vi.mocked(getSiteContent);
 
 beforeEach(() => {
   setLanguage("en");
   mockedSearch.mockReset().mockResolvedValue(EMPTY_PAGE as never);
+  mockedSiteContent.mockReset().mockResolvedValue({});
   vi.mocked(getAssemblies).mockReset().mockResolvedValue(ASSEMBLIES as never);
   vi.mocked(getSiteBranding).mockReset().mockResolvedValue({
     variant: "external",
@@ -127,7 +136,7 @@ describe("VariantsView (Phase F, DB-CORE-3/4/6 + ADR-0006)", () => {
         end: 2000,
         impact: "HIGH",
         variant_type: "SNP",
-        mutant_line_id: "SM7QF3Z",
+        mutant_line_public_id: "SM7QF3Z",
         limit: 50,
       }),
     );
@@ -246,6 +255,37 @@ describe("VariantsView (Phase F, DB-CORE-3/4/6 + ADR-0006)", () => {
     const { wrapper } = await mountView({ assembly: "5" });
 
     expect(wrapper.find('[data-testid="variants-assembly-column"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("renders today's localized title/subtitle when no override is stored", async () => {
+    const { wrapper } = await mountView();
+
+    expect(wrapper.get(".eyebrow").text()).toBe(t("variants.title"));
+    expect(wrapper.get("h1").text()).toBe(t("variants.subtitle"));
+    wrapper.unmount();
+  });
+
+  it("keeps Chinese copy (not the English default) when the override map is empty", async () => {
+    setLanguage("zh");
+    const { wrapper } = await mountView();
+
+    expect(wrapper.get(".eyebrow").text()).toBe(t("variants.title"));
+    expect(wrapper.get("h1").text()).toBe(t("variants.subtitle"));
+    expect(wrapper.get("h1").text()).not.toBe("Search and explore genomic variant information");
+    wrapper.unmount();
+  });
+
+  it("renders a stored title/subtitle override under the active language", async () => {
+    mockedSiteContent.mockResolvedValue({
+      "variants.title": "运营变异标题",
+      "variants.subtitle": "运营变异副标题",
+    });
+    setLanguage("zh");
+    const { wrapper } = await mountView();
+
+    expect(wrapper.get(".eyebrow").text()).toBe("运营变异标题");
+    expect(wrapper.get("h1").text()).toBe("运营变异副标题");
     wrapper.unmount();
   });
 });

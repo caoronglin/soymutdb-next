@@ -1,8 +1,8 @@
 #!/usr/bin/env tsx
 /**
- * Static route enumeration for the Vue portal.
+ * Static route enumeration for the React portal.
  *
- * Runs after `vite build`. For every route whose metadata marks it prerenderable
+ * Runs after the Umi build. For every route whose metadata marks it prerenderable
  * it writes `<dist>/<path>/index.html` (the built shell with the page title,
  * description, and canonical link injected) so static hosts serve a real
  * document per route instead of relying on an SPA fallback. It also writes:
@@ -38,7 +38,7 @@ function resolveSiteVariant(value: unknown): SiteVariant {
 
 const DIST_DIR = resolve(
   process.cwd(),
-  process.env.SOYMUTDB_VUE_DIST_DIR?.trim() || "dist",
+  process.env.SOYMUTDB_DIST_DIR?.trim() || "dist",
 );
 const siteVariant = resolveSiteVariant(process.env.VITE_SITE_VARIANT);
 const origin = process.env.SOYMUTDB_SITE_URL?.trim() || undefined;

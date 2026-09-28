@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# SoyMutDB — build the (Vue) portal and the admin static applications
+# SoyMutDB — build the React portal and admin static applications
 # =============================================================================
 # Shared by the baseline validation job and by any caller that needs the two
 # static bundles without the full verification gate set (i18n, budgets,
@@ -32,6 +32,7 @@ export SOYMUTDB_EMIT_GZ="${SOYMUTDB_EMIT_GZ:-1}"
 pnpm build:web
 pnpm build:admin
 
-test -d apps/web/dist
-test -d apps/admin/dist
+test -s apps/web/dist/external/index.html
+test -s apps/web/dist/internal/index.html
+test -s apps/admin/dist/index.html
 printf 'static applications built (web, admin)\n'

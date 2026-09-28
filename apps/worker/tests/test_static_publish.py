@@ -41,31 +41,94 @@ def test_build_manifest_is_deterministic(tmp_path: Path) -> None:
     assert len(d1) == 64
 
 
-def test_build_static_tree_writes_fresh_tree_and_manifest(tmp_path: Path) -> None:
+def _ssg_output(root: Path, *, label: str = "real") -> Path:
+    """A stand-in for a real SSG build directory."""
+    build = root / f"build-{label}"
+    (build / "assets").mkdir(parents=True, exist_ok=True)
+    (build / "index.html").write_text(
+        f"<!doctype html><html><body>{label} site</body></html>", "utf-8"
+    )
+    (build / "assets" / "app.js").write_text("export {};\n", "utf-8")
+    (build / "data").mkdir(parents=True, exist_ok=True)
+    (build / "data" / "content.json").write_text('{"about": {}}', "utf-8")
+    return build
+
+
+def test_build_static_tree_uses_the_real_build_output(tmp_path: Path) -> None:
     from soymutdb_worker.tasks.static_publish_impl import build_static_tree
 
-    # Redirect DIST_ROOT via monkeypatch (module constant used inside paths).
     monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr(
         "soymutdb_worker.tasks.static_publish_impl.DIST_ROOT", tmp_path / "releases"
     )
+    build = _ssg_output(tmp_path, label="real")
 
     tree, digest = build_static_tree(
-        release_id=7, page_definition_version=3, snapshot={"about": {}}
+        release_id=7, page_definition_version=3, build_dir=build
     )
+
     assert tree.is_dir()
     assert (tree / "manifest.json").is_file()
-    assert (tree / "index.html").is_file()
+    # The artifact is the build output, byte-for-byte, plus the manifest.
+    assert "real site" in (tree / "index.html").read_text("utf-8")
+    assert (tree / "assets" / "app.js").is_file()
     assert (tree / "data" / "content.json").is_file()
 
     ev = verify_manifest(tree, digest)
     assert ev.ok is True
 
     # A second build for a different release produces a different digest dir.
-    tree2, digest2 = build_static_tree(
-        release_id=8, page_definition_version=3, snapshot={"about": {}}
+    tree2, _digest2 = build_static_tree(
+        release_id=8, page_definition_version=3, build_dir=build
     )
     assert tree != tree2
+
+
+def test_build_static_tree_refuses_a_synthetic_tree(tmp_path: Path) -> None:
+    """Ablation: the synthetic single-page fallback must not come back.
+
+    The previous implementation published a one-page placeholder whenever no
+    build chain existed, so a request could report ``published`` while serving
+    nothing. There is deliberately no fallback now.
+    """
+    from soymutdb_worker.tasks.static_publish_impl import (
+        MissingBuildOutput,
+        build_static_tree,
+    )
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(
+        "soymutdb_worker.tasks.static_publish_impl.DIST_ROOT", tmp_path / "releases"
+    )
+
+    with pytest.raises(MissingBuildOutput, match="No SSG build output"):
+        build_static_tree(
+            release_id=7, page_definition_version=3, build_dir=None
+        )
+
+
+def test_build_static_tree_refuses_a_missing_or_empty_directory(tmp_path: Path) -> None:
+    from soymutdb_worker.tasks.static_publish_impl import (
+        MissingBuildOutput,
+        build_static_tree,
+    )
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(
+        "soymutdb_worker.tasks.static_publish_impl.DIST_ROOT", tmp_path / "releases"
+    )
+
+    with pytest.raises(MissingBuildOutput, match="not a directory"):
+        build_static_tree(
+            release_id=7, page_definition_version=None, build_dir=tmp_path / "nope"
+        )
+
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    with pytest.raises(MissingBuildOutput, match="missing required file"):
+        build_static_tree(
+            release_id=7, page_definition_version=None, build_dir=empty
+        )
 
 
 def test_state_store_transition_guards_status() -> None:

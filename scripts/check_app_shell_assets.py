@@ -23,14 +23,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# Apps whose HTML shell must carry an icon. `dist_variants` lists the possible
-# built roots (a single-tree build and the dual-site build both count).
-APPS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    # The portal is only ever published as a site variant (external/internal);
-    # the single-tree apps/web/dist is not a release artifact, so requiring it
-    # here forced a redundant third web build in the frontend gate.
-    ("apps/web", ("dist/external", "dist/internal")),
-    ("apps/admin", ("dist",)),
+# Apps whose generated HTML shell must carry an icon. Each app config declares
+# the icon source, and built trees prove that Umi copied it into the artifact.
+APPS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("apps/web", "config/config.ts", ("dist/external", "dist/internal")),
+    ("apps/admin", "config/config.ts", ("dist",)),
+    ("apps/jbrowse", "config/config.ts", ("dist",)),
 )
 
 ICON_LINK = re.compile(r"<link[^>]*rel=\"icon\"[^>]*>", re.IGNORECASE)
@@ -48,43 +46,44 @@ def icon_href(html: str) -> str | None:
 
 def check_shell(
     app_dir: Path,
+    config_path: Path,
     dist_dirs: tuple[Path, ...],
     failures: list[str],
 ) -> None:
-    """Check one app's source shell and every built tree that exists."""
-    index = app_dir / "index.html"
-    if not index.is_file():
-        failures.append(f"{app_dir.name}: index.html is missing")
-        return
-    href = icon_href(index.read_text(encoding="utf-8"))
-    if href is None:
-        failures.append(f'{app_dir.name}/index.html declares no <link rel="icon">')
+    """Check Umi's icon declaration and every built tree that exists."""
+    config = config_path.read_text(encoding="utf-8") if config_path.is_file() else ""
+    if "favicon.svg" not in config or "favicons:" not in config:
+        failures.append(f"{app_dir.name}: Umi config must declare favicon.svg")
         return
 
-    # A Vite shell uses `/favicon.svg`, rewritten to the deployment base at
-    # build time; only the file name has to resolve.
-    name = href.rsplit("/", 1)[-1]
-    if not name:
-        failures.append(f"{app_dir.name}: icon href {href!r} has no file name")
-        return
-
-    source_asset = app_dir / "public" / name
+    source_asset = app_dir / "public" / "favicon.svg"
     if not source_asset.is_file():
-        failures.append(f"{app_dir.name}: {href} has no matching public/{name}")
+        failures.append(f"{app_dir.name}: config favicon has no matching public/favicon.svg")
+        return
 
     for dist in dist_dirs:
         if not dist.is_dir():
             continue
-        if not (dist / name).is_file():
-            failures.append(f"{app_dir.name}: built {dist.name}/{name} is missing")
+        index = dist / "index.html"
+        if not index.is_file():
+            failures.append(f"{app_dir.name}: built {dist.name}/index.html is missing")
+            continue
+        href = icon_href(index.read_text(encoding="utf-8"))
+        if href is None:
+            failures.append(f'{app_dir.name}: built {dist.name}/index.html declares no <link rel="icon">')
+            continue
+        name = href.rsplit("/", 1)[-1]
+        if not name or not (dist / name).is_file():
+            failures.append(f"{app_dir.name}: built {dist.name}/{name or 'favicon'} is missing")
 
 
 def run() -> list[str]:
     failures: list[str] = []
-    for app, variants in APPS:
+    for app, config_relative, variants in APPS:
         app_dir = ROOT / app
+        config_path = app_dir / config_relative
         dist_dirs = tuple(app_dir / variant for variant in variants)
-        check_shell(app_dir, dist_dirs, failures)
+        check_shell(app_dir, config_path, dist_dirs, failures)
     return failures
 
 
@@ -95,33 +94,34 @@ def self_test() -> int:
         app = root / "apps" / "demo"
         (app / "public").mkdir(parents=True)
         (app / "public" / "favicon.svg").write_text("<svg/>", encoding="utf-8")
-        (app / "index.html").write_text(
+        config = app / "config" / "config.ts"
+        config.parent.mkdir(parents=True)
+        config.write_text('favicons: [`${base}favicon.svg`],', encoding="utf-8")
+        dist = app / "dist"
+        dist.mkdir()
+        (dist / "index.html").write_text(
             '<head><link rel="icon" type="image/svg+xml" href="/favicon.svg" /></head>',
             encoding="utf-8",
         )
-        (app / "dist").mkdir()
-        (app / "dist" / "favicon.svg").write_text("<svg/>", encoding="utf-8")
+        (dist / "favicon.svg").write_text("<svg/>", encoding="utf-8")
 
         failures: list[str] = []
-        check_shell(app, (app / "dist",), failures)
+        check_shell(app, config, (dist,), failures)
         assert failures == [], failures
 
-        (app / "dist" / "favicon.svg").unlink()
-        check_shell(app, (app / "dist",), failures)
+        (dist / "favicon.svg").unlink()
+        check_shell(app, config, (dist,), failures)
         assert any("built dist/favicon.svg is missing" in item for item in failures), failures
 
         failures.clear()
-        (app / "index.html").write_text("<head></head>", encoding="utf-8")
-        check_shell(app, (), failures)
+        (dist / "index.html").write_text("<head></head>", encoding="utf-8")
+        check_shell(app, config, (dist,), failures)
         assert any("declares no" in item for item in failures), failures
 
         failures.clear()
         (app / "public" / "favicon.svg").unlink()
-        (app / "index.html").write_text(
-            '<head><link rel="icon" href="/favicon.svg" /></head>', encoding="utf-8"
-        )
-        check_shell(app, (), failures)
-        assert any("has no matching public/favicon.svg" in item for item in failures), failures
+        check_shell(app, config, (), failures)
+        assert any("no matching public/favicon.svg" in item for item in failures), failures
 
     print("app shell asset self-test passed")
     return 0

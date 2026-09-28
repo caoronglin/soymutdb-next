@@ -27,7 +27,7 @@
 #   SOYMUTDB_DEV_WEB_PORT    public portal port              (default: 5173)
 #   SOYMUTDB_DEV_API_PORT    FastAPI port                    (default: 8010)
 #   SOYMUTDB_DEV_LOG_DIR     where background logs land      (default: .dev-logs)
-#   SOYMUTDB_DEV_ALLOWED_HOSTS  extra Vite dev hosts (default: the CNB preview
+#   SOYMUTDB_DEV_ALLOWED_HOSTS  extra Umi dev hosts (default: the CNB preview
 #                              domains, see step 1b)
 #   SOYMUTDB_DEV_WEB_HOST    address the portal binds to   (default: 0.0.0.0)
 #   SOYMUTDB_DEV_API_HOST    address the API binds to      (default: 0.0.0.0)
@@ -43,7 +43,7 @@
 # .cnb.yml sets SOYMUTDB_DEV_WEB_PORT=8686 for the preview entry point.
 #
 # Two failure modes this script exists to make impossible
-#   1. "Blocked request. This host (...cnb.space) is not allowed." — Vite 6
+#   1. "Blocked request. This host (...cnb.space) is not allowed." — the dev server
 #      rejects a Host it does not know, and CNB mints a NEW `*.cnb.space`
 #      hostname for every environment. The allowlist therefore cannot be
 #      hard-coded; step 1b derives it from the platform domains, so the preview
@@ -70,7 +70,7 @@ API_BIND_HOST="${SOYMUTDB_DEV_API_HOST:-0.0.0.0}"
 # release to serve. Brought up automatically when a Docker daemon is reachable,
 # explicitly skippable, never silently assumed.
 DATA_LAYER="${SOYMUTDB_DEV_DATA_LAYER:-auto}"
-# `dev` runs the Vite dev server (HMR); `preview` serves the built tree, which
+# `dev` runs the Umi dev server (HMR); `preview` serves the built tree, which
 # starts faster and is what reviewing an existing artifact wants.
 FRONTEND="${SOYMUTDB_DEV_FRONTEND:-dev}"
 
@@ -104,16 +104,16 @@ export VITE_HOST="${VITE_HOST:-${BIND_HOST}}"
 export HOST="${HOST:-${BIND_HOST}}"
 
 # -----------------------------------------------------------------------------
-# 1b. Allow the CNB preview hostname at the Vite dev server
+# 1b. Allow the CNB preview hostname at the Umi dev server
 # -----------------------------------------------------------------------------
-# Vite 6 refuses any request whose Host header is not allowlisted:
+# The dev server refuses any request whose Host header is not allowlisted:
 #
 #   Blocked request. This host ("cnb-38o-1k28dm5ta-001.cnb.space") is not allowed.
 #   To allow this host, add "cnb-38o-1k28dm5ta-001.cnb.space" to
-#   `server.allowedHosts` in vite.config.js.
+#   the `devServer.allowedHosts` option in the Umi config.
 #
 # The hostname is generated per environment, so listing it by hand is not a fix —
-# the next environment gets a different one. The Vite configs now match the
+# the next environment gets a different one. The Umi configs now match the
 # platform domains (`*.cnb.space`, `*.cnb.run`) by pattern; this step feeds the
 # same variable for the cases a config cannot see:
 #
@@ -130,7 +130,7 @@ for candidate in \
   cnb.space cnb.run localhost \
   "${CNB_DEV_DOMAIN:-}" "${CNB_WEB_HOST:-}" "${CNB_HOSTS:-}" "${CNB_VSCODE_PROXY_URI:-}"; do
   [[ -n "${candidate}" ]] || continue
-  # Keep only the host, which is what Vite compares: drop the scheme, any
+  # Keep only the host, which is what the dev server compares: drop the scheme, any
   # userinfo, then the path/query/fragment and finally the port. `{{port}}` in a
   # proxy URI is already dropped by the path rule, so it needs no special case.
   host="${candidate#*://}"
@@ -147,15 +147,15 @@ for candidate in \
 done
 if [[ -n "${SOYMUTDB_DEV_ALLOWED_HOSTS}" ]]; then
   export SOYMUTDB_DEV_ALLOWED_HOSTS
-  log "Vite dev-server allowlist extended: ${SOYMUTDB_DEV_ALLOWED_HOSTS}"
+  log "Umi dev-server allowlist extended: ${SOYMUTDB_DEV_ALLOWED_HOSTS}"
 else
-  log "Vite dev-server allowlist: platform defaults only (*.cnb.space, *.cnb.run, localhost)"
+  log "Umi dev-server allowlist: platform defaults only (*.cnb.space, *.cnb.run, localhost)"
 fi
 
 # -----------------------------------------------------------------------------
 # 1c. Give the frontend configs the dev origins they validate
 # -----------------------------------------------------------------------------
-# `apps/web/vite.config.ts` validates its deployment origins at IMPORT time —
+# The Umi configs validate deployment origins at import time —
 # `requireDeploymentOrigin` throws rather than defaulting to a placeholder, so an
 # unset VITE_API_BASE_URL is
 #
@@ -163,12 +163,11 @@ fi
 #
 # and the command fails before serving anything. That is the desired behaviour
 # for a build; for a development server there is no reason to demand a deployed
-# API, and Vite's proxy forwards `/api` to the origin anyway.
+# API, and the Umi dev proxy forwards `/api` to the origin anyway.
 #
-# Two commands need this, not one: `vite dev` does not read `.env` files that the
-# repository is not allowed to commit, and `vite preview` ALSO loads the config
-# (it serves a built tree through the same pipeline), so a preview of an artifact
-# whose build-time origin was not exported would fail the same way.
+# `max dev` does not read `.env` files that the repository is not allowed to
+# commit; a preview serves the already-built external artifact and does not load
+# the Umi config.
 #
 # Only defaulted when unset: an exported value stays authoritative, so pointing
 # the environment at a real backend keeps working.
@@ -404,7 +403,7 @@ mkdir -p "${LOG_DIR}"
 # Launch a service in the background and wait for its port to accept a
 # connection. Waiting matters twice over:
 #   * only-preview mode polls the business port and gives up after ~200s, so a
-#     slow first Vite start must not be reported as a failure;
+#     slow first Umi start must not be reported as a failure;
 #   * a "started" service that never bound the port is the failure mode this
 #     whole script exists to make visible.
 launch_background() {
@@ -445,20 +444,18 @@ case "${MODE}" in
     ;;
 
   preview)
-    # The frontend command is chosen by SOYMUTDB_DEV_FRONTEND. Both forms take
-    # --host/--port through the Vite CLI, so neither depends on whether the
-    # package script forwards them; the host is the variable the configs read
-    # (VITE_HOST) and the CLI flag is passed as well, so the two cannot disagree.
+    # The frontend command is chosen by SOYMUTDB_DEV_FRONTEND. The Umi dev CLI
+    # receives host/port explicitly; the static Python preview receives them as
+    # HOST/PORT environment variables.
     case "$(frontend_cmd)" in
       web-preview)
-        # `vite preview` serves the tree `pnpm build:web` produced and starts in
-        # roughly a second, which is what only-preview mode's ~200s budget wants.
-        if [[ ! -d apps/web/dist ]]; then
-          log "SOYMUTDB_DEV_FRONTEND=preview but apps/web/dist is missing; run: pnpm build:web"
+        # The static preview serves only the public external artifact.
+        if [[ ! -s apps/web/dist/external/index.html ]]; then
+          log "SOYMUTDB_DEV_FRONTEND=preview but apps/web/dist/external/index.html is missing; run: pnpm build:web"
           exit 1
         fi
         launch_background web "${WEB_PORT}" \
-          pnpm --filter @soymutdb/web preview --host "${BIND_HOST}" --port "${WEB_PORT}"
+          env HOST="${BIND_HOST}" PORT="${WEB_PORT}" pnpm --filter @soymutdb/web preview
         ;;
       off)
         launch_background_skipped=1

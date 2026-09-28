@@ -80,9 +80,12 @@ async def list_genes(
     limit: int = Query(default=50, ge=1, le=200),
     page: int | None = Query(default=None, ge=1),
     page_size: int | None = Query(default=None, ge=1, le=200),
+    sort_by: str = Query(default="gene_id"),
+    sort_dir: str = Query(default="asc"),
 ) -> GeneListResponse:
     """List genes with cursor pagination or the portal's page contract."""
-    params = GeneListParams(
+    try:
+        params = GeneListParams(
         assembly_id=str(assembly_id) if assembly_id else None,
         chromosome=chromosome,
         biotype=biotype,
@@ -91,7 +94,12 @@ async def list_genes(
         limit=limit,
         page=page,
         page_size=page_size,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
     )
+    except ValueError as exc:
+        # An unknown sort column/direction is client input, not a server bug.
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     return await service.list_genes(
         db,
         params,

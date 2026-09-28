@@ -4,12 +4,21 @@ import { computed, reactive, ref, toValue, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
 import { normalizeInterval } from "@soymutdb/genome-view-model";
-import { ConfigProvider, createThemeConfig, Tag } from "@soymutdb/ui-vue";
+import { formatPosition } from "@soymutdb/shared/genomics";
+import { Button, Tag } from "@soymutdb/ui-vue";
 
 import PortalLayout from "../components/PortalLayout.vue";
+import AppIcon from "../components/table/AppIcon.vue";
+import DataTable from "../components/table/DataTable.vue";
+import FilterCard from "../components/table/FilterCard.vue";
+import FilterField from "../components/table/FilterField.vue";
+import PageHeader from "../components/table/PageHeader.vue";
+import type { TableColumn } from "../components/table/table-types";
+import StateBlock from "../components/states/StateBlock.vue";
 import { assemblyOptionLabel, resolveAssemblyParam } from "../lib/assembly-selection";
 import { t } from "../lib/i18n";
 import { assembliesQueryOptions, variantsQueryOptions } from "../lib/query-options";
+import { useSiteContent } from "../lib/site-content";
 import { useSiteContextStore } from "../stores/site-context";
 
 /**
@@ -29,6 +38,9 @@ const IMPACTS = ["HIGH", "MODERATE", "LOW", "MODIFIER"] as const;
 const route = useRoute();
 const router = useRouter();
 const site = useSiteContextStore();
+
+// Operator-editable page copy (admin `content.*` rows): override ?? localized fallback.
+const { get } = useSiteContent();
 
 interface VariantFiltersState {
   chromosome: string;
@@ -132,7 +144,7 @@ const query = useQuery(
       ...parsedRegion(),
       impact: filters.value.impact || undefined,
       variantType: filters.value.variant_type || undefined,
-      mutantLineId: filters.value.mutant_line_id || undefined,
+      mutantLinePublicId: filters.value.mutant_line_id || undefined,
       limit: PAGE_SIZE,
       page: cursorStack.value.length,
       cursor: cursor.value,
@@ -186,6 +198,11 @@ function selectAssembly(value: string): void {
   void router.replace({ path: route.path, query: next });
 }
 
+function resetFilters(): void {
+  cursorStack.value = [undefined];
+  void router.replace({ path: route.path, query: {} });
+}
+
 function nextPage(): void {
   const next = response.value?.next_cursor;
   if (!next) return;
@@ -202,165 +219,245 @@ function previousPage(): void {
   else delete next.cursor;
   void router.replace({ path: route.path, query: next });
 }
+
+const hasActiveFilters = computed(() =>
+  Boolean(
+    filters.value.chromosome ||
+      filters.value.variant_type ||
+      filters.value.impact ||
+      filters.value.mutant_line_id ||
+      assemblyParam.value,
+  ),
+);
+
+const columns = computed<TableColumn[]>(() => {
+  const result: TableColumn[] = [
+    { id: "variant_id", header: t("variants.variantId"), primary: true, cellClass: "font-mono text-xs" },
+  ];
+  if (showAssemblyColumn.value) {
+    result.push({
+      id: "assembly",
+      header: t("variants.assembly"),
+      headerTestId: "variants-assembly-column",
+      cellClass: "text-xs",
+    });
+  }
+  result.push(
+    { id: "chromosome", header: t("variants.chromosomeLabel"), cellClass: "font-mono text-xs" },
+    {
+      id: "position",
+      header: t("variants.positionLabel"),
+      numeric: true,
+      align: "right",
+      cellClass: "font-mono text-xs",
+    },
+    { id: "ref_allele", header: t("variants.ref"), cellClass: "font-mono text-xs" },
+    { id: "alt_allele", header: t("variants.alt"), cellClass: "font-mono text-xs" },
+    { id: "variant_type", header: t("variants.variantTypeLabel"), cellClass: "text-xs" },
+    { id: "impact", header: t("variants.impactLabel"), cellClass: "text-xs" },
+    { id: "gene_symbol", header: t("variants.geneSymbol"), cellClass: "font-mono text-xs" },
+  );
+  return result;
+});
+
+function impactTone(impact: string): string {
+  const tone =
+    impact === "HIGH"
+      ? "high"
+      : impact === "MODERATE"
+        ? "moderate"
+        : impact === "LOW"
+          ? "low"
+          : "modifier";
+  return `var(--impact-${tone})`;
+}
 </script>
 
 <template>
   <PortalLayout>
-    <ConfigProvider :theme="createThemeConfig({ dark: false })">
-      <div class="mx-auto max-w-6xl px-4 py-8">
-        <h1 class="text-2xl font-semibold">{{ t("variants.title") }}</h1>
-        <p class="mt-1 text-sm opacity-70">{{ t("variants.subtitle") }}</p>
+    <div class="container-prose py-10 md:py-14">
+      <PageHeader :eyebrow="get('variants.title', t('variants.title'))" :title="get('variants.subtitle', t('variants.subtitle'))">
+        <template #actions>
+          <Button data-testid="variants-export">
+            <AppIcon name="download" class="mr-1.5 inline size-4" />
+            {{ t("variants.export") }}
+          </Button>
+        </template>
+      </PageHeader>
 
-        <form
-          class="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-5"
-          role="search"
-          @submit.prevent="applyFilters"
-        >
-          <label class="text-sm opacity-70">
-            {{ t("variants.assembly") }}
-            <select
-              class="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5"
-              :value="selectedAssemblyId"
-              :disabled="isLoadingAssemblies"
-              data-testid="assembly-filter"
-              @change="selectAssembly(($event.target as HTMLSelectElement).value)"
-            >
-              <option value="">{{ t("variants.allAssemblies") }}</option>
-              <option v-for="item in assemblies" :key="String(item.id)" :value="String(item.id)">
-                {{ assemblyOptionLabel(item) }}
-              </option>
-            </select>
-          </label>
-          <label class="text-sm opacity-70">
-            {{ t("variants.chromosome") }}
-            <input
-              v-model="draft.chromosome"
-              class="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5"
-              data-testid="chromosome-filter"
-              @change="applyFilters"
-            />
-          </label>
-          <label class="text-sm opacity-70">
-            {{ t("variants.variantType") }}
-            <select
-              v-model="draft.variant_type"
-              class="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5"
-              data-testid="variant-type-filter"
-              @change="applyFilters"
-            >
-              <option value="">{{ t("variants.allTypes") }}</option>
-              <option v-for="item in VARIANT_TYPES" :key="item" :value="item">{{ item }}</option>
-            </select>
-          </label>
-          <label class="text-sm opacity-70">
-            {{ t("variants.impact") }}
-            <select
-              v-model="draft.impact"
-              class="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5"
-              data-testid="impact-filter"
-              @change="applyFilters"
-            >
-              <option value="">{{ t("variants.allImpacts") }}</option>
-              <option v-for="item in IMPACTS" :key="item" :value="item">{{ item }}</option>
-            </select>
-          </label>
-          <label class="text-sm opacity-70">
-            {{ t("variants.mutantLine") }}
-            <input
-              v-model="draft.mutant_line_id"
-              class="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 font-mono"
-              data-testid="mutant-line-filter"
-              @change="applyFilters"
-            />
-          </label>
-        </form>
+      <FilterCard @submit="applyFilters">
+        <FilterField :label="t('variants.assembly')" for-id="variant-assembly-filter">
+          <select
+            id="variant-assembly-filter"
+            class="w-full min-w-40 rounded-md border border-border bg-background px-3 py-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            :value="selectedAssemblyId"
+            :disabled="isLoadingAssemblies"
+            data-testid="assembly-filter"
+            @change="selectAssembly(($event.target as HTMLSelectElement).value)"
+          >
+            <option value="">{{ t("variants.allAssemblies") }}</option>
+            <option v-for="item in assemblies" :key="String(item.id)" :value="String(item.id)">
+              {{ assemblyOptionLabel(item) }}
+            </option>
+          </select>
+        </FilterField>
+        <FilterField :label="t('variants.chromosome')" for-id="variant-chromosome-filter">
+          <input
+            id="variant-chromosome-filter"
+            v-model="draft.chromosome"
+            class="w-full min-w-32 rounded-md border border-border bg-background px-3 py-2 font-mono outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            data-testid="chromosome-filter"
+            @change="applyFilters"
+          />
+        </FilterField>
+        <FilterField :label="t('variants.variantType')" for-id="variant-type-filter">
+          <select
+            id="variant-type-filter"
+            v-model="draft.variant_type"
+            class="w-full rounded-md border border-border bg-background px-3 py-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            data-testid="variant-type-filter"
+            @change="applyFilters"
+          >
+            <option value="">{{ t("variants.allTypes") }}</option>
+            <option v-for="item in VARIANT_TYPES" :key="item" :value="item">{{ item }}</option>
+          </select>
+        </FilterField>
+        <FilterField :label="t('variants.impact')" for-id="variant-impact-filter">
+          <select
+            id="variant-impact-filter"
+            v-model="draft.impact"
+            class="w-full rounded-md border border-border bg-background px-3 py-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            data-testid="impact-filter"
+            @change="applyFilters"
+          >
+            <option value="">{{ t("variants.allImpacts") }}</option>
+            <option v-for="item in IMPACTS" :key="item" :value="item">{{ item }}</option>
+          </select>
+        </FilterField>
+        <FilterField :label="t('variants.mutantLine')" for-id="variant-mutant-line-filter">
+          <input
+            id="variant-mutant-line-filter"
+            v-model="draft.mutant_line_id"
+            class="w-full min-w-32 rounded-md border border-border bg-background px-3 py-2 font-mono outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            data-testid="mutant-line-filter"
+            @change="applyFilters"
+          />
+        </FilterField>
 
-        <p
-          v-if="unknownAssembly"
-          role="alert"
-          data-testid="variants-unknown-assembly"
-          class="mt-4 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700"
-        >
-          {{ assemblyResolution.status === "ambiguous" ? t("common.ambiguousAssembly") : t("common.unknownAssembly") }}
+        <template #actions>
+          <Button :disabled="!hasActiveFilters" data-testid="variants-filter-clear" @click="resetFilters">
+            <AppIcon name="reload" class="mr-1.5 inline size-3.5" />
+            {{ t("common.clear") }}
+          </Button>
+        </template>
+      </FilterCard>
+
+      <p
+        v-if="unknownAssembly"
+        role="alert"
+        data-testid="variants-unknown-assembly"
+        class="mt-4 flex items-start gap-2 rounded-xl border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive"
+      >
+        <AppIcon name="alert" class="mt-0.5 size-4" />
+        <span>
+          {{
+            assemblyResolution.status === "ambiguous"
+              ? t("common.ambiguousAssembly")
+              : t("common.unknownAssembly")
+          }}
+        </span>
+      </p>
+
+      <section
+        v-if="!unknownAssembly"
+        data-testid="variants-results"
+        class="mt-4"
+        role="region"
+        :aria-label="t('variants.resultsAria')"
+      >
+        <p class="mb-3 text-sm text-muted-foreground" data-testid="variants-total">
+          <template v-if="totalCount !== null">
+            {{ t("variants.totalCount", { count: totalCount }) }}
+          </template>
+          <template v-else>{{ t("variants.totalHidden") }}</template>
         </p>
 
-        <div v-if="isLoading" data-testid="variants-loading" class="mt-6 grid gap-2">
-          <div v-for="index in 4" :key="index" class="h-10 w-full rounded bg-muted" />
-        </div>
-        <div
-          v-else-if="isError"
+        <StateBlock
+          v-if="isError"
           data-testid="variants-error"
-          class="mt-6 rounded border border-red-300 p-5"
+          variant="error"
+          :title="t('variants.loadError')"
+        />
+        <StateBlock
+          v-else-if="!isLoading && items.length === 0"
+          data-testid="variants-empty"
+          variant="empty"
+          icon="dna"
+          :title="t('variants.noResults')"
+          :description="t('common.noResults')"
+        />
+        <DataTable
+          v-else
+          :data-testid="isLoading ? 'variants-loading' : 'variants-table'"
+          :columns="columns"
+          :rows="items"
+          :loading="isLoading"
+          :row-key="(row) => row.variant_id"
+          :row-attrs="() => ({ 'data-testid': 'variant-row' })"
+          :aria-label="t('variants.resultsAria')"
+          :emptyTitle="t('variants.noResults')"
+          :emptyDescription="t('common.noResults')"
         >
-          <p class="font-medium">{{ t("variants.loadError") }}</p>
-        </div>
-
-        <section v-else data-testid="variants-results" class="mt-6" :aria-label="t('variants.resultsAria')">
-          <p class="mb-3 text-sm opacity-70" data-testid="variants-total">
-            <template v-if="totalCount !== null">
-              {{ t("variants.totalCount", { count: totalCount }) }}
-            </template>
-            <template v-else>{{ t("variants.totalHidden") }}</template>
-          </p>
-          <p v-if="items.length === 0" data-testid="variants-empty" class="text-sm opacity-70">
-            {{ t("variants.noResults") }}
-          </p>
-          <table v-else class="w-full text-sm">
-            <thead class="text-left opacity-60">
-              <tr>
-                <th scope="col" class="py-2">{{ t("variants.variantId") }}</th>
-                <th v-if="showAssemblyColumn" scope="col" class="py-2" data-testid="variants-assembly-column">
-                  {{ t("variants.assembly") }}
-                </th>
-                <th scope="col" class="py-2">{{ t("variants.chromosomeLabel") }}</th>
-                <th scope="col" class="py-2">{{ t("variants.positionLabel") }}</th>
-                <th scope="col" class="py-2">{{ t("variants.ref") }}</th>
-                <th scope="col" class="py-2">{{ t("variants.alt") }}</th>
-                <th scope="col" class="py-2">{{ t("variants.geneSymbol") }}</th>
-                <th scope="col" class="py-2">{{ t("variants.impactLabel") }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="variant in items" :key="variant.variant_id" class="border-t border-border" data-testid="variant-row">
-                <td class="py-2 font-mono">{{ variant.variant_id }}</td>
-                <td v-if="showAssemblyColumn" class="py-2" data-testid="variant-assembly">
-                  {{ assemblyLabel(variant.assembly) }}
-                </td>
-                <td class="py-2">{{ variant.chromosome }}</td>
-                <td class="py-2">{{ variant.position }}</td>
-                <td class="py-2 font-mono">{{ variant.ref_allele }}</td>
-                <td class="py-2 font-mono">{{ variant.alt_allele }}</td>
-                <td class="py-2">{{ variant.gene_symbol ?? variant.gene_id ?? "—" }}</td>
-                <td class="py-2"><Tag>{{ variant.impact ?? "—" }}</Tag></td>
-              </tr>
-            </tbody>
-          </table>
-
-          <div class="mt-4 flex items-center gap-3">
-            <button
-              type="button"
-              class="min-h-10 rounded-md border border-border px-3 text-sm disabled:opacity-50"
-              :disabled="cursorStack.length <= 1"
-              data-testid="variants-previous"
-              @click="previousPage"
-            >
-              {{ t("variants.previousPage") }}
-            </button>
-            <button
-              type="button"
-              class="min-h-10 rounded-md border border-border px-3 text-sm disabled:opacity-50"
-              :disabled="!response?.has_more || !response?.next_cursor"
-              data-testid="variants-next"
-              @click="nextPage"
-            >
-              {{ t("variants.nextPage") }}
-            </button>
-            <span class="text-xs opacity-60" data-testid="variants-page">
-              {{ t("variants.pageOf", { page: cursorStack.length }) }}
+          <template #cell-assembly="{ row }">
+            <span data-testid="variant-assembly">{{ assemblyLabel(row.assembly) }}</span>
+          </template>
+          <template #cell-position="{ row }">{{ formatPosition(row.position) }}</template>
+          <template #cell-variant_type="{ row }">
+            <Tag class="font-mono text-[10px]">{{ row.variant_type }}</Tag>
+          </template>
+          <template #cell-impact="{ row }">
+            <span v-if="row.impact" class="inline-flex items-center gap-1.5">
+              <span
+                class="size-2 rounded-full"
+                :style="{ backgroundColor: impactTone(row.impact) }"
+                aria-hidden="true"
+              />
+              <span class="font-mono">{{ row.impact }}</span>
             </span>
-          </div>
-        </section>
-      </div>
-    </ConfigProvider>
+            <span v-else class="text-muted-foreground">—</span>
+          </template>
+          <template #cell-gene_symbol="{ row }">
+            <span v-if="row.gene_symbol || row.gene_id">{{ row.gene_symbol ?? row.gene_id }}</span>
+            <span v-else class="text-muted-foreground">—</span>
+          </template>
+        </DataTable>
+
+        <div v-if="!isError" class="mt-4 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            class="inline-flex min-h-10 items-center gap-1 rounded-md border border-border px-3 text-sm disabled:opacity-50"
+            :disabled="cursorStack.length <= 1"
+            data-testid="variants-previous"
+            @click="previousPage"
+          >
+            <AppIcon name="chevron-left" class="size-4" />
+            {{ t("variants.previousPage") }}
+          </button>
+          <button
+            type="button"
+            class="inline-flex min-h-10 items-center gap-1 rounded-md border border-border px-3 text-sm disabled:opacity-50"
+            :disabled="!response?.has_more || !response?.next_cursor"
+            data-testid="variants-next"
+            @click="nextPage"
+          >
+            {{ t("variants.nextPage") }}
+            <AppIcon name="chevron-right" class="size-4" />
+          </button>
+          <span class="text-xs text-muted-foreground" data-testid="variants-page">
+            {{ t("variants.pageOf", { page: cursorStack.length }) }}
+          </span>
+        </div>
+      </section>
+    </div>
   </PortalLayout>
 </template>

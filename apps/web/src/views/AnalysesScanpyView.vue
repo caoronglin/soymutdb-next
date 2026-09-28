@@ -4,6 +4,7 @@ import { useRouter } from "vue-router";
 
 
 import PortalLayout from "../components/PortalLayout.vue";
+import ResearcherGate from "../components/ResearcherGate.vue";
 import { t } from "../lib/i18n";
 import { useAnalysisJobForm } from "../lib/use-analysis-job-form";
 
@@ -63,58 +64,60 @@ function onFiles(event: Event) {
 <template>
   <PortalLayout>
     <div class="mx-auto max-w-3xl px-4 py-8">
-      <h1 class="text-2xl font-semibold">{{ t("analyses.scanpy.title") }}</h1>
-      <p class="mt-1 text-sm opacity-70">{{ t("analyses.scanpy.subtitle") }}</p>
+      <ResearcherGate>
+        <h1 class="text-2xl font-semibold">{{ t("analyses.scanpy.title") }}</h1>
+        <p class="mt-1 text-sm opacity-70">{{ t("analyses.scanpy.subtitle") }}</p>
 
-      <form class="mt-6 grid gap-4" @submit.prevent="onSubmit">
-        <label class="text-sm opacity-70">
-          {{ t("analyses.scanpy.files") }}
-          <input
-            type="file"
-            accept=".h5ad"
-            class="mt-1 block w-full text-sm"
-            data-testid="scanpy-files"
-            @change="onFiles"
-          />
-        </label>
-
-        <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <label v-for="key in paramKeys" :key="key" class="text-sm opacity-70">
-            {{ key }}
+        <form class="mt-6 grid gap-4" @submit.prevent="onSubmit">
+          <label class="text-sm opacity-70">
+            {{ t("analyses.scanpy.files") }}
             <input
-              v-model="params[key]"
-              class="mt-1 w-full rounded-md border bg-background px-2 py-1.5 font-mono"
-              :data-testid="'scanpy-' + key"
+              type="file"
+              accept=".h5ad"
+              class="mt-1 block w-full text-sm"
+              data-testid="scanpy-files"
+              @change="onFiles"
             />
-            <span v-if="fieldErrors[key as string]" class="text-xs text-red-700">
-              {{ fieldErrors[key] }}
-            </span>
           </label>
-        </div>
 
-        <label class="flex items-center gap-2 text-sm">
-          <input v-model="useHvg" type="checkbox" data-testid="scanpy-use-hvg" />
-          {{ t("analyses.scanpy.useHvg") }}
-        </label>
+          <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <label v-for="key in paramKeys" :key="key" class="text-sm opacity-70">
+              {{ key }}
+              <input
+                v-model="params[key]"
+                class="mt-1 w-full rounded-md border bg-background px-2 py-1.5 font-mono"
+                :data-testid="'scanpy-' + key"
+              />
+              <span v-if="fieldErrors[key as string]" class="text-xs text-red-700">
+                {{ fieldErrors[key] }}
+              </span>
+            </label>
+          </div>
 
-        <p v-if="errorMessage" class="text-sm text-red-700" role="alert" data-testid="scanpy-error">
-          {{ errorMessage }}
-        </p>
-        <p v-if="progress > 0" class="text-sm opacity-70" data-testid="scanpy-progress">
-          {{ progress }}%
-        </p>
+          <label class="flex items-center gap-2 text-sm">
+            <input v-model="useHvg" type="checkbox" data-testid="scanpy-use-hvg" />
+            {{ t("analyses.scanpy.useHvg") }}
+          </label>
 
-        <button
-          type="submit"
-          class="w-fit rounded-md border px-4 py-2 text-sm font-medium disabled:opacity-50"
-          :disabled="isPending || files.length === 0"
-          data-testid="scanpy-submit"
-        >
-          {{ isPending ? t("common.loading") : t("analyses.submit") }}
-        </button>
-      </form>
+          <p v-if="errorMessage" class="text-sm text-red-700" role="alert" data-testid="scanpy-error">
+            {{ errorMessage }}
+          </p>
+          <p v-if="progress > 0" class="text-sm opacity-70" data-testid="scanpy-progress">
+            {{ progress }}%
+          </p>
 
-      <p class="mt-4 text-xs opacity-60">{{ t("analyses.maxFileSize") }}</p>
+          <button
+            type="submit"
+            class="w-fit rounded-md border px-4 py-2 text-sm font-medium disabled:opacity-50"
+            :disabled="isPending || files.length === 0"
+            data-testid="scanpy-submit"
+          >
+            {{ isPending ? t("common.loading") : t("analyses.submit") }}
+          </button>
+        </form>
+
+        <p class="mt-4 text-xs opacity-60">{{ t("analyses.maxFileSize") }}</p>
+      </ResearcherGate>
     </div>
   </PortalLayout>
 </template>

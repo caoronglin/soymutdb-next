@@ -3,10 +3,12 @@ import { useQuery } from "@tanstack/vue-query";
 import { computed, ref, toValue } from "vue";
 
 import { getDownloadUrl, type DownloadFile } from "@soymutdb/api-client";
-import { ConfigProvider, Tag, createThemeConfig } from "@soymutdb/ui-vue";
+import { Tag } from "@soymutdb/ui-vue";
 
+import PortalLayout from "../components/PortalLayout.vue";
 import { downloadsQueryOptions } from "../lib/query-options";
 import { t } from "../lib/i18n";
+import { useSiteContent } from "../lib/site-content";
 
 // Data downloads (Phase F). Lists downloadable artifacts via the neutral
 // api-client, scoped by category. Downloads are fetched on demand through a
@@ -17,6 +19,9 @@ import { t } from "../lib/i18n";
 // biological search, not the content catalogue).
 const category = ref<string>("");
 const downloadingId = ref<string | null>(null);
+
+// Operator-editable copy (admin `content.*` rows): override ?? localized fallback.
+const { get } = useSiteContent();
 
 const query = useQuery(
   computed(() => downloadsQueryOptions({ category: category.value || undefined })),
@@ -54,11 +59,11 @@ function formatSize(bytes: number | null): string {
 </script>
 
 <template>
-  <ConfigProvider :theme="createThemeConfig({ dark: false })">
-    <div class="mx-auto max-w-3xl p-8">
+  <PortalLayout>
+    <div class="mx-auto max-w-6xl px-4 py-8">
       <p class="text-sm opacity-70"><RouterLink to="/" class="underline">{{ t("nav.home") }}</RouterLink></p>
-      <h1 class="mt-2 text-2xl font-semibold">{{ t("downloads.title") }}</h1>
-      <p class="mt-2 text-sm opacity-70">{{ t("downloads.subtitle") }}</p>
+      <h1 class="mt-2 text-2xl font-semibold">{{ get("downloads.title", t("downloads.title")) }}</h1>
+      <p class="mt-2 text-sm opacity-70">{{ get("downloads.subtitle", t("downloads.subtitle")) }}</p>
 
       <div v-if="isLoading" data-testid="downloads-loading" class="mt-6 grid gap-3">
         <div v-for="index in 4" :key="index" class="h-16 w-full rounded bg-black/5" />
@@ -98,5 +103,5 @@ function formatSize(bytes: number | null): string {
         </li>
       </ul>
     </div>
-  </ConfigProvider>
+  </PortalLayout>
 </template>

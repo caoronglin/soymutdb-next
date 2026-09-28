@@ -18,7 +18,12 @@ _PREFIX = "SM"
 
 
 def generate_public_id() -> str:
-    """Return a new random public id, e.g. ``SM7K3ZQ9P2A``."""
+    """Return a new random public id, e.g. ``SM7K3ZQ9P2AX``.
+
+    ``_PREFIX`` + ``_BODY_LENGTH`` characters: 12 in total. The example used to
+    be one character short of the real width, which made hand-written fixtures
+    reject as malformed.
+    """
     body = "".join(secrets.choice(_ALPHABET) for _ in range(_BODY_LENGTH))
     return f"{_PREFIX}{body}"
 

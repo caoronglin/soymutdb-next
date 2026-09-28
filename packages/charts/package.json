@@ -3,7 +3,7 @@
   "version": "2.1.0",
   "private": true,
   "type": "module",
-  "description": "SoyMutDB chart facade \u2014 the only module allowed to import a chart runtime (plan \u00a72.3)",
+  "description": "React chart facade with accessible exact-value alternatives",
   "exports": {
     ".": {
       "types": "./src/index.ts",
@@ -18,28 +18,24 @@
   "scripts": {
     "test": "vitest run",
     "lint": "eslint src",
-    "typecheck": "vue-tsc --noEmit",
+    "typecheck": "tsc --noEmit",
     "clean": "rimraf dist .turbo"
   },
   "dependencies": {
-    "@soymutdb/shared": "workspace:*",
-    "@tanstack/charts": "catalog:charts",
-    "vue": "catalog:"
+    "echarts": "catalog:"
   },
   "peerDependencies": {
-    "@tanstack/vue-charts": "catalog:charts",
-    "@tanstack/charts": "catalog:charts"
+    "react": "catalog:"
   },
   "devDependencies": {
-    "@tanstack/vue-charts": "catalog:charts",
-    "@vitejs/plugin-vue": "catalog:",
-    "@vue/test-utils": "^2.5.1",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
     "jsdom": "^29.1.1",
+    "react": "catalog:",
+    "react-dom": "catalog:",
     "rimraf": "^6.0.0",
     "typescript": "catalog:",
     "vite": "catalog:",
-    "vitest": "catalog:",
-    "vue-tsc": "^3.2.0",
-    "@tanstack/charts": "catalog:charts"
+    "vitest": "catalog:"
   }
 }

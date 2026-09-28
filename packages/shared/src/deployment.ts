@@ -1,16 +1,16 @@
 /**
- * Deployment-origin and CSP helpers shared by the Vite configs, the build
- * scripts and the release gates.
+ * Deployment-origin and CSP helpers shared by the Umi configs, build scripts
+ * and release gates.
  *
- * Framework-neutral on purpose: the portal (React or Vue), its container build
- * and its gates all read the same origin/CSP decisions from here.
+ * Framework-neutral on purpose: the React applications, their container builds
+ * and release gates all read the same origin/CSP decisions from here.
  *
  * The CSP is composed through `@soymutdb/shared/build/csp` so every emitter
  * produces the same directive order and separators; see that module's header for
  * why hand-agreement between copies was not good enough.
  */
 // Self-reference through the package name (Node "self-referencing a package
-// using its name"): every consumer — the Vite config, the build scripts and the
+// using its name"): every consumer — the Umi config, build scripts and the
 // browser bundle — resolves the CSP builder through the exports map, so there is
 // exactly one resolution path and no relative-specifier ambiguity between the
 // bundler and the Node/tsx loaders.
@@ -114,11 +114,12 @@ export function resolveAppUrl(base: string, path: string): string {
  */
 export function buildJbrowseLocusUrl(
   base: string,
-  params: { assembly: string; locus: string },
+  params: { assembly: string; locus: string; release?: string },
 ): { href: string } {
   const query = new URLSearchParams({
     assembly: params.assembly,
     locus: params.locus,
+    ...(params.release ? { release: params.release } : {}),
   });
   return { href: `${normalizeBasePath(base)}browser?${query.toString()}` };
 }
@@ -174,21 +175,20 @@ export function buildCsp(origins: DeploymentOrigins, analytics = false): string 
 }
 
 /**
- * Hosts the Vite development server accepts.
+ * Hosts accepted by the Vite and Umi development servers.
  *
- * Vite 6 rejects any request whose `Host` header is not allowlisted:
+ * Vite 6 and webpack-dev-server reject any request whose `Host` header is not allowlisted:
  *
  *   Blocked request. This host ("cnb-38o-1k28dm5ta-001.cnb.space") is not allowed.
  *   To allow this host, add "cnb-38o-1k28dm5ta-001.cnb.space" to
- *   `server.allowedHosts` in vite.config.js.
+ *   `server.allowedHosts` in Vite or `devServer.allowedHosts` in Umi.
  *
  * That is exactly what a cloud development environment hits: CNB proxies every
  * preview port through a generated `*.cnb.space` / `*.cnb.run` host, and the
  * hostname is different for every environment, so it cannot be listed by hand.
  *
- * Scope: `server` (and `preview`) only. This is a development-server transport
- * rule and is never consulted by `vite build`, so no host becomes trustworthy
- * in a built artifact and no CSP changes with it.
+ * Scope: development-server transport configuration only. Production builds do
+ * not consult it, so no host becomes trusted in an artifact and no CSP changes.
  *
  * Security: `allowedHosts: true` would accept ANY hostname, which turns a
  * forwarded preview URL into a DNS-rebinding pivot. The generated platform
@@ -205,7 +205,7 @@ function normalizeDevHost(entry: string): string {
     const value = entry.trim().replace(/^https?:\/\//i, "");
     if (!value) return "";
     // Drop anything after the host: a path, a query or a `:port` suffix. The
-    // configured port is already in the `Host` header Vite compares against,
+    // configured port is already in the `Host` header the server compares against,
     // so keeping it would make a working entry silently not match.
     return value.replace(/[/?#].*$/, "").replace(/:\d+$/, "").toLowerCase();
 }

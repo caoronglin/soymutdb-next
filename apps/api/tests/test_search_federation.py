@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -41,6 +41,12 @@ async def test_external_json_preserves_source_degradation(monkeypatch):
     monkeypatch.setattr("app.api.v1.search.get_redis", lambda: object())
     db = AsyncMock()
     db.scalar = AsyncMock(return_value=None)
+    # A real AsyncSession returns ``scalar_one_or_none`` synchronously; model
+    # that so release-context resolution sees no release (and degrades) rather
+    # than handing back a coroutine.
+    db.execute = AsyncMock(
+        return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None))
+    )
 
     async def override_db():
         yield db

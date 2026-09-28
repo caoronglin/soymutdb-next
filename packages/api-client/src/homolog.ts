@@ -49,13 +49,31 @@ export async function getGeneHomologs(
   };
 }
 
+/** Server-side paging contract of GET /homologs/search. */
+export interface HomologSearchPage {
+  items: ApiGeneHomologRecord[];
+  total: number | null;
+  page: number | null;
+  page_size: number;
+  cursor: string | null;
+  next_cursor: string | null;
+  has_more: boolean;
+}
+
 export async function searchHomologs(params: {
   gene_id?: string;
-  species?: string;
+  /** Canonical assembly id; required when the accession spans assemblies. */
+  assembly_id?: string;
+  /**
+   * Species filter. The server parameter is `homolog_species`; the previous
+   * client sent `species`, which the API ignored — a filter that silently did
+   * nothing.
+   */
+  homolog_species?: string;
+  homolog_type?: string;
   page?: number;
   page_size?: number;
-}): Promise<{ items: unknown[]; total: number }> {
-  return http.get<{ items: unknown[]; total: number }>("/homologs/search", {
-    params,
-  });
+  cursor?: string;
+}): Promise<HomologSearchPage> {
+  return http.get<HomologSearchPage>("/homologs/search", { params });
 }

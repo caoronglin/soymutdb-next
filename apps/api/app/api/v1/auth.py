@@ -5,8 +5,9 @@ Refresh sessions
 The refresh token is delivered exclusively through an HttpOnly cookie
 (path-scoped to ``/api/v1/auth``) and is never returned in JSON.  Every
 refresh rotates the token server-side (SHA-256 hashes in ``refresh_tokens``);
-reuse of a rotated token revokes the whole session family.  ``refresh`` and
-``logout`` additionally verify the request Origin/Referer (CSRF defence).
+reuse of a rotated token revokes the whole session family.  ``login``,
+``refresh`` and ``logout`` additionally verify the request Origin/Referer
+(CSRF defence).
 """
 
 from __future__ import annotations
@@ -85,10 +86,17 @@ def _clear_refresh_cookie(response: Response) -> None:
     )
 
 
+def _require_registration_enabled() -> None:
+    """Reject public registration before resolving or using the database."""
+    if not settings.feature_registration_enabled:
+        raise ServiceUnavailableError("Registration is currently disabled")
+
+
 @router.post(
     "/register",
     response_model=UserResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(_require_registration_enabled)],
 )
 async def register(
     payload: UserCreate,
@@ -155,8 +163,11 @@ async def login(
     across workers and instances without changing the authentication flow.
 
     The refresh token is set as an HttpOnly cookie scoped to ``/api/v1/auth``
-    and is **not** included in the JSON response body.
+    and is **not** included in the JSON response body.  Requests without a
+    trusted Origin/Referer are rejected (CSRF defence).
     """
+    validate_request_origin(request, settings)
+
     client_ip = request.client.host if request.client else None
     await login_rate_limiter.enforce(username=payload.username, client_ip=client_ip)
 

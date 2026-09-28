@@ -17,9 +17,9 @@ from ...core.security import RoleName, has_role
 from ...models.auth import User
 from ...models.content import Publication
 from ...schemas.content import (
+    AdminPublicationListResponse,
+    AdminPublicationResponse,
     PublicationCreate,
-    PublicationListResponse,
-    PublicationResponse,
     PublicationUpdate,
 )
 from ...services.content_snapshot_cache import invalidate_mutable_content_snapshot
@@ -34,8 +34,8 @@ def _require_admin(user: User) -> None:
         raise AuthorizationError("Administrator access required")
 
 
-def _to_response(p: Publication) -> PublicationResponse:
-    return PublicationResponse(
+def _to_response(p: Publication) -> AdminPublicationResponse:
+    return AdminPublicationResponse(
         id=str(p.id),
         title=p.title,
         title_zh=p.title_zh,
@@ -62,7 +62,7 @@ async def _get(db: AsyncSession, publication_id: int) -> Publication:
     return pub
 
 
-@router.get("", response_model=PublicationListResponse)
+@router.get("", response_model=AdminPublicationListResponse)
 async def list_publications_admin(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -70,7 +70,7 @@ async def list_publications_admin(
     page_size: int = Query(default=20, ge=1, le=200),
     search: str | None = Query(default=None),
     is_featured: bool | None = Query(default=None),
-) -> PublicationListResponse:
+) -> AdminPublicationListResponse:
     """List publications (admin)."""
     _require_admin(current_user)
     conditions = []
@@ -98,15 +98,17 @@ async def list_publications_admin(
     stmt = stmt.offset((page - 1) * page_size).limit(page_size)
     result = await db.execute(stmt)
     items = [_to_response(p) for p in result.scalars().all()]
-    return PublicationListResponse(items=items, total=total, page=page, page_size=page_size)
+    return AdminPublicationListResponse(
+        items=items, total=total, page=page, page_size=page_size
+    )
 
 
-@router.post("", response_model=PublicationResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=AdminPublicationResponse, status_code=status.HTTP_201_CREATED)
 async def create_publication(
     payload: PublicationCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> PublicationResponse:
+) -> AdminPublicationResponse:
     """Create a publication (admin)."""
     _require_admin(current_user)
     pub = Publication(
@@ -129,13 +131,13 @@ async def create_publication(
     return _to_response(pub)
 
 
-@router.put("/{publication_id}", response_model=PublicationResponse)
+@router.put("/{publication_id}", response_model=AdminPublicationResponse)
 async def update_publication(
     publication_id: int,
     payload: PublicationUpdate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> PublicationResponse:
+) -> AdminPublicationResponse:
     """Update a publication (admin)."""
     _require_admin(current_user)
     pub = await _get(db, publication_id)

@@ -1,3 +1,69 @@
+<template>
+  <div class="admin-page">
+    <AdminPageHeader
+      :title="t('admin.contentLegacy.title')"
+      :description="t('admin.contentLegacy.description')"
+    >
+      <template #actions>
+        <Button data-testid="migration-run" :disabled="preview.isPending.value" @click="preview.mutate()">
+          {{ preview.isPending.value ? t("common.loading") : t("admin.contentLegacy.preview") }}
+        </Button>
+      </template>
+    </AdminPageHeader>
+
+    <p class="admin-state" data-testid="migration-note">
+      {{ t("admin.contentLegacy.readOnly") }}
+    </p>
+
+    <AdminState
+      v-if="preview.isError.value"
+      state="error"
+      testid="migration-error"
+      :title="t('common.errorDescription')"
+    />
+
+    <template v-if="preview.isPending.value">
+      <AdminState state="loading" testid="migration-loading" :rows="4" />
+    </template>
+
+    <AdminCard v-else-if="report" testid="migration-report">
+      <p class="text-sm">
+        {{ t("admin.contentLegacy.summary", {
+          created: report.created,
+          skipped: report.skipped,
+          invalid: report.invalid,
+        }) }}
+      </p>
+
+      <p v-if="report.items.length === 0" class="mt-3 text-sm text-muted-foreground" data-testid="migration-empty">
+        {{ t("admin.contentLegacy.empty") }}
+      </p>
+      <div v-else class="admin-table-wrap mt-3">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th scope="col">{{ t("admin.contentLegacy.slug") }}</th>
+              <th scope="col">{{ t("admin.contentLegacy.route") }}</th>
+              <th scope="col">{{ t("admin.contentLegacy.outcome") }}</th>
+              <th scope="col">{{ t("admin.contentLegacy.message") }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in report.items" :key="item.static_page_id" data-testid="migration-item">
+              <td class="font-mono text-xs">{{ item.slug }}</td>
+              <td class="font-mono text-xs">{{ item.route }}</td>
+              <td><AdminStatusTag :status="item.outcome" /></td>
+              <td class="text-muted-foreground">
+                {{ item.message ?? t("admin.contentLegacy.ready") }}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </AdminCard>
+  </div>
+</template>
+
 <script setup lang="ts">
 import { useMutation } from "@tanstack/vue-query";
 import { computed, toValue } from "vue";
@@ -6,8 +72,12 @@ import {
   dryRunStaticPageMigration,
   type StaticPageMigrationDryRunReport,
 } from "@soymutdb/api-client";
-import { Button, ConfigProvider, createThemeConfig } from "@soymutdb/ui-vue";
+import { Button } from "@soymutdb/ui-vue";
 
+import AdminCard from "../components/AdminCard.vue";
+import AdminPageHeader from "../components/AdminPageHeader.vue";
+import AdminState from "../components/AdminState.vue";
+import AdminStatusTag from "../components/AdminStatusTag.vue";
 import { t } from "../lib/i18n";
 
 /**
@@ -24,67 +94,5 @@ const preview = useMutation({
   mutationFn: () => dryRunStaticPageMigration({}),
 });
 
-const report = computed<StaticPageMigrationDryRunReport | undefined>(() =>
-  toValue(preview.data),
-);
+const report = computed<StaticPageMigrationDryRunReport | undefined>(() => toValue(preview.data));
 </script>
-
-<template>
-  <ConfigProvider :theme="createThemeConfig({ dark: false })">
-    <div class="max-w-4xl">
-      <h1 class="text-xl font-semibold">{{ t("admin.contentLegacy.title") }}</h1>
-      <p class="mt-2 text-sm opacity-70">{{ t("admin.contentLegacy.description") }}</p>
-      <p class="mt-3 rounded-md border border-border bg-muted px-3 py-2 text-sm" data-testid="migration-note">
-        {{ t("admin.contentLegacy.readOnly") }}
-      </p>
-
-      <div class="mt-4">
-        <Button :disabled="preview.isPending.value" data-testid="migration-run" @click="preview.mutate()">
-          {{ t("admin.contentLegacy.preview") }}
-        </Button>
-      </div>
-
-      <p v-if="preview.isError.value" role="alert" class="mt-4 text-sm text-red-700" data-testid="migration-error">
-        {{ t("common.errorDescription") }}
-      </p>
-
-      <div v-if="report" class="mt-5" data-testid="migration-report">
-        <p class="text-sm">
-          {{ t("admin.contentLegacy.summary", {
-            created: report.created,
-            skipped: report.skipped,
-            invalid: report.invalid,
-          }) }}
-        </p>
-        <p v-if="report.items.length === 0" class="mt-3 text-sm opacity-70" data-testid="migration-empty">
-          {{ t("admin.contentLegacy.empty") }}
-        </p>
-        <table v-else class="mt-3 w-full text-left text-sm">
-          <thead class="text-left opacity-60">
-            <tr>
-              <th scope="col" class="p-2">{{ t("admin.contentLegacy.slug") }}</th>
-              <th scope="col" class="p-2">{{ t("admin.contentLegacy.route") }}</th>
-              <th scope="col" class="p-2">{{ t("admin.contentLegacy.outcome") }}</th>
-              <th scope="col" class="p-2">{{ t("admin.contentLegacy.message") }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="item in report.items"
-              :key="item.static_page_id"
-              class="border-t"
-              data-testid="migration-item"
-            >
-              <td class="p-2 font-mono text-xs">{{ item.slug }}</td>
-              <td class="p-2 font-mono text-xs">{{ item.route }}</td>
-              <td class="p-2">{{ item.outcome }}</td>
-              <td class="p-2 opacity-70">
-                {{ item.message ?? t("admin.contentLegacy.ready") }}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </ConfigProvider>
-</template>

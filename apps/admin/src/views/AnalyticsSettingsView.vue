@@ -1,159 +1,168 @@
+<template>
+  <div class="admin-page">
+    <AdminPageHeader
+      :title="t('admin.analyticsSettings.title')"
+      :description="t('admin.analyticsSettings.description')"
+    />
+
+    <form class="admin-toolbar">
+      <label class="admin-field">
+        {{ t("admin.analyticsSettings.window") }}
+        <select v-model.number="days" class="admin-control" data-testid="analytics-days">
+          <option :value="7">7</option>
+          <option :value="30">30</option>
+          <option :value="90">90</option>
+        </select>
+      </label>
+    </form>
+
+    <AdminState v-if="summaryQuery.isPending.value" state="loading" testid="analytics-loading" />
+    <AdminState
+      v-else-if="summaryQuery.isError.value"
+      state="error"
+      testid="analytics-error"
+      :title="t('admin.analyticsSettings.loadError')"
+    >
+      <template #actions>
+        <Button size="small" data-testid="analytics-retry" @click="summaryQuery.refetch()">
+          {{ t("common.retry") }}
+        </Button>
+      </template>
+    </AdminState>
+
+    <template v-else-if="summary">
+      <div class="grid gap-4 sm:grid-cols-2" data-testid="analytics-summary">
+        <AdminStatCard
+          :label="t('admin.analyticsSettings.totalEvents')"
+          :value="String(summary.total_events)"
+          testid="analytics-total-events"
+        />
+        <AdminStatCard
+          :label="t('admin.analyticsSettings.uniqueSessions')"
+          :value="String(summary.unique_sessions)"
+          testid="analytics-unique-sessions"
+        />
+      </div>
+
+      <!-- A zero here is a real answer ("nobody visited"), so it is labelled
+           rather than left to read as a missing value. -->
+      <p
+        v-if="summary.total_events === 0"
+        class="admin-state admin-state--empty"
+        data-testid="analytics-empty"
+      >
+        {{ t("admin.analyticsSettings.description") }}
+      </p>
+
+      <AdminCard>
+        <div class="grid gap-6 sm:grid-cols-2">
+          <div v-for="block in BREAKDOWNS" :key="block.testid" :data-testid="block.testid">
+            <h2 class="admin-section-title">{{ t(block.titleKey) }}</h2>
+            <p
+              v-if="summary[block.field].length === 0"
+              class="mt-1 text-xs text-muted-foreground"
+            >
+              {{ t("common.noData") }}
+            </p>
+            <ul v-else class="mt-2 grid gap-1 text-sm">
+              <li
+                v-for="item in summary[block.field]"
+                :key="item.label"
+                class="flex items-baseline justify-between gap-3 border-b border-border/60 pb-1 last:border-0"
+              >
+                <span class="truncate font-mono text-xs">{{ item.label }}</span>
+                <span class="shrink-0 text-xs">{{ item.count }}</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </AdminCard>
+    </template>
+
+    <AdminCard
+      :title="t('admin.analyticsSettings.overviewTitle')"
+      testid="analytics-cloudflare"
+    >
+      <template #actions>
+        <AdminStatusTag status="active" />
+      </template>
+      <p class="text-sm text-muted-foreground">{{ t("admin.analyticsSettings.overviewDesc") }}</p>
+      <p class="mt-2 text-sm text-muted-foreground">{{ t("admin.analyticsSettings.beaconNote") }}</p>
+      <p class="mt-3 flex flex-wrap items-center gap-3">
+        <code class="rounded-md border border-border bg-muted px-2 py-1 font-mono text-xs">
+          {{ CLOUDFLARE_ENV_VAR }}
+        </code>
+        <a
+          :href="CLOUDFLARE_DASHBOARD_URL"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="admin-link"
+        >
+          {{ t("admin.analyticsSettings.dashboardLink") }}
+        </a>
+      </p>
+    </AdminCard>
+  </div>
+</template>
+
 <script setup lang="ts">
 import { useQuery } from "@tanstack/vue-query";
 import { computed, ref, toValue } from "vue";
 
 import { getAdminAnalyticsSummary } from "@soymutdb/api-client";
-import { ConfigProvider, Tag, createThemeConfig } from "@soymutdb/ui-vue";
+import { Button } from "@soymutdb/ui-vue";
 
+import AdminCard from "../components/AdminCard.vue";
+import AdminPageHeader from "../components/AdminPageHeader.vue";
+import AdminState from "../components/AdminState.vue";
+import AdminStatCard from "../components/AdminStatCard.vue";
+import AdminStatusTag from "../components/AdminStatusTag.vue";
 import { t } from "../lib/i18n";
 
 /**
  * Analytics settings.
  *
  * The console half of visitor analytics: the aggregate numbers come from the
- * administrator endpoint `GET /admin/analytics/summary` (ClickHouse-backed),
- * and the public-portal Cloudflare beacon is documented here because its token
- * is a build-time `VITE_*` value that this page cannot read back from the
- * running deployment. Nothing on this page is hard-coded sample data: when the
- * endpoint is unavailable the view says so instead of showing zeros that read
- * as "no traffic".
+ * administrator endpoint `GET /admin/analytics/summary` (ClickHouse-backed), and
+ * the public-portal Cloudflare beacon is documented here because its token is a
+ * build-time `VITE_*` value this page cannot read back from the running
+ * deployment. Nothing on this page is hard-coded sample data: when the endpoint
+ * is unavailable the view says so instead of showing zeros that read as "no
+ * traffic".
  */
 const days = ref(7);
 
 const summaryQuery = useQuery({
   queryKey: computed(() => ["admin", "analytics", "summary", days.value]),
   queryFn: () => getAdminAnalyticsSummary({ days: days.value }),
-  staleTime: 30_000,
 });
 
 const summary = computed(() => toValue(summaryQuery.data));
 
+/** One row per server-provided breakdown; the four blocks are the same shape. */
+const BREAKDOWNS = [
+  {
+    field: "events_by_type" as const,
+    testid: "analytics-by-type",
+    titleKey: "admin.analyticsSettings.byType",
+  },
+  {
+    field: "top_pages" as const,
+    testid: "analytics-top-pages",
+    titleKey: "admin.analyticsSettings.topPages",
+  },
+  {
+    field: "top_searches" as const,
+    testid: "analytics-top-searches",
+    titleKey: "admin.analyticsSettings.topSearches",
+  },
+  {
+    field: "top_referrers" as const,
+    testid: "analytics-top-referrers",
+    titleKey: "admin.analyticsSettings.topReferrers",
+  },
+];
+
 const CLOUDFLARE_ENV_VAR = "VITE_CLOUDFLARE_ANALYTICS_TOKEN";
 const CLOUDFLARE_DASHBOARD_URL = "https://dash.cloudflare.com/?to=/:account/web-analytics";
 </script>
-
-<template>
-  <ConfigProvider :theme="createThemeConfig({ dark: false })">
-    <div class="max-w-4xl">
-      <h1 class="text-xl font-semibold">{{ t("admin.analyticsSettings.title") }}</h1>
-      <p class="mt-2 text-sm opacity-70">{{ t("admin.analyticsSettings.description") }}</p>
-
-      <div class="mt-4 flex flex-wrap items-end gap-3">
-        <label class="text-sm opacity-70">
-          {{ t("admin.analyticsSettings.window") }}
-          <select
-            v-model.number="days"
-            class="ms-2 rounded-md border bg-background px-2 py-1.5"
-            data-testid="analytics-days"
-          >
-            <option :value="7">7</option>
-            <option :value="30">30</option>
-            <option :value="90">90</option>
-          </select>
-        </label>
-      </div>
-
-      <p v-if="summaryQuery.isPending.value" class="mt-4 text-sm opacity-70">
-        {{ t("common.loading") }}
-      </p>
-      <p
-        v-else-if="summaryQuery.isError.value"
-        role="alert"
-        class="mt-4 rounded-md border border-red-200 p-3 text-sm text-red-700"
-        data-testid="analytics-error"
-      >
-        {{ t("admin.analyticsSettings.loadError") }}
-      </p>
-      <div v-else-if="summary" class="mt-4" data-testid="analytics-summary">
-        <div class="grid gap-3 sm:grid-cols-2">
-          <div class="rounded-lg border p-4">
-            <p class="text-xs uppercase opacity-60">{{ t("admin.analyticsSettings.totalEvents") }}</p>
-            <p class="mt-1 text-2xl font-semibold" data-testid="analytics-total-events">
-              {{ summary.total_events }}
-            </p>
-          </div>
-          <div class="rounded-lg border p-4">
-            <p class="text-xs uppercase opacity-60">{{ t("admin.analyticsSettings.uniqueSessions") }}</p>
-            <p class="mt-1 text-2xl font-semibold" data-testid="analytics-unique-sessions">
-              {{ summary.unique_sessions }}
-            </p>
-          </div>
-        </div>
-
-        <section class="mt-5 grid gap-5 sm:grid-cols-2">
-          <div data-testid="analytics-by-type">
-            <h2 class="text-sm font-medium">{{ t("admin.analyticsSettings.byType") }}</h2>
-            <p v-if="summary.events_by_type.length === 0" class="mt-1 text-xs opacity-60">
-              {{ t("common.noData") }}
-            </p>
-            <ul v-else class="mt-1 grid gap-1 text-sm">
-              <li v-for="item in summary.events_by_type" :key="item.label" class="flex justify-between">
-                <span class="font-mono text-xs">{{ item.label }}</span>
-                <span>{{ item.count }}</span>
-              </li>
-            </ul>
-          </div>
-
-          <div data-testid="analytics-top-pages">
-            <h2 class="text-sm font-medium">{{ t("admin.analyticsSettings.topPages") }}</h2>
-            <p v-if="summary.top_pages.length === 0" class="mt-1 text-xs opacity-60">
-              {{ t("common.noData") }}
-            </p>
-            <ul v-else class="mt-1 grid gap-1 text-sm">
-              <li v-for="item in summary.top_pages" :key="item.label" class="flex justify-between">
-                <span class="truncate font-mono text-xs">{{ item.label }}</span>
-                <span>{{ item.count }}</span>
-              </li>
-            </ul>
-          </div>
-
-          <div data-testid="analytics-top-searches">
-            <h2 class="text-sm font-medium">{{ t("admin.analyticsSettings.topSearches") }}</h2>
-            <p v-if="summary.top_searches.length === 0" class="mt-1 text-xs opacity-60">
-              {{ t("common.noData") }}
-            </p>
-            <ul v-else class="mt-1 grid gap-1 text-sm">
-              <li v-for="item in summary.top_searches" :key="item.label" class="flex justify-between">
-                <span class="truncate font-mono text-xs">{{ item.label }}</span>
-                <span>{{ item.count }}</span>
-              </li>
-            </ul>
-          </div>
-
-          <div data-testid="analytics-top-referrers">
-            <h2 class="text-sm font-medium">{{ t("admin.analyticsSettings.topReferrers") }}</h2>
-            <p v-if="summary.top_referrers.length === 0" class="mt-1 text-xs opacity-60">
-              {{ t("common.noData") }}
-            </p>
-            <ul v-else class="mt-1 grid gap-1 text-sm">
-              <li v-for="item in summary.top_referrers" :key="item.label" class="flex justify-between">
-                <span class="truncate font-mono text-xs">{{ item.label }}</span>
-                <span>{{ item.count }}</span>
-              </li>
-            </ul>
-          </div>
-        </section>
-      </div>
-
-      <section class="mt-8 rounded-lg border p-4" data-testid="analytics-cloudflare">
-        <h2 class="text-sm font-medium">
-          {{ t("admin.analyticsSettings.overviewTitle") }}
-          <Tag color="blue">{{ t("admin.analyticsSettings.cloudflareBadge") }}</Tag>
-        </h2>
-        <p class="mt-2 text-sm opacity-70">{{ t("admin.analyticsSettings.overviewDesc") }}</p>
-        <p class="mt-2 text-sm opacity-70">{{ t("admin.analyticsSettings.beaconNote") }}</p>
-        <p class="mt-3 flex flex-wrap items-center gap-3">
-          <code class="rounded-md border bg-muted px-2 py-1 font-mono text-xs">{{ CLOUDFLARE_ENV_VAR }}</code>
-          <a
-            :href="CLOUDFLARE_DASHBOARD_URL"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="text-sm text-primary underline"
-          >
-            {{ t("admin.analyticsSettings.dashboardLink") }}
-          </a>
-        </p>
-      </section>
-    </div>
-  </ConfigProvider>
-</template>

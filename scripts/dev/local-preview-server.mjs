@@ -11,7 +11,7 @@
  * Usage
  *   node scripts/dev/local-preview-server.mjs --app portal --port 8090
  *   node scripts/dev/local-preview-server.mjs --app admin  --port 8091
- *   node scripts/dev/local-preview-server.mjs --app portal --dist apps/web/dist-internal --port 8094
+ *   node scripts/dev/local-preview-server.mjs --app portal --dist apps/web/dist/internal --port 8094
  *
  * Env
  *   SOYMUTDB_PREVIEW_API_HOST  default 127.0.0.1
@@ -24,7 +24,7 @@ import { fileURLToPath } from "node:url";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const APPS = {
-  portal: resolve(REPO_ROOT, "apps", "web", "dist"),
+  portal: resolve(REPO_ROOT, "apps", "web", "dist", "external"),
   admin: resolve(REPO_ROOT, "apps", "admin", "dist"),
   jbrowse: resolve(REPO_ROOT, "apps", "jbrowse", "dist"),
 };

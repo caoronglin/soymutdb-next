@@ -8,8 +8,16 @@ import { compactGeneId, formatPosition, SOYBEAN_CHROMOSOMES } from "@soymutdb/sh
 import { Button } from "@soymutdb/ui-vue";
 
 import PortalLayout from "../components/PortalLayout.vue";
+import AppIcon from "../components/table/AppIcon.vue";
+import DataTable from "../components/table/DataTable.vue";
+import FilterCard from "../components/table/FilterCard.vue";
+import FilterField from "../components/table/FilterField.vue";
+import PageHeader from "../components/table/PageHeader.vue";
+import type { TableColumn, TableSort } from "../components/table/table-types";
+import StateBlock from "../components/states/StateBlock.vue";
 import { t } from "../lib/i18n";
 import { assembliesQueryOptions, geneListQueryOptions, GENE_LIST_PAGE_SIZE } from "../lib/query-options";
+import { useSiteContent } from "../lib/site-content";
 import { useSiteContextStore } from "../stores/site-context";
 
 /**
@@ -38,6 +46,9 @@ type SortDir = "asc" | "desc";
 const route = useRoute();
 const router = useRouter();
 const site = useSiteContextStore();
+
+// Operator-editable page copy (admin `content.*` rows): override ?? localized fallback.
+const { get } = useSiteContent();
 
 interface GeneFilters {
   q: string;
@@ -110,11 +121,6 @@ function navigateWith(next: Partial<GeneFilters>) {
   void router.push({ path: "/genes", query: params });
 }
 
-function sortDirection(column: string): "" | "asc" | "desc" {
-  if (filters.value.sort_by !== column) return "";
-  return filters.value.sort_dir === "asc" ? "asc" : "desc";
-}
-
 function toggleSort(column: string) {
   if (!SORTABLE.includes(column as (typeof SORTABLE)[number])) return;
   const nextDir: SortDir =
@@ -133,32 +139,56 @@ const lastPage = computed(() => Math.max(1, Math.ceil(total.value / GENE_LIST_PA
 const activeFilterCount = computed(
   () => [filters.value.q, filters.value.chromosome, filters.value.biotype].filter(Boolean).length,
 );
+const currentSort = computed<TableSort>(() => ({
+  key: filters.value.sort_by,
+  dir: filters.value.sort_dir,
+}));
+
+const columns = computed<TableColumn[]>(() => [
+  {
+    id: "gene_id",
+    header: t("genes.geneId"),
+    sortKey: "gene_id",
+    sortTestId: "genes-sort-gene_id",
+    primary: true,
+    cellClass: "font-mono",
+  },
+  { id: "symbol", header: t("genes.symbol"), sortKey: "symbol" },
+  { id: "biotype", header: t("genes.biotypeLabel"), cellClass: "font-mono text-xs" },
+  { id: "chromosome", header: t("genes.chromosomeLabel"), cellClass: "font-mono text-xs" },
+  { id: "position", header: t("genes.position"), cellClass: "font-mono text-xs" },
+  {
+    id: "variant_count",
+    header: t("genes.variantCount"),
+    sortKey: "variant_count",
+    sortTestId: "genes-sort-variant_count",
+    numeric: true,
+    align: "right",
+    cellClass: "font-mono text-xs",
+  },
+  { id: "actions", header: "", width: "48px" },
+]);
 </script>
 
 <template>
   <PortalLayout>
-    <div class="mx-auto max-w-7xl px-4 py-8">
-      <h1 class="text-2xl font-semibold">{{ t("genes.title") }}</h1>
-      <p class="mt-1 text-sm opacity-70">{{ t("genes.subtitle") }}</p>
+    <div class="container-prose py-10 md:py-14">
+      <PageHeader :eyebrow="get('genes.title', t('genes.title'))" :title="get('genes.subtitle', t('genes.subtitle'))" />
 
-      <form
-        class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
-        role="search"
-        @submit.prevent="navigateWith({ q: draft.q.trim() })"
-      >
-        <label class="text-sm opacity-70">
-          {{ t("genes.search") }}
+      <FilterCard @submit="navigateWith({ q: draft.q.trim() })">
+        <FilterField :label="t('genes.search')" for-id="genes-search">
           <input
+            id="genes-search"
             v-model="draft.q"
-            class="mt-1 w-full rounded-md border bg-background px-2 py-1.5"
+            class="w-full max-w-xs rounded-md border border-border bg-background px-3 py-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
             :placeholder="t('genes.searchPlaceholder')"
             data-testid="genes-search"
           />
-        </label>
-        <label class="text-sm opacity-70">
-          {{ t("genes.chromosome") }}
+        </FilterField>
+        <FilterField :label="t('genes.chromosome')" for-id="genes-chromosome">
           <select
-            class="mt-1 w-full rounded-md border bg-background px-2 py-1.5"
+            id="genes-chromosome"
+            class="w-full rounded-md border border-border bg-background px-3 py-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
             :value="filters.chromosome || 'all'"
             data-testid="genes-chromosome"
             @change="navigateWith({ chromosome: ($event.target as HTMLSelectElement).value === 'all' ? '' : ($event.target as HTMLSelectElement).value })"
@@ -166,11 +196,11 @@ const activeFilterCount = computed(
             <option value="all">{{ t("genes.allChromosomes") }}</option>
             <option v-for="name in SOYBEAN_CHROMOSOMES" :key="name" :value="name">{{ name }}</option>
           </select>
-        </label>
-        <label class="text-sm opacity-70">
-          {{ t("genes.biotype") }}
+        </FilterField>
+        <FilterField :label="t('genes.biotype')" for-id="genes-biotype">
           <select
-            class="mt-1 w-full rounded-md border bg-background px-2 py-1.5"
+            id="genes-biotype"
+            class="w-full rounded-md border border-border bg-background px-3 py-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
             :value="filters.biotype || 'all'"
             data-testid="genes-biotype"
             @change="navigateWith({ biotype: ($event.target as HTMLSelectElement).value === 'all' ? '' : ($event.target as HTMLSelectElement).value })"
@@ -178,8 +208,9 @@ const activeFilterCount = computed(
             <option value="all">{{ t("genes.allBiotype") }}</option>
             <option v-for="name in BIOTYPES" :key="name" :value="name">{{ name }}</option>
           </select>
-        </label>
-        <div class="flex items-end gap-2">
+        </FilterField>
+
+        <template #actions>
           <Button html-type="submit" data-testid="genes-filter-apply">
             {{ t("common.search") }}
           </Button>
@@ -188,95 +219,91 @@ const activeFilterCount = computed(
             data-testid="genes-filter-clear"
             @click="navigateWith({ q: '', chromosome: '', biotype: '' })"
           >
+            <AppIcon name="reload" class="mr-1 inline size-3.5" />
             {{ t("common.clear") }}
           </Button>
-        </div>
-      </form>
-
-      <div class="mt-6" role="region" :aria-label="t('genes.resultsAria')">
-        <p v-if="isLoading" data-testid="genes-loading" class="text-sm opacity-70">
-          {{ t("common.loading") }}
-        </p>
-        <p v-else-if="isError" data-testid="genes-error" class="text-sm text-red-700">
-          {{ t("common.errorDescription") }}
-        </p>
-        <template v-else>
-          <p class="mb-3 text-sm opacity-70" data-testid="genes-total">
-            {{ total.toLocaleString() }} {{ t("common.total") }}
-          </p>
-          <p v-if="items.length === 0" data-testid="genes-empty" class="text-sm opacity-70">
-            {{ t("genes.noResults") }}
-          </p>
-          <table v-else class="w-full text-sm" data-testid="genes-table">
-            <thead class="text-left opacity-60">
-              <tr>
-                <th scope="col" class="py-2">
-                  <button
-                    type="button"
-                    class="underline decoration-dotted"
-                    :aria-sort="sortDirection('gene_id') === 'desc' ? 'descending' : 'ascending'"
-                    data-testid="genes-sort-gene_id"
-                    @click="toggleSort('gene_id')"
-                  >
-                    {{ t("genes.geneId") }}
-                  </button>
-                </th>
-                <th scope="col" class="py-2">{{ t("genes.symbol") }}</th>
-                <th scope="col" class="py-2">{{ t("genes.biotypeLabel") }}</th>
-                <th scope="col" class="py-2">{{ t("genes.chromosomeLabel") }}</th>
-                <th scope="col" class="py-2">{{ t("genes.position") }}</th>
-                <th scope="col" class="py-2 text-right">
-                  <button
-                    type="button"
-                    class="underline decoration-dotted"
-                    data-testid="genes-sort-variant_count"
-                    @click="toggleSort('variant_count')"
-                  >
-                    {{ t("genes.variantCount") }}
-                  </button>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="row in items" :key="row.gene_id" data-testid="gene-row" class="border-t">
-                <td class="py-2 font-mono">
-                  <RouterLink :to="geneHref(row)" class="underline">
-                    {{ compactGeneId(row.gene_id, 24) }}
-                  </RouterLink>
-                </td>
-                <td class="py-2">{{ row.symbol ?? "—" }}</td>
-                <td class="py-2 font-mono text-xs">{{ row.biotype }}</td>
-                <td class="py-2 font-mono text-xs">{{ row.chromosome }}</td>
-                <td class="py-2 font-mono text-xs">
-                  {{ formatPosition(row.start_pos) }}–{{ formatPosition(row.end_pos) }}
-                </td>
-                <td class="py-2 text-right font-mono text-xs">
-                  {{ row.variant_count == null ? "—" : row.variant_count.toLocaleString() }}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-
-          <nav class="mt-4 flex items-center gap-3" :aria-label="t('common.pagination')">
-            <Button
-              :disabled="filters.page <= 1"
-              data-testid="genes-prev-page"
-              @click="navigateWith({ page: filters.page - 1 })"
-            >
-              {{ t("common.previous") }}
-            </Button>
-            <span class="text-sm opacity-70" data-testid="genes-page">
-              {{ t("common.page") }} {{ filters.page }} / {{ lastPage }}
-            </span>
-            <Button
-              :disabled="filters.page >= lastPage"
-              data-testid="genes-next-page"
-              @click="navigateWith({ page: filters.page + 1 })"
-            >
-              {{ t("common.next") }}
-            </Button>
-          </nav>
         </template>
+      </FilterCard>
+
+      <div class="mt-4" role="region" :aria-label="t('genes.resultsAria')">
+        <p class="mb-3 text-sm text-muted-foreground" data-testid="genes-total">
+          {{ total.toLocaleString() }} {{ t("common.total") }}
+        </p>
+
+        <StateBlock
+          v-if="isError"
+          data-testid="genes-error"
+          variant="error"
+          :title="t('common.errorDescription')"
+        />
+        <StateBlock
+          v-else-if="!isLoading && items.length === 0"
+          data-testid="genes-empty"
+          variant="empty"
+          icon="dna"
+          :title="t('genes.noResults')"
+          :description="t('common.noResults')"
+        />
+        <DataTable
+          v-else
+          :data-testid="isLoading ? 'genes-loading' : 'genes-table'"
+          :columns="columns"
+          :rows="items"
+          :loading="isLoading"
+          :sort="currentSort"
+          :aria-label="t('genes.resultsAria')"
+          :row-key="(row) => row.gene_id"
+          :row-attrs="() => ({ 'data-testid': 'gene-row' })"
+          :emptyTitle="t('genes.noResults')"
+          :emptyDescription="t('common.noResults')"
+          @sort="toggleSort"
+        >
+          <template #cell-gene_id="{ row }">
+            <RouterLink :to="geneHref(row)" class="link-underline font-medium text-primary">
+              {{ compactGeneId(row.gene_id, 24) }}
+            </RouterLink>
+          </template>
+          <template #cell-symbol="{ row }">{{ row.symbol ?? "—" }}</template>
+          <template #cell-position="{ row }">
+            {{ formatPosition(row.start_pos) }}–{{ formatPosition(row.end_pos) }}
+          </template>
+          <template #cell-variant_count="{ row }">
+            {{ row.variant_count == null ? "—" : row.variant_count.toLocaleString() }}
+          </template>
+          <template #cell-actions="{ row }">
+            <RouterLink
+              :to="geneHref(row)"
+              class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              :aria-label="`View ${row.gene_id}`"
+            >
+              <AppIcon name="arrow-right" class="size-4" />
+            </RouterLink>
+          </template>
+        </DataTable>
+
+        <nav
+          v-if="!isError"
+          class="mt-4 flex flex-wrap items-center gap-3"
+          :aria-label="t('common.pagination')"
+        >
+          <Button
+            :disabled="filters.page <= 1"
+            data-testid="genes-prev-page"
+            @click="navigateWith({ page: filters.page - 1 })"
+          >
+            {{ t("common.previous") }}
+          </Button>
+          <span class="text-sm text-muted-foreground" data-testid="genes-page">
+            {{ t("common.page") }} {{ filters.page }} / {{ lastPage }}
+          </span>
+          <Button
+            :disabled="filters.page >= lastPage"
+            data-testid="genes-next-page"
+            @click="navigateWith({ page: filters.page + 1 })"
+          >
+            {{ t("common.next") }}
+          </Button>
+        </nav>
       </div>
     </div>
   </PortalLayout>

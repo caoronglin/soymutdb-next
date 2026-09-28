@@ -11,7 +11,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // disabled rows — without pulling the whole design system into jsdom.
 vi.mock("@soymutdb/ui-vue", () => ({
   ConfigProvider: { template: "<div><slot /></div>" },
-  Input: { template: "<input :value=\"modelValue\" @input=\"$emit('update:modelValue', $event.target.value)\" />", props: ["modelValue"] },
+  Button: {
+    props: ["disabled", "type", "htmlType", "size"],
+    emits: ["click"],
+    template:
+      '<button :type="htmlType ?? type ?? \'button\'" :disabled="disabled" @click="$emit(\'click\', $event)"><slot /></button>',
+  },
+  Input: { template: "<input :value=\"value\" @input=\"$emit('update:value', $event.target.value)\" />", props: ["value"] },
   Tag: { template: "<span><slot /></span>" },
   createThemeConfig: () => ({}),
 }));

@@ -1,4 +1,10 @@
-<div class="widget widget-sra-run widget-detail" data-widget="sra_run" data-run="{{ run.Run }}">
+{# `run` is None when the live fetch failed and no demo fixture applies; the
+   template must render an explicit unavailable state rather than dereferencing
+   a missing record. #}
+<div class="widget widget-sra-run widget-detail" data-widget="sra_run"
+     data-run="{{ run.Run if run else run_accession }}"
+     data-source="{{ 'demo' if is_fallback else ('live' if run else 'unavailable') }}">
+  {% if run %}
   <div class="widget-sra-run__header">
     <span class="widget-sra-run__badge">SRA</span>
     <h3 class="widget-sra-run__title">
@@ -8,6 +14,13 @@
     </h3>
     <span class="widget-sra-run__org">{{ run.ScientificName }}</span>
   </div>
+  {% else %}
+  <div class="widget-sra-run__header">
+    <span class="widget-sra-run__badge">SRA</span>
+    <h3 class="widget-sra-run__title">{{ run_accession }}</h3>
+    <span class="widget-sra-run__org">metadata unavailable</span>
+  </div>
+  {% endif %}
 
   {% if fetch_error %}
   <div class="widget-notice widget-notice--warning">
@@ -15,6 +28,15 @@
   </div>
   {% endif %}
 
+  {% if not run %}
+  <div class="widget-sra-run__body">
+    <p class="widget-sra-run__unavailable">
+      SRA metadata for this run is not available right now. Nothing is
+      substituted in its place; retry later.
+    </p>
+  </div>
+  </div>
+  {% else %}
   <div class="widget-sra-run__body">
     <div class="widget-sra-run__meta-grid">
       <div class="widget-sra-run__meta-item">
@@ -98,4 +120,5 @@
     </div>
     {% endif %}
   </div>
+  {% endif %}
 </div>

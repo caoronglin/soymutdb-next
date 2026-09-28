@@ -6,8 +6,8 @@ packages:
 # of mutating dependencies implicitly before every script.
 verifyDepsBeforeRun: warn
 
-# React is retired; do not auto-install the optional React peers declared by
-# @tanstack/charts, so react never re-enters the lockfile.
+# Applications and shared UI use one catalog-pinned React runtime. Disable
+# implicit peer installation so every app declares its runtime dependencies.
 autoInstallPeers: false
 
 # Shared platform versions. Consumers opt in with the `catalog:` protocol so a
@@ -15,30 +15,31 @@ autoInstallPeers: false
 catalog:
   typescript: 5.9.3
   vite: 6.4.3
-  # Vue frontend mainline (plan.md §2). Latest stable, exact-pinned here so a
-  # framework-line change stays one reviewed workspace decision (Phase D).
+  # React Pro v6 frontend line; exact pins shared by all three applications.
+  '@umijs/max': 4.7.20
+  react: 19.3.0
+  react-dom: 19.3.0
+  '@types/react': 19.3.0
+  '@types/react-dom': 19.3.0
+  antd: 6.6.5
+  echarts: 5.5.1
+  '@ant-design/pro-components': 3.1.15-2
+  # Legacy Vue toolchain kept only while old source/tests are being retired.
+  # React applications use Umi Max 4; do not add new runtime features here.
   vue: 3.5.43
   '@vitejs/plugin-vue': 6.0.9
-  # Keep the new Vue app on the workspace Vitest line (no second major).
   vitest: 3.2.7
-  # Vue mainline stack (plan.md §2): Router + Pinia 4 + TanStack Vue Query,
-  # latest stable, exact-pinned (Phase D Checkpoint B). VueUse 15 joins the
-  # catalog with the first page that uses it: knip fails an unused dependency,
-  # and plan.md §24 forbids replacing simple ref/computed just to justify it.
   vue-router: 5.3.1
   pinia: 4.0.3
   '@tanstack/vue-query': 5.103.2
-  # Vue UI layer (Phase D Checkpoint D): Antdv Next 1.x (via the @soymutdb/ui-vue
-  # facade only), Tailwind CSS 4 + its Vite plugin. Exact-pinned; Antdv Next may
-  # break on minor, so upgrades go through the facade contract test first.
+  # Legacy Vue UI layer, retained until W5 removes its remaining consumers.
   antdv-next: 1.5.4
   tailwindcss: 4.3.3
   '@tailwindcss/vite': 4.3.3
 
-# pnpm 11: workspace-level settings live here (the root package.json "pnpm"
-# field is no longer read). Overrides force the exact React 19.2.0 build for
-# every transitive peer, so @ant-design/* and @soymutdb/* share a single React
-# runtime with no React downgrade.
+# Workspace-level pnpm settings live here. React and ReactDOM are resolved
+# through the shared catalog so all React applications and facades use one
+# runtime version; targeted overrides below address audited transitive floors.
 overrides:
   librpc-web-mod: 1.3.0
   rxjs: 7.8.0
@@ -49,33 +50,42 @@ overrides:
   # merge sources. Reached through api-client -> openapi-typescript ->
   # @redocly/openapi-core.
   js-yaml: 4.3.2
+  # Umi Max 4.7.20 carries older transitive ranges; these compatible floors
+  # remove known advisories without replacing the React/Ant Design majors.
+  axios: 0.33.0
+  immer: 9.0.6
+  node-fetch: 2.7.0
+  "path-to-regexp@^1.7.0": 1.9.0
+  "path-to-regexp@^8.0.0": 8.4.2
+  esbuild: 0.28.2
+  "@babel/core": 7.29.7
+  "@babel/runtime": 7.29.7
+  "react-router@6": 6.30.6
+  "react-router-dom@6": 6.30.6
+  "@remix-run/router": 1.23.3
+  decode-uri-component: 0.5.0
 
 allowBuilds:
-  # Vite's platform-specific binary is required at build time. All other
-  # dependency lifecycle scripts remain denied by default.
+  # Umi/Vite-compatible bundling requires esbuild's platform binary.
   esbuild: true
-  # vue-demi is the Vue 2/3 switch shim that runtime VueUse expects; its
-  # postinstall selects the installed Vue. Required for the Vue mainline.
+  # Reviewed postinstall scripts only print notices; no build output is needed.
+  core-js: false
+  core-js-pure: false
+  es5-ext: false
+  # vue-demi remains for legacy Vue sources until the Vue cleanup wave.
   vue-demi: true
 
 # pnpm 12 supply-chain: minimumReleaseAge refuses packages younger than its
-# window; the pinned TanStack Vue Query (latest stable, plan §2) was published
-# inside it, so those two packages are exempted explicitly here.
+# window; the legacy Vue Query and ProComponents pins were published inside it,
+# so those exact packages are exempted explicitly here.
 minimumReleaseAgeExclude:
   - "@tanstack/query-core@5.103.2"
   - "@tanstack/vue-query@5.103.2"
+  - "@ant-design/pro-components@3.1.15-2"
 
-# Charts (plan §2.3): TanStack Charts is pre-1.0, so its pins live in their own
-# catalog and are consumed by @soymutdb/charts only. Upgrades go through one
-# minor at a time, behind that facade's contract test.
 catalogs:
-  charts:
-    '@tanstack/vue-charts': 0.18.0
-    '@tanstack/charts': 0.18.0
-
-  # Framework-neutral genome readers (zero-React JBrowse replacement) over the
-  # same /jbrowse-data files. Exact pins so the data layer never drifts with
-  # JBrowse's transitive tree.
+  # Framework-neutral genome readers over the same /jbrowse-data files.
+  # Exact pins keep the data layer independent of JBrowse's transitive tree.
   genomics:
     '@gmod/bbi': 5.0.0
     '@gmod/bam': 4.0.1

@@ -29,6 +29,7 @@ dist-internal/
 # failure class as .cnb/env/ below; re-include the tracked source directory.
 !packages/shared/src/build/
 .turbo/
+**/.umi*/
 target/
 *.tsbuildinfo
 *.pyc

@@ -80,7 +80,13 @@ def test_global_search_signature_is_canonical():
         "limit",
         "assembly_id",
         "site_variant",
+        "release_id",
     ]
+
+
+def test_search_route_accepts_optional_release_id():
+    """OPT2-02: an explicit release pin must be scoped, not ignored."""
+    assert "release_id" in inspect.signature(global_search_endpoint).parameters
 
 
 def test_search_route_accepts_optional_assembly_id():
@@ -217,6 +223,7 @@ async def test_external_search_does_not_expose_mutant_persistence_ids():
 async def test_internal_search_sets_private_no_store_header():
     """R06: internal search response must carry private, no-store cache policy."""
     from fastapi import Response
+
     from app.api.v1.search import internal_search
 
     db = _CaptureDb()

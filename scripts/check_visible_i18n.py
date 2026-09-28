@@ -77,6 +77,14 @@ ALLOWED_EXACT = frozenset(
         "MODIFIER",
         "EN",
         "中文",
+        # Keyboard-shortcut glyphs: key names, not prose. The command palette
+        # shows the accelerator next to its trigger in every locale.
+        "⌘K",
+        "Esc",
+        # Identifier field names rendered as column labels. They are contract
+        # vocabulary (public_id / internal_id), never translated.
+        "public_id",
+        "internal_id",
         "N",
         "T",
         "—",
@@ -112,6 +120,8 @@ ALLOWED_SHORT = frozenset(
         "F",
         "R",
         "C",
+        # Keyboard accelerator keys shown inside <kbd> (⌘K tokenises to "K").
+        "K",
         "v",
         "true",
         "false",

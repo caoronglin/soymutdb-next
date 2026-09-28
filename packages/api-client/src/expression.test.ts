@@ -33,7 +33,8 @@ describe("getGeneExpression", () => {
     };
     mockGet.mockResolvedValueOnce(mockResponse);
 
-    const params = { assembly_id: "5", tissue: "root", min_fpkm: 1.0, cursor: 12, limit: 50 };
+    // The cursor is the opaque string the server issued, not a row id.
+    const params = { assembly_id: "5", tissue: "root", min_fpkm: 1.0, cursor: "opaque.cursor", limit: 50 };
     const result = await getGeneExpression("Glyma.01G000100", params);
 
     expect(mockGet).toHaveBeenCalledWith("/expression/genes/Glyma.01G000100/expression", {
