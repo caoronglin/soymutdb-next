@@ -47,18 +47,48 @@ def _cursor_filters(params: GeneListParams) -> dict[str, str]:
     )
 
 
-def _order_by(params: GeneListParams):
+def _variant_count_subquery(release_id: int):
+    """Correlated per-gene variant count for the resolved release + assembly.
+
+    Correlated on ``Gene`` deliberately. The ``outerjoin + GROUP BY
+    genes.gene_pk`` form cannot work here: ``Gene`` eager-loads its
+    relationships (``lazy="joined"``), so the target list also carries
+    ``releases_1`` / ``chromosomes_1`` / ``gene_data_cache_1`` columns that are
+    not functionally dependent on the grouping key, and PostgreSQL rejects the
+    statement with
+
+        column "releases_1.id" must appear in the GROUP BY clause
+
+    That is a 500 on every ``GET /genes`` -- and a statement-shape test that
+    never executes the SQL cannot see it.
+    """
+    return (
+        select(func.count(VariantSummary.id))
+        .where(
+            VariantSummary.gene_id == Gene.gene_pk,
+            VariantSummary.release_id == release_id,
+            VariantSummary.assembly_id == Gene.assembly_id,
+        )
+        .correlate(Gene)
+        .scalar_subquery()
+    )
+
+
+def _order_by(params: GeneListParams, release_id: int):
     """Validated ORDER BY list for the gene list.
 
     Only columns from the closed allowlist reach SQL; the keyset cursor is
     defined for the default ``(accession, gene_pk)`` order, so any other sort
     uses the page-based contract (enforced in ``list_genes``).
+
+    ``variant_count`` orders by the same correlated subquery the projection
+    selects: a bare aggregate here would re-introduce the missing GROUP BY.
     """
     descending = params.sort_dir == "desc"
     column = {
         "gene_id": Gene.accession,
         "symbol": Gene.name,
-        "variant_count": func.count(VariantSummary.id),
+        "variant_count": _variant_count_subquery(release_id),
     }[params.sort_by]
     primary = column.desc() if descending else column.asc()
     # gene_pk is the stable tiebreaker; keep it aligned with the primary
@@ -131,20 +161,13 @@ class GeneService:
         back as ``0`` for every row (the React table rendered an always-empty
         column) and an unscoped count would have spanned draft releases.
         """
-        variant_count = func.count(VariantSummary.id).label("variant_count")
+        variant_count = _variant_count_subquery(release_context.release_id).label(
+            "variant_count"
+        )
         stmt = (
             select(Gene, variant_count)
             .join(Assembly, Gene.assembly_id == Assembly.id)
-            .outerjoin(
-                VariantSummary,
-                and_(
-                    VariantSummary.gene_id == Gene.gene_pk,
-                    VariantSummary.release_id == release_context.release_id,
-                    VariantSummary.assembly_id == Gene.assembly_id,
-                ),
-            )
             .where(Assembly.release_id == release_context.release_id)
-            .group_by(Gene.gene_pk)
         )
 
         if params.assembly_id is not None:
@@ -212,7 +235,7 @@ class GeneService:
                 )
             )
 
-        stmt = stmt.order_by(*_order_by(params))
+        stmt = stmt.order_by(*_order_by(params, release_context.release_id))
         if params.page is not None:
             stmt = stmt.offset((params.page - 1) * page_size).limit(page_size)
         else:

@@ -76,6 +76,14 @@ async def test_gene_list_variant_count_is_release_and_assembly_scoped():
     # The join is bound to the resolved release *and* the gene's own assembly.
     assert "variant_summaries.release_id" in sql
     assert "variant_summaries.assembly_id" in sql
+    # The aggregate is a correlated scalar subquery. The join+GROUP BY form
+    # that used to be here selected Gene's lazy="joined" relationship columns
+    # without them appearing in GROUP BY, so PostgreSQL rejected the statement
+    # outright:
+    #   column "releases_1.id" must appear in the GROUP BY clause
+    # A shape-only test cannot see that, so pin the absence of the clause that
+    # made it invalid.
+    assert "group by" not in sql.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -102,8 +110,8 @@ def test_gene_sort_direction_is_normalised_and_validated():
 
 def test_order_by_uses_validated_columns_only():
     """The ORDER BY builder never interpolates user text."""
-    descending = _order_by(GeneListParams(sort_by="variant_count", sort_dir="desc"))
-    ascending = _order_by(GeneListParams(sort_by="variant_count", sort_dir="asc"))
+    descending = _order_by(GeneListParams(sort_by="variant_count", sort_dir="desc"), 7)
+    ascending = _order_by(GeneListParams(sort_by="variant_count", sort_dir="asc"), 7)
     assert [str(clause) for clause in descending] != [str(clause) for clause in ascending]
     # The aggregate is counted, not a raw user string.
     assert "count(" in str(descending[0]).lower()
