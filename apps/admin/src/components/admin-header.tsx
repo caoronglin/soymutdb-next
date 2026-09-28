@@ -286,8 +286,8 @@ function UserMenu() {
   }, []);
 
   const closeMenu = () => setOpen(false);
-  const initials = (user?.username ?? "admin").slice(0, 2).toUpperCase();
-  const displayName = user?.username ?? t("admin.shell.adminUserLabel", { defaultValue: "Admin User" });
+  const displayName = user?.fullName?.trim() || user?.username || t("admin.shell.adminUserLabel", { defaultValue: "Admin User" });
+  const initials = displayName.slice(0, 2).toUpperCase();
 
   const menuItems: Array<{ key: string; label: string; icon: IconComponent; danger?: boolean; onClick: () => void }> = [
     {

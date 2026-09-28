@@ -11,6 +11,7 @@ import {
 /** Authenticated admin user. */
 export interface AuthUser {
   username: string;
+  fullName?: string;
 }
 
 /**
@@ -52,15 +53,34 @@ function decodeJwtPayload(token: string): Record<string, unknown> | null {
   }
 }
 
-/** Extract a username from a JWT payload (`username` or `sub` claim). */
+/** Extract only human-readable identity claims; `sub` is the internal UUID. */
 function usernameFromToken(token: string): string | null {
   const payload = decodeJwtPayload(token);
   if (!payload) return null;
-  const username = payload["username"];
-  if (typeof username === "string" && username) return username;
-  const sub = payload["sub"];
-  if (typeof sub === "string" && sub) return sub;
+  for (const claim of ["username", "preferred_username", "email"]) {
+    const value = payload[claim];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  // `sub` is deliberately not a display name: in SoyMutDB it is a UUID.
   return null;
+}
+
+interface CurrentUserResponse {
+  username: string;
+  full_name?: string | null;
+}
+
+async function loadCurrentUser(fallbackUsername: string | null): Promise<AuthUser | null> {
+  try {
+    const current = await http.get<CurrentUserResponse>("/auth/me", { withCredentials: true });
+    if (current.username) {
+      return { username: current.username, fullName: current.full_name ?? undefined };
+    }
+  } catch {
+    // Session state may be restored even when the profile endpoint is temporarily
+    // unavailable; fall back to a human-readable login/claim, never the UUID.
+  }
+  return fallbackUsername ? { username: fallbackUsername } : null;
 }
 
 /**
@@ -83,12 +103,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   React.useEffect(() => {
     let cancelled = false;
     void restoreSession()
-      .then((ok) => {
+      .then(async (ok) => {
         if (cancelled || !ok) return;
         const token = getAccessToken();
-        const username = token ? usernameFromToken(token) : null;
+        const fallback = token ? usernameFromToken(token) : null;
+        const current = await loadCurrentUser(fallback);
+        if (cancelled) return;
         setIsAuthenticated(true);
-        setUser(username ? { username } : null);
+        setUser(current);
       })
       .finally(() => {
         if (!cancelled) setIsRestoringSession(false);
@@ -117,8 +139,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         json: { username, password },
       });
       setAccessToken(res.access_token);
-      const resolved = usernameFromToken(res.access_token) ?? username;
-      const authedUser: AuthUser = { username: resolved };
+      const fallback = usernameFromToken(res.access_token) ?? username;
+      const authedUser = (await loadCurrentUser(fallback)) ?? { username: fallback };
       setIsAuthenticated(true);
       setUser(authedUser);
       return authedUser;
