@@ -20,6 +20,10 @@ from app.services.local_test_preview_import_service import (
     read_fai,
     validate_local_test_database,
 )
+from app.schemas.local_test_preview import (
+    PreviewMutationSiteItem,
+    PreviewMutationSiteUpdate,
+)
 from app.services.local_test_preview_service import (
     PREVIEW_ANNOTATION_VERSION,
     PREVIEW_ASSEMBLY_NAME,
@@ -49,7 +53,7 @@ def _request(peer_host: str, *, forwarded_for: str | None = None) -> Request:
     )
 
 
-def test_preview_gate_requires_opted_in_baseline_development(monkeypatch):
+def test_preview_gate_requires_opted_in_development(monkeypatch):
     settings = SimpleNamespace(
         local_test_preview_enabled=True,
         app_env="dev",
@@ -64,11 +68,21 @@ def test_preview_gate_requires_opted_in_baseline_development(monkeypatch):
         preview_test_data.require_local_test_preview(_request("127.0.0.1"))
     assert disabled.value.status_code == 404
 
+    # `app_env=dev` plus the explicit opt-in are what keep this dataset out of
+    # production. `deployment_mode` is deliberately not part of the gate:
+    # requiring `baseline` additionally made the local *full-stack* (`extended`)
+    # run unable to preview its own test data, which is the same relaxation made
+    # in `core/config.py` and the import CLI.
     settings.local_test_preview_enabled = True
-    settings.deployment_mode = "extended"
-    with pytest.raises(HTTPException) as extended:
+    for mode in ("baseline", "extended"):
+        settings.deployment_mode = mode
         preview_test_data.require_local_test_preview(_request("127.0.0.1"))
-    assert extended.value.status_code == 404
+
+    # Non-dev environments stay blocked in either mode.
+    settings.app_env = "production"
+    with pytest.raises(HTTPException) as production:
+        preview_test_data.require_local_test_preview(_request("127.0.0.1"))
+    assert production.value.status_code == 404
 
 
 def test_preview_gate_uses_tcp_peer_and_ignores_spoofed_host_and_forwarded_ip(monkeypatch):
@@ -91,9 +105,14 @@ def test_preview_gate_uses_tcp_peer_and_ignores_spoofed_host_and_forwarded_ip(mo
 @pytest.mark.parametrize(
     "url",
     [
-        "postgresql+asyncpg://user:secret@127.0.0.1:5432/soymutdb",
+        # What protects a real database is the loopback host plus the
+        # `soymutdb` name; the port is not part of that property, and pinning
+        # 55432 blocked importing into the standard local development database
+        # that `.deploy/scripts/up.sh` serves (see the relaxation in
+        # `validate_local_test_database`).
         "postgresql+asyncpg://user:secret@127.0.0.1:55432/production",
         "postgresql+asyncpg://user:secret@example.org:55432/soymutdb",
+        "postgresql+asyncpg://user:secret@example.org:5432/soymutdb",
         "sqlite+aiosqlite:///tmp/not-allowed.db",
     ],
 )
@@ -108,6 +127,10 @@ def test_importer_rejects_non_disposable_or_non_postgres_targets(url):
         "postgresql+asyncpg://user:secret@127.0.0.1:55432/soymutdb",
         "postgresql+asyncpg://user:secret@[::1]:55432/soymutdb",
         "postgresql+asyncpg://user:secret@localhost:55432/soymutdb",
+        # The standard local development database: loopback + `soymutdb`, which
+        # is what the guard actually protects, on a different port.
+        "postgresql+asyncpg://user:secret@127.0.0.1:5432/soymutdb",
+        "postgresql+asyncpg://user:secret@localhost:5432/soymutdb",
     ],
 )
 def test_importer_accepts_only_the_dedicated_loopback_target(url):
@@ -152,6 +175,9 @@ def test_sample_data_parsers_preserve_a6_namespace_and_coordinate_semantics(tmp_
         "基因号",
         "特征",
         "可获得",
+        "W82_V2",
+        "W82_V4",
+        "DN53_V1",
     ]
     with sites_path.open("w", encoding="utf-8-sig", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=columns, delimiter="\t")
@@ -166,18 +192,44 @@ def test_sample_data_parsers_preserve_a6_namespace_and_coordinate_semantics(tmp_
                 "基因号": accession,
                 "特征": "gene|-30",
                 "可获得": "Y",
+                "W82_V2": "Glyma.02G115200",
+                "W82_V4": "Glyma.02G115200.Wm82.a4.v1",
+                "DN53_V1": "Glyma.DN53G115200",
+            }
+        )
+        # A row whose homolog columns are empty must parse to None, not "".
+        writer.writerow(
+            {
+                "株系": "SOYTE1M00002",
+                "突变体系（株系母+位置）": "SOYTE1M-Gm01-80",
+                "染色体号": "Gm01",
+                "位点": "80",
+                "可信度（高/中/低）": "L",
+                "基因号": accession,
+                "特征": "ds|-10",
+                "可获得": "N",
+                "W82_V2": "",
+                "W82_V4": "",
+                "DN53_V1": "",
             }
         )
     sites = parse_mutation_sites(
         sites_path,
         chromosome_lengths,
         {accession},
-        expected_rows=1,
+        expected_rows=2,
     )
-    assert len(sites) == 1
+    assert len(sites) == 2
     assert sites[0].position == 50
     assert sites[0].confidence == "H"
     assert sites[0].available is True
+    assert sites[0].gene_v2 == "Glyma.02G115200"
+    assert sites[0].gene_v4 == "Glyma.02G115200.Wm82.a4.v1"
+    assert sites[0].gene_dn53 == "Glyma.DN53G115200"
+    # Empty source columns stay absent rather than becoming empty strings.
+    assert sites[1].gene_v2 is None
+    assert sites[1].gene_v4 is None
+    assert sites[1].gene_dn53 is None
     assert not hasattr(sites[0], "ref")
     assert not hasattr(sites[0], "alt")
 
@@ -290,3 +342,51 @@ async def test_preview_api_returns_unpublished_v6_data_without_variant_fields(
     assert "ref_allele" not in site_body["items"][0]
     assert "alt_allele" not in site_body["items"][0]
 
+
+
+def test_preview_router_exposes_the_operator_maintenance_endpoints():
+    """The pages rely on these three paths existing; a rename would silently
+    drop the mutation-site table or the availability switch."""
+    paths = {(route.path, tuple(sorted(route.methods))) for route in preview_test_data.router.routes}
+    assert ("/preview/test-data/mutation-sites", ("GET",)) in paths
+    assert ("/preview/test-data/mutation-sites/by-gene", ("GET",)) in paths
+    assert ("/preview/test-data/mutation-sites/{source_site_key}", ("PATCH",)) in paths
+
+
+def test_mutation_site_schema_carries_the_homolog_columns():
+    """The three homolog accessions are part of the published row shape."""
+    item = PreviewMutationSiteItem(
+        source_site_key="SOYTE1M-Gm01-98256",
+        mutant_line_name="SOYTE1M00001",
+        chromosome="Gm01",
+        position=98256,
+        confidence="H",
+        gene_id="Glyma.01G000100.Wm82.a6.v1",
+        feature="gene|-5225.5",
+        available=True,
+        gene_v2="Glyma.02G115200",
+        gene_v4="Glyma.02G115200.Wm82.a4.v1",
+        gene_dn53="Glyma.DN53G115200",
+    )
+    assert item.gene_v2 == "Glyma.02G115200"
+    assert item.model_dump()["gene_dn53"] == "Glyma.DN53G115200"
+
+    # Rows whose source columns are empty stay nullable rather than defaulting.
+    empty = PreviewMutationSiteItem(
+        source_site_key="SOYTE1M-Gm01-50",
+        mutant_line_name="SOYTE1M00002",
+        chromosome="Gm01",
+        position=50,
+        confidence="L",
+        gene_id="Glyma.01G000100.Wm82.a6.v1",
+        feature="ds|-10",
+        available=False,
+    )
+    assert empty.gene_v2 is None and empty.gene_v4 is None and empty.gene_dn53 is None
+
+
+def test_mutation_site_update_accepts_only_availability():
+    """`available` is the single writable field of a preview row."""
+    assert PreviewMutationSiteUpdate(available=True).available is True
+    with pytest.raises(Exception):
+        PreviewMutationSiteUpdate.model_validate({"feature": "gene|-1"})

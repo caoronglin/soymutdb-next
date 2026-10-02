@@ -38,6 +38,7 @@ from .genomic import (
     GeneAlias,
     GeneCrosswalk,
     Transcript,
+    TranscriptPart,
 )
 from .gwas import GwasFileType, GwasJob, GwasJobStatus, GwasMethod
 from .homolog import GeneHomolog
@@ -97,6 +98,7 @@ __all__ = [
     "GeneAnnotation",
     "GeneAnnotationSet",
     "GeneCrosswalk",
+    "TranscriptPart",
     "GeneDataCache",
     "GeneHomolog",
     "GwasFileType",

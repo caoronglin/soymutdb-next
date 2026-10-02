@@ -43,13 +43,12 @@ def _parser() -> argparse.ArgumentParser:
 
 async def _run(args: argparse.Namespace) -> None:
     settings = get_settings()
-    if (
-        not settings.local_test_preview_enabled
-        or settings.app_env != "dev"
-        or settings.deployment_mode != "baseline"
-    ):
+    # `app_env=dev` is the guard that keeps the preview dataset out of
+    # production; `deployment_mode` is not (same relaxation as
+    # `core/config.py`), so a local full-stack run may import too.
+    if not settings.local_test_preview_enabled or settings.app_env != "dev":
         raise SystemExit(
-            "Set SOYMUTDB_APP_ENV=dev, SOYMUTDB_DEPLOYMENT_MODE=baseline, and "
+            "Set SOYMUTDB_APP_ENV=dev and "
             "SOYMUTDB_LOCAL_TEST_PREVIEW_ENABLED=true for this local import."
         )
 

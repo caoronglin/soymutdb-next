@@ -365,30 +365,9 @@ def test_ABL_rejects_unknown_cache_key_parameter(monkeypatch) -> None:
     assert decorated is not None
 
 
-# ------------------------------------------------------------ legacy federated key
-def test_GAP_legacy_federated_searchcache_key_ignores_biological_scope() -> None:
-    """Was: the federated key only covered (query, sources). OPT-03 closed it."""
-    from app.search.cache import SearchCache
-
-    params = list(inspect.signature(SearchCache.make_key).parameters)
-    key = SearchCache.make_key("G1", ("ncbi", "uniprot"))
-    other = SearchCache.make_key("G1", ("uniprot", "ncbi"))
-    scoped = SearchCache.make_key(
-        "G1", ("ncbi", "uniprot"), site_variant="external", release_id=7
-    )
-    _emit("legacy_federated_key", params=params, key=key, sorted_sources_same=key == other)
-    assert params == [
-        "query",
-        "sources",
-        "site_variant",
-        "release_id",
-        "assembly_id",
-        "filters",
-    ]
-    # An unscoped call keeps the old shape; a scoped one forks the key.
-    assert "release" not in key and "assembly" not in key
-    assert key == other  # sources are sorted
-    assert scoped != key
+# The legacy federated cache-key ablation was removed with federated search
+# itself: `app.search.cache.SearchCache` no longer exists, so there is no key
+# shape left to ablate.
 
 
 # ------------------------------------------------------------ Cache-Control header

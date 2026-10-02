@@ -55,6 +55,13 @@ async def resolve_release_context(
     requested_release_id: int | None = None,
 ) -> ReleaseContext:
     """Resolve a published release, defaulting to the singleton active pointer."""
+    # The local unpublished preview database holds *only* the draft test release.
+    # Without a fallback the whole API surface answers 503, so none of the
+    # preview pages can even be opened. The fallback is scoped to the opt-in
+    # preview flag and to the draft status, so a real deployment is unaffected.
+    preview_fallback = (
+        requested_release_id is None and get_settings().local_test_preview_enabled
+    )
     if requested_release_id is None:
         statement = (
             select(Release)
@@ -73,6 +80,12 @@ async def resolve_release_context(
     @cached("release-context", ttl=60, key_params=("request_id",))
     async def load_identity(request_id: int | None) -> dict[str, Any]:
         release = (await db.execute(statement)).scalar_one_or_none()
+        if release is None and preview_fallback:
+            release = (
+                await db.execute(
+                    select(Release).where(Release.status == ReleaseStatus.DRAFT.value)
+                )
+            ).scalars().first()
         if release is None and requested_release_id is None:
             raise ServiceUnavailableError("No active data release is available")
         if release is None:

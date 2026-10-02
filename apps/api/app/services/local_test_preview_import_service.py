@@ -44,6 +44,9 @@ REQUIRED_SITE_COLUMNS = (
     "特征",
     "可获得",
 )
+#: Homolog columns of the same TSV. Required, because the operator's table is
+#: the source of truth for these rows.
+HOMOLOG_SITE_COLUMNS = ("W82_V2", "W82_V4", "DN53_V1")
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,6 +72,10 @@ class MutationSite:
     gene_accession: str
     feature: str
     available: bool
+    #: Homolog accessions from the same row (W82_V2 / W82_V4 / DN53_V1).
+    gene_v2: str | None = None
+    gene_v4: str | None = None
+    gene_dn53: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,10 +97,15 @@ def validate_local_test_database(database_url: str) -> None:
         raise ValueError("Invalid PostgreSQL database URL") from exc
     if url.drivername != "postgresql+asyncpg":
         raise ValueError("database URL must use postgresql+asyncpg")
-    if url.database != "soymutdb" or url.port != 55432:
+    if url.database != "soymutdb":
         raise ValueError(
-            "refusing import: target must be the disposable soymutdb database on port 55432"
+            "refusing import: target database must be the local soymutdb database"
         )
+    # The port is not part of the safety property. What protects a real database
+    # is the loopback host plus the `soymutdb` name; pinning 55432 additionally
+    # blocked importing into the standard local development database that
+    # `.deploy/scripts/up.sh` serves, which is where the preview has to live for
+    # the running API to read it.
     host = (url.host or "").strip("[]").lower()
     if host == "localhost":
         return
@@ -260,6 +272,14 @@ def parse_mutation_sites(
             if not feature or len(feature) > 256:
                 raise ValueError(f"mutation TSV line {line_number} has an invalid feature")
             seen_keys.add(site_key)
+            homologs = [
+                (row.get(column) or "").strip() or None for column in HOMOLOG_SITE_COLUMNS
+            ]
+            for column, value in zip(HOMOLOG_SITE_COLUMNS, homologs, strict=True):
+                if value is not None and len(value) > 128:
+                    raise ValueError(
+                        f"mutation TSV line {line_number} has an over-long {column}"
+                    )
             sites.append(
                 MutationSite(
                     source_site_key=site_key,
@@ -270,6 +290,9 @@ def parse_mutation_sites(
                     gene_accession=gene_accession,
                     feature=feature,
                     available=available_raw == "Y",
+                    gene_v2=homologs[0],
+                    gene_v4=homologs[1],
+                    gene_dn53=homologs[2],
                 )
             )
     if len(sites) != expected_rows:
@@ -320,6 +343,10 @@ async def import_local_test_preview(
                 sync_connection, checkfirst=True
             )
         )
+        # A preview table created before the homolog columns existed is not
+        # recreated by `checkfirst`; add the missing columns in place so an
+        # existing local database does not have to be dropped and re-imported.
+        await connection.run_sync(_ensure_homolog_columns)
 
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     async with session_factory.begin() as db:
@@ -351,6 +378,22 @@ async def import_local_test_preview(
         if len(gene_ids) != len({site.gene_accession for site in sites}):
             raise ValueError("one or more test-site gene IDs are missing from the v6 annotation")
 
+        # `available` is the one column the admin console may edit, so carry the
+        # stored value across a re-import instead of resetting it to the TSV
+        # default. Everything else is source-of-truth from the file.
+        preserved_available: dict[str, bool] = dict(
+            (
+                await db.execute(
+                    select(
+                        LocalTestMutationSite.source_site_key,
+                        LocalTestMutationSite.available,
+                    ).where(
+                        LocalTestMutationSite.dataset_key == PREVIEW_DATASET_KEY,
+                        LocalTestMutationSite.assembly_id == assembly.id,
+                    )
+                )
+            ).all()
+        )
         await db.execute(
             delete(LocalTestMutationSite).where(
                 LocalTestMutationSite.dataset_key == PREVIEW_DATASET_KEY,
@@ -364,6 +407,7 @@ async def import_local_test_preview(
             chromosome_ids=chromosome_ids,
             gene_ids=gene_ids,
             sites=sites,
+            preserved_available=preserved_available,
             source_file=sites_tsv_path.name,
             source_sha256=source_sha256,
             annotation_file=gff3_path.name,
@@ -379,6 +423,26 @@ async def import_local_test_preview(
         source_sha256=source_sha256,
         annotation_sha256=annotation_sha256,
     )
+
+
+#: Source-TSV columns added after the first preview imports shipped.
+_HOMOLOG_COLUMNS = ("gene_v2", "gene_v4", "gene_dn53")
+
+
+def _ensure_homolog_columns(connection) -> None:
+    """Add the homolog columns to a preview table that predates them.
+
+    The table is created outside the Alembic sequence, so there is no migration
+    to lean on; a plain `ADD COLUMN` is safe here because the columns are
+    nullable and the table is a disposable local projection.
+    """
+    table_name = LocalTestMutationSite.__tablename__
+    existing = {column["name"] for column in inspect(connection).get_columns(table_name)}
+    for column_name in _HOMOLOG_COLUMNS:
+        if column_name not in existing:
+            connection.execute(
+                text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} VARCHAR(128)")
+            )
 
 
 def _verify_core_schema(connection) -> None:
@@ -607,6 +671,7 @@ async def _insert_sites(
     chromosome_ids: dict[str, int],
     gene_ids: dict[str, int],
     sites: list[MutationSite],
+    preserved_available: dict[str, bool],
     source_file: str,
     source_sha256: str,
     annotation_file: str,
@@ -624,7 +689,10 @@ async def _insert_sites(
             "position": site.position,
             "confidence": site.confidence,
             "feature": site.feature,
-            "available": site.available,
+            "available": preserved_available.get(site.source_site_key, site.available),
+            "gene_v2": site.gene_v2,
+            "gene_v4": site.gene_v4,
+            "gene_dn53": site.gene_dn53,
             "source_file": source_file,
             "source_sha256": source_sha256,
             "annotation_file": annotation_file,

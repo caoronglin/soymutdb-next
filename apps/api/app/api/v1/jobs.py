@@ -33,7 +33,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials
-from sqlalchemy import func, literal, select, text
+from sqlalchemy import String, cast, func, literal, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from structlog import get_logger
 
@@ -105,11 +105,16 @@ async def _recent_job_updates(
             return user_id_column.is_(None)
         return user_id_column == user.id
 
+    # `status` has a different physical type per table (varchar on blast_jobs,
+    # `analysis_job_status_enum` on analysis_jobs), and PostgreSQL refuses to
+    # UNION mismatched types. Casting all three to text keeps the union valid;
+    # without it the statement aborts the surrounding transaction, which then
+    # poisons every later request on the same pooled connection.
     blast_stmt = (
         select(
             literal("blast").label("job_type"),
             BlastJob.id.label("job_id"),
-            BlastJob.status.label("status"),
+            cast(BlastJob.status, String).label("status"),
             _blast_updated_at().label("updated_at"),
         )
         .where(user_condition(BlastJob.user_id))
@@ -119,7 +124,7 @@ async def _recent_job_updates(
         select(
             literal("analysis").label("job_type"),
             AnalysisJob.id.label("job_id"),
-            AnalysisJob.status.label("status"),
+            cast(AnalysisJob.status, String).label("status"),
             AnalysisJob.updated_at.label("updated_at"),
         )
         .where(user_condition(AnalysisJob.user_id))
@@ -129,7 +134,7 @@ async def _recent_job_updates(
         select(
             literal("gwas").label("job_type"),
             GwasJob.id.label("job_id"),
-            GwasJob.status.label("status"),
+            cast(GwasJob.status, String).label("status"),
             GwasJob.updated_at.label("updated_at"),
         )
         .where(user_condition(GwasJob.user_id))

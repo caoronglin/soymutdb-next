@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     ForeignKey,
     Index,
     Integer,
@@ -25,7 +26,7 @@ if TYPE_CHECKING:
     from .expression import ExpressionData, ExpressionLibrary
     from .gene_data_cache import GeneDataCache
     from .homolog import GeneHomolog
-    from .variant import MutantLine, VariantSummary
+    from .variant import VariantSummary
 
 
 class Assembly(Base, TimestampMixin):
@@ -37,31 +38,31 @@ class Assembly(Base, TimestampMixin):
         String(128), nullable=False, default="Glycine max"
     )
     version: Mapped[str] = mapped_column(String(64), nullable=False)
-    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    fasta_url: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
-    fai_url: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    fasta_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    fai_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     is_default: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false", nullable=False
     )
-    release_id: Mapped[Optional[int]] = mapped_column(
+    release_id: Mapped[int | None] = mapped_column(
         ForeignKey("releases.id", ondelete="SET NULL"), nullable=True
     )
 
-    chromosomes: Mapped[List["Chromosome"]] = relationship(
+    chromosomes: Mapped[list[Chromosome]] = relationship(
         back_populates="assembly",
         lazy="selectin",
         cascade="all, delete-orphan",
     )
-    genes: Mapped[List["Gene"]] = relationship(
+    genes: Mapped[list[Gene]] = relationship(
         back_populates="assembly", lazy="noload"
     )
-    variant_summaries: Mapped[List["VariantSummary"]] = relationship(
+    variant_summaries: Mapped[list[VariantSummary]] = relationship(
         back_populates="assembly", lazy="noload"
     )
-    expression_libraries: Mapped[List["ExpressionLibrary"]] = relationship(
+    expression_libraries: Mapped[list[ExpressionLibrary]] = relationship(
         back_populates="assembly", lazy="noload"
     )
-    release: Mapped[Optional["Release"]] = relationship(
+    release: Mapped[Release | None] = relationship(
         back_populates="assemblies",
         foreign_keys=[release_id],
         lazy="joined",
@@ -88,13 +89,13 @@ class Chromosome(Base):
     length: Mapped[int] = mapped_column(BigInteger, nullable=False)
     order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
-    assembly: Mapped["Assembly"] = relationship(
+    assembly: Mapped[Assembly] = relationship(
         back_populates="chromosomes", lazy="joined"
     )
-    genes: Mapped[List["Gene"]] = relationship(
+    genes: Mapped[list[Gene]] = relationship(
         back_populates="chromosome", lazy="noload"
     )
-    variant_summaries: Mapped[List["VariantSummary"]] = relationship(
+    variant_summaries: Mapped[list[VariantSummary]] = relationship(
         back_populates="chromosome", lazy="noload"
     )
 
@@ -123,7 +124,7 @@ class Gene(Base, TimestampMixin):
     chromosome_id: Mapped[int] = mapped_column(
         ForeignKey("chromosomes.id", ondelete="CASCADE"), nullable=False
     )
-    name: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    name: Mapped[str | None] = mapped_column(String(256), nullable=True)
     biotype: Mapped[str] = mapped_column(
         String(64),
         default="protein_coding",
@@ -133,35 +134,35 @@ class Gene(Base, TimestampMixin):
     start: Mapped[int] = mapped_column(BigInteger, nullable=False)
     end: Mapped[int] = mapped_column(BigInteger, nullable=False)
     strand: Mapped[str] = mapped_column(String(1), nullable=False, comment="'+' or '-'")
-    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    attributes: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    attributes: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
-    assembly: Mapped["Assembly"] = relationship(
+    assembly: Mapped[Assembly] = relationship(
         back_populates="genes", lazy="joined"
     )
-    chromosome: Mapped["Chromosome"] = relationship(
+    chromosome: Mapped[Chromosome] = relationship(
         back_populates="genes", lazy="joined"
     )
-    transcripts: Mapped[List["Transcript"]] = relationship(
+    transcripts: Mapped[list[Transcript]] = relationship(
         back_populates="gene",
         lazy="selectin",
         cascade="all, delete-orphan",
     )
-    aliases: Mapped[List["GeneAlias"]] = relationship(
+    aliases: Mapped[list[GeneAlias]] = relationship(
         back_populates="gene",
         lazy="selectin",
         cascade="all, delete-orphan",
     )
-    variant_summaries: Mapped[List["VariantSummary"]] = relationship(
+    variant_summaries: Mapped[list[VariantSummary]] = relationship(
         back_populates="gene", lazy="noload"
     )
-    expression_data: Mapped[List["ExpressionData"]] = relationship(
+    expression_data: Mapped[list[ExpressionData]] = relationship(
         back_populates="gene", lazy="noload"
     )
-    homologs: Mapped[List["GeneHomolog"]] = relationship(
+    homologs: Mapped[list[GeneHomolog]] = relationship(
         back_populates="gene", lazy="noload"
     )
-    data_cache: Mapped[Optional["GeneDataCache"]] = relationship(
+    data_cache: Mapped[GeneDataCache | None] = relationship(
         back_populates="gene", lazy="joined", uselist=False
     )
 
@@ -188,7 +189,7 @@ class Transcript(Base):
         ForeignKey("genes.gene_pk", ondelete="CASCADE"), nullable=False,
         comment="FK to genes.gene_pk (surrogate)",
     )
-    name: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    name: Mapped[str | None] = mapped_column(String(256), nullable=True)
     biotype: Mapped[str] = mapped_column(
         String(64), default="mRNA", server_default="mRNA", nullable=False
     )
@@ -199,12 +200,18 @@ class Transcript(Base):
         Boolean, default=False, server_default="false", nullable=False
     )
 
-    gene: Mapped["Gene"] = relationship(back_populates="transcripts", lazy="joined")
-    exons: Mapped[List["Exon"]] = relationship(
+    gene: Mapped[Gene] = relationship(back_populates="transcripts", lazy="joined")
+    exons: Mapped[list[Exon]] = relationship(
         back_populates="transcript",
         lazy="selectin",
         cascade="all, delete-orphan",
         order_by="Exon.order",
+    )
+    parts: Mapped[list[TranscriptPart]] = relationship(
+        back_populates="transcript",
+        lazy="selectin",
+        cascade="all, delete-orphan",
+        order_by="TranscriptPart.order",
     )
 
     __table_args__ = (
@@ -227,7 +234,7 @@ class Exon(Base):
     end: Mapped[int] = mapped_column(BigInteger, nullable=False)
     order: Mapped[int] = mapped_column(SmallInteger, nullable=False)
 
-    transcript: Mapped["Transcript"] = relationship(
+    transcript: Mapped[Transcript] = relationship(
         back_populates="exons", lazy="joined"
     )
 
@@ -239,6 +246,62 @@ class Exon(Base):
         return f"<Exon id={self.id} transcript={self.transcript_id!r} order={self.order}>"
 
 
+class TranscriptPart(Base):
+    """A typed segment inside a transcript: CDS, 5' UTR or 3' UTR.
+
+    ``exons`` alone cannot describe a gene model. An exon is the *union* of the
+    coding and untranslated segments it contains, so a renderer that only sees
+    exons can draw boxes but cannot distinguish the coding region from the
+    flanks — and the flanks are exactly what a reader needs in order to tell a
+    CDS boundary from a UTR boundary.
+
+    Both are stored, deliberately: ``Exon`` rows carry the merged picture for
+    existing queries, and ``TranscriptPart`` rows carry the typed detail. The
+    import derives the exon rows by merging the parts, so the two can never
+    drift apart at the source.
+
+    Coordinates are 1-based inclusive, matching the GFF3 they come from.
+    """
+
+    __tablename__ = "transcript_parts"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    transcript_id: Mapped[str] = mapped_column(
+        ForeignKey("transcripts.id", ondelete="CASCADE"), nullable=False
+    )
+    part_type: Mapped[str] = mapped_column(
+        String(24),
+        nullable=False,
+        comment="cds | five_prime_utr | three_prime_utr",
+    )
+    start: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    end: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    order: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+
+    transcript: Mapped[Transcript] = relationship(
+        back_populates="parts", lazy="joined"
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "part_type IN ('cds', 'five_prime_utr', 'three_prime_utr')",
+            name="ck_transcript_parts_type",
+        ),
+        # Quoted because `end` is a reserved word and a CheckConstraint's text
+        # is emitted verbatim — this is the `create_all` path's copy of the
+        # migration's constraint.
+        CheckConstraint('"end" >= "start"', name="ck_transcript_parts_order"),
+        Index("ix_transcript_parts_transcript", "transcript_id", "part_type", "order"),
+        Index("ix_transcript_parts_location", "start", "end"),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<TranscriptPart transcript={self.transcript_id!r} "
+            f"type={self.part_type!r} {self.start}-{self.end}>"
+        )
+
+
 class GeneAlias(Base):
     __tablename__ = "gene_aliases"
 
@@ -248,9 +311,9 @@ class GeneAlias(Base):
         comment="FK to genes.gene_pk (surrogate)",
     )
     alias: Mapped[str] = mapped_column(String(256), nullable=False)
-    source: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    source: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
-    gene: Mapped["Gene"] = relationship(back_populates="aliases", lazy="joined")
+    gene: Mapped[Gene] = relationship(back_populates="aliases", lazy="joined")
 
     __table_args__ = (
         UniqueConstraint("gene_id", "alias", name="uq_gene_alias"),
@@ -284,15 +347,15 @@ class GeneCrosswalk(Base, TimestampMixin):
     )
     relation_type: Mapped[str] = mapped_column(String(32), nullable=False)
     provenance_source: Mapped[str] = mapped_column(String(256), nullable=False)
-    provenance_evidence: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
-    release_id: Mapped[Optional[int]] = mapped_column(
+    provenance_evidence: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    release_id: Mapped[int | None] = mapped_column(
         ForeignKey("releases.id", ondelete="SET NULL"), nullable=True
     )
 
-    source_gene: Mapped["Gene"] = relationship(
+    source_gene: Mapped[Gene] = relationship(
         foreign_keys=[source_gene_id], lazy="joined"
     )
-    target_gene: Mapped["Gene"] = relationship(
+    target_gene: Mapped[Gene] = relationship(
         foreign_keys=[target_gene_id], lazy="joined"
     )
 
@@ -322,4 +385,5 @@ __all__ = [
     "GeneCrosswalk",
     "GeneAlias",
     "Transcript",
+    "TranscriptPart",
 ]

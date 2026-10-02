@@ -12,7 +12,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.config import get_settings
@@ -130,6 +130,46 @@ class SeedRequestService:
         return SeedRequestListResponse(
             items=items, total=total, page=page, page_size=page_size
         )
+
+    async def count_requests_by_gene(
+        self,
+        db: AsyncSession,
+        *,
+        gene_ids: list[str],
+        max_gene_ids: int = 200,
+    ) -> dict[str, int]:
+        """Count the seed requests that reference each of *gene_ids*.
+
+        Aggregate only — see ``SeedRequestGeneCount`` for why. The gene IDs on a
+        request are the requester's own free text, so this is a literal string
+        match against what people typed, **not** a resolution to released
+        records; callers must not present it as one.
+
+        ``CROSS JOIN LATERAL`` over ``jsonb_array_elements_text`` counts each
+        request once per matching gene without a self-join or a temp table.
+        """
+        # Ordered de-duplication, so the response is deterministic and a caller
+        # cannot widen the query with a huge repeated list.
+        wanted = [value for value in dict.fromkeys(gene_ids) if value][:max_gene_ids]
+        if not wanted:
+            return {}
+
+        stmt = text(
+            """
+            SELECT g.gene_id AS gene_id, count(*) AS requests
+            FROM seed_request_contacts AS c
+            CROSS JOIN LATERAL jsonb_array_elements_text(c.gene_ids) AS g(gene_id)
+            WHERE g.gene_id = ANY(:ids)
+            GROUP BY g.gene_id
+            """
+        )
+        result = await db.execute(stmt, {"ids": wanted})
+        return {str(row.gene_id): int(row.requests) for row in result.all()}
+
+    async def total_requests(self, db: AsyncSession) -> int:
+        """Count every seed request on record, regardless of gene or status."""
+        result = await db.execute(select(func.count()).select_from(SeedRequestContact))
+        return int(result.scalar() or 0)
 
     async def update_status(
         self,

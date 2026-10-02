@@ -11,6 +11,8 @@ of the Alembic production migration sequence.
 
 from __future__ import annotations
 
+from typing import Optional
+
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -47,7 +49,16 @@ class LocalTestMutationSite(Base, TimestampMixin):
     position: Mapped[int] = mapped_column(BigInteger, nullable=False)
     confidence: Mapped[str] = mapped_column(String(1), nullable=False)
     feature: Mapped[str] = mapped_column(String(256), nullable=False)
+    #: Operator-editable availability flag. Unlike the imported columns this one
+    #: is meant to be changed after the fact from the admin console, so a
+    #: re-import must not clobber an existing value.
     available: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    #: Homolog accessions supplied by the same source TSV: the Wm82.a2.v1 and
+    #: Wm82.a4.v1 names and the DN53 v1 equivalent of the mutated gene. Nullable
+    #: because the source rows do not always carry all three.
+    gene_v2: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    gene_v4: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    gene_dn53: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     source_file: Mapped[str] = mapped_column(String(256), nullable=False)
     source_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     annotation_file: Mapped[str] = mapped_column(String(256), nullable=False)

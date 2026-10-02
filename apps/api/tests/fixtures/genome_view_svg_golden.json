@@ -1,0 +1,717 @@
+{
+  "generator": "packages/genome-view/scripts/gen-svg-golden.ts",
+  "note": "Byte-for-byte contract between the TypeScript and Python genome-view SVG renderers.",
+  "cases": [
+    {
+      "name": "ruler-and-single-gene",
+      "why": "The ordinary gene page: a leading ruler plus one body.",
+      "options": {
+        "viewport": {
+          "assemblyKey": "Gmax_880_v6.0",
+          "refName": "Gm01",
+          "start": 10685338,
+          "end": 10694003
+        },
+        "widthPx": 900,
+        "tracks": [
+          {
+            "id": "ruler",
+            "label": "Gm01",
+            "kind": "ruler"
+          },
+          {
+            "id": "gene",
+            "label": "Glyma.01G066600.Wm82.a6.v1 (+)",
+            "kind": "feature",
+            "features": [
+              {
+                "id": "Glyma.01G066600.Wm82.a6.v1",
+                "start": 10685338,
+                "end": 10694003,
+                "kind": "gene",
+                "label": "Glyma.01G066600.Wm82.a6.v1",
+                "strand": "+"
+              }
+            ]
+          }
+        ],
+        "theme": {
+          "background": "#fafafa",
+          "surface": "#ffffff",
+          "text": "#262626",
+          "textSecondary": "#8c8c8c",
+          "border": "#f0f0f0",
+          "primary": "#2f6f4f",
+          "warn": "#faad14"
+        }
+      },
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"900\" height=\"58\" viewBox=\"0 0 900 58\" role=\"img\" aria-label=\"Gm01:10,685,338-10,694,003\" font-family=\"-apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, Roboto, &quot;Helvetica Neue&quot;, Arial, sans-serif\"><rect x=\"0\" y=\"0\" width=\"900\" height=\"58\" fill=\"#fafafa\"/><rect x=\"0\" y=\"0\" width=\"900\" height=\"28\" fill=\"#ffffff\"/><text x=\"8\" y=\"14\" font-size=\"11\" fill=\"#8c8c8c\" stroke=\"#ffffff\" stroke-width=\"3\" paint-order=\"stroke\">Gm01</text><line x1=\"179.59\" y1=\"0\" x2=\"179.59\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"182.59\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">10,686,000</text><line x1=\"269.61\" y1=\"0\" x2=\"269.61\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"272.61\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">10,687,000</text><line x1=\"359.63\" y1=\"0\" x2=\"359.63\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"362.63\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">10,688,000</text><line x1=\"449.64\" y1=\"0\" x2=\"449.64\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"452.64\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">10,689,000</text><line x1=\"539.66\" y1=\"0\" x2=\"539.66\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"542.66\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">10,690,000</text><line x1=\"629.68\" y1=\"0\" x2=\"629.68\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"632.68\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">10,691,000</text><line x1=\"719.7\" y1=\"0\" x2=\"719.7\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"722.7\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">10,692,000</text><line x1=\"809.71\" y1=\"0\" x2=\"809.71\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"812.71\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">10,693,000</text><line x1=\"899.73\" y1=\"0\" x2=\"899.73\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"902.73\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">10,694,000</text><rect x=\"0\" y=\"36\" width=\"900\" height=\"22\" fill=\"#ffffff\"/><text x=\"8\" y=\"50\" font-size=\"11\" fill=\"#8c8c8c\" stroke=\"#ffffff\" stroke-width=\"3\" paint-order=\"stroke\">Glyma.01G066600.Wm82.a6.v1 (+)</text><rect x=\"120\" y=\"40\" width=\"780\" height=\"14\" rx=\"2\" fill=\"#2f6f4f\" data-feature-id=\"Glyma.01G066600.Wm82.a6.v1\"><title>Glyma.01G066600.Wm82.a6.v1 · 10,685,338-10,694,003</title></rect><polygon points=\"900,44 904,47 900,50\" fill=\"#ffffff\" opacity=\"0.9\" data-strand=\"+\"/><text x=\"124\" y=\"51\" font-size=\"10\" fill=\"#262626\" stroke=\"#ffffff\" stroke-width=\"2.5\" paint-order=\"stroke\">Glyma.01G066600.Wm82.a6.v1</text><g id=\"gv-strand\" data-ref=\"Gm01\"></g></svg>"
+    },
+    {
+      "name": "overlapping-features-wrap-to-rows",
+      "why": "Exercises the greedy first-fit row packing and the max-row height.",
+      "options": {
+        "viewport": {
+          "assemblyKey": "Gmax_880_v6.0",
+          "refName": "Gm01",
+          "start": 1000,
+          "end": 2000
+        },
+        "widthPx": 300,
+        "tracks": [
+          {
+            "id": "ruler",
+            "label": "Gm01",
+            "kind": "ruler"
+          },
+          {
+            "id": "gene",
+            "label": "overlapping",
+            "kind": "feature",
+            "features": [
+              {
+                "id": "a",
+                "start": 1000,
+                "end": 1500,
+                "kind": "gene",
+                "label": "A"
+              },
+              {
+                "id": "b",
+                "start": 1010,
+                "end": 1520,
+                "kind": "gene",
+                "label": "B"
+              },
+              {
+                "id": "c",
+                "start": 1020,
+                "end": 1540,
+                "kind": "gene",
+                "label": "C"
+              }
+            ]
+          }
+        ],
+        "theme": {
+          "background": "#fafafa",
+          "surface": "#ffffff",
+          "text": "#262626",
+          "textSecondary": "#8c8c8c",
+          "border": "#f0f0f0",
+          "primary": "#2f6f4f",
+          "warn": "#faad14"
+        }
+      },
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"300\" height=\"102\" viewBox=\"0 0 300 102\" role=\"img\" aria-label=\"Gm01:1,000-2,000\" font-family=\"-apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, Roboto, &quot;Helvetica Neue&quot;, Arial, sans-serif\"><rect x=\"0\" y=\"0\" width=\"300\" height=\"102\" fill=\"#fafafa\"/><rect x=\"0\" y=\"0\" width=\"300\" height=\"28\" fill=\"#ffffff\"/><text x=\"8\" y=\"14\" font-size=\"11\" fill=\"#8c8c8c\" stroke=\"#ffffff\" stroke-width=\"3\" paint-order=\"stroke\">Gm01</text><line x1=\"120\" y1=\"0\" x2=\"120\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"123\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">1,000</text><line x1=\"210\" y1=\"0\" x2=\"210\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"213\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">1,500</text><line x1=\"300\" y1=\"0\" x2=\"300\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"303\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">2,000</text><rect x=\"0\" y=\"36\" width=\"300\" height=\"66\" fill=\"#ffffff\"/><text x=\"8\" y=\"50\" font-size=\"11\" fill=\"#8c8c8c\" stroke=\"#ffffff\" stroke-width=\"3\" paint-order=\"stroke\">overlapping</text><rect x=\"120\" y=\"40\" width=\"90\" height=\"14\" rx=\"2\" fill=\"#2f6f4f\" data-feature-id=\"a\"><title>A · 1,000-1,500</title></rect><text x=\"124\" y=\"51\" font-size=\"10\" fill=\"#262626\" stroke=\"#ffffff\" stroke-width=\"2.5\" paint-order=\"stroke\">A</text><rect x=\"121.8\" y=\"62\" width=\"91.8\" height=\"14\" rx=\"2\" fill=\"#2f6f4f\" data-feature-id=\"b\"><title>B · 1,010-1,520</title></rect><text x=\"125.8\" y=\"73\" font-size=\"10\" fill=\"#262626\" stroke=\"#ffffff\" stroke-width=\"2.5\" paint-order=\"stroke\">B</text><rect x=\"123.6\" y=\"84\" width=\"93.6\" height=\"14\" rx=\"2\" fill=\"#2f6f4f\" data-feature-id=\"c\"><title>C · 1,020-1,540</title></rect><text x=\"127.6\" y=\"95\" font-size=\"10\" fill=\"#262626\" stroke=\"#ffffff\" stroke-width=\"2.5\" paint-order=\"stroke\">C</text><g id=\"gv-strand\" data-ref=\"Gm01\"></g></svg>"
+    },
+    {
+      "name": "mutation-marks-use-warn-colour",
+      "why": "Mutation sites must be visually distinct from gene bodies.",
+      "options": {
+        "viewport": {
+          "assemblyKey": "Gmax_880_v6.0",
+          "refName": "Gm01",
+          "start": 10690000,
+          "end": 10693000
+        },
+        "widthPx": 600,
+        "tracks": [
+          {
+            "id": "ruler",
+            "label": "Gm01",
+            "kind": "ruler"
+          },
+          {
+            "id": "sites",
+            "label": "Mutation sites (2)",
+            "kind": "feature",
+            "features": [
+              {
+                "id": "SOYTE1M-Gm01-10692035",
+                "start": 10692035,
+                "end": 10692036,
+                "kind": "mutation",
+                "label": "line-a"
+              },
+              {
+                "id": "SOYTE1M-Gm01-10692100",
+                "start": 10692100,
+                "end": 10692101,
+                "kind": "mutation",
+                "label": "line-b"
+              }
+            ]
+          }
+        ],
+        "theme": {
+          "background": "#fafafa",
+          "surface": "#ffffff",
+          "text": "#262626",
+          "textSecondary": "#8c8c8c",
+          "border": "#f0f0f0",
+          "primary": "#2f6f4f",
+          "warn": "#faad14"
+        }
+      },
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"600\" height=\"58\" viewBox=\"0 0 600 58\" role=\"img\" aria-label=\"Gm01:10,690,000-10,693,000\" font-family=\"-apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, Roboto, &quot;Helvetica Neue&quot;, Arial, sans-serif\"><rect x=\"0\" y=\"0\" width=\"600\" height=\"58\" fill=\"#fafafa\"/><rect x=\"0\" y=\"0\" width=\"600\" height=\"28\" fill=\"#ffffff\"/><text x=\"8\" y=\"14\" font-size=\"11\" fill=\"#8c8c8c\" stroke=\"#ffffff\" stroke-width=\"3\" paint-order=\"stroke\">Gm01</text><line x1=\"120\" y1=\"0\" x2=\"120\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"123\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">10,690,000</text><line x1=\"200\" y1=\"0\" x2=\"200\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"203\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">10,690,500</text><line x1=\"280\" y1=\"0\" x2=\"280\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"283\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">10,691,000</text><line x1=\"360\" y1=\"0\" x2=\"360\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"363\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">10,691,500</text><line x1=\"440\" y1=\"0\" x2=\"440\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"443\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">10,692,000</text><line x1=\"520\" y1=\"0\" x2=\"520\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"523\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">10,692,500</text><line x1=\"600\" y1=\"0\" x2=\"600\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"603\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">10,693,000</text><rect x=\"0\" y=\"36\" width=\"600\" height=\"22\" fill=\"#ffffff\"/><text x=\"8\" y=\"50\" font-size=\"11\" fill=\"#8c8c8c\" stroke=\"#ffffff\" stroke-width=\"3\" paint-order=\"stroke\">Mutation sites (2)</text><rect x=\"445.6\" y=\"40\" width=\"2\" height=\"14\" rx=\"2\" fill=\"#faad14\" data-feature-id=\"SOYTE1M-Gm01-10692035\"><title>line-a · 10,692,035-10,692,036</title></rect><rect x=\"456\" y=\"40\" width=\"2\" height=\"14\" rx=\"2\" fill=\"#faad14\" data-feature-id=\"SOYTE1M-Gm01-10692100\"><title>line-b · 10,692,100-10,692,101</title></rect><g id=\"gv-strand\" data-ref=\"Gm01\"></g></svg>"
+    },
+    {
+      "name": "empty-track",
+      "why": "Pins the \"No features in this window\" placeholder.",
+      "options": {
+        "viewport": {
+          "assemblyKey": "Gmax_880_v6.0",
+          "refName": "Gm02",
+          "start": 0,
+          "end": 5000
+        },
+        "widthPx": 640,
+        "tracks": [
+          {
+            "id": "ruler",
+            "label": "Gm02",
+            "kind": "ruler"
+          },
+          {
+            "id": "sites",
+            "label": "Mutation sites (0)",
+            "kind": "feature",
+            "features": []
+          }
+        ],
+        "theme": {
+          "background": "#fafafa",
+          "surface": "#ffffff",
+          "text": "#262626",
+          "textSecondary": "#8c8c8c",
+          "border": "#f0f0f0",
+          "primary": "#2f6f4f",
+          "warn": "#faad14"
+        }
+      },
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"640\" height=\"58\" viewBox=\"0 0 640 58\" role=\"img\" aria-label=\"Gm02:0-5,000\" font-family=\"-apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, Roboto, &quot;Helvetica Neue&quot;, Arial, sans-serif\"><rect x=\"0\" y=\"0\" width=\"640\" height=\"58\" fill=\"#fafafa\"/><rect x=\"0\" y=\"0\" width=\"640\" height=\"28\" fill=\"#ffffff\"/><text x=\"8\" y=\"14\" font-size=\"11\" fill=\"#8c8c8c\" stroke=\"#ffffff\" stroke-width=\"3\" paint-order=\"stroke\">Gm02</text><line x1=\"120\" y1=\"0\" x2=\"120\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"123\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">0</text><line x1=\"224\" y1=\"0\" x2=\"224\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"227\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">1,000</text><line x1=\"328\" y1=\"0\" x2=\"328\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"331\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">2,000</text><line x1=\"432\" y1=\"0\" x2=\"432\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"435\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">3,000</text><line x1=\"536\" y1=\"0\" x2=\"536\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"539\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">4,000</text><line x1=\"640\" y1=\"0\" x2=\"640\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"643\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">5,000</text><rect x=\"0\" y=\"36\" width=\"640\" height=\"22\" fill=\"#ffffff\"/><text x=\"8\" y=\"50\" font-size=\"11\" fill=\"#8c8c8c\" stroke=\"#ffffff\" stroke-width=\"3\" paint-order=\"stroke\">Mutation sites (0)</text><text x=\"128\" y=\"58\" font-size=\"11\" fill=\"#8c8c8c\">No features in this window</text><g id=\"gv-strand\" data-ref=\"Gm02\"></g></svg>"
+    },
+    {
+      "name": "narrow-window-tight-ticks",
+      "why": "Small spans change the nice-step ladder and the px/bp direction.",
+      "options": {
+        "viewport": {
+          "assemblyKey": "Gmax_880_v6.0",
+          "refName": "Gm01",
+          "start": 10692000,
+          "end": 10692120
+        },
+        "widthPx": 1200,
+        "tracks": [
+          {
+            "id": "ruler",
+            "label": "Gm01",
+            "kind": "ruler"
+          }
+        ],
+        "theme": {
+          "background": "#fafafa",
+          "surface": "#ffffff",
+          "text": "#262626",
+          "textSecondary": "#8c8c8c",
+          "border": "#f0f0f0",
+          "primary": "#2f6f4f",
+          "warn": "#faad14"
+        }
+      },
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1200\" height=\"28\" viewBox=\"0 0 1200 28\" role=\"img\" aria-label=\"Gm01:10,692,000-10,692,120\" font-family=\"-apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, Roboto, &quot;Helvetica Neue&quot;, Arial, sans-serif\"><rect x=\"0\" y=\"0\" width=\"1200\" height=\"28\" fill=\"#fafafa\"/><rect x=\"0\" y=\"0\" width=\"1200\" height=\"28\" fill=\"#ffffff\"/><text x=\"8\" y=\"14\" font-size=\"11\" fill=\"#8c8c8c\" stroke=\"#ffffff\" stroke-width=\"3\" paint-order=\"stroke\">Gm01</text><line x1=\"120\" y1=\"0\" x2=\"120\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"123\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">10,692,000</text><line x1=\"210\" y1=\"0\" x2=\"210\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"213\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">10,692,010</text><line x1=\"300\" y1=\"0\" x2=\"300\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"303\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">10,692,020</text><line x1=\"390\" y1=\"0\" x2=\"390\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"393\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">10,692,030</text><line x1=\"480\" y1=\"0\" x2=\"480\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"483\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">10,692,040</text><line x1=\"570\" y1=\"0\" x2=\"570\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"573\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">10,692,050</text><line x1=\"660\" y1=\"0\" x2=\"660\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"663\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">10,692,060</text><line x1=\"750\" y1=\"0\" x2=\"750\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"753\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">10,692,070</text><line x1=\"840\" y1=\"0\" x2=\"840\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"843\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">10,692,080</text><line x1=\"930\" y1=\"0\" x2=\"930\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"933\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">10,692,090</text><line x1=\"1020\" y1=\"0\" x2=\"1020\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"1023\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">10,692,100</text><line x1=\"1110\" y1=\"0\" x2=\"1110\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"1113\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">10,692,110</text><line x1=\"1200\" y1=\"0\" x2=\"1200\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"1203\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">10,692,120</text><g id=\"gv-strand\" data-ref=\"Gm01\"></g></svg>"
+    },
+    {
+      "name": "wide-feature-shows-inline-label",
+      "why": "The w >= 28 label threshold is a visible behaviour change if it drifts.",
+      "options": {
+        "viewport": {
+          "assemblyKey": "Gmax_880_v6.0",
+          "refName": "Gm03",
+          "start": 0,
+          "end": 100
+        },
+        "widthPx": 2000,
+        "tracks": [
+          {
+            "id": "ruler",
+            "label": "Gm03",
+            "kind": "ruler"
+          },
+          {
+            "id": "gene",
+            "label": "wide",
+            "kind": "feature",
+            "features": [
+              {
+                "id": "wide",
+                "start": 0,
+                "end": 60,
+                "kind": "gene",
+                "label": "WIDE-LABEL"
+              },
+              {
+                "id": "tiny",
+                "start": 70,
+                "end": 71,
+                "kind": "mutation",
+                "label": "T"
+              }
+            ]
+          }
+        ],
+        "theme": {
+          "background": "#fafafa",
+          "surface": "#ffffff",
+          "text": "#262626",
+          "textSecondary": "#8c8c8c",
+          "border": "#f0f0f0",
+          "primary": "#2f6f4f",
+          "warn": "#faad14"
+        }
+      },
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"2000\" height=\"58\" viewBox=\"0 0 2000 58\" role=\"img\" aria-label=\"Gm03:0-100\" font-family=\"-apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, Roboto, &quot;Helvetica Neue&quot;, Arial, sans-serif\"><rect x=\"0\" y=\"0\" width=\"2000\" height=\"58\" fill=\"#fafafa\"/><rect x=\"0\" y=\"0\" width=\"2000\" height=\"28\" fill=\"#ffffff\"/><text x=\"8\" y=\"14\" font-size=\"11\" fill=\"#8c8c8c\" stroke=\"#ffffff\" stroke-width=\"3\" paint-order=\"stroke\">Gm03</text><line x1=\"120\" y1=\"0\" x2=\"120\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"123\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">0</text><line x1=\"214\" y1=\"0\" x2=\"214\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"217\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">5</text><line x1=\"308\" y1=\"0\" x2=\"308\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"311\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">10</text><line x1=\"402\" y1=\"0\" x2=\"402\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"405\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">15</text><line x1=\"496\" y1=\"0\" x2=\"496\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"499\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">20</text><line x1=\"590\" y1=\"0\" x2=\"590\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"593\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">25</text><line x1=\"684\" y1=\"0\" x2=\"684\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"687\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">30</text><line x1=\"778\" y1=\"0\" x2=\"778\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"781\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">35</text><line x1=\"872\" y1=\"0\" x2=\"872\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"875\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">40</text><line x1=\"966\" y1=\"0\" x2=\"966\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"969\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">45</text><line x1=\"1060\" y1=\"0\" x2=\"1060\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"1063\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">50</text><line x1=\"1154\" y1=\"0\" x2=\"1154\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"1157\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">55</text><line x1=\"1248\" y1=\"0\" x2=\"1248\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"1251\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">60</text><line x1=\"1342\" y1=\"0\" x2=\"1342\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"1345\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">65</text><line x1=\"1436\" y1=\"0\" x2=\"1436\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"1439\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">70</text><line x1=\"1530\" y1=\"0\" x2=\"1530\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"1533\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">75</text><line x1=\"1624\" y1=\"0\" x2=\"1624\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"1627\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">80</text><line x1=\"1718\" y1=\"0\" x2=\"1718\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"1721\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">85</text><line x1=\"1812\" y1=\"0\" x2=\"1812\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"1815\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">90</text><line x1=\"1906\" y1=\"0\" x2=\"1906\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"1909\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">95</text><line x1=\"2000\" y1=\"0\" x2=\"2000\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"2003\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">100</text><rect x=\"0\" y=\"36\" width=\"2000\" height=\"22\" fill=\"#ffffff\"/><text x=\"8\" y=\"50\" font-size=\"11\" fill=\"#8c8c8c\" stroke=\"#ffffff\" stroke-width=\"3\" paint-order=\"stroke\">wide</text><rect x=\"120\" y=\"40\" width=\"1128\" height=\"14\" rx=\"2\" fill=\"#2f6f4f\" data-feature-id=\"wide\"><title>WIDE-LABEL · 0-60</title></rect><text x=\"124\" y=\"51\" font-size=\"10\" fill=\"#262626\" stroke=\"#ffffff\" stroke-width=\"2.5\" paint-order=\"stroke\">WIDE-LABEL</text><rect x=\"1436\" y=\"40\" width=\"18.8\" height=\"14\" rx=\"2\" fill=\"#faad14\" data-feature-id=\"tiny\"><title>T · 70-71</title></rect><g id=\"gv-strand\" data-ref=\"Gm03\"></g></svg>"
+    },
+    {
+      "name": "escapes-hostile-labels",
+      "why": "Pins XML escaping so a crafted label cannot break the picture or inject markup.",
+      "options": {
+        "viewport": {
+          "assemblyKey": "x<&>y",
+          "refName": "chr\"1'",
+          "start": 0,
+          "end": 1000
+        },
+        "widthPx": 500,
+        "tracks": [
+          {
+            "id": "ruler",
+            "label": "<script>&\"'",
+            "kind": "ruler"
+          },
+          {
+            "id": "gene",
+            "label": "a&b",
+            "kind": "feature",
+            "features": [
+              {
+                "id": "f<&>",
+                "start": 100,
+                "end": 900,
+                "kind": "gene",
+                "label": "\"quoted\" & <tag>"
+              }
+            ]
+          }
+        ],
+        "theme": {
+          "background": "#fafafa",
+          "surface": "#ffffff",
+          "text": "#262626",
+          "textSecondary": "#8c8c8c",
+          "border": "#f0f0f0",
+          "primary": "#2f6f4f",
+          "warn": "#faad14"
+        },
+        "idPrefix": "p\"x"
+      },
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"500\" height=\"58\" viewBox=\"0 0 500 58\" role=\"img\" aria-label=\"chr&quot;1&apos;:0-1,000\" font-family=\"-apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, Roboto, &quot;Helvetica Neue&quot;, Arial, sans-serif\"><rect x=\"0\" y=\"0\" width=\"500\" height=\"58\" fill=\"#fafafa\"/><rect x=\"0\" y=\"0\" width=\"500\" height=\"28\" fill=\"#ffffff\"/><text x=\"8\" y=\"14\" font-size=\"11\" fill=\"#8c8c8c\" stroke=\"#ffffff\" stroke-width=\"3\" paint-order=\"stroke\">&lt;script&gt;&amp;&quot;&apos;</text><line x1=\"120\" y1=\"0\" x2=\"120\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"123\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">0</text><line x1=\"310\" y1=\"0\" x2=\"310\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"313\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">500</text><line x1=\"500\" y1=\"0\" x2=\"500\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"503\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">1,000</text><rect x=\"0\" y=\"36\" width=\"500\" height=\"22\" fill=\"#ffffff\"/><text x=\"8\" y=\"50\" font-size=\"11\" fill=\"#8c8c8c\" stroke=\"#ffffff\" stroke-width=\"3\" paint-order=\"stroke\">a&amp;b</text><rect x=\"158\" y=\"40\" width=\"304\" height=\"14\" rx=\"2\" fill=\"#2f6f4f\" data-feature-id=\"f&lt;&amp;&gt;\"><title>&quot;quoted&quot; &amp; &lt;tag&gt; · 100-900</title></rect><text x=\"162\" y=\"51\" font-size=\"10\" fill=\"#262626\" stroke=\"#ffffff\" stroke-width=\"2.5\" paint-order=\"stroke\">&quot;quoted&quot; &amp; &lt;tag&gt;</text><g id=\"p&quot;x-strand\" data-ref=\"chr&quot;1&apos;\"></g></svg>"
+    },
+    {
+      "name": "gene-model-with-exons",
+      "why": "The gene model: exon boxes on an intron line plus a forward strand arrowhead.",
+      "options": {
+        "viewport": {
+          "assemblyKey": "Gmax_880_v6.0",
+          "refName": "Gm01",
+          "start": 10685338,
+          "end": 10694003
+        },
+        "widthPx": 900,
+        "tracks": [
+          {
+            "id": "ruler",
+            "label": "Gm01",
+            "kind": "ruler"
+          },
+          {
+            "id": "gene",
+            "label": "基因 (+)",
+            "kind": "feature",
+            "features": [
+              {
+                "id": "Glyma.01G066600.Wm82.a6.v1",
+                "start": 10685338,
+                "end": 10694003,
+                "kind": "gene",
+                "label": "Glyma.01G066600.Wm82.a6.v1",
+                "strand": "+",
+                "parts": [
+                  {
+                    "start": 10685338,
+                    "end": 10685700,
+                    "kind": "exon"
+                  },
+                  {
+                    "start": 10687000,
+                    "end": 10687450,
+                    "kind": "exon"
+                  },
+                  {
+                    "start": 10691500,
+                    "end": 10692100,
+                    "kind": "exon"
+                  },
+                  {
+                    "start": 10693500,
+                    "end": 10694003,
+                    "kind": "exon"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "theme": {
+          "background": "#fafafa",
+          "surface": "#ffffff",
+          "text": "#262626",
+          "textSecondary": "#8c8c8c",
+          "border": "#f0f0f0",
+          "primary": "#2f6f4f",
+          "warn": "#faad14"
+        }
+      },
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"900\" height=\"58\" viewBox=\"0 0 900 58\" role=\"img\" aria-label=\"Gm01:10,685,338-10,694,003\" font-family=\"-apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, Roboto, &quot;Helvetica Neue&quot;, Arial, sans-serif\"><rect x=\"0\" y=\"0\" width=\"900\" height=\"58\" fill=\"#fafafa\"/><rect x=\"0\" y=\"0\" width=\"900\" height=\"28\" fill=\"#ffffff\"/><text x=\"8\" y=\"14\" font-size=\"11\" fill=\"#8c8c8c\" stroke=\"#ffffff\" stroke-width=\"3\" paint-order=\"stroke\">Gm01</text><line x1=\"179.59\" y1=\"0\" x2=\"179.59\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"182.59\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">10,686,000</text><line x1=\"269.61\" y1=\"0\" x2=\"269.61\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"272.61\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">10,687,000</text><line x1=\"359.63\" y1=\"0\" x2=\"359.63\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"362.63\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">10,688,000</text><line x1=\"449.64\" y1=\"0\" x2=\"449.64\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"452.64\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">10,689,000</text><line x1=\"539.66\" y1=\"0\" x2=\"539.66\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"542.66\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">10,690,000</text><line x1=\"629.68\" y1=\"0\" x2=\"629.68\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"632.68\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">10,691,000</text><line x1=\"719.7\" y1=\"0\" x2=\"719.7\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"722.7\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">10,692,000</text><line x1=\"809.71\" y1=\"0\" x2=\"809.71\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"812.71\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">10,693,000</text><line x1=\"899.73\" y1=\"0\" x2=\"899.73\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"902.73\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">10,694,000</text><rect x=\"0\" y=\"36\" width=\"900\" height=\"22\" fill=\"#ffffff\"/><text x=\"8\" y=\"50\" font-size=\"11\" fill=\"#8c8c8c\" stroke=\"#ffffff\" stroke-width=\"3\" paint-order=\"stroke\">基因 (+)</text><line x1=\"120\" y1=\"47\" x2=\"900\" y2=\"47\" stroke=\"#2f6f4f\" stroke-width=\"1.5\" stroke-linecap=\"round\" opacity=\"0.55\"/><rect x=\"120\" y=\"41\" width=\"32.59\" height=\"12\" rx=\"1\" fill=\"#2f6f4f\" data-exon-kind=\"exon\"/><rect x=\"269.61\" y=\"41\" width=\"40.51\" height=\"12\" rx=\"1\" fill=\"#2f6f4f\" data-exon-kind=\"exon\"/><rect x=\"674.69\" y=\"41\" width=\"54.01\" height=\"12\" rx=\"1\" fill=\"#2f6f4f\" data-exon-kind=\"exon\"/><rect x=\"854.72\" y=\"41\" width=\"45.28\" height=\"12\" rx=\"1\" fill=\"#2f6f4f\" data-exon-kind=\"exon\"/><polygon points=\"900,43 907,47 900,51\" fill=\"#2f6f4f\" data-strand=\"+\"/><rect x=\"120\" y=\"36\" width=\"780\" height=\"22\" fill=\"transparent\" data-feature-id=\"Glyma.01G066600.Wm82.a6.v1\"><title>Glyma.01G066600.Wm82.a6.v1 · 10,685,338-10,694,003 · 4 exons</title></rect><text x=\"124\" y=\"52\" font-size=\"10\" fill=\"#262626\" stroke=\"#ffffff\" stroke-width=\"2.5\" paint-order=\"stroke\">Glyma.01G066600.Wm82.a6.v1</text><g id=\"gv-strand\" data-ref=\"Gm01\"></g></svg>"
+    },
+    {
+      "name": "gene-model-reverse-strand",
+      "why": "A minus-strand gene puts its arrowhead on the left, where the other end is.",
+      "options": {
+        "viewport": {
+          "assemblyKey": "Gmax_880_v6.0",
+          "refName": "Gm02",
+          "start": 0,
+          "end": 10000
+        },
+        "widthPx": 800,
+        "tracks": [
+          {
+            "id": "ruler",
+            "label": "Gm02",
+            "kind": "ruler"
+          },
+          {
+            "id": "gene",
+            "label": "reverse",
+            "kind": "feature",
+            "features": [
+              {
+                "id": "rev",
+                "start": 1000,
+                "end": 9000,
+                "kind": "gene",
+                "label": "REV",
+                "strand": "-",
+                "parts": [
+                  {
+                    "start": 1000,
+                    "end": 2000,
+                    "kind": "exon"
+                  },
+                  {
+                    "start": 8000,
+                    "end": 9000,
+                    "kind": "exon"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "theme": {
+          "background": "#fafafa",
+          "surface": "#ffffff",
+          "text": "#262626",
+          "textSecondary": "#8c8c8c",
+          "border": "#f0f0f0",
+          "primary": "#2f6f4f",
+          "warn": "#faad14"
+        }
+      },
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"800\" height=\"58\" viewBox=\"0 0 800 58\" role=\"img\" aria-label=\"Gm02:0-10,000\" font-family=\"-apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, Roboto, &quot;Helvetica Neue&quot;, Arial, sans-serif\"><rect x=\"0\" y=\"0\" width=\"800\" height=\"58\" fill=\"#fafafa\"/><rect x=\"0\" y=\"0\" width=\"800\" height=\"28\" fill=\"#ffffff\"/><text x=\"8\" y=\"14\" font-size=\"11\" fill=\"#8c8c8c\" stroke=\"#ffffff\" stroke-width=\"3\" paint-order=\"stroke\">Gm02</text><line x1=\"120\" y1=\"0\" x2=\"120\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"123\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">0</text><line x1=\"256\" y1=\"0\" x2=\"256\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"259\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">2,000</text><line x1=\"392\" y1=\"0\" x2=\"392\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"395\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">4,000</text><line x1=\"528\" y1=\"0\" x2=\"528\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"531\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">6,000</text><line x1=\"664\" y1=\"0\" x2=\"664\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"667\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">8,000</text><line x1=\"800\" y1=\"0\" x2=\"800\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"803\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">10,000</text><rect x=\"0\" y=\"36\" width=\"800\" height=\"22\" fill=\"#ffffff\"/><text x=\"8\" y=\"50\" font-size=\"11\" fill=\"#8c8c8c\" stroke=\"#ffffff\" stroke-width=\"3\" paint-order=\"stroke\">reverse</text><line x1=\"188\" y1=\"47\" x2=\"732\" y2=\"47\" stroke=\"#2f6f4f\" stroke-width=\"1.5\" stroke-linecap=\"round\" opacity=\"0.55\"/><rect x=\"188\" y=\"41\" width=\"68\" height=\"12\" rx=\"1\" fill=\"#2f6f4f\" data-exon-kind=\"exon\"/><rect x=\"664\" y=\"41\" width=\"68\" height=\"12\" rx=\"1\" fill=\"#2f6f4f\" data-exon-kind=\"exon\"/><polygon points=\"188,43 181,47 188,51\" fill=\"#2f6f4f\" data-strand=\"-\"/><rect x=\"188\" y=\"36\" width=\"544\" height=\"22\" fill=\"transparent\" data-feature-id=\"rev\"><title>REV · 1,000-9,000 · 2 exons</title></rect><text x=\"192\" y=\"52\" font-size=\"10\" fill=\"#262626\" stroke=\"#ffffff\" stroke-width=\"2.5\" paint-order=\"stroke\">REV</text><g id=\"gv-strand\" data-ref=\"Gm02\"></g></svg>"
+    },
+    {
+      "name": "gene-model-no-strand-no-arrow",
+      "why": "An unrecorded strand must not be drawn as if it were forward.",
+      "options": {
+        "viewport": {
+          "assemblyKey": "Gmax_880_v6.0",
+          "refName": "Gm03",
+          "start": 0,
+          "end": 10000
+        },
+        "widthPx": 800,
+        "tracks": [
+          {
+            "id": "ruler",
+            "label": "Gm03",
+            "kind": "ruler"
+          },
+          {
+            "id": "gene",
+            "label": "unknown strand",
+            "kind": "feature",
+            "features": [
+              {
+                "id": "unk",
+                "start": 1000,
+                "end": 9000,
+                "kind": "gene",
+                "label": "UNK",
+                "parts": [
+                  {
+                    "start": 2000,
+                    "end": 3000,
+                    "kind": "exon"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "theme": {
+          "background": "#fafafa",
+          "surface": "#ffffff",
+          "text": "#262626",
+          "textSecondary": "#8c8c8c",
+          "border": "#f0f0f0",
+          "primary": "#2f6f4f",
+          "warn": "#faad14"
+        }
+      },
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"800\" height=\"58\" viewBox=\"0 0 800 58\" role=\"img\" aria-label=\"Gm03:0-10,000\" font-family=\"-apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, Roboto, &quot;Helvetica Neue&quot;, Arial, sans-serif\"><rect x=\"0\" y=\"0\" width=\"800\" height=\"58\" fill=\"#fafafa\"/><rect x=\"0\" y=\"0\" width=\"800\" height=\"28\" fill=\"#ffffff\"/><text x=\"8\" y=\"14\" font-size=\"11\" fill=\"#8c8c8c\" stroke=\"#ffffff\" stroke-width=\"3\" paint-order=\"stroke\">Gm03</text><line x1=\"120\" y1=\"0\" x2=\"120\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"123\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">0</text><line x1=\"256\" y1=\"0\" x2=\"256\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"259\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">2,000</text><line x1=\"392\" y1=\"0\" x2=\"392\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"395\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">4,000</text><line x1=\"528\" y1=\"0\" x2=\"528\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"531\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">6,000</text><line x1=\"664\" y1=\"0\" x2=\"664\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"667\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">8,000</text><line x1=\"800\" y1=\"0\" x2=\"800\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"803\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">10,000</text><rect x=\"0\" y=\"36\" width=\"800\" height=\"22\" fill=\"#ffffff\"/><text x=\"8\" y=\"50\" font-size=\"11\" fill=\"#8c8c8c\" stroke=\"#ffffff\" stroke-width=\"3\" paint-order=\"stroke\">unknown strand</text><line x1=\"188\" y1=\"47\" x2=\"732\" y2=\"47\" stroke=\"#2f6f4f\" stroke-width=\"1.5\" stroke-linecap=\"round\" opacity=\"0.55\"/><rect x=\"256\" y=\"41\" width=\"68\" height=\"12\" rx=\"1\" fill=\"#2f6f4f\" data-exon-kind=\"exon\"/><rect x=\"188\" y=\"36\" width=\"544\" height=\"22\" fill=\"transparent\" data-feature-id=\"unk\"><title>UNK · 1,000-9,000 · 1 exon</title></rect><text x=\"192\" y=\"52\" font-size=\"10\" fill=\"#262626\" stroke=\"#ffffff\" stroke-width=\"2.5\" paint-order=\"stroke\">UNK</text><g id=\"gv-strand\" data-ref=\"Gm03\"></g></svg>"
+    },
+    {
+      "name": "gene-model-exon-overhangs-gene",
+      "why": "A mis-annotated exon is clamped to the gene body, not smeared past it.",
+      "options": {
+        "viewport": {
+          "assemblyKey": "Gmax_880_v6.0",
+          "refName": "Gm04",
+          "start": 0,
+          "end": 10000
+        },
+        "widthPx": 800,
+        "tracks": [
+          {
+            "id": "ruler",
+            "label": "Gm04",
+            "kind": "ruler"
+          },
+          {
+            "id": "gene",
+            "label": "overhang",
+            "kind": "feature",
+            "features": [
+              {
+                "id": "ovh",
+                "start": 2000,
+                "end": 8000,
+                "kind": "gene",
+                "label": "OVH",
+                "strand": "+",
+                "parts": [
+                  {
+                    "start": 500,
+                    "end": 2500,
+                    "kind": "exon"
+                  },
+                  {
+                    "start": 7500,
+                    "end": 9500,
+                    "kind": "exon"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "theme": {
+          "background": "#fafafa",
+          "surface": "#ffffff",
+          "text": "#262626",
+          "textSecondary": "#8c8c8c",
+          "border": "#f0f0f0",
+          "primary": "#2f6f4f",
+          "warn": "#faad14"
+        }
+      },
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"800\" height=\"58\" viewBox=\"0 0 800 58\" role=\"img\" aria-label=\"Gm04:0-10,000\" font-family=\"-apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, Roboto, &quot;Helvetica Neue&quot;, Arial, sans-serif\"><rect x=\"0\" y=\"0\" width=\"800\" height=\"58\" fill=\"#fafafa\"/><rect x=\"0\" y=\"0\" width=\"800\" height=\"28\" fill=\"#ffffff\"/><text x=\"8\" y=\"14\" font-size=\"11\" fill=\"#8c8c8c\" stroke=\"#ffffff\" stroke-width=\"3\" paint-order=\"stroke\">Gm04</text><line x1=\"120\" y1=\"0\" x2=\"120\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"123\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">0</text><line x1=\"256\" y1=\"0\" x2=\"256\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"259\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">2,000</text><line x1=\"392\" y1=\"0\" x2=\"392\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"395\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">4,000</text><line x1=\"528\" y1=\"0\" x2=\"528\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"531\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">6,000</text><line x1=\"664\" y1=\"0\" x2=\"664\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"667\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">8,000</text><line x1=\"800\" y1=\"0\" x2=\"800\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"803\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">10,000</text><rect x=\"0\" y=\"36\" width=\"800\" height=\"22\" fill=\"#ffffff\"/><text x=\"8\" y=\"50\" font-size=\"11\" fill=\"#8c8c8c\" stroke=\"#ffffff\" stroke-width=\"3\" paint-order=\"stroke\">overhang</text><line x1=\"256\" y1=\"47\" x2=\"664\" y2=\"47\" stroke=\"#2f6f4f\" stroke-width=\"1.5\" stroke-linecap=\"round\" opacity=\"0.55\"/><rect x=\"256\" y=\"41\" width=\"34\" height=\"12\" rx=\"1\" fill=\"#2f6f4f\" data-exon-kind=\"exon\"/><rect x=\"630\" y=\"41\" width=\"34\" height=\"12\" rx=\"1\" fill=\"#2f6f4f\" data-exon-kind=\"exon\"/><polygon points=\"664,43 671,47 664,51\" fill=\"#2f6f4f\" data-strand=\"+\"/><rect x=\"256\" y=\"36\" width=\"408\" height=\"22\" fill=\"transparent\" data-feature-id=\"ovh\"><title>OVH · 2,000-8,000 · 2 exons</title></rect><text x=\"260\" y=\"52\" font-size=\"10\" fill=\"#262626\" stroke=\"#ffffff\" stroke-width=\"2.5\" paint-order=\"stroke\">OVH</text><g id=\"gv-strand\" data-ref=\"Gm04\"></g></svg>"
+    },
+    {
+      "name": "gene-model-partly-offscreen",
+      "why": "Zoomed in far enough that the gene starts before the window.",
+      "options": {
+        "viewport": {
+          "assemblyKey": "Gmax_880_v6.0",
+          "refName": "Gm05",
+          "start": 4000,
+          "end": 8000
+        },
+        "widthPx": 800,
+        "tracks": [
+          {
+            "id": "ruler",
+            "label": "Gm05",
+            "kind": "ruler"
+          },
+          {
+            "id": "gene",
+            "label": "clipped",
+            "kind": "feature",
+            "features": [
+              {
+                "id": "clip",
+                "start": 1000,
+                "end": 9000,
+                "kind": "gene",
+                "label": "CLIP",
+                "strand": "+",
+                "parts": [
+                  {
+                    "start": 1000,
+                    "end": 5000,
+                    "kind": "exon"
+                  },
+                  {
+                    "start": 6000,
+                    "end": 9000,
+                    "kind": "exon"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "theme": {
+          "background": "#fafafa",
+          "surface": "#ffffff",
+          "text": "#262626",
+          "textSecondary": "#8c8c8c",
+          "border": "#f0f0f0",
+          "primary": "#2f6f4f",
+          "warn": "#faad14"
+        }
+      },
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"800\" height=\"58\" viewBox=\"0 0 800 58\" role=\"img\" aria-label=\"Gm05:4,000-8,000\" font-family=\"-apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, Roboto, &quot;Helvetica Neue&quot;, Arial, sans-serif\"><rect x=\"0\" y=\"0\" width=\"800\" height=\"58\" fill=\"#fafafa\"/><rect x=\"0\" y=\"0\" width=\"800\" height=\"28\" fill=\"#ffffff\"/><text x=\"8\" y=\"14\" font-size=\"11\" fill=\"#8c8c8c\" stroke=\"#ffffff\" stroke-width=\"3\" paint-order=\"stroke\">Gm05</text><line x1=\"120\" y1=\"0\" x2=\"120\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"123\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">4,000</text><line x1=\"205\" y1=\"0\" x2=\"205\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"208\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">4,500</text><line x1=\"290\" y1=\"0\" x2=\"290\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"293\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">5,000</text><line x1=\"375\" y1=\"0\" x2=\"375\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"378\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">5,500</text><line x1=\"460\" y1=\"0\" x2=\"460\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"463\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">6,000</text><line x1=\"545\" y1=\"0\" x2=\"545\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"548\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">6,500</text><line x1=\"630\" y1=\"0\" x2=\"630\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"633\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">7,000</text><line x1=\"715\" y1=\"0\" x2=\"715\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"718\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">7,500</text><line x1=\"800\" y1=\"0\" x2=\"800\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"803\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">8,000</text><rect x=\"0\" y=\"36\" width=\"800\" height=\"22\" fill=\"#ffffff\"/><text x=\"8\" y=\"50\" font-size=\"11\" fill=\"#8c8c8c\" stroke=\"#ffffff\" stroke-width=\"3\" paint-order=\"stroke\">clipped</text><line x1=\"120\" y1=\"47\" x2=\"800\" y2=\"47\" stroke=\"#2f6f4f\" stroke-width=\"1.5\" stroke-linecap=\"round\" opacity=\"0.55\"/><rect x=\"120\" y=\"41\" width=\"170\" height=\"12\" rx=\"1\" fill=\"#2f6f4f\" data-exon-kind=\"exon\"/><rect x=\"460\" y=\"41\" width=\"340\" height=\"12\" rx=\"1\" fill=\"#2f6f4f\" data-exon-kind=\"exon\"/><polygon points=\"800,43 807,47 800,51\" fill=\"#2f6f4f\" data-strand=\"+\"/><rect x=\"120\" y=\"36\" width=\"680\" height=\"22\" fill=\"transparent\" data-feature-id=\"clip\"><title>CLIP · 1,000-9,000 · 2 exons</title></rect><text x=\"124\" y=\"52\" font-size=\"10\" fill=\"#262626\" stroke=\"#ffffff\" stroke-width=\"2.5\" paint-order=\"stroke\">CLIP</text><g id=\"gv-strand\" data-ref=\"Gm05\"></g></svg>"
+    },
+    {
+      "name": "plain-feature-strand-arrow",
+      "why": "Without exon data a gene is only a bar, but it must still show direction; a sliver must not.",
+      "options": {
+        "viewport": {
+          "assemblyKey": "Gmax_880_v6.0",
+          "refName": "Gm06",
+          "start": 0,
+          "end": 10000
+        },
+        "widthPx": 800,
+        "tracks": [
+          {
+            "id": "ruler",
+            "label": "Gm06",
+            "kind": "ruler"
+          },
+          {
+            "id": "gene",
+            "label": "plain",
+            "kind": "feature",
+            "features": [
+              {
+                "id": "fwd",
+                "start": 1000,
+                "end": 4000,
+                "kind": "gene",
+                "label": "FWD",
+                "strand": "+"
+              },
+              {
+                "id": "rev",
+                "start": 5000,
+                "end": 8000,
+                "kind": "gene",
+                "label": "REV",
+                "strand": "-"
+              },
+              {
+                "id": "sliver",
+                "start": 8100,
+                "end": 8105,
+                "kind": "gene",
+                "label": "S",
+                "strand": "+"
+              }
+            ]
+          }
+        ],
+        "theme": {
+          "background": "#fafafa",
+          "surface": "#ffffff",
+          "text": "#262626",
+          "textSecondary": "#8c8c8c",
+          "border": "#f0f0f0",
+          "primary": "#2f6f4f",
+          "warn": "#faad14"
+        }
+      },
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"800\" height=\"58\" viewBox=\"0 0 800 58\" role=\"img\" aria-label=\"Gm06:0-10,000\" font-family=\"-apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, Roboto, &quot;Helvetica Neue&quot;, Arial, sans-serif\"><rect x=\"0\" y=\"0\" width=\"800\" height=\"58\" fill=\"#fafafa\"/><rect x=\"0\" y=\"0\" width=\"800\" height=\"28\" fill=\"#ffffff\"/><text x=\"8\" y=\"14\" font-size=\"11\" fill=\"#8c8c8c\" stroke=\"#ffffff\" stroke-width=\"3\" paint-order=\"stroke\">Gm06</text><line x1=\"120\" y1=\"0\" x2=\"120\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"123\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">0</text><line x1=\"256\" y1=\"0\" x2=\"256\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"259\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">2,000</text><line x1=\"392\" y1=\"0\" x2=\"392\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"395\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">4,000</text><line x1=\"528\" y1=\"0\" x2=\"528\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"531\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">6,000</text><line x1=\"664\" y1=\"0\" x2=\"664\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"667\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">8,000</text><line x1=\"800\" y1=\"0\" x2=\"800\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"803\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">10,000</text><rect x=\"0\" y=\"36\" width=\"800\" height=\"22\" fill=\"#ffffff\"/><text x=\"8\" y=\"50\" font-size=\"11\" fill=\"#8c8c8c\" stroke=\"#ffffff\" stroke-width=\"3\" paint-order=\"stroke\">plain</text><rect x=\"188\" y=\"40\" width=\"204\" height=\"14\" rx=\"2\" fill=\"#2f6f4f\" data-feature-id=\"fwd\"><title>FWD · 1,000-4,000</title></rect><polygon points=\"392,44 396,47 392,50\" fill=\"#ffffff\" opacity=\"0.9\" data-strand=\"+\"/><text x=\"192\" y=\"51\" font-size=\"10\" fill=\"#262626\" stroke=\"#ffffff\" stroke-width=\"2.5\" paint-order=\"stroke\">FWD</text><rect x=\"460\" y=\"40\" width=\"204\" height=\"14\" rx=\"2\" fill=\"#2f6f4f\" data-feature-id=\"rev\"><title>REV · 5,000-8,000</title></rect><polygon points=\"460,44 456,47 460,50\" fill=\"#ffffff\" opacity=\"0.9\" data-strand=\"-\"/><text x=\"464\" y=\"51\" font-size=\"10\" fill=\"#262626\" stroke=\"#ffffff\" stroke-width=\"2.5\" paint-order=\"stroke\">REV</text><rect x=\"670.8\" y=\"40\" width=\"2\" height=\"14\" rx=\"2\" fill=\"#2f6f4f\" data-feature-id=\"sliver\"><title>S · 8,100-8,105</title></rect><g id=\"gv-strand\" data-ref=\"Gm06\"></g></svg>"
+    },
+    {
+      "name": "KNOWN-LIMIT-overlong-track-label-overflows-rail",
+      "why": "Records a deliberate limit: the label rail is a fixed 120 px because SVG cannot measure text, so a label past ~18 characters spills over its content. Callers must pass short track labels (the web gene page passes '基因 (+)'); the full accession belongs in the feature label and the page heading.",
+      "options": {
+        "viewport": {
+          "assemblyKey": "Gmax_880_v6.0",
+          "refName": "Gm07",
+          "start": 0,
+          "end": 10000
+        },
+        "widthPx": 800,
+        "tracks": [
+          {
+            "id": "ruler",
+            "label": "Gm07",
+            "kind": "ruler"
+          },
+          {
+            "id": "gene",
+            "label": "Glyma.01G066600.Wm82.a6.v1 (+)",
+            "kind": "feature",
+            "features": [
+              {
+                "id": "long",
+                "start": 1000,
+                "end": 9000,
+                "kind": "gene",
+                "label": "LONG",
+                "strand": "+"
+              }
+            ]
+          }
+        ],
+        "theme": {
+          "background": "#fafafa",
+          "surface": "#ffffff",
+          "text": "#262626",
+          "textSecondary": "#8c8c8c",
+          "border": "#f0f0f0",
+          "primary": "#2f6f4f",
+          "warn": "#faad14"
+        }
+      },
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"800\" height=\"58\" viewBox=\"0 0 800 58\" role=\"img\" aria-label=\"Gm07:0-10,000\" font-family=\"-apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, Roboto, &quot;Helvetica Neue&quot;, Arial, sans-serif\"><rect x=\"0\" y=\"0\" width=\"800\" height=\"58\" fill=\"#fafafa\"/><rect x=\"0\" y=\"0\" width=\"800\" height=\"28\" fill=\"#ffffff\"/><text x=\"8\" y=\"14\" font-size=\"11\" fill=\"#8c8c8c\" stroke=\"#ffffff\" stroke-width=\"3\" paint-order=\"stroke\">Gm07</text><line x1=\"120\" y1=\"0\" x2=\"120\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"123\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">0</text><line x1=\"256\" y1=\"0\" x2=\"256\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"259\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">2,000</text><line x1=\"392\" y1=\"0\" x2=\"392\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"395\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">4,000</text><line x1=\"528\" y1=\"0\" x2=\"528\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"531\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">6,000</text><line x1=\"664\" y1=\"0\" x2=\"664\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"667\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">8,000</text><line x1=\"800\" y1=\"0\" x2=\"800\" y2=\"28\" stroke=\"#f0f0f0\" stroke-width=\"1\"/><text x=\"803\" y=\"12\" font-size=\"10\" fill=\"#8c8c8c\">10,000</text><rect x=\"0\" y=\"36\" width=\"800\" height=\"22\" fill=\"#ffffff\"/><text x=\"8\" y=\"50\" font-size=\"11\" fill=\"#8c8c8c\" stroke=\"#ffffff\" stroke-width=\"3\" paint-order=\"stroke\">Glyma.01G066600.Wm82.a6.v1 (+)</text><rect x=\"188\" y=\"40\" width=\"544\" height=\"14\" rx=\"2\" fill=\"#2f6f4f\" data-feature-id=\"long\"><title>LONG · 1,000-9,000</title></rect><polygon points=\"732,44 736,47 732,50\" fill=\"#ffffff\" opacity=\"0.9\" data-strand=\"+\"/><text x=\"192\" y=\"51\" font-size=\"10\" fill=\"#262626\" stroke=\"#ffffff\" stroke-width=\"2.5\" paint-order=\"stroke\">LONG</text><g id=\"gv-strand\" data-ref=\"Gm07\"></g></svg>"
+    }
+  ]
+}

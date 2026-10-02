@@ -91,11 +91,34 @@ class SeedRequestListResponse(BaseModel):
     page_size: int
 
 
+class SeedRequestGeneCount(BaseModel):
+    """Aggregate demand for one gene ID.
+
+    Deliberately carries no requester, timestamp or status: the public gene page
+    shows "how many people asked for this material", which is demand signal, not
+    personal data. Anything that could identify a requester stays behind
+    ``/admin/seed-requests``.
+    """
+
+    gene_id: str
+    requests: int
+
+
+class SeedRequestStatsResponse(BaseModel):
+    """Public aggregate counts keyed by gene ID."""
+
+    items: list[SeedRequestGeneCount]
+    #: Total request rows on record, across every gene.
+    total_requests: int
+
+
 __all__ = [
     "MAX_GENE_IDS",
     "SeedRequestCreate",
+    "SeedRequestGeneCount",
     "SeedRequestListResponse",
     "SeedRequestResponse",
+    "SeedRequestStatsResponse",
     "SeedRequestStatus",
     "SeedRequestUpdate",
 ]

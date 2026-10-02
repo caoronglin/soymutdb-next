@@ -15,6 +15,12 @@ from enum import StrEnum
 from typing import Final
 from urllib.parse import urlsplit
 
+from .footer_content import (
+    DEFAULT_FOOTER_NAVIGATION_JSON,
+    MAX_FOOTER_NAVIGATION_BYTES,
+    FooterContentValidationError,
+    validate_footer_setting,
+)
 from .site_variant import SITE_VARIANT_BASE_SECTIONS, SITE_VARIANTS, SiteVariant, variant_section
 
 
@@ -214,6 +220,106 @@ _DEFINITIONS = (
         redaction=SettingRedaction.NONE,
         requires_approval=False,
         max_length=512,
+    ),
+    # New bilingual footer fields and the bounded grouped navigation document.
+    _definition(
+        "footer",
+        "contact_person_en",
+        default="",
+        permission=SettingPermission.ADMINISTRATOR,
+        scope=SettingScope.GLOBAL,
+        hot_reload=True,
+        redaction=SettingRedaction.NONE,
+        requires_approval=False,
+        max_length=512,
+    ),
+    _definition(
+        "footer",
+        "contact_person_zh",
+        default="",
+        permission=SettingPermission.ADMINISTRATOR,
+        scope=SettingScope.GLOBAL,
+        hot_reload=True,
+        redaction=SettingRedaction.NONE,
+        requires_approval=False,
+        max_length=512,
+    ),
+    _definition(
+        "footer",
+        "contact_phone_value",
+        default="",
+        permission=SettingPermission.ADMINISTRATOR,
+        scope=SettingScope.GLOBAL,
+        hot_reload=True,
+        redaction=SettingRedaction.NONE,
+        requires_approval=False,
+        max_length=32,
+    ),
+    _definition(
+        "footer",
+        "contact_email_value",
+        default="",
+        permission=SettingPermission.ADMINISTRATOR,
+        scope=SettingScope.GLOBAL,
+        hot_reload=True,
+        redaction=SettingRedaction.NONE,
+        requires_approval=False,
+        max_length=254,
+    ),
+    _definition(
+        "footer",
+        "address_en",
+        default="",
+        permission=SettingPermission.ADMINISTRATOR,
+        scope=SettingScope.GLOBAL,
+        hot_reload=True,
+        redaction=SettingRedaction.NONE,
+        requires_approval=False,
+        max_length=512,
+    ),
+    _definition(
+        "footer",
+        "address_zh",
+        default="",
+        permission=SettingPermission.ADMINISTRATOR,
+        scope=SettingScope.GLOBAL,
+        hot_reload=True,
+        redaction=SettingRedaction.NONE,
+        requires_approval=False,
+        max_length=512,
+    ),
+    _definition(
+        "footer",
+        "copyright_en",
+        default="",
+        permission=SettingPermission.ADMINISTRATOR,
+        scope=SettingScope.GLOBAL,
+        hot_reload=True,
+        redaction=SettingRedaction.NONE,
+        requires_approval=False,
+        max_length=512,
+    ),
+    _definition(
+        "footer",
+        "copyright_zh",
+        default="",
+        permission=SettingPermission.ADMINISTRATOR,
+        scope=SettingScope.GLOBAL,
+        hot_reload=True,
+        redaction=SettingRedaction.NONE,
+        requires_approval=False,
+        max_length=512,
+    ),
+    _definition(
+        "footer",
+        "navigation_json",
+        default=DEFAULT_FOOTER_NAVIGATION_JSON,
+        permission=SettingPermission.ADMINISTRATOR,
+        scope=SettingScope.GLOBAL,
+        hot_reload=True,
+        redaction=SettingRedaction.NONE,
+        requires_approval=False,
+        max_length=MAX_FOOTER_NAVIGATION_BYTES,
     ),
     _definition(
         "about",
@@ -2291,6 +2397,13 @@ def validate_setting_update(section: str, key: str, value: object) -> str:
         return str(parsed)
 
     string_value = _validate_string(definition, value)
+    if definition.section in {"footer", "footer_external", "footer_internal"}:
+        try:
+            return validate_footer_setting(key, string_value)
+        except FooterContentValidationError as exc:
+            raise SettingValidationError(
+                f"Setting '{definition.full_key}' is invalid: {exc}"
+            ) from exc
     if section in {"brand_external", "brand_internal"} and key in {"name_zh", "name_en"}:
         string_value = string_value.strip()
         if not string_value or "<" in string_value or ">" in string_value:

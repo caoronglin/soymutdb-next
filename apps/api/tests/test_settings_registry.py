@@ -217,3 +217,38 @@ def test_site_variant_settings_are_isolated_and_share_validation() -> None:
 
     with pytest.raises(SettingValidationError, match="Unknown setting"):
         validate_setting_update("content_internal", "not_registered", "value")
+
+
+def test_footer_settings_are_registered_per_variant_and_use_domain_validation() -> None:
+    from app.core.footer_content import DEFAULT_FOOTER_NAVIGATION_JSON
+    from app.core.settings_registry import (
+        SETTINGS_REGISTRY,
+        SettingValidationError,
+        registered_keys_for_section,
+        validate_setting_update,
+    )
+
+    expected = {
+        "contact_person_en",
+        "contact_person_zh",
+        "contact_phone_value",
+        "contact_email_value",
+        "address_en",
+        "address_zh",
+        "copyright_en",
+        "copyright_zh",
+        "navigation_json",
+    }
+    for section in ("footer_external", "footer_internal"):
+        assert expected <= registered_keys_for_section(section)
+        assert SETTINGS_REGISTRY[f"{section}.navigation_json"].default == (
+            DEFAULT_FOOTER_NAVIGATION_JSON
+        )
+        assert validate_setting_update(section, "contact_phone_value", "") == ""
+        assert validate_setting_update(section, "contact_email_value", "help@example.org") == (
+            "help@example.org"
+        )
+        with pytest.raises(SettingValidationError, match="valid email"):
+            validate_setting_update(section, "contact_email_value", "invalid")
+        with pytest.raises(SettingValidationError, match="navigation is invalid"):
+            validate_setting_update(section, "navigation_json", '{"schema_version":2,"groups":[]}')

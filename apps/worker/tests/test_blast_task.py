@@ -577,3 +577,168 @@ def test_run_blast_with_unlisted_database_fails_job(monkeypatch) -> None:
         _call_task(blast_module.run_blast, FakeTask(), payload=payload)
 
     assert session.status == "failed"
+
+
+# ---------------------------------------------------------------------------
+# DIAMOND backend
+# ---------------------------------------------------------------------------
+# DIAMOND is the default for the programs it implements, because it answers the
+# same question 100-1000x faster. Two things differ from BLAST and both are
+# silent when wrong: the flags (`--max-target-seqs`, not `-max_target_seqs`) and
+# the output format (there is no `-outfmt 15`).
+
+
+def test_diamond_command_uses_diamond_flags_and_explicit_columns(tmp_path) -> None:
+    """The argv is built as a list, with DIAMOND's own spelling of every flag."""
+    cmd = blast_module.build_diamond_command(
+        "blastp",
+        Path("/db/wm82.dmnd"),
+        Path("/tmp/q.faa"),
+        Path("/tmp/out.txt"),
+        evalue=1e-5,
+        max_target_seqs=50,
+        num_threads=4,
+        extra_args=None,
+    )
+
+    assert cmd[0] == str(blast_module.DIAMOND_BIN)
+    assert cmd[1] == "blastp"
+    assert "--db" in cmd and "--query" in cmd and "--out" in cmd
+    # BLAST's single-dash spelling would make DIAMOND exit rc=1.
+    assert "-db" not in cmd
+    assert cmd[cmd.index("--evalue") + 1] == "1e-05"
+    assert cmd[cmd.index("--max-target-seqs") + 1] == "50"
+    assert cmd[cmd.index("--threads") + 1] == "4"
+    # Columns are requested explicitly so a DIAMOND release that reorders its
+    # default output cannot shift every parsed field by one.
+    outfmt = cmd.index("--outfmt")
+    assert cmd[outfmt + 1] == "6"
+    columns = blast_module.DIAMOND_OUTFMT6_COLUMNS
+    assert tuple(cmd[outfmt + 2 : outfmt + 2 + len(columns)]) == columns
+
+
+def test_diamond_command_rejects_blast_only_parameters() -> None:
+    """`-dust` means nothing to DIAMOND; forwarding it aborts the run."""
+    with pytest.raises(ValueError, match="Disallowed DIAMOND parameter"):
+        blast_module.build_diamond_command(
+            "blastp",
+            Path("/db/x.dmnd"),
+            Path("/tmp/q.faa"),
+            Path("/tmp/out.txt"),
+            evalue=1e-5,
+            max_target_seqs=50,
+            num_threads=1,
+            extra_args={"dust": "no"},
+        )
+
+
+def test_diamond_command_translates_word_size_to_kebab_case() -> None:
+    cmd = blast_module.build_diamond_command(
+        "blastp",
+        Path("/db/x.dmnd"),
+        Path("/tmp/q.faa"),
+        Path("/tmp/out.txt"),
+        evalue=1e-5,
+        max_target_seqs=50,
+        num_threads=1,
+        extra_args={"word_size": 5},
+    )
+    assert "--word-size" in cmd
+    assert "-word_size" not in cmd
+
+
+def test_parse_diamond_tabular_maps_columns_without_recomputing_identity(tmp_path) -> None:
+    """`pident` is already a percentage; dividing it by alignment length is the
+    bug this test exists to catch (it reported ~0.05% identity)."""
+    out = tmp_path / "results.txt"
+    out.write_text(
+        "q1\tGlyma.01G000100.Wm82.a6.v1\t98.734\t158\t2\t0\t1\t158\t103572\t103729\t1e-95\t342.0\n"
+        "q1\tGlyma.01G000200.Wm82.a6.v1\t71.000\t100\t29\t0\t5\t104\t900\t999\t3e-20\t88.5\n",
+        encoding="utf-8",
+    )
+
+    parsed = blast_module.parse_diamond_tabular(out)
+
+    assert parsed["total_hits"] == 2
+    assert parsed["query_id"] == "q1"
+    first = parsed["hits"][0]
+    assert first["subject_id"] == "Glyma.01G000100.Wm82.a6.v1"
+    assert first["percent_identity"] == pytest.approx(98.734)
+    assert first["alignment_length"] == 158
+    assert first["mismatches"] == 2
+    assert first["evalue"] == pytest.approx(1e-95)
+    assert first["bit_score"] == pytest.approx(342.0)
+    assert first["subject_start"] == 103572
+    assert first["subject_strand"] == "plus"
+
+
+def test_parse_diamond_tabular_derives_strand_from_coordinates(tmp_path) -> None:
+    """outfmt 6 has no strand column; a descending subject range is minus."""
+    out = tmp_path / "results.txt"
+    out.write_text(
+        "q1\ts1\t90.0\t100\t10\t0\t1\t100\t999\t900\t1e-30\t150.0\n",
+        encoding="utf-8",
+    )
+
+    hit = blast_module.parse_diamond_tabular(out)["hits"][0]
+
+    assert hit["subject_strand"] == "minus"
+    assert hit["query_strand"] == "plus"
+
+
+def test_parse_diamond_tabular_rejects_a_truncated_row(tmp_path) -> None:
+    out = tmp_path / "results.txt"
+    out.write_text("q1\ts1\t90.0\t100\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="expected"):
+        blast_module.parse_diamond_tabular(out)
+
+
+def test_parse_diamond_tabular_accepts_an_empty_result(tmp_path) -> None:
+    """No hits is a valid answer, not a parse failure."""
+    out = tmp_path / "results.txt"
+    out.write_text("", encoding="utf-8")
+
+    parsed = blast_module.parse_diamond_tabular(out)
+
+    assert parsed["total_hits"] == 0
+    assert parsed["hits"] == []
+
+
+@pytest.mark.parametrize(
+    ("program", "expected"),
+    [
+        ("blastp", "diamond"),
+        ("blastx", "diamond"),
+        # DIAMOND has no nucleotide/nucleotide equivalent; these must not be
+        # routed to it, or every such job fails.
+        ("blastn", "blast"),
+        ("tblastn", "blast"),
+        ("tblastx", "blast"),
+    ],
+)
+def test_auto_engine_routes_each_program_to_the_one_that_implements_it(
+    program: str, expected: str
+) -> None:
+    assert blast_module.resolve_engine(program, "auto") == expected
+
+
+def test_auto_is_the_default_engine() -> None:
+    assert blast_module.BLAST_ENGINE == "auto"
+    assert blast_module.resolve_engine("blastp") == "diamond"
+    assert blast_module.resolve_engine("blastn") == "blast"
+
+
+def test_forcing_diamond_for_blastn_raises_instead_of_falling_back() -> None:
+    """A forced engine that silently becomes the other one hides the mistake."""
+    with pytest.raises(ValueError, match="does not implement"):
+        blast_module.resolve_engine("blastn", "diamond")
+
+
+def test_explicit_blast_engine_always_wins() -> None:
+    assert blast_module.resolve_engine("blastp", "blast") == "blast"
+
+
+def test_unknown_engine_is_rejected() -> None:
+    with pytest.raises(ValueError, match="Unknown aligner"):
+        blast_module.resolve_engine("blastp", "clustal")

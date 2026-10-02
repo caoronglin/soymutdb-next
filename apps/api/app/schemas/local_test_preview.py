@@ -51,6 +51,19 @@ class PreviewMutationSiteItem(BaseModel):
     confidence: Literal["H", "L"]
     gene_id: str
     feature: str
+    #: Operator-editable from the admin console; the import carries the stored
+    #: value forward rather than resetting it.
+    available: bool
+    #: Homolog accessions from the same source row (W82_V2 / W82_V4 / DN53_V1).
+    #: Absent when the source row leaves that column empty.
+    gene_v2: str | None = None
+    gene_v4: str | None = None
+    gene_dn53: str | None = None
+
+
+class PreviewMutationSiteUpdate(BaseModel):
+    """Operator-editable fields of one source mutation-site row."""
+
     available: bool
 
 
@@ -97,4 +110,5 @@ __all__ = [
     "PreviewGeneSearchResponse",
     "PreviewMutationSiteItem",
     "PreviewMutationSiteSearchResponse",
+    "PreviewMutationSiteUpdate",
 ]

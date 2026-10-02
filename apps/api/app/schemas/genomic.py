@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -116,6 +117,63 @@ class TranscriptResponse(BaseModel):
     exons: list[ExonResponse] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
+
+
+class TranscriptPartResponse(BaseModel):
+    """One typed segment of a transcript.
+
+    ``kind`` is the vocabulary the renderers already speak — the portal's
+    ``packages/genome-view`` places ``cds`` / ``utr5`` / ``utr3`` boxes and the
+    server-side SVG renderer draws the same four. Exposing the database's
+    ``part_type`` verbatim would put that mapping in every client.
+    """
+
+    kind: Literal["cds", "utr5", "utr3"]
+    start: int = Field(..., ge=1)
+    end: int = Field(..., ge=1)
+
+
+class RegionTranscriptResponse(BaseModel):
+    """A transcript with its structure, inside one coordinate window."""
+
+    id: str
+    name: str | None = None
+    biotype: str = "mRNA"
+    start: int = Field(..., ge=0)
+    end: int = Field(..., ge=0)
+    strand: Strand
+    is_canonical: bool = False
+    parts: list[TranscriptPartResponse] = Field(default_factory=list)
+
+
+class RegionGeneResponse(BaseModel):
+    """A gene overlapping the window, with every transcript it models."""
+
+    gene_id: str
+    name: str | None = None
+    chromosome: str
+    start: int = Field(..., ge=0)
+    end: int = Field(..., ge=0)
+    start_pos: int = Field(..., ge=0)
+    end_pos: int = Field(..., ge=0)
+    strand: Strand
+    biotype: str = "protein_coding"
+    transcripts: list[RegionTranscriptResponse] = Field(default_factory=list)
+
+
+class RegionStructureResponse(BaseModel):
+    """The answer to "what is in this window"."""
+
+    assembly_id: int
+    assembly_name: str
+    assembly_version: str
+    chromosome: str
+    chromosome_length: int
+    start: int = Field(..., ge=1)
+    end: int = Field(..., ge=1)
+    genes: list[RegionGeneResponse] = Field(default_factory=list)
+    #: True when the window is wider than the endpoint will model in full.
+    truncated: bool = False
 
 
 #: Columns the gene list may be ordered by (validated, never interpolated

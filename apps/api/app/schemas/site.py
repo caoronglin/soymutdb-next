@@ -14,6 +14,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from ..core.footer_content import FooterNavigationGroup
+
 SiteVariant = Literal["external", "internal"]
 
 
@@ -100,15 +102,22 @@ class HomeContentResponse(BaseModel):
 
 
 class FooterContentResponse(BaseModel):
-    """Editable footer contact block backed by ``system_settings``.
+    """Variant-specific, plain-text footer content and visible navigation."""
 
-    Values are plain text (``footer.*`` keys). A fresh deployment without the
-    rows returns the registered defaults so the public footer renders without
-    a separate fallback.
-    """
-
+    # Legacy fields remain available to existing clients.
     contact_person: str | None = None
     contact_phone: str | None = None
     contact_email: str | None = None
     copyright: str | None = None
     address: str | None = None
+
+    # New per-language content; phone/email values are shared across locales.
+    contact_person_en: str | None = None
+    contact_person_zh: str | None = None
+    contact_phone_value: str | None = None
+    contact_email_value: str | None = None
+    address_en: str | None = None
+    address_zh: str | None = None
+    copyright_en: str | None = None
+    copyright_zh: str | None = None
+    navigation: list[FooterNavigationGroup] = Field(default_factory=list)

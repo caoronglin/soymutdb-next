@@ -218,6 +218,9 @@ async def search_preview_mutation_sites(
             gene_id=gene_accession,
             feature=site.feature,
             available=site.available,
+            gene_v2=site.gene_v2,
+            gene_v4=site.gene_v4,
+            gene_dn53=site.gene_dn53,
         )
         for site, gene_accession in rows.all()
     ]
@@ -267,6 +270,124 @@ def _parse_gene_ids(value: str) -> list[str]:
     return identifiers
 
 
+async def list_preview_mutation_sites_for_gene(
+    db: AsyncSession,
+    *,
+    gene_id: str,
+    limit: int = 1000,
+) -> list[PreviewMutationSiteItem]:
+    """Return every source mutation-site row attached to one gene.
+
+    Keyed on the gene relation rather than on a coordinate interval: 13% of the
+    source rows sit up- or downstream of their gene's own start/end (the TSV's
+    ``feature`` column carries that offset), so an interval query would silently
+    drop them.
+    """
+    if not 1 <= limit <= 1000:
+        raise ValidationError("limit must be between 1 and 1000")
+
+    assembly = await _get_preview_assembly(db)
+    scope = (
+        LocalTestMutationSite.dataset_key == PREVIEW_DATASET_KEY,
+        LocalTestMutationSite.assembly_id == assembly.id,
+        LocalTestMutationSite.release_id == assembly.release_id,
+        Gene.assembly_id == assembly.id,
+    )
+
+    async def load(*criteria) -> list:
+        statement = (
+            select(LocalTestMutationSite, Gene.accession, Chromosome.name)
+            .join(Gene, Gene.gene_pk == LocalTestMutationSite.gene_pk)
+            .join(Chromosome, Chromosome.id == LocalTestMutationSite.chromosome_id)
+            .where(*scope, *criteria)
+            .order_by(LocalTestMutationSite.position, LocalTestMutationSite.source_site_key)
+            .limit(limit)
+        )
+        return list((await db.execute(statement)).all())
+
+    # Exact identifiers only — the operator asked for a full match, so a bare or
+    # partial string (`Glyma.01G000100`, `Gl`) must not resolve. Two things count
+    # as exact: this assembly's own versioned accession
+    # (`Glyma.01G000100.Wm82.a6.v1`), or any of the three homolog accessions the
+    # source table records for the same row (W82_V2 / W82_V4 / DN53_V1).
+    #
+    # This assembly's identifier wins when both would match: a string such as
+    # `Glyma.02G115200` is a real locus in this assembly *and* another locus's
+    # W82_V2 accession, and those belong to different coordinate namespaces, so
+    # returning both in one pass would silently merge them.
+    rows = await load(Gene.accession == gene_id)
+    if not rows:
+        rows = await load(
+            or_(
+                LocalTestMutationSite.gene_v2 == gene_id,
+                LocalTestMutationSite.gene_v4 == gene_id,
+                LocalTestMutationSite.gene_dn53 == gene_id,
+            )
+        )
+    return [
+        PreviewMutationSiteItem(
+            source_site_key=site.source_site_key,
+            mutant_line_name=site.mutant_line_name,
+            chromosome=chromosome_name,
+            position=site.position,
+            confidence=site.confidence,
+            gene_id=gene_accession,
+            feature=site.feature,
+            available=site.available,
+            gene_v2=site.gene_v2,
+            gene_v4=site.gene_v4,
+            gene_dn53=site.gene_dn53,
+        )
+        for site, gene_accession, chromosome_name in rows
+    ]
+
+
+async def update_preview_mutation_site(
+    db: AsyncSession,
+    *,
+    source_site_key: str,
+    available: bool,
+) -> PreviewMutationSiteItem:
+    """Set the operator-maintained ``available`` flag on one source row.
+
+    Only this column is writable: every other field is the uploaded table's
+    content and is rewritten on the next import.
+    """
+    assembly = await _get_preview_assembly(db)
+    row = (
+        await db.execute(
+            select(LocalTestMutationSite, Gene.accession, Chromosome.name)
+            .join(Gene, Gene.gene_pk == LocalTestMutationSite.gene_pk)
+            .join(Chromosome, Chromosome.id == LocalTestMutationSite.chromosome_id)
+            .where(
+                LocalTestMutationSite.dataset_key == PREVIEW_DATASET_KEY,
+                LocalTestMutationSite.assembly_id == assembly.id,
+                LocalTestMutationSite.release_id == assembly.release_id,
+                LocalTestMutationSite.source_site_key == source_site_key,
+            )
+        )
+    ).first()
+    if row is None:
+        raise NotFoundError(f"Unknown source mutation site: {source_site_key}")
+
+    site, gene_accession, chromosome_name = row
+    site.available = available
+    await db.commit()
+    return PreviewMutationSiteItem(
+        source_site_key=site.source_site_key,
+        mutant_line_name=site.mutant_line_name,
+        chromosome=chromosome_name,
+        position=site.position,
+        confidence=site.confidence,
+        gene_id=gene_accession,
+        feature=site.feature,
+        available=site.available,
+        gene_v2=site.gene_v2,
+        gene_v4=site.gene_v4,
+        gene_dn53=site.gene_dn53,
+    )
+
+
 __all__ = [
     "PREVIEW_ANNOTATION_VERSION",
     "PREVIEW_ASSEMBLY_NAME",
@@ -274,6 +395,8 @@ __all__ = [
     "PREVIEW_DATASET_KEY",
     "PREVIEW_RELEASE_VERSION",
     "get_preview_meta",
+    "list_preview_mutation_sites_for_gene",
     "search_preview_genes",
     "search_preview_mutation_sites",
+    "update_preview_mutation_site",
 ]

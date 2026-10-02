@@ -21,9 +21,12 @@ from ...core.database import get_db
 from ...core.security import RoleName
 from ...models.auth import User
 from ...schemas.seed_request import (
+    MAX_GENE_IDS,
     SeedRequestCreate,
+    SeedRequestGeneCount,
     SeedRequestListResponse,
     SeedRequestResponse,
+    SeedRequestStatsResponse,
     SeedRequestStatus,
     SeedRequestUpdate,
 )
@@ -47,6 +50,44 @@ async def create_seed_request(
 ) -> SeedRequestResponse:
     """Submit a seed request contact (open to all; no authentication)."""
     return await service.create_request(db, payload)
+
+
+@router.get(
+    "/seed-requests/stats",
+    response_model=SeedRequestStatsResponse,
+    summary="Public seed-request demand per gene (counts only)",
+)
+async def seed_request_stats(
+    db: AsyncSession = Depends(get_db),
+    gene_ids: str = Query(
+        default="",
+        max_length=8192,
+        description=(
+            "Comma-separated gene IDs. At most MAX_GENE_IDS distinct values are "
+            "counted; the rest are ignored rather than rejected, so a page can "
+            "send a whole result set without branching."
+        ),
+    ),
+) -> SeedRequestStatsResponse:
+    """Report how many requests reference each gene ID.
+
+    Anonymous on purpose: the gene page renders "N requests" beside the seed
+    request entry as a demand signal. The payload is counts only — no requester
+    name, institution, email, timestamp or status ever leaves
+    ``/admin/seed-requests``, so this cannot be turned into an enumeration of
+    who asked for what.
+    """
+    wanted = [part.strip() for part in gene_ids.split(",") if part.strip()][:MAX_GENE_IDS]
+    counts = await service.count_requests_by_gene(db, gene_ids=wanted)
+    return SeedRequestStatsResponse(
+        # Every requested ID is echoed, including the zeros, so the client can
+        # render a row per gene without inferring "missing" as "unknown".
+        items=[
+            SeedRequestGeneCount(gene_id=gene_id, requests=counts.get(gene_id, 0))
+            for gene_id in dict.fromkeys(wanted)
+        ],
+        total_requests=await service.total_requests(db),
+    )
 
 
 @router.get(

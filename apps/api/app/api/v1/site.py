@@ -22,6 +22,7 @@ variant=internal requires a bearer token for a user who has the viewer role
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterable
 
 from fastapi import APIRouter, Depends, Query, Response
@@ -30,6 +31,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.database import get_db
 from ...core.exceptions import AuthenticationError, AuthorizationError
+from ...core.footer_content import (
+    DEFAULT_FOOTER_NAVIGATION_JSON,
+    FooterContentValidationError,
+    parse_footer_navigation,
+    visible_footer_navigation,
+)
 from ...core.sanitize import sanitize_rich_html
 from ...core.security import RoleName, has_role
 from ...core.settings_registry import (
@@ -50,6 +57,7 @@ from ...services.site_brand_service import get_site_brand_document
 from .deps import get_optional_user, get_user_roles
 
 router = APIRouter(prefix="/site", tags=["site"])
+logger = logging.getLogger(__name__)
 
 
 # Keys served by the specialized endpoints (without their section prefix).
@@ -68,6 +76,15 @@ _FOOTER_KEYS = (
     "contact_email",
     "copyright",
     "address",
+    "contact_person_en",
+    "contact_person_zh",
+    "contact_phone_value",
+    "contact_email_value",
+    "address_en",
+    "address_zh",
+    "copyright_en",
+    "copyright_zh",
+    "navigation_json",
 )
 _RICH_ABOUT_KEYS = frozenset({"content_en", "content_zh"})
 _RICH_HOME_KEYS = frozenset({"welcome_en", "welcome_zh"})
@@ -208,14 +225,33 @@ async def get_footer_content(
         db, base_section="footer", variant=variant, keys=_FOOTER_KEYS
     )
     selected_section = variant_section("footer", variant)
-    return FooterContentResponse(
-        **{
-            key: values[key]
-            if key in values
-            else str(get_setting_definition(selected_section, key).default)
-            for key in _FOOTER_KEYS
-        }
+    footer_values = {
+        key: values[key]
+        if key in values
+        else str(get_setting_definition(selected_section, key).default)
+        for key in _FOOTER_KEYS
+        if key != "navigation_json"
+    }
+    default_navigation = DEFAULT_FOOTER_NAVIGATION_JSON
+    navigation_json = values.get(
+        "navigation_json",
+        str(get_setting_definition(selected_section, "navigation_json").default),
     )
+    try:
+        navigation = visible_footer_navigation(
+            parse_footer_navigation(navigation_json)
+        )
+    except FooterContentValidationError:
+        # Never log stored contact or navigation values; the variant is enough
+        # context to diagnose the fallback without exposing user content.
+        logger.warning(
+            "Invalid footer navigation configuration for variant=%s; using defaults",
+            variant.value,
+        )
+        navigation = visible_footer_navigation(
+            parse_footer_navigation(default_navigation)
+        )
+    return FooterContentResponse(**footer_values, navigation=navigation)
 
 
 @router.get("/content", response_model=dict[str, str])

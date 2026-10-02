@@ -16,6 +16,10 @@ from ..schemas.genomic import (
     GeneListParams,
     GeneListResponse,
     GeneResponse,
+    RegionGeneResponse,
+    RegionStructureResponse,
+    RegionTranscriptResponse,
+    TranscriptPartResponse,
     TranscriptResponse,
 )
 from .release_context import (
@@ -142,6 +146,41 @@ def decode_cursor(
         raise
     except Exception as exc:
         raise ValidationError(f"Invalid cursor: {exc}") from exc
+
+
+PART_KIND_BY_TYPE: dict[str, str] = {
+    "cds": "cds",
+    "five_prime_utr": "utr5",
+    "three_prime_utr": "utr3",
+}
+
+
+def _region_transcript(tx: Transcript, *, include_parts: bool) -> RegionTranscriptResponse:
+    """Map one ORM transcript, translating ``part_type`` into the renderers' kind.
+
+    The translation lives here rather than in the renderers so that the
+    four-value vocabulary (``exon`` / ``cds`` / ``utr5`` / ``utr3``) is decided
+    once, at the API boundary. Segments whose type falls outside the table are
+    dropped instead of being guessed at as coding sequence — mislabelling a UTR
+    as CDS would change how the picture reads.
+    """
+    parts: list[TranscriptPartResponse] = []
+    if include_parts:
+        for part in tx.parts:
+            kind = PART_KIND_BY_TYPE.get(part.part_type)
+            if kind is None:
+                continue
+            parts.append(TranscriptPartResponse(kind=kind, start=part.start, end=part.end))
+    return RegionTranscriptResponse(
+        id=tx.id,
+        name=tx.name,
+        biotype=tx.biotype,
+        start=tx.start,
+        end=tx.end,
+        strand=tx.strand,
+        is_canonical=tx.is_canonical,
+        parts=parts,
+    )
 
 
 class GeneService:
@@ -429,6 +468,91 @@ class GeneService:
                 details={"code": "ambiguous_assembly"},
             )
         return matches[0]
+
+    async def get_region_structure(
+        self,
+        db: AsyncSession,
+        *,
+        assembly_id: int,
+        chromosome: str,
+        start: int,
+        end: int,
+        include_parts: bool = True,
+        release_context: ReleaseContext,
+    ) -> RegionStructureResponse:
+        """Every gene overlapping a window, with its modelled structure.
+
+        Overlap, not containment: a gene that merely crosses the window edge is
+        part of the picture, and dropping it would leave a visible hole in the
+        track.
+
+        The window is scoped to one assembly on purpose. v4 and v5 are distinct
+        coordinate namespaces, so the same ``Gm01:1,563,650`` names two
+        different places in the genome and a query without an assembly would
+        silently merge them.
+        """
+        assembly = (
+            await db.execute(
+                select(Assembly)
+                .where(Assembly.id == assembly_id)
+                .where(Assembly.release_id == release_context.release_id)
+            )
+        ).scalar_one_or_none()
+        if assembly is None:
+            raise NotFoundError(f"Assembly {assembly_id} not found in this release")
+
+        chromosome_row = (
+            await db.execute(
+                select(Chromosome)
+                .where(Chromosome.assembly_id == assembly_id)
+                .where(Chromosome.name == chromosome)
+            )
+        ).scalar_one_or_none()
+        if chromosome_row is None:
+            raise NotFoundError(f"Chromosome {chromosome} not found in assembly {assembly_id}")
+
+        genes = list(
+            (
+                await db.execute(
+                    select(Gene)
+                    .where(Gene.assembly_id == assembly_id)
+                    .where(Gene.chromosome_id == chromosome_row.id)
+                    .where(Gene.start <= end)
+                    .where(Gene.end >= start)
+                    .order_by(Gene.start, Gene.gene_pk)
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+        return RegionStructureResponse(
+            assembly_id=assembly.id,
+            assembly_name=assembly.name,
+            assembly_version=assembly.version,
+            chromosome=chromosome_row.name,
+            chromosome_length=chromosome_row.length,
+            start=start,
+            end=end,
+            genes=[
+                RegionGeneResponse(
+                    gene_id=gene.accession,
+                    name=gene.name,
+                    chromosome=chromosome_row.name,
+                    start=gene.start,
+                    end=gene.end,
+                    start_pos=gene.start,
+                    end_pos=gene.end,
+                    strand=gene.strand,
+                    biotype=gene.biotype,
+                    transcripts=[
+                        _region_transcript(tx, include_parts=include_parts)
+                        for tx in gene.transcripts
+                    ],
+                )
+                for gene in genes
+            ],
+        )
 
     async def list_assemblies(
         self, db: AsyncSession, *, release_id: int

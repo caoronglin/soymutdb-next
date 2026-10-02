@@ -360,11 +360,14 @@ class Settings(BaseSettings):
 
         validation_errors: list[str] = []
 
-        if self.local_test_preview_enabled and (
-            self.app_env != "dev" or self.deployment_mode != "baseline"
-        ):
+        # The preview dataset must never reach a production deployment, and
+        # `app_env=dev` already guarantees that. Requiring `deployment_mode ==
+        # "baseline"` on top added nothing except making the local *full-stack*
+        # (`extended`) run unable to preview its own test data, so the flag is
+        # allowed in either local mode.
+        if self.local_test_preview_enabled and self.app_env != "dev":
             validation_errors.append(
-                "local_test_preview_enabled requires app_env=dev and deployment_mode=baseline"
+                "local_test_preview_enabled requires app_env=dev"
             )
 
         # Credentials are always enabled by the API middleware, so a wildcard
