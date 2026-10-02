@@ -1,5 +1,7 @@
 # OPT2 第二轮优化执行报告（2026-09-26）
 
+> **已归档（2026-10-01）**：优化 / 消融战役的逐轮记录（结论已并入现状与基线）。继任：docs/aegis/baseline/2026-10-01-react-only-baseline.md §5 的消融判定，以及仓库内现存的消融测试与守卫。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../../ARCHIVE.md)。
+
 - **清单**：`docs/dev/opt2/OPT2-CHECKLIST.md`（8 项 → 5 个子代理）。
 - **执行方式**：协调者 + 5 个并行子代理（`nwafu/DeepSeek-V4.1-Flash`），各自独占文件集，冻结跨代理契约后再落码；协调者逐条独立复跑，不采信子代理自述。
 - **输入**：`docs/dev/ablation/2026-09-26/OPTIMIZATION-REPORT.md` §4/§6 的未验证项 + `docs/dev/vue-parity/README.md` §5 的残留。

@@ -1,5 +1,7 @@
 # W6 制品隔离与 E2E — 消融实验报告
 
+> **已归档（2026-10-01）**：优化 / 消融战役的逐轮记录（结论已并入现状与基线）。继任：docs/aegis/baseline/2026-10-01-react-only-baseline.md §5 的消融判定，以及仓库内现存的消融测试与守卫。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../../../ARCHIVE.md)。
+
 - 仓库：`/mnt/data02/T25ronglin/code/web`（HEAD `8e78116fd`）
 - 执行者：子代理 F（W6）
 - 日期：2026-09-26

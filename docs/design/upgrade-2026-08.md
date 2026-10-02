@@ -1,5 +1,7 @@
 # SoyMutDB Next 升级方案（2026-08）：AntD 迁移 · 信息架构重设计 · 新闻闭环 · MCP Server
 
+> **已归档（2026-10-01）**：2026-08 设计波次与旧基线快照。继任：docs/aegis/baseline/2026-10-01-react-only-baseline.md；门户布局以 `docs/superpowers/specs/2026-08-14-public-web-layout-alignment-design.md` 为准。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../ARCHIVE.md)。
+
 范围：apps/web + apps/admin + apps/api（schema）+ 新增 apps/mcp-server。本文档只做方案，不改代码。
 现状校准（与任务描述的差异，以仓库为准）：Vite 实际为 ^6.0.0 而非 7；web 路由为手动 TanStack Router（无文件路由插件）；SSG（scripts/ssg-build.ts）产出 widget 化静态壳 HTML，不是 React SSR；`NewsArticle` 模型与 /news 前端路由已存在但功能单薄；Primer3 引物设计完全未实现；HarmonyOS Sans SC 自托管于 public/fonts/harmonyos。
 与 `docs/design/ui-simplify-2026-08.md` 的关系：该文是 shadcn/Tailwind 时代的简化方案，其"单一焦点、克制色彩"结论继续有效，但组件实现层整体转向 AntD，本文为其后续。

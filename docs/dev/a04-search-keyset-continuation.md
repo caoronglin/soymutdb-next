@@ -1,5 +1,7 @@
 # A-04 Global Search Keyset Continuation
 
+> **已归档（2026-10-01）**：一次性任务笔记与旧状态视图（结论已进入现状视图与计划）。继任：docs/dev/project-status.md；任务级进度见 `docs/aegis/plans/`。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../ARCHIVE.md)。
+
 ## Scope
 
 `SearchService.global_search()` currently carries one decimal offset cursor across every queried source. This is sufficient for shallow continuation but has offset cost and cannot represent an independent stable position for each result type. This document specifies a backwards-compatible keyset continuation migration.

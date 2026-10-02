@@ -1,5 +1,7 @@
 # OPT-05 / OPT-06 执行小结（agent C · internal 搜索 client 与双 id UI）
 
+> **已归档（2026-10-01）**：优化 / 消融战役的逐轮记录（结论已并入现状与基线）。继任：docs/aegis/baseline/2026-10-01-react-only-baseline.md §5 的消融判定，以及仓库内现存的消融测试与守卫。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../../../ARCHIVE.md)。
+
 - 日期：2026-09-26
 - 范围：`packages/api-client/src/search.ts`、`packages/api-client/src/search.test.ts`、
   `apps/web/src/views/SearchView.vue`、`apps/web/src/ablation/ui02-internal-ids.test.ts`、

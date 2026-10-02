@@ -1,5 +1,7 @@
 # Vue ↔ React 视觉与功能对等修复（2026-09-26）
 
+> **已归档（2026-10-01）**：Vue / React 迁移期文档（Vue 已退役，React 为唯一生产路径）。继任：docs/dev/project-status.md。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../../ARCHIVE.md)。
+
 > 触发：用户反馈「现在的 Vue UI 和 React 还是不一样、很多功能用不了、样式和布局没有同步」。
 > 验收参照：线上 React 站 <https://caoronglin.github.io/soymutdb-next/>（2026-08-08 构建，截图 `.validation/vue-parity/react-live-home.png`）
 > ＋ React 源码基线 门户 `d3904c2105f34e5d74f3ae3a163d6b25f075bf64` / 管理端 `2004c25c61d850f15335dcc8329d0649930c35a4`

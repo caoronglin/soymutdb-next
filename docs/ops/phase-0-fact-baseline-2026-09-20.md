@@ -1,5 +1,7 @@
 # Phase 0 · 事实基线报告（W0 执行记录）
 
+> **已归档（2026-10-01）**：一次性的基础模式验收战役记录（操作手册仍在 ops/）。继任：`docs/ops/README.md` 及其下的现行运维手册；部署事实见 `docs/dev/project-status.md`。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../ARCHIVE.md)。
+
 > **父计划：** `plan.md`（第二轮审计版）+ `docs/superpowers/plans/2026-09-20-phase-0-fact-baseline-plan.md`
 > **执行日期：** 2026-09-20 ｜ **状态：** 静态部分完成；DB 相关项 RUNTIME_ONLY
 > **证据纪律：** 每条结论标 Evidence(E0–E4) + State(S0–S5)；无 `文件:行号` 不结项；runtime-only 不冒充事实。

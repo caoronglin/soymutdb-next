@@ -1,5 +1,7 @@
 # SoyMutDB 收口方案：架构收敛 · 旧代码退役 · Admin 全权治理台 · 安全加固
 
+> **已归档（2026-10-01）**：2026-08 设计波次与旧基线快照。继任：docs/aegis/baseline/2026-10-01-react-only-baseline.md；门户布局以 `docs/superpowers/specs/2026-08-14-public-web-layout-alignment-design.md` 为准。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../ARCHIVE.md)。
+
 > 版本：v8.0 设计稿（**只做设计，未实施**）
 > 核验日期：2026-09-25 · 基线 `main@d3904c210`（工作区另有 212 处未提交：126 modified / 78 untracked / 8 deleted）
 > 仓库：`/mnt/smb/t25ronglin/code/web`

@@ -1,5 +1,7 @@
 # Route B —— 虚拟数据本地验证证据（VIRTUAL ITERATION ONLY）
 
+> **已归档（2026-10-01）**：一次性的基础模式验收战役记录（操作手册仍在 ops/）。继任：`docs/ops/README.md` 及其下的现行运维手册；部署事实见 `docs/dev/project-status.md`。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../../../ARCHIVE.md)。
+
 > 本目录为 **非生产虚拟数据** 驱动的 Route B seed loader 验证证据（t18）。**仅验证解析/校验/plan/emit**，
 > **未执行任何写库**（未调用 `--write`/`--apply`）。产物由 `scripts/seed_release_data.py` 生成，
 > 使用 `SOYMUTDB_EVIDENCE_DIR=docs/ops/evidence/route-b`（受 Git 跟踪）。

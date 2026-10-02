@@ -1,5 +1,7 @@
 # Local minimal search validation
 
+> **已归档（2026-10-01）**：一次性任务笔记与旧状态视图（结论已进入现状视图与计划）。继任：docs/dev/project-status.md；任务级进度见 `docs/aegis/plans/`。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../ARCHIVE.md)。
+
 This is a small, no-Docker preview for the supplied local test files. It serves
 only on `127.0.0.1`, reads the source files in place, keeps the parsed index in
 memory, and writes no database or generated data. It does not change the normal

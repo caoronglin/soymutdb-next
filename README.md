@@ -189,6 +189,8 @@ SOYMUTDB_JBROWSE_ENABLED=0 bash scripts/build-pages-artifact.sh  # Pages 制品�
 
 ## 文档入口
 
+**总入口**：[文档总入口](docs/README.md)（当前该读哪几份） · [归档登记表](docs/ARCHIVE.md)（已取代的 138 份）
+
 - [科研用户指南](docs/user/README.md)
 - [项目 Wiki](docs/wiki/README.md)（架构、应用状态、API/端口、部署运维、多实例信任）
 - [项目状态](docs/dev/project-status.md)（部署、门禁、功能与缺口单一视图）

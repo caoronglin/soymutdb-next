@@ -1,5 +1,7 @@
 # OPT-07 / OPT-08 / OPT-09：双站制品守卫补洞（子代理 D）
 
+> **已归档（2026-10-01）**：优化 / 消融战役的逐轮记录（结论已并入现状与基线）。继任：docs/aegis/baseline/2026-10-01-react-only-baseline.md §5 的消融判定，以及仓库内现存的消融测试与守卫。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../../../ARCHIVE.md)。
+
 - 日期：2026-09-26
 - 来源：`docs/dev/ablation/2026-09-26/artifact-e2e.md` §4 的 INERT-1（I3）、INERT-3（I5）、INERT-2（I4）
 - 判定口径：red-before = 旧代码路径在消融下 `exit 0`；green-after = 新代码在同样消融下 `exit 1`，对照 `exit 0`

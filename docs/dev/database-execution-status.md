@@ -1,5 +1,7 @@
 # SoyMutDB 数据库核心能力执行状态
 
+> **已归档（2026-10-01）**：一次性任务笔记与旧状态视图（结论已进入现状视图与计划）。继任：docs/dev/project-status.md；任务级进度见 `docs/aegis/plans/`。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../ARCHIVE.md)。
+
 维护者：总控执行实例。更新：2026-09-08（首轮 T0 记录）。
 依据：`database-execution-handoff.md` + `database-core-contract.md` + `pi-agent-hard-constraints.md`。
 用户已撤销旧 AGENTS.md；本文件不恢复其内容。

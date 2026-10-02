@@ -1,5 +1,7 @@
 # Plan B：双物种数据平面与本体基础实施计划
 
+> **已归档（2026-10-01）**：已被现行计划取代的历史实施计划。继任：`docs/aegis/plans/` 与 `docs/aegis/INDEX.md`。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../../ARCHIVE.md)。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `executing-plans` (or an equivalent task-by-task execution workflow) to implement this plan. Every checkbox is a separately reviewable task. Do not batch destructive migration, production cutover, or unrelated cleanup into this plan.
 
 **目标：** 在 A0/A1 已提供事实、契约、授权和 outbox 证据后，以 expand-only 方式建立双物种科学数据基础、不可变数据集版本、受治理 ontology closure、legacy adapter 和最小 ClickHouse scope-binding 证明。

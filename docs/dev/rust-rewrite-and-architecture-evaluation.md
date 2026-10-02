@@ -1,5 +1,7 @@
 # 架构优化与 Rust 重写评估方案
 
+> **已归档（2026-10-01）**：一次性任务笔记与旧状态视图（结论已进入现状视图与计划）。继任：docs/dev/project-status.md；任务级进度见 `docs/aegis/plans/`。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../ARCHIVE.md)。
+
 > 类型：架构评估 + 方案设计（Design Proposal），**不是实施授权**
 > 日期：2026-09-11
 > 发起：Issue #2「架构优化探索」

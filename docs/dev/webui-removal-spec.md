@@ -1,5 +1,7 @@
 # web-ui → Ant Design removal spec (apps/web)
 
+> **已归档（2026-10-01）**：Vue / React 迁移期文档（Vue 已退役，React 为唯一生产路径）。继任：docs/dev/project-status.md。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../ARCHIVE.md)。
+
 Goal: delete `src/lib/web-ui.tsx`. Replace its exports with Ant Design directly.
 Components come from `@/lib/antd`, icons from `@ant-design/icons`, the toast
 hook from `@/lib/toast`, class-joiner from `@/lib/cn`, format helpers from

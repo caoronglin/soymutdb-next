@@ -1,5 +1,7 @@
 # Plan C：确定性 Publication、不可变制品与可恢复 Promotion
 
+> **已归档（2026-10-01）**：已被现行计划取代的历史实施计划。继任：`docs/aegis/plans/` 与 `docs/aegis/INDEX.md`。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../../ARCHIVE.md)。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `executing-plans` (or an equivalent task-by-task executor) to implement this plan. Execute one narrow task at a time, keep the stated file ownership, run the listed gate before advancing, and stop at any failed gate.
 
 **状态：** 仅实施计划，未授权实现、迁移、依赖变更或部署变更。

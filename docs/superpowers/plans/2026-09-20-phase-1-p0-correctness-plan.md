@@ -1,5 +1,7 @@
 # Phase 1 · P0 正确性与隔离
 
+> **已归档（2026-10-01）**：已被现行计划取代的历史实施计划。继任：`docs/aegis/plans/` 与 `docs/aegis/INDEX.md`。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../../ARCHIVE.md)。
+
 > **父计划：** `plan.md`（第二轮审计版 §14/§19）+ Gate A（`docs/ops/gate-a-decision-brief-2026-09-20.md`，已签批）
 > **前置：** Phase 0 完成（`docs/ops/phase-0-fact-baseline-2026-09-20.md`）；Gate A 四项 ADR 已 Accepted（`docs/adr/0004`–`0007`）。
 > **Wave：** W1 ｜ **退出判据：** §3

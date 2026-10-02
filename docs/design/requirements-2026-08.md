@@ -1,5 +1,7 @@
 # SoyMutDB 需求整合与执行台账（2026-08）
 
+> **已归档（2026-10-01）**：2026-08 设计波次与旧基线快照。继任：docs/aegis/baseline/2026-10-01-react-only-baseline.md；门户布局以 `docs/superpowers/specs/2026-08-14-public-web-layout-alignment-design.md` 为准。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../ARCHIVE.md)。
+
 > 分支：`feature/upgrade-antd-mcp-mcp` ｜ 编制：D7（清理整理 + 文档整合）
 > 范围：本轮 A 批（邮件/通知/整合）与 B 批（清理/conda/消息性能/SW/Admin 增强）需求统一整合；
 > 已完成的调研结果（plyer / 知乎邮件文章 / MDN Service Worker / 相似项目）归档；

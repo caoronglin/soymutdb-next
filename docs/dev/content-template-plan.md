@@ -1,5 +1,7 @@
 # SoyMutDB 内容管理与模板生成优化方案
 
+> **已归档（2026-10-01）**：一次性任务笔记与旧状态视图（结论已进入现状视图与计划）。继任：docs/dev/project-status.md；任务级进度见 `docs/aegis/plans/`。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../ARCHIVE.md)。
+
 > **版本**：v5.0
 > **日期**：2026-08-29
 > **范围**：`apps/admin`（内容管理界面）· `apps/web/scripts`（SSG 与模板生成）· `apps/api/app/page_builder`（服务端注册表）· `packages/shared`（契约）

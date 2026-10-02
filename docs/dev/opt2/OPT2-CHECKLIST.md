@@ -1,5 +1,7 @@
 # OPT2 可优化清单（2026-09-26 第二轮）
 
+> **已归档（2026-10-01）**：优化 / 消融战役的逐轮记录（结论已并入现状与基线）。继任：docs/aegis/baseline/2026-10-01-react-only-baseline.md §5 的消融判定，以及仓库内现存的消融测试与守卫。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../../ARCHIVE.md)。
+
 > 输入来源（两处**已验证为"未完成/未验证"**的残留，不是新造需求）：
 > 1. `docs/dev/ablation/2026-09-26/OPTIMIZATION-REPORT.md` §4 未验证项 + §6 建议下一步；
 > 2. `docs/dev/vue-parity/README.md` §5 仍未完成（Vue↔React 对等战役的残留）。

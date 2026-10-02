@@ -1,5 +1,7 @@
 # Plan A0：事实、契约与迁移闸门实施计划
 
+> **已归档（2026-10-01）**：已被现行计划取代的历史实施计划。继任：`docs/aegis/plans/` 与 `docs/aegis/INDEX.md`。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../../ARCHIVE.md)。
+
 > 本文件定义 observational-only reconciliation、A0-local 测试夹具、只读审计和 disposable PostgreSQL 演练；不实现产品领域模型，也不授权 A1、生产迁移、生产写入切换或 publication 实现。Oracle Gate 2 的计划级 verdict 为 `APPROVE_WITH_NON_BLOCKING_NOTES`，因此可启动本文定义的有界 A0 实施；这不表示 A0 evidence 已完成、A1 已解锁或任何生产动作已获批准。
 
 **Goal：** 以仓库实际 runtime、Alembic revision graph、disposable PostgreSQL 实际 schema、ORM metadata、OpenAPI/client/Admin/Worker 消费关系、完整 fresh-target catalog baseline 和可恢复数据库演练为事实，产出一套可审计、可复现、fail-closed 的 A0 reconciliation evidence package。

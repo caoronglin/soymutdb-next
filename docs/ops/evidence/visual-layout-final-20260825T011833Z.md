@@ -1,5 +1,7 @@
 # Final public-site visual smoke acceptance
 
+> **已归档（2026-10-01）**：一次性的基础模式验收战役记录（操作手册仍在 ops/）。继任：`docs/ops/README.md` 及其下的现行运维手册；部署事实见 `docs/dev/project-status.md`。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../../ARCHIVE.md)。
+
 - Build: demo mode with `VITE_BASE_URL=/soymutdb-next/`, API/JBrowse test origins.
 - Command: `cd e2e && npm run test:visual`
 - Evidence: `e2e/visual-artifacts/20260825T011833Z/report.json` plus 15 PNG screenshots.

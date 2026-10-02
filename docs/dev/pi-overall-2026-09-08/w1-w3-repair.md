@@ -1,5 +1,7 @@
 # PI 接续任务：W1–W3 真实缺口修复与验证
 
+> **已归档（2026-10-01）**：智能体执行日志与提示词草稿（治理要求工作区不存放日志）。继任：docs/aegis/baseline/2026-10-01-react-only-baseline.md §7 变更记录；执行结论见 docs/dev/project-status.md。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../../ARCHIVE.md)。
+
 本文件将用户重复粘贴的清单去重，形成一次实施任务。沿用本包 prompt.md、plan.md、仓库 AGENTS.md、database-core-contract.md 和 H01–H12。本文件是交给 PI 的修复指令，不是修复完成报告。
 
 ## 范围与执行方式

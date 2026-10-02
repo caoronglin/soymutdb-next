@@ -1,5 +1,7 @@
 # Ontology PostgreSQL Control Plane Master Execution Plan
 
+> **已归档（2026-10-01）**：已被现行计划取代的历史实施计划。继任：`docs/aegis/plans/` 与 `docs/aegis/INDEX.md`。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../../ARCHIVE.md)。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `executing-plans` (or an equivalent bounded task-by-task execution workflow) for every implementation phase. This document is the orchestration plan; the seven child plans remain the source of truth for code-level TDD steps.
 
 **Goal:** 在用户已确认、Oracle Gate 1 已批准的 ontology/PostgreSQL control-plane 设计上，按可审计依赖、互不重叠的写入车道和逐阶段 Oracle 复核，协调 A0→F 的实施、验证、回滚和证据收口。Oracle Gate 2 必须先批准或修订本主计划；在 Gate 2 通过前不得开始任何产品实现、数据库迁移、依赖变更或部署修改。

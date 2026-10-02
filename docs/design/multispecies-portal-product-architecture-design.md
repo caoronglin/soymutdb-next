@@ -1,5 +1,7 @@
 # SoyMutDB Next 多物种门户产品与架构设计
 
+> **已归档（2026-10-01）**：2026-08 设计波次与旧基线快照。继任：docs/aegis/baseline/2026-10-01-react-only-baseline.md；门户布局以 `docs/superpowers/specs/2026-08-14-public-web-layout-alignment-design.md` 为准。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../ARCHIVE.md)。
+
 **状态：** 迭代设计基线  
 **目标：** 将 SoyMutDB Next 从大豆专属突变数据门户升级为可治理、可发布、可回滚的多物种科研数据平台。核心运行链路固定为“管理控制台 → 静态资源生成中心 → 内部搜索 API / 外部搜索 API”。  
 **依据：** `README.md`、`docs/design/architecture.md`、现有 Web/Admin/API/Worker/Rust 结构及已存在的内容、发布、组件和搜索设计。

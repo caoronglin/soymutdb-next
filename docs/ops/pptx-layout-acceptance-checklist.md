@@ -1,5 +1,7 @@
 # SoyMutDB PPTX 逐页布局验收清单
 
+> **已归档（2026-10-01）**：一次性的基础模式验收战役记录（操作手册仍在 ops/）。继任：`docs/ops/README.md` 及其下的现行运维手册；部署事实见 `docs/dev/project-status.md`。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../ARCHIVE.md)。
+
 > **目的**：以 [`pptx-layout-spec.md`](pptx-layout-spec.md) 为唯一 PPTX 解读基线，对 `docs/01.pptx` 的 7 张页面进行可复核的视觉与布局验收。
 >
 > **使用方式**：每次候选前端构建以 1440×900、1024×768、390×844 三个视口运行 `e2e:visual`（见 [`visual-regression.md`](visual-regression.md)）。在本清单的“结果”中记录通过/失败/不适用和证据目录。该清单检验内容层级、布局、响应式与可操作性，**不取代** G0–G16 数据/安全上线门禁。

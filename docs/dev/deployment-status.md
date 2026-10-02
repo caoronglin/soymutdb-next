@@ -1,5 +1,7 @@
 # 部署现状核对（D0）与状态记录
 
+> **已归档（2026-10-01）**：一次性任务笔记与旧状态视图（结论已进入现状视图与计划）。继任：docs/dev/project-status.md；任务级进度见 `docs/aegis/plans/`。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../ARCHIVE.md)。
+
 > 状态：D0 交付。日期 2026-09-09，HEAD `6592dfd8e`，工作树含大量既有未提交修改（约 357 项，归属既有工作）。
 > 本文档执行 `docs/dev/pi-website-deployment-handoff.md` 的 D0 工作包：核对部署脚本、Compose、CI、迁移、
 > 双站构建与健康接口，逐项给出文件或运行证据。历史材料（pi-overall-2026-09-08 等）仅作线索，不作为完成证据。

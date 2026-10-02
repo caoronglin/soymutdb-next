@@ -1,5 +1,7 @@
 # React 前端迁移进度总结（2026-09-27）
 
+> **已归档（2026-10-01）**：Vue / React 迁移期文档（Vue 已退役，React 为唯一生产路径）。继任：docs/dev/project-status.md。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../ARCHIVE.md)。
+
 ## 摘要
 
 SoyMutDB 前端正从 Vue 切换到 **React 19 + Umi Max 4 + Ant Design 6 + ProComponents v3**。Web、Admin、JBrowse 已建立 React/Umi 入口和主要页面骨架，Web 双站构建与主要交付脚本也已接线，并已通过受限生产构建与单元测试；但共享 genome-view、后台发布/SSG 链路、部分后端公开边界和 E2E 对等尚未完成。本文件记录的是**迁移进展，不是发布验收报告**。

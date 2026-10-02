@@ -1,5 +1,7 @@
 # A0 Gate 契约漂移修复总结（t9）
 
+> **已归档（2026-10-01）**：智能体执行日志与提示词草稿（治理要求工作区不存放日志）。继任：docs/aegis/baseline/2026-10-01-react-only-baseline.md §7 变更记录；执行结论见 docs/dev/project-status.md。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../ARCHIVE.md)。
+
 > 由 `qa-verify` 产出。目标：把 `apps/api/tests/a0/` 的 38 个失败收敛到 0，
 > 并判断正确的修复方向。本报告给出真实根因、已确认的修复映射，以及一处
 > **必须由 A0 计划 owner / captain 决策的实现级缺陷**。

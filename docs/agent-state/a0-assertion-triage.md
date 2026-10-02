@@ -1,5 +1,7 @@
 # A0 断言漂移 Triage（38 failures）
 
+> **已归档（2026-10-01）**：智能体执行日志与提示词草稿（治理要求工作区不存放日志）。继任：docs/aegis/baseline/2026-10-01-react-only-baseline.md §7 变更记录；执行结论见 docs/dev/project-status.md。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../ARCHIVE.md)。
+
 > 由 `qa-verify`（task t7）产出。判断 A0 release-lifecycle 工具链的 38 个
 > 失败是否与本次 Phase 2/3/4 改动相关。
 

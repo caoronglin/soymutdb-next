@@ -1,5 +1,7 @@
 # Phase 2 · 导入协议与 canonical 数据链路
 
+> **已归档（2026-10-01）**：已被现行计划取代的历史实施计划。继任：`docs/aegis/plans/` 与 `docs/aegis/INDEX.md`。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../../ARCHIVE.md)。
+
 > **父计划：** `plan.md`（第二轮审计版 §14/§19）
 > **前置：** Gate A 已签批（ADR-0004 module_data_rows=staging+promotion；ADR-0005 导入幂等/可见性）；
 > Phase 0 完成（T0-6 ClickHouse 引擎已由 canonical DDL 解析，见报告 §CH-RESOLVED）。

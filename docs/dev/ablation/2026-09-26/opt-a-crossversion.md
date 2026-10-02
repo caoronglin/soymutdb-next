@@ -1,5 +1,7 @@
 # OPT-A 优化小结：跨版本关联浮出（OPT-01）与 `site_variant` 缓存参数契约（OPT-02）
 
+> **已归档（2026-10-01）**：优化 / 消融战役的逐轮记录（结论已并入现状与基线）。继任：docs/aegis/baseline/2026-10-01-react-only-baseline.md §5 的消融判定，以及仓库内现存的消融测试与守卫。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../../../ARCHIVE.md)。
+
 - 仓库：`/mnt/data02/T25ronglin/code/web`
 - 基准 HEAD：`202ae7f92148045e45f8d2d0fb028f2874830a3d`（改动未提交，工作树与他人改动共存）
 - 日期：2026-09-26

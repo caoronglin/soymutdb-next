@@ -1,5 +1,7 @@
 # Plan F：基准、验证、OCR、清理与最终证据实施计划
 
+> **已归档（2026-10-01）**：已被现行计划取代的历史实施计划。继任：`docs/aegis/plans/` 与 `docs/aegis/INDEX.md`。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../../ARCHIVE.md)。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `executing-plans` (or the repository-approved equivalent) to execute this plan task-by-task. Do not start Plan F until A0、A1、B-pre-ADR、B、C、D、E 已完成并分别通过 Oracle 复核和用户确认；本计划只定义 F 的验证、证据、清理和最终收口，不授权提前实现、迁移、依赖升级、部署或提交。
 
 ## 1. 目标、前置闸门与不变边界

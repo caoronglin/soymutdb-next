@@ -1,5 +1,7 @@
 # SoyMutDB 基础模式缺陷账本
 
+> **已归档（2026-10-01）**：一次性的基础模式验收战役记录（操作手册仍在 ops/）。继任：`docs/ops/README.md` 及其下的现行运维手册；部署事实见 `docs/dev/project-status.md`。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../ARCHIVE.md)。
+
 > Wave 0 审计记录；只记录当前证据，不代表问题已经修复。
 > 审计目标：baseline = FastAPI + PostgreSQL + Web/Admin，且不依赖 Docker、Redis、ClickHouse、S3 或 Celery。
 

@@ -1,5 +1,7 @@
 # 直接交给 PI 的本轮修改任务
 
+> **已归档（2026-10-01）**：智能体执行日志与提示词草稿（治理要求工作区不存放日志）。继任：docs/aegis/baseline/2026-10-01-react-only-baseline.md §7 变更记录；执行结论见 docs/dev/project-status.md。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../../ARCHIVE.md)。
+
 在当前 SoyMutDB 仓库继续已有工作。使用本包 system.md 的约束、根及适用子目录 AGENTS.md、plan.md、database-core-contract.md 与 H01–H12。
 
 本轮执行 w1-w3-repair.md 中 R01–R07、V01–V03 的现状复核、真实缺口修复和适用验收。先读取 execution-status.md，保留已有 W0 与代码改动，只补过时或缺失证据，不重新规划整个项目，也不自动扩大到 W4–W8。历史“修复完成”必须经当前代码和测试确认。

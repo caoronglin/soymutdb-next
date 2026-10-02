@@ -1,5 +1,7 @@
 # OPT2-07 — 门户注册 Service Worker（D）
 
+> **已归档（2026-10-01）**：优化 / 消融战役的逐轮记录（结论已并入现状与基线）。继任：docs/aegis/baseline/2026-10-01-react-only-baseline.md §5 的消融判定，以及仓库内现存的消融测试与守卫。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../../ARCHIVE.md)。
+
 - 状态：**已完成**（单元测试 + 类型 + lint + 生产构建 + 真实浏览器实测全部通过）
 - 责任人：D
 - 依据：`docs/dev/opt2/OPT2-CHECKLIST.md` OPT2-07；`docs/dev/vue-parity/README.md` §5

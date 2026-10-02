@@ -2,6 +2,7 @@
 
 Registry for durable Aegis records. Governance: [BASELINE-GOVERNANCE.md](BASELINE-GOVERNANCE.md).
 Register new records here rather than duplicating them, and mark superseded records instead of deleting them.
+Repository-wide document entry point: [docs/README.md](../README.md); superseded documents: [docs/ARCHIVE.md](../ARCHIVE.md).
 
 ## Start here
 

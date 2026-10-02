@@ -1,5 +1,7 @@
 # Plan D：隔离双搜索与科学 UX 垂直切片实施计划
 
+> **已归档（2026-10-01）**：已被现行计划取代的历史实施计划。继任：`docs/aegis/plans/` 与 `docs/aegis/INDEX.md`。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../../ARCHIVE.md)。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `executing-plans` (or an equivalent task-by-task execution workflow) to implement this plan. Execute only after Plan C has produced validated publication/projection artifacts and after B-pre-ADR has frozen the initial search ceilings. Do not implement, migrate, add dependencies, or deploy before the plan has passed its required Oracle review and the preceding gates are recorded as passed.
 
 **状态：** Phase 2 实施计划；等待 Plan C 验证制品、B-pre-ADR 搜索边界和本计划复核

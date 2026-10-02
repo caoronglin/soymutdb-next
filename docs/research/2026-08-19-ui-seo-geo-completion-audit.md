@@ -1,5 +1,7 @@
 # SoyMutDB UI 完成度与 SEO/GEO 升级计划
 
+> **已归档（2026-10-01）**：早期调研笔记（结论已进入基线与设计）。继任：docs/aegis/baseline/2026-10-01-react-only-baseline.md §1.1 需求来源。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../ARCHIVE.md)。
+
 > 日期：2026-08-19
 > 范围：`apps/web`、`apps/admin`、`apps/jbrowse`、前端构建与浏览器门禁。SEO/GEO 本轮只制定计划，不实施配置。
 > 方法：四个子智能体静态审计、主控复核、生产构建产物检查，以及 Playwright 桌面/移动端验证。

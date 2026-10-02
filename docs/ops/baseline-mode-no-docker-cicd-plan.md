@@ -1,5 +1,7 @@
 # SoyMutDB 基础模式、无 Docker 部署与 CI/CD 方案
 
+> **已归档（2026-10-01）**：一次性的基础模式验收战役记录（操作手册仍在 ops/）。继任：`docs/ops/README.md` 及其下的现行运维手册；部署事实见 `docs/dev/project-status.md`。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../ARCHIVE.md)。
+
 > 状态：仅方案设计，未实施。
 > 对应 Goal：goal-515a511b-0c45-4832-9a3d-3f40a300d259
 

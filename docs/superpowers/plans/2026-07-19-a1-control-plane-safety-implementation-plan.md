@@ -1,5 +1,7 @@
 # A1 控制面安全骨架实施计划
 
+> **已归档（2026-10-01）**：已被现行计划取代的历史实施计划。继任：`docs/aegis/plans/` 与 `docs/aegis/INDEX.md`。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../../ARCHIVE.md)。
+
 > **写作计划头**：A1 / control-plane safety foundation  
 > **日期**：2026-07-19  
 > **状态**：待 A0 证据包与本计划审核通过；本文件只描述实施，不授权实施  

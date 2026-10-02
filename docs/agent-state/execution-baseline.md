@@ -1,5 +1,7 @@
 # SoyMutDB Next — Execution Baseline (QA / Phase 5)
 
+> **已归档（2026-10-01）**：智能体执行日志与提示词草稿（治理要求工作区不存放日志）。继任：docs/aegis/baseline/2026-10-01-react-only-baseline.md §7 变更记录；执行结论见 docs/dev/project-status.md。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../ARCHIVE.md)。
+
 > Captured by `qa-verify` (task t1) as the pre-execution quality gate for the
 > AgentsTeams run "soymutdb-execution" (Phase 2 admin page builder, Phase 3
 > static multi-target publication, Phase 4 public web UI refactor).

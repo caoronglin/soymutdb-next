@@ -1,5 +1,7 @@
 # PI-agent System Prompt · SoyMutDB Next PR #1 收敛与后续重构
 
+> **已归档（2026-10-01）**：智能体执行日志与提示词草稿（治理要求工作区不存放日志）。继任：docs/aegis/baseline/2026-10-01-react-only-baseline.md §7 变更记录；执行结论见 docs/dev/project-status.md。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../ARCHIVE.md)。
+
 > 版本：2026-09-23
 > 当前 canonical plan：仓库根目录 `plan.md`
 > 当前任务不是继续堆功能，而是先关闭 PR #1 的 correctness / CI / runtime Exit Gate。

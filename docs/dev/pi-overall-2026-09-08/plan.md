@@ -1,5 +1,7 @@
 # SoyMutDB 整体完善方案与执行契约
 
+> **已归档（2026-10-01）**：智能体执行日志与提示词草稿（治理要求工作区不存放日志）。继任：docs/aegis/baseline/2026-10-01-react-only-baseline.md §7 变更记录；执行结论见 docs/dev/project-status.md。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../../ARCHIVE.md)。
+
 版本：1.0，2026-09-08。用户选择“整体完善方案”，供 PI coding agent 执行。
 
 > **2026-09-26 校正（历史任务包）**：本轮之后前端已从 React 迁到 Vue 3，`packages/motion` 与

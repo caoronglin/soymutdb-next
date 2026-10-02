@@ -1,5 +1,7 @@
 # opt5-a — 后台可编辑文案接线（4 个页面）
 
+> **已归档（2026-10-01）**：优化 / 消融战役的逐轮记录（结论已并入现状与基线）。继任：docs/aegis/baseline/2026-10-01-react-only-baseline.md §5 的消融判定，以及仓库内现存的消融测试与守卫。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../../ARCHIVE.md)。
+
 范围：把 React 门户当年真正消费过的 `content.*` 文案键接到 Vue 门户的
 4 个页面，使用已就绪的 `apps/web/src/lib/site-content.ts::useSiteContent()`。
 零覆盖时除「注册键的默认译文与被替换的本地占位译文不同」的少数表头外，页面

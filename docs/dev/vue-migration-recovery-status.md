@@ -1,6 +1,8 @@
 # Vue 迁移恢复 — Gate 0 核验与首轮执行记录（2026-09-26）
 
 
+> **已归档（2026-10-01）**：Vue / React 迁移期文档（Vue 已退役，React 为唯一生产路径）。继任：docs/dev/project-status.md。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../ARCHIVE.md)。
+
 > 当前总体状态（部署/门禁/缺口单一视图）：`docs/dev/project-status.md`。
 > 配套方案：`docs/dev/vue-migration-recovery-plan.md`（本轮未改动该文件）。
 > 本记录只陈述已实测的事实；未验证项统一保留在文末缺口清单，并标注 `未开始` / `待复核`。

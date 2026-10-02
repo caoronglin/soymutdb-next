@@ -1,5 +1,7 @@
 # 零 React Vue 基因组视图：设计说明（2026-09-26）
 
+> **已归档（2026-10-01）**：Vue / React 迁移期文档（Vue 已退役，React 为唯一生产路径）。继任：docs/dev/project-status.md。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../../ARCHIVE.md)。
+
 **文档用途：** 定义把 `apps/jbrowse` 从 `@jbrowse/react-linear-genome-view` 迁移到自研 Vue 基因组视图的目标架构、包边界、数据契约、错误与测试策略、迁移顺序与验收标准。本文是子项目 A/B/C 的 spec；D–G 只在第 13 节列出边界，各自另行成文。
 
 **目标：** 全仓不再依赖 React；基线功能（参考序列、VCF 变异、结构变异、GFF3 基因模型、BigBed 重复、BigWig 定量、比对轨道、Trix 基因搜索、多 assembly、深链、iframe 嵌入、全屏、分享）以 Vue 原生渲染达到对等，且轨道类型/实验能力可由后端配置增减。

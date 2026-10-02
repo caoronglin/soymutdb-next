@@ -1,5 +1,7 @@
 # 多格式表格导入生产完善计划（TXT / TSV / CSV / XLSX）
 
+> **已归档（2026-10-01）**：已被现行计划取代的历史实施计划。继任：`docs/aegis/plans/` 与 `docs/aegis/INDEX.md`。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../../ARCHIVE.md)。
+
 > 日期：2026-08-17
 > 状态：待执行的生产加固方案
 > 当前基线：txt/tsv/csv/xlsx 已贯通共享解析器、API、Worker、Admin UI、模板下载与 OpenAPI；本地验证通过。

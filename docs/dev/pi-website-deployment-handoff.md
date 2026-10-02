@@ -1,5 +1,7 @@
 # SoyMutDB 网站核心功能与部署优化：PI Agent 单文件执行包
 
+> **已归档（2026-10-01）**：智能体执行日志与提示词草稿（治理要求工作区不存放日志）。继任：docs/aegis/baseline/2026-10-01-react-only-baseline.md §7 变更记录；执行结论见 docs/dev/project-status.md。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../ARCHIVE.md)。
+
 本文整合设计方案、硬约束、系统提示词、任务顺序和验收要求。它是待实施方案，不是已完成证明。Portable、Tauri、本地工具箱和插件市场属于后续计划。
 
 ## 使用方式

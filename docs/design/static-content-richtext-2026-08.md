@@ -1,5 +1,7 @@
 # 静态内容页 + 富文本编辑器方案 v2（2026-08）
 
+> **已归档（2026-10-01）**：2026-08 设计波次与旧基线快照。继任：docs/aegis/baseline/2026-10-01-react-only-baseline.md；门户布局以 `docs/superpowers/specs/2026-08-14-public-web-layout-alignment-design.md` 为准。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../ARCHIVE.md)。
+
 > 状态：**已修订**（吸收 oracle 审查意见 R1-R7；待用户确认后执行）
 > v1 → v2 变更：非 hydration 模式明确化、快照契约冻结、API 写入侧清洗、SSG 所有权与构建顺序修正、guide/help 剥离、marked 版本策略、SW 策略修正、CF _redirects 处理
 

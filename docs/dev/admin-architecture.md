@@ -1,5 +1,7 @@
 # Admin 管理端架构、API 绑定与数据库关系
 
+> **已归档（2026-10-01）**：一次性任务笔记与旧状态视图（结论已进入现状视图与计划）。继任：docs/dev/project-status.md；任务级进度见 `docs/aegis/plans/`。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../ARCHIVE.md)。
+
 > 本文描述当前代码实现，而不是未来愿景。接口路径使用前端 client 的逻辑路径；实际 HTTP 前缀由 @soymutdb/api-client 的 VITE_API_BASE_URL 决定，生产环境通常为 /api/v1。
 
 > **2026-09-27 前端重平台状态**：方向改为 React 19 + Umi Max 4、Ant Design 6、ProComponents v3；三应用 React 入口与构建配置已接线，但功能差距、双站制品和安全/交付合同仍在迁移中，尚未测试或构建验收。遗留 Vue source/tests 暂留作参考，不代表生产新功能入口。Page Builder/Widgets 管理面按 ADR-0009 有意退役；下文 §3.3、§5 中相关 API 记录是历史/服务端边界，不能据此认为当前 React UI 提供管理闭环。

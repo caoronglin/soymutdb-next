@@ -1,5 +1,7 @@
 # PI 可粘贴提示词（第二轮：站点核心验收与部署）
 
+> **已归档（2026-10-01）**：智能体执行日志与提示词草稿（治理要求工作区不存放日志）。继任：docs/aegis/baseline/2026-10-01-react-only-baseline.md §7 变更记录；执行结论见 docs/dev/project-status.md。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../ARCHIVE.md)。
+
 > 用途：不 clone 仓库时，直接把本文件「提示词正文」整段粘贴给 PI Agent。
 > 完整任务包（含表格、证据与详细命令）见 `docs/dev/pi-next-tasks-2026-09-10.md`。
 > 生成时间：2026-09-10　基线提交：`cc8792a2f`

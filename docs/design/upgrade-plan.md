@@ -1,5 +1,7 @@
 # SoyMutDB Next 升级执行方案（2026-08 定稿）
 
+> **已归档（2026-10-01）**：2026-08 设计波次与旧基线快照。继任：docs/aegis/baseline/2026-10-01-react-only-baseline.md；门户布局以 `docs/superpowers/specs/2026-08-14-public-web-layout-alignment-design.md` 为准。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../ARCHIVE.md)。
+
 > 已审查整合：designer 方案 + oracle 审查 + librarian 功能差距矩阵 + 用户拍板决策。
 > 分支 `feature/upgrade-antd-mcp-mcp`，6 个并行执行包。
 

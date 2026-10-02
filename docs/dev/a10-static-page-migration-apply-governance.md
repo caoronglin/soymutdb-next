@@ -1,5 +1,7 @@
 # A-10 StaticPage Migration Apply Governance Design
 
+> **已归档（2026-10-01）**：一次性任务笔记与旧状态视图（结论已进入现状视图与计划）。继任：docs/dev/project-status.md；任务级进度见 `docs/aegis/plans/`。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../ARCHIVE.md)。
+
 ## Status and scope
 
 **Status: design approved for governed apply only; no apply endpoint or UI is exposed.** This document defines the controls that must exist before a future mutation can be proposed. The currently exposed operation remains the administrator-gated, non-mutating dry run:

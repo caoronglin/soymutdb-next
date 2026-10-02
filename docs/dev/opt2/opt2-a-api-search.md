@@ -1,5 +1,7 @@
 # OPT2-A — API search 收口（OPT2-01 / OPT2-02 / OPT2-03）
 
+> **已归档（2026-10-01）**：优化 / 消融战役的逐轮记录（结论已并入现状与基线）。继任：docs/aegis/baseline/2026-10-01-react-only-baseline.md §5 的消融判定，以及仓库内现存的消融测试与守卫。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../../ARCHIVE.md)。
+
 > 负责人：A（后端 search 所有权范围）
 > 工作区：`/mnt/data02/T25ronglin/code/web`（HEAD 未提交工作树；不 commit）
 > 环境：PostgreSQL 16 @ `127.0.0.1:55432`（trust），库 `abl2_optapi`

@@ -1,5 +1,7 @@
 # 整体完善执行状态
 
+> **已归档（2026-10-01）**：智能体执行日志与提示词草稿（治理要求工作区不存放日志）。继任：docs/aegis/baseline/2026-10-01-react-only-baseline.md §7 变更记录；执行结论见 docs/dev/project-status.md。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../../ARCHIVE.md)。
+
 - 日期/角色/PI 版本/provider/model：2026-09-08 / 执行代理 / 平台默认模型
 - 原生工作目录/分支/HEAD/相关文件摘要：
   - 工作目录：`/mnt/data02/T25ronglin/code/web`

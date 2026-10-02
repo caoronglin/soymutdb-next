@@ -1,5 +1,7 @@
 # SoyMutDB 门户 UI 简约化设计方案（2026-08）
 
+> **已归档（2026-10-01）**：2026-08 设计波次与旧基线快照。继任：docs/aegis/baseline/2026-10-01-react-only-baseline.md；门户布局以 `docs/superpowers/specs/2026-08-14-public-web-layout-alignment-design.md` 为准。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../ARCHIVE.md)。
+
 目标：首页从"繁华门户"收敛为"一句话定位 + 搜索 + 三入口"的极简结构（参考 iSoybean）；导航从 7 个平铺条目收敛为 4 个分组；数据页统一模板。
 涉及文件（fixer 只改这些）：
 - `apps/web/src/routes/index.tsx`（首页重构）

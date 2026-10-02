@@ -1,5 +1,7 @@
 # OPT2-06 小结：消融 harness 提升为常规回归套件
 
+> **已归档（2026-10-01）**：优化 / 消融战役的逐轮记录（结论已并入现状与基线）。继任：docs/aegis/baseline/2026-10-01-react-only-baseline.md §5 的消融判定，以及仓库内现存的消融测试与守卫。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../../ARCHIVE.md)。
+
 - 任务来源：`docs/dev/opt2/OPT2-CHECKLIST.md` OPT2-06（源自 `docs/dev/ablation/2026-09-26/OPTIMIZATION-REPORT.md` §6.3）。
 - 日期：2026-09-26。负责人：agent C。
 - 改动范围：仅 `apps/web/src/ablation/**` → `apps/web/src/regression/**`，以及本文件。**未改任何应用源码 / 断言 / 依赖。**

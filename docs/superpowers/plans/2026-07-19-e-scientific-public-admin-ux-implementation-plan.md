@@ -1,5 +1,7 @@
 # Phase E：Scientific Field Manual 公共端与受治理 Admin UX 实施计划
 
+> **已归档（2026-10-01）**：已被现行计划取代的历史实施计划。继任：`docs/aegis/plans/` 与 `docs/aegis/INDEX.md`。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../../ARCHIVE.md)。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `executing-plans` (or `subagent-driven-development`) to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. This document is an implementation plan, not an implementation authorization.
 
 **Goal:** 在 A0、A1、B、C、D 均完成并通过各自 Oracle phase review 后，实现 Scientific Field Manual / Research Instrument 方向的公共端与管理端用户体验：公开端让研究者在可复现的物种、组装、数据发布和门户发布上下文中发现、理解、比较、下载和打开 JBrowse；Admin 让具备能力的操作员在真实契约、预览、证据和三条历史约束下完成工作。

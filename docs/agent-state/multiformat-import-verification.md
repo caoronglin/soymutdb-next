@@ -1,5 +1,7 @@
 # 多格式 Module 导入验证（txt/tsv/csv/xlsx）— t17
 
+> **已归档（2026-10-01）**：智能体执行日志与提示词草稿（治理要求工作区不存放日志）。继任：docs/aegis/baseline/2026-10-01-react-only-baseline.md §7 变更记录；执行结论见 docs/dev/project-status.md。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../ARCHIVE.md)。
+
 > 由 `qa-verify` 产出。验证 Phase「多格式 module 导入」后端 + 前端就绪后的
 > 端到端正确性（本地、无 Docker）。
 

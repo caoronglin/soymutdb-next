@@ -1,5 +1,7 @@
 # SoyMutDB 门户 —— PPTX 全站布局实现对照规范（docs/01.pptx）
 
+> **已归档（2026-10-01）**：一次性的基础模式验收战役记录（操作手册仍在 ops/）。继任：`docs/ops/README.md` 及其下的现行运维手册；部署事实见 `docs/dev/project-status.md`。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../ARCHIVE.md)。
+
 > **状态**：本文由 QA（qa-acceptance）把 `docs/01.pptx`（7 页）的每页布局整理成**实现对照规范**，供
 > `frontend-platform` 的 **t24（首页重构）/ t25（全站布局审计）** 对齐。规范**以 pptx 为准**描述**要实现的布局**，
 > 不代替现有代码；实现可用 **Ant Design 6** 组件与之对应，凡与现有路由/组件有出入处，在「实现映射与开放项」标注。

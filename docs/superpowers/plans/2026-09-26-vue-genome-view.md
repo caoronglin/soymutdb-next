@@ -1,5 +1,7 @@
 # 零 React Vue 基因组视图 — 实施计划（2026-09-26）
 
+> **已归档（2026-10-01）**：已被现行计划取代的历史实施计划。继任：`docs/aegis/plans/` 与 `docs/aegis/INDEX.md`。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../../ARCHIVE.md)。
+
 **Aegis Visibility:** 本计划新增两个包、重写一个应用外壳、删除跨包 React 依赖并更新 lockfile，引入新 owner 与对外契约；门户 iframe 契约必须保持，因此需要持久计划锁定边界、验证与退役路径。
 
 **Spec:** docs/superpowers/specs/2026-09-26-vue-genome-view-design.md（已批准；本计划只覆盖其子项目 A/B/C）

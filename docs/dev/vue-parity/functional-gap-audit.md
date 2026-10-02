@@ -1,5 +1,7 @@
 # Vue 功能缺口审计（2026-09-26）
 
+> **已归档（2026-10-01）**：Vue / React 迁移期文档（Vue 已退役，React 为唯一生产路径）。继任：docs/dev/project-status.md。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../../ARCHIVE.md)。
+
 > 快照：`HEAD = 053666680ad0a456c8dfff8c2b0fab54a42a0de8`（main），**工作树有未提交改动/未跟踪文件**，
 > 审计时刻 `2026-09-26 23:07 CST`。工作树中另有代理在并发修改 `apps/web/src/views/HomeView.vue`、
 > `apps/web/src/components/visuals/*`、`apps/web/src/views/VariantsView.vue`、`apps/admin/src/**`（见 `git status`）。
