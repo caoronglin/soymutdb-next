@@ -24,16 +24,7 @@ catalog:
   antd: 6.6.5
   echarts: 5.5.1
   '@ant-design/pro-components': 3.1.15-2
-  # Legacy Vue toolchain kept only while old source/tests are being retired.
-  # React applications use Umi Max 4; do not add new runtime features here.
-  vue: 3.5.43
-  '@vitejs/plugin-vue': 6.0.9
   vitest: 3.2.7
-  vue-router: 5.3.1
-  pinia: 4.0.3
-  '@tanstack/vue-query': 5.103.2
-  # Legacy Vue UI layer, retained until W5 removes its remaining consumers.
-  antdv-next: 1.5.4
   tailwindcss: 4.3.3
   '@tailwindcss/vite': 4.3.3
 
@@ -72,15 +63,12 @@ allowBuilds:
   core-js: false
   core-js-pure: false
   es5-ext: false
-  # vue-demi remains for legacy Vue sources until the Vue cleanup wave.
-  vue-demi: true
 
 # pnpm 12 supply-chain: minimumReleaseAge refuses packages younger than its
-# window; the legacy Vue Query and ProComponents pins were published inside it,
-# so those exact packages are exempted explicitly here.
+# window; the ProComponents pin was published inside it, so that exact package
+# is exempted explicitly here.
 minimumReleaseAgeExclude:
   - "@tanstack/query-core@5.103.2"
-  - "@tanstack/vue-query@5.103.2"
   - "@ant-design/pro-components@3.1.15-2"
 
 catalogs:

@@ -2,7 +2,7 @@
   "name": "soymutdb",
   "version": "2.1.0",
   "private": true,
-  "description": "SoyMutDB Next \u2014 comprehensive soybean mutant database with SSG public portal and web admin console",
+  "description": "SoyMutDB Next — comprehensive soybean mutant database with SSG public portal and web admin console",
   "packageManager": "pnpm@12.5.1",
   "engines": {
     "node": ">=24.0.0 <25",
@@ -37,13 +37,14 @@
     "ci:jobs": "bash scripts/ci-job-steps.sh list"
   },
   "devDependencies": {
+    "@ant-design/cli": "^6.6.5",
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.8.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.9.0",
+    "rimraf": "^6.0.0",
     "turbo": "^2.3.0",
     "typescript": "^5.9.3",
-    "rimraf": "^6.0.0",
-    "eslint": "^10.8.0",
-    "@eslint/js": "^10.0.1",
-    "typescript-eslint": "^8.66.0",
-    "globals": "^17.9.0",
-    "eslint-plugin-react-hooks": "^7.1.1"
+    "typescript-eslint": "^8.66.0"
   }
 }
