@@ -154,6 +154,7 @@ smoke_contracts() {
   "${PYTHON_BIN}" scripts/check_app_shell_assets.py --self-test || rc=$?
   # The visible-text budget may fall but never rise; new hardcoded strings fail.
   "${PYTHON_BIN}" scripts/check_visible_i18n.py --self-test || rc=$?
+  node scripts/check_visible_i18n_react.mjs --self-test || rc=$?
   # nginx security-header fragments and the locations that must re-include
   # them. Not part of the frontend gate: the configs cover the API and data
   # planes too, so a backend-only change can break them.
@@ -204,8 +205,15 @@ smoke_static() {
     local relative="${asset#/}"
     relative="${relative%%\?*}"
     if [[ ! -e "${dir}/${relative}" ]]; then
-      echo "missing referenced asset: ${asset}" >&2
-      missing=1
+      # The artifact may be built for a deployment sub-path (e.g. /soymutdb-next),
+      # so its HTML references assets *with* that prefix while the files sit at
+      # the artifact root. Retry once with the baked base segment removed; only
+      # report when neither spelling resolves.
+      local stripped="${relative#*/}"
+      if [[ "${stripped}" == "${relative}" || ! -e "${dir}/${stripped}" ]]; then
+        echo "missing referenced asset: ${asset}" >&2
+        missing=1
+      fi
     fi
   done < <(grep -oE '(src|href)="[^"]+"' "${dir}/index.html" | sed -E 's/.*="([^"]+)"/\1/' | sort -u)
   [[ "${missing}" -eq 0 ]] || return 1

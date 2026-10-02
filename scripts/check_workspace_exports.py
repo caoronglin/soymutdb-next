@@ -115,6 +115,13 @@ def check_ignored_source(errors: list[str]) -> int:
     for glob in SOURCE_GLOBS:
         for root in sorted(ROOT.glob(glob)):
             for path in sorted(root.rglob("*")):
+                # Umi writes its generated cache (`src/.umi`, `src/.umi-production`)
+                # inside the source tree. Those are build output that `.gitignore`
+                # is right to exclude, so they are not "authorable source" and must
+                # not be reported. Skipping by path segment keeps the check honest
+                # for real source files instead of allow-listing dozens of hashes.
+                if any(part.startswith(".umi") for part in path.relative_to(root).parts):
+                    continue
                 if not path.is_file() or path.suffix not in SOURCE_SUFFIXES:
                     continue
                 rel = path.relative_to(ROOT).as_posix()

@@ -39,6 +39,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BASELINE_PATH = Path(__file__).resolve().parent / "visible-i18n-baseline.json"
+ALLOWLIST_PATH = Path(__file__).resolve().parent / "visible-i18n-allowlist.json"
 
 SCAN_ROOTS: tuple[tuple[str, str], ...] = (
     ("portal", "apps/web/src"),
@@ -53,94 +54,13 @@ TEXT_NODE = re.compile(r">([^<>]+)<")
 ATTRIBUTE = re.compile(r'(?<!:)\b(placeholder|title|aria-label|alt)="([^"]*)"')
 HAS_WORDS = re.compile(r"[A-Za-z\u4e00-\u9fff]")
 
-# Exact strings that are product/brand/technical vocabulary, never translated.
-ALLOWED_EXACT = frozenset(
-    {
-        "SoyMutDB",
-        "JBrowse",
-        "JBrowse 2",
-        "BLAST",
-        "BLASTn",
-        "NCBI",
-        "UniProt",
-        "Ensembl",
-        "EBI",
-        "SHA-256",
-        "SNP",
-        "INS",
-        "DEL",
-        "MNV",
-        "SV",
-        "HIGH",
-        "MODERATE",
-        "LOW",
-        "MODIFIER",
-        "EN",
-        "中文",
-        # Keyboard-shortcut glyphs: key names, not prose. The command palette
-        # shows the accelerator next to its trigger in every locale.
-        "⌘K",
-        "Esc",
-        # Identifier field names rendered as column labels. They are contract
-        # vocabulary (public_id / internal_id), never translated.
-        "public_id",
-        "internal_id",
-        "N",
-        "T",
-        "—",
-        "·",
-        "×",
-        "→",
-    }
-)
+# One shared allowlist keeps the legacy Vue scan and the active React scan aligned.
+_ALLOWLIST = json.loads(ALLOWLIST_PATH.read_text(encoding="utf-8"))
+ALLOWED_EXACT = frozenset(_ALLOWLIST["exact"])
+ALLOWED_SHORT = frozenset(_ALLOWLIST["short"])
+ALLOWED_PATTERNS = tuple(re.compile(pattern) for pattern in _ALLOWLIST["patterns"])
+WORD = re.compile(_ALLOWLIST["wordPattern"])
 
-# A short lowercase/technical token list instead of a permissive length rule:
-# "bp" and "q" are units, "Open" and "gene" are words that must be translated.
-ALLOWED_SHORT = frozenset(
-    {
-        "bp",
-        "kb",
-        "Mb",
-        "Gb",
-        "kb",
-        "CDS",
-        "UTR",
-        "TPM",
-        "FPKM",
-        "ID",
-        "URL",
-        "API",
-        "Tm",
-        "GC",
-        "p",
-        "q",
-        "EMS",
-        "TSV",
-        "CSV",
-        "F",
-        "R",
-        "C",
-        # Keyboard accelerator keys shown inside <kbd> (⌘K tokenises to "K").
-        "K",
-        "v",
-        "true",
-        "false",
-    }
-)
-
-# Identifier-shaped strings: accessions/coordinates contain a digit, and
-# all-caps tokens are abbreviations. A sentence has untranslated words.
-ALLOWED_PATTERNS = (
-    re.compile(r"^[\W\d_]+$"),
-    re.compile(r"^(Chr|chr)[0-9A-Za-z._]+$"),
-    re.compile(r"^[A-Za-z0-9._:+-]*[0-9][A-Za-z0-9._:+-]*$"),
-    re.compile(r"^[A-Z]{2,}$"),
-)
-
-# A text node is checked token by token: "SoyMutDB · :" is product name plus
-# punctuation, while "Gene structure" is two untranslated words. Multi-word
-# scientific names are handled by their own entries.
-WORD = re.compile(r"[A-Za-z\u4e00-\u9fff][A-Za-z0-9\u4e00-\u9fff._:+-]*")
 
 
 def _word_allowed(word: str) -> bool:
@@ -190,19 +110,49 @@ def collect(root: Path) -> dict[str, int]:
     return counts
 
 
+def normalize_counts(counts: object, label: str) -> dict[str, int]:
+    if not isinstance(counts, dict):
+        raise ValueError(f"{label} counts must be an object")
+    normalized: dict[str, int] = {}
+    for key, value in counts.items():
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise ValueError(f"{label} count for {key} must be a non-negative integer")
+        normalized[str(key)] = value
+    return normalized
+
+
 def load_baseline(path: Path) -> dict[str, int]:
     data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"invalid baseline object: {path}")
     counts = data.get("counts", data)
-    return {str(key): int(value) for key, value in counts.items()}
+    return normalize_counts(counts, f"baseline {path}")
 
 
 def check(counts: dict[str, int], baseline: dict[str, int]) -> list[str]:
+    baseline = normalize_counts(baseline, "baseline")
     failures: list[str] = []
     for path, hits in sorted(counts.items()):
         allowed = baseline.get(path, 0)
         if hits > allowed:
             failures.append(f"{path}: {hits} hardcoded string(s), baseline {allowed}")
     return failures
+
+
+def write_baseline(path: Path, counts: dict[str, int]) -> None:
+    """Update Vue counts without discarding React entries owned by the JS scanner."""
+    previous = load_baseline(path) if path.is_file() else {}
+    other_sources = {
+        source: hits for source, hits in previous.items() if Path(source).suffix.lower() != ".vue"
+    }
+    payload = {
+        "comment": (
+            "Hardcoded visible strings per Vue/React source file. Counts may fall but must "
+            "never rise; remove an entry once the page is translated."
+        ),
+        "counts": {**other_sources, **counts},
+    }
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
 def self_test() -> int:
@@ -223,6 +173,13 @@ def self_test() -> int:
             "apps/web/src/views/Demo.vue: 2 hardcoded string(s), baseline 0"
         ]
         assert check(counts, {"apps/web/src/views/Demo.vue": 2}) == []
+        for malformed in ("oops", -1, 1.5, True):
+            try:
+                check({}, {"apps/web/src/views/Demo.vue": malformed})
+            except ValueError:
+                pass
+            else:
+                raise AssertionError(f"malformed baseline count was accepted: {malformed!r}")
 
         source.write_text(
             '<template><h1>Two hardcoded strings here</h1><p>And another one</p></template>',
@@ -230,6 +187,24 @@ def self_test() -> int:
         )
         counts = collect(root)
         assert counts["apps/web/src/views/Demo.vue"] == 2, counts
+
+        baseline_path = root / "visible-i18n-baseline.json"
+        baseline_path.write_text(
+            json.dumps(
+                {
+                    "counts": {
+                        "apps/web/src/views/Old.vue": 1,
+                        "apps/web/src/routes/Compare.tsx": 4,
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        write_baseline(baseline_path, counts)
+        assert load_baseline(baseline_path) == {
+            "apps/web/src/routes/Compare.tsx": 4,
+            "apps/web/src/views/Demo.vue": 2,
+        }
     print("visible i18n self-test passed")
     return 0
 
@@ -245,16 +220,7 @@ def main() -> int:
 
     counts = collect(ROOT)
     if args.update_baseline:
-        payload = {
-            "comment": (
-                "Hardcoded visible strings per Vue file. The count may fall but must "
-                "never rise; remove an entry once the page is translated."
-            ),
-            "counts": counts,
-        }
-        args.baseline.write_text(
-            json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
-        )
+        write_baseline(args.baseline, counts)
         total = sum(counts.values())
         print(f"baseline written: {len(counts)} file(s), {total} string(s)")
         return 0

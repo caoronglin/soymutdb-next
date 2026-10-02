@@ -51,14 +51,7 @@ PLATFORM_CATALOG = {
     "antd": "6.6.5",
     "echarts": "5.5.1",
     "@ant-design/pro-components": "3.1.15-2",
-    # Vue packages remain only while legacy sources/tests are being retired.
-    "vue": "3.5.43",
-    "@vitejs/plugin-vue": "6.0.9",
     "vitest": "3.2.7",
-    "vue-router": "5.3.1",
-    "pinia": "4.0.3",
-    "@tanstack/vue-query": "5.103.2",
-    "antdv-next": "1.5.4",
     "tailwindcss": "4.3.3",
     "@tailwindcss/vite": "4.3.3",
 }
@@ -204,8 +197,8 @@ def test_frontend_platform_lines_remain_bounded() -> None:
     assert workspace["catalog"]["@umijs/max"] == "4.7.20"
     assert workspace["catalog"]["antd"] == "6.6.5"
     assert workspace["catalog"]["@ant-design/pro-components"] == "3.1.15-2"
-    # Vue packages are temporarily retained for legacy source/test retirement;
-    # none is a production dependency of the React applications.
+    # Vue is fully retired: it must not be a production dependency of any React
+    # application (dev-only Vue tooling was removed alongside the legacy sources).
     for app in ("web", "admin", "jbrowse"):
         package = _json(f"apps/{app}/package.json")
         assert "vue" not in package["dependencies"], app
@@ -260,7 +253,6 @@ def test_dependency_build_scripts_are_fail_closed_except_for_reviewed_tools() ->
         "core-js": False,
         "core-js-pure": False,
         "es5-ext": False,
-        "vue-demi": True,
     }
 
 
@@ -287,8 +279,7 @@ def test_legacy_shared_ui_package_is_not_copied_into_ci_images() -> None:
         "infra/docker/Dockerfile.admin",
     ):
         source = (ROOT / dockerfile).read_text(encoding="utf-8")
-        # Match the retired React package path (packages/ui/...), not the
-        # current Vue design-system facade (packages/ui-vue/...).
+        # Match the retired React package path (packages/ui/...).
         assert "packages/ui/" not in source, (
             f"{dockerfile} must not copy the retired packages/ui into the image"
         )

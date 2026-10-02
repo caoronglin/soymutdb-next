@@ -81,6 +81,8 @@ python3 scripts/check_app_shell_assets.py
 
 step "Visible i18n contract (hardcoded text budget)"
 python3 scripts/check_visible_i18n.py
+node scripts/check_visible_i18n_react.mjs --self-test
+node scripts/check_visible_i18n_react.mjs
 
 step "nginx security-header fragments"
 python3 scripts/check_nginx_security_headers.py
@@ -97,11 +99,13 @@ pnpm turbo run lint
 step "Typecheck"
 pnpm turbo run typecheck
 
-step "Vue retirement (shipped React/Umi entry graphs)"
-# The repository still contains legacy Vue source; this asserts each app's
-# *shipped* entry graph is free of it, so a React file re-importing a .vue
-# component fails the gate instead of only misbehaving at runtime.
+step "Vue retirement (shipped entry graphs + workspace scan)"
+# Assert each app's *shipped* React/Umi entry graph is free of Vue, then scan
+# the whole workspace for any remaining Vue source, manifest, catalog or
+# lockfile residue. A React file re-importing a .vue component, or a leftover
+# Vue dependency, fails the gate instead of only misbehaving at runtime.
 node scripts/check-react-entry-graph.mjs
+node scripts/check-vue-retirement.mjs
 
 step "Page Builder registry contract"
 python3 scripts/check_page_registry.py

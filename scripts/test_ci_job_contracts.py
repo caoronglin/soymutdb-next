@@ -960,11 +960,20 @@ class DeliveryArchitectureTests(unittest.TestCase):
         # framework-neutral core; both must resolve to `@soymutdb/i18n-core`,
         # which is asserted by following the adapter rather than by requiring one
         # particular import spelling.
-        for app in ("web", "admin"):
-            i18n = (ROOT / f"apps/{app}/src/lib/i18n.ts").read_text(encoding="utf-8")
+        # Vue is retired, so the two frontends no longer share one per-app
+        # `src/lib/i18n.ts`: web keeps a local adapter module, while admin
+        # initialises the shared package from its React entry point. Name each
+        # entry explicitly rather than assuming a path that no longer exists.
+        i18n_entries = {
+            "web": ROOT / "apps/web/src/lib/i18n.ts",
+            "admin": ROOT / "apps/admin/src/react-app.tsx",
+        }
+        for app, entry in i18n_entries.items():
+            self.assertTrue(entry.exists(), f"{app}: missing i18n entry point {entry}")
+            i18n = entry.read_text(encoding="utf-8")
             self.assertTrue(
                 "@soymutdb/i18n" in i18n,
-                f"apps/{app}/src/lib/i18n.ts must use the shared i18n package",
+                f"{entry.relative_to(ROOT)} must use the shared i18n package",
             )
 
             # If a shared double exists it must be the stable kind.

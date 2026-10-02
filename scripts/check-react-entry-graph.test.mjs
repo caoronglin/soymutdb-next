@@ -5,15 +5,16 @@
  * The risk with a reachability check is that it passes *vacuously*: if the
  * walker stops one hop early, or the entry path is wrong, it reports a clean
  * graph without having inspected anything. These tests pin the walker's
- * behaviour against the retired Vue entry, which is known to contain Vue
- * imports, so a broken walker fails here instead of silently approving the
- * migration.
+ * behaviour against a synthetic Vue entry, so a broken walker fails here
+ * instead of silently approving the retirement.
  *
  * Run with: node --test scripts/check-react-entry-graph.test.mjs
  */
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { dirname, resolve } from "node:path";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { test } from "node:test";
@@ -63,23 +64,21 @@ test("no shipped React entry graph reaches Vue", async () => {
   }
 });
 
-test("the walker is load-bearing: the retired Vue entry is detected", async () => {
-  // Negative control. If this ever reports a clean graph the checker has
-  // stopped guarding anything.
-  const inspected = await inspectApp({
-    appDir: appDirFor(repoRoot, { appDir: "apps/jbrowse" }),
-    entry: "src/App.vue",
-  });
-
-  assert.ok(inspected.vueFiles.length > 0, "expected .vue imports from the Vue entry");
-  assert.ok(
-    inspected.vueImports.some((hit) => hit.specifier === "vue"),
-    "expected the Vue runtime import to be detected",
-  );
-  assert.ok(
-    inspected.vueImports.some((hit) => hit.specifier === "@soymutdb/genome-view"),
-    "expected the Vue genome-view package import to be detected",
-  );
+test("the walker is load-bearing: a synthetic Vue entry is detected", async () => {
+  const root = mkdtempSync(resolve(tmpdir(), "soymutdb-vue-guard-"));
+  try {
+    mkdirSync(resolve(root, "src"));
+    writeFileSync(resolve(root, "src/entry.ts"),
+      'import "./Retired.vue";\nimport "vue";\nimport "@soymutdb/genome-view";\n',
+    );
+    writeFileSync(resolve(root, "src/Retired.vue"), "<template><div /></template>\n");
+    const inspected = await inspectApp({ appDir: root, entry: "src/entry.ts" });
+    assert.ok(inspected.vueFiles.length > 0, "expected a .vue import");
+    assert.ok(inspected.vueImports.some((hit) => hit.specifier === "vue"));
+    assert.ok(inspected.vueImports.some((hit) => hit.specifier === "@soymutdb/genome-view"));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("resolveRelative requires the file to exist", () => {
