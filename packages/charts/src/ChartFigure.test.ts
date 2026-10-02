@@ -107,6 +107,10 @@ describe("ChartFigure", () => {
     expect(host.querySelector('[data-testid="chart-unavailable"]')?.textContent).toContain("could not be drawn");
     expect(host.querySelector('[data-testid="chart-values"]')?.textContent).toContain("missense");
     expect(host.querySelector('[data-testid="chart-values"]')?.textContent).toContain("4");
-    expect(host.querySelector('[role="img"]')?.getAttribute("aria-describedby")).toBeTruthy();
+    // The fallback renders no `role="img"` wrapper, so the description stays
+    // reachable as visually hidden text rather than via aria-describedby.
+    expect(host.querySelector('[data-testid="chart-unavailable"]')?.textContent).toContain(
+      "Variant counts by consequence",
+    );
   });
 });

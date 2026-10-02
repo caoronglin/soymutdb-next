@@ -14,6 +14,7 @@ from fastapi.exceptions import RequestValidationError
 from httpx import ASGITransport, AsyncClient
 
 from app.core.database import get_db
+from app.services.release_context import ReleaseContext, get_release_context
 from app.core.exceptions import (
     SoyMutDBError,
     http_exception_handler,
@@ -152,6 +153,15 @@ async def client(mock_session):
 
     app.dependency_overrides[get_db] = override_get_db
 
+    # Every /expression/* endpoint is release-scoped: without an active
+    # published release the API fails closed with 503 rather than returning
+    # an unversioned result set. The mock DB session cannot resolve that, so
+    # the release context is injected the same way test_exppattern does it.
+    async def override_release_context() -> ReleaseContext:
+        return ReleaseContext(release_id=7, assembly_id=1, assembly="Wm82.v5")
+
+    app.dependency_overrides[get_release_context] = override_release_context
+
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
@@ -250,24 +260,29 @@ class TestGetLibrary:
         count_result = _make_exec_result(scalar_val=3)
         mock_session.execute.side_effect = [find_result, count_result]
 
-        response = await client.get("/api/v1/expression/libraries/1")
+        # The locator is the public sample identifier, never the persistence key.
+        response = await client.get("/api/v1/expression/libraries/SMPL001")
         assert response.status_code == 200
         data = response.json()
-        assert data["id"] == 1
+        assert data["public_id"] == "SMPL001"
         assert data["library_name"] == "Leaf Control Library"
         assert data["expression_data_count"] == 3
+        # The public projection must not leak the surrogate key.
+        assert "id" not in data
 
     async def test_get_library_not_found(self, client, mock_session):
         """Missing library returns 404."""
-        response = await client.get("/api/v1/expression/libraries/999")
+        response = await client.get("/api/v1/expression/libraries/NOPE")
         assert response.status_code == 404
         data = response.json()
         assert "error" in data
 
-    async def test_get_library_invalid_id(self, client, mock_session):
-        """Non-integer library ID returns 422."""
-        response = await client.get("/api/v1/expression/libraries/abc")
-        assert response.status_code == 422
+    async def test_internal_key_is_not_a_locator(self, client, mock_session):
+        """A persistence key must not resolve, and must not be distinguishable
+        from a missing library: both answers are the same 404."""
+        response = await client.get("/api/v1/expression/libraries/1")
+        assert response.status_code == 404
+        assert "error" in response.json()
 
 
 # ---------------------------------------------------------------------------
@@ -343,7 +358,11 @@ class TestGetGeneExpression:
         data = response.json()
         assert len(data["expressions"]) == 1
         assert data["has_more"] is True
-        assert data["next_cursor"] == 1
+        # The cursor is a signed, release- and filter-bound token; it must not
+        # expose the raw persistence key.
+        cursor = data["next_cursor"]
+        assert isinstance(cursor, str) and cursor
+        assert cursor != "1"
 
     async def test_gene_expression_rejects_unbounded_limit(self, client):
         response = await client.get(

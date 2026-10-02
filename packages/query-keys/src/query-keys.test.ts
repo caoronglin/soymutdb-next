@@ -96,7 +96,6 @@ describe("queryKeys", () => {
       assemblyId: "4",
       releaseId: "2026.09",
       siteVariant: "external" as const,
-      federated: false,
     };
 
     const externalKey = queryKeys.search.global(base);
@@ -111,12 +110,10 @@ describe("queryKeys", () => {
       "4",
       "2026.09",
       "external",
-      false,
     ]);
     expect(queryKeys.search.global({ ...base, assemblyId: "5" })).not.toEqual(externalKey);
     expect(queryKeys.search.global({ ...base, releaseId: "2026.10" })).not.toEqual(externalKey);
     expect(queryKeys.search.global({ ...base, siteVariant: "internal" })).not.toEqual(externalKey);
-    expect(queryKeys.search.global({ ...base, federated: true })).not.toEqual(externalKey);
   });
 
   it("scopes gene search caches by query, assembly, page, release and site", () => {

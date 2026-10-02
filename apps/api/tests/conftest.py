@@ -54,10 +54,20 @@ async def _seed_test_roles(connection: AsyncConnection) -> None:
 
     Testcontainers starts from ``Base.metadata.create_all()``, not Alembic, so
     it otherwise misses the role rows that public registration requires.
+
+    The insert is idempotent on purpose. ``SOYMUTDB_TEST_DATABASE_URL`` points
+    at a database that outlives a single session, and a session that is killed
+    (OOM, SIGKILL, a closed laptop) never reaches the ``drop_all`` teardown.
+    Without the conflict guard every later session then fails at setup with
+    ``duplicate key value violates unique constraint "roles_name_key"``, which
+    reads like a code defect and is not one.
     """
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
     await connection.execute(
-        insert(Role),
-        [{"name": role.value} for role in RoleName],
+        pg_insert(Role)
+        .values([{"name": role.value} for role in RoleName])
+        .on_conflict_do_nothing(index_elements=[Role.__table__.c.name])
     )
 
 

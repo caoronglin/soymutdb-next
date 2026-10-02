@@ -16,6 +16,7 @@ from typing import Any
 from unittest.mock import Mock
 
 import pytest
+from fastapi import Response
 
 from app.api.v1 import gwas as gwas_routes
 from app.core.task_contract import GWAS_RUN_TASK
@@ -127,6 +128,7 @@ async def test_upload_route_derives_owner_from_current_user(monkeypatch) -> None
 
     await gwas_routes.create_upload(
         GwasUploadRequest(filename="trait.pheno"),
+        Response(),
         current_user=SimpleNamespace(id=owner_id),
     )
 

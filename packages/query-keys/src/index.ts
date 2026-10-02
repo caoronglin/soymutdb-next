@@ -129,6 +129,9 @@ export const queryKeys = {
   },
   search: {
     all: () => [...queryKeys.all, "search"] as const,
+    // `federated` was dropped from the key when external-source search was
+    // retired: the response can no longer vary by that flag, so keeping it in
+    // the key would only fragment the cache.
     global: (context: {
       query: string | undefined;
       types: readonly string[] | undefined;
@@ -137,7 +140,6 @@ export const queryKeys = {
       assemblyId: string | undefined;
       releaseId: string | null;
       siteVariant: "external" | "internal";
-      federated: boolean;
     }) => [
       ...queryKeys.search.all(),
       "global",
@@ -148,7 +150,6 @@ export const queryKeys = {
       context.assemblyId ?? null,
       context.releaseId,
       context.siteVariant,
-      context.federated,
     ] as const,
   },
   mutants: {

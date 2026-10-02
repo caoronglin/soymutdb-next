@@ -217,6 +217,7 @@ apps/api/.venv
 
 # Local service state and generated validation output (never release inputs)
 dump.rdb
+temp-*.rdb
 appendonlydir/
 apps/worker/celerybeat-schedule
 e2e/visual-artifacts/

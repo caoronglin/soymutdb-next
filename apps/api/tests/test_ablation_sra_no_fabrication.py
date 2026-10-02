@@ -145,7 +145,7 @@ def test_samples_endpoint_is_labelled_demo_in_demo_mode(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_widget_returns_an_unavailable_context_on_fetch_failure(monkeypatch):
+def test_widget_returns_an_unavailable_context_on_fetch_failure(monkeypatch, offline):
     """Ablation: the widget used to keep the demo record and rewrite ``Run``."""
     _settings(monkeypatch, demo=False)
 
@@ -157,7 +157,7 @@ def test_widget_returns_an_unavailable_context_on_fetch_failure(monkeypatch):
     assert ctx["is_fallback"] is False
 
 
-def test_widget_never_attaches_demo_metadata_to_another_accession(monkeypatch):
+def test_widget_never_attaches_demo_metadata_to_another_accession(monkeypatch, offline):
     """Even in demo mode an unrelated accession must not get fixture data."""
     _settings(monkeypatch, demo=True)
 
@@ -168,7 +168,9 @@ def test_widget_never_attaches_demo_metadata_to_another_accession(monkeypatch):
     assert "SRR999999" in ctx["fetch_error"]
 
 
-def test_widget_serves_the_fixture_only_for_its_own_accession_in_demo_mode(monkeypatch):
+def test_widget_serves_the_fixture_only_for_its_own_accession_in_demo_mode(
+    monkeypatch, offline
+):
     _settings(monkeypatch, demo=True)
 
     ctx = asyncio.run(sra_widget.sra_run_context({"run": _DEMO_ACCESSION}))

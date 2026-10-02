@@ -137,6 +137,10 @@ export function ChartFigure<TDatum = unknown>({
           data-testid="chart-unavailable"
           style={{ border: "1px dashed currentColor", borderRadius: 6, opacity: 0.7, padding: 16, textAlign: "center" }}
         >
+          {/* The fallback has no `role="img"` wrapper, so the description the
+              chart would have exposed to assistive tech must still be in the
+              accessibility tree. */}
+          {description ? <span id={descriptionId} style={visuallyHidden}>{description}</span> : null}
           {label} — the graphic could not be drawn; the exact values are listed below.
         </p>
       ) : null}
