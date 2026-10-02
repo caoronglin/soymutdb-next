@@ -108,7 +108,7 @@ export function NewsPreviewModal({ open, article, onClose }: NewsPreviewModalPro
       <Alert
         type="info"
         showIcon
-        message={t("admin.news.preview.note")}
+        title={t("admin.news.preview.note")}
         style={{ marginBottom: 16 }}
       />
       {loading ? (

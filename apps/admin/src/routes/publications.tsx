@@ -283,7 +283,7 @@ export default function AdminPublicationsPage() {
         <Alert
           type="error"
           showIcon
-          message={t("admin.content.publication.loadError", { defaultValue: "Could not load publications" })}
+          title={t("admin.content.publication.loadError", { defaultValue: "Could not load publications" })}
         />
       ) : null}
 

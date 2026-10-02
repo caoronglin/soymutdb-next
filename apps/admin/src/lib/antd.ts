@@ -47,6 +47,7 @@ export {
   Row,
   Select,
   Skeleton,
+  Segmented,
   Space,
   Spin,
   Statistic,
@@ -61,6 +62,7 @@ export {
 } from "@soymutdb/ui-react";
 export type {
   FormProps,
+  InputRef,
   MenuProps,
   TableColumnsType,
   TableProps,

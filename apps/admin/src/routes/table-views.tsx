@@ -241,7 +241,7 @@ export default function TableViewsPage() {
       <Alert
         type="info"
         showIcon
-        message="列顺序、显隐与操作按钮都在此配置；跨组装同源列（W82_V2 / W82_V4 / DN53_V1）默认关闭，按需添加。"
+        title="列顺序、显隐与操作按钮都在此配置；跨组装同源列（W82_V2 / W82_V4 / DN53_V1）默认关闭，按需添加。"
         description="保存为模板后立即生效：门户按物种、站点变体与 release 解析这一列集合。"
       />
 
@@ -492,7 +492,7 @@ export default function TableViewsPage() {
         <Alert
           type="info"
           showIcon
-          message="一个管理面板可管理多个物种库：在此登记每个实例的 API / JBrowse / 门户地址，数据仍留在各自实例内。"
+          title="一个管理面板可管理多个物种库：在此登记每个实例的 API / JBrowse / 门户地址，数据仍留在各自实例内。"
           style={{ marginBottom: 12 }}
         />
         {instancesQuery.isLoading ? (

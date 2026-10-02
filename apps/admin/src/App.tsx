@@ -26,6 +26,7 @@ const DashboardPage = lazy(() => import("./routes/index"));
 const UsageGuidePage = lazy(() => import("./routes/usage-guide"));
 const LegacyUnavailablePage = lazy(() => import("./routes/legacy-unavailable"));
 const ReleasesPage = lazy(() => import("./routes/releases"));
+const PreviewTestDataPage = lazy(() => import("./routes/preview-test-data"));
 const InstancesPage = lazy(() => import("./routes/instances"));
 const SiteBrandPage = lazy(() => import("./routes/settings/brand"));
 const ImportsPage = lazy(() => import("./routes/imports"));
@@ -57,10 +58,10 @@ function RouteLoading() {
       <Skeleton className="h-8 w-48" />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {Array.from({ length: 4 }).map((_, i) => (
-          <Skeleton key={i} className="h-28 w-full rounded-xl" />
+          <Skeleton key={i} className="h-28 w-full rounded-lg" />
         ))}
       </div>
-      <Skeleton className="h-96 w-full rounded-xl" />
+      <Skeleton className="h-96 w-full rounded-lg" />
     </div>
   );
 }
@@ -149,6 +150,12 @@ const instancesRoute = createRoute({
   getParentRoute: () => authLayoutRoute,
   path: "/instances",
   component: () => withSuspense(InstancesPage),
+});
+
+const previewTestDataRoute = createRoute({
+  getParentRoute: () => authLayoutRoute,
+  path: "/preview-test-data",
+  component: () => withSuspense(PreviewTestDataPage),
 });
 
 const resourceCatalogRoute = createRoute({
@@ -346,6 +353,7 @@ const routeTree = rootRoute.addChildren([
     usageGuideRoute,
     releasesRoute,
     instancesRoute,
+    previewTestDataRoute,
     resourceCatalogRoute,
     importsRoute,
     newImportRoute,

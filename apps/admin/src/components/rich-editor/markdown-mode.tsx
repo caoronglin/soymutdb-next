@@ -53,7 +53,7 @@ export function MarkdownMode({ editor, onApplied }: MarkdownModeProps) {
       <Alert
         type="info"
         showIcon
-        message={t("admin.editor.markdownHint")}
+        title={t("admin.editor.markdownHint")}
         style={{ margin: "8px 12px 0" }}
       />
       <div className="rl-editor-markdown-wrap" style={{ position: "relative" }}>

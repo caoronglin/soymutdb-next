@@ -120,7 +120,7 @@ export default function SiteBrandSettingsPage() {
           type="error"
           showIcon
           data-testid="brand-load-error"
-          message={t("admin.brand.loadError")}
+          title={t("admin.brand.loadError")}
           action={<Button size="small" onClick={() => void query.refetch()} data-testid="brand-retry">{t("common.retry")}</Button>}
         />
       ) : (
@@ -178,10 +178,10 @@ export default function SiteBrandSettingsPage() {
               </Button>
             </Space>
 
-            <Space direction="vertical" size="small" style={{ display: "flex", marginBottom: 16 }}>
-              {noticeMessage ? <Alert type="success" showIcon message={noticeMessage} data-testid="brand-notice" /> : null}
-              {conflictMessage ? <Alert type="warning" showIcon message={conflictMessage} data-testid="brand-conflict" /> : null}
-              {errorMessage ? <Alert type="error" showIcon message={errorMessage} data-testid="brand-error" /> : null}
+            <Space orientation="vertical" size="small" style={{ display: "flex", marginBottom: 16 }}>
+              {noticeMessage ? <Alert type="success" showIcon title={noticeMessage} data-testid="brand-notice" /> : null}
+              {conflictMessage ? <Alert type="warning" showIcon title={conflictMessage} data-testid="brand-conflict" /> : null}
+              {errorMessage ? <Alert type="error" showIcon title={errorMessage} data-testid="brand-error" /> : null}
             </Space>
 
             <Button type="primary" htmlType="submit" loading={saveMutation.isPending} data-testid="brand-save">

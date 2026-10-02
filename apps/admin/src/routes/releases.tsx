@@ -43,7 +43,7 @@ export default function ReleasesPage() {
       dataIndex: "id",
       key: "id",
       render: (_id, release) => (
-        <Space direction="vertical" size={2}>
+        <Space orientation="vertical" size={2}>
           <Typography.Text code>{release.id}</Typography.Text>
           {release.name ? <Typography.Text type="secondary">{release.name}</Typography.Text> : null}
           {release.is_active ? <Tag color="green">{t("releases.active")}</Tag> : null}
@@ -91,7 +91,7 @@ export default function ReleasesPage() {
           type="error"
           showIcon
           data-testid="releases-error"
-          message={t("common.errorDescription")}
+          title={t("common.errorDescription")}
           action={<Button size="small" onClick={() => void query.refetch()} data-testid="releases-retry">{t("common.retry")}</Button>}
         />
       ) : releases.length === 0 ? (
@@ -120,7 +120,7 @@ export default function ReleasesPage() {
           {provenanceQuery.isPending ? (
             <Card loading data-testid="provenance-loading" />
           ) : provenanceQuery.isError ? (
-            <Alert type="error" showIcon data-testid="provenance-error" message={t("common.errorDescription")} />
+            <Alert type="error" showIcon data-testid="provenance-error" title={t("common.errorDescription")} />
           ) : provenance.length === 0 ? (
             <Typography.Text type="secondary" data-testid="provenance-empty">{t("common.noData")}</Typography.Text>
           ) : (

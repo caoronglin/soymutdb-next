@@ -1,30 +1,56 @@
-import { LoginOutlined, LockOutlined, SafetyCertificateOutlined, ExclamationCircleOutlined, ArrowRightOutlined } from "@ant-design/icons";
+/**
+ * Admin login page — public route (no AdminLayout). Submits credentials via
+ * the auth context and redirects to the dashboard on success.
+ *
+ * Structurally aligned with the Ant Design CLI `Form / Login Form` demo
+ * (`antd demo Form login`): every field is a `Form.Item`, the password uses
+ * `Input.Password`, input prefixes go through `Input prefix=`, and the submit
+ * button lives inside its own `Form.Item` so antd owns the 24px vertical
+ * rhythm.
+ *
+ * Why this was rewritten: the previous revision wrapped only the error banner
+ * and the two fields in a Tailwind `space-y-4` container and left the submit
+ * button in a sibling `<div>`. The button therefore received no top margin and
+ * overlapped the password-strength readout. Spacing now comes entirely from
+ * antd tokens, per `antd design.md` ("snap every gap, inset, and gutter to the
+ * 4px grid through the spacing scale", "don't use magic numbers").
+ */
+import {
+  ArrowRightOutlined,
+  LockOutlined,
+  LoginOutlined,
+  SafetyCertificateOutlined,
+  UserOutlined,
+} from "@ant-design/icons";
 import * as React from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
-import { cn } from "../lib/cn";
-import { Typography, Card, Button, Input } from "@/lib/antd";
+import { Alert, Button, Card, Flex, Form, Input, Progress, Typography, theme } from "@/lib/antd";
 import { ApiError } from "@soymutdb/api-client";
 import { useAuth } from "../lib/auth-context";
 
-/** Password strength evaluation result. */
+/** Semantic strength tier; resolved to an antd colour token at render time. */
+type StrengthTier = "neutral" | "error" | "warning" | "success";
+
 interface StrengthInfo {
-  score: 0 | 1 | 2 | 3 | 4;
+  /** 0, 25, 50, 75 or 100 — one step per scoring point. */
+  percent: number;
+  tier: StrengthTier;
   label: string;
-  barClass: string;
-  textClass: string;
 }
 
 type StrengthTranslate = (key: string, defaultValue: string) => string;
 
-/** Score the entered password in real time (0–4). */
+/**
+ * Score the entered password in real time. The scoring rules are unchanged
+ * from the original implementation; only the presentation moved to antd.
+ */
 function evaluateStrength(pw: string, t: StrengthTranslate): StrengthInfo {
   if (!pw) {
     return {
-      score: 0,
+      percent: 0,
+      tier: "neutral",
       label: t("admin.login.enterPassword", "Enter a password"),
-      barClass: "bg-muted",
-      textClass: "text-muted-foreground",
     };
   }
   let raw = 0;
@@ -33,32 +59,51 @@ function evaluateStrength(pw: string, t: StrengthTranslate): StrengthInfo {
   if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) raw++;
   if (/\d/.test(pw)) raw++;
   if (/[^A-Za-z0-9]/.test(pw)) raw++;
-  const score = Math.min(raw, 4) as StrengthInfo["score"];
-  const map: Record<number, Omit<StrengthInfo, "score">> = {
-    0: { label: t("admin.login.tooShort", "Too short"), barClass: "bg-destructive", textClass: "text-destructive" },
-    1: { label: t("admin.login.weak", "Weak"), barClass: "bg-destructive", textClass: "text-destructive" },
-    2: { label: t("admin.login.fair", "Fair"), barClass: "bg-amber-500", textClass: "text-amber-600" },
-    3: { label: t("admin.login.good", "Good"), barClass: "bg-lime-500", textClass: "text-lime-600" },
-    4: { label: t("admin.login.strong", "Strong"), barClass: "bg-primary", textClass: "text-primary" },
+  const score = Math.min(raw, 4);
+  const tiers: Record<number, [StrengthTier, string]> = {
+    0: ["error", t("admin.login.tooShort", "Too short")],
+    1: ["error", t("admin.login.weak", "Weak")],
+    2: ["warning", t("admin.login.fair", "Fair")],
+    3: ["success", t("admin.login.good", "Good")],
+    4: ["success", t("admin.login.strong", "Strong")],
   };
-  return { score, ...map[score] };
+  const [tier, label] = tiers[score];
+  return { percent: score * 25, tier, label };
 }
 
-/**
- * Admin login page — public route (no AdminLayout). Submits credentials via
- * the auth context and redirects to the dashboard on success.
- */
+interface LoginFormValues {
+  username: string;
+  password: string;
+}
+
 export default function LoginPage() {
   const { t } = useTranslation();
   const { login, isAuthenticated } = useAuth();
   const navigate = useNavigate();
+  const { token } = theme.useToken();
+  const [form] = Form.useForm<LoginFormValues>();
 
-  const [username, setUsername] = React.useState("");
-  const [password, setPassword] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
 
-  const strength = evaluateStrength(password, (key, defaultValue) => t(key, { defaultValue }));
+  const password = Form.useWatch("password", form) ?? "";
+  const strength = React.useMemo(
+    () => evaluateStrength(password, (key, defaultValue) => t(key, { defaultValue })),
+    [password, t],
+  );
+
+  const strengthColor = React.useMemo(() => {
+    switch (strength.tier) {
+      case "error":
+        return token.colorError;
+      case "warning":
+        return token.colorWarning;
+      case "success":
+        return token.colorSuccess;
+      default:
+        return token.colorTextTertiary;
+    }
+  }, [strength.tier, token]);
 
   // If a session already exists, bounce to the dashboard.
   React.useEffect(() => {
@@ -67,17 +112,18 @@ export default function LoginPage() {
     }
   }, [isAuthenticated, navigate]);
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  async function handleFinish(values: LoginFormValues) {
     if (submitting) return;
     setError(null);
     setSubmitting(true);
     try {
-      await login(username.trim(), password);
+      await login(values.username.trim(), values.password);
       await navigate({ to: "/" });
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
-        setError(t("admin.login.invalidCredentials", { defaultValue: "Invalid username or password." }));
+        setError(
+          t("admin.login.invalidCredentials", { defaultValue: "Invalid username or password." }),
+        );
       } else if (err instanceof Error && err.message) {
         setError(err.message);
       } else {
@@ -89,115 +135,147 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
-      <div className="w-full max-w-sm">
+    <Flex
+      align="center"
+      justify="center"
+      style={{ minHeight: "100vh", padding: token.padding, background: token.colorBgLayout }}
+    >
+      <div style={{ width: "100%", maxWidth: 384 }}>
         {/* Brand header */}
-        <div className="mb-6 flex flex-col items-center gap-2 text-center">
-          <div className="flex size-12 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
-            <SafetyCertificateOutlined className="size-6" />
-          </div>
-          <h1 className="font-serif text-2xl font-semibold">{t("admin.login.brandTitle", { defaultValue: "SoyMutDB Admin" })}</h1>
-          <p className="text-sm text-muted-foreground">
+        <Flex
+          vertical
+          align="center"
+          gap={token.marginSM}
+          style={{ marginBottom: token.marginLG }}
+        >
+          <Flex
+            align="center"
+            justify="center"
+            style={{
+              width: 48,
+              height: 48,
+              borderRadius: token.borderRadiusLG,
+              background: token.colorPrimary,
+              color: token.colorTextLightSolid,
+            }}
+          >
+            <SafetyCertificateOutlined style={{ fontSize: 24 }} />
+          </Flex>
+          <Typography.Title level={3} style={{ margin: 0 }}>
+            {t("admin.login.brandTitle", { defaultValue: "SoyMutDB Admin" })}
+          </Typography.Title>
+          <Typography.Text type="secondary">
             {t("admin.login.signInSubtitle", { defaultValue: "Sign in to the management console" })}
-          </p>
-        </div>
+          </Typography.Text>
+        </Flex>
 
         <Card>
-          <div>
-            <Typography.Title level={5} className="flex items-center gap-2">
-              <LoginOutlined className="size-4" />
-              {t("admin.login.signIn", { defaultValue: "Sign in" })}
+          <Flex vertical gap={token.marginXS} style={{ marginBottom: token.marginMD }}>
+            <Typography.Title level={5} style={{ margin: 0 }}>
+              <Flex align="center" gap={token.marginXS}>
+                <LoginOutlined />
+                {t("admin.login.signIn", { defaultValue: "Sign in" })}
+              </Flex>
             </Typography.Title>
             <Typography.Text type="secondary">
-              {t("admin.login.enterCredentials", { defaultValue: "Enter your administrator credentials to continue." })}
+              {t("admin.login.enterCredentials", {
+                defaultValue: "Enter your administrator credentials to continue.",
+              })}
             </Typography.Text>
-          </div>
-          <form onSubmit={handleSubmit} noValidate>
-            <div className="space-y-4">
-              {error ? (
-                <div
-                  role="alert"
-                  className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
-                >
-                  <ExclamationCircleOutlined className="mt-0.5 size-4 shrink-0" />
-                  <span>{error}</span>
-                </div>
-              ) : null}
+          </Flex>
 
-              <div className="space-y-1.5">
-                <label htmlFor="username">{t("admin.login.username", { defaultValue: "Username" })}</label>
-                <Input
-                  id="username"
-                  name="username"
-                  type="text"
-                  autoComplete="username"
-                  required
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="admin"
-                  disabled={submitting}
-                />
-              </div>
+          <Form<LoginFormValues>
+            form={form}
+            name="login"
+            layout="vertical"
+            requiredMark={false}
+            disabled={submitting}
+            onFinish={handleFinish}
+            initialValues={{ username: "", password: "" }}
+          >
+            {error ? (
+              <Form.Item>
+                <Alert type="error" showIcon title={error} />
+              </Form.Item>
+            ) : null}
 
-              <div className="space-y-1.5">
-                <label htmlFor="password">{t("admin.login.password", { defaultValue: "Password" })}</label>
-                <div className="relative">
-                  <LockOutlined
-                    className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-                    aria-hidden
+            <Form.Item
+              name="username"
+              label={t("admin.login.username", { defaultValue: "Username" })}
+              rules={[
+                {
+                  required: true,
+                  message: t("admin.login.usernameRequired", {
+                    defaultValue: "Please enter your username",
+                  }),
+                },
+              ]}
+            >
+              <Input
+                prefix={<UserOutlined />}
+                autoComplete="username"
+                placeholder="admin"
+                size="large"
+              />
+            </Form.Item>
+
+            <Form.Item
+              name="password"
+              label={t("admin.login.password", { defaultValue: "Password" })}
+              rules={[
+                {
+                  required: true,
+                  message: t("admin.login.passwordRequired", {
+                    defaultValue: "Please enter your password",
+                  }),
+                },
+              ]}
+              extra={
+                <Flex vertical gap={token.marginXS}>
+                  <Progress
+                    percent={strength.percent}
+                    showInfo={false}
+                    size="small"
+                    strokeColor={strengthColor}
+                    railColor={token.colorFillSecondary}
+                    aria-label={strength.label}
                   />
-                  <Input
-                    id="password"
-                    name="password"
-                    type="password"
-                    autoComplete="current-password"
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    disabled={submitting}
-                    className="pl-9"
-                  />
-                </div>
-
-                {/* Real-time password strength indicator */}
-                <div className="space-y-1">
-                  <div className="flex h-1.5 w-full gap-1" aria-hidden>
-                    {[0, 1, 2, 3].map((i) => (
-                      <div
-                        key={i}
-                        className={cn(
-                          "h-full flex-1 rounded-full transition-colors",
-                          i < strength.score ? strength.barClass : "bg-muted",
-                        )}
-                      />
-                    ))}
-                  </div>
-                  <p className={cn("text-xs", strength.textClass)}>
+                  <Typography.Text style={{ color: strengthColor, fontSize: token.fontSizeSM }}>
                     {strength.label}
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div>
-              <Button htmlType="submit" className="w-full" disabled={submitting}>
+                  </Typography.Text>
+                </Flex>
+              }
+            >
+              <Input.Password
+                prefix={<LockOutlined />}
+                autoComplete="current-password"
+                placeholder="••••••••"
+                size="large"
+              />
+            </Form.Item>
+
+            <Form.Item style={{ marginBottom: 0 }}>
+              <Button block type="primary" size="large" htmlType="submit" loading={submitting}>
                 {submitting ? (
                   t("admin.login.signingIn", { defaultValue: "Signing in…" })
                 ) : (
-                  <>
+                  <Flex align="center" justify="center" gap={token.marginXS}>
                     {t("admin.login.signIn", { defaultValue: "Sign in" })}
-                    <ArrowRightOutlined className="size-4" />
-                  </>
+                    <ArrowRightOutlined />
+                  </Flex>
                 )}
               </Button>
-            </div>
-          </form>
+            </Form.Item>
+          </Form>
         </Card>
 
-        <p className="mt-6 text-center text-xs text-muted-foreground">
+        <Typography.Text
+          type="secondary"
+          style={{ display: "block", marginTop: token.marginLG, textAlign: "center" }}
+        >
           {t("admin.login.authorizedOnly", { defaultValue: "Authorized personnel only." })}
-        </p>
+        </Typography.Text>
       </div>
-    </div>
+    </Flex>
   );
 }

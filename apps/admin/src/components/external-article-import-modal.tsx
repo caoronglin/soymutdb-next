@@ -125,7 +125,7 @@ export function ExternalArticleImportModal({
       <Alert
         type="info"
         showIcon
-        message="Review before saving"
+        title="Review before saving"
         description="Previewing or applying this source does not create, save, or publish a news article. Review the imported content and make any edits before saving it in the news form."
         style={{ marginBottom: 16 }}
       />
@@ -188,7 +188,7 @@ export function ExternalArticleImportModal({
         <Alert
           type="error"
           showIcon
-          message="Preview failed"
+          title="Preview failed"
           description={error}
           style={{ marginTop: 16 }}
         />

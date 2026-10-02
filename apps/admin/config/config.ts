@@ -8,9 +8,23 @@ type WebpackChain = Parameters<NonNullable<Parameters<typeof defineConfig>[0]["c
 const env = process.env;
 const development = env.NODE_ENV === "development";
 const base = normalizeBasePath(env.VITE_BASE_URL);
-const apiBaseUrl =
-  env.VITE_API_BASE_URL?.trim() || (development ? "http://localhost:8010" : undefined);
-const apiOrigin = requireDeploymentOrigin(apiBaseUrl, "Admin API", {
+// Two different jobs, deliberately fed from two different variables.
+//
+// `apiBaseUrl` is baked into `import.meta.env` and therefore read *by the
+// browser*, so it must stay unset for any deployment that serves the console
+// and the API from the same origin — setting it pins the artifact to one host
+// and breaks the console for every other hostname (e.g. a LAN address). The
+// client already falls back to the same-origin `/api/v1`.
+//
+// `apiOrigin` only feeds the CSP `connect-src` allowlist and the artifact
+// identity checks, so it still needs an absolute URL at build time. It accepts
+// the non-`VITE_`-prefixed spelling, which Vite does not auto-inject.
+const apiBaseUrl = env.VITE_API_BASE_URL?.trim() || undefined;
+const apiOriginValue =
+  apiBaseUrl ||
+  env.SOYMUTDB_ADMIN_API_URL?.trim() ||
+  (development ? "http://localhost:8010" : undefined);
+const apiOrigin = requireDeploymentOrigin(apiOriginValue, "Admin API", {
   allowInsecureHttp: development || env.SOYMUTDB_LOCAL_TEST_PREVIEW_ENABLED === "true" || env.SOYMUTDB_LOCAL_TEST_PREVIEW_ENABLED === "1",
 });
 const configuredDevHosts = resolveDevAllowedHosts(env.SOYMUTDB_DEV_ALLOWED_HOSTS);

@@ -8,7 +8,7 @@ export default function IntegrationsSettingsPage() {
     <div className="space-y-6">
       <SettingsDomainPage domain="integrations" />
       <Card title={t("admin.integrations.wecom.title", { defaultValue: "WeCom group bot" })}>
-        <Space direction="vertical" size="middle" className="w-full">
+        <Space orientation="vertical" size="middle" className="w-full">
           <Typography.Paragraph type="secondary" className="mb-0">
             {t("admin.integrations.wecom.description", {
               defaultValue: "Send compact operational summaries to a WeCom group. Full records remain in the authenticated admin tables.",
@@ -17,7 +17,7 @@ export default function IntegrationsSettingsPage() {
           <Alert
             type="info"
             showIcon
-            message={t("admin.integrations.wecom.secretTitle", { defaultValue: "Secret configuration" })}
+            title={t("admin.integrations.wecom.secretTitle", { defaultValue: "Secret configuration" })}
             description={t("admin.integrations.wecom.secretDescription", {
               defaultValue: "Configure SOYMUTDB_WECOM_BOT_WEBHOOK in the worker secret environment. The webhook is never stored in the database or returned by the API.",
             })}

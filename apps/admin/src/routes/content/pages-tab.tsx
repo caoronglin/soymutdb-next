@@ -337,7 +337,7 @@ export function PagesTab({ PageFormDialog, VersionHistoryDialog, VersionDetail }
           type="info"
           showIcon
           data-testid="content-edit-loading"
-          message={t("admin.content.editLoading", { defaultValue: "Loading the requested page…" })}
+          title={t("admin.content.editLoading", { defaultValue: "Loading the requested page…" })}
         />
       ) : null}
       {search.edit && requestedEditQuery.isError ? (
@@ -345,7 +345,7 @@ export function PagesTab({ PageFormDialog, VersionHistoryDialog, VersionDetail }
           type="error"
           showIcon
           data-testid="content-edit-error"
-          message={t("admin.content.editLoadError", { defaultValue: "The requested page could not be loaded." })}
+          title={t("admin.content.editLoadError", { defaultValue: "The requested page could not be loaded." })}
           action={(
             <Button
               size="small"

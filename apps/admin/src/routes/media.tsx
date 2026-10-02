@@ -223,7 +223,7 @@ export default function MediaPage() {
         <Alert
           type="error"
           showIcon
-          message={t("admin.media.loadError")}
+          title={t("admin.media.loadError")}
           description={error}
           action={<Button onClick={() => setReload((value) => value + 1)}>{t("admin.media.retry")}</Button>}
         />
@@ -323,7 +323,7 @@ export default function MediaPage() {
         confirmLoading={saving}
         okText={t("admin.media.saveMetadata")}
       >
-        <Space direction="vertical" size="middle" className="w-full">
+        <Space orientation="vertical" size="middle" className="w-full">
           <Input.TextArea
             rows={3}
             maxLength={2000}
@@ -370,7 +370,7 @@ export default function MediaPage() {
       >
         <Typography.Paragraph>{t("admin.media.archiveConfirm")}</Typography.Paragraph>
         {archiving && archiving.usage_count > 0 ? (
-          <Alert type="warning" showIcon message={t("admin.media.archiveInUse", { count: archiving.usage_count })} />
+          <Alert type="warning" showIcon title={t("admin.media.archiveInUse", { count: archiving.usage_count })} />
         ) : null}
       </Modal>
     </div>

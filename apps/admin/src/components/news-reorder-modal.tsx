@@ -144,7 +144,7 @@ export function NewsReorderModal({ open, onClose, onSaved }: NewsReorderModalPro
         </Space>
       }
     >
-      <Alert type="info" showIcon message={t("admin.news.reorder.hint")} style={{ marginBottom: 16 }} />
+      <Alert type="info" showIcon title={t("admin.news.reorder.hint")} style={{ marginBottom: 16 }} />
       {loading ? (
         <Typography.Text type="secondary">
           <LoadingOutlined /> {t("admin.news.loading")}

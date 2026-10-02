@@ -1,4 +1,4 @@
-import { DashboardOutlined, CloudUploadOutlined, FolderOpenOutlined, FileTextOutlined, ReadOutlined, SnippetsOutlined, SettingOutlined, CheckOutlined, BarChartOutlined, LeftOutlined, RightOutlined, EnvironmentOutlined, RiseOutlined, PictureOutlined } from "@ant-design/icons";
+import { DashboardOutlined, CloudUploadOutlined, FolderOpenOutlined, FileTextOutlined, ReadOutlined, SnippetsOutlined, SettingOutlined, CheckOutlined, BarChartOutlined, LeftOutlined, RightOutlined, EnvironmentOutlined, RiseOutlined, PictureOutlined, ExperimentOutlined } from "@ant-design/icons";
 import type { ComponentType } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
@@ -35,6 +35,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { path: "/imports", label: "Imports", labelKey: "admin.shell.imports", icon: CloudUploadOutlined },
       { path: "/releases", label: "Releases", labelKey: "admin.releases", icon: RiseOutlined },
       { path: "/instances", label: "Instances", labelKey: "admin.instances.title", icon: EnvironmentOutlined },
+      { path: "/preview-test-data", label: "Test Data Preview", labelKey: "admin.shell.previewTestData", icon: ExperimentOutlined },
     ],
   },
   {

@@ -5,7 +5,7 @@ import { Link } from "@tanstack/react-router";
 import { http } from "@soymutdb/api-client";
 import { fetchHomepageStats } from "@soymutdb/api-client";
 import { formatNumber } from "../lib/format";
-import { Alert, Typography } from "@/lib/antd";
+import { Alert, Button, Typography } from "@/lib/antd";
 import { StatCard } from "../components/stat-card";
 import { lazy, Suspense } from "react";
 
@@ -65,7 +65,7 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <div><Typography.Title level={2}>{t("admin.dashboard.systemOverview", { defaultValue: "System Overview" })}</Typography.Title><Typography.Text type="secondary">{t("admin.dashboard.metricsSubtitle", { defaultValue: "Real-time metrics for the SoyMutDB platform." })}</Typography.Text></div>
 
-      <section className="rounded-xl border border-primary/20 bg-primary/5 p-5">
+      <section className="rounded-lg border border-primary/20 bg-primary/5 p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-xs font-medium uppercase tracking-wider text-primary">{t("admin.dashboard.nextActions", { defaultValue: "Next actions" })}</p>
@@ -82,9 +82,20 @@ export default function DashboardPage() {
         <Alert
           type="error"
           showIcon
-          message={t("admin.dashboard.metricsUnavailable", { defaultValue: "Dashboard metrics unavailable" })}
+          title={t("admin.dashboard.metricsUnavailable", { defaultValue: "Dashboard metrics unavailable" })}
           description={t("admin.dashboard.metricsUnavailableDesc", { defaultValue: "The API did not return a current metric snapshot; no placeholder values are shown." })}
-          action={<button type="button" className="underline" onClick={() => { void homepageStatsQuery.refetch(); void dashboardStatsQuery.refetch(); }}>{t("admin.dashboard.retry", { defaultValue: "Retry" })}</button>}
+          action={
+            <Button
+              type="link"
+              size="small"
+              onClick={() => {
+                void homepageStatsQuery.refetch();
+                void dashboardStatsQuery.refetch();
+              }}
+            >
+              {t("admin.dashboard.retry", { defaultValue: "Retry" })}
+            </Button>
+          }
         />
       ) : null}
 
@@ -125,7 +136,20 @@ export default function DashboardPage() {
       </div>
 
       {/* Charts */}
-      {seriesError ? <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">{t("admin.dashboard.trendUnavailable", { defaultValue: "Dashboard trend data unavailable." })} <button type="button" className="underline" onClick={() => void refetchSeries()}>{t("admin.dashboard.retry", { defaultValue: "Retry" })}</button></div> : null}
+      {seriesError ? (
+        <Alert
+          type="error"
+          showIcon
+          title={t("admin.dashboard.trendUnavailable", {
+            defaultValue: "Dashboard trend data unavailable.",
+          })}
+          action={
+            <Button type="link" size="small" onClick={() => void refetchSeries()}>
+              {t("admin.dashboard.retry", { defaultValue: "Retry" })}
+            </Button>
+          }
+        />
+      ) : null}
       <div className="grid gap-4 lg:grid-cols-2">
         <Suspense fallback={<ChartLoading />}><ImportThroughputChart data={seriesLoading ? [] : importData} /></Suspense>
         <Suspense fallback={<ChartLoading />}><QueryLatencyChart data={seriesLoading ? [] : latencyData} /></Suspense>
@@ -156,5 +180,5 @@ export default function DashboardPage() {
 }
 
 function ChartLoading() {
-  return <div className="h-80 animate-pulse rounded-xl border border-border bg-muted/40" />;
+  return <div className="h-80 animate-pulse rounded-lg border border-border bg-muted/40" />;
 }

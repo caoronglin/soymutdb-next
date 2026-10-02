@@ -24,14 +24,6 @@
     "node_modules",
     "src/**/*.test.ts",
     "src/**/*.test.tsx",
-    "src/main.ts",
-    "src/router/index.ts",
-    "src/stores/**",
-    "src/test/**",
-    "src/views/**",
-    "src/lib/auth.ts",
-    "src/lib/i18n.ts",
-    "src/lib/theme.ts",
-    "src/lib/instance-context.ts"
+    "src/test/**"
   ]
 }

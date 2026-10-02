@@ -147,7 +147,7 @@ export function MediaPicker({
             <Alert
               type="error"
               showIcon
-              message={t("admin.media.picker.loadError")}
+              title={t("admin.media.picker.loadError")}
               description={error}
               action={<Button onClick={() => setReloadToken((token) => token + 1)}>{t("admin.media.picker.retry")}</Button>}
             />

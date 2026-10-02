@@ -3,10 +3,18 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { requireDeploymentOrigin } from "@soymutdb/shared/deployment";
 
+// Same split as `config/config.ts`: the CSP needs an absolute origin, while the
+// value that reaches the browser (`VITE_API_BASE_URL`) must stay unset for
+// same-origin deployments. Accept the non-`VITE_`-prefixed spelling for the
+// origin-only case.
 const apiOrigin = requireDeploymentOrigin(
-  process.env.VITE_API_BASE_URL,
+  process.env.VITE_API_BASE_URL?.trim() || process.env.SOYMUTDB_ADMIN_API_URL?.trim(),
   "Admin API",
-  { allowInsecureHttp: process.env.NODE_ENV === "development" },
+  {
+    allowInsecureHttp:
+      process.env.NODE_ENV === "development" ||
+      process.env.SOYMUTDB_LOCAL_TEST_PREVIEW_ENABLED === "true",
+  },
 );
 const distDir = resolve(process.env.SOYMUTDB_DIST_DIR?.trim() || "dist");
 const headersPath = resolve(distDir, "_headers");

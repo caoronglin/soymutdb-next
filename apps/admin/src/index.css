@@ -56,9 +56,12 @@
 
 :root {
     color-scheme: light;
+    /* Aligned with antd's derivation (base radius 10px => Button 10px,
+       Card 12px). The previous 14/18px values made Tailwind surfaces disagree
+       with the antd components sitting next to them. */
     --radius: 0.625rem;
-    --radius-lg: 0.875rem;
-    --radius-xl: 1.125rem;
+    --radius-lg: 0.75rem;
+    --radius-xl: 1rem;
     --background: oklch(0.991 0.004 148);
     --foreground: oklch(0.195 0.028 152);
     --card: oklch(1 0 0);

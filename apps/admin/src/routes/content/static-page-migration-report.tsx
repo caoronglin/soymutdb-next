@@ -1,7 +1,16 @@
 import { EyeOutlined } from "@ant-design/icons";
 import { useMutation } from "@tanstack/react-query";
 import { http } from "@soymutdb/api-client";
-import { Button, Card, Typography } from "@/lib/antd";
+import {
+  Alert,
+  Button,
+  Card,
+  Space,
+  Table,
+  Tag,
+  Typography,
+  type TableColumnsType,
+} from "@/lib/antd";
 
 interface MigrationItem {
   static_page_id: number;
@@ -19,6 +28,44 @@ interface MigrationReport {
   invalid: number;
   items: MigrationItem[];
 }
+
+const OUTCOME_COLOR: Record<MigrationItem["outcome"], string> = {
+  created: "green",
+  skipped: "default",
+  invalid: "red",
+};
+
+const migrationColumns: TableColumnsType<MigrationItem> = [
+  {
+    title: "Legacy slug",
+    dataIndex: "slug",
+    key: "slug",
+    render: (_, row) => <span className="font-mono text-xs">{row.slug}</span>,
+  },
+  {
+    title: "Draft route",
+    dataIndex: "route",
+    key: "route",
+    render: (_, row) => <span className="font-mono text-xs">{row.route}</span>,
+  },
+  {
+    title: "Result",
+    dataIndex: "outcome",
+    key: "outcome",
+    width: 120,
+    render: (_, row) => <Tag color={OUTCOME_COLOR[row.outcome]}>{row.outcome}</Tag>,
+  },
+  {
+    title: "Message",
+    dataIndex: "message",
+    key: "message",
+    render: (_, row) => (
+      <Typography.Text type={row.message ? undefined : "secondary"}>
+        {row.message ?? "Ready for a draft migration."}
+      </Typography.Text>
+    ),
+  },
+];
 
 export function StaticPageMigrationReport() {
   const preview = useMutation({
@@ -48,39 +95,30 @@ export function StaticPageMigrationReport() {
       </div>
 
       {preview.isError ? (
-        <p role="alert" className="mt-3 text-sm text-destructive">
-          Unable to load the migration preview. Try again later.
-        </p>
+        <Alert
+          className="mt-3"
+          type="error"
+          showIcon
+          title="Unable to load the migration preview. Try again later."
+        />
       ) : null}
 
       {report ? (
-        <div className="mt-4 space-y-3" aria-live="polite">
-          <p className="text-sm">
-            Dry run: {report.created} ready, {report.skipped} already mapped, {report.invalid} needs review.
-          </p>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b text-muted-foreground">
-                  <th className="p-2">Legacy slug</th>
-                  <th className="p-2">Draft route</th>
-                  <th className="p-2">Result</th>
-                  <th className="p-2">Message</th>
-                </tr>
-              </thead>
-              <tbody>
-                {report.items.map((item) => (
-                  <tr key={item.static_page_id} className="border-b last:border-0">
-                    <td className="p-2 font-mono">{item.slug}</td>
-                    <td className="p-2 font-mono">{item.route}</td>
-                    <td className="p-2">{item.outcome}</td>
-                    <td className="p-2 text-muted-foreground">{item.message ?? "Ready for a draft migration."}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <Space className="mt-4 w-full" orientation="vertical" size={12} aria-live="polite">
+          <Typography.Text type="secondary">
+            Dry run: {report.created} ready, {report.skipped} already mapped, {report.invalid} needs
+            review.
+          </Typography.Text>
+          <Table<MigrationItem>
+            size="small"
+            bordered
+            rowKey="static_page_id"
+            columns={migrationColumns}
+            dataSource={report.items}
+            pagination={false}
+            scroll={{ x: "max-content" }}
+          />
+        </Space>
       ) : null}
     </Card>
   );

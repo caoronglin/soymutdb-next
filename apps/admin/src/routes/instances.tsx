@@ -185,7 +185,7 @@ export default function SpeciesInstancesPage() {
       dataIndex: "name",
       key: "name",
       render: (_value, instance) => (
-        <Space direction="vertical" size={2}>
+        <Space orientation="vertical" size={2}>
           <Typography.Text strong>{instance.name}</Typography.Text>
           <Typography.Text code>{instance.code}</Typography.Text>
           <Space size={[4, 4]} wrap>
@@ -204,7 +204,7 @@ export default function SpeciesInstancesPage() {
       render: (value: string, instance) => {
         const portal = safeUrl(instance.portal_base_url ?? instance.site_url);
         return (
-          <Space direction="vertical" size={2}>
+          <Space orientation="vertical" size={2}>
             <Typography.Text code copyable>{value}</Typography.Text>
             {portal ? (
               <a
@@ -294,9 +294,9 @@ export default function SpeciesInstancesPage() {
         </Button>,
       ]}
     >
-      <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+      <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
         <Card size="small">
-          <Space direction="vertical" size={6}>
+          <Space orientation="vertical" size={6}>
             <Space wrap>
               <Typography.Text>{t("admin.instances.context")}: </Typography.Text>
               <Typography.Text strong data-testid="instances-current">{currentInstance?.name ?? "—"}</Typography.Text>
@@ -313,8 +313,8 @@ export default function SpeciesInstancesPage() {
           </Space>
         </Card>
 
-        {noticeMessage ? <Alert type="success" showIcon message={noticeMessage} data-testid="instances-notice" /> : null}
-        {errorMessage ? <Alert type="error" showIcon message={errorMessage} role="alert" data-testid="instances-error" /> : null}
+        {noticeMessage ? <Alert type="success" showIcon title={noticeMessage} data-testid="instances-notice" /> : null}
+        {errorMessage ? <Alert type="error" showIcon title={errorMessage} role="alert" data-testid="instances-error" /> : null}
 
         {editorOpen ? (
           <Card
@@ -369,10 +369,10 @@ export default function SpeciesInstancesPage() {
                   </>
                 ) : null}
               </Space>
-              <Space direction="vertical" size="small" style={{ display: "flex", marginTop: 16 }}>
-                {editorIsLocal ? <Alert type="info" showIcon message={t("admin.instances.localHint")} data-testid="instance-local-hint" /> : null}
-                {editingId === null && !editorIsLocal ? <Alert type="info" showIcon message={t("admin.instances.remoteHint")} data-testid="instance-remote-hint" /> : null}
-                <Alert type="info" showIcon message={t("admin.instances.targetNote")} data-testid="instance-target-note" />
+              <Space orientation="vertical" size="small" style={{ display: "flex", marginTop: 16 }}>
+                {editorIsLocal ? <Alert type="info" showIcon title={t("admin.instances.localHint")} data-testid="instance-local-hint" /> : null}
+                {editingId === null && !editorIsLocal ? <Alert type="info" showIcon title={t("admin.instances.remoteHint")} data-testid="instance-remote-hint" /> : null}
+                <Alert type="info" showIcon title={t("admin.instances.targetNote")} data-testid="instance-target-note" />
               </Space>
               <Space style={{ marginTop: 16 }}>
                 <Button type="primary" htmlType="submit" loading={saveMutation.isPending} data-testid="instance-save">
@@ -391,9 +391,9 @@ export default function SpeciesInstancesPage() {
             type="error"
             showIcon
             data-testid="instance-delete-confirm"
-            message={t("admin.instances.deleteConfirmTitle")}
+            title={t("admin.instances.deleteConfirmTitle")}
             description={
-              <Space direction="vertical">
+              <Space orientation="vertical">
                 <span>{t("admin.instances.deleteConfirmBody")}</span>
                 <Typography.Text code>{deleteTarget.name} · {deleteTarget.code}</Typography.Text>
                 <Space>
@@ -423,7 +423,7 @@ export default function SpeciesInstancesPage() {
             type="error"
             showIcon
             data-testid="instances-load-error"
-            message={t("common.errorDescription")}
+            title={t("common.errorDescription")}
             action={<Button size="small" onClick={() => void query.refetch()} data-testid="instances-retry">{t("common.retry")}</Button>}
           />
         ) : instances.length === 0 ? (

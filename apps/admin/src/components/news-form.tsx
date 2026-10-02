@@ -135,7 +135,7 @@ export function NewsForm({
             "Preview imports are sanitized and staged as a draft. Review the article and save it before publishing.",
         })}
       >
-        <Space direction="vertical" size="small" className="w-full">
+        <Space orientation="vertical" size="small" className="w-full">
           <Button
             htmlType="button"
             onClick={() => setExternalImportOpen(true)}
@@ -240,7 +240,7 @@ export function NewsForm({
             const coverAssetId = getFieldValue("cover_asset_id") as string | undefined;
             const coverAltText = getFieldValue("cover_alt_text") as string | undefined;
             return (
-              <Space direction="vertical" size="middle" className="w-full">
+              <Space orientation="vertical" size="middle" className="w-full">
                 <MediaPicker
                   value={coverAssetId}
                   previewUrl={coverUrl}

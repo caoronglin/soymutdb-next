@@ -1,6 +1,7 @@
 import { SearchOutlined } from "@ant-design/icons";
 import { searchGenes, type GeneSummary } from "@soymutdb/api-client";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { Input, type InputRef } from "@/lib/antd";
 import { cn } from "../lib/cn";
 
 export type AdminCommandPath = "/" | "/imports" | "/content" | "/news/new" | "/settings" | "/audit" | "/widgets" | "/page-builder" | "/resource-catalog";
@@ -69,13 +70,39 @@ export function AdminCommandPalette({ open, onClose, onNavigate, onOpenGene }: {
   };
 
   return <div className="fixed inset-0 z-[70] flex items-start justify-center bg-black/45 px-4 pt-[12vh]" onMouseDown={onClose}>
-    <section aria-label="Command palette" aria-modal="true" className="w-full max-w-xl overflow-hidden rounded-xl border border-border bg-popover shadow-2xl" onMouseDown={(event) => event.stopPropagation()} onKeyDown={(event) => {
+    <section aria-label="Command palette" aria-modal="true" className="w-full max-w-xl overflow-hidden rounded-lg border border-border bg-popover shadow-2xl" onMouseDown={(event) => event.stopPropagation()} onKeyDown={(event) => {
       if (event.key === "Escape") { event.preventDefault(); onClose(); }
       else if (event.key === "ArrowDown") { event.preventDefault(); setActiveIndex((index) => Math.min(index + 1, Math.max(results.length - 1, 0))); }
       else if (event.key === "ArrowUp") { event.preventDefault(); setActiveIndex((index) => Math.max(index - 1, 0)); }
       else if (event.key === "Enter") { event.preventDefault(); choose(results[activeIndex]); }
     }} role="dialog">
-      <div className="flex items-center gap-3 border-b border-border px-4"><SearchOutlined aria-hidden className="text-muted-foreground" /><input ref={inputRef} aria-activedescendant={results[activeIndex] ? "admin-command-" + results[activeIndex].id : undefined} aria-autocomplete="list" aria-controls={listboxId} aria-expanded="true" aria-label="Search commands and genes" className="h-14 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground" onChange={(event) => { setQuery(event.target.value); setActiveIndex(0); }} placeholder="Search commands or published genes…" role="combobox" value={query} /><kbd className="rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground">Esc</kbd></div>
+      {/* The search field is antd's `Input` with the borderless variant, so it
+          still carries the combobox role and aria wiring through to the DOM. */}
+      <div className="flex items-center gap-3 border-b border-border px-4">
+        <SearchOutlined aria-hidden className="text-muted-foreground" />
+        <Input
+          ref={inputRef as React.Ref<InputRef>}
+          variant="borderless"
+          size="large"
+          aria-activedescendant={results[activeIndex] ? "admin-command-" + results[activeIndex].id : undefined}
+          aria-autocomplete="list"
+          aria-controls={listboxId}
+          aria-expanded="true"
+          aria-label="Search commands and genes"
+          className="min-w-0 flex-1"
+          onChange={(event) => { setQuery(event.target.value); setActiveIndex(0); }}
+          placeholder="Search commands or published genes…"
+          role="combobox"
+          value={query}
+        />
+        <kbd className="rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground">Esc</kbd>
+      </div>
+      {/* Kept as a native listbox/option pair on purpose: this is an ARIA
+          combobox, and the row needs `role="option"` + `aria-selected` plus a
+          stable `id` for `aria-activedescendant`. antd has no Combobox
+          component, and both `Button` and `List.Item` render their own roles,
+          so substituting them would drop the semantics screen readers rely on.
+          This is the only remaining native interactive element in apps/admin. */}
       <ul aria-label="Available commands" className="max-h-80 overflow-y-auto p-2" id={listboxId} role="listbox">
         {results.map((result, index) => <li key={result.id}><button aria-selected={index === activeIndex} className={cn("flex w-full items-start rounded-lg px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", index === activeIndex ? "bg-accent text-accent-foreground" : "hover:bg-accent/70")} id={"admin-command-" + result.id} onClick={() => choose(result)} onMouseMove={() => setActiveIndex(index)} role="option" type="button"><span className="min-w-0 flex-1"><span className="block text-sm font-medium">{result.label}</span><span className="mt-0.5 block text-xs text-muted-foreground">{result.hint}</span></span><span aria-hidden className="ml-3 pt-1 text-xs text-muted-foreground">↵</span></button></li>)}
         {!results.length && !geneSearchFailed ? <li className="px-3 py-8 text-center text-sm text-muted-foreground">No matching command or gene. Try another keyword.</li> : null}

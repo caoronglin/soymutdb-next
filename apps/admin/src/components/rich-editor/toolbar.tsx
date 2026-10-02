@@ -139,7 +139,7 @@ export function Toolbar({ editor, onDocxImported, onMarkdownPasted, onSourceMode
           <Tooltip title={t("admin.editor.strike")}>
             <Button type="text" size="small" icon={<StrikethroughOutlined />} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleStrike().run()} />
           </Tooltip>
-          <Divider type="vertical" />
+          <Divider orientation="vertical" />
           <Tooltip title={t("admin.editor.heading1")}>
             <Button type="text" size="small" onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}>
               H1
@@ -155,7 +155,7 @@ export function Toolbar({ editor, onDocxImported, onMarkdownPasted, onSourceMode
               H3
             </Button>
           </Tooltip>
-          <Divider type="vertical" />
+          <Divider orientation="vertical" />
           <Tooltip title={t("admin.editor.bulletList")}>
             <Button type="text" size="small" icon={<UnorderedListOutlined />} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleBulletList().run()} />
           </Tooltip>
@@ -174,7 +174,7 @@ export function Toolbar({ editor, onDocxImported, onMarkdownPasted, onSourceMode
       <Tooltip title={t("admin.editor.strike")}>
         <Button type="text" size="small" icon={<StrikethroughOutlined />} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleStrike().run()} />
       </Tooltip>
-      <Divider type="vertical" />
+      <Divider orientation="vertical" />
       <Tooltip title={t("admin.editor.heading1")}>
         <Button type="text" size="small" onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}>
           H1
@@ -190,14 +190,14 @@ export function Toolbar({ editor, onDocxImported, onMarkdownPasted, onSourceMode
           H3
         </Button>
       </Tooltip>
-      <Divider type="vertical" />
+      <Divider orientation="vertical" />
       <Tooltip title={t("admin.editor.bulletList")}>
         <Button type="text" size="small" icon={<UnorderedListOutlined />} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleBulletList().run()} />
       </Tooltip>
       <Tooltip title={t("admin.editor.orderedList")}>
         <Button type="text" size="small" icon={<OrderedListOutlined />} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleOrderedList().run()} />
       </Tooltip>
-      <Divider type="vertical" />
+      <Divider orientation="vertical" />
       <Tooltip title={t("admin.editor.table")}>
         <Button type="text" size="small" icon={<TableOutlined />} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()} />
       </Tooltip>
@@ -207,14 +207,14 @@ export function Toolbar({ editor, onDocxImported, onMarkdownPasted, onSourceMode
       <Tooltip title={t("admin.editor.link")}>
         <Button type="text" size="small" icon={<LinkOutlined />} onMouseDown={(e) => e.preventDefault()} onClick={() => setLinkModalOpen(true)} />
       </Tooltip>
-      <Divider type="vertical" />
+      <Divider orientation="vertical" />
       <Tooltip title={t("admin.editor.undo")}>
         <Button type="text" size="small" icon={<UndoOutlined />} disabled={!editor.can().chain().focus().undo().run()} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().undo().run()} />
       </Tooltip>
       <Tooltip title={t("admin.editor.redo")}>
         <Button type="text" size="small" icon={<RedoOutlined />} disabled={!editor.can().chain().focus().redo().run()} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().redo().run()} />
       </Tooltip>
-      <Divider type="vertical" />
+      <Divider orientation="vertical" />
       <Tooltip title={t("admin.editor.pasteMarkdown")}>
         <Button type="text" size="small" icon={<FileMarkdownOutlined />} onClick={handlePasteMarkdown} />
       </Tooltip>
