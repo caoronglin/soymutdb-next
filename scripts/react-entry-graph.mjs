@@ -4,12 +4,18 @@
  * The repository still contains legacy Vue source during the staged migration.
  * Final removal is gated on React parity plus deployed E2E acceptance, so what
  * must hold *now* is that the module graph reachable from each app's **shipped**
- * entry is free of Vue. A React file that re-imports a `.vue` component or the
- * Vue `@soymutdb/genome-view` package would only fail at runtime — as a
- * mounted-but-unstyled view or a duplicate browser — so it is checked statically.
+ * entry is free of Vue. A React file that re-imports a `.vue` component or a
+ * Vue view package would only fail at runtime — as a mounted-but-unstyled view
+ * or a duplicate browser — so it is checked statically.
  *
  * `@soymutdb/genome-view-model` is deliberately allowed: it is the
  * framework-neutral model package that both the Vue and React shells consume.
+ * `@soymutdb/genome-view` was on this list only while it was a Vue view layer;
+ * it has since been rebuilt as a React renderer (`renderGenomeViewSvg` plus
+ * React components), and apps/web legitimately imports it. What the check must
+ * police is the framework reached through the import, not the package's former
+ * name — the `.vue` file rule below still catches a Vue component reappearing
+ * inside that package.
  *
  * Exposed as a module so the walker has exactly one implementation, used by both
  * the per-app contract tests and `scripts/check-react-entry-graph.mjs`.
@@ -24,7 +30,6 @@ const IMPORT_RE = /(?:from\s*|import\s*)["']([^"']+)["']/g;
 
 /** Vue packages that must not appear in a shipped entry graph. */
 export const FORBIDDEN_VUE_PACKAGES = [
-  "@soymutdb/genome-view",
   "vue",
   "vue-router",
   "pinia",

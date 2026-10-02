@@ -84,3 +84,18 @@
   Vue 组件或 Vue import 仍会被拦。注释里写清楚为什么这个包名被特意排除。
 - **消融验证**: 在临时副本里放一个 `apps/web/src/VueProbe.vue` → 守卫 exit 1 并精确报出该文件；
   正式目录跑 → PASS exit 0；`pytest scripts -q` 275 passed/1 skipped 不受影响。
+
+## [21:5x] 同一类缺陷的第二处: check-react-entry-graph 同样按包名判 Vue
+
+- `node scripts/check-react-entry-graph.mjs` → **FAIL**（web），报 3 处 `imports @soymutdb/genome-view`
+  （`routes/genome-view.tsx`、`lib/locus-structure.ts`、`components/gene-genome-view.tsx`）。
+- 与前一条**同源**：`scripts/react-entry-graph.mjs` 的 `FORBIDDEN_VUE_PACKAGES` 里也硬编码了
+  `@soymutdb/genome-view`。包重建为 React 之后，两个守卫同时变红，而 9-29 的收尾日志记录的是「双双 PASS」——
+  那是重建之前的事实，重建之后没人再跑。
+- **修法**: 从 `FORBIDDEN_VUE_PACKAGES` 移除该包名，保留 `.vue` 文件规则（它照旧覆盖 `packages/**`，
+  因此包内若重新出现 Vue 组件仍会被拦）。
+- **消融验证**: 临时副本里把一个 `VueProbe.vue` 接进 `umi-entry.tsx` 的 import 闭包 → 守卫 exit 1 并精确指出
+  `apps/web/src/components/probe-importer.ts imports ./VueProbe.vue`；正式目录 → 三端 PASS / exit 0；
+  `pytest scripts/test_platform_delivery_contracts.py scripts/test_ci_job_contracts.py -q` 97 passed。
+- **教训（写给下一个人）**: 守卫的判据必须落在**属性**上（是否 .vue、是否 import vue），
+  不能落在**名字**上；一旦某个包被重建，名字型判据会静默变成红灯，而没人再跑它时就是长期红线。
