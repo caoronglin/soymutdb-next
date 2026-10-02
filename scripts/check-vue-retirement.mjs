@@ -5,7 +5,11 @@ import { resolve, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
-const retiredPackage = /^(?:vue(?:-.+)?|@vue\/.+|pinia|antdv-next|@vitejs\/plugin-vue|@tanstack\/vue-query|@soymutdb\/(?:ui-vue|genome-view))$/;
+// `@soymutdb/genome-view` is deliberately absent: the package was retired as a
+// Vue view layer and then rebuilt as a React renderer, and the `.vue` / import
+// scans below cover its sources either way. Denying it by name would forbid a
+// framework-neutral decision the design already made.
+const retiredPackage = /^(?:vue(?:-.+)?|@vue\/.+|pinia|antdv-next|@vitejs\/plugin-vue|@tanstack\/vue-query|@soymutdb\/ui-vue)$/;
 const importPattern = /(?:from\s*|import\s*|require\s*\(\s*)["']([^"']+)["']/g;
 
 function sourceFiles(dir) {
@@ -20,7 +24,7 @@ function sourceFiles(dir) {
 export function inspectRetirement(root = ROOT) {
   const problems = [];
   const packages = resolve(root, "packages");
-  for (const legacy of ["ui-vue", "genome-view"]) {
+  for (const legacy of ["ui-vue"]) {
     if (existsSync(resolve(packages, legacy))) problems.push(`retired workspace package remains: packages/${legacy}`);
   }
   const roots = ["apps/web/src", "apps/admin/src", "apps/jbrowse/src", "packages"];
