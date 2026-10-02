@@ -72,49 +72,11 @@ export interface SearchResponse {
   total_count: number | null;
 }
 
-/** A single external hit returned by a federated search source. */
-export interface FederatedHit {
-  source: string;
-  title: string;
-  url: string;
-  snippet?: string;
-  id?: string;
-  extra?: Record<string, unknown>;
-}
-
-/**
- * One federated search source with its per-source degradation state. Mirrors
- * the backend `_external_json_payload` shape returned by `/search` when
- * `sources` is supplied (external federated search).
- */
-export interface FederatedSource {
-  source: string;
-  status: string;
-  hits: FederatedHit[];
-  elapsed?: number;
-  elapsed_ms?: number;
-  error?: string | null;
-  health?: string;
-}
-
-/**
- * Federated external search response (`/search?sources=...`). The `/search`
- * endpoint returns this shape when external `sources` are requested (content
- * negotiation produces the internal `SearchResponse` otherwise).
- */
-export interface FederatedSearchResponse {
-  query: string;
-  sources: FederatedSource[];
-  total_hits: number;
-  elapsed_ms?: number;
-}
-
 export interface SearchSuggestion { text: string; type: string; id?: string; }
 
 export interface SearchParams {
   q: string;
   types?: SearchResultType[];
-  sources?: string[];
   cursor?: string;
   limit?: number;
   assembly_id?: number;
@@ -122,11 +84,12 @@ export interface SearchParams {
   release_id?: number;
 }
 
-export function globalSearch(
-  params: SearchParams,
-): Promise<SearchResponse | FederatedSearchResponse> {
+// External federated search (NCBI/UniProt/Ensembl/EBI) is retired permanently:
+// the `sources` request parameter and the `{sources, total_hits}` response shape
+// are gone, so this always resolves to the catalogue response.
+export function globalSearch(params: SearchParams): Promise<SearchResponse> {
   const { q, ...rest } = params;
-  return http.get<SearchResponse | FederatedSearchResponse>("/search", {
+  return http.get<SearchResponse>("/search", {
     params: { ...rest, query: q },
   });
 }

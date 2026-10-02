@@ -5749,6 +5749,27 @@ export interface components {
                 [key: string]: boolean;
             };
         };
+        /**
+         * FieldError
+         * @description Field-level validation error for 422 responses.
+         */
+        FieldError: {
+            /**
+             * Field
+             * @description Dot-joined request field path, e.g. ``query.chromosome``.
+             */
+            field: string;
+            /**
+             * Message
+             * @description Human-readable validation message.
+             */
+            message: string;
+            /**
+             * Type
+             * @description Pydantic error type identifier (e.g. ``string_type``).
+             */
+            type: string;
+        };
         /** FieldMappingItem */
         FieldMappingItem: {
             /** Source Field */
@@ -5769,11 +5790,7 @@ export interface components {
         };
         /**
          * FooterContentResponse
-         * @description Editable footer contact block backed by ``system_settings``.
-         *
-         *     Values are plain text (``footer.*`` keys). A fresh deployment without the
-         *     rows returns the registered defaults so the public footer renders without
-         *     a separate fallback.
+         * @description Variant-specific, plain-text footer content and visible navigation.
          */
         FooterContentResponse: {
             /** Contact Person */
@@ -5786,6 +5803,65 @@ export interface components {
             copyright?: string | null;
             /** Address */
             address?: string | null;
+            /** Contact Person En */
+            contact_person_en?: string | null;
+            /** Contact Person Zh */
+            contact_person_zh?: string | null;
+            /** Contact Phone Value */
+            contact_phone_value?: string | null;
+            /** Contact Email Value */
+            contact_email_value?: string | null;
+            /** Address En */
+            address_en?: string | null;
+            /** Address Zh */
+            address_zh?: string | null;
+            /** Copyright En */
+            copyright_en?: string | null;
+            /** Copyright Zh */
+            copyright_zh?: string | null;
+            /** Navigation */
+            navigation?: components["schemas"]["FooterNavigationGroup"][];
+        };
+        /**
+         * FooterNavigationGroup
+         * @description A bilingual group of footer links.
+         */
+        FooterNavigationGroup: {
+            /** Id */
+            id: string;
+            /** Title En */
+            title_en: string;
+            /** Title Zh */
+            title_zh: string;
+            /** Enabled */
+            enabled: boolean;
+            /** Order */
+            order: number;
+            /** Links */
+            links: components["schemas"]["FooterNavigationLink"][];
+        };
+        /**
+         * FooterNavigationLink
+         * @description One editable, bilingual footer destination.
+         */
+        FooterNavigationLink: {
+            /** Id */
+            id: string;
+            /** Label En */
+            label_en: string;
+            /** Label Zh */
+            label_zh: string;
+            /**
+             * Target
+             * @enum {string}
+             */
+            target: "internal" | "external";
+            /** Href */
+            href: string;
+            /** Enabled */
+            enabled: boolean;
+            /** Order */
+            order: number;
         };
         /** GeneDetail */
         GeneDetail: {
@@ -9181,6 +9257,74 @@ export interface components {
             ctx?: Record<string, never>;
         };
         /**
+         * ValidationErrorResponse
+         * @description 422 response: unified envelope plus field-level ``errors``.
+         */
+        ValidationErrorResponse: {
+            error: components["schemas"]["ErrorDetail"];
+            /**
+             * Request Id
+             * @description Correlation id (also echoed in the ``X-Request-ID`` header).
+             */
+            request_id: string;
+            /**
+             * Status Code
+             * @description HTTP status code.
+             */
+            status_code: number;
+            /**
+             * Errors
+             * @description Field-level validation errors (sanitised; no internal structure exposed).
+             */
+            errors?: components["schemas"]["FieldError"][];
+            $defs: {
+                /**
+                 * ErrorDetail
+                 * @description Machine-readable error detail (inside the ``error`` envelope).
+                 */
+                ErrorDetail: {
+                    /**
+                     * Code
+                     * @description Stable machine-readable error code, e.g. ``not_found``.
+                     */
+                    code: string;
+                    /**
+                     * Message
+                     * @description Human-readable error message.
+                     */
+                    message: string;
+                    /**
+                     * Details
+                     * @description Optional structured context (never contains secrets or stack traces).
+                     */
+                    details?: {
+                        [key: string]: unknown;
+                    };
+                };
+                /**
+                 * FieldError
+                 * @description Field-level validation error for 422 responses.
+                 */
+                FieldError: {
+                    /**
+                     * Field
+                     * @description Dot-joined request field path, e.g. ``query.chromosome``.
+                     */
+                    field: string;
+                    /**
+                     * Message
+                     * @description Human-readable validation message.
+                     */
+                    message: string;
+                    /**
+                     * Type
+                     * @description Pydantic error type identifier (e.g. ``string_type``).
+                     */
+                    type: string;
+                };
+            };
+        };
+        /**
          * VariantDetail
          * @description Extended variant information with annotation and linked entities.
          */
@@ -9847,95 +9991,6 @@ export interface components {
          */
         app__schemas__seed_request__SeedRequestUpdate: {
             status: components["schemas"]["app__models__seed_request__SeedRequestStatus"];
-        };
-        /**
-         * FieldError
-         * @description Field-level validation error for 422 responses.
-         */
-        FieldError: {
-            /**
-             * Field
-             * @description Dot-joined request field path, e.g. ``query.chromosome``.
-             */
-            field: string;
-            /**
-             * Message
-             * @description Human-readable validation message.
-             */
-            message: string;
-            /**
-             * Type
-             * @description Pydantic error type identifier (e.g. ``string_type``).
-             */
-            type: string;
-        };
-        /**
-         * ValidationErrorResponse
-         * @description 422 response: unified envelope plus field-level ``errors``.
-         */
-        ValidationErrorResponse: {
-            error: components["schemas"]["ErrorDetail"];
-            /**
-             * Request Id
-             * @description Correlation id (also echoed in the ``X-Request-ID`` header).
-             */
-            request_id: string;
-            /**
-             * Status Code
-             * @description HTTP status code.
-             */
-            status_code: number;
-            /**
-             * Errors
-             * @description Field-level validation errors (sanitised; no internal structure exposed).
-             */
-            errors?: components["schemas"]["FieldError"][];
-            $defs: {
-                /**
-                 * ErrorDetail
-                 * @description Machine-readable error detail (inside the ``error`` envelope).
-                 */
-                ErrorDetail: {
-                    /**
-                     * Code
-                     * @description Stable machine-readable error code, e.g. ``not_found``.
-                     */
-                    code: string;
-                    /**
-                     * Message
-                     * @description Human-readable error message.
-                     */
-                    message: string;
-                    /**
-                     * Details
-                     * @description Optional structured context (never contains secrets or stack traces).
-                     */
-                    details?: {
-                        [key: string]: unknown;
-                    };
-                };
-                /**
-                 * FieldError
-                 * @description Field-level validation error for 422 responses.
-                 */
-                FieldError: {
-                    /**
-                     * Field
-                     * @description Dot-joined request field path, e.g. ``query.chromosome``.
-                     */
-                    field: string;
-                    /**
-                     * Message
-                     * @description Human-readable validation message.
-                     */
-                    message: string;
-                    /**
-                     * Type
-                     * @description Pydantic error type identifier (e.g. ``string_type``).
-                     */
-                    type: string;
-                };
-            };
         };
     };
     responses: never;

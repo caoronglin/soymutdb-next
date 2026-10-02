@@ -1,11 +1,21 @@
-import type { Component } from "vue";
+import type { ComponentType } from "react";
 
 /** A renderer bound to a backend track `type`. */
 export interface TrackRendererDescriptor {
-  /** Vue component that renders a single `TrackConfig`. */
-  component: Component;
+  /** React component that renders a single `TrackConfig`. */
+  component: ComponentType<TrackRendererProps>;
   /** Capability required before this renderer may be offered to the user. */
   requiredCapability?: string;
+}
+
+/** Props every track renderer receives. */
+export interface TrackRendererProps {
+  /** Track identity from the backend configuration. */
+  trackId: string;
+  /** Human-readable label for the track. */
+  label: string;
+  /** Renderer-specific payload; shape is owned by the renderer. */
+  data?: unknown;
 }
 
 const renderers = new Map<string, TrackRendererDescriptor>();
@@ -29,4 +39,9 @@ export function resolveTrackRenderer(type: string): TrackRendererDescriptor | un
 /** Registered track type names, in registration order. */
 export function listTrackRenderers(): string[] {
   return [...renderers.keys()];
+}
+
+/** Test-only: drop every registration so a suite can re-register cleanly. */
+export function resetTrackRenderers(): void {
+  renderers.clear();
 }

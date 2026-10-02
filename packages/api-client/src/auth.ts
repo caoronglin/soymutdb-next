@@ -25,6 +25,7 @@ import {
     TimeoutPresets,
     setAuthTokens,
     clearAuth,
+    getAccessToken,
     withRetry,
     type RequestOptions,
 } from "./client";
@@ -65,7 +66,8 @@ let refreshInFlight: Promise<boolean> | null = null;
 
 /**
  * Register a handler invoked when the session dies (refresh failure while
- * handling a 401). Returns an unsubscribe function.
+ * handling a 401 on a request that carried a token). Returns an unsubscribe
+ * function.
  */
 export function onAuthLogout(handler: LogoutHandler): () => void {
     logoutHandlers.add(handler);
@@ -178,9 +180,13 @@ function isRetrySafeMethod(method: string | undefined): boolean {
 /**
  * Coordinated request: on 401, trigger a single-flight refresh and replay a
  * retry-safe request exactly once. Unsafe mutations preserve the original 401
- * after refresh rather than risking duplicate submission. If refresh fails,
- * in-memory auth is cleared and the logout event fires once (per unauthenticated
- * period). The refresh endpoint itself is never recursed into.
+ * after refresh rather than risking duplicate submission.
+ *
+ * The logout event fires only when the failed refresh interrupted a request
+ * that was carrying a token. A 401 on a request sent anonymously is the
+ * expected answer for a public route that happens to read an authenticated
+ * endpoint (`GET /auth/me` on the portal), and bouncing that visitor to
+ * /login would make published routes unreachable. See `emitLogoutOnce`.
  */
 export async function authRequest<T>(
     path: string,
@@ -197,10 +203,13 @@ export async function authRequest<T>(
             return await request<T>(path, secured);
         } catch (err) {
             if (err instanceof ApiError && err.status === 401 && !isRefreshEndpoint(path)) {
+                // Read before the refresh clears in-memory auth: this is what
+                // separates "session died" from "there was never a session".
+                const hadToken = getAccessToken() != null;
                 const refreshed = await refreshAccessToken();
                 if (refreshed) {
                     if (canRetry) return await request<T>(path, secured);
-                } else {
+                } else if (hadToken) {
                     emitLogoutOnce();
                 }
             }
@@ -215,7 +224,7 @@ export async function authRequest<T>(
 
 /**
  * Coordinated blob request for streamed downloads. It follows the same 401
- * refresh and idempotent retry path as JSON GET requests.
+ * refresh, idempotent retry and conditional logout path as JSON requests.
  */
 export async function authRequestBlob(
     path: string,
@@ -230,10 +239,11 @@ export async function authRequestBlob(
             return await requestBlob(path, secured);
         } catch (err) {
             if (err instanceof ApiError && err.status === 401 && !isRefreshEndpoint(path)) {
+                const hadToken = getAccessToken() != null;
                 const refreshed = await refreshAccessToken();
                 if (refreshed) {
                     if (canRetry) return await requestBlob(path, secured);
-                } else {
+                } else if (hadToken) {
                     emitLogoutOnce();
                 }
             }

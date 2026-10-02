@@ -83,13 +83,43 @@ export function getSiteHome(variant: SiteVariant = "external"): Promise<SiteHome
   return siteRequest<SiteHome>("/site/home", variant);
 }
 
-/** Editable footer contact block (plain text, defaults filled by the API). */
+/** One visible bilingual link in the public footer navigation. */
+export interface SiteFooterNavigationLink {
+  id: string;
+  label_en: string;
+  label_zh: string;
+  target: "internal" | "external";
+  href: string;
+  enabled: boolean;
+  order: number;
+}
+
+/** One visible bilingual group in the public footer navigation. */
+export interface SiteFooterNavigationGroup {
+  id: string;
+  title_en: string;
+  title_zh: string;
+  enabled: boolean;
+  order: number;
+  links: SiteFooterNavigationLink[];
+}
+
+/** Variant-specific footer values; legacy keys remain for older clients. */
 export interface SiteFooter {
   contact_person: string | null;
   contact_phone: string | null;
   contact_email: string | null;
   copyright: string | null;
   address: string | null;
+  contact_person_en: string | null;
+  contact_person_zh: string | null;
+  contact_phone_value: string | null;
+  contact_email_value: string | null;
+  address_en: string | null;
+  address_zh: string | null;
+  copyright_en: string | null;
+  copyright_zh: string | null;
+  navigation: SiteFooterNavigationGroup[];
 }
 
 /** Fetch the footer contact content for one explicit site variant. */

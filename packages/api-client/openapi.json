@@ -19526,6 +19526,33 @@
         "type": "object",
         "title": "FeatureUpdateRequest"
       },
+      "FieldError": {
+        "description": "Field-level validation error for 422 responses.",
+        "properties": {
+          "field": {
+            "description": "Dot-joined request field path, e.g. ``query.chromosome``.",
+            "title": "Field",
+            "type": "string"
+          },
+          "message": {
+            "description": "Human-readable validation message.",
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "description": "Pydantic error type identifier (e.g. ``string_type``).",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "message",
+          "type"
+        ],
+        "title": "FieldError",
+        "type": "object"
+      },
       "FieldMappingItem": {
         "properties": {
           "source_field": {
@@ -19631,11 +19658,215 @@
               }
             ],
             "title": "Address"
+          },
+          "contact_person_en": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Person En"
+          },
+          "contact_person_zh": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Person Zh"
+          },
+          "contact_phone_value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Phone Value"
+          },
+          "contact_email_value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Email Value"
+          },
+          "address_en": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address En"
+          },
+          "address_zh": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address Zh"
+          },
+          "copyright_en": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Copyright En"
+          },
+          "copyright_zh": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Copyright Zh"
+          },
+          "navigation": {
+            "items": {
+              "$ref": "#/components/schemas/FooterNavigationGroup"
+            },
+            "type": "array",
+            "title": "Navigation"
           }
         },
         "type": "object",
         "title": "FooterContentResponse",
-        "description": "Editable footer contact block backed by ``system_settings``.\n\nValues are plain text (``footer.*`` keys). A fresh deployment without the\nrows returns the registered defaults so the public footer renders without\na separate fallback."
+        "description": "Variant-specific, plain-text footer content and visible navigation."
+      },
+      "FooterNavigationGroup": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "title": "Id"
+          },
+          "title_en": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Title En"
+          },
+          "title_zh": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Title Zh"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "order": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Order"
+          },
+          "links": {
+            "items": {
+              "$ref": "#/components/schemas/FooterNavigationLink"
+            },
+            "type": "array",
+            "maxItems": 32,
+            "title": "Links"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "title_en",
+          "title_zh",
+          "enabled",
+          "order",
+          "links"
+        ],
+        "title": "FooterNavigationGroup",
+        "description": "A bilingual group of footer links."
+      },
+      "FooterNavigationLink": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "title": "Id"
+          },
+          "label_en": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Label En"
+          },
+          "label_zh": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Label Zh"
+          },
+          "target": {
+            "type": "string",
+            "enum": [
+              "internal",
+              "external"
+            ],
+            "title": "Target"
+          },
+          "href": {
+            "type": "string",
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Href"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "order": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Order"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "label_en",
+          "label_zh",
+          "target",
+          "href",
+          "enabled",
+          "order"
+        ],
+        "title": "FooterNavigationLink",
+        "description": "One editable, bilingual footer destination."
       },
       "GeneDetail": {
         "properties": {
@@ -28487,6 +28718,95 @@
         ],
         "title": "ValidationError"
       },
+      "ValidationErrorResponse": {
+        "$defs": {
+          "ErrorDetail": {
+            "description": "Machine-readable error detail (inside the ``error`` envelope).",
+            "properties": {
+              "code": {
+                "description": "Stable machine-readable error code, e.g. ``not_found``.",
+                "title": "Code",
+                "type": "string"
+              },
+              "message": {
+                "description": "Human-readable error message.",
+                "title": "Message",
+                "type": "string"
+              },
+              "details": {
+                "additionalProperties": true,
+                "description": "Optional structured context (never contains secrets or stack traces).",
+                "title": "Details",
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "title": "ErrorDetail",
+            "type": "object"
+          },
+          "FieldError": {
+            "description": "Field-level validation error for 422 responses.",
+            "properties": {
+              "field": {
+                "description": "Dot-joined request field path, e.g. ``query.chromosome``.",
+                "title": "Field",
+                "type": "string"
+              },
+              "message": {
+                "description": "Human-readable validation message.",
+                "title": "Message",
+                "type": "string"
+              },
+              "type": {
+                "description": "Pydantic error type identifier (e.g. ``string_type``).",
+                "title": "Type",
+                "type": "string"
+              }
+            },
+            "required": [
+              "field",
+              "message",
+              "type"
+            ],
+            "title": "FieldError",
+            "type": "object"
+          }
+        },
+        "description": "422 response: unified envelope plus field-level ``errors``.",
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorDetail"
+          },
+          "request_id": {
+            "description": "Correlation id (also echoed in the ``X-Request-ID`` header).",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "status_code": {
+            "description": "HTTP status code.",
+            "title": "Status Code",
+            "type": "integer"
+          },
+          "errors": {
+            "description": "Field-level validation errors (sanitised; no internal structure exposed).",
+            "items": {
+              "$ref": "#/components/schemas/FieldError"
+            },
+            "title": "Errors",
+            "type": "array"
+          }
+        },
+        "required": [
+          "error",
+          "request_id",
+          "status_code"
+        ],
+        "title": "ValidationErrorResponse",
+        "type": "object"
+      },
       "VariantDetail": {
         "properties": {
           "id": {
@@ -30357,122 +30677,6 @@
         ],
         "title": "SeedRequestUpdate",
         "description": "Admin status update payload."
-      },
-      "FieldError": {
-        "description": "Field-level validation error for 422 responses.",
-        "properties": {
-          "field": {
-            "description": "Dot-joined request field path, e.g. ``query.chromosome``.",
-            "title": "Field",
-            "type": "string"
-          },
-          "message": {
-            "description": "Human-readable validation message.",
-            "title": "Message",
-            "type": "string"
-          },
-          "type": {
-            "description": "Pydantic error type identifier (e.g. ``string_type``).",
-            "title": "Type",
-            "type": "string"
-          }
-        },
-        "required": [
-          "field",
-          "message",
-          "type"
-        ],
-        "title": "FieldError",
-        "type": "object"
-      },
-      "ValidationErrorResponse": {
-        "$defs": {
-          "ErrorDetail": {
-            "description": "Machine-readable error detail (inside the ``error`` envelope).",
-            "properties": {
-              "code": {
-                "description": "Stable machine-readable error code, e.g. ``not_found``.",
-                "title": "Code",
-                "type": "string"
-              },
-              "message": {
-                "description": "Human-readable error message.",
-                "title": "Message",
-                "type": "string"
-              },
-              "details": {
-                "additionalProperties": true,
-                "description": "Optional structured context (never contains secrets or stack traces).",
-                "title": "Details",
-                "type": "object"
-              }
-            },
-            "required": [
-              "code",
-              "message"
-            ],
-            "title": "ErrorDetail",
-            "type": "object"
-          },
-          "FieldError": {
-            "description": "Field-level validation error for 422 responses.",
-            "properties": {
-              "field": {
-                "description": "Dot-joined request field path, e.g. ``query.chromosome``.",
-                "title": "Field",
-                "type": "string"
-              },
-              "message": {
-                "description": "Human-readable validation message.",
-                "title": "Message",
-                "type": "string"
-              },
-              "type": {
-                "description": "Pydantic error type identifier (e.g. ``string_type``).",
-                "title": "Type",
-                "type": "string"
-              }
-            },
-            "required": [
-              "field",
-              "message",
-              "type"
-            ],
-            "title": "FieldError",
-            "type": "object"
-          }
-        },
-        "description": "422 response: unified envelope plus field-level ``errors``.",
-        "properties": {
-          "error": {
-            "$ref": "#/components/schemas/ErrorDetail"
-          },
-          "request_id": {
-            "description": "Correlation id (also echoed in the ``X-Request-ID`` header).",
-            "title": "Request Id",
-            "type": "string"
-          },
-          "status_code": {
-            "description": "HTTP status code.",
-            "title": "Status Code",
-            "type": "integer"
-          },
-          "errors": {
-            "description": "Field-level validation errors (sanitised; no internal structure exposed).",
-            "items": {
-              "$ref": "#/components/schemas/FieldError"
-            },
-            "title": "Errors",
-            "type": "array"
-          }
-        },
-        "required": [
-          "error",
-          "request_id",
-          "status_code"
-        ],
-        "title": "ValidationErrorResponse",
-        "type": "object"
       }
     },
     "securitySchemes": {

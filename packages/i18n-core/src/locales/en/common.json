@@ -49,6 +49,7 @@
     "heroTitle": "Explore the unknown frontier of multi-species mutations",
     "heroSubtitle": "Explore released public records with clear assembly and release context.",
     "searchPlaceholder": "Search gene IDs, variants, or mutant public IDs…",
+    "searchButton": "Search",
     "databaseTitle": "SoyMutDB database",
     "databaseSubtitle": "Browse released records using stable public identifiers and assembly-scoped genomic data.",
     "databaseSearch": "Search the database",
@@ -208,7 +209,6 @@
     "speciesLabel": "Species",
     "homologGeneLabel": "Homolog gene",
     "relationshipLabel": "Relationship",
-    "sourceLabel": "Source",
     "homologsAria": "Gene homologs",
     "notFound": "Gene not found.",
     "structureTitle": "Gene structure",
@@ -405,7 +405,9 @@
     "ready": "Browser ready",
     "timeout": "The genome browser did not report ready. Retry the connection below.",
     "loadError": "The genome browser failed to load.",
-    "iframeTitle": "SoyMutDB genome browser (JBrowse 2)"
+    "iframeTitle": "SoyMutDB genome browser (JBrowse 2)",
+    "contextMissingTitle": "Genome browser context unavailable",
+    "contextMissingDescription": "Choose an explicit assembly and published release before opening JBrowse."
   },
   "blast": {
     "title": "BLAST Search",
@@ -444,6 +446,7 @@
     "viewResults": "View Results",
     "cancel": "Cancel",
     "noJobs": "No jobs yet",
+    "noJobsAnonymous": "The database list and this form are public; submitting an alignment needs a session.",
     "noHits": "No hits found for this job",
     "resultsTitle": "BLAST Results",
     "alignments": "Alignments",
@@ -753,7 +756,11 @@
     "noChartData": "No chart data available",
     "discoveryTrend": "Discovery trend",
     "trendDescription": "Cumulative variant count over the last 365 days.",
-    "noData": "No aggregate data for this release."
+    "noData": "No aggregate data for this release.",
+    "demoNotice": "Demo mode is enabled. The charts below use synthetic example data and are not database measurements.",
+    "variantTypesDescription": "SNP / Indel / SV distribution",
+    "impactDescription": "Variant count by predicted impact",
+    "liveDataUnavailable": "Live data is unavailable. Please retry."
   },
   "search": {
     "title": "Global Search",
@@ -775,13 +782,25 @@
     "subtitle": "Search genes, variants, mutant lines, and documentation",
     "openPalette": "Open search palette",
     "placeholder": "Enter search keywords...",
+    "heroTitle": "Discover SoyMutDB",
+    "portalDescription": "Search genes, variants, mutant lines, and publications.",
+    "portalPlaceholder": "Search genes, variants, publications…",
+    "emptyPromptTitle": "Start with a search",
+    "emptyPromptDescription": "Enter a gene, variant, or publication to explore the database.",
+    "errorTitle": "Search failed",
+    "resultsAria": "Search results",
+    "refreshing": "refreshing",
+    "resultCount": "{{count}} results",
+    "noMatchesDescription": "No records matched this query. Try a broader term.",
+    "viewResult": "View {{name}}",
     "searching": "Searching...",
     "noResults": "No results found",
     "resultsFor": "Results for:",
     "ambiguousNotice": "This query matches more than one genome version. Choose a version to disambiguate.",
+    "ambiguousAssembly": "Assembly name matches several versions: {{matches}}. Select a version by its identifier.",
+    "assemblyUnavailable": "The requested assembly is unavailable; no query was sent.",
     "assemblyLabel": "Genome version",
     "releaseLabel": "Release",
-    "sourceLabel": "Source",
     "unknownAssembly": "Unknown version",
     "genes": {
       "title": "Gene ID Search",
@@ -795,6 +814,8 @@
       "resultsFor": "Results for",
       "noResults": "No genes found",
       "resultsRetry": "The API did not return a result set. Please retry later.",
+      "resultsUnavailable": "Gene search is temporarily unavailable.",
+      "resultsAria": "Gene ID search results",
       "colAssembly": "Genome version",
       "colChromosome": "Chromosome",
       "colMutation": "Mutation feature",
@@ -835,7 +856,9 @@
       "submit": "Search",
       "noResults": "No variants found in this region",
       "resultsRetry": "The API did not return a result set. Please retry later.",
-      "found": "{{count}} variants found",
+      "resultsUnavailable": "Region search is temporarily unavailable.",
+      "chromosomesUnavailable": "The chromosome list could not be loaded.",
+      "found": "{{count}} mutation sites found",
       "colAssembly": "Genome version",
       "colChromosome": "Chromosome",
       "colMutation": "Mutation feature",
@@ -913,22 +936,10 @@
       "exppattern": "Expression Pattern",
       "exppatternDesc": "Heatmap of expression across conditions."
     },
-    "externalSources": "Search external sources (NCBI · UniProt · Ensembl · EBI)",
     "enterQuery": "Enter a gene, variant, or publication to explore the database.",
     "searchFailed": "Search failed",
     "requestId": "Request ID",
-    "externalResultsFor": "External results for",
-    "resultsSection": "Search results",
-    "externalResultsSection": "External search results",
-    "resultCount": "{{count}} results",
-    "sourceEmpty": "No results from this source.",
-    "sourceUnknown": "Unknown source status",
-    "sourceStatusOK": "Available",
-    "sourceStatusEmpty": "No results",
-    "sourceStatusTimeout": "Timed out",
-    "sourceStatusError": "Source error",
-    "sourceStatusCircuitOpen": "Paused after failures",
-    "sourceStatusRateLimited": "Rate limited"
+    "resultsSection": "Search results"
   },
   "admin": {
     "title": "Admin Console",
@@ -2169,10 +2180,56 @@
     }
   },
   "sra": {
+    "title": "SRA Run Metadata Browser",
+    "documentTitle": "SRA Run Metadata Browser — SoyMutDB",
+    "archiveName": "NCBI Sequence Read Archive",
+    "description": "Look up sequencing run metadata from the NCBI Sequence Read Archive (SRA). Enter a run accession (SRR/DRR/ERR) to view its library details, platform, and data provenance.",
     "subtitle": "Look up run metadata from NCBI's Sequence Read Archive",
     "accession": "Run accession",
+    "accessionExample": "e.g. SRR30334525",
+    "loadRun": "Load run",
+    "loadFailed": "Failed to load run",
+    "fetchFailed": "Could not fetch SRA metadata. Check the accession and try again.",
     "notFound": "Run not found",
-    "openInNcbi": "Open in NCBI"
+    "openInNcbi": "Open in NCBI",
+    "recentRuns": "Recent runs",
+    "noRecentRuns": "No recent accessions.",
+    "clearHistory": "Clear history",
+    "curatedTitle": "Curated SRA runs",
+    "curatedDescription": "Glycine max (soybean) sequencing runs — the current default species",
+    "sampleCount": "{{count}} runs",
+    "scrollCue": "Scroll to browse all runs",
+    "noCuratedRuns": "No curated SRA runs are available.",
+    "samplesUnavailable": "The curated run list is unavailable.",
+    "widgetTitle": "Additional run metadata",
+    "widgetDescription": "An expanded view of the selected run metadata.",
+    "defaultRunName": "SRA sequencing run",
+    "downloadData": "Download data from NCBI",
+    "stats": {
+      "bases": "Bases",
+      "spots": "Spots",
+      "size": "Size",
+      "averageLength": "Average read length"
+    },
+    "fields": {
+      "experiment": "Experiment",
+      "bioProject": "BioProject",
+      "bioSample": "BioSample",
+      "sample": "Sample",
+      "platform": "Platform",
+      "strategy": "Strategy",
+      "source": "Source",
+      "selection": "Selection",
+      "layout": "Layout",
+      "center": "Center",
+      "released": "Released",
+      "taxId": "TaxID"
+    },
+    "status": {
+      "cached": "cached",
+      "offline": "offline",
+      "stub": "stub"
+    }
   },
   "compare": {
     "title": "Variant comparison",
@@ -2182,6 +2239,55 @@
     "limit": "Up to {{max}} variants per comparison.",
     "field": "Field",
     "notFound": "Not present in the active release:",
-    "noRows": "None of these ids are available in the active release."
+    "noRows": "None of these ids are available in the active release.",
+    "curated": {
+      "eyebrow": "Variant comparison",
+      "pageTitle": "Compare Mutant Variants",
+      "documentTitle": "Variant comparison — SoyMutDB",
+      "subtitle": "Select up to {{max}} curated reference variants to compare their genes, mutation types, impact, mutagen, and phenotype.",
+      "referenceNote": "This page uses a fixed curated reference set, not the current database release. Release-pinned live comparison will be available when its evidence API is implemented.",
+      "picker": {
+        "title": "Select variants",
+        "selectedCount": "{{count}} / {{max}} selected",
+        "selectVariant": "Select {{id}}",
+        "gridLabel": "Curated reference variants"
+      },
+      "empty": {
+        "title": "Select at least 2 variants",
+        "description": "Choose variants from the grid above to start a comparison."
+      },
+      "comparisonTitle": "Attribute comparison",
+      "fields": {
+        "gene": "Gene",
+        "location": "Location",
+        "alleleChange": "Allele change",
+        "mutation": "Mutation",
+        "impact": "Impact",
+        "protein": "Protein",
+        "mutagen": "Mutagen",
+        "cultivar": "Cultivar",
+        "phenotype": "Phenotype"
+      },
+      "removeVariant": "Remove {{id}}",
+      "impactDistribution": {
+        "title": "Impact distribution",
+        "description": "Counts of HIGH / MODERATE / LOW / MODIFIER impact among the selected variants.",
+        "ariaLabel": "Impact distribution bar chart"
+      },
+      "phenotypes": {
+        "SMDB-00001": "Early flowering, reduced plant height",
+        "SMDB-00002": "Delayed flowering under long days",
+        "SMDB-00003": "Subtle floral morphology change",
+        "SMDB-00004": "Early maturity, determinate growth",
+        "SMDB-00005": "Insensitive to far-red light",
+        "SMDB-00006": "Late flowering under short days",
+        "SMDB-00007": "Determinate stem growth",
+        "SMDB-00008": "Determinate habit, terminal flower",
+        "SMDB-00009": "Supernodulation, nitrate-tolerant symbiosis",
+        "SMDB-00010": "Late flowering under long days",
+        "SMDB-00011": "Semi-determinate growth habit",
+        "SMDB-00012": "Elevated stearic acid in seeds"
+      }
+    }
   }
 }

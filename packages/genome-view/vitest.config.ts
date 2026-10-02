@@ -1,13 +1,13 @@
-import vue from "@vitejs/plugin-vue";
 import { defineConfig } from "vitest/config";
 
-// Component tests need a DOM; pure viewport/registry tests are unaffected.
+// The viewport/registry/ruler tests are pure, and the SVG renderer is a pure
+// function too, so nothing here needs a component runtime. jsdom is still used
+// because the interactive component tests touch ResizeObserver.
 export default defineConfig({
-  plugins: [vue()],
   test: {
     environment: "jsdom",
     globals: true,
-    include: ["src/**/*.test.ts"],
+    include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
     passWithNoTests: true,
     pool: "forks",
     poolOptions: { forks: { singleFork: true, maxForks: 1 } },

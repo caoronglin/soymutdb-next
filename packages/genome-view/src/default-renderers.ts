@@ -1,21 +1,23 @@
 import { registerTrackRenderer, resolveTrackRenderer } from "./registry";
-import TrackRenderer from "./components/TrackRenderer.vue";
+import { TrackRenderer } from "./components/TrackRenderer";
 
 /**
- * Bind the backend track types to their Vue renderers.
+ * Bind the backend track types to their React renderers.
  *
- * Each type resolves to the data-connected TrackRenderer, which builds the
- * right reader through @soymutdb/genome-data and delegates presentation to the
- * matching track component. Idempotent so importing this never throws.
+ * Each type resolves to the same data-connected `TrackRenderer`, which picks a
+ * reader from `@soymutdb/genome-data` and delegates presentation to the matching
+ * track view. Idempotent so importing this never throws.
  */
+export const DEFAULT_TRACK_TYPES = [
+  "ReferenceSequenceTrack",
+  "FeatureTrack",
+  "VariantTrack",
+  "QuantitativeTrack",
+  "AlignmentsTrack",
+] as const;
+
 export function registerDefaultTrackRenderers(): void {
-  for (const type of [
-    "ReferenceSequenceTrack",
-    "FeatureTrack",
-    "VariantTrack",
-    "QuantitativeTrack",
-    "AlignmentsTrack",
-  ]) {
+  for (const type of DEFAULT_TRACK_TYPES) {
     if (!resolveTrackRenderer(type)) {
       registerTrackRenderer(type, { component: TrackRenderer });
     }

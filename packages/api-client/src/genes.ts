@@ -134,3 +134,78 @@ export function getAssemblyChromosomes(
 ): Promise<ChromosomeInfo[]> {
   return http.get<ChromosomeInfo[]>(`/genes/assemblies/${assembly_id}/chromosomes`);
 }
+
+/**
+ * A typed segment of one transcript, in the vocabulary the portals' renderers
+ * speak (`packages/genome-view` places `cds` / `utr5` / `utr3` boxes). The
+ * database stores `part_type`; the API translates at its boundary so no client
+ * has to know the storage spelling.
+ */
+export interface TranscriptPart {
+  kind: "cds" | "utr5" | "utr3";
+  start: number;
+  end: number;
+}
+
+export interface RegionTranscript {
+  id: string;
+  name: string | null;
+  biotype: string;
+  start: number;
+  end: number;
+  strand: string;
+  is_canonical: boolean;
+  parts: TranscriptPart[];
+}
+
+export interface RegionGene {
+  gene_id: string;
+  name: string | null;
+  chromosome: string;
+  start: number;
+  end: number;
+  start_pos: number;
+  end_pos: number;
+  strand: string;
+  biotype: string;
+  transcripts: RegionTranscript[];
+}
+
+export interface RegionStructure {
+  assembly_id: number;
+  assembly_name: string;
+  assembly_version: string;
+  chromosome: string;
+  chromosome_length: number;
+  start: number;
+  end: number;
+  genes: RegionGene[];
+  truncated: boolean;
+}
+
+export interface RegionStructureParams {
+  assemblyId: number | string;
+  chromosome: string;
+  start: number;
+  end: number;
+  /** Gene bodies only; skips the CDS/UTR segments. */
+  includeParts?: boolean;
+}
+
+/**
+ * Every gene overlapping a window, with its modelled structure.
+ *
+ * The per-gene `/{gene_id}/genome-view.svg` route answers "show me this gene";
+ * this answers "show me this place", which is what a locus link needs.
+ */
+export function getRegionStructure(params: RegionStructureParams): Promise<RegionStructure> {
+  return http.get<RegionStructure>("/genes/region-structure", {
+    params: {
+      assembly_id: params.assemblyId,
+      chromosome: params.chromosome,
+      start: params.start,
+      end: params.end,
+      ...(params.includeParts === false ? { include_parts: false } : {}),
+    },
+  });
+}

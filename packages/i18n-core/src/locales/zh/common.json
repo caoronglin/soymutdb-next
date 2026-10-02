@@ -49,6 +49,7 @@
     "heroTitle": "探索多物种突变的未知疆域",
     "heroSubtitle": "按明确的基因组组装和数据版本，检索已发布的公开记录。",
     "searchPlaceholder": "搜索基因 ID、变异或突变系公开编号…",
+    "searchButton": "搜索",
     "databaseTitle": "SoyMutDB 数据库",
     "databaseSubtitle": "通过稳定的公开标识符浏览已发布记录，并明确区分不同基因组组装。",
     "databaseSearch": "查询数据库",
@@ -208,7 +209,6 @@
     "speciesLabel": "物种",
     "homologGeneLabel": "同源基因",
     "relationshipLabel": "关系",
-    "sourceLabel": "来源",
     "homologsAria": "基因同源记录",
     "notFound": "未找到该基因。",
     "structureTitle": "基因结构",
@@ -405,7 +405,9 @@
     "ready": "浏览器已就绪",
     "timeout": "基因组浏览器未报告就绪。请在下方重试连接。",
     "loadError": "基因组浏览器加载失败。",
-    "iframeTitle": "SoyMutDB 基因组浏览器（JBrowse 2）"
+    "iframeTitle": "SoyMutDB 基因组浏览器（JBrowse 2）",
+    "contextMissingTitle": "基因组浏览器上下文不可用",
+    "contextMissingDescription": "打开 JBrowse 前，请选择明确的基因组组装版本和已发布的数据版本。"
   },
   "blast": {
     "title": "BLAST 搜索",
@@ -444,6 +446,7 @@
     "viewResults": "查看结果",
     "cancel": "取消",
     "noJobs": "暂无任务",
+    "noJobsAnonymous": "数据库列表与提交表单是公开的；提交比对需要登录会话。",
     "noHits": "该任务未找到比对命中",
     "resultsTitle": "BLAST 结果",
     "alignments": "比对",
@@ -753,7 +756,11 @@
     "noChartData": "暂无图表数据",
     "discoveryTrend": "发现趋势",
     "trendDescription": "最近 365 天的累计变异数。",
-    "noData": "该 release 没有汇总数据。"
+    "noData": "该 release 没有汇总数据。",
+    "demoNotice": "演示模式已开启。下方图表使用合成示例数据，并非数据库测量结果。",
+    "variantTypesDescription": "SNP / Indel / SV 分布",
+    "impactDescription": "按预测影响程度统计的变异数量",
+    "liveDataUnavailable": "实时数据暂不可用，请重试。"
   },
   "search": {
     "title": "全局搜索",
@@ -775,13 +782,25 @@
     "subtitle": "搜索基因、变异、突变系和文档",
     "openPalette": "打开搜索",
     "placeholder": "输入搜索关键词...",
+    "heroTitle": "探索 SoyMutDB",
+    "portalDescription": "搜索基因、变异、突变系与论文。",
+    "portalPlaceholder": "搜索基因、变异或论文…",
+    "emptyPromptTitle": "输入关键词开始搜索",
+    "emptyPromptDescription": "输入基因、变异或论文信息以探索数据库。",
+    "errorTitle": "搜索失败",
+    "resultsAria": "搜索结果",
+    "refreshing": "正在刷新",
+    "resultCount": "{{count}} 条结果",
+    "noMatchesDescription": "没有记录匹配此查询，请尝试更宽泛的关键词。",
+    "viewResult": "查看 {{name}}",
     "searching": "搜索中...",
     "noResults": "未找到结果",
     "resultsFor": "搜索结果：",
     "ambiguousNotice": "该查询命中多个基因组版本，请选择一个版本以消除歧义。",
+    "ambiguousAssembly": "基因组组装名称匹配多个版本：{{matches}}。请按版本标识选择。",
+    "assemblyUnavailable": "所请求的基因组组装版本不可用；未发送查询。",
     "assemblyLabel": "基因组版本",
     "releaseLabel": "数据版本",
-    "sourceLabel": "来源",
     "unknownAssembly": "未知版本",
     "genes": {
       "title": "基因 ID 搜索",
@@ -795,6 +814,8 @@
       "resultsFor": "搜索结果",
       "noResults": "未找到基因",
       "resultsRetry": "接口没有返回结果集，请稍后重试。",
+      "resultsUnavailable": "基因搜索暂时不可用。",
+      "resultsAria": "基因 ID 搜索结果",
       "colAssembly": "基因组版本",
       "colChromosome": "染色体号",
       "colMutation": "突变特征",
@@ -835,7 +856,9 @@
       "submit": "搜索",
       "noResults": "该区域内未找到变异",
       "resultsRetry": "接口没有返回结果集，请稍后重试。",
-      "found": "找到 {{count}} 个变异",
+      "resultsUnavailable": "区域搜索暂时不可用。",
+      "chromosomesUnavailable": "无法加载染色体列表。",
+      "found": "找到 {{count}} 个突变位点",
       "colAssembly": "基因组版本",
       "colChromosome": "染色体号",
       "colMutation": "突变特征",
@@ -913,22 +936,10 @@
       "exppattern": "表达模式",
       "exppatternDesc": "跨条件的表达热图。"
     },
-    "externalSources": "搜索外部数据源（NCBI · UniProt · Ensembl · EBI）",
     "enterQuery": "输入基因、变异或文献标识符以浏览数据库。",
     "searchFailed": "搜索失败",
     "requestId": "请求 ID",
-    "externalResultsFor": "外部结果：",
-    "resultsSection": "搜索结果",
-    "externalResultsSection": "外部搜索结果",
-    "resultCount": "{{count}} 条结果",
-    "sourceEmpty": "此数据源没有结果。",
-    "sourceUnknown": "未知数据源状态",
-    "sourceStatusOK": "可用",
-    "sourceStatusEmpty": "无结果",
-    "sourceStatusTimeout": "超时",
-    "sourceStatusError": "数据源错误",
-    "sourceStatusCircuitOpen": "故障后暂停",
-    "sourceStatusRateLimited": "请求受限"
+    "resultsSection": "搜索结果"
   },
   "admin": {
     "title": "管理后台",
@@ -2169,10 +2180,56 @@
     }
   },
   "sra": {
+    "title": "SRA 运行元数据浏览器",
+    "documentTitle": "SRA 运行元数据浏览器 — SoyMutDB",
+    "archiveName": "NCBI 序列读取档案（SRA）",
+    "description": "查询 NCBI 序列读取档案（SRA）的测序运行元数据。输入运行登录号（SRR/DRR/ERR），即可查看文库详情、测序平台和数据来源。",
     "subtitle": "查询 NCBI 序列读取档案中的运行元数据",
     "accession": "运行编号",
+    "accessionExample": "例如：SRR30334525",
+    "loadRun": "加载运行记录",
+    "loadFailed": "运行记录加载失败",
+    "fetchFailed": "无法获取 SRA 元数据。请检查运行编号后重试。",
     "notFound": "未找到该运行",
-    "openInNcbi": "在 NCBI 中打开"
+    "openInNcbi": "在 NCBI 中打开",
+    "recentRuns": "最近查询",
+    "noRecentRuns": "暂无最近查询的运行编号。",
+    "clearHistory": "清除历史记录",
+    "curatedTitle": "精选 SRA 运行",
+    "curatedDescription": "Glycine max（大豆）的测序运行数据——当前默认物种",
+    "sampleCount": "{{count}} 条运行记录",
+    "scrollCue": "滚动查看全部运行记录",
+    "noCuratedRuns": "暂无精选 SRA 运行记录。",
+    "samplesUnavailable": "精选运行列表暂不可用。",
+    "widgetTitle": "更多运行元数据",
+    "widgetDescription": "此区域展示所选运行的扩展元数据。",
+    "defaultRunName": "SRA 测序运行",
+    "downloadData": "从 NCBI 下载数据",
+    "stats": {
+      "bases": "碱基数",
+      "spots": "测序 Spot 数",
+      "size": "数据大小",
+      "averageLength": "平均读长"
+    },
+    "fields": {
+      "experiment": "实验编号",
+      "bioProject": "生物项目（BioProject）",
+      "bioSample": "生物样本（BioSample）",
+      "sample": "样本",
+      "platform": "测序平台",
+      "strategy": "文库策略",
+      "source": "文库来源",
+      "selection": "文库选择",
+      "layout": "文库布局",
+      "center": "测序中心",
+      "released": "发布日期",
+      "taxId": "分类学 ID"
+    },
+    "status": {
+      "cached": "已缓存",
+      "offline": "离线",
+      "stub": "模拟数据"
+    }
   },
   "compare": {
     "title": "变异对比",
@@ -2182,6 +2239,55 @@
     "limit": "每次对比最多 {{max}} 个变异。",
     "field": "字段",
     "notFound": "当前 release 中不存在：",
-    "noRows": "这些 ID 在当前 release 中均不可用。"
+    "noRows": "这些 ID 在当前 release 中均不可用。",
+    "curated": {
+      "eyebrow": "变异对比",
+      "pageTitle": "大豆突变体变异对比",
+      "documentTitle": "变异对比 — SoyMutDB",
+      "subtitle": "选择最多 {{max}} 个精选参考变异，并排比较基因、突变类型、影响程度、诱变剂和表型。",
+      "referenceNote": "本页面使用固定的精选参考数据集，并非当前数据库发布版本。待证据 API 完成后，将支持按发布版本固定的实时比较。",
+      "picker": {
+        "title": "选择变异",
+        "selectedCount": "已选 {{count}} / {{max}} 个",
+        "selectVariant": "选择 {{id}}",
+        "gridLabel": "精选参考变异"
+      },
+      "empty": {
+        "title": "至少选择 2 个变异",
+        "description": "从上方网格选择变异以开始对比。"
+      },
+      "comparisonTitle": "属性对比",
+      "fields": {
+        "gene": "基因",
+        "location": "位置",
+        "alleleChange": "等位基因变化",
+        "mutation": "突变类型",
+        "impact": "影响程度",
+        "protein": "蛋白质变化",
+        "mutagen": "诱变剂",
+        "cultivar": "栽培品种",
+        "phenotype": "表型"
+      },
+      "removeVariant": "移除 {{id}}",
+      "impactDistribution": {
+        "title": "影响程度分布",
+        "description": "当前选择中 HIGH / MODERATE / LOW / MODIFIER 影响等级的数量。",
+        "ariaLabel": "变异影响程度分布柱状图"
+      },
+      "phenotypes": {
+        "SMDB-00001": "开花提前，株高降低",
+        "SMDB-00002": "长日照条件下开花延迟",
+        "SMDB-00003": "花部形态轻微改变",
+        "SMDB-00004": "成熟提前，有限生长",
+        "SMDB-00005": "对远红光不敏感",
+        "SMDB-00006": "短日照条件下开花延迟",
+        "SMDB-00007": "茎秆有限生长",
+        "SMDB-00008": "有限生长习性，顶端开花",
+        "SMDB-00009": "超结瘤，具有硝酸盐耐受性共生表型",
+        "SMDB-00010": "长日照条件下开花延迟",
+        "SMDB-00011": "半有限生长习性",
+        "SMDB-00012": "种子硬脂酸含量升高"
+      }
+    }
   }
 }

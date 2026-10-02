@@ -1,11 +1,34 @@
-export { useGenomeViewport, type GenomeViewport } from "./viewport";
+/**
+ * @soymutdb/genome-view — React genome view.
+ *
+ * Public surface is deliberately small: the pure geometry, the SVG renderer that
+ * both the pre-rendered and interactive paths share, and the React components on
+ * top of them.
+ */
 export {
-  listTrackRenderers,
-  registerTrackRenderer,
-  resolveTrackRenderer,
-  type TrackRendererDescriptor,
-} from "./registry";
-export { computeTicks, formatBp, niceStep, type RulerRegion, type RulerTick } from "./ruler";
+  bpPerPx,
+  bpToPx,
+  createViewport,
+  gotoViewport,
+  MIN_SPAN,
+  panViewport,
+  useGenomeViewport,
+  useStableViewportCallback,
+  useViewportKey,
+  viewportKey,
+  zoomViewport,
+  type GenomeViewport,
+  type GenomeViewportActions,
+} from "./viewport";
+
+export {
+  formatBp,
+  computeTicks,
+  niceStep,
+  type RulerRegion,
+  type RulerTick,
+} from "./ruler";
+
 export {
   clipToRegion,
   layoutIntervals,
@@ -14,12 +37,40 @@ export {
   type PlacedInterval,
   type RegionLike,
 } from "./track-layout";
-export { default as GenomeBrowser } from "./components/GenomeBrowser.vue";
-export { default as TrackErrorBoundary } from "./components/TrackErrorBoundary.vue";
-export { default as TrackRuler } from "./components/TrackRuler.vue";
-export { default as TrackSelector } from "./components/TrackSelector.vue";
-export { default as LocusSearch } from "./components/LocusSearch.vue";
-export { default as FeatureTrack } from "./components/FeatureTrack.vue";export { default as VariantTrack } from "./components/VariantTrack.vue";
-export { default as QuantitativeTrack } from "./components/QuantitativeTrack.vue";export { default as SequenceTrack } from "./components/SequenceTrack.vue";
-export { default as AlignmentsTrack } from "./components/AlignmentsTrack.vue";
-export { registerDefaultTrackRenderers } from "./default-renderers";export { default as TrackRenderer } from "./components/TrackRenderer.vue";
+
+export {
+  mergeExonSpans,
+  placeStructureParts,
+  type Interval,
+  type PlacedPart,
+  type StructurePart,
+  type StructurePartKind,
+} from "./gene-structure";
+
+export {
+  genomeViewCacheKey,
+  renderGenomeViewSvg,
+  type GenomeViewSvgOptions,
+  type GenomeViewSvgTheme,
+  type SvgFeature,
+  type SvgTrack,
+} from "./svg-renderer";
+
+export {
+  listTrackRenderers,
+  registerTrackRenderer,
+  resetTrackRenderers,
+  resolveTrackRenderer,
+  type TrackRendererDescriptor,
+  type TrackRendererProps,
+} from "./registry";
+
+export { DEFAULT_TRACK_TYPES, registerDefaultTrackRenderers } from "./default-renderers";
+
+export {
+  GenomeView,
+  type GenomeViewAction,
+  type GenomeViewControlsApi,
+  type GenomeViewProps,
+} from "./components/GenomeView";
+export { TrackRenderer } from "./components/TrackRenderer";

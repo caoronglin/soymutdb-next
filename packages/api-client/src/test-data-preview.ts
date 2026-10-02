@@ -56,7 +56,12 @@ export interface TestDataPreviewMutationSite {
   confidence: "H" | "L";
   gene_id: string;
   feature: string;
+  /** Operator-editable from the admin console. */
   available: boolean;
+  /** Homolog accessions from the same TSV row; null when the column is empty. */
+  gene_v2: string | null;
+  gene_v4: string | null;
+  gene_dn53: string | null;
 }
 
 export interface TestDataPreviewMutationSitesResponse {
@@ -103,6 +108,40 @@ export function searchTestDataPreviewMutationSites(params: {
       }
       return value;
     });
+}
+
+/**
+ * Every source mutation-site row attached to one exact gene ID.
+ *
+ * Keyed on the gene relation, not a coordinate interval: 13% of the source rows
+ * sit up- or downstream of their gene's start/end, so an interval query would
+ * silently drop them.
+ */
+export function listTestDataPreviewMutationSitesForGene(
+  geneId: string,
+  limit = 1000,
+): Promise<TestDataPreviewMutationSite[]> {
+  return http.get<TestDataPreviewMutationSite[]>("/preview/test-data/mutation-sites/by-gene", {
+    params: { gene_id: geneId, limit },
+  });
+}
+
+/**
+ * Update the operator-maintained `available` flag of one source row.
+ *
+ * This is the only writable field of a preview mutation site: everything else
+ * is the uploaded table's content and is rewritten on the next import.
+ */
+export function updateTestDataPreviewMutationSite(
+  sourceSiteKey: string,
+  payload: { available: boolean },
+): Promise<TestDataPreviewMutationSite> {
+  // The single-row response is the bare row shape (no `preview` envelope), so
+  // there is nothing to assert here beyond the request itself.
+  return http.patch<TestDataPreviewMutationSite>(
+    `/preview/test-data/mutation-sites/${encodeURIComponent(sourceSiteKey)}`,
+    { json: payload },
+  );
 }
 
 function assertUnpublishedPreview<T extends { preview: boolean; publication_status: string }>(value: T): T {

@@ -189,6 +189,11 @@ describe("auth coordination", () => {
     const onLogout = vi.fn();
     onAuthLogout(onLogout);
 
+    // A session must exist for a refresh failure to be a logout — otherwise
+    // this is an anonymous 401, which stays silent (see the dedicated test
+    // below).
+    setAccessToken("token-before-failure");
+
     // First failure → logout fires.
     installFetchMock({
       refreshResponse: () =>
@@ -223,6 +228,29 @@ describe("auth coordination", () => {
 
     await expect(authRequest(AUTH_REFRESH_PATH)).rejects.toMatchObject({ status: 401 });
     // Only the refresh call itself — no retry loop, no second refresh.
+    expect(refreshCalls()).toHaveLength(1);
+  });
+
+  it("anonymous 401 does not emit a logout event", async () => {
+    // The portal renders published routes to visitors with no session; a
+    // public page that reads GET /auth/me (or any per-account endpoint) gets
+    // 401 by design. Emitting logout there navigates the visitor to /login
+    // and takes /blast, /analyses, ... offline for anonymous readers.
+    expect(getAccessToken()).toBeNull();
+    const onLogout = vi.fn();
+    onAuthLogout(onLogout);
+
+    const { refreshCalls } = installFetchMock({
+      refreshResponse: () =>
+        jsonResponse({ error: { code: "invalid_token", message: "nope" }, request_id: "r5" }, 401),
+      failures: 1,
+    });
+
+    await expect(authRequest("/auth/me")).rejects.toMatchObject({ status: 401 });
+
+    expect(onLogout).not.toHaveBeenCalled();
+    // The refresh was still attempted exactly once, so a cookie-backed
+    // session on a freshly loaded page is picked up.
     expect(refreshCalls()).toHaveLength(1);
   });
 
