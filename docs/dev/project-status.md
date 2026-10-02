@@ -40,6 +40,7 @@
 | `apps/api/tests/test_ablation_sra_no_fabrication.py` | 3 个消融用例漏挂 `offline` fixture，实际去访问 NCBI；网络通时守卫反而失败 —— 一个「只在断网时才生效」的守卫不是守卫 | 补 fixture → **11 passed** |
 | `packages/query-keys/src/query-keys.test.ts` | 联邦搜索已永久下线、`federated` 已从缓存键移除，测试仍断言该维度 | 按实现口径删断言 |
 | `packages/charts/src/ChartFigure.tsx` + 测试 | 图表回退分支没把 description 暴露给辅助技术，测试却断言回退态根本不渲染的 `role="img"` | 回退分支补 visually-hidden description，测试改断言真实可达文本 |
+| `scripts/check-vue-retirement.mjs` | 守卫按**包名**把 `@soymutdb/genome-view` 判为退役，但该包已按设计重建为 React 渲染器且 `apps/web` 在用 → 自重建后一直红，没人再跑 | denylist 只保留真正退役的 `ui-vue`，改按**框架**判定；保留 `.vue` 与 `vue/@vue/*` import 扫描覆盖重建后的包；临时副本放一个 `.vue` 文件验证守卫仍 exit 1 |
 
 ## 已知红灯（不是「待办的口头描述」，是当前可复现的状态）
 
