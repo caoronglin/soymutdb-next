@@ -1,108 +1,112 @@
-# SoyMutDB 项目状态（2026-09-26）
+# SoyMutDB 项目状态（2026-10-01 实跑核对）
 
-> 单一状态视图。执行日志与逐项证据见 `docs/dev/vue-migration-recovery-status.md`，
-> 功能矩阵见 `docs/wiki/applications.md`，本页只回答“现在是什么状态”。
-
-> **2026-09-26 校正**：按 Vue 迁移后的现有代码复核。三端均为 Vue 3；`packages/motion` 与
-> `packages/i18n` 已移除；公共站路由数以 `apps/web/src/router/routes.ts` 为准，管理端功能路由数以
-> `apps/admin/src/router/index.ts` 为准。下文旧计数（34/14）与复现包清单已在本次校正中更新；
-> “最近一次全绿”的测试条数为迁移期快照，包集合已变化。
+> 单一状态视图。执行日志见 `.ai-memory/`，逐项设计与计划见 `docs/superpowers/specs/` 与 `docs/aegis/plans/`，
+> 整合视图见 `docs/3.9升级优化文档.md`。本页只回答「现在是什么状态」，且每一条都带本机实跑证据。
+>
+> **本版相对 2026-09-26 版的实质更正**：三个应用全部是 React 19 + Umi Max 4 + antd 6 + ProComponents v3；
+> Vue 已完全退役（0 残留）；上版「三端均为 Vue 3」的表述已作废。旧计数与旧结论一律以本版为准。
 
 ## 一句话
 
-Vue 迁移恢复的 P0/P1 已清零；i18n backlog 从 225 串清到 6 串；本机完成无 Docker 全面部署，
-并在部署中定位、修复了“迁移链落后于模型”的 39 列 + 1 表漂移；远端多实例按约定保持未启动。
+技术栈迁移与 Vue 退役已完成并可复跑；**真实缺口集中在三处**——管理后台的 Pro 业务组件体系（6 个页面仍是裸 antd `Table`、
+详情页无 `ProDescriptions`）、公共门户可见文案守卫为红（39 个文件）、以及后端若干 mock 测试未跟上 release fail-closed 契约。
+本机质量门禁（前端逐包 + `scripts` 契约 275 项 + API 消融 149 项）全绿；后端全量 pytest 在本机会被 OOM kill，
+没有可信的全量数字 —— 这本身就是一条待办。
 
-## 运行中的本机部署
+## 技术栈现状（实跑）
 
-| 服务 | 地址 | 状态 |
+| 应用 | 框架 | 单测 | typecheck |
+| --- | --- | --- | --- |
+| `apps/web` | React 19 + Umi Max 4 + antd 6 | **20 files / 99 tests** | exit 0 |
+| `apps/admin` | 同上 + ProLayout | **6 files / 41 tests**（本轮 3/19 → 6/41） | exit 0 |
+| `apps/jbrowse` | React + JBrowse 2 | 40 pass | exit 0 |
+| `packages/api-client` | — | 27 files / 150 tests | — |
+| 其他包 | genome-view 43 · genome-data 121 · genome-view-model 23 · shared 49 · charts 5 · query-keys 11 · i18n-core 10 | 全绿 | — |
+| `scripts`（Python 契约） | — | **275 passed / 1 skipped** | — |
+| `apps/api` 消融 | — | **16 files / 149 passed / 0 failed** | — |
+| `apps/api` 全量 | — | **无法在本机跑完**：约 47% 处被 OOM kill（EXIT=137） | — |
+| `apps/worker` | — | 本机 `multiprocessing` spawn 失败，未取得数字 | — |
+
+环境：`Node 24.19.0`（符合 pin）、`pnpm 12.5.1`、`Python 3.14.6`；本机 cgroup 受限，任何构建/测试都必须
+`GOMAXPROCS=1 RAYON_NUM_THREADS=1 UV_THREADPOOL_SIZE=1`，否则 turbo/vitest/rayon 因线程耗尽直接崩溃。
+
+## 本轮修掉的真实缺陷（都是工作树里长期存在的契约漂移）
+
+| 文件 | 症状 | 处理 |
 | --- | --- | --- |
-| API（uvicorn） | `127.0.0.1:8010` | `/health` 200 · `live` 200 · `ready` = degraded（PG 正常） |
-| 公共站 external | `http://localhost:8090/` | 200 · 同源 `/api/v1` 代理 · CSP 指向 8090 |
-| 公共站 internal | `http://localhost:8094/` | 200 · `noindex, nofollow, noarchive` |
-| 管理端 | `http://localhost:8091/login` | 200 · 登录/实例上下文/管理 API 全通 |
-| JBrowse 2 | `http://localhost:8090/jbrowse/` | 200（同源前缀服务） |
-| PostgreSQL | `127.0.0.1:55432/soymutdb_deploy` | 迁移到 `0042`；`0041` 已 seed 本地实例 |
-| Redis / ClickHouse / MinIO | — | ❌ 本机无二进制且无 Docker：相应能力降级/503，**不计为通过** |
+| `apps/api/tests/test_expression.py` | `/expression/*` 已按 release fail-closed 返回 503，测试仍断言旧的「空列表 200」→ 6 failed | 注入 `get_release_context`；另 3 处旧断言改为当前公开契约（`/libraries/{public_id}`、内部主键不再是 locator、cursor 为不透明签名串）→ **19 passed** |
+| `apps/api/tests/test_gwas_api.py` | 路由新增 `response: Response` 后测试漏传 → 1 failed | 补参数 → **18 passed** |
+| `apps/api/tests/conftest.py` | 复用的本地测试库在会话被强杀后残留角色行，之后每个会话都在 setup 报 `roles_name_key` 冲突（读起来像代码缺陷，其实不是） | 角色种子插入改 `on_conflict_do_nothing` |
+| `apps/api/tests/test_ablation_sra_no_fabrication.py` | 3 个消融用例漏挂 `offline` fixture，实际去访问 NCBI；网络通时守卫反而失败 —— 一个「只在断网时才生效」的守卫不是守卫 | 补 fixture → **11 passed** |
+| `packages/query-keys/src/query-keys.test.ts` | 联邦搜索已永久下线、`federated` 已从缓存键移除，测试仍断言该维度 | 按实现口径删断言 |
+| `packages/charts/src/ChartFigure.tsx` + 测试 | 图表回退分支没把 description 暴露给辅助技术，测试却断言回退态根本不渲染的 `role="img"` | 回退分支补 visually-hidden description，测试改断言真实可达文本 |
 
-- 日志：`/tmp/soymutdb-deploy/*.log`；管理员 `deploy_admin` 密码：`/tmp/soymutdb-deploy/credentials.txt`（600，不入仓库）。
-- 远端多实例：仅登记/探活/门户跳转；`administer()` 在默认与置位标志下都拒绝。管理端每页显示目标实例/发布/服务器。
+## 已知红灯（不是「待办的口头描述」，是当前可复现的状态）
 
-## 数据与迁移
+| # | 红灯 | 证据 | 归属 |
+| --- | --- | --- | --- |
+| 1 | 可见文案守卫 exit 1，**39 个文件** | `node scripts/check_visible_i18n_react.mjs` | `docs/aegis/plans/2026-10-01-admin-pro-migration.md` A5 |
+| 2 | 6 个 admin 页面仍是裸 antd `Table`；`ProDescriptions` 0 处、`ProCard` 0 处 | 逐项 grep | 同上 A2/A3 |
+| 3 | `ProLayout.menuItemRender` 用 `<a href>`，侧栏点击整页刷新 | `apps/admin/src/routes/__root.tsx` | 同上 A1 |
+| 4 | API 全量 pytest OOM（EXIT=137 @ ~47%） | 实跑 | 新增待办：分片或降内存跑法需写进 `scripts/verify-backend-tests.sh` |
+| 5 | `Makefile:197` lint 目标指向不存在的 `apps/api/src`（代码在 `apps/api/app`） | 实读 | 工具链缺陷，等修 |
+| 6 | `AGENTS.md:58,90` 写 pnpm `11.21.0`，仓库实际 `12.5.1` | 实读 | 文档漂移，等修 |
+| 7 | 15 个 API 测试依赖 testcontainers，本机无 Docker | 实跑 | **SKIPPED ≠ PASS** |
+| 8 | 随 Vue 退役丢失的契约覆盖：admin 会话（`lib/auth-context.tsx`）、web 动效可访问性（`lib/motion-*.ts`）、页面定义 href 安全校验 | 对比 Vue 树被删的三个测试文件 | 本轮已补两项（导航可达性、门面导出），会话与动效仍缺 |
 
-| 库 | 角色 | 状态 |
-| --- | --- | --- |
-| `soymutdb_deploy` | 本机部署运行库 | `0042`，漂移 = NONE |
-| `soymutdb_testfixtures` | pytest fixture（每次重建） | 由测试会话创建/销毁 |
-| `soymutdb_validation` | 迁移验证/升降级实操 | `0042` |
-| `soymutdb_scratch42` | 0042 带数据回填验证（可丢） | `0042` |
+## 已完成并留证（要点）
 
-- 迁移 `0042_reconcile_model_schema` 修复：`news_articles`/`static_pages` 双语列、
-  `publications.is_featured`、`track_categories.display_order`、`tracks.*`、`blast_jobs.*`、
-  `blast_databases.file_path`、`seed_inventory.*`、`seed_requests.*`、新建 `content_versions`。
-- 验证：带历史数据回填 → 降级精确移除 → 再升级；离线升降级契约测试 2 个。
+- **Vue 完全退役**：0 个 `.vue`；`packages/ui-vue`、`packages/genome-view`（Vue 版）已删；`scripts/check-vue-retirement.mjs` 常驻门禁；
+  `scripts/check-react-entry-graph.mjs` 遍历三端实际发布入口的 import 闭包 PASS。
+- **三项查询收口**：Gene ID / Physical Location 的 assembly 作用域隔离（深链不可判定不回退默认版本）、坐标安全整数校验、
+  JBrowse 深链携带 `release`。
+- **自研基因组视图**：`packages/genome-view` 以 React 重建，`renderGenomeViewSvg()` 纯函数保证预渲染与交互渲染不漂移；
+  配套迁移 `0045_transcript_parts` + GFF3 结构导入（transcripts 80,374 / parts 716,349 / exons 563,838，与 GFF3 计数逐一对上）。
+- **联邦搜索彻底下线**（API `app/search/` 整包删除 + 前端与客户端清理），`federated` 已退出缓存键。
+- **消融测试体系**：API 侧 16 个文件 149 项全绿，覆盖身份边界、assembly/crosswalk、release 作用域、缓存键、快照、ClickHouse 投影。
+- **本轮新增前端守卫**：内容管理 URL 真源功能测试、导航可达性消融、antd 门面导出完整性消融（补 `@ant-design/cli usage`
+  解析不到 `@/lib/antd` 门面层的盲区）。
 
-## 质量门禁（最近一次全绿）
+## 环境阻碍（影响所有门禁判定）
 
-| 门禁 | 结果 |
-| --- | --- |
-| 逐包 `lint / typecheck / test` | 36/36 顺序执行通过（12 包） |
-| 前端单测 | web 106 · admin 37 · api-client 120 · shared 49 · query-keys 10 · i18n-core 7 · genome-view-model 13 · ui-vue 4 · charts 2 |
-| 后端 | API **1608 passed** · worker **357 passed / 1 skipped** · 架构守卫通过 |
-| 契约烟测 | 232 + 10（含 locale parity、visible-i18n、app-shell self-test） |
-| 公共站 E2E（本地离线子路径） | 29 passed / 2 skipped（后端依赖） |
-| 管理端产物 E2E | 3/3 |
-| 部署态浏览器探针 | 三站点 core 全通过；控制台仅剩 meta `frame-ancestors` 提示 + 无发布数据的预期 503 |
-| 仓库 runtime 验收 | `acceptance.sh --profile runtime` PASS（迁移 + 真实 uvicorn + health + search） |
-| 产物检查 | 双站构建、隔离扫描、static smoke ×3、favicon、可见文案 6/1、locale 1431=1431 |
+- **无 Docker**：testcontainers 用例必然 SKIPPED/ERROR，不计通过。
+- **裸 `pnpm` 调用**：`apps/web/scripts/build-sites.ts` 内部调 `pnpm exec max build`，PATH 中的 pnpm 版本与状态不可靠；
+  绕过方式是用 corepack 缓存里的真实 `pnpm.mjs` 做 shim（`.validation/bin/pnpm`）。不得改 pin 或全局包管理器状态。
+- **registry 滞后**：`.npmrc` 指向 `registry.npmmirror.com`，其 `@tanstack/react-query` 最新仅 5.99.2，锁文件已锁 5.104.0；
+  任何重新解析锁文件的操作必须临时 `--registry=https://registry.npmjs.org/`，`--frozen-lockfile` 不受影响。
+- **本地测试库需为空**：复用的 `soymutdb_*` 库在被强杀的会话后会残留数据；本轮已把角色种子改为幂等，
+  但整表残留仍需人工清理或换库。
+- **可写隔离 Admin 环境缺失**：截图视觉验收、Admin save→公共渲染 E2E、响应式运行时检查全部 pending。
 
-## 功能状态摘要
+## 待决策（不自行拍板）
 
-- **公共站** 35 条路由全部实现（`apps/web/src/router/routes.ts` 的 35 个 `PortalRouteDefinition`）；
-  首页数据库入口、搜索、实体详情、工具、新闻、登录均可用。
-- **管理端** 19 条功能路由（`apps/admin/src/router/index.ts`）：登录、dashboard、发布、导入（列表/新建/详情）、
-  内容页、旧内容迁移、表格模板、文献、新闻、媒体、审计、能力、实例、设置、品牌、分析设置已实现；
-  Page Builder/Widgets/Layout（ADR-0009）为**有意退役**，`/resource-catalog` 落到明确“未恢复”页，
-  其余旧深链已重定向。
-- **i18n**：字典 en/zh 各 1431 key 完全对等；可见文案预算 6 串 / 1 文件（数据值白名单）。
-- **assembly**：URL/缓存/请求身份统一稳定 `id`，未知/歧义显式报错；后端 label 规范化**计划中**。
-- **品牌**：运行时写入页眉/标题/favicon 已通（写入→公共读取→回滚实测）；构建期静态写入**计划中**。
-- **多实例**：本地优先管理闭环完成；远端管理通道**未启动**。
-
-## 已知缺口（均标注计划中）
-
-1. 管理端遗留项：`/resource-catalog`（“未恢复”页）；设置历史回滚 UI。Page Builder/Widgets/Layout 为
-   ADR-0009 有意退役，不属于待恢复缺口。
-2. 后端 `assembly_id` 入参与 ClickHouse `assembly_key` 规范化。
-3. 构建期品牌写入静态 HTML/manifest。
-4. 部署态在线 smoke 与 Service Worker 升级测试（需部署/网络）。
-5. Redis / ClickHouse / MinIO 未部署（本机环境）；远端管理、服务间凭据、双实例测试未启动。
-
-## 环境约束（沙箱）
-
-- 无 Docker → 无 Redis/ClickHouse/MinIO；testcontainers 不可用，使用 Mamba PostgreSQL 55432。
-- Node 24 需 `PATH=/usr/local/bin:$PATH`；构建需 `GOMAXPROCS=2 RAYON_NUM_THREADS=1`。
-- 本沙箱 cgroup pid 计费异常导致 `turbo run` 的 spawn 偶发 EAGAIN；逐包顺序执行可完整验证。
-- `8000` 已被本机其他服务占用，本仓库默认 API 端口为 **8010**。
+见 `docs/3.9升级优化文档.md` §11：`public_id` 正式格式、internal 检索角色名单、无 assembly 查询的 UX、
+v4↔v5 映射展示规则、生产对象存储选择、主导航口径、Gene ID 单行 vs 批量、页脚导航初始 bounds 等。
 
 ## 复现
 
 ```bash
-# 质量门禁（逐包；沙箱下比 turbo 更稳）
+# 前端（逐包；本机比 turbo 稳）
+export GOMAXPROCS=1 RAYON_NUM_THREADS=1 UV_THREADPOOL_SIZE=1
 for p in @soymutdb/api-client @soymutdb/charts @soymutdb/genome-data @soymutdb/genome-view \
-         @soymutdb/genome-view-model @soymutdb/i18n-core \
-         @soymutdb/query-keys @soymutdb/shared @soymutdb/ui-vue \
+         @soymutdb/genome-view-model @soymutdb/i18n-core @soymutdb/query-keys @soymutdb/shared \
          @soymutdb/web @soymutdb/admin @soymutdb/jbrowse; do
   pnpm --filter "$p" run lint && pnpm --filter "$p" run typecheck && pnpm --filter "$p" run test
 done
 
-# 后端（真实 PostgreSQL）
-SOYMUTDB_TEST_DATABASE_URL='postgresql+asyncpg://soymutdb@127.0.0.1:55432/soymutdb_testfixtures' \
-  bash scripts/verify-backend-tests.sh
+# 交付与平台契约
+python3 -m pytest scripts -q
+node scripts/check-react-entry-graph.mjs && node scripts/check-vue-retirement.mjs
+node scripts/check_visible_i18n_react.mjs     # 当前 exit 1，见「已知红灯」第 1 条
 
-# 运行时验收
-SOYMUTDB_DATABASE_URL='postgresql+asyncpg://soymutdb@127.0.0.1:55432/soymutdb_scratch42' \
-  bash scripts/acceptance.sh --profile runtime
+# antd CLI（需要 HOME 可写）
+HOME=$PWD/.validation/home ./node_modules/.bin/antd lint apps/admin/src
+HOME=$PWD/.validation/home ./node_modules/.bin/antd info Table
 
-# 本机部署启停见 docs/wiki/deployment-and-ops.md「无 Docker 本机部署」
+# 后端（需要一个**空**的本地库；全量在本机会 OOM，建议分片）
+cd apps/api
+SOYMUTDB_TEST_DATABASE_URL='postgresql+asyncpg://soymutdb@127.0.0.1:55432/<empty-db>' \
+  .venv/bin/python -m pytest tests --ignore=tests/a0 -q
+SOYMUTDB_TEST_DATABASE_URL='postgresql+asyncpg://soymutdb@127.0.0.1:55432/<empty-db>' \
+  .venv/bin/python -m pytest tests/test_ablation_*.py -q     # 149 passed
 ```

@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "requestedOutcome": "Complete the user-approved, phased improvements to the SoyMutDB public portal and its Admin experience.",
+  "goal": "Audit and improve localization, typography, clipping, Admin UX, footer editing, portal functionality, analytics collection and visualization across apps/web, apps/admin, and apps/jbrowse, with no production writes.",
+  "successEvidence": [
+    "Every implementation slice has an approved spec and plan, focused tests/builds pass, published routes receive desktop/mobile screenshot review, isolated Admin workflows pass on synthetic data, and existing ClickHouse telemetry/history is preserved while GoatCounter and AntV are verified."
+  ],
+  "stopCondition": "Stop on scope drift or any required production write. Keep the goal active with needs-verification when isolated Admin environment or SoyMutDB preview is unavailable; ask the user before any live Admin write or starting a replacement server.",
+  "nonGoals": [
+    "No production writes, no silent data/telemetry deletion, no desktop runtime in this monorepo, and no implementation outside a separately approved slice."
+  ],
+  "scope": "Phased work across apps/web, apps/admin, apps/jbrowse, relevant API/client contracts, self-hosted GoatCounter, preserved ClickHouse search/component/Web Vitals history, and AntV dashboards; each phase requires user-approved scope.",
+  "changeKinds": [
+    "cross-cutting-feature"
+  ],
+  "riskHints": [
+    "Public/internal security boundary, runtime settings/API compatibility, search assembly/release invariants, telemetry retention, and Admin write workflows; synthetic test data only."
+  ]
+}

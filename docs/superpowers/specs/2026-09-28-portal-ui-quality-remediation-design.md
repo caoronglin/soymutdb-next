@@ -1,6 +1,6 @@
 # Public Portal UI Localization and Layout Remediation Design
 
-**Status:** Design approved in conversation; written specification is awaiting user review.
+**Status:** Design and written specification approved by the user; committed as `967edba`.
 
 **Date:** 2026-09-28
 **Parent objective:** Remediate confirmed UI localization/readability issues across all three frontends in separate app-specific phases. This specification covers only the first `apps/web` phase.

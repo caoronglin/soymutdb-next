@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "goal-b6a0bed6-54eb-4a42-900c-a233ae327b6c",
+  "currentTodo": "Gene ID and physical-location search pages decoupled from the portal hero; awaiting the user's call on the two remaining wireframe differences.",
+  "completedTodos": [
+    "Create and review the scoped implementation plan for the approved footer/search/font design.",
+    "Capture full TaskStartSnapshot and review current search.tsx/shared locale diffs without overwriting them.",
+    "Implement the footer API validation, settings wiring, additive response, and client type; focused API tests passed (46). OpenAPI artifact cleanup remains pending.",
+    "Trace the CSP warning to a meta policy containing frame-ancestors while the dev response carried no CSP HTTP header.",
+    "Bring up the no-Docker local stack with .deploy/scripts/up.sh under a managed background job: API 8030 reports ready, portal 5173 and admin 5174 return 200, and the Celery worker answers a broker ping."
+  ],
+  "activeSlice": "Runtime verification slice: the .deploy stack serves built artifacts (portal 5173, admin 5174) against API 8030; no application source change was made.",
+  "evidenceRefs": [
+    "docs/aegis/plans/2026-09-28-admin-editable-footer-search-font.md",
+    ".deploy/scripts/up.sh",
+    "apps/web/config/config.ts#L74-L76",
+    "packages/shared/src/deployment.ts#L148-L174",
+    "apps/web/public/_headers#L29-L35",
+    "apps/web/scripts/finalize-csp.ts#L139-L149",
+    "apps/web/dist/external/index.html"
+  ],
+  "blockedOn": "MinIO on 127.0.0.1:9001 is not started by up.sh, so object-storage tasks fail with EndpointConnectionError while the worker stays online. The stack also runs inside the harness sandbox job (bwrap --die-with-parent), so it stops when that job is reclaimed. Isolated Admin E2E and published-route visual verification still need their environment.",
+  "nextStep": "Collect user feedback on the running stack. Remaining candidates: keep frame-ancestors in response headers and drop it from meta policies, rebuild artifacts so source fixes reach 5173/5174, finish the scoped OpenAPI cleanup, then build the Admin footer editor slice.",
+  "updatedAt": "2026-09-29"
+}

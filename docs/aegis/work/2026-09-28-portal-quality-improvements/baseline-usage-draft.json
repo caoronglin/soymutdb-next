@@ -1,0 +1,47 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "goal-b6a0bed6-54eb-4a42-900c-a233ae327b6c",
+  "requiredBaselineRefs": [
+    "AGENTS.md",
+    "docs/dev/database-core-contract.md",
+    "docs/aegis/BASELINE-GOVERNANCE.md",
+    "docs/aegis/baseline/2026-09-28-initial-baseline.md",
+    "docs/superpowers/specs/2026-09-28-portal-ui-quality-remediation-design.md",
+    "docs/aegis/plans/2026-09-28-portal-ui-quality-remediation.md",
+    "docs/superpowers/specs/2026-09-28-admin-editable-footer-search-font-design.md"
+  ],
+  "deliveredContextRefs": [
+    "docs/dev/README.md",
+    "docs/dev/architecture-and-deployment.md",
+    "apps/web/package.json",
+    "apps/web/config/config.ts",
+    "apps/web/public/_headers",
+    "apps/web/scripts/finalize-csp.ts",
+    "packages/shared/src/deployment.ts",
+    "apps/jbrowse/config/config.ts",
+    "apps/jbrowse/public/_headers",
+    "apps/jbrowse/src/config.ts",
+    "apps/admin/config/config.ts",
+    "apps/admin/public/_headers"
+  ],
+  "acknowledgedBeforePlanRefs": [
+    "AGENTS.md",
+    "docs/dev/database-core-contract.md",
+    "docs/aegis/BASELINE-GOVERNANCE.md",
+    "docs/aegis/baseline/2026-09-28-initial-baseline.md",
+    "docs/superpowers/specs/2026-09-28-portal-ui-quality-remediation-design.md",
+    "docs/aegis/plans/2026-09-28-portal-ui-quality-remediation.md",
+    "docs/superpowers/specs/2026-09-28-admin-editable-footer-search-font-design.md"
+  ],
+  "citedInPlanRefs": [
+    "AGENTS.md",
+    "docs/dev/database-core-contract.md",
+    "docs/aegis/BASELINE-GOVERNANCE.md",
+    "docs/aegis/baseline/2026-09-28-initial-baseline.md",
+    "docs/superpowers/specs/2026-09-28-portal-ui-quality-remediation-design.md",
+    "docs/aegis/plans/2026-09-28-portal-ui-quality-remediation.md",
+    "docs/superpowers/specs/2026-09-28-admin-editable-footer-search-font-design.md"
+  ],
+  "missingRefs": [],
+  "decision": "continue"
+}

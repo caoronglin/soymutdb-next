@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "candidateDocs": [
+    "AGENTS.md",
+    "docs/dev/database-core-contract.md",
+    "docs/aegis/BASELINE-GOVERNANCE.md",
+    "docs/superpowers/specs/2026-09-28-portal-ui-quality-remediation-design.md",
+    "docs/aegis/plans/2026-09-28-portal-ui-quality-remediation.md",
+    "docs/superpowers/specs/2026-09-28-admin-editable-footer-search-font-design.md"
+  ],
+  "whyRelevant": "Repo security/toolchain rules, database search contracts, baseline governance, and the previously approved Web-only remediation define the invariant boundaries; the newly approved footer/search/font design adds this active feature scope without silently expanding the older plan.",
+  "missingAuthority": [
+    "A SoyMutDB preview URL and isolated writable Admin test environment/credentials are not supplied; they block live screenshots and Admin write E2E only. No production writes are authorized."
+  ]
+}

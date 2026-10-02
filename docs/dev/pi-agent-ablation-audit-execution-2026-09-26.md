@@ -2,7 +2,21 @@
 
 > 审计日期：2026-09-26。对象是当前工作树，不是旧版验收文档中的历史快照。
 > 本文只给出已审计事实、执行顺序和验收门禁；本轮没有修复产品代码或改动生产数据。
-> 当前判定：**生产发布 No-Go**。公开数据边界、assembly 搜索和真实数据写入仍有阻断项。
+> **2026-09-30 复核：第 1～4、6～7 节记录的是 9 月 26 日失败前基线，不可作为今天的待修清单直接执行。** 后续消融与优化已关闭其中多项；公共站和管理端又切换到 React 19/Umi Max/Ant Design 6。PI-AGENT 先执行下方第 0 节，再使用历史实验设计和第 5 节硬约束。当前生产发布仍因真实数据 G10/G12 而 **No-Go**。
+
+## 0. PI-AGENT 当前执行入口（2026-09-30 复核）
+
+本轮只做了现行源码与已有报告的针对性回读，没有在 `HEAD=967edbab1` 重跑全部 PostgreSQL、ClickHouse、E2E 或部署验收。以下“已改”表示代码存在且 9 月 26 日后有对应消融/优化证据，**不等于今天在新 React 制品上重新放行**。
+
+| 原条目 | 现行状态与证据 | PI-AGENT 下一步 |
+| --- | --- | --- |
+| P0-01～04（公开 release、suggest、歧义、内部 ID） | **已改，待当前 HEAD 回归**。`apps/api/app/api/v1/mutants.py:25-110` 已绑定 release；`apps/api/app/api/v1/search.py:86-108` 无发布版本时 fail closed；`apps/api/app/services/search_service.py:565-607,1115-1156` 在分页前检查全量 assembly 歧义并匹配内部主键。9 月 26 日的 51 场景消融和优化证据见 `docs/dev/ablation/2026-09-26/README.md`、`OPTIMIZATION-REPORT.md`。 | 在当前 HEAD 的一次性 PostgreSQL 库复跑 ID/ASM/CTX 全矩阵；检查 React 客户端与 URL/日志/制品泄漏，失败再定位修复。 |
+| P1-01～04（VCF 身份、样本、staging、游标键） | **已改，待当前 HEAD 回归**。`ingest.py:621,640-644` 使用所选样本基因型和 assembly；`infra/clickhouse/init.sql:145` 与升级 DDL 已建 staging；`query-options.ts:380-405` 的键带 cursor。9 月 26 日管线消融显示去掉这些保护会翻转结果。 | 在真实 ClickHouse 和当前 Web 制品复跑跨装配重试、双样本 VCF、游标深链/前进后退；保留现有汇总清理保护。 |
+| P0-06（CI 双站与 Kind） | **双站子项已接线，Kind 子项仍待决**。CNB 现在通过 `.cnb.yml:125-129` → `scripts/ci-job-steps.sh:267-286` 执行隔离脚本；GitHub 同样调用。GitHub 发布依赖 `kubernetes-kind`（`.github/workflows/ci.yml:482-484`），CNB release 仍只等待两个架构镜像包（`.cnb.yml:401-421`）。 | 用 CI 契约测试证明双站 gate 两边等价；对 Kind 是否为共同发布阻断门禁作明确决策，若是则补 CNB 同等依赖并做失败注入，若否则调整 GitHub/规范并记录理由。 |
+| P1-05～08、P2 的 Vue 页面结论 | **框架已替换，历史定位不再适用**。当前 `apps/web/src/main.tsx`、`apps/admin/src/main.tsx` 是 React 入口，历史 `SearchView.vue`、`VariantsView.vue`、`ImportsView.vue` 等已不存在；见 `docs/superpowers/specs/2026-09-27-react-pro-v6-replatform-design.md`。 | 从当前 React 路由、typed client 和运行中制品重新建立功能矩阵，重点测数据库搜索/筛选/分页、详情与 JBrowse、导入/新闻/品牌、实例目标、双站隔离及真实浏览器错误态。禁止按下方 Vue 行号直接改码。 |
+| P0-05（受控真实数据） | **仍开放，生产 No-Go**。`scripts/seed_release_data.py:498,536` 的 `--write` 仍 fail closed；`docs/ops/acceptance-current-state.md:21,42-44` 仍判 G10/G12 未过。 | 先冻结数据源版本/许可、样本映射和 CH canonical schema；取得实际写入授权后，在隔离 staging 完成 PG/CH 写入、幂等、回滚、provenance 与 `validate-release-data.sh`，再申请生产放行。 |
+
+**执行顺序**：① 保全当前工作树并记录新 HEAD；② 复跑已改核心矩阵，失败才开修复 Wave；③ 审查 React 新路径的 E2E/双站制品；④ 收口 CI Kind 策略；⑤ 在授权和真实数据前置齐全后处理 G10/G12。每步按第 5 节 `dev-expert` 硬门禁提交证据。下文第 1～4 节的 P0/P1 表是 9 月 26 日审计原始记录，保留供失败前对照和回归设计。
 
 ## 1. 任务边界与证据口径
 

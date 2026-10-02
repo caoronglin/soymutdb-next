@@ -2,6 +2,7 @@
 
 Date: 2026-08-14
 Status: Approved
+Revised: 2026-09-29 — search tool pages separated from the portal search page, home database-entrypoint strip removed, reference details for Gene ID / Physical Location / BLAST recorded, and the remaining wireframe differences listed inline as open items.
 Reference: `ui-r/网页-查询V2.pdf`
 
 ## Goal
@@ -33,6 +34,8 @@ The primary navigation order is fixed to:
 4. Latest News
 5. Contact
 
+The reference confirms this order as 主页 / 收录 / 工具 / 最新动态 / 联系我们. As of 2026-09-29 the shipped portal header instead renders 浏览 / 工具 / 下载 / 资源 with a 最新动态 child link, so it does not yet match the approved order. That is an open implementation deviation, not an approved change to this section.
+
 The public home page contains, in order:
 
 1. A desktop 2:3 content grid with up to five latest-news links on the left and a three-to-six-image featured carousel on the right.
@@ -40,6 +43,20 @@ The public home page contains, in order:
 3. The existing sanitized, CMS-managed home content block supporting text, images, video, and links.
 
 The current hero search and statistics strip are removed because they are outside the approved reference structure. Their underlying APIs remain unchanged.
+
+The home database-entrypoint strip — the `SOYMUTDB DATABASE` eyebrow, the `SoyMutDB 数据库` heading, the `查询数据库` link, and the 突变系 / 基因 / 变异 cards — is not part of the approved structure above. It was removed from the public React home page on 2026-09-29 to align the implementation with this section. The three destinations stay reachable through the primary navigation, the five task entries, and the resource navigation; no API, route, or i18n catalog entry was deleted.
+
+### Search tool pages
+
+Every search tool is a standalone page, never a section of the portal search page.
+
+- Routes: `/search/genes` (Gene ID), `/search/location` (Physical Location), `/search/gbrowse` (JBrowse 2), `/search/blast` (BLAST), `/search/primer` (Primer Design).
+- A tool page renders its own heading, its own query form and its own result table. It SHALL NOT render the portal hero, the global search box, the federated-source toggle or the aggregated portal result list — those belong to `/search` alone.
+- `/search` keeps the hero, the global search box and the aggregated result list.
+
+This is a route-architecture rule, not a styling preference. `/search` is a parent route that renders `<Outlet />`; until 2026-09-29 it also rendered the portal hero for every child, which pushed each tool's own heading and form below a full screen of unrelated portal content. The fix renders the portal block only when the path is `/search` itself.
+
+The reference marks a secondary directory on tool pages in this order: 基因 ID / 物理位置 / JBrowse / BLAST.
 
 ## Search Flows
 
@@ -56,9 +73,19 @@ The form contains a default API-provided genome assembly, a gene ID input, and a
 
 Gene IDs link to gene details. The JBrowse 2 action opens a locus-specific browser view in a new tab.
 
+Form details confirmed by the reference:
+
+- The assembly control is a dropdown showing the default assembly with an explicit default marker; options can grow as more assemblies are released.
+- The gene ID field carries a placeholder example drawn from the currently selected assembly, so the accepted identifier shape is visible before typing.
+- The submit action is the only trigger; results appear in a new tab rather than replacing the page.
+
+Open difference: the reference draws a single-line gene ID field with one example, while the current implementation accepts multiple gene IDs, one per line, and says so in a helper line. The multi-ID form is a superset of the reference behaviour and is not yet reconciled with the wireframe.
+
 ### Physical Location
 
 The form contains an assembly, chromosome, start position, and end position. Submission opens a parameterized `/search/location` URL in a new tab. The result table follows the same six-column order as Gene ID search and links each row to JBrowse 2.
+
+Open difference: the reference draws one combined input — `染色体号:起始点位-终止点位` (for example `Gm01:1-2000`) — while the current implementation provides four controls: an assembly dropdown, a chromosome dropdown populated from the API for the selected assembly, and separate start/end inputs. The four-control form matches the "assembly, chromosome, start position, and end position" contract in this section and keeps the chromosome list authoritative instead of parsing free text; reconciling it with the single-box wireframe is a pending decision.
 
 ### JBrowse 2
 
@@ -67,6 +94,13 @@ The current transfer page remains responsible for selecting an assembly and open
 ### BLAST
 
 The search entry opens the complete BLAST form rather than an intermediate explanation card. The form contains BLAST type (`blastn` or `blastp`), reference sequence type, assembly, FASTA input, and submit action. Results expose genome assembly, query sequence ID, coverage, E-value, gene ID, and JBrowse 2 actions. Gene IDs cross-link to parameterized Gene ID search results.
+
+Form details confirmed by the reference:
+
+- BLAST type is a dropdown limited to `blastn` and `blastp`; no other program is offered.
+- The reference sequence type is the assembly version.
+- The sequence input accepts FASTA format.
+- Each result row carries two independent actions: the gene ID opens Gene ID search for that identifier, and the JBrowse action opens the genome browser in a new page. Both are per row, not per result set.
 
 ### Primer Design
 

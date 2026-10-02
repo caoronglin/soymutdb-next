@@ -1,0 +1,28 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "taskId": "goal-b6a0bed6-54eb-4a42-900c-a233ae327b6c",
+  "lastCheckpointRef": "docs/aegis/work/2026-09-28-portal-quality-improvements/todo-checkpoint-draft.json",
+  "resumeInstruction": "Read the active goal, latest checkpoint, and implementation plan; preserve every dirty path. Check whether the managed Web dev job is still serving 127.0.0.1:5173; API port 8010 was absent. User review is active, the CSP warning is diagnosed but not fixed, and the API client OpenAPI cleanup remains pending.",
+  "knownPartialWork": [
+    "Create and review the scoped implementation plan for the approved footer/search/font design.",
+    "Capture full TaskStartSnapshot and review current search.tsx/shared locale diffs without overwriting them.",
+    "Implement the API footer validator, settings wiring, public response, and client type; focused tests passed (46), while scoped OpenAPI cleanup remains unresolved.",
+    "Start the public Web dev server on port 5173; the API at 8010 is not running.",
+    "Diagnose CSP delivery: the live Web response has one CSP meta tag with frame-ancestors and no CSP response header; Admin and JBrowse configs also put frame-ancestors in meta policies."
+  ],
+  "mustReadBeforeContinuing": [
+    "docs/aegis/work/2026-09-28-portal-quality-improvements/10-intent.md",
+    "docs/aegis/work/2026-09-28-portal-quality-improvements/20-checkpoint.md",
+    "docs/aegis/work/2026-09-28-portal-quality-improvements/todo-checkpoint-draft.json",
+    "docs/aegis/plans/2026-09-28-admin-editable-footer-search-font.md",
+    "apps/web/config/config.ts",
+    "packages/shared/src/deployment.ts",
+    "apps/web/public/_headers",
+    "apps/web/scripts/finalize-csp.ts"
+  ],
+  "unsafeToAssume": [
+    "The workspace-wide Aegis structural check has pre-existing baseline wording and unindexed legacy-record findings; do not treat the global check as passing or alter unrelated records.",
+    "The user has not requested a source edit for CSP yet. The current Web dev server does not deliver a CSP HTTP header, so frame-ancestors is not enforced there; production _headers contains the directive, while the meta tag still causes the browser warning.",
+    "The current Web dev server is frontend-only; API-backed interactions require the API on 127.0.0.1:8010."
+  ]
+}

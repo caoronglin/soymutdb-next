@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "affectedLayers": [
+    "apps/web",
+    "apps/admin",
+    "apps/jbrowse",
+    "apps/api",
+    "packages/api-client",
+    "packages/i18n-core",
+    "telemetry",
+    "deployment"
+  ],
+  "owners": [
+    "Each application/API owns its route, settings, and telemetry boundary; the approved footer API remains under apps/api, versioned settings remain the persistence owner, and the current goal is the coordination parent."
+  ],
+  "invariants": [
+    "Preserve explicit external/internal isolation, stable IDs and release/assembly/provenance contracts, existing ClickHouse history, and no-production-write policy."
+  ],
+  "compatBoundary": "Footer response and old setting keys remain compatible; ClickHouse search/component/Web Vitals collection and historical records remain while GoatCounter replaces only public pageview analytics; existing routes and API contracts are additive unless separately approved.",
+  "nonGoals": [
+    "No production writes, no silent data/telemetry deletion, no desktop runtime in this monorepo, and no implementation outside a separately approved slice."
+  ]
+}

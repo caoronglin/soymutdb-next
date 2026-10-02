@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "aegis.schema.v0",
+  "baselineRefs": [
+    "docs/superpowers/specs/2026-09-28-admin-editable-footer-search-font-design.md",
+    "docs/aegis/plans/2026-09-28-admin-editable-footer-search-font.md",
+    "docs/dev/database-core-contract.md"
+  ],
+  "impactStatement": "docs/aegis/work/2026-09-28-portal-quality-improvements/impact-statement-draft.json",
+  "compatPlan": "Footer response and old setting keys remain compatible; ClickHouse search/component/Web Vitals collection and historical records remain while GoatCounter replaces only public pageview analytics; existing routes and API contracts are additive unless separately approved.",
+  "retirementPlan": "Aligned: no logic, settings, or persistent data was retired.",
+  "evidenceBundle": []
+}
