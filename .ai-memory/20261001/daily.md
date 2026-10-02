@@ -99,3 +99,26 @@
   `pytest scripts/test_platform_delivery_contracts.py scripts/test_ci_job_contracts.py -q` 97 passed。
 - **教训（写给下一个人）**: 守卫的判据必须落在**属性**上（是否 .vue、是否 import vue），
   不能落在**名字**上；一旦某个包被重建，名字型判据会静默变成红灯，而没人再跑它时就是长期红线。
+
+## [22:2x] 提交基线: 2026-10-01 双基线取代初版快照
+
+- **产出**: `docs/aegis/baseline/2026-10-01-react-only-baseline.md`，按 `BASELINE-GOVERNANCE.md` 的双基线角色写：
+  - §1 产品/需求基线：需求来源表、目标状态、用户与场景、**R-01…R-15 需求项 + 可执行验收判据 + 「今天成立吗」**、
+    非目标、工作流约束；
+  - §2 架构/运行时边界基线：规范所有者与契约表（含依赖方向）、不可协商项、兼容性边界、**运行时就绪边界**、退役状态；
+  - §3 今日实测值（把 `GOMAXPROCS/RAYON/UV` 环境前提也写进去，因为缺这三个本机必崩）；
+  - §4 尚未确认项（明确「不许自行拍板」）；
+  - §5 **治理 §5 格式的基线检查报告**：3 处 Implementation Drift、1 处 Design Defect、1 处 missing-authority、
+    1 处 needs-clarification、其余 aligned，并标 `scope`；
+  - §6 七维架构复审；§7 变更记录。
+- **可用性改造**（不只是新增文件）:
+  1. `docs/aegis/INDEX.md` 重写：原来 8 个设计/计划散成裸链接、末尾还挂着一段没有表头的原始记录表。
+     改为「Start here（3 步入口）+ Baselines（标 CURRENT/HISTORICAL）+ 设计表 + 计划表 + 工作记录 + Record log」，
+     每项带 area 与 status 列。所有相对链接已用脚本逐条验证（0 broken）。
+  2. `work/2026-09-28-portal-quality-improvements/20-checkpoint.md` 顶部加 **Superseded** 横幅并指向现行基线 ——
+     它还在让人去追 Vue 期的 `search.tsx` 与 API 端口 8010。
+  3. `90-evidence.md` 原文只有一句「No evidence has been recorded yet」，极易被读成「这一片过了」；
+     改为明确写出「缺证据 ≠ 通过」，并指向基线 §5。
+  4. `resume-state-hint.json` 加 `supersededBy`，并把 `mustReadBeforeContinuing` 的第一项换成现行基线与状态视图，
+     避免下一个会话按旧线索去找已不存在的端口与文件。
+- **验证**: INDEX 与 4 份新/改文档的全部相对链接经脚本解析，均存在；`resume-state-hint.json` 仍是合法 JSON。

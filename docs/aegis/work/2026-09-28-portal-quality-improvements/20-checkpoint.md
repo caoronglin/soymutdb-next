@@ -1,5 +1,12 @@
 # Portal quality and feature improvements - Checkpoint
 
+> **Superseded (2026-10-01).** This checkpoint describes the 2026-09-28/29 slice and still
+> references the Vue-era `search.tsx` and API port 8010. Current truth:
+> [`docs/aegis/baseline/2026-10-01-react-only-baseline.md`](../../baseline/2026-10-01-react-only-baseline.md)
+> for the dual baseline and [`docs/dev/project-status.md`](../../../dev/project-status.md) for
+> measured status. The visible-copy guard this record tracked is still red — see
+> `docs/aegis/plans/2026-10-01-admin-pro-migration.md` A5. Kept as evidence.
+
 ## Current Checkpoint
 
 - Current todo: Wait for the user to test the running local stack and share UI/CSP feedback.
