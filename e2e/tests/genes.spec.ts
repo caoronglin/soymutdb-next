@@ -49,18 +49,21 @@ test.describe("genes — result column order", () => {
     await mockEntityApis(page);
     await gotoReady(page, `${BASE}/search/genes?q=${encodeURIComponent(MOCK_GENE_ID)}&run=1`);
 
-    // The action is the row's anchor (ConfigurableTable emits
-    // `jbrowse-link-<index>`), not a button; target it precisely so the
-    // assertion cannot pass vacuously.
+    // The action carries a stable `jbrowse-link-<index>` handle; target it
+    // precisely so the assertion cannot pass vacuously.
     const link = page.getByTestId(/^jbrowse-link-/).first();
     await expect(link).toBeVisible({ timeout: 15_000 });
 
     const href = await link.getAttribute("href");
     expect(href, "the JBrowse 2 action must be an anchor with an href").toBeTruthy();
     const deepLink = new URL(href as string, "http://e2e.invalid");
-    expect(deepLink.pathname).toBe("/browser");
+    // Base-aware: the artifact is built for a sub-path, so the browser route is
+    // `${BASE}/browser` rather than `/browser`.
+    expect(deepLink.pathname).toBe(`${BASE}/browser`);
     const assembly = deepLink.searchParams.get("assembly");
-    const locus = deepLink.searchParams.get("loc");
+    // `locus` is the canonical parameter (browser.tsx accepts `loc` only as a
+    // legacy alias), so assert the real contract rather than the alias.
+    const locus = deepLink.searchParams.get("locus");
     // DB-CORE-3/4: the deep link must carry the assembly context, never an
     // assembly-less locus that would resolve to another coordinate namespace.
     expect(assembly).toBe(MOCK_ASSEMBLY.name);
@@ -70,7 +73,9 @@ test.describe("genes — result column order", () => {
     // Follow the deep link into the portal browser route and prove the locus is
     // carried into the JBrowse shell URL (the shell iframe itself is not served
     // by the offline static server, so the frame *src* is the contract here).
-    await gotoReady(page, `${BASE}${href}`);
+    // `href` is already base-qualified (`${BASE}/browser?...`), so it must not
+    // be prefixed with BASE again.
+    await gotoReady(page, href as string);
     await expect(page.getByTestId("browser-locus-input")).toHaveValue("chr01:100-200");
     // The assembly is echoed in the browser header (the <select> only offers
     // chromosome options, so it is not a reliable assembly assertion).

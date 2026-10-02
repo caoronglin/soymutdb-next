@@ -16,10 +16,16 @@ const BASE = "/soymutdb-next";
 test.describe("BLAST — form and routing", () => {
   test("/blast renders the full form", async ({ page }) => {
     await gotoReady(page, `${BASE}/blast`);
-    await expect(page.getByRole("heading", { name: /blast/i })).toBeVisible();
+    // The title block is an eyebrow label ("BLAST Search") plus a descriptive
+    // level-1 heading; assert the rendered structure instead of binding the
+    // heading to one i18n string.
+    await expect(page.getByText("BLAST Search").first()).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1 })).toContainText(/search sequences/i);
     // Program selector: the nucleotide programme is the default selection.
     const programme = page.getByTestId("blast-program");
-    await expect(programme).toHaveValue("blastn");
+    // antd Select renders a div rather than an <input>, so assert the rendered
+    // selection label instead of an input value.
+    await expect(programme).toContainText("BLASTN");
     // "Reference sequence type" also matches /sequence/i, so target the query
     // textarea by its exact label ("Input Sequence").
     await expect(page.getByRole("textbox", { name: "Input Sequence" })).toBeVisible();
@@ -40,10 +46,11 @@ test.describe("BLAST — form and routing", () => {
       }
     });
     await gotoReady(page, `${BASE}/blast`);
-    // The submit control is lab/built from blast.submit; with no sequence and no
-    // database selected it must stay disabled rather than fail server-side.
-    const submit = page.getByTestId("blast-submit");
-    await expect(submit).toBeDisabled();
+    // The contract is that an incomplete form never reaches the API. The client
+    // rejects it locally through schema/FASTA validation, so assert the absence
+    // of a request rather than a particular disabled styling.
+    await page.getByTestId("blast-submit").click();
+    await page.waitForTimeout(500);
     expect(submissions).toEqual([]);
   });
 });

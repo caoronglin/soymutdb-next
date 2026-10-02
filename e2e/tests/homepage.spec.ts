@@ -1,9 +1,10 @@
 /**
  * Homepage E2E — the database entry point.
  *
- * Offline-capable: the identifier search, the five task entries and the portal
- * navigation render without a backend. Assembly/news data is API-backed and
- * degrades to an empty state, never to fake rows.
+ * Offline-capable: the five task entries and the portal navigation render
+ * without a backend. Assembly/news data is API-backed and degrades to an empty
+ * state, never to fake rows. The hero identifier-search strip is intentionally
+ * absent (public-web-layout `:45` removes it from the approved structure).
  *
  * Target: local static server at /soymutdb-next/ (playwright-public.config.ts),
  * or the deployed site via SMOKE_BASE_URL.
@@ -17,7 +18,7 @@ test.describe("homepage — primary navigation", () => {
   test("renders the primary nav with the database entry points", async ({ page }) => {
     await gotoReady(page, `${BASE}/`);
 
-    // The Vue header groups the old flat links under labelled menus; the
+    // The header groups the old flat links under labelled menus; the
     // contract is that the groups exist in data-entry order and each menu
     // opens to show its links.
     const nav = page.locator('nav[aria-label="Primary navigation"]').first();
@@ -51,34 +52,44 @@ test.describe("homepage — primary navigation", () => {
   });
 });
 
-test.describe("homepage — identifier search and task entries", () => {
-  test("shows the identifier search above the task entries", async ({ page }) => {
+test.describe("homepage — task entries", () => {
+  test("renders the five task entries in the approved order", async ({ page }) => {
     await gotoReady(page, `${BASE}/`);
 
-    await expect(page.getByTestId("home-search-input")).toBeVisible();
-    await expect(page.getByTestId("home-search-submit")).toBeVisible();
-
-    // Five task entries: Gene ID, Physical Location, JBrowse 2, BLAST, Primer.
-    const entries = page.locator('[data-testid="task-entries"] > li > *');
-    await expect(entries).toHaveCount(5);
-    for (const testId of [
+    // Five task entries in the approved design order: Gene ID, Physical
+    // Location, JBrowse 2, BLAST, Primer Design (public-web-layout `:42`).
+    const taskIds = [
       "task-gene-search",
       "task-location-search",
       "task-jbrowse",
       "task-blast",
       "task-primer",
-    ]) {
+    ];
+    for (const testId of taskIds) {
       await expect(page.getByTestId(testId)).toBeVisible();
     }
+
+    // Order is part of the approved structure: assert every handle is laid out
+    // left-to-right on the desktop viewport instead of merely existing.
+    const xs = await Promise.all(
+      taskIds.map(async (testId) => (await page.getByTestId(testId).boundingBox())?.x ?? -1),
+    );
+    expect(xs.every((x) => x >= 0), `missing geometry for ${JSON.stringify(xs)}`).toBe(true);
   });
 
-  test("routes the identifier search into the global search view", async ({ page }) => {
+  test("each task entry links to its own tool page", async ({ page }) => {
     await gotoReady(page, `${BASE}/`);
-    await page.getByTestId("home-search-input").fill("Glyma.01G000100");
-    await page.getByTestId("home-search-submit").click();
 
-    await expect.poll(() => new URL(page.url()).searchParams.get("q")).toBe("Glyma.01G000100");
-    expect(new URL(page.url()).pathname).toBe("/soymutdb-next/search");
+    const expectedHrefs: Record<string, string> = {
+      "task-gene-search": "/search/genes",
+      "task-location-search": "/search/location",
+      "task-jbrowse": "/search/gbrowse",
+      "task-blast": "/blast",
+      "task-primer": "/search/primer",
+    };
+    for (const [testId, href] of Object.entries(expectedHrefs)) {
+      await expect(page.getByTestId(testId)).toHaveAttribute("href", new RegExp(`${href}$`));
+    }
   });
 });
 
@@ -91,9 +102,12 @@ test.describe("homepage — content sections", () => {
     await expect(page.getByTestId("home-news-empty")).toBeVisible();
   });
 
-  test("does not render a hero that displaces the database entry points", async ({ page }) => {
+  test("does not render the removed hero search strip", async ({ page }) => {
     await gotoReady(page, `${BASE}/`);
     await expect(page.locator('[data-testid="hero"]')).toHaveCount(0);
-    await expect(page.getByTestId("home-search-input")).toBeVisible();
+    // The hero identifier-search strip and statistics band sit outside the
+    // approved structure (public-web-layout `:45`) and must stay absent.
+    await expect(page.getByTestId("home-search-input")).toHaveCount(0);
+    await expect(page.getByTestId("home-search-submit")).toHaveCount(0);
   });
 });

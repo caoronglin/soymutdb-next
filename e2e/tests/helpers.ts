@@ -2,10 +2,11 @@
  * Shared helpers for the public-artifact suites.
  *
  * The web artifact is a replacement-render SPA: the build-time prerendered
- * markup is inert and only becomes interactive after Vue's first commit
- * ("handoff"). `apps/web/src/main.ts` announces that boundary on
- * `<html data-app-ready>`, so a spec must wait for it before interacting —
- * otherwise a click can land on the static fallback and be silently discarded.
+ * markup is inert and only becomes interactive after React's first commit
+ * ("handoff"). `apps/web/src/react-app.tsx` (`AppReadySignal`) announces that
+ * boundary on `<html data-app-ready>`, so a spec must wait for it before
+ * interacting — otherwise a click can land on the static fallback and be
+ * silently discarded.
  */
 import { expect, type Page, type Request } from "@playwright/test";
 
@@ -85,6 +86,8 @@ export const MOCK_ASSEMBLY = Object.freeze({
 });
 
 export const MOCK_GENE_ID = "Glyma.01G000100";
+/** Release the mocked API pins in its `X-SoyMutDB-Release` response header. */
+export const MOCK_RELEASE_ID = "7";
 export const MOCK_MUTANT_PUBLIC_ID = "SMDB-00001";
 export const MOCK_MUTANT_INTERNAL_ID = "INT-MUT-000001";
 export const MOCK_VARIANT_ID = "Wm82.a4.v1_01_000123";
@@ -202,7 +205,15 @@ export async function mockEntityApis(page: Page): Promise<CapturedApiRequest[]> 
       route.fulfill({
         status,
         contentType: "application/json",
-        headers: cors,
+        // The portal pins the release from this response header. Without it the
+        // client has no release context, so a JBrowse deep link carries only an
+        // assembly and `/browser` correctly refuses to render (missing context)
+        // instead of guessing a dataset.
+        headers: {
+          ...cors,
+          "x-soymutdb-release": MOCK_RELEASE_ID,
+          "access-control-expose-headers": "x-soymutdb-release",
+        },
         body: JSON.stringify(body),
       });
 

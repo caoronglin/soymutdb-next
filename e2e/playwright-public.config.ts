@@ -37,7 +37,11 @@ export default defineConfig({
   },
   outputDir: "test-results-public",
   webServer: {
-    command: "node static-server.mjs",
+    // Serve the external artifact explicitly. `build-sites.ts` writes the two
+    // site variants to dist/external and dist/internal, so the dist root is a
+    // stale single-site leftover rather than the portal under test. Mirrors
+    // playwright-internal.config.ts, which already passes its own root.
+    command: "node static-server.mjs ../apps/web/dist/external",
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 30_000,

@@ -1,9 +1,9 @@
 import { defineConfig } from "@playwright/test";
 
 /**
- * Deployed-stack E2E for the Vue JBrowse shell and the portal /browser embed.
+ * Deployed-stack E2E for the React JBrowse shell and the portal /browser embed.
  *
- * This suite needs BOTH a deployed Vue shell (JBROWSE_BASE_URL) and a deployed
+ * This suite needs BOTH a deployed React shell (JBROWSE_BASE_URL) and a deployed
  * portal whose /browser route embeds it (PORTAL_BASE_URL). It is deliberately
  * not part of the offline static-server suites: e2e/static-server.mjs serves
  * only apps/web/dist and knows nothing about the shell or /jbrowse-data.

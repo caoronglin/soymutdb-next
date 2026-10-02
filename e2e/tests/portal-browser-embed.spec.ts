@@ -51,7 +51,7 @@ const PORTAL_BASE_URL = (
 
 /**
  * Query keys the portal may put on the shell URL. Mirrors
- * `buildJbrowseUrl` in apps/web/src/views/BrowserView.vue; an unexpected key is
+ * `buildJbrowseUrl` in apps/web/src/routes/browser.tsx; an unexpected key is
  * a leakage vector, not an extension point.
  */
 const BRIDGE_QUERY_KEYS = new Set(["assembly", "locus", "tracks", "release", "portalOrigin"]);
@@ -135,7 +135,7 @@ test.describe("portal /browser — JBrowse iframe embed", () => {
       "set PORTAL_BASE_URL (or SMOKE_BASE_URL) to the deployed portal",
     );
 
-    // The portal's prerendered markup is inert until Vue commits; interact only
+    // The portal's prerendered markup is inert until React commits; interact only
     // after the shared SPA handoff helper reports readiness.
     await gotoReady(page, underBase(PORTAL_BASE_URL, "browser"));
 
@@ -158,7 +158,7 @@ test.describe("portal /browser — JBrowse iframe embed", () => {
     await expect(page.getByTestId("browser-timeout")).toHaveCount(0);
     await expect(page.getByTestId("browser-error")).toHaveCount(0);
 
-    // Prove the frame is the real Vue shell document, not a blocked stub.
+    // Prove the frame is the real JBrowse shell document, not a blocked stub.
     await expect(
       page
         .frameLocator('[data-testid="browser-iframe"]')

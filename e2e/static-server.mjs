@@ -102,6 +102,16 @@ const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
   let pathname = decodeURIComponent(url.pathname);
 
+  // `@soymutdb/api-client` falls back to a RELATIVE `/api/v1` base when the
+  // injected `VITE_API_BASE_URL` is not visible to the workspace package. A
+  // relative base resolves against the origin root, so those requests arrive as
+  // `/api/v1/...` while every mock route below is keyed on the mount prefix.
+  // Normalise before matching, otherwise the whole portal 404s offline and the
+  // suites report "assemblies could not be loaded" instead of exercising a page.
+  if (PREFIX !== "/" && pathname.startsWith("/api/v1")) {
+    pathname = `${PREFIX}${pathname}`;
+  }
+
   // Mock login: POST /<prefix>/api/v1/auth/login. This exercises the emitted
   // browser request rather than a route-level stub. Keep the test principal
   // local to this static server; it is not a real account or a test fixture

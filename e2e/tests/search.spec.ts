@@ -38,12 +38,16 @@ test.describe("Gene ID search", () => {
     // so wait for the enabled state instead of racing the assemblies request.
     const submit = searchSubmit(page);
     await expect(submit).toBeEnabled();
-    await submit.click();
+    // Submission opens a parameterized result view in a NEW tab (the approved
+    // flow: results are shareable and must not replace the form), so the result
+    // assertions belong to the popup rather than to the submitting page.
+    const [results] = await Promise.all([page.waitForEvent("popup"), submit.click()]);
+    await results.waitForLoadState();
 
     // The result region reports the query instead of inventing rows: the mock
     // returns an empty gene list, so the empty state is the honest outcome.
-    await expect(page.getByTestId("search-genes-total")).toBeVisible();
-    await expect(page.getByTestId("search-genes-empty")).toBeVisible();
+    await expect(results.getByTestId("search-genes-total")).toBeVisible();
+    await expect(results.getByTestId("search-genes-empty")).toBeVisible();
   });
 
   test("restores form state from a parameterized URL", async ({ page }) => {
@@ -77,16 +81,25 @@ test.describe("Physical Location search", () => {
 
   test("submit issues the region request for the chosen chromosome", async ({ page }) => {
     const requested: string[] = [];
-    page.on("request", (request) => {
+    // Listen on the CONTEXT: the result view opens in a popup, so a page-scoped
+    // listener would never observe the region request.
+    page.context().on("request", (request) => {
       if (request.url().includes("/variants/region")) requested.push(request.url());
     });
     await gotoReady(page, `${BASE}/search/location`);
 
     // The mock assembly auto-selects; pick a chromosome so the form validates.
-    await page.getByTestId("location-chromosome").selectOption("chr01");
+    // antd Select is a div rather than a native <select>, so open it and click
+    // the option instead of using `selectOption`.
+    await page.getByTestId("location-chromosome").click();
+    await page.getByRole("option", { name: "chr01" }).click();
     await page.getByTestId("location-start").fill("1");
     await page.getByTestId("location-end").fill("2000");
-    await page.getByTestId("location-submit").click();
+    const [results] = await Promise.all([
+      page.waitForEvent("popup"),
+      page.getByTestId("location-submit").click(),
+    ]);
+    await results.waitForLoadState();
 
     await expect.poll(() => requested.length).toBeGreaterThan(0);
     expect(requested[0]).toContain("chromosome=chr01");
@@ -94,7 +107,7 @@ test.describe("Physical Location search", () => {
     expect(requested[0]).toContain("end=2000");
     expect(requested[0]).toContain("assembly=Wm82.a4.v1");
     // The empty result is reported, not hidden.
-    await expect(page.getByTestId("location-empty")).toBeVisible();
+    await expect(results.getByTestId("location-empty")).toBeVisible();
   });
 });
 
