@@ -18,7 +18,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { Alert, Empty, Input, List, Pagination, Result, Skeleton, Tabs, Typography } from "@/lib/antd";
+import { Alert, Button, Empty, Input, List, Pagination, Result, Skeleton, Tabs, Typography } from "@/lib/antd";
 import { ReloadOutlined } from "@ant-design/icons";
 import { ApiError, listNews, type NewsListResponse, type NewsSummary } from "@soymutdb/api-client";
 import { NewsCard } from "../../components/news-card";
@@ -178,14 +178,9 @@ function NewsIndexComponent() {
                 : t("news.loadErrorSubtitle")
             }
             extra={
-              <button
-                type="button"
-                onClick={() => void listQuery.refetch()}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-4 py-2 text-sm text-foreground transition-colors hover:border-primary/40"
-              >
-                <ReloadOutlined aria-hidden />
+              <Button icon={<ReloadOutlined aria-hidden />} onClick={() => void listQuery.refetch()}>
                 {t("common.retry")}
-              </button>
+              </Button>
             }
           />
         ) : filtered.length === 0 ? (
@@ -203,7 +198,7 @@ function NewsIndexComponent() {
               <Alert
                 type="info"
                 showIcon
-                message={t("news.searchFiltering", { count: filtered.length })}
+                title={t("news.searchFiltering", { count: filtered.length })}
                 className="mb-4"
               />
             ) : null}

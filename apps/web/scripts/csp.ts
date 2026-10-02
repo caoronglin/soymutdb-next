@@ -16,7 +16,15 @@ const here = dirname(fileURLToPath(import.meta.url));
 const env = process.env;
 const analyticsToken = env.VITE_CLOUDFLARE_ANALYTICS_TOKEN?.trim() || undefined;
 const minimalDeployment = (env.VITE_DEPLOYMENT_MODE ?? "").trim().toLowerCase() === "minimal";
-const allowInsecureDevOrigins = env.NODE_ENV === "development";
+// Keep this aligned with `apps/web/config/config.ts`. An http preview origin is
+// accepted by either `NODE_ENV=development` or the explicit local-test flag;
+// when this file recognised only the first, `build-sites.ts` failed on an http
+// preview origin that the Umi config had already accepted — the two halves of
+// one build disagreed about the same environment.
+const allowInsecureDevOrigins =
+  env.NODE_ENV === "development" ||
+  env.SOYMUTDB_LOCAL_TEST_PREVIEW_ENABLED === "true" ||
+  env.SOYMUTDB_LOCAL_TEST_PREVIEW_ENABLED === "1";
 
 /** CSP for every document and the `_headers` file before inline hashes are added. */
 export const CSP_CONTENT = buildCsp(

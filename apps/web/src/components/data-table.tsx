@@ -1,14 +1,16 @@
 /**
- * DataTable — server-side paginated table with sticky header, optional
- * frozen leading column, skeleton loading, and empty/error states.
+ * DataTable — server-side paginated table built on antd's native `Table`.
  *
- * Built on @tanstack/react-table for column defs and sorting, but renders
- * a plain table for full control over styling and virtualization hooks.
+ * The column/prop surface is unchanged for callers (`columns` with `cell`
+ * renderers, `sort`/`onSortChange` for server-side sorting, `frozen` for the
+ * leading column, and the compact mobile card list), but the rendering is now
+ * antd's own table: sticky header, fixed columns, loading skeleton, empty
+ * state and pagination all come from the component library instead of a
+ * hand-rolled `<table>`.
  */
 import * as React from "react";
 import { cn } from "../lib/cn";
-import { Pagination } from "@/lib/antd";
-import { ArrowDownOutlined, ArrowUpOutlined, SwapOutlined, InboxOutlined } from "@ant-design/icons";
+import { Empty, Table, type TableColumnsType, type TableProps } from "@/lib/antd";
 
 export interface DataTableColumn<T> {
   id?: string;
@@ -35,7 +37,7 @@ export interface DataTableColumn<T> {
 export interface DataTableProps<T> {
   columns: DataTableColumn<T>[];
   data: T[];
-  /** Loading state — renders skeleton rows. */
+  /** Loading state — renders the antd loading overlay. */
   loading?: boolean;
   /** Number of skeleton rows to show while loading (default 8). */
   skeletonRows?: number;
@@ -65,11 +67,21 @@ export interface DataTableProps<T> {
   className?: string;
 }
 
+function columnId<T>(column: DataTableColumn<T>, index: number): string {
+  return column.id ?? column.key ?? `column-${index}`;
+}
+
+function isRightAligned<T>(column: DataTableColumn<T>): boolean {
+  return Boolean(column.numeric || column.align === "right");
+}
+
 export function DataTable<T>({
   columns,
   data,
   loading = false,
-  skeletonRows = 8,
+  // Kept on the prop surface for existing callers; antd v6's Table owns the
+  // loading presentation and exposes no row-count hook.
+  skeletonRows: _skeletonRows = 8,
   emptyTitle = "No results found",
   emptyDescription = "Try adjusting your filters or search query.",
   pagination,
@@ -81,148 +93,106 @@ export function DataTable<T>({
   ariaLabel,
   className,
 }: DataTableProps<T>) {
-  const columnKey = (column: DataTableColumn<T>, index: number) =>
-    column.id ?? column.key ?? `column-${index}`;
-  const isRightAligned = (column: DataTableColumn<T>) =>
-    column.numeric || column.align === "right";
-  const handleSort = (col: DataTableColumn<T>) => {
-    if (!col.sortKey || !onSortChange) return;
-    if (sort?.key === col.sortKey) {
-      onSortChange(sort.dir === "asc" ? { key: col.sortKey, dir: "desc" } : null);
-    } else {
-      onSortChange({ key: col.sortKey, dir: "asc" });
+  const antdColumns: TableColumnsType<T> = React.useMemo(
+    () =>
+      columns.map((column, index) => {
+        const id = columnId(column, index);
+        const sorted = sort?.key != null && sort.key === column.sortKey;
+        return {
+          key: id,
+          title: column.header,
+          align: isRightAligned(column) ? "right" : column.align ?? "left",
+          fixed: column.frozen ? ("left" as const) : undefined,
+          width: column.width,
+          className: column.className,
+          // The caller owns the cell renderer, so the value never comes from a
+          // dataIndex; antd still needs `render` to be present per column.
+          render: (_value: unknown, row: T) => column.cell(row),
+          sorter: column.sortKey && onSortChange ? true : undefined,
+          sortOrder: sorted ? (sort?.dir === "asc" ? ("ascend" as const) : ("descend" as const)) : null,
+          showSorterTooltip: false,
+        };
+      }),
+    [columns, sort, onSortChange],
+  );
+
+  // antd reports sorting as a column key + order; the caller's contract is a
+  // server-side `sortKey`, so translate back through the column definitions.
+  const handleChange: TableProps<T>["onChange"] = (_pag, _filters, sorter) => {
+    if (!onSortChange) return;
+    const active = Array.isArray(sorter) ? sorter[0] : sorter;
+    if (!active?.order) {
+      onSortChange(null);
+      return;
     }
+    const matched = columns.find((c, i) => columnId(c, i) === active.columnKey && c.sortKey);
+    if (!matched?.sortKey) return;
+    const dir = active.order === "ascend" ? "asc" : "desc";
+    if (sort?.key === matched.sortKey && sort.dir === dir) {
+      onSortChange(null);
+      return;
+    }
+    onSortChange({ key: matched.sortKey, dir });
   };
 
   return (
     <div className={cn("flex flex-col gap-4", className)}>
-      <div
-        className={cn(
-          "overflow-x-auto rounded-xl border bg-card shadow-sm",
-          responsive && !loading && data.length > 0 && "hidden md:block",
-        )}
-      >
-        <table className="w-full border-collapse text-sm" aria-label={ariaLabel}>
-          <thead className="sticky top-0 z-10 bg-muted/50 backdrop-blur">
-            <tr className="border-b">
-              {columns.map((col, ci) => {
-                const isSorted = sort?.key === col.sortKey;
-                return (
-                  <th
-                    key={columnKey(col, ci)}
-                    scope="col"
-                    className={cn(
-                      "px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground",
-                      isRightAligned(col) && "text-right",
-                      col.align === "center" && "text-center",
-                      col.frozen && "sticky left-0 z-20 bg-muted/50 backdrop-blur",
-                      col.sortKey && "cursor-pointer select-none",
-                      col.className,
-                    )}
-                    style={{ width: col.width }}
-                    aria-sort={isSorted ? (sort?.dir === "asc" ? "ascending" : "descending") : undefined}
-                  >
-                    {col.sortKey ? (
-                      <button
-                        type="button"
-                        className={cn(
-                          "inline-flex items-center gap-1 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                          isRightAligned(col) && "flex-row-reverse",
-                          isSorted && "text-foreground",
-                        )}
-                        onClick={() => handleSort(col)}
-                      >
-                        {col.header}
-                        {isSorted ? (
-                          sort?.dir === "asc" ? (
-                            <ArrowUpOutlined className="size-3.5" aria-hidden />
-                          ) : (
-                            <ArrowDownOutlined className="size-3.5" aria-hidden />
-                          )
-                        ) : (
-                          <SwapOutlined className="size-3.5 opacity-40" aria-hidden />
-                        )}
-                      </button>
-                    ) : (
-                      col.header
-                    )}
-                  </th>
-                );
-              })}
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              Array.from({ length: skeletonRows }).map((_, ri) => (
-                <tr key={`skel-${ri}`} className="border-b last:border-0">
-                  {columns.map((col, ci) => (
-                    <td
-                      key={columnKey(col, ci)}
-                      className={cn(
-                        "px-4 py-3",
-                        isRightAligned(col) && "text-right",
-                        col.align === "center" && "text-center",
-                        col.frozen && "sticky left-0 z-10 bg-card",
-                      )}
-                    >
-                      <div className="h-4 w-full max-w-[120px] animate-pulse rounded bg-muted/70" />
-                    </td>
-                  ))}
-                </tr>
-              ))
-            ) : data.length === 0 ? (
-              <tr>
-                <td colSpan={columns.length} className="px-4 py-12">
-                  <div className="flex flex-col items-center gap-3 text-center">
-                    <div className="flex size-10 items-center justify-center rounded-full bg-muted">
-                      <InboxOutlined className="size-5 text-muted-foreground" aria-hidden />
-                    </div>
-                    <p className="font-medium">{emptyTitle}</p>
-                    <p className="max-w-sm text-sm text-muted-foreground">{emptyDescription}</p>
-                  </div>
-                </td>
-              </tr>
-            ) : (
-              data.map((row, ri) => (
-                <tr
-                  key={rowKey?.(row) ?? ri}
-                  className={cn(
-                    "group/row border-b last:border-0 transition-colors hover:bg-muted/50",
-                    onRowClick && "cursor-pointer",
-                  )}
-                  onClick={onRowClick ? () => onRowClick(row) : undefined}
-                  tabIndex={onRowClick ? 0 : undefined}
-                  onKeyDown={
-                    onRowClick
-                      ? (e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            onRowClick(row);
-                          }
-                        }
-                      : undefined
+      <Table<T>
+        rowKey={(row, index) => rowKey?.(row) ?? String(index)}
+        columns={antdColumns}
+        dataSource={data}
+        // antd v6 renders its own spinner overlay; `skeletonRows` is kept on the
+        // prop surface for callers but has no equivalent hook in the component.
+        loading={loading}
+        sticky
+        size="middle"
+        scroll={{ x: "max-content" }}
+        onChange={handleChange}
+        onRow={
+          onRowClick
+            ? (row) => ({
+                onClick: () => onRowClick(row),
+                onKeyDown: (event: React.KeyboardEvent) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onRowClick(row);
                   }
-                >
-                  {columns.map((col, ci) => (
-                    <td
-                      key={columnKey(col, ci)}
-                      className={cn(
-                        "px-4 py-3 align-middle",
-                        isRightAligned(col) && "text-right font-mono tabular-nums",
-                        col.align === "center" && "text-center",
-                        col.frozen && "sticky left-0 z-10 bg-card transition-colors group-hover/row:bg-muted/50",
-                        col.className,
-                      )}
-                    >
-                      {col.cell(row)}
-                    </td>
-                  ))}
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+                },
+                tabIndex: 0,
+                style: { cursor: "pointer" },
+              })
+            : undefined
+        }
+        pagination={
+          pagination
+            ? {
+                current: pagination.page,
+                total: pagination.total,
+                pageSize: pagination.pageSize,
+                showSizeChanger: false,
+                disabled: loading,
+                onChange: pagination.onPageChange,
+              }
+            : false
+        }
+        locale={{
+          emptyText: (
+            <Empty
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              description={
+                <>
+                  <p className="font-medium">{emptyTitle}</p>
+                  <p className="text-sm text-muted-foreground">{emptyDescription}</p>
+                </>
+              }
+            />
+          ),
+        }}
+        className={cn(responsive && data.length > 0 && "hidden md:block")}
+        aria-label={ariaLabel}
+      />
+
+      {/* antd has no built-in compact card fallback below the md breakpoint. */}
       {responsive && !loading && data.length > 0 ? (
         <ul className="grid gap-3 md:hidden" aria-label={`${ariaLabel ?? "Data table"} compact view`}>
           {data.map((row, ri) => {
@@ -230,10 +200,7 @@ export function DataTable<T>({
             return (
               <li key={rowKey?.(row) ?? ri}>
                 <div
-                  className={cn(
-                    "rounded-xl border bg-card p-4 shadow-sm",
-                    onRowClick && "cursor-pointer",
-                  )}
+                  className={cn("rounded-xl border bg-card p-4 shadow-sm", onRowClick && "cursor-pointer")}
                   tabIndex={onRowClick ? 0 : undefined}
                   onClick={onRowClick ? () => onRowClick(row) : undefined}
                   onKeyDown={
@@ -250,9 +217,11 @@ export function DataTable<T>({
                   {primary ? <div className="font-medium">{primary.cell(row)}</div> : null}
                   <dl className="mt-3 grid gap-2">
                     {columns.filter((column) => column !== primary).map((column, ci) => (
-                      <div key={columnKey(column, ci)} className="flex items-baseline justify-between gap-3">
+                      <div key={columnId(column, ci)} className="flex items-baseline justify-between gap-3">
                         <dt className="text-xs text-muted-foreground">{column.header}</dt>
-                        <dd className={cn("text-sm", isRightAligned(column) && "font-mono tabular-nums")}>{column.cell(row)}</dd>
+                        <dd className={cn("text-sm", isRightAligned(column) && "font-mono tabular-nums")}>
+                          {column.cell(row)}
+                        </dd>
                       </div>
                     ))}
                   </dl>
@@ -261,16 +230,6 @@ export function DataTable<T>({
             );
           })}
         </ul>
-      ) : null}
-      {pagination ? (
-        <Pagination
-          current={pagination.page}
-          total={pagination.total}
-          pageSize={pagination.pageSize}
-          showSizeChanger={false}
-          disabled={loading}
-          onChange={pagination.onPageChange}
-        />
       ) : null}
     </div>
   );

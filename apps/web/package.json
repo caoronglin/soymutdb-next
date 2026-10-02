@@ -24,6 +24,7 @@
     "@fontsource/jetbrains-mono": "^5.1.0",
     "@hookform/resolvers": "^3.9.1",
     "@soymutdb/api-client": "workspace:*",
+    "@soymutdb/genome-view": "workspace:*",
     "@soymutdb/i18n": "workspace:*",
     "@soymutdb/query-keys": "workspace:*",
     "@soymutdb/shared": "workspace:*",
@@ -32,6 +33,7 @@
     "@tanstack/react-router": "^1.170.21",
     "@tanstack/react-table": "^8.20.0",
     "@tanstack/react-virtual": "^3.11.0",
+    "@umijs/max": "catalog:",
     "antd": "catalog:",
     "cytoscape": "^3.34.1",
     "dayjs": "^1.11.0",
@@ -46,21 +48,16 @@
     "react-dom": "catalog:",
     "react-hook-form": "^7.54.0",
     "react-i18next": "^15.4.0",
-    "zod": "^3.24.0",
-    "@umijs/max": "catalog:"
+    "zod": "^3.24.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.0",
-    "@vitejs/plugin-vue": "catalog:",
-    "@vue/test-utils": "^2.5.1",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.5.2",
     "@soymutdb/charts": "workspace:*",
     "@soymutdb/genome-view-model": "workspace:*",
     "@soymutdb/i18n-core": "workspace:*",
-    "@soymutdb/ui-vue": "workspace:*",
-    "@tanstack/vue-query": "catalog:",
     "@types/dompurify": "^3.0.5",
     "@types/node": "^22.10.0",
     "@types/react": "catalog:",
@@ -69,14 +66,11 @@
     "eslint": "^10.8.0",
     "jsdom": "^29.1.1",
     "postcss": "^8.4.49",
-    "pinia": "catalog:",
     "rimraf": "^6.0.0",
     "tailwindcss": "catalog:",
     "tsx": "^4.19.0",
     "typescript": "catalog:",
     "vite": "catalog:",
-    "vitest": "catalog:",
-    "vue": "catalog:",
-    "vue-router": "catalog:"
+    "vitest": "catalog:"
   }
 }

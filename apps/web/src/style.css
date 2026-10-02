@@ -14,8 +14,8 @@
 /* Web-owned color and surface tokens. Light mode is the default. */
 :root {
     --radius: 0.625rem;
-    --radius-lg: 0.875rem;
-    --radius-xl: 1.125rem;
+    --radius-lg: 0.75rem;
+    --radius-xl: 1rem;
     --background: oklch(0.991 0.004 148);
     --foreground: oklch(0.195 0.028 152);
     --card: oklch(1 0 0);
@@ -165,11 +165,15 @@
     --text-caption: 0.75rem;
     --text-caption--line-height: 1.5;
 
-    /* Radii */
-    --radius-sm: 0.375rem;
+    /* Radii. These follow antd's own derivation so a Tailwind `rounded-lg`
+       surface and an antd Card cannot disagree: `brandTokens.radius` is 10px,
+       which makes antd Button 10px (borderRadius) and Card 12px
+       (borderRadiusLG = base + 2). Values here used to be 14/18px, which put a
+       14px Tailwind card next to a 12px antd card on the same row. */
+    --radius-sm: 0.5rem;
     --radius-md: 0.625rem;
-    --radius-lg: 0.875rem;
-    --radius-xl: 1.125rem;
+    --radius-lg: 0.75rem;
+    --radius-xl: 1rem;
     --radius-2xl: 1.5rem;
 
     /* Section rhythm */

@@ -1,10 +1,7 @@
 import { fileURLToPath } from "node:url";
-import vue from "@vitejs/plugin-vue";
 import { defineConfig } from "vitest/config";
 
-// Keep legacy Vue component tests loadable while adding React TSX test coverage.
 export default defineConfig({
-  plugins: [vue()],
   resolve: {
     alias: {
       // Mirrors the `@/*` -> `src/*` path mapping in tsconfig.json so React
@@ -16,6 +13,10 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     globals: true,
+    // `src/test/setup.ts` holds the Node/jsdom compatibility shims (Web Storage,
+    // ResizeObserver, matchMedia). Without this entry the file was never loaded,
+    // so components that measure layout threw "ResizeObserver is not defined".
+    setupFiles: ["./src/test/setup.ts"],
     include: ["src/**/*.test.ts", "src/**/*.test.tsx", "src/**/*.spec.ts", "src/**/*.spec.tsx"],
     pool: "forks",
     poolOptions: {

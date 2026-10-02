@@ -4,13 +4,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import {
-  DownOutlined as ChevronDown,
   MailOutlined as Mail,
   QuestionCircleOutlined as HelpCircle,
   ReadOutlined as BookOpen,
   RocketOutlined as Rocket,
 } from "@ant-design/icons";
-import { Card, Typography } from "@/lib/antd";
+import { Card, Collapse, Typography } from "@/lib/antd";
 import { FadeUp, Stagger } from "../components/route-motion";
 import { useSiteContent } from "../lib/site-content-react";
 import * as React from "react";
@@ -98,15 +97,18 @@ function HelpComponent() {
             </Typography.Title>
           </div>
           <div>
-            <div className="divide-y">
-              {FAQS.map((faq, i) => (
-                <FaqItem
-                  key={i}
-                  q={get("help.faq" + (i + 1) + ".q", t("help.faq" + (i + 1) + ".q", { defaultValue: faq.q }))}
-                  a={get("help.faq" + (i + 1) + ".a", t("help.faq" + (i + 1) + ".a", { defaultValue: faq.a }))}
-                />
-              ))}
-            </div>
+            <Collapse
+              ghost
+              items={FAQS.map((faq, i) => ({
+                key: String(i),
+                label: <span className="font-medium">{get("help.faq" + (i + 1) + ".q", t("help.faq" + (i + 1) + ".q", { defaultValue: faq.q }))}</span>,
+                children: (
+                  <p className="text-sm text-muted-foreground">
+                    {get("help.faq" + (i + 1) + ".a", t("help.faq" + (i + 1) + ".a", { defaultValue: faq.a }))}
+                  </p>
+                ),
+              }))}
+            />
           </div>
         </Card>
       </FadeUp>
@@ -114,20 +116,5 @@ function HelpComponent() {
   );
 }
 
-function FaqItem({ q, a }: { q: string; a: string }) {
-  const [open, setOpen] = React.useState(false);
-  return (
-    <div className="py-4">
-      <button
-        type="button"
-        className="flex w-full items-center justify-between gap-4 text-left"
-        aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
-      >
-        <span className="font-medium">{q}</span>
-        <ChevronDown className={`size-4 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} aria-hidden />
-      </button>
-      {open ? <p className="mt-2 text-sm text-muted-foreground">{a}</p> : null}
-    </div>
-  );
-}
+// The hand-rolled FAQ disclosure was replaced by antd's `Collapse`, which owns
+// the expanded state, the chevron rotation and the transition.

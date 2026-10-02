@@ -21,6 +21,7 @@
 import * as React from "react";
 import { ZoomInOutlined, ZoomOutOutlined, ExpandOutlined, ExportOutlined, LoadingOutlined, AimOutlined, ExclamationCircleOutlined } from "@ant-design/icons";
 import { cn } from "@/lib/cn";
+import { Button } from "@/lib/antd";
 import { useAnimation } from "../lib/animation-context";
 import { buildJbrowseLocusUrl, isMinimalDeploymentMode, resolveJbrowseBaseUrl } from "../lib/deployment";
 import { formatPosition, formatMb, CHROMOSOME_LENGTHS_BP } from "../lib/format";
@@ -306,33 +307,27 @@ export function GenomeBrowserWidget({
             <span className="text-[10px] text-muted-foreground">({formatMb(viewWidth)})</span>
           </div>
           <div className="flex items-center gap-1">
-            <button
-              type="button"
+            <Button
+              type="text"
               onClick={zoomIn}
-              className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               aria-label="Zoom in"
               title="Zoom in"
-            >
-              <ZoomInOutlined className="size-4" />
-            </button>
-            <button
-              type="button"
+              icon={<ZoomInOutlined className="size-4" />}
+            />
+            <Button
+              type="text"
               onClick={zoomOut}
-              className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               aria-label="Zoom out"
               title="Zoom out"
-            >
-              <ZoomOutOutlined className="size-4" />
-            </button>
-            <button
-              type="button"
+              icon={<ZoomOutOutlined className="size-4" />}
+            />
+            <Button
+              type="text"
               onClick={resetView}
-              className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               aria-label="Reset view"
               title="Reset view"
-            >
-              <ExpandOutlined className="size-4" />
-            </button>
+              icon={<ExpandOutlined className="size-4" />}
+            />
             {effectiveMode === "iframe" && (
               <a
                 href={fullBrowserHref}
@@ -362,13 +357,13 @@ export function GenomeBrowserWidget({
               <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-card p-4 text-center">
                 <ExclamationCircleOutlined className="size-8 text-muted-foreground" />
                 <p className="mt-2 text-xs text-muted-foreground">JBrowse unavailable. Using linear view.</p>
-                <button
-                  type="button"
+                <Button
+                  size="small"
+                  className="mt-2"
                   onClick={() => { iframeLoadedRef.current = false; setIframeError(false); setIframeLoaded(false); }}
-                  className="mt-2 rounded border px-2 py-1 text-xs"
                 >
                   Retry
-                </button>
+                </Button>
               </div>
             )}
             <iframe

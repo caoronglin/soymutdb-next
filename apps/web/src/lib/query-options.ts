@@ -416,8 +416,6 @@ export function globalSearchQueryOptions(
     cursor: string | undefined;
     limit: number;
     assemblyId: string | undefined;
-    federated: boolean;
-    sources: readonly string[] | undefined;
   },
 ) {
   return queryOptions({
@@ -429,7 +427,6 @@ export function globalSearchQueryOptions(
       assemblyId: context.assemblyId,
       releaseId: context.releaseId,
       siteVariant: context.siteVariant,
-      federated: context.federated,
     }),
     queryFn: () =>
       globalSearch({
@@ -438,7 +435,6 @@ export function globalSearchQueryOptions(
         cursor: context.cursor,
         limit: context.limit,
         assembly_id: context.assemblyId ? Number(context.assemblyId) : undefined,
-        sources: context.federated ? [...(context.sources ?? [])] : undefined,
       }),
     enabled: Boolean(context.query?.trim()),
     staleTime: 60_000,

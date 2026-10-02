@@ -288,7 +288,7 @@ export function FilePreviewDialog({
           >
             {current.name}
           </span>
-          <Tag bordered={false} className="font-mono text-[10px]">
+          <Tag variant="filled" className="font-mono text-[10px]">
             {(current.format ?? getFileExtension(current.name)).toUpperCase()}
           </Tag>
           <span className="whitespace-nowrap text-xs text-muted-foreground">

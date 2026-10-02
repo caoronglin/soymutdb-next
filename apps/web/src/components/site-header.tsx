@@ -8,8 +8,8 @@
  *
  * Features:
  * - Scroll-reactive backdrop blur / shadow (RAF-throttled)
- * - Two-level primary nav: Explore / Tools / Downloads / Resources.
- *   Explore, Tools and Resources open dropdown panels (the "secondary menu");
+ * - Two-level primary nav: Search / Tools / Downloads / Resources.
+ *   Search, Tools and Resources open dropdown panels (the "secondary menu");
  *   Downloads is a single direct link (no dropdown).
  * - Animated underline on active nav links
  * - Cmd+K quick search trigger
@@ -31,7 +31,7 @@ import {
   DeploymentUnitOutlined,
 } from "@ant-design/icons";
 import { cn } from "../lib/cn";
-import { Affix, Button, Input } from "@/lib/antd";
+import { Affix, Button, Input, Menu } from "@/lib/antd";
 import { useTheme } from "../lib/theme-provider";
 import { useI18n, type SupportedLanguage } from "../lib/i18n";
 
@@ -71,16 +71,17 @@ interface NavGroupDef {
  */
 const NAV_GROUPS: ReadonlyArray<NavGroupDef> = [
   {
-    key: "explore",
-    labelKey: "nav.explore",
+    key: "search",
+    labelKey: "nav.search",
+    // The four search entries kept per the operator's reference (Gene ID /
+    // Physical Location / JBrowse 2 / BLAST). The routes that used to live in
+    // this group (variants / mutants / browser / SRA / compare / analytics)
+    // remain reachable by direct URL as optional features.
     children: [
-      { kind: "link", to: "/genes", labelKey: "nav.genes" },
-      { kind: "link", to: "/variants", labelKey: "nav.variants" },
-      { kind: "link", to: "/mutants", labelKey: "nav.mutantLines" },
-      { kind: "link", to: "/browser", labelKey: "nav.browser" },
-      { kind: "link", to: "/sra", labelKey: "nav.sra" },
-      { kind: "link", to: "/compare", labelKey: "nav.compare" },
-      { kind: "link", to: "/analytics", labelKey: "nav.analytics" },
+      { kind: "link", to: "/search/genes", labelKey: "search.tabGenes" },
+      { kind: "link", to: "/search/location", labelKey: "search.tabLocation" },
+      { kind: "link", to: "/search/gbrowse", labelKey: "search.tabGbrowse" },
+      { kind: "link", to: "/blast", labelKey: "nav.blast" },
     ],
   },
   {
@@ -259,7 +260,7 @@ export function SiteHeader() {
         <nav
           ref={navRef}
           className="mx-auto hidden items-center gap-1 lg:flex"
-          aria-label="Primary"
+          aria-label="Primary navigation"
         >
           {NAV_GROUPS.map((group) => {
             if (group.to) {
@@ -282,19 +283,31 @@ export function SiteHeader() {
 
             const active = isGroupActive(group);
             const open = openMenu === group.key;
+            const activeChild = (group.children ?? []).find(
+              (child) => child.kind !== "separator" && isRouteActive(child.to),
+            );
+            // antd's `Dropdown` was tried here first and could not be used: its
+            // portal + open-state handling rebuilt the panel on mousedown, so the
+            // `click` never reached a menu item and every navigation was
+            // silently dropped. Rendering antd's `Menu` directly keeps the
+            // component native while leaving open/close under our control.
             return (
               <div key={group.key} className="relative">
-                <button
-                  type="button"
+                <Button
+                  type="text"
                   data-active={active}
                   aria-haspopup="menu"
                   aria-expanded={open}
                   onClick={() => setOpenMenu(open ? null : group.key)}
+                  // No `px-3 py-2` here: antd injects `.ant-btn` padding at
+                  // runtime into the unlayered cascade, which outranks every
+                  // Tailwind utility, so such a class is a silent no-op on this
+                  // element (the `<Link>` sibling above is a plain <a> and keeps
+                  // its own). Detected by
+                  // .validation/probe/audit-antd-spacing.mjs.
                   className={cn(
-                    "nav-link flex items-center gap-1 whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
-                    active
-                      ? "text-foreground"
-                      : "text-muted-foreground hover:text-foreground",
+                    "nav-link flex items-center gap-1 whitespace-nowrap rounded-md text-sm font-medium",
+                    active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
                   )}
                 >
                   {get(group.labelKey, t(group.labelKey))}
@@ -302,31 +315,38 @@ export function SiteHeader() {
                     className={cn("size-3.5 transition-transform", open && "rotate-180")}
                     aria-hidden
                   />
-                </button>
+                </Button>
                 {open ? (
-                  <div
-                    role="menu"
-                    className="absolute left-1/2 top-full z-50 mt-2 w-60 -translate-x-1/2 rounded-xl border bg-popover p-1.5 shadow-lg"
-                    style={{ animation: "fade-down 160ms cubic-bezier(0.16,1,0.3,1)" }}
-                  >
-                    {(group.children ?? []).map((child, i) =>
-                      child.kind === "separator" ? (
-                        <div key={`sep-${group.key}-${i}`} className="my-1 h-px bg-border" aria-hidden />
-                      ) : (
-                        <Link
-                          key={child.to}
-                          to={child.to}
-                          role="menuitem"
-                          onClick={() => setOpenMenu(null)}
-                          className={cn(
-                            "block rounded-lg px-3 py-2 text-sm text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
-                            isRouteActive(child.to) && "bg-accent/60 font-medium text-foreground",
-                          )}
-                        >
-                          {get(child.labelKey, t(child.labelKey))}
-                        </Link>
-                      ),
-                    )}
+                  // The panel chrome (border / radius / shadow) lives on this
+                  // wrapper: antd's `ant-menu-vertical` styles outrank a
+                  // Tailwind utility on the Menu itself, which flattened the
+                  // shadow and left the right border nearly transparent.
+                  //
+                  // That same specificity rule is why the Menu also carries an
+                  // inline `border: 0`: `.ant-menu-vertical` sets
+                  // `border-inline-end`, and a Tailwind `border-0` class loses to
+                  // it, so the panel drew a second vertical rule inside its own
+                  // outline. An inline style is the only thing that outranks the
+                  // injected stylesheet here.
+                  <div className="absolute left-1/2 top-full z-50 mt-2 w-60 -translate-x-1/2 rounded-xl border bg-popover p-1.5 shadow-lg">
+                    <Menu
+                      mode="vertical"
+                      style={{ border: 0 }}
+                      className="bg-transparent"
+                      selectedKeys={activeChild && activeChild.kind !== "separator" ? [activeChild.to] : []}
+                      items={(group.children ?? []).map((child, i) =>
+                        child.kind === "separator"
+                          ? { type: "divider" as const, key: `sep-${group.key}-${i}` }
+                          : { key: child.to, label: get(child.labelKey, t(child.labelKey)) },
+                      )}
+                      onClick={({ key }) => {
+                        const target = (group.children ?? []).find(
+                          (child) => child.kind !== "separator" && child.to === key,
+                        );
+                        setOpenMenu(null);
+                        if (target && target.kind !== "separator") void navigate({ to: target.to });
+                      }}
+                    />
                   </div>
                 ) : null}
               </div>
@@ -334,14 +354,16 @@ export function SiteHeader() {
           })}
         </nav>
 
-        {/* Right cluster */}
-        <div className="ml-auto flex items-center gap-1 md:ml-2">
+        {/* Right cluster. `shrink-0` keeps the controls from being squeezed,
+            and every button is `size="small"` because the default padding made
+            this cluster wider than a 390px viewport, which pushed the whole
+            document into a horizontal scroll. */}
+        <div className="ml-auto flex shrink-0 items-center gap-1 md:ml-2">
           {/* Search (desktop) — triggers command palette */}
-          <button
-            type="button"
+          <Button
             onClick={openPalette}
-            className="hidden h-9 items-center gap-2.5 rounded-lg border border-input/70 bg-muted/40 px-3 text-sm text-muted-foreground shadow-sm outline-none transition-colors hover:border-border hover:bg-muted/70 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring md:flex md:w-44 lg:w-56"
             aria-label="Quick search (Cmd+K)"
+            className="hidden h-9 items-center gap-2.5 rounded-lg border-input/70 bg-muted/40 px-3 text-sm text-muted-foreground shadow-sm hover:border-border hover:bg-muted/70 hover:text-foreground md:flex md:w-44 lg:w-56"
           >
             <SearchOutlined className="size-4 shrink-0" aria-hidden />
             <span className="min-w-0 flex-1 truncate text-left">
@@ -352,7 +374,7 @@ export function SiteHeader() {
               <kbd className="hidden sm:inline-flex">⌘</kbd>
               <kbd className="hidden sm:inline-flex">K</kbd>
             </span>
-          </button>
+          </Button>
           <LanguageSwitcher
             open={langOpen}
             setOpen={setLangOpen}
@@ -361,21 +383,28 @@ export function SiteHeader() {
           />
           <Button
             type="text"
+            size="small"
             aria-label={t("nav.theme")}
             onClick={toggleTheme}
             icon={theme === "dark" ? <SunOutlined /> : <MoonOutlined />}
           />
 
-          {/* Mobile menu toggle */}
-          <Button
-            type="text"
-            className="lg:hidden"
-            aria-label={mobileOpen ? "Close menu" : "Open menu"}
-            aria-expanded={mobileOpen}
-            aria-controls="mobile-nav"
-            onClick={() => setMobileOpen((v) => !v)}
-            icon={mobileOpen ? <CloseOutlined /> : <MenuOutlined />}
-          />
+          {/* Mobile menu toggle — below the lg breakpoint only. The rule lives
+              on a wrapper on purpose: antd's own Button `display` rule outranks
+              a Tailwind utility applied to the same element, so `lg:hidden` on
+              the Button itself never took effect and the icon stayed visible on
+              desktop next to the full navigation. */}
+          <div className="lg:hidden">
+            <Button
+              type="text"
+              size="small"
+              aria-label={mobileOpen ? "Close menu" : "Open menu"}
+              aria-expanded={mobileOpen}
+              aria-controls="mobile-nav"
+              onClick={() => setMobileOpen((v) => !v)}
+              icon={mobileOpen ? <CloseOutlined /> : <MenuOutlined />}
+            />
+          </div>
         </div>
       </div>
 
@@ -399,7 +428,7 @@ export function SiteHeader() {
             </form>
 
             {/* Sectioned two-level nav (mirrors the desktop groups) */}
-            <nav aria-label="Primary" className="flex flex-col">
+            <nav aria-label="Primary navigation" className="flex flex-col">
               {NAV_GROUPS.map((group) => {
                 if (group.to) {
                   return (
@@ -479,10 +508,11 @@ function LanguageSwitcher({
   onChange: (lang: SupportedLanguage) => void;
 }) {
   const ref = React.useRef<HTMLDivElement | null>(null);
+  // Outside-click dismissal, which antd's `Dropdown` would otherwise provide.
   React.useEffect(() => {
     if (!open) return;
-    const onPointer = (e: PointerEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    const onPointer = (event: PointerEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
     };
     document.addEventListener("pointerdown", onPointer);
     return () => document.removeEventListener("pointerdown", onPointer);
@@ -493,10 +523,13 @@ function LanguageSwitcher({
     { code: "zh", label: "中文" },
   ];
 
+  // Same reasoning as the primary nav: antd's `Dropdown` dropped the menu-item
+  // click, so antd's `Menu` is rendered directly and dismissal is handled here.
   return (
     <div className="relative" ref={ref}>
       <Button
         type="text"
+        size="small"
         aria-label="Language"
         aria-haspopup="menu"
         aria-expanded={open}
@@ -504,29 +537,17 @@ function LanguageSwitcher({
         icon={<GlobalOutlined />}
       />
       {open ? (
-        <div
-          role="menu"
-          className="absolute right-0 top-full z-50 mt-2 w-36 origin-top-right rounded-xl border bg-popover p-1 shadow-lg"
-          style={{ animation: "fade-down 160ms cubic-bezier(0.16,1,0.3,1)" }}
-        >
-          {languages.map((lang) => (
-            <button
-              key={lang.code}
-              role="menuitemradio"
-              aria-checked={current === lang.code}
-              onClick={() => {
-                onChange(lang.code);
-                setOpen(false);
-              }}
-              className={cn(
-                "flex w-full items-center justify-between rounded-md px-3 py-2 text-sm outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring",
-                current === lang.code && "bg-accent/60",
-              )}
-            >
-              {lang.label}
-              {current === lang.code ? <DownOutlined className="size-3 -rotate-90" aria-hidden /> : null}
-            </button>
-          ))}
+        <div className="absolute right-0 top-full z-50 mt-2 w-36 rounded-xl border bg-popover p-1.5 shadow-lg">
+          <Menu
+            mode="vertical"
+            className="border-0 bg-transparent"
+            selectedKeys={[current]}
+            items={languages.map((lang) => ({ key: lang.code, label: lang.label }))}
+            onClick={({ key }) => {
+              onChange(key as SupportedLanguage);
+              setOpen(false);
+            }}
+          />
         </div>
       ) : null}
     </div>

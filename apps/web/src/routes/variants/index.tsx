@@ -347,13 +347,13 @@ function VariantsComponent() {
             data-testid="variants-unknown-assembly"
             description={
               assemblyResolution.status === "ambiguous"
-                ? `Assembly name matches several versions: ${assemblyResolution.matches.map(assemblyOptionLabel).join(", ")}. Select a version.`
-                : "The requested assembly is unavailable; no variant query was sent."
+                ? t("search.ambiguousAssembly", { matches: assemblyResolution.matches.map(assemblyOptionLabel).join(", ") })
+                : t("search.assemblyUnavailable")
             }
           />
         ) : null}
 
-        <div className="mt-4" role="region" aria-label="Variant search results">
+        <div className="mt-4" role="region" aria-label={t("variants.resultsAria")}>
           <Table<VariantSummary>
             rowKey="variant_id"
             columns={columns}

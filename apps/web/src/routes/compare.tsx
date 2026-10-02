@@ -15,7 +15,7 @@ import {
   RiseOutlined as Activity,
   SwapOutlined as GitCompareArrows,
 } from "@ant-design/icons";
-import { Card, Empty, Tag, Typography } from "@/lib/antd";
+import { Button, Card, Checkbox, Empty, Table, Tag, Typography } from "@/lib/antd";
 import { FadeUp, useReveal } from "../components/route-motion";
 import { startViewTransition } from "../lib/view-transitions";
 import { COMPARE_VARIANTS, type CompareVariant } from "../lib/compare-data";
@@ -37,7 +37,7 @@ export const Route = createFileRoute("/compare")({
 });
 
 function ComparePage() {
-  useTranslation();
+  const { t } = useTranslation();
   const { ids } = Route.useSearch();
   const navigate = Route.useNavigate();
   const rootRef = React.useRef<HTMLDivElement>(null);
@@ -51,8 +51,8 @@ function ComparePage() {
   useReveal(rootRef, { threshold: 0.05 });
 
   React.useEffect(() => {
-    document.title = "Variant Comparison — SoyMutDB";
-  }, []);
+    document.title = t("compare.curated.documentTitle");
+  }, [t]);
 
   // Sync to URL
   React.useEffect(() => {
@@ -73,103 +73,198 @@ function ComparePage() {
     .map((id) => COMPARE_VARIANTS.find((v) => v.id === id))
     .filter((v): v is CompareVariant => Boolean(v));
 
+  // The comparison grid is transposed: antd's Table takes fields as rows and
+  // the selected variants as columns, so each row carries one rendered cell per
+  // variant.
+  const comparisonRows: ComparisonRow[] = [
+    {
+      key: "gene",
+      label: t("compare.curated.fields.gene"),
+      icon: <Dna className="size-3.5" />,
+      cells: selectedVariants.map((v) => (
+        <span key={v.id}>
+          <span className="font-semibold">{v.geneName || v.gene}</span>
+          {v.geneName && (
+            <span className="ml-1 font-mono text-xs text-muted-foreground">({v.gene})</span>
+          )}
+        </span>
+      )),
+    },
+    {
+      key: "location",
+      label: t("compare.curated.fields.location"),
+      icon: <MapPin className="size-3.5" />,
+      cells: selectedVariants.map((v) => (
+        <span key={v.id} className="font-mono text-xs">
+          {v.chromosome}:{v.position.toLocaleString()}
+        </span>
+      )),
+    },
+    {
+      key: "alleleChange",
+      label: t("compare.curated.fields.alleleChange"),
+      icon: <Activity className="size-3.5" />,
+      cells: selectedVariants.map((v) => (
+        <span key={v.id} className="font-mono text-xs">
+          <span className="text-muted-foreground">{v.refAllele}</span>
+          <span className="mx-1">→</span>
+          <span className="font-semibold text-primary">{v.altAllele}</span>
+        </span>
+      )),
+    },
+    {
+      key: "mutation",
+      label: t("compare.curated.fields.mutation"),
+      icon: <Dna className="size-3.5" />,
+      cells: selectedVariants.map((v) => (
+        <Tag key={v.id} className="text-xs">{v.mutationType}</Tag>
+      )),
+    },
+    {
+      key: "impact",
+      label: t("compare.curated.fields.impact"),
+      icon: <Activity className="size-3.5" />,
+      cells: selectedVariants.map((v) => (
+        <Tag
+          key={v.id}
+          variant="outlined"
+          className={`text-xs border ${IMPACT_COLORS[v.impact] || ""}`}
+        >
+          {v.impact}
+        </Tag>
+      )),
+    },
+    ...(selectedVariants.some((v) => v.proteinChange)
+      ? [
+          {
+            key: "protein",
+            label: t("compare.curated.fields.protein"),
+            icon: <Activity className="size-3.5" />,
+            cells: selectedVariants.map((v) => (
+              <span key={v.id} className="font-mono text-xs">
+                {v.proteinChange || <span className="text-muted-foreground">—</span>}
+              </span>
+            )),
+          },
+        ]
+      : []),
+    {
+      key: "mutagen",
+      label: t("compare.curated.fields.mutagen"),
+      icon: <FlaskConical className="size-3.5" />,
+      cells: selectedVariants.map((v) => <span key={v.id}>{v.mutagen}</span>),
+    },
+    {
+      key: "cultivar",
+      label: t("compare.curated.fields.cultivar"),
+      icon: <Dna className="size-3.5" />,
+      cells: selectedVariants.map((v) => <span key={v.id}>{v.cultivar}</span>),
+    },
+    {
+      key: "phenotype",
+      label: t("compare.curated.fields.phenotype"),
+      icon: null,
+      cells: selectedVariants.map((v) => (
+        <span key={v.id} className="break-words text-sm">
+          {t(`compare.curated.phenotypes.${v.id}`)}
+        </span>
+      )),
+    },
+  ];
+
   return (
     <div ref={rootRef} className="container-prose py-8 md:py-12">
       <FadeUp stagger={0.05}>
         <div className="mb-8">
           <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
             <GitCompareArrows className="size-4" />
-            <span>Variant Comparison</span>
+            <span>{t("compare.curated.eyebrow")}</span>
           </div>
           <h1 className="font-display text-3xl md:text-4xl font-bold tracking-tight">
-            Compare Mutant Variants
+            {t("compare.curated.pageTitle")}
           </h1>
           <p className="mt-2 text-muted-foreground max-w-2xl">
-            Select up to {MAX_COMPARE} curated reference variants to compare gene, mutation type,
-            impact, mutagen, and phenotype side-by-side.
+            {t("compare.curated.subtitle", { max: MAX_COMPARE })}
           </p>
           <p className="mt-2 text-sm text-amber-700 dark:text-amber-300" role="note">
-            This comparison uses a fixed curated reference set, not the current database release.
-            Release-pinned live comparison will be available when its evidence API is implemented.
+            {t("compare.curated.referenceNote")}
           </p>
         </div>
       </FadeUp>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[280px,1fr] gap-6">
-        {/* Variant picker */}
-        <FadeUp delay={0.1}>
-          <Card className="lg:sticky lg:top-20 h-fit max-h-[70vh] overflow-hidden flex flex-col">
-            <div className="pb-3">
-              <Typography.Title className="text-sm">Select Variants</Typography.Title>
-              <Typography.Text className="text-xs">
-                {selected.length} / {MAX_COMPARE} selected
-              </Typography.Text>
-            </div>
-            <div className="pt-0 overflow-y-auto space-y-1">
-              {COMPARE_VARIANTS.map((v) => {
-                const isSelected = selected.includes(v.id);
-                const disabled = !isSelected && selected.length >= MAX_COMPARE;
-                return (
-                  <label
-                    key={v.id}
-                    className={`flex items-start gap-2 px-2 py-2 rounded-md cursor-pointer transition-colors ${
-                      disabled ? "opacity-40 cursor-not-allowed" : "hover:bg-muted"
-                    } ${isSelected ? "bg-primary/10" : ""}`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      disabled={disabled}
-                      onChange={() => toggle(v.id)}
-                      className="mt-0.5 size-4 accent-[var(--primary)]"
-                      aria-label={`Select ${v.id}`}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs font-semibold">{v.id}</span>
-                        <Tag
-                          variant="outlined"
-                          className={`text-[10px] border ${IMPACT_COLORS[v.impact] || ""}`}
-                        >
-                          {v.impact}
-                        </Tag>
-                      </div>
-                      <div className="text-xs font-medium truncate">{v.geneName || v.gene}</div>
-                      <div className="text-[11px] text-muted-foreground truncate">
-                        {v.mutagen} · {v.chromosome}
-                      </div>
-                    </div>
-                  </label>
-                );
-              })}
-            </div>
-          </Card>
-        </FadeUp>
+      <section className="mt-8" aria-labelledby="compare-picker-heading">
+        <div className="mb-4">
+          <Typography.Title id="compare-picker-heading" level={2} className="m-0 text-xl md:text-2xl">
+            {t("compare.curated.picker.title")}
+          </Typography.Title>
+          <Typography.Text className="text-sm text-muted-foreground">
+            {t("compare.curated.picker.selectedCount", { count: selected.length, max: MAX_COMPARE })}
+          </Typography.Text>
+        </div>
+        <div
+          data-testid="compare-picker"
+          role="group"
+          aria-label={t("compare.curated.picker.gridLabel")}
+          className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3"
+        >
+          {COMPARE_VARIANTS.map((v) => {
+            const isSelected = selected.includes(v.id);
+            const disabled = !isSelected && selected.length >= MAX_COMPARE;
+            // antd Checkbox renders its own <label>, so the card IS the
+            // checkbox: the whole card stays clickable and keyboard-reachable
+            // while the control itself becomes a native antd component.
+            return (
+              <Checkbox
+                key={v.id}
+                checked={isSelected}
+                disabled={disabled}
+                onChange={() => toggle(v.id)}
+                aria-label={t("compare.curated.picker.selectVariant", { id: v.id })}
+                className={`h-full items-start rounded-xl border p-4 transition-colors [&_.ant-checkbox]:mt-0.5 [&>span:last-child]:w-full ${
+                  disabled ? "cursor-not-allowed opacity-50" : "hover:border-primary/60"
+                } ${isSelected ? "border-primary bg-primary/10" : "border-border bg-card"}`}
+              >
+                <div className="min-w-0 flex-1 space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-mono text-xs font-semibold">{v.id}</span>
+                    <Tag variant="outlined" className={`text-xs border ${IMPACT_COLORS[v.impact] || ""}`}>
+                      {v.impact}
+                    </Tag>
+                  </div>
+                  <div className="break-words text-sm font-medium">{v.geneName || v.gene}</div>
+                  <div className="break-words text-xs text-muted-foreground">
+                    {v.mutagen} · {v.chromosome}
+                  </div>
+                </div>
+              </Checkbox>
+            );
+          })}
+        </div>
+      </section>
 
-        {/* Comparison panel */}
-        <div className="space-y-6 min-w-0">
+      {/* Comparison panel */}
+      <div className="mt-8 space-y-6 min-w-0">
           {selectedVariants.length < 2 ? (
             <Empty
               image={<Plus style={{ fontSize: 40, color: "var(--muted-foreground)" }} />}
               description={
                 <>
-                  <p className="font-medium">Select at least 2 variants</p>
-                  <p className="text-sm text-muted-foreground">Pick variants from the list to start a comparison.</p>
+                  <p className="font-medium">{t("compare.curated.empty.title")}</p>
+                  <p className="text-sm text-muted-foreground">{t("compare.curated.empty.description")}</p>
                 </>
               }
             />
           ) : (
             <>
               {/* Summary cards */}
-              <div
-                className="grid gap-4"
-                style={{
-                  gridTemplateColumns: `repeat(${Math.min(selectedVariants.length, 4)}, minmax(0, 1fr))`,
-                }}
-              >
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 {selectedVariants.map((v, i) => (
                   <FadeUp key={v.id} delay={0.05 + i * 0.05}>
-                    <VariantCard v={v} onRemove={() => toggle(v.id)} />
+                    <VariantCard
+                      v={v}
+                      onRemove={() => toggle(v.id)}
+                      removeLabel={t("compare.curated.removeVariant", { id: v.id })}
+                    />
                   </FadeUp>
                 ))}
               </div>
@@ -178,111 +273,39 @@ function ComparePage() {
               <FadeUp delay={0.2}>
                 <Card>
                   <div className="pb-3">
-                    <Typography.Title className="text-base flex items-center gap-2">
-                      <BarChart3 className="size-4" /> Attribute Comparison
+                    <Typography.Title level={2} className="m-0 text-lg flex items-center gap-2">
+                      <BarChart3 className="size-4" /> {t("compare.curated.comparisonTitle")}
                     </Typography.Title>
                   </div>
-                  <div className="pt-0 overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <tbody>
-                        <CompareRow
-                          label="Gene"
-                          icon={<Dna className="size-3.5" />}
-                          values={selectedVariants.map((v) => (
-                            <span key={v.id}>
-                              <span className="font-semibold">{v.geneName || v.gene}</span>
-                              {v.geneName && (
-                                <span className="text-muted-foreground font-mono text-xs ml-1">
-                                  ({v.gene})
-                                </span>
-                              )}
-                            </span>
-                          ))}
-                          ids={selectedVariants.map((v) => v.id)}
-                        />
-                        <CompareRow
-                          label="Location"
-                          icon={<MapPin className="size-3.5" />}
-                          values={selectedVariants.map((v) => (
-                            <span key={v.id} className="font-mono text-xs">
-                              {v.chromosome}:{v.position.toLocaleString()}
-                            </span>
-                          ))}
-                          ids={selectedVariants.map((v) => v.id)}
-                        />
-                        <CompareRow
-                          label="Allele change"
-                          icon={<Activity className="size-3.5" />}
-                          values={selectedVariants.map((v) => (
-                            <span key={v.id} className="font-mono text-xs">
-                              <span className="text-muted-foreground">{v.refAllele}</span>
-                              <span className="mx-1">→</span>
-                              <span className="text-primary font-semibold">{v.altAllele}</span>
-                            </span>
-                          ))}
-                          ids={selectedVariants.map((v) => v.id)}
-                        />
-                        <CompareRow
-                          label="Mutation"
-                          icon={<Dna className="size-3.5" />}
-                          values={selectedVariants.map((v) => (
-                            <Tag key={v.id} className="text-xs">
-                              {v.mutationType}
-                            </Tag>
-                          ))}
-                          ids={selectedVariants.map((v) => v.id)}
-                        />
-                        <CompareRow
-                          label="Impact"
-                          icon={<Activity className="size-3.5" />}
-                          values={selectedVariants.map((v) => (
-                            <Tag
-                              key={v.id}
-                              variant="outlined"
-                              className={`text-xs border ${IMPACT_COLORS[v.impact] || ""}`}
-                            >
-                              {v.impact}
-                            </Tag>
-                          ))}
-                          ids={selectedVariants.map((v) => v.id)}
-                        />
-                        {selectedVariants.some((v) => v.proteinChange) && (
-                          <CompareRow
-                            label="Protein"
-                            icon={<Activity className="size-3.5" />}
-                            values={selectedVariants.map((v) => (
-                              <span key={v.id} className="font-mono text-xs">
-                                {v.proteinChange || <span className="text-muted-foreground">—</span>}
-                              </span>
-                            ))}
-                            ids={selectedVariants.map((v) => v.id)}
-                          />
-                        )}
-                        <CompareRow
-                          label="Mutagen"
-                          icon={<FlaskConical className="size-3.5" />}
-                          values={selectedVariants.map((v) => v.mutagen)}
-                          ids={selectedVariants.map((v) => v.id)}
-                        />
-                        <CompareRow
-                          label="Cultivar"
-                          icon={<Dna className="size-3.5" />}
-                          values={selectedVariants.map((v) => v.cultivar)}
-                          ids={selectedVariants.map((v) => v.id)}
-                        />
-                        <tr>
-                          <th className="text-left text-xs text-muted-foreground py-3 pr-4 align-top font-medium w-28">
-                            Phenotype
-                          </th>
-                          {selectedVariants.map((v) => (
-                            <td key={v.id} className="py-3 px-3 align-top text-xs max-w-[200px] border-t border-border/50">
-                              {v.phenotype}
-                            </td>
-                          ))}
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
+                  <Table<ComparisonRow>
+                    size="small"
+                    bordered
+                    rowKey="key"
+                    pagination={false}
+                    scroll={{ x: "max-content" }}
+                    columns={[
+                      {
+                        title: t("compare.curated.comparisonTitle"),
+                        dataIndex: "label",
+                        key: "label",
+                        fixed: "left",
+                        width: 170,
+                        render: (_: unknown, row: ComparisonRow) => (
+                          <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+                            {row.icon}
+                            {row.label}
+                          </span>
+                        ),
+                      },
+                      ...selectedVariants.map((v, index) => ({
+                        title: <span className="font-mono text-xs">{v.id}</span>,
+                        key: v.id,
+                        width: 220,
+                        render: (_: unknown, row: ComparisonRow) => row.cells[index],
+                      })),
+                    ]}
+                    dataSource={comparisonRows}
+                  />
                 </Card>
               </FadeUp>
 
@@ -290,51 +313,62 @@ function ComparePage() {
               <FadeUp delay={0.25}>
                 <Card>
                   <div className="pb-3">
-                    <Typography.Title className="text-base flex items-center gap-2">
-                      <BarChart3 className="size-4" /> Impact Distribution
+                    <Typography.Title level={2} className="m-0 text-lg flex items-center gap-2">
+                      <BarChart3 className="size-4" /> {t("compare.curated.impactDistribution.title")}
                     </Typography.Title>
-                    <Typography.Text className="text-xs">
-                      Counts of HIGH / MODERATE / LOW / MODIFIER impact in current selection
+                    <Typography.Text className="text-sm text-muted-foreground">
+                      {t("compare.curated.impactDistribution.description")}
                     </Typography.Text>
                   </div>
                   <div>
-                    <ImpactChart variants={selectedVariants} />
+                    <ImpactChart
+                      variants={selectedVariants}
+                      ariaLabel={t("compare.curated.impactDistribution.ariaLabel")}
+                    />
                   </div>
                 </Card>
               </FadeUp>
             </>
           )}
         </div>
-      </div>
     </div>
   );
 }
 
 /* ------------------------------------------------------------------ */
 
-function VariantCard({ v, onRemove }: { v: CompareVariant; onRemove: () => void }) {
+function VariantCard({
+  v,
+  onRemove,
+  removeLabel,
+}: {
+  v: CompareVariant;
+  onRemove: () => void;
+  removeLabel: string;
+}) {
   return (
     <Card className="relative">
-      <button
+      <Button
+        type="text"
+        shape="circle"
         onClick={onRemove}
-        className="absolute top-2 right-2 size-6 inline-flex items-center justify-center rounded-full bg-muted/60 hover:bg-destructive hover:text-destructive-foreground transition-colors"
-        aria-label={`Remove ${v.id}`}
-      >
-        <X className="size-3" />
-      </button>
+        aria-label={removeLabel}
+        className="absolute top-3 right-3"
+        icon={<X className="size-3" />}
+      />
       <div className="p-4">
         <div className="font-mono text-xs text-muted-foreground mb-1">{v.id}</div>
         <div className="font-display text-lg font-bold leading-tight mb-1">
           {v.geneName || v.gene}
         </div>
-        <div className="font-mono text-[11px] text-muted-foreground truncate mb-3">{v.gene}</div>
+        <div className="font-mono text-xs text-muted-foreground break-words mb-3 pr-12">{v.gene}</div>
         <Tag
           variant="outlined"
-          className={`text-[10px] border ${IMPACT_COLORS[v.impact] || ""}`}
+          className={`text-xs border ${IMPACT_COLORS[v.impact] || ""}`}
         >
           {v.impact}
         </Tag>
-        <div className="mt-3 space-y-1 text-[11px] text-muted-foreground">
+        <div className="mt-3 space-y-1 text-xs text-muted-foreground">
           <div className="flex items-center gap-1">
             <MapPin className="size-3" />
             {v.chromosome}:{v.position.toLocaleString()}
@@ -349,38 +383,17 @@ function VariantCard({ v, onRemove }: { v: CompareVariant; onRemove: () => void 
   );
 }
 
-function CompareRow({
-  label,
-  icon,
-  values,
-  ids,
-}: {
+/** One field row of the transposed comparison grid. */
+interface ComparisonRow {
+  key: string;
   label: string;
   icon: React.ReactNode;
-  values: React.ReactNode[];
-  ids: string[];
-}) {
-  return (
-    <tr>
-      <th className="text-left text-xs text-muted-foreground py-2.5 pr-4 align-middle font-medium w-28">
-        <span className="inline-flex items-center gap-1.5">
-          {icon}
-          {label}
-        </span>
-      </th>
-      {values.map((val, i) => (
-        <td
-          key={ids[i]}
-          className="py-2.5 px-3 align-middle text-sm border-t border-border/50"
-        >
-          {val}
-        </td>
-      ))}
-    </tr>
-  );
+  /** One rendered cell per selected variant, in `selectedVariants` order. */
+  cells: React.ReactNode[];
 }
 
-function ImpactChart({ variants }: { variants: CompareVariant[] }) {
+
+function ImpactChart({ variants, ariaLabel }: { variants: CompareVariant[]; ariaLabel: string }) {
   const counts: Record<string, number> = { HIGH: 0, MODERATE: 0, LOW: 0, MODIFIER: 0 };
   for (const v of variants) counts[v.impact] = (counts[v.impact] || 0) + 1;
   const total = variants.length;
@@ -397,7 +410,7 @@ function ImpactChart({ variants }: { variants: CompareVariant[] }) {
   const startX = (W - totalBarWidth) / 2;
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full max-w-md mx-auto" role="img" aria-label="Impact distribution bar chart">
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full max-w-md mx-auto" role="img" aria-label={ariaLabel}>
       {keys.map((k, i) => {
         const c = counts[k];
         const h = total > 0 ? (c / total) * maxH : 0;

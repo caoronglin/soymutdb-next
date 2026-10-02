@@ -334,9 +334,9 @@ function BrowserComponent() {
         return (
             <main className="container-prose section-rhythm" data-testid="browser-missing-context">
                 <Card>
-                    <Typography.Title level={3}>Genome browser context unavailable</Typography.Title>
+                    <Typography.Title level={3}>{t("browser.contextMissingTitle")}</Typography.Title>
                     <Typography.Paragraph type="secondary">
-                        Choose an explicit assembly and published release before opening JBrowse.
+                        {t("browser.contextMissingDescription")}
                     </Typography.Paragraph>
                 </Card>
             </main>
@@ -385,7 +385,7 @@ function BrowserComponent() {
                         */}
                         {status === "ready" && (
                             <span data-testid="browser-ready" className="sr-only">
-                                {t("browser.ready", { defaultValue: "JBrowse bridge ready" })}
+                                {t("browser.ready")}
                             </span>
                         )}
                     </div>
@@ -410,6 +410,7 @@ function BrowserComponent() {
                                 onChange={(e) => setLocInput(e.target.value)}
                                 placeholder={t("browser.searchPlaceholder")}
                                 aria-label={t("browser.location")}
+                                data-testid="browser-locus-input"
                                 className="h-12 pl-9"
                             />
                         </div>
@@ -495,7 +496,7 @@ function BrowserComponent() {
                             src={jbrowseSrc}
                             data-testid="browser-iframe"
                             data-bridge-status={status}
-                            title="JBrowse 2 genome browser"
+                            title={t("browser.iframeTitle")}
                             className="h-[600px] w-full"
                             loading="lazy"
                             allow="clipboard-read; clipboard-write"

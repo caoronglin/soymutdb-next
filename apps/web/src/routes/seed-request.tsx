@@ -17,6 +17,13 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchHomepageStats } from "@soymutdb/api-client";
 
 export const Route = createFileRoute("/seed-request")({
+  // The gene detail page links here with the accession already written into the
+  // textarea, so a visitor arriving from a gene never retypes it. The value is a
+  // comma-separated list in the same format the textarea itself accepts.
+  validateSearch: (search: Record<string, unknown>): { genes?: string } => ({
+    genes:
+      typeof search.genes === "string" && search.genes.trim() ? search.genes.trim() : undefined,
+  }),
   component: SeedRequestComponent,
 });
 
@@ -51,6 +58,7 @@ function parseGeneIds(raw: string): string[] {
 
 function SeedRequestComponent() {
   const { t } = useTranslation();
+  const { genes: prefilledGenes } = Route.useSearch();
   const [form] = Form.useForm<SeedRequestFormValues>();
   const [submitted, setSubmitted] = React.useState<SeedRequestResponse | null>(null);
   const [submitError, setSubmitError] = React.useState<string | null>(null);
@@ -153,7 +161,7 @@ function SeedRequestComponent() {
           <Alert
             type="error"
             showIcon
-            message={t("seedRequest.errorTitle")}
+            title={t("seedRequest.errorTitle")}
             description={submitError}
             className="mb-4"
           />
@@ -164,6 +172,7 @@ function SeedRequestComponent() {
           layout="vertical"
           onFinish={onFinish}
           requiredMark="optional"
+          initialValues={{ geneIds: prefilledGenes ?? "" }}
         >
           <div className="grid gap-0 sm:grid-cols-2 sm:gap-x-4">
             <Form.Item
@@ -265,7 +274,11 @@ function SeedRequestComponent() {
           <div className="mt-5 rounded-lg bg-muted/40 p-4 text-sm text-muted-foreground">
             {t("seedRequest.analysisPrivacy")}
           </div>
-          {overview.isError ? <button className="mt-3 text-xs text-muted-foreground underline" onClick={() => void overview.refetch()}>{t("common.retry")}</button> : null}
+          {overview.isError ? (
+            <Button type="link" size="small" className="mt-3 px-0" onClick={() => void overview.refetch()}>
+              {t("common.retry")}
+            </Button>
+          ) : null}
         </Card>
       </aside>
       </div>

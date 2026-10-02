@@ -57,7 +57,7 @@ function GbrowseComponent() {
           {t("search.gbrowse.subtitle")}
         </h2>
 
-        <Card className="mt-6 max-w-3xl">
+        <Card className="mt-6">
           <div className="flex items-start gap-3">
             <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-foreground">
               <GlobalOutlined aria-hidden />
@@ -67,34 +67,46 @@ function GbrowseComponent() {
             </Typography.Paragraph>
           </div>
 
-          <Form layout="vertical" className="mt-6 max-w-sm" onFinish={openBrowser}>
-            <Form.Item label={t("search.gbrowse.assembly")} className="mb-0">
-              <Select
-                value={assemblyId}
-                onChange={(v) => setAssemblyId(v)}
-                placeholder={t("search.genes.assemblyPlaceholder")}
-                loading={assembliesQuery.isLoading}
-                options={assemblies.map((a) => ({
-                  value: String(a.id),
-                  label: (
-                    <span className="flex items-center gap-2">
-                      <span>{a.name}</span>
-                      {a.is_default ? (
-                        <Tag className="m-0 text-[9px] uppercase">Default</Tag>
-                      ) : null}
-                    </span>
-                  ),
-                }))}
-              />
-            </Form.Item>
-            <Button
-              type="primary"
-              htmlType="submit"
-              className="mt-4"
-              disabled={!selectedAssembly}
-            >
-              {t("search.gbrowse.open")}
-            </Button>
+          {/* Single field, but it grows with the viewport instead of sitting in
+              a 28rem box on a 1400px canvas — the card is full width now, so a
+              fixed narrow form next to it reads as a rendering mistake. The row
+              caps at 3xl so the control never becomes a 1300px dropdown. */}
+          <Form layout="vertical" className="mt-6" onFinish={openBrowser}>
+            <div className="flex flex-wrap items-end gap-3 md:max-w-3xl md:flex-nowrap">
+              <Form.Item
+                label={t("search.gbrowse.assembly")}
+                className="mb-0 min-w-[240px] flex-1"
+              >
+                <Select
+                  value={assemblyId}
+                  onChange={(v) => setAssemblyId(v)}
+                  placeholder={t("search.genes.assemblyPlaceholder")}
+                  loading={assembliesQuery.isLoading}
+                  size="large"
+                  className="w-full"
+                  options={assemblies.map((a) => ({
+                    value: String(a.id),
+                    label: (
+                      <span className="flex items-center gap-2">
+                        <span>{a.name}</span>
+                        {a.is_default ? (
+                          <Tag className="m-0 text-[9px] uppercase">{t("home.defaultAssembly")}</Tag>
+                        ) : null}
+                      </span>
+                    ),
+                  }))}
+                />
+              </Form.Item>
+              <Button
+                type="primary"
+                htmlType="submit"
+                size="large"
+                className="shrink-0"
+                disabled={!selectedAssembly}
+              >
+                {t("search.gbrowse.open")}
+              </Button>
+            </div>
           </Form>
         </Card>
       </div>

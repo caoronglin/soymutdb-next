@@ -1,4 +1,18 @@
-@import "tailwindcss";
+/* `important` makes every Tailwind utility an `!important` declaration.
+ *
+ * Why it is needed: antd 6 injects its component CSS from JS at runtime, into
+ * <head>, AFTER the built stylesheet, and leaves it unlayered. Unlayered
+ * declarations beat layered ones, so `:where(.css-x).ant-card{margin:0}` — the
+ * universal reset antd emits for every component root — silently wins against
+ * `Card className="mt-6"`. The consequence was not cosmetic: every stacked
+ * Card lost its top margin, so consecutive cards rendered edge to edge with no
+ * gap and read as one duplicated block.
+ *
+ * Specificity cannot fix this (same tie, later wins) and neither can
+ * `@layer` ordering, so the utilities are promoted. This restores the plain
+ * meaning of a class in a className: if it is written, it applies.
+ * Detection and evidence: .validation/probe/audit-antd-spacing.mjs. */
+@import "tailwindcss" important;
 
 /* ----------------------------------------------------------------------------
  * Cascade layer order (oracle R1 修正, 2026-08):
@@ -13,9 +27,12 @@
 
 /* Web-owned color and surface tokens. Light mode is the default. */
 :root {
+    /* Aligned with antd's derivation (base radius 10px => Button 10px,
+       Card 12px). The previous 14/18px values made a Tailwind-rounded surface
+       disagree with the antd Card sitting next to it. */
     --radius: 0.625rem;
-    --radius-lg: 0.875rem;
-    --radius-xl: 1.125rem;
+    --radius-lg: 0.75rem;
+    --radius-xl: 1rem;
     --background: oklch(0.991 0.004 148);
     --foreground: oklch(0.195 0.028 152);
     --card: oklch(1 0 0);
@@ -168,10 +185,10 @@
     --text-caption--line-height: 1.5;
 
     /* Radii */
-    --radius-sm: 0.375rem;
+    --radius-sm: 0.5rem;
     --radius-md: 0.625rem;
-    --radius-lg: 0.875rem;
-    --radius-xl: 1.125rem;
+    --radius-lg: 0.75rem;
+    --radius-xl: 1rem;
     --radius-2xl: 1.5rem;
 
     /* Section rhythm */

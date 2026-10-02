@@ -19,7 +19,7 @@ describe("portal i18n interpolation", () => {
     expect(instance.t("variants.totalCount", { count: 7, lng: "en" })).toBe("7 results");
     expect(instance.t("variants.totalCount", { count: 7, lng: "zh" })).toBe("共 7 条");
     expect(instance.t("search.location.found", { count: 3, lng: "en" })).toBe(
-      "3 variants found",
+      "3 mutation sites found",
     );
     expect(instance.t("variants.pageOf", { page: 2, lng: "en" })).toBe("Page 2");
   });

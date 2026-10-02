@@ -1,9 +1,12 @@
 /**
- * CSV/TSV viewer — native HTML <table> (NOT @tanstack/react-table).
+ * CSV/TSV viewer — antd's native `Table`.
  *
- * Parses with a simple split; max 100 rows shown to avoid browser strain.
+ * Parses with a simple split; max 100 rows shown to avoid browser strain. The
+ * bounded body height and the header that stays put while scrolling are the
+ * table's own `scroll` behaviour now, rather than a hand-rolled sticky <th>.
  */
 import { useMemo } from "react";
+import { Table, type TableColumnsType } from "@/lib/antd";
 
 interface CsvViewerProps {
   content: string;
@@ -11,6 +14,10 @@ interface CsvViewerProps {
 }
 
 const MAX_ROWS = 100;
+/** Body height in px, matching the previous `max-h-96` container. */
+const BODY_HEIGHT = 384;
+
+type CsvRow = Record<string, string>;
 
 export function CsvViewer({ content, delimiter = "," }: CsvViewerProps) {
   const { headers, rows, totalRows, truncated } = useMemo(() => {
@@ -32,6 +39,31 @@ export function CsvViewer({ content, delimiter = "," }: CsvViewerProps) {
     };
   }, [content, delimiter]);
 
+  // CSV headers can repeat or be empty, so columns are addressed by position
+  // instead of by the header text.
+  const columns: TableColumnsType<CsvRow> = useMemo(
+    () =>
+      headers.map((header, index) => ({
+        title: header,
+        dataIndex: `c${index}`,
+        key: `c${index}`,
+        render: (value: string) => <span className="font-mono">{value}</span>,
+      })),
+    [headers],
+  );
+
+  const dataSource: CsvRow[] = useMemo(
+    () =>
+      rows.map((cells, index) => {
+        const record: CsvRow = { key: String(index) };
+        headers.forEach((_, h) => {
+          record[`c${h}`] = cells[h] ?? "";
+        });
+        return record;
+      }),
+    [rows, headers],
+  );
+
   if (headers.length === 0) {
     return (
       <div className="p-4 text-center text-sm text-muted-foreground">
@@ -47,30 +79,15 @@ export function CsvViewer({ content, delimiter = "," }: CsvViewerProps) {
           Showing {MAX_ROWS} of {totalRows} rows
         </div>
       )}
-      <div className="overflow-auto max-h-96 rounded-md border">
-        <table className="w-full text-left text-xs">
-          <thead className="sticky top-0 bg-background">
-            <tr className="border-b">
-              {headers.map((h, i) => (
-                <th key={i} className="px-3 py-2 font-semibold text-muted-foreground">
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, ri) => (
-              <tr key={ri} className="border-b last:border-0 hover:bg-accent/30">
-                {row.map((cell, ci) => (
-                  <td key={ci} className="px-3 py-1.5 font-mono">
-                    {cell}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <Table<CsvRow>
+        rowKey="key"
+        size="small"
+        bordered
+        columns={columns}
+        dataSource={dataSource}
+        pagination={false}
+        scroll={{ x: "max-content", y: BODY_HEIGHT }}
+      />
     </div>
   );
 }

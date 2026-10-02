@@ -9,7 +9,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import * as React from "react";
 import { ScanOutlined, LoadingOutlined, CaretRightOutlined, RedoOutlined, InfoCircleOutlined } from "@ant-design/icons";
-import { Breadcrumb, Button, Card, Input, Typography } from "@/lib/antd";
+import { Breadcrumb, Button, Card, Checkbox, Input, Typography } from "@/lib/antd";
 import { UploadDropzone } from "../../components/analyses/upload-dropzone";
 import { ResearcherGate } from "../../components/analyses/researcher-gate";
 import { useAnalysisUpload } from "../../lib/analyses-upload";
@@ -190,16 +190,13 @@ function ScanpyComponent() {
                 </div>
               </div>
 
-              <label className="flex cursor-pointer items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={useHvg}
-                  onChange={(e) => setUseHvg(e.target.checked)}
-                  disabled={upload.busy}
-                  className="size-4 accent-[var(--primary)]"
-                />
+              <Checkbox
+                checked={useHvg}
+                onChange={(e) => setUseHvg(e.target.checked)}
+                disabled={upload.busy}
+              >
                 Use highly variable genes (HVG) before PCA
-              </label>
+              </Checkbox>
 
               {upload.busy ? (
                 <div className="grid gap-2">

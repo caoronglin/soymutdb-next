@@ -17,13 +17,12 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { useSiteContent } from "@/lib/site-content-react";
+import { PortalSearchBox } from "../portal-search-box";
 import {
   ArrowRightOutlined,
   EnvironmentOutlined,
-  ExperimentOutlined,
   GlobalOutlined,
   IdcardOutlined,
-  SearchOutlined,
   ThunderboltOutlined,
 } from "@ant-design/icons";
 import {
@@ -33,15 +32,16 @@ import {
   Carousel,
   Col,
   Empty,
-  Input,
   List,
   Row,
   Typography,
 } from "@/lib/antd";
 import { FluidGradient } from "../fluids/fluid-gradient";
 import { useAnimation } from "@/lib/animation-context";
-import { getFeaturedNews, type NewsSummary } from "@soymutdb/api-client";
+import DOMPurify from "dompurify";
+import { getFeaturedNews, getSiteHome, type NewsSummary } from "@soymutdb/api-client";
 import { formatDate } from "../../lib/format";
+import { SITE_VARIANT } from "../../lib/site-variant";
 import { NEWS_FEATURED_KEY } from "../news-carousel";
 import { pickNewsTitle } from "../news-card";
 
@@ -91,20 +91,28 @@ interface ToolEntry {
   icon: React.ReactNode;
 }
 
-// Slide 1 directory order: 基因 ID / 物理位置 / Gbrowse / 引物设计 / BLAST.
+// The four search entries shown on the home page: the two identifier searches
+// are the primary (arrow) entries, the other two keep card entries. Primer
+// Design was retired from this surface at the operator's request; its route
+// `/search/primer` stays reachable directly.
 const TOOL_ENTRIES: ToolEntry[] = [
   { key: "gene", labelKey: "home.toolGeneLabel", label: "基因 ID 检索", descKey: "home.toolGeneDesc", desc: "按基因号查询突变", route: "/search/genes", icon: <IdcardOutlined /> },
   { key: "location", labelKey: "home.toolLocationLabel", label: "物理位置检索", descKey: "home.toolLocationDesc", desc: "按染色体与位点查询", route: "/search/location", icon: <EnvironmentOutlined /> },
   { key: "gbrowse", labelKey: "home.toolGbrowseLabel", label: "JBrowse 2", descKey: "home.toolGbrowseDesc", desc: "在 JBrowse 2 中浏览基因组", route: "/search/gbrowse", icon: <GlobalOutlined /> },
-  { key: "primer", labelKey: "home.toolPrimerLabel", label: "引物设计", descKey: "home.toolPrimerDesc", desc: "设计并检查引物", route: "/search/primer", icon: <ExperimentOutlined /> },
   { key: "blast", labelKey: "home.toolBlastLabel", label: "BLAST 比对", descKey: "home.toolBlastDesc", desc: "序列比对检索同源", route: "/blast", icon: <ThunderboltOutlined /> },
 ];
 
-const DATABASE_ENTRIES = [
-  { key: "mutants", route: "/mutants", label: "突变体", description: "浏览已发布的突变体记录", search: { mutagen: "" } },
-  { key: "genes", route: "/genes", label: "基因", description: "按基因与组装版本筛选", search: { assembly: "", q: "", chromosome: "", biotype: "", page: 1, sort_by: "gene_id", sort_dir: "asc" as const } },
-  { key: "variants", route: "/variants", label: "变异", description: "按染色体、类型与影响筛选", search: { assembly: "", chromosome: "", variant_type: "" as const, impact: "" as const, mutant_line_public_id: "", cursor: undefined } },
-] as const;
+/**
+ * Stable handles for the task entries, in the approved design order. The e2e
+ * suites assert these handles instead of positional selectors, so reordering
+ * the entries cannot silently break a flow assertion.
+ */
+const TASK_TESTIDS: Record<string, string> = {
+  gene: "task-gene-search",
+  location: "task-location-search",
+  gbrowse: "task-jbrowse",
+  blast: "task-blast",
+};
 
 function LatestNewsPanel() {
   const { t, i18n } = useTranslation();
@@ -115,11 +123,11 @@ function LatestNewsPanel() {
   });
 
   if (query.isPending) {
-    return <div className="flex min-h-24 items-center justify-center" role="status"><span className="sr-only">{t("common.loading", { defaultValue: "Loading" })}</span><span className="animate-pulse text-sm text-muted-foreground">{t("common.loading", { defaultValue: "Loading" })}</span></div>;
+    return <div className="flex min-h-24 items-center justify-center" role="status"><span className="sr-only">{t("common.loading")}</span><span className="animate-pulse text-sm text-muted-foreground">{t("common.loading")}</span></div>;
   }
 
   if (query.isError) {
-    return <Alert type="error" showIcon message={t("home.newsUnavailable", { defaultValue: "最新动态暂不可用" })} description={t("home.newsRetry", { defaultValue: "请稍后重试，当前没有使用演示数据替代。" })} />;
+    return <Alert type="error" showIcon title={t("home.newsUnavailable", { defaultValue: "最新动态暂不可用" })} description={t("home.newsRetry", { defaultValue: "请稍后重试，当前没有使用演示数据替代。" })} />;
   }
 
   const items: NewsSummary[] = query.data?.featured.slice(0, 5) ?? [];
@@ -127,7 +135,13 @@ function LatestNewsPanel() {
     <List
       dataSource={items}
       split
-      locale={{ emptyText: <Empty description={t("home.noNews", { defaultValue: "暂无已发布新闻" })} /> }}
+      locale={{
+        emptyText: (
+          <div data-testid="home-news-empty">
+            <Empty description={t("home.noNews", { defaultValue: "暂无已发布新闻" })} />
+          </div>
+        ),
+      }}
       renderItem={(item) => (
         <List.Item>
           <List.Item.Meta
@@ -148,6 +162,38 @@ function LatestNewsPanel() {
   );
 }
 
+/**
+ * HomeWelcomeBlock — the Admin-editable homepage content block.
+ *
+ * Backed by `/site/home` (`welcome_zh` / `welcome_en`), which the API returns as
+ * bleach-sanitised rich HTML, so an operator can embed photos, video and links
+ * from the Admin console's "Homepage welcome" editor. DOMPurify re-sanitises as
+ * defence in depth, matching the About page. Renders nothing while the block is
+ * empty, so the home page never shows a stray heading for absent content.
+ */
+function HomeWelcomeBlock() {
+  const { i18n } = useTranslation();
+  const query = useQuery({
+    queryKey: ["site-home", SITE_VARIANT],
+    queryFn: () => getSiteHome(SITE_VARIANT),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const isZh = (i18n.language ?? "").toLowerCase().startsWith("zh");
+  const html = (isZh ? query.data?.welcome_zh : query.data?.welcome_en) ?? "";
+  if (html.trim() === "") return null;
+
+  return (
+    <section className="container-prose pb-20 pt-2" data-testid="home-welcome">
+      <div
+        className="news-content prose-sm max-w-none text-base leading-relaxed text-foreground/90"
+        // Admin-authored, backend-sanitised HTML; DOMPurify is defence in depth.
+        dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(html) }}
+      />
+    </section>
+  );
+}
+
 export function AntdHome() {
   const { t } = useTranslation();
   const { get } = useSiteContent();
@@ -156,18 +202,16 @@ export function AntdHome() {
   const { reduced } = useAnimation();
 
   const goSearch = () => navigate({ to: "/search", search: { q: undefined } });
-  const [heroQuery, setHeroQuery] = React.useState("");
-  const runHeroSearch = (term: string) => navigate({ to: "/search", search: { q: term.trim() || undefined } });
 
   return (
     <div data-testid="antd-home">
       {/* ---------------------------------------------------------------- */}
-      {/* HERO (clean): brand intro + search. No heavy gradient/CTA.        */}
+      {/* HERO: brand intro plus the shared identifier search box. */}
       {/* ---------------------------------------------------------------- */}
       <section className="border-b border-border/60 bg-background">
         <div className="container-prose py-14 text-center md:py-20">
           <Text className="block text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-            {get("hero.eyebrow", t("home.heroEyebrow", { defaultValue: "SOYMUTDB · MULTI-SPECIES" }))}
+            {get("hero.eyebrow", t("home.heroEyebrow"))}
           </Text>
           <Title level={1} style={{ margin: "18px 0 14px", color: "var(--foreground)", fontSize: "clamp(2rem, 4.5vw, 3rem)", lineHeight: 1.15, fontWeight: 700 }}>
             {get("hero.title", t("home.heroTitle", { defaultValue: "探索多物种突变的未知疆域" }))}
@@ -175,20 +219,8 @@ export function AntdHome() {
           <Paragraph style={{ maxWidth: "58ch", margin: "0 auto", color: "var(--muted-foreground)", fontSize: "clamp(1rem, 1.5vw, 1.1rem)", lineHeight: 1.7 }}>
             {get("hero.subtitle", t("home.heroSubtitle", { defaultValue: "新一代多物种突变数据库，从基因组到表型一站探索。" }))}
           </Paragraph>
-          <div role="search" className="mx-auto mt-8 flex w-full max-w-2xl flex-wrap items-center gap-2.5">
-            <Input
-              size="large"
-              value={heroQuery}
-              onChange={(e) => setHeroQuery(e.target.value)}
-              onPressEnter={() => runHeroSearch(heroQuery)}
-              placeholder={get("hero.searchPlaceholder", t("home.searchPlaceholder", { defaultValue: "搜索基因、变异、突变系…" }))}
-              prefix={<SearchOutlined style={{ color: "var(--muted-foreground)" }} />}
-              style={{ flex: 1, minWidth: 220 }}
-              aria-label={get("hero.searchPlaceholder", t("home.searchPlaceholder", { defaultValue: "搜索基因、变异、突变系…" }))}
-            />
-            <Button type="primary" size="large" onClick={() => runHeroSearch(heroQuery)}>
-              {t("home.searchButton", { defaultValue: "搜索" })}
-            </Button>
+          <div className="mt-8">
+            <PortalSearchBox testId="home-search" />
           </div>
           {heroImage ? (
             <div className="mx-auto mt-10 aspect-[16/9] w-full max-w-3xl overflow-hidden rounded-2xl border border-border/60 shadow-sm">
@@ -200,38 +232,6 @@ export function AntdHome() {
               />
             </div>
           ) : null}
-        </div>
-      </section>
-
-      <section className="border-b border-border/60 bg-muted/20" data-testid="database-entrypoints">
-        <div className="container-prose py-10 md:py-12">
-          <div className="mb-5 flex flex-wrap items-baseline justify-between gap-3">
-            <div>
-              <Text className="eyebrow">{t("home.databaseEyebrow", { defaultValue: "SOYMUTDB DATABASE" })}</Text>
-              <Title level={2} style={{ margin: "8px 0 0", fontWeight: 700 }}>
-                {t("home.databaseTitle", { defaultValue: "生物信息学数据库" })}
-              </Title>
-            </div>
-            <Link to="/search" className="home-section-link shrink-0 text-primary" style={{ fontWeight: 500 }}>
-              {t("home.databaseSearch", { defaultValue: "查询数据库" })} →
-            </Link>
-          </div>
-          <Row gutter={[20, 20]}>
-            {DATABASE_ENTRIES.map((entry) => (
-              <Col key={entry.key} xs={24} md={8}>
-                <Link
-                  to={entry.route}
-                  search={entry.search}
-                  className="block h-full rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <Card className="h-full rounded-xl border border-border bg-card shadow-sm transition-colors hover:border-primary/40">
-                    <Text strong className="block text-base text-foreground">{t(`home.database.${entry.key}`, { defaultValue: entry.label })}</Text>
-                    <Paragraph className="mb-0 mt-1 text-sm text-muted-foreground">{t(`home.database.${entry.key}Description`, { defaultValue: entry.description })}</Paragraph>
-                  </Card>
-                </Link>
-              </Col>
-            ))}
-          </Row>
         </div>
       </section>
 
@@ -308,67 +308,46 @@ export function AntdHome() {
           </Link>
         </div>
 
-        <Row gutter={[20, 20]}>
-          {TOOL_ENTRIES.map((tool) => {
-            const label = get(`tool.${tool.key}.label`, t(tool.labelKey, { defaultValue: tool.label }));
-            const desc = get(`tool.${tool.key}.desc`, t(tool.descKey, { defaultValue: tool.desc }));
-            const image = get(`tool.${tool.key}.image`, "");
-            return (
-              <Col key={tool.key} xs={24} sm={12} lg={{ flex: 1 }}>
-                <Link
-                  to={tool.route}
-                  className="block h-full rounded-xl outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <Card
-                    className="h-full rounded-xl border border-border bg-card shadow-sm transition-colors hover:border-primary/40"
-                    styles={{ body: { padding: 18, height: "100%" } }}
+        <div data-testid="task-entries">
+          {/* All four entries share one square-card treatment: the two identifier
+              searches used to render as arrow shapes, which made the row read as
+              two different component families. */}
+          <Row gutter={[20, 20]}>
+            {TOOL_ENTRIES.map((tool) => {
+              const label = get(`tool.${tool.key}.label`, t(tool.labelKey, { defaultValue: tool.label }));
+              const desc = get(`tool.${tool.key}.desc`, t(tool.descKey, { defaultValue: tool.desc }));
+              const image = get(`tool.${tool.key}.image`, "");
+              return (
+                <Col key={tool.key} xs={24} sm={12} lg={6}>
+                  <Link
+                    to={tool.route}
+                    data-testid={TASK_TESTIDS[tool.key]}
+                    className="block h-full rounded-xl outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring"
                   >
-                    <div className="flex items-center gap-3.5">
-                      <div className="flex h-11 w-11 flex-none items-center justify-center overflow-hidden rounded-lg bg-accent text-accent-foreground">
-                        {image ? (
-                          <img src={image} alt={label} loading="lazy" className="h-full w-full object-cover" />
-                        ) : (
-                          tool.icon
-                        )}
+                    <Card
+                      className="h-full rounded-xl border border-border bg-card shadow-sm transition-colors hover:border-primary/40"
+                      styles={{ body: { padding: 18, height: "100%" } }}
+                    >
+                      <div className="flex h-full flex-col items-center justify-start gap-3 text-center">
+                        <div className="flex h-11 w-11 flex-none items-center justify-center overflow-hidden rounded-lg bg-accent text-accent-foreground">
+                          {image ? <img src={image} alt={label} loading="lazy" className="h-full w-full object-cover" /> : tool.icon}
+                        </div>
+                        <Text strong className="block text-[15px] text-foreground">{label}</Text>
+                        <Paragraph className="mb-0 text-[13px] leading-5 text-muted-foreground">{desc}</Paragraph>
                       </div>
-                      <div className="min-w-0">
-                        <Text strong className="block text-[15px] text-foreground">
-                          {label}
-                        </Text>
-                        <Paragraph className="mb-0 mt-1 text-[13px] leading-5 text-muted-foreground">
-                          {desc}
-                        </Paragraph>
-                      </div>
-                    </div>
-                  </Card>
-                </Link>
-              </Col>
-            );
-          })}
-        </Row>
+                    </Card>
+                  </Link>
+                </Col>
+              );
+            })}
+          </Row>
+        </div>
       </div>
 
-      <section className="container-prose pb-24 pt-2" data-testid="resource-cards">
-        <Title level={3} style={{ margin: "0 0 18px", fontWeight: 700 }}>
-          {t("home.resourceNav", { defaultValue: "资源导览" })}
-        </Title>
-        <Row gutter={[20, 20]}>
-          {[
-            { key: "downloads", route: "/downloads", label: "数据下载", desc: "下载参考基因组、变异与注释数据" },
-            { key: "guide", route: "/guide", label: "使用指南", desc: "快速上手与检索帮助" },
-            { key: "publications", route: "/publications", label: "文献 / 出版物", desc: "SoyMutDB 相关文献" },
-          ].map((item) => (
-            <Col key={item.key} xs={24} sm={12} lg={8}>
-              <Link to={item.route} className="block h-full rounded-xl outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring">
-                <Card className="h-full rounded-xl border border-border bg-card shadow-sm transition-colors hover:border-primary/40">
-                  <Text strong style={{ display: "block", fontSize: 15, color: "var(--foreground)" }}>{item.label}</Text>
-                  <Paragraph style={{ margin: "4px 0 0", color: "var(--muted-foreground)", fontSize: 13, lineHeight: 1.5 }}>{item.desc}</Paragraph>
-                </Card>
-              </Link>
-            </Col>
-          ))}
-        </Row>
-      </section>
+      {/* Admin-editable rich content block. This replaced a hard-coded row of
+          resource cards, so the operator can author text, images, video and
+          links from the Admin console ("Homepage welcome"). */}
+      <HomeWelcomeBlock />
     </div>
   );
 }

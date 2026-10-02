@@ -108,7 +108,7 @@ function PublicationsComponent() {
           type="error"
           showIcon
           className="mt-8"
-          message={t("publications.loadError", { defaultValue: "Publications unavailable" })}
+          title={t("publications.loadError", { defaultValue: "Publications unavailable" })}
           description={t("publications.loadErrorDesc", { defaultValue: "The publications list could not be retrieved from the backend. Please try again later." })}
         />
       ) : items.length === 0 ? (

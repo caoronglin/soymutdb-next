@@ -278,7 +278,7 @@ function PrimerComponent() {
           className="mt-6 max-w-3xl"
           type="info"
           showIcon
-          message={t("search.primer.disclaimer")}
+          title={t("search.primer.disclaimer")}
           description={t("search.primer.desc")}
         />
 
@@ -329,7 +329,7 @@ function PrimerComponent() {
                           <span className="flex items-center gap-2">
                             <span>{a.name}</span>
                             {a.is_default ? (
-                              <Tag className="m-0 text-[9px] uppercase">Default</Tag>
+                              <Tag className="m-0 text-[9px] uppercase">{t("home.defaultAssembly")}</Tag>
                             ) : null}
                           </span>
                         ),
@@ -393,7 +393,7 @@ function PrimerComponent() {
         </Card>
 
         {error ? (
-          <Alert type="error" showIcon message={error} className="mt-6 max-w-3xl" />
+          <Alert type="error" showIcon title={error} className="mt-6 max-w-3xl" />
         ) : null}
 
         {loading ? (

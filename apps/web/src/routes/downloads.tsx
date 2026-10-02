@@ -23,7 +23,7 @@ import {
   FileTextOutlined as FileText,
   PartitionOutlined as Layers,
 } from "@ant-design/icons";
-import { Button, Card, Skeleton, Tag, Typography } from "@/lib/antd";
+import { Button, Card, Skeleton, Table, Tag, Typography, type TableColumnsType } from "@/lib/antd";
 import { FadeUp, Stagger } from "../components/route-motion";
 import { getDownloadFiles, getDownloadUrl } from "@soymutdb/api-client";
 import type { DownloadFile } from "@soymutdb/api-client";
@@ -114,6 +114,77 @@ function DownloadsComponent() {
   // Group files by category
   const groups = groupByCategory(files ?? []);
 
+  // antd's native table replaces the hand-rolled <table>: same columns, but it
+  // inherits the theme's header/row/hover tokens and the responsive scroll.
+  const downloadColumns: TableColumnsType<DownloadFile> = [
+    {
+      title: get("downloads.fileName", t("downloads.fileName")),
+      dataIndex: "name",
+      key: "name",
+      render: (_, file) => <span className="font-mono text-xs">{file.name}</span>,
+    },
+    {
+      title: get("downloads.format", t("downloads.format")),
+      key: "format",
+      width: 110,
+      render: (_, file) => (
+        <Tag variant="outlined" className="font-mono text-[10px]">
+          {getFileFormat(file.name)}
+        </Tag>
+      ),
+    },
+    {
+      title: get("downloads.fileSize", t("downloads.fileSize")),
+      key: "size",
+      width: 130,
+      render: (_, file) => {
+        const oversize = file.file_size !== null && file.file_size > 1024 * 1024 * 1024;
+        return (
+          <span
+            className={`font-mono text-xs tabular-nums ${oversize ? "text-warning-foreground" : ""}`}
+          >
+            {formatFileSize(file.file_size)}
+          </span>
+        );
+      },
+    },
+    {
+      title: get("downloads.lastUpdated", t("downloads.lastUpdated")),
+      key: "created_at",
+      width: 150,
+      render: (_, file) => <span className="font-mono text-xs">{formatDate(file.created_at)}</span>,
+    },
+    {
+      title: t("common.actions"),
+      key: "actions",
+      align: "right",
+      width: 190,
+      render: (_, file) => {
+        const tooLarge = file.file_size !== null && file.file_size > MAX_PREVIEW_SIZE;
+        return (
+          <div className="flex items-center justify-end gap-1">
+            {tooLarge ? (
+              <Tag className="text-[10px]">{get("downloads.too_large", t("downloads.too_large"))}</Tag>
+            ) : (
+              <Button type="text" size="small" onClick={() => handlePreview(file)}>
+                <Eye className="size-3.5" aria-hidden />
+                <span className="hidden sm:inline">{get("downloads.preview", t("downloads.preview"))}</span>
+              </Button>
+            )}
+            <Button
+              type="text"
+              size="small"
+              aria-label={get("downloads.download", t("downloads.download"))}
+              onClick={() => handleDownload(file)}
+            >
+              <Download className="size-4" aria-hidden />
+            </Button>
+          </div>
+        );
+      },
+    },
+  ];
+
   return (
     <div className="container-prose section-rhythm">
       <FadeUp>
@@ -159,80 +230,14 @@ function DownloadsComponent() {
                   {group.files.length} {t("common.items")}
                 </Typography.Text>
               </div>
-              <div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b text-left text-xs text-muted-foreground">
-                        <th className="py-2 pr-4 font-medium">{get("downloads.fileName", t("downloads.fileName"))}</th>
-                        <th className="py-2 pr-4 font-medium">{get("downloads.format", t("downloads.format"))}</th>
-                        <th className="py-2 pr-4 font-medium">{get("downloads.fileSize", t("downloads.fileSize"))}</th>
-                        <th className="py-2 pr-4 font-medium">{get("downloads.lastUpdated", t("downloads.lastUpdated"))}</th>
-                        <th className="py-2 font-medium text-right">{t("common.actions")}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {group.files.map((file) => {
-                        const format = getFileFormat(file.name);
-                        const isTooLarge = file.file_size !== null && file.file_size > MAX_PREVIEW_SIZE;
-                        return (
-                          <tr
-                            key={file.id}
-                            className="border-b last:border-0 hover:bg-accent/30"
-                          >
-                            <td className="py-3 pr-4 font-mono text-xs">{file.name}</td>
-                            <td className="py-3 pr-4">
-                              <Tag variant="outlined" className="font-mono text-[10px]">
-                                {format}
-                              </Tag>
-                            </td>
-                            <td className="py-3 pr-4 font-mono text-xs tabular-nums">
-                              {file.file_size !== null && file.file_size > 1024 * 1024 * 1024 ? (
-                                <span className="text-warning-foreground">
-                                  {formatFileSize(file.file_size)}
-                                </span>
-                              ) : (
-                                formatFileSize(file.file_size)
-                              )}
-                            </td>
-                            <td className="py-3 pr-4 font-mono text-xs">
-                              {formatDate(file.created_at)}
-                            </td>
-                            <td className="py-3 text-right">
-                              <div className="flex items-center justify-end gap-1">
-                                {isTooLarge ? (
-                                  <Tag className="text-[10px]">
-                                    {get("downloads.too_large", t("downloads.too_large"))}
-                                  </Tag>
-                                ) : (
-                                  <Button
-                                    type="text"
-                                    size="small"
-                                    className="h-8 px-2 text-xs"
-                                    onClick={() => handlePreview(file)}
-                                  >
-                                    <Eye className="size-3.5" aria-hidden />
-                                    <span className="hidden sm:inline">{get("downloads.preview", t("downloads.preview"))}</span>
-                                  </Button>
-                                )}
-                                <Button
-                                  type="text"
-                                 
-                                  className="h-8 w-8"
-                                  aria-label={get("downloads.download", t("downloads.download"))}
-                                  onClick={() => handleDownload(file)}
-                                >
-                                  <Download className="size-4" aria-hidden />
-                                </Button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+              <Table<DownloadFile>
+                rowKey="id"
+                size="small"
+                dataSource={group.files}
+                pagination={false}
+                scroll={{ x: 720 }}
+                columns={downloadColumns}
+              />
             </Card>
           );
         })}

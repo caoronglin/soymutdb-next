@@ -18,9 +18,8 @@ import * as React from "react";
 import {
   Alert,
   Button,
-  Card,
   Empty,
-  Form,
+  Flex,
   InputNumber,
   Select,
   Table,
@@ -30,18 +29,19 @@ import {
 } from "@/lib/antd";
 import { SearchOutlined } from "@ant-design/icons";
 import {
-  searchRegionVariants,
+  searchTestDataPreviewMutationSites,
   getAssemblies,
   getAssemblyChromosomes,
   getReleaseId,
-  type VariantSummary,
+  type TestDataPreviewMutationSite,
   type AssemblyInfo,
 } from "@soymutdb/api-client";
 import { FadeUp } from "../../components/route-motion";
-import { formatNumber, compactGeneId } from "../../lib/format";
+import { formatNumber } from "../../lib/format";
 import { buildJbrowseLocusUrl } from "../../lib/deployment";
 import { queryKeys } from "../../lib/query-keys";
 import { SITE_VARIANT } from "../../lib/site-variant";
+import { resolveSearchAssembly } from "../../lib/search-assembly";
 
 interface LocationSearchParams {
   assembly?: string;
@@ -62,10 +62,9 @@ export const Route = createFileRoute("/search/location")({
   }),
 });
 
-const MAX_RESULTS = 1000;
-
 interface RegionQuery {
   assembly: string;
+  assemblyId: string;
   chromosome: string;
   start: number;
   end: number;
@@ -93,12 +92,14 @@ function LocationSearchComponent() {
   const selectedAssembly: AssemblyInfo | undefined = assemblies.find(
     (a) => String(a.id) === String(assemblyId),
   );
+  const linkedAssembly = resolveSearchAssembly(assemblies, urlAssembly);
+  const resultAssembly = assemblies.find((a) => String(a.id) === submitted?.assemblyId);
 
   React.useEffect(() => {
-    if (assemblyId || assemblies.length === 0) return;
-    const def = assemblies.find((a) => a.is_default) ?? assemblies[0];
+    if (assemblyId || urlAssembly || assemblies.length === 0) return;
+    const def = resolveSearchAssembly(assemblies);
     if (def) setAssemblyId(String(def.id));
-  }, [assemblies, assemblyId]);
+  }, [assemblies, assemblyId, urlAssembly]);
 
   const chromosomesQuery = useQuery({
     queryKey: queryKeys.assemblies.chromosomes(assemblyId, { releaseId, siteVariant: SITE_VARIANT }),
@@ -112,153 +113,183 @@ function LocationSearchComponent() {
   );
 
   React.useEffect(() => {
+    // Prune only after the chromosome list has actually arrived. Running this
+    // against the initial empty list wiped a deep-linked chromosome, leaving
+    // the control blank (and submit disabled) while the results below still
+    // rendered from the URL values.
+    if (!chromosomesQuery.isSuccess) return;
     if (chromosome && !chromosomes.some((item) => item.name === chromosome)) {
       setChromosome(undefined);
     }
-  }, [chromosome, chromosomes]);
+  }, [chromosome, chromosomes, chromosomesQuery.isSuccess]);
 
   // Deep link: restore form state from URL once assemblies/chromosomes load.
   const restoredRef = React.useRef(false);
   React.useEffect(() => {
     if (restoredRef.current) return;
-    // Resolve assembly id from URL name/id.
-    if (urlAssembly && assemblies.length > 0) {
-      const match = assemblies.find((a) => String(a.id) === urlAssembly || a.name === urlAssembly);
-      if (match) setAssemblyId(String(match.id));
-    }
+    // Resolve the explicit URL assembly without substituting a default version.
+    if (urlAssembly && linkedAssembly) setAssemblyId(String(linkedAssembly.id));
     if (urlChromosome) setChromosome(urlChromosome);
     if (urlStart != null) setStart(urlStart);
     if (urlEnd != null) setEnd(urlEnd);
-  }, [urlAssembly, urlChromosome, urlStart, urlEnd, assemblies]);
+  }, [urlAssembly, urlChromosome, urlStart, urlEnd, linkedAssembly]);
 
-  const autoRun = (assembly: string, chr: string, s: number, e: number): RegionQuery | null => {
-    if (s < 1 || e < s) return null;
-    return { assembly, chromosome: chr, start: s, end: e };
+  const autoRun = (assembly: AssemblyInfo, chr: string, s: number, e: number): RegionQuery | null => {
+    if (!Number.isSafeInteger(s) || !Number.isSafeInteger(e) || s < 1 || e < s) return null;
+    return { assembly: assembly.name, assemblyId: String(assembly.id), chromosome: chr, start: s, end: e };
   };
 
   // Auto-submit once when `run=1` arrives with a complete, valid region.
   React.useEffect(() => {
     if (restoredRef.current) return;
     if (run !== true) return;
-    const assembly = selectedAssembly?.name;
-    if (!assembly || !urlChromosome || urlStart == null || urlEnd == null) return;
-    const query = autoRun(assembly, urlChromosome, urlStart, urlEnd);
+    if (!selectedAssembly || !urlChromosome || urlStart == null || urlEnd == null) return;
+    if (urlAssembly && String(selectedAssembly.id) !== urlAssembly && selectedAssembly.name !== urlAssembly) return;
+    if (!chromosomes.some((item) => item.name === urlChromosome)) return;
+    const query = autoRun(selectedAssembly, urlChromosome, urlStart, urlEnd);
     if (!query) return;
     restoredRef.current = true;
     setSubmitted(query);
-  }, [run, selectedAssembly, urlChromosome, urlStart, urlEnd]);
+  }, [run, selectedAssembly, urlAssembly, urlChromosome, urlStart, urlEnd, chromosomes]);
 
-  const regionQuery = useQuery({
-    queryKey: ["search-region-variants", submitted, releaseId, SITE_VARIANT],
+  // The operator's own source records for the interval. The region-variant
+  // projection is a separate store that is often empty for these coordinates,
+  // while the uploaded table has rows at exactly the coordinates a person
+  // searches for, so that table is what this page shows.
+  const sitesQuery = useQuery({
+    queryKey: ["search-region-preview-sites", submitted],
     queryFn: () =>
-      searchRegionVariants({
-        assembly: submitted!.assembly,
+      searchTestDataPreviewMutationSites({
         chromosome: submitted!.chromosome,
         start: submitted!.start,
         end: submitted!.end,
-        max_results: MAX_RESULTS,
+        limit: 1000,
       }),
     enabled: submitted != null,
+    // A missing preview route (non-local deployment) is a normal answer here.
+    retry: false,
   });
+  const sites = sitesQuery.data?.items ?? [];
 
-  const data = regionQuery.data ?? [];
-
-  const submitInNewTab = () => {
-    if (!selectedAssembly || !chromosome || start == null || end == null) return;
-    if (start < 1 || end < start) return;
-    const location = router.buildLocation({
-      to: "/search/location",
-      search: { assembly: selectedAssembly.name, chromosome, start, end, run: true },
-    });
-    window.open(location.href, "_blank", "noopener");
-  };
-
-  const columns: TableColumnsType<VariantSummary> = [
+  const siteColumns: TableColumnsType<TestDataPreviewMutationSite> = [
     {
-      // 1. Genome assembly
-      title: get("search.genes.colAssembly", t("search.location.colAssembly")),
-      dataIndex: "assembly",
-      key: "assembly",
-      render: () => <span className="font-mono text-xs">{selectedAssembly?.name ?? "—"}</span>,
+      title: t("genes.mutationSites.siteKey", { defaultValue: "突变体系（株系母+位置）" }),
+      dataIndex: "source_site_key",
+      key: "source_site_key",
+      render: (_, row) => <span className="font-mono text-xs">{row.source_site_key}</span>,
     },
     {
-      // 2. Chromosome
-      title: get("search.genes.colChromosome", t("search.location.colChromosome")),
+      title: t("genes.mutationSites.chromosome", { defaultValue: "染色体号" }),
       dataIndex: "chromosome",
       key: "chromosome",
+      width: 100,
       render: (_, row) => <span className="font-mono text-xs">{row.chromosome}</span>,
     },
     {
-      // 3. Position
-      title: get("search.genes.colPosition", t("search.location.colPosition")),
+      title: t("genes.mutationSites.position", { defaultValue: "位点" }),
       dataIndex: "position",
       key: "position",
+      align: "right",
+      width: 120,
+      render: (_, row) => <span className="font-mono text-xs">{formatNumber(row.position)}</span>,
+    },
+    {
+      title: t("genes.mutationSites.confidence", { defaultValue: "可信度" }),
+      dataIndex: "confidence",
+      key: "confidence",
+      width: 90,
       render: (_, row) => (
-        <span className="font-mono text-xs text-muted-foreground">
-          {row.chromosome}:{formatNumber(row.position)}
-        </span>
+        <Tag color={row.confidence === "H" ? "green" : "default"}>
+          {row.confidence === "H" ? "高" : "低"}
+        </Tag>
       ),
     },
     {
-      // 4. Mutation feature
-      title: get("search.genes.colMutation", t("search.location.colMutation")),
-      dataIndex: "mutation",
-      key: "mutation",
-      render: (_, row) => (
-        <span className="font-mono text-xs">{row.impact ?? row.variant_type ?? "—"}</span>
-      ),
-    },
-    {
-      // 5. Gene ID (linked to detail when present)
-      title: get("search.genes.colGeneId", t("search.location.colGeneId")),
+      title: t("genes.mutationSites.geneId", { defaultValue: "基因号" }),
       dataIndex: "gene_id",
       key: "gene_id",
-      render: (_, row) =>
-        row.gene_id ? (
-          <Link
-            to="/genes/$geneId"
-            params={{ geneId: row.gene_id }}
-            search={{ assembly: selectedAssembly ? String(selectedAssembly.id) : undefined }}
-            aria-label={t("search.location.openGene", { geneId: row.gene_id })}
-            className="link-underline font-mono text-sm font-medium text-primary"
-          >
-            {compactGeneId(row.gene_id, 18)}
-          </Link>
-        ) : (
-          <span className="text-muted-foreground">—</span>
-        ),
+      render: (_, row) => (
+        <Link
+          to="/genes/$geneId"
+          params={{ geneId: row.gene_id }}
+          search={{ assembly: assemblyId }}
+          title={row.gene_id}
+          className="link-underline whitespace-nowrap font-mono text-xs font-medium text-primary"
+        >
+          {row.gene_id}
+        </Link>
+      ),
     },
     {
-      // 6. JBrowse 2 action (base-aware, new tab)
-      title: get("search.genes.colGbrowse", t("search.location.colGbrowse")),
-      dataIndex: "gbrowse",
-      key: "gbrowse",
+      title: t("genes.mutationSites.feature", { defaultValue: "特征" }),
+      dataIndex: "feature",
+      key: "feature",
+      render: (_, row) => <span className="font-mono text-xs">{row.feature}</span>,
+    },
+    {
+      title: t("genes.mutationSites.available", { defaultValue: "可获得" }),
+      dataIndex: "available",
+      key: "available",
+      width: 100,
       render: (_, row) => (
+        <Tag color={row.available ? "green" : "default"}>{row.available ? "是" : "否"}</Tag>
+      ),
+    },
+    {
+      title: get("search.genes.colGbrowse", t("search.location.colGbrowse")),
+      key: "jbrowse",
+      width: 140,
+      render: (_, row, index) => (
         <Button
           size="small"
-          disabled={!selectedAssembly}
+          data-testid={`jbrowse-link-${index}`}
+          disabled={!resultAssembly}
           href={
-            selectedAssembly
+            resultAssembly
               ? buildJbrowseLocusUrl(import.meta.env.BASE_URL, {
-                  assembly: selectedAssembly.name,
+                  assembly: resultAssembly.name,
                   locus: `${row.chromosome}:${row.position}-${row.position}`,
+                  release: releaseId ?? undefined,
                 }).href
               : undefined
           }
           target="_blank"
           rel="noopener noreferrer"
         >
-          {t("search.location.openBrowser")}
+          {t("search.genes.openBrowser")}
         </Button>
       ),
     },
   ];
+
+  // Search updates this page in place: the region is applied to the local
+  // result state immediately, while `replace` keeps the URL shareable without
+  // stacking a history entry per submit.
+  const submit = () => {
+    if (!selectedAssembly || !chromosome || start == null || end == null) return;
+    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 1 || end < start) return;
+    setSubmitted({
+      assembly: selectedAssembly.name,
+      assemblyId: String(selectedAssembly.id),
+      chromosome,
+      start,
+      end,
+    });
+    void router.navigate({
+      to: "/search/location",
+      search: { assembly: selectedAssembly.name, chromosome, start, end, run: true },
+      replace: true,
+    });
+  };
+
 
   const formValid =
     Boolean(selectedAssembly) &&
     Boolean(chromosome) &&
     start != null &&
     end != null &&
+    Number.isSafeInteger(start) &&
+    Number.isSafeInteger(end) &&
     start >= 1 &&
     end >= start;
 
@@ -270,134 +301,167 @@ function LocationSearchComponent() {
           {get("search.location.subtitle", t("search.location.subtitle"))}
         </h2>
 
-        <Card className="mt-6 max-w-3xl">
-          <Form
-            layout="horizontal"
-            onFinish={submitInNewTab}
-            labelCol={{ xs: 24, sm: 8 }}
-            wrapperCol={{ xs: 24, sm: 16 }}
-          >
-            <Form.Item label={get("search.location.assembly", t("search.location.assembly"))} className="mb-0">
-              <Select
-                value={assemblyId}
-                onChange={(v) => setAssemblyId(v)}
-                placeholder={get("search.location.assemblyPlaceholder", t("search.location.assemblyPlaceholder"))}
-                loading={assembliesQuery.isLoading}
-                options={assemblies.map((a) => ({
-                  value: String(a.id),
-                  label: (
-                    <span className="flex items-center gap-2">
-                      <span>{a.name}</span>
-                      {a.is_default ? (
-                        <Tag className="m-0 text-[9px] uppercase">Default</Tag>
-                      ) : null}
-                    </span>
-                  ),
-                }))}
-              />
-              {assembliesQuery.isError ? (
-                <Alert
-                  className="mt-2"
-                  type="error"
-                  showIcon
-                  message={t("search.location.assembliesUnavailable", { defaultValue: "Assembly list unavailable" })}
-                />
-              ) : null}
-            </Form.Item>
-            <div className="mt-6 grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-3">
-              <Form.Item label={get("search.location.chromosome", t("search.location.chromosome"))} className="mb-0">
-                <Select
-                  value={chromosome}
-                  onChange={(v) => setChromosome(v)}
-                  loading={chromosomesQuery.isLoading}
-                  options={chromosomes.map((item) => ({
-                    value: item.name,
-                    label: item.name,
-                  }))}
-                  showSearch
-                />
-                {chromosomesQuery.isError ? (
-                  <Alert
-                    className="mt-2"
-                    type="error"
-                    showIcon
-                    message={t("search.location.chromosomesUnavailable", { defaultValue: "Chromosome list unavailable" })}
-                  />
-                ) : null}
-              </Form.Item>
-              <Form.Item label={get("search.location.start", t("search.location.start"))} className="mb-0">
-                <InputNumber
-                  value={start}
-                  onChange={setStart}
-                  min={1}
-                  className="w-full"
-                  placeholder="1"
-                  aria-label={get("search.location.start", t("search.location.start"))}
-                />
-              </Form.Item>
-              <Form.Item label={get("search.location.end", t("search.location.end"))} className="mb-0">
-                <InputNumber
-                  value={end}
-                  onChange={setEnd}
-                  min={1}
-                  className="w-full"
-                  placeholder="2000"
-                  aria-label={get("search.location.end", t("search.location.end"))}
-                />
-              </Form.Item>
-            </div>
-            <div className="mt-4 flex flex-wrap items-center gap-3">
-              <Button
-                type="primary"
-                htmlType="submit"
-                icon={<SearchOutlined aria-hidden />}
-                disabled={!formValid}
-                loading={regionQuery.isFetching}
-              >
-                {get("search.location.submit", t("search.location.submit"))}
-              </Button>
-              <Typography.Text type="secondary" className="text-xs">
-                {get("search.location.formatHint", t("search.location.formatHint"))}
-              </Typography.Text>
-            </div>
-          </Form>
-        </Card>
+        {/* One compact control row: assembly / chromosome / start / end /
+            submit. Each label is wrapped together with its control in a
+            non-shrinking group, so a wrap can only happen *between* fields —
+            `Space wrap` used to break the label away from its input and leave
+            the tail of the row clipped. */}
+        <div className="mt-6" data-testid="location-form">
+          {/* `gap={20}` between groups, `gap={8}` inside one: a single 12px gap
+              made four fields read as one long undifferentiated row. Every
+              group is `shrink-0` because these are fixed-width coordinate
+              inputs; a wrap is only ever allowed between groups. */}
+          <Flex wrap align="center" gap={20}>
+            <Flex align="center" gap={8} className="shrink-0">
+            <span className="whitespace-nowrap text-sm text-muted-foreground">
+              {get("search.location.assembly", t("search.location.assembly"))}
+            </span>
+            <Select
+              value={assemblyId}
+              onChange={(v) => setAssemblyId(v)}
+              placeholder={get("search.location.assemblyPlaceholder", t("search.location.assemblyPlaceholder"))}
+              loading={assembliesQuery.isLoading}
+              data-testid="location-assembly"
+              size="large"
+              style={{ width: 260 }}
+              options={assemblies.map((a) => ({
+                value: String(a.id),
+                label: (
+                  <span className="flex items-center gap-2">
+                    <span>{a.name}</span>
+                    {a.is_default ? (
+                      <Tag className="m-0 text-[9px] uppercase">{t("home.defaultAssembly")}</Tag>
+                    ) : null}
+                  </span>
+                ),
+              }))}
+            />
+            </Flex>
+
+            <Flex align="center" gap={8} className="shrink-0">
+            <span className="whitespace-nowrap text-sm text-muted-foreground">
+              {get("search.location.chromosome", t("search.location.chromosome"))}
+            </span>
+            <Select
+              value={chromosome}
+              onChange={(v) => setChromosome(v)}
+              loading={chromosomesQuery.isLoading}
+              data-testid="location-chromosome"
+              size="large"
+              style={{ width: 150 }}
+              options={chromosomes.map((item) => ({ value: item.name, label: item.name }))}
+              showSearch
+            />
+            </Flex>
+
+            <Flex align="center" gap={8} className="shrink-0">
+            <span className="whitespace-nowrap text-sm text-muted-foreground">
+              {get("search.location.start", t("search.location.start"))}
+            </span>
+            <InputNumber
+              value={start}
+              onChange={setStart}
+              min={1}
+              size="large"
+              style={{ width: 130 }}
+              placeholder="1"
+              data-testid="location-start"
+              aria-label={get("search.location.start", t("search.location.start"))}
+            />
+            </Flex>
+
+            <Flex align="center" gap={8} className="shrink-0">
+            <span className="whitespace-nowrap text-sm text-muted-foreground">
+              {get("search.location.end", t("search.location.end"))}
+            </span>
+            <InputNumber
+              value={end}
+              onChange={setEnd}
+              min={1}
+              size="large"
+              style={{ width: 130 }}
+              placeholder="2000"
+              data-testid="location-end"
+              aria-label={get("search.location.end", t("search.location.end"))}
+            />
+            </Flex>
+
+            <Button
+              type="primary"
+              size="large"
+              onClick={submit}
+              data-testid="location-submit"
+              icon={<SearchOutlined aria-hidden />}
+              disabled={!formValid}
+              loading={sitesQuery.isFetching}
+            >
+              {get("search.location.submit", t("search.location.submit"))}
+            </Button>
+          </Flex>
+          <Typography.Text type="secondary" className="mt-2 block text-xs">
+            {get("search.location.formatHint", t("search.location.formatHint"))}
+          </Typography.Text>
+          {assembliesQuery.isError || (urlAssembly && assemblies.length > 0 && !linkedAssembly) ? (
+            <Alert
+              className="mt-3"
+              type="error"
+              showIcon
+              title={t(urlAssembly && !linkedAssembly && assemblies.length > 0 ? "search.assemblyUnavailable" : "home.assembliesUnavailable")}
+            />
+          ) : null}
+          {chromosomesQuery.isError ? (
+            <Alert
+              className="mt-3"
+              type="error"
+              showIcon
+              title={t("search.location.chromosomesUnavailable")}
+            />
+          ) : null}
+        </div>
 
         {submitted ? (
-          <div className="mt-6" role="region" aria-label="Region search results">
+          <div className="mt-6" role="region" aria-label={t("search.location.resultsAria")}>
             <p className="mb-3 text-sm text-muted-foreground">
-              {t("search.location.found", { count: data.length })}
+              {t("search.location.found", { count: sites.length })}
             </p>
-            {regionQuery.isError ? (
+            {sitesQuery.isError ? (
               <Alert
                 type="error"
                 showIcon
-                message={t("search.location.resultsUnavailable", { defaultValue: "Region search unavailable" })}
-                description={get("ui.errorRetry", t("search.location.resultsRetry", { defaultValue: "The API did not return a result set. Please retry later." }))}
+                title={t("search.location.resultsUnavailable")}
+                description={get("ui.errorRetry", t("search.location.resultsRetry"))}
               />
             ) : (
-              <div className="-mx-4 overflow-x-auto sm:mx-0">
-              <Table<VariantSummary>
-                rowKey="variant_id"
-                columns={columns}
-                dataSource={data}
-                loading={regionQuery.isLoading}
-                pagination={
-                  data.length > 25 ? { pageSize: 25, showSizeChanger: false } : false
-                }
-                scroll={{ x: 720 }}
-                locale={{
-                  emptyText: (
-                    <Empty
-                      description={
-                        <Typography.Text type="secondary">
-                          {get("ui.noResults", t("search.location.noResults"))}
-                        </Typography.Text>
-                      }
-                    />
-                  ),
-                }}
-              />
+              <div
+                className="-mx-4 overflow-x-auto sm:mx-0"
+                data-testid="location-table"
+                data-preview-sites={sites.length > 0 ? "true" : undefined}
+              >
+                <Table<TestDataPreviewMutationSite>
+                  rowKey="source_site_key"
+                  size="small"
+                  bordered
+                  columns={siteColumns}
+                  dataSource={sites}
+                  loading={sitesQuery.isLoading}
+                  pagination={
+                    sites.length > 25 ? { pageSize: 25, showSizeChanger: false } : false
+                  }
+                  scroll={{ x: "max-content" }}
+                  locale={{
+                    emptyText: (
+                      <div data-testid="location-empty">
+                        <Empty
+                          description={
+                            <Typography.Text type="secondary">
+                              {get("ui.noResults", t("search.location.noResults"))}
+                            </Typography.Text>
+                          }
+                        />
+                      </div>
+                    ),
+                  }}
+                />
               </div>
             )}
           </div>

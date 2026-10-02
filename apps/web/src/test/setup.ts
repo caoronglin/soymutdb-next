@@ -71,4 +71,53 @@ if (isDomEnvironment && localStorageMissing) {
   });
 }
 
+/**
+ * antd probes two browser APIs that jsdom does not implement:
+ *
+ * - `ResizeObserver`, used by `Table` (sticky header / scroll measurement) and
+ *   other responsive components. A component that renders a table throws inside
+ *   an effect without it, and the render is discarded.
+ * - `matchMedia`, used for responsive breakpoints.
+ *
+ * Both shims are inert stand-ins: they exist so a component can mount in jsdom,
+ * not to reproduce layout. Behaviour is asserted against the rendered DOM, so a
+ * no-op observer is the correct level of fidelity here.
+ */
+if (isDomEnvironment) {
+  const domScope = globalThis as {
+    ResizeObserver?: unknown;
+    matchMedia?: unknown;
+  };
+
+  if (typeof domScope.ResizeObserver === "undefined") {
+    class ResizeObserverStub {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+    Object.defineProperty(globalThis, "ResizeObserver", {
+      value: ResizeObserverStub,
+      configurable: true,
+    });
+  }
+
+  if (typeof domScope.matchMedia !== "function") {
+    // jsdom aliases `window` to the global object, so one definition covers both.
+    const matchMedia = (query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    });
+    Object.defineProperty(globalThis, "matchMedia", {
+      value: matchMedia,
+      configurable: true,
+    });
+  }
+}
+
 export {};

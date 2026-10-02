@@ -18,10 +18,12 @@ import {
   Breadcrumb,
   Button,
   Card,
+  Checkbox,
   Empty,
   Input,
   Result,
   Select,
+  Table,
   Tag,
   Typography,
 } from "@/lib/antd";
@@ -226,19 +228,14 @@ function ExpPatternInner() {
                 />
               </div>
               <div className="flex items-end gap-2 pb-1">
-                <label
-                  htmlFor="ep-cluster"
-                  className="flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-muted/20 px-3 py-2.5 text-sm font-medium transition-colors hover:bg-muted/40"
+                <Checkbox
+                  id="ep-cluster"
+                  checked={clusterRows}
+                  onChange={(e) => setClusterRows(e.target.checked)}
+                  className="rounded-lg border border-border bg-muted/20 px-3 py-2.5 text-sm font-medium transition-colors hover:bg-muted/40"
                 >
-                  <input
-                    id="ep-cluster"
-                    type="checkbox"
-                    checked={clusterRows}
-                    onChange={(e) => setClusterRows(e.target.checked)}
-                    className="size-4 accent-primary"
-                  />
                   {t("tools.exppattern.clusterLabel")}
-                </label>
+                </Checkbox>
               </div>
             </div>
 
@@ -372,34 +369,35 @@ function ExpPatternInner() {
                   </>
                 }
               >
-                <div className="overflow-auto rounded-xl border border-border">
-                  <table className="min-w-max text-xs">
-                    <thead>
-                      <tr>
-                        <th className="sticky left-0 z-10 bg-card font-mono">
-                          {t("tools.exppattern.geneCol")}
-                        </th>
-                        {result.conditions.map((c) => (
-                          <th key={c} className="max-w-[140px] truncate font-mono">
-                            {c}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {result.genes.map((gene, i) => (
-                        <tr key={gene}>
-                          <td className="sticky left-0 z-10 bg-card font-mono font-medium">{gene}</td>
-                          {result.conditions.map((c, j) => (
-                            <td key={`${gene}-${c}`} align="right" className="font-mono tabular-nums">
-                              {fmtV(result.matrix[i]?.[j] ?? null)}
-                            </td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                {/* antd's Table owns the frozen gene column (`fixed: "left"`)
+                    and the horizontal scroll the matrix needs. */}
+                <Table<{ gene: string; index: number }>
+                  size="small"
+                  bordered
+                  rowKey="gene"
+                  pagination={false}
+                  scroll={{ x: "max-content" }}
+                  dataSource={result.genes.map((gene, index) => ({ gene, index }))}
+                  columns={[
+                    {
+                      title: t("tools.exppattern.geneCol"),
+                      dataIndex: "gene",
+                      key: "gene",
+                      fixed: "left",
+                      render: (gene: string) => <span className="font-mono font-medium">{gene}</span>,
+                    },
+                    ...result.conditions.map((condition, j) => ({
+                      title: <span className="font-mono">{condition}</span>,
+                      key: `c${j}`,
+                      align: "right" as const,
+                      render: (_: unknown, row: { gene: string; index: number }) => (
+                        <span className="font-mono tabular-nums">
+                          {fmtV(result.matrix[row.index]?.[j] ?? null)}
+                        </span>
+                      ),
+                    })),
+                  ]}
+                />
               </Card>
             </>
           )}

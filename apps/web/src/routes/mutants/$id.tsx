@@ -81,7 +81,7 @@ function MutantDetail() {
         </section>
         <section className="mt-10" aria-labelledby="mutant-phenotypes">
           <h2 id="mutant-phenotypes" className="font-display text-2xl font-semibold">{t("mutants.phenotypes.title")}</h2>
-          <Alert className="mt-4" type="info" showIcon message={t("mutants.phenotypes.boundary")} />
+          <Alert className="mt-4" type="info" showIcon title={t("mutants.phenotypes.boundary")} />
           <div className="mt-5">
             {phenotypeQuery.isLoading ? <Skeleton active paragraph={{ rows: 4 }} aria-label={t("mutants.phenotypes.loading")} /> : phenotypeQuery.isError ? <Empty description={t("mutants.phenotypes.error")} /> : <Table<PhenotypeResponse> rowKey="id" columns={phenotypeColumns} dataSource={phenotypeQuery.data ?? []} pagination={false} scroll={{ x: true }} locale={{ emptyText: <Empty description={t("mutants.phenotypes.empty")} /> }} />}
           </div>

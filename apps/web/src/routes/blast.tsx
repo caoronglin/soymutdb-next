@@ -41,8 +41,8 @@ import {
 } from "@soymutdb/api-client";
 import { FadeUp } from "../components/route-motion";
 import { useSiteContent } from "../lib/site-content-react";
-import { compactGeneId } from "../lib/format";
-import { buildJbrowseLocusUrl } from "../lib/deployment";
+import { useCurrentUser } from "../lib/use-current-user";
+import { buildJbrowseLocusUrl, resolveAppUrl } from "../lib/deployment";
 import { ensurePermission, showNotification } from "../lib/use-browser-notifications";
 import { z } from "zod";
 
@@ -166,8 +166,19 @@ function BlastComponent() {
   const { t } = useTranslation();
   const { get } = useSiteContent();
   const queryClient = useQueryClient();
+  // /blast is a prerendered, sitemapped public route: an anonymous visitor must
+  // be able to read the form and the database list. Only the per-account job
+  // history needs a session, so the session is read first and every
+  // authenticated call is gated on it. Requesting /blast/jobs while anonymous
+  // returns 401, which the api-client turns into a global logout event — that
+  // bounced the whole page to /login and made the published route unreachable.
+  const { user, isLoading: currentUserLoading } = useCurrentUser();
+  const isSignedIn = user != null;
+  // Defaults to blastp: protein/protein is the search this deployment is for,
+  // and it is the one the DIAMOND backend answers (BLAST_ENGINE=auto routes
+  // blastp and blastx to DIAMOND, and everything else to BLAST).
   const [form, setForm] = React.useState({
-    program: "blastn",
+    program: "blastp",
     database: "",
     sequence: "",
     e_value: "1e-5",
@@ -220,6 +231,7 @@ function BlastComponent() {
     queryKey: ["blast-jobs"],
     queryFn: () => getBlastJobs({ page: 1, page_size: 5 }),
     staleTime: 30_000,
+    enabled: isSignedIn,
     // D5 pilot: polling is the fallback — it runs only while the SSE stream
     // (GET /api/v1/jobs/events) is unavailable AND at least one job is still
     // active. The D2 notification effect below keeps working on refetches.
@@ -238,6 +250,12 @@ function BlastComponent() {
   // stream failure closes the connection and falls back to polling; the
   // connection is closed again when the component unmounts.
   React.useEffect(() => {
+    // EventSource cannot carry an Authorization header, so an anonymous stream
+    // would 401 and reconnect forever. Subscribe only for a known session.
+    if (!isSignedIn) {
+      setSseAvailable(false);
+      return;
+    }
     const token = getAccessToken();
     const url = new URL(`${apiBaseUrl}/jobs/events`, window.location.origin);
     if (token) url.searchParams.set("access_token", token);
@@ -271,7 +289,7 @@ function BlastComponent() {
       es.close();
       setSseAvailable(false);
     };
-  }, [queryClient]);
+  }, [queryClient, isSignedIn]);
 
   // D2 pilot: fire an OS-level browser notification when a job transitions
   // to completed while the user is watching (only after the first render,
@@ -335,7 +353,7 @@ function BlastComponent() {
   };
 
   const clearForm = () =>
-    setForm({ program: "blastn", database: "", sequence: "", e_value: "1e-5", max_hits: "50" });
+    setForm({ program: "blastp", database: "", sequence: "", e_value: "1e-5", max_hits: "50" });
 
   const jobs = jobsQuery.data?.items ?? [];
 
@@ -442,9 +460,16 @@ function BlastComponent() {
       width: 180,
       render: (_, hit) => {
         const geneId = hitSubjectId(hit);
+        // The identifier is shown whole. It used to go through
+        // `compactGeneId(geneId, 18)`, which cut `Glyma.066015200`-length and
+        // longer accessions with an ellipsis — the one string on this row a
+        // reader needs in full to verify the hit. The column is wide enough for
+        // the common cases and the button wraps for the rest.
         return (
           <Button
             size="small"
+            className="h-auto whitespace-normal break-all py-1 text-left font-mono text-xs"
+            title={geneId ?? undefined}
             disabled={!geneId}
             onClick={() => {
               if (!geneId) return;
@@ -454,7 +479,7 @@ function BlastComponent() {
               });
             }}
           >
-            {geneId ? compactGeneId(geneId, 18) : t("blast.actions.geneSearch")}
+            {geneId ?? t("blast.actions.geneSearch")}
           </Button>
         );
       },
@@ -489,7 +514,7 @@ function BlastComponent() {
           {t("blast.subtitle")}
         </h1>
 
-        <Card className="mt-8 max-w-3xl">
+        <Card className="mt-8">
           <Card.Meta
             title={
               <span className="flex items-center gap-2">
@@ -501,13 +526,18 @@ function BlastComponent() {
               <Typography.Text type="secondary">{t("blast.desc")}</Typography.Text>
             }
           />
-          <Form
-            layout="horizontal"
-            labelCol={{ xs: { span: 24 }, sm: { span: 6 } }}
-            wrapperCol={{ xs: { span: 24 }, sm: { span: 18 } }}
-            onFinish={onSubmit}
-            className="mt-6"
-          >
+          {/* Label-above, two columns. The previous horizontal layout pinned a
+              6/24 label column inside a 768px card, which left every control
+              roughly 570px wide no matter how wide the viewport got — the page
+              looked small on a wide screen because it was.
+
+              The wrapper div carries `mt-6`, not the <form>: antd's cssinjs
+              injects `:where(.css-x).ant-form{margin:0}` at runtime, into the
+              head *after* Tailwind's stylesheet. Same specificity, later wins,
+              so a spacing utility on an antd element root is a silent no-op. */}
+          <div className="mt-6">
+          <Form layout="vertical" onFinish={onSubmit}>
+            <div className="grid gap-x-6 md:grid-cols-2">
             <Form.Item
               label={get("blast.searchType", t("blast.searchType"))}
               htmlFor="program"
@@ -516,6 +546,8 @@ function BlastComponent() {
             >
               <Select
                 id="program"
+                data-testid="blast-program"
+                size="large"
                 value={form.program}
                 onChange={(v) => setForm((f) => ({ ...f, program: v }))}
                 options={BLAST_PROGRAM_OPTIONS.map((p) => ({ value: p.id, label: p.label }))}
@@ -530,6 +562,8 @@ function BlastComponent() {
             >
               <Select
                 id="database"
+                data-testid="blast-database"
+                size="large"
                 value={form.database}
                 onChange={(v) => setForm((f) => ({ ...f, database: v }))}
                 placeholder={get("blast.databasePlaceholder", t("blast.databasePlaceholder", {
@@ -539,6 +573,8 @@ function BlastComponent() {
               />
             </Form.Item>
 
+            </div>
+
             <Form.Item
               label={get("blast.input", t("blast.inputSequence"))}
               htmlFor="sequence"
@@ -547,6 +583,8 @@ function BlastComponent() {
             >
               <Input.TextArea
                 id="sequence"
+                data-testid="blast-sequence"
+                size="large"
                 value={form.sequence}
                 onChange={(e) => setForm((f) => ({ ...f, sequence: e.target.value }))}
                 placeholder={get("blast.sequencePlaceholder", t("blast.sequencePlaceholder"))}
@@ -554,57 +592,89 @@ function BlastComponent() {
               />
             </Form.Item>
 
-            <Form.Item label={t("blast.eValue")} htmlFor="e_value">
+            <div className="grid gap-x-6 md:grid-cols-2">
+            <Form.Item label={t("blast.eValue")} htmlFor="e_value" style={{ marginBottom: 0 }}>
               <Input
                 id="e_value"
+                size="large"
                 value={form.e_value}
                 onChange={(e) => setForm((f) => ({ ...f, e_value: e.target.value }))}
                 className="font-mono"
+                style={{ maxWidth: 320 }}
               />
             </Form.Item>
 
-            <Form.Item label={t("blast.maxHits")} htmlFor="max_hits">
+            <Form.Item label={t("blast.maxHits")} htmlFor="max_hits" style={{ marginBottom: 0 }}>
               <Input
                 id="max_hits"
                 type="number"
+                size="large"
                 value={form.max_hits}
                 onChange={(e) => setForm((f) => ({ ...f, max_hits: e.target.value }))}
                 className="font-mono"
+                style={{ maxWidth: 320 }}
               />
             </Form.Item>
 
-            <Form.Item wrapperCol={{ xs: { span: 24 }, sm: { offset: 6, span: 18 } }} className="mb-0">
+            </div>
+
+            <Form.Item style={{ marginTop: 24, marginBottom: 0 }}>
               <div className="flex flex-wrap gap-2">
                 <Button
                   type="primary"
                   htmlType="submit"
+                  size="large"
+                  data-testid="blast-submit"
                   loading={submitMutation.isPending}
                   icon={<Play className="size-4" aria-hidden />}
                 >
                   {get("blast.submit", t("blast.submit"))}
                 </Button>
-                <Button onClick={clearForm}>{t("blast.clear")}</Button>
+                <Button size="large" onClick={clearForm}>{t("blast.clear")}</Button>
               </div>
             </Form.Item>
 
             {submitMutation.isError ? (
-              <Form.Item wrapperCol={{ xs: { span: 24 }, sm: { offset: 6, span: 18 } }} className="mb-0 mt-4">
+              <Form.Item className="mb-0 mt-4">
                 <Alert
                   type="error"
                   showIcon
-                  message={get("ui.errorRetry", `Failed to submit: ${(submitMutation.error as Error).message}`)}
+                  title={get("ui.errorRetry", `Failed to submit: ${(submitMutation.error as Error).message}`)}
                 />
               </Form.Item>
             ) : null}
           </Form>
+          </div>
         </Card>
 
         <Card
           className="mt-6"
           title={<span className="text-base">{t("blast.myJobs")}</span>}
-          extra={<Typography.Text type="secondary">{t("blast.jobHistory")}</Typography.Text>}
+          extra={
+            isSignedIn ? (
+              <Typography.Text type="secondary">{t("blast.jobHistory")}</Typography.Text>
+            ) : null
+          }
         >
-          {jobsQuery.isLoading ? (
+          {currentUserLoading ? (
+            <Skeleton active paragraph={{ rows: 2 }} title={false} />
+          ) : !isSignedIn ? (
+            <Empty
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              description={
+                <span className="text-sm text-muted-foreground">
+                  {t("blast.noJobsAnonymous")}
+                </span>
+              }
+            >
+              <Button
+                type="primary"
+                href={resolveAppUrl(import.meta.env.BASE_URL, "/login")}
+              >
+                {t("auth.login")}
+              </Button>
+            </Empty>
+          ) : jobsQuery.isLoading ? (
             <Skeleton active paragraph={{ rows: 3 }} title={false} />
           ) : jobs.length === 0 ? (
             <Empty description={get("ui.noResults", t("blast.noJobs"))} />

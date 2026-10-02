@@ -12,7 +12,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { useSiteContent } from "../lib/site-content-react";
 import { http, ApiError } from "@soymutdb/api-client";
-import { Button, Card, Skeleton, Tag, Typography } from "../lib/antd";
+import { Button, Card, Skeleton, Table, Tag, Typography } from "../lib/antd";
 import {
     AimOutlined as Microscope,
     ArrowLeftOutlined as ArrowLeft,
@@ -255,31 +255,26 @@ export function Markdown({ content }: { content: string }): React.ReactElement {
                 rows.push(parseTableRow(lines[i]));
                 i++;
             }
+            // antd's Table renders the markdown table: the header and body
+            // styling come from the theme instead of hand-applied classes.
+            const tableKey = key++;
             blocks.push(
-                <div key={`tbl-${key++}`} className="my-4 overflow-x-auto rounded-lg border">
-                    <table className="w-full text-sm">
-                        <thead className="bg-muted/50">
-                            <tr className="border-b text-left">
-                                {headerCells.map((cell, ci) => (
-                                    <th key={ci} className="px-4 py-2.5 font-semibold">
-                                        {renderInline(cell, `th-${key}-${ci}`)}
-                                    </th>
-                                ))}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {rows.map((row, ri) => (
-                                <tr key={ri} className="border-b last:border-0 hover:bg-accent/30">
-                                    {row.map((cell, ci) => (
-                                        <td key={ci} className="px-4 py-2.5 align-top">
-                                            {renderInline(cell, `td-${key}-${ri}-${ci}`)}
-                                        </td>
-                                    ))}
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>,
+                <Table<{ key: string; cells: string[] }>
+                    key={`tbl-${tableKey}`}
+                    className="my-4"
+                    size="middle"
+                    rowKey="key"
+                    bordered
+                    pagination={false}
+                    scroll={{ x: "max-content" }}
+                    columns={headerCells.map((cell, ci) => ({
+                        title: renderInline(cell, `th-${tableKey}-${ci}`),
+                        key: `c${ci}`,
+                        render: (_: unknown, row: { key: string; cells: string[] }) =>
+                            renderInline(row.cells[ci] ?? "", `td-${tableKey}-${row.key}-${ci}`),
+                    }))}
+                    dataSource={rows.map((row, ri) => ({ key: String(ri), cells: row }))}
+                />,
             );
             continue;
         }
@@ -480,17 +475,18 @@ function GuideComponent() {
                                     <p className="eyebrow mb-3">{get("help.documentation", t("help.documentation"))}</p>
                                     <nav className="space-y-1 border-l pl-3 text-sm">
                                         {toc.map((item) => (
-                                            <button
+                                            <Button
                                                 key={item.id}
-                                                type="button"
+                                                type="text"
+                                                block
                                                 onClick={() => scrollToId(item.id)}
                                                 className={
-                                                    "block w-full text-left text-muted-foreground transition-colors hover:text-foreground " +
-                                                    (item.level === 3 ? "pl-3" : "font-medium text-foreground/80")
+                                                    "h-auto justify-start px-2 py-1 text-left text-muted-foreground " +
+                                                    (item.level === 3 ? "pl-4" : "font-medium text-foreground/80")
                                                 }
                                             >
                                                 {item.text}
-                                            </button>
+                                            </Button>
                                         ))}
                                     </nav>
                                 </div>

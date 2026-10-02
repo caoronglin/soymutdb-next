@@ -16,6 +16,7 @@ import { Route as BlastRouteImport } from './routes/blast'
 import { Route as BrowserRouteImport } from './routes/browser'
 import { Route as CompareRouteImport } from './routes/compare'
 import { Route as DownloadsRouteImport } from './routes/downloads'
+import { Route as GenomeViewRouteImport } from './routes/genome-view'
 import { Route as GuideRouteImport } from './routes/guide'
 import { Route as HelpRouteImport } from './routes/help'
 import { Route as LoginRouteImport } from './routes/login'
@@ -83,6 +84,11 @@ const DownloadsRoute = DownloadsRouteImport.update({
 const GuideRoute = GuideRouteImport.update({
   id: '/guide',
   path: '/guide',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GenomeViewRoute = GenomeViewRouteImport.update({
+  id: '/genome-view',
+  path: '/genome-view',
   getParentRoute: () => rootRouteImport,
 } as any)
 const HelpRoute = HelpRouteImport.update({
@@ -249,6 +255,7 @@ export interface FileRoutesByFullPath {
   '/browser': typeof BrowserRoute
   '/compare': typeof CompareRoute
   '/downloads': typeof DownloadsRoute
+  '/genome-view': typeof GenomeViewRoute
   '/guide': typeof GuideRoute
   '/help': typeof HelpRoute
   '/login': typeof LoginRoute
@@ -286,6 +293,7 @@ export interface FileRoutesByTo {
   '/browser': typeof BrowserRoute
   '/compare': typeof CompareRoute
   '/downloads': typeof DownloadsRoute
+  '/genome-view': typeof GenomeViewRoute
   '/guide': typeof GuideRoute
   '/help': typeof HelpRoute
   '/login': typeof LoginRoute
@@ -324,6 +332,7 @@ export interface FileRoutesById {
   '/browser': typeof BrowserRoute
   '/compare': typeof CompareRoute
   '/downloads': typeof DownloadsRoute
+  '/genome-view': typeof GenomeViewRoute
   '/guide': typeof GuideRoute
   '/help': typeof HelpRoute
   '/login': typeof LoginRoute
@@ -363,6 +372,7 @@ export interface FileRouteTypes {
     | '/browser'
     | '/compare'
     | '/downloads'
+    | '/genome-view'
     | '/guide'
     | '/help'
     | '/login'
@@ -400,6 +410,7 @@ export interface FileRouteTypes {
     | '/browser'
     | '/compare'
     | '/downloads'
+    | '/genome-view'
     | '/guide'
     | '/help'
     | '/login'
@@ -437,6 +448,7 @@ export interface FileRouteTypes {
     | '/browser'
     | '/compare'
     | '/downloads'
+    | '/genome-view'
     | '/guide'
     | '/help'
     | '/login'
@@ -475,6 +487,7 @@ export interface RootRouteChildren {
   BrowserRoute: typeof BrowserRoute
   CompareRoute: typeof CompareRoute
   DownloadsRoute: typeof DownloadsRoute
+  GenomeViewRoute: typeof GenomeViewRoute
   GuideRoute: typeof GuideRoute
   HelpRoute: typeof HelpRoute
   LoginRoute: typeof LoginRoute
@@ -548,6 +561,13 @@ declare module '@tanstack/react-router' {
       path: '/downloads'
       fullPath: '/downloads'
       preLoaderRoute: typeof DownloadsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/genome-view': {
+      id: '/genome-view'
+      path: '/genome-view'
+      fullPath: '/genome-view'
+      preLoaderRoute: typeof GenomeViewRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/guide': {
@@ -757,6 +777,7 @@ const rootRouteChildren: RootRouteChildren = {
   BrowserRoute: BrowserRoute,
   CompareRoute: CompareRoute,
   DownloadsRoute: DownloadsRoute,
+  GenomeViewRoute: GenomeViewRoute,
   GuideRoute: GuideRoute,
   HelpRoute: HelpRoute,
   LoginRoute: LoginRoute,

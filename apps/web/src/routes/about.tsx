@@ -14,7 +14,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { Empty, Result, Skeleton, Typography } from "@/lib/antd";
+import { Button, Empty, Result, Skeleton, Typography } from "@/lib/antd";
 import { ReloadOutlined } from "@ant-design/icons";
 import DOMPurify from "dompurify";
 import { ApiError, getSiteAbout } from "@soymutdb/api-client";
@@ -119,14 +119,9 @@ function AboutComponent() {
                 : t("about.loadErrorSubtitle")
             }
             extra={
-              <button
-                type="button"
-                onClick={() => void aboutQuery.refetch()}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-4 py-2 text-sm text-foreground transition-colors hover:border-primary/40"
-              >
-                <ReloadOutlined aria-hidden />
+              <Button icon={<ReloadOutlined aria-hidden />} onClick={() => void aboutQuery.refetch()}>
                 {t("common.retry")}
-              </button>
+              </Button>
             }
           />
         ) : !hasContent ? (

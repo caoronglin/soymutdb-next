@@ -5,6 +5,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import {
   AimOutlined as Microscope,
   ClockCircleOutlined as Clock,
@@ -101,6 +102,7 @@ export const Route = createFileRoute("/sra")({
 });
 
 function SraBrowser() {
+  const { t } = useTranslation();
   const { run: initialRun } = Route.useSearch();
   const navigate = Route.useNavigate();
   const [input, setInput] = React.useState(initialRun || DEFAULT_RUN);
@@ -110,8 +112,8 @@ function SraBrowser() {
 
   // SEO title
   React.useEffect(() => {
-    document.title = "SRA Run Browser — SoyMutDB";
-  }, []);
+    document.title = t("sra.documentTitle");
+  }, [t]);
 
   const runQuery = useQuery({
     queryKey: ["sra-run", activeRun],
@@ -161,24 +163,24 @@ function SraBrowser() {
   const run = runQuery.data?.run;
   const source = runQuery.data?.source;
   const isCached = runQuery.data?.cached;
+  const samples = samplesQuery.data?.samples ?? [];
+  const hasLongSampleList = samples.length > 6;
 
   return (
     <div ref={rootRef} className="container-prose py-8 md:py-12">
       <FadeUp stagger={0.05}>
         <div className="mb-8">
           <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
-            <Database className="size-4" />
-            <span>SRA Run Browser</span>
+            <Database className="size-4" aria-hidden />
+            <span>{t("nav.sra")}</span>
             <span className="text-border">/</span>
-            <span>NCBI Sequence Read Archive</span>
+            <span>{t("sra.archiveName")}</span>
           </div>
           <h1 className="font-display text-3xl md:text-4xl font-bold tracking-tight">
-            SRA Run Metadata Browser
+            {t("sra.title")}
           </h1>
           <p className="mt-2 text-muted-foreground max-w-2xl">
-            Look up sequencing run metadata from the NCBI Sequence Read Archive (SRA).
-            Enter a run accession (SRR/DRR/ERR) to view library details, platform,
-            and data provenance.
+            {t("sra.description")}
           </p>
         </div>
       </FadeUp>
@@ -188,24 +190,24 @@ function SraBrowser() {
         <form onSubmit={submit} className="mb-6">
           <div className="flex gap-2 max-w-xl">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" aria-hidden />
               <Input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="e.g. SRR30334525"
+                placeholder={t("sra.accessionExample")}
                 className="pl-9 font-mono"
                 spellCheck={false}
                 autoCapitalize="off"
-                aria-label="SRA accession"
+                aria-label={t("sra.accession")}
               />
             </div>
             <Button htmlType="submit" type="primary" disabled={runQuery.isFetching}>
               {runQuery.isFetching ? (
-                <RefreshCw className="size-4 mr-1 animate-spin" />
+                <RefreshCw className="size-4 mr-1 animate-spin" aria-hidden />
               ) : (
-                <Search className="size-4 mr-1" />
+                <Search className="size-4 mr-1" aria-hidden />
               )}
-              Load
+              {t("sra.loadRun")}
             </Button>
           </div>
         </form>
@@ -217,18 +219,18 @@ function SraBrowser() {
           {runQuery.isLoading && <RunDetailsSkeleton />}
           {runQuery.isError && !run && (
             <Empty
-              image={<AlertTriangle style={{ fontSize: 40, color: "var(--muted-foreground)" }} />}
+              image={<AlertTriangle aria-hidden style={{ fontSize: 40, color: "var(--muted-foreground)" }} />}
               description={
                 <>
-                  <p className="font-medium">Failed to load run</p>
+                  <p className="font-medium">{t("sra.loadFailed")}</p>
                   <p className="text-sm text-muted-foreground">
-                    {runQuery.error?.message || "Could not fetch SRA metadata. Check the accession and try again."}
+                    {runQuery.error?.message || t("sra.fetchFailed")}
                   </p>
                 </>
               }
             >
-              <Button icon={<RefreshCw className="size-4" />} onClick={() => runQuery.refetch()}>
-                Retry
+              <Button icon={<RefreshCw className="size-4" aria-hidden />} onClick={() => runQuery.refetch()}>
+                {t("common.retry")}
               </Button>
             </Empty>
           )}
@@ -241,32 +243,40 @@ function SraBrowser() {
           <FadeUp delay={0.15}>
             <Card>
               <div className="pb-3">
-                <Typography.Title className="text-sm flex items-center gap-2">
-                  <History className="size-4" />
-                  Recent Runs
+                <Typography.Title level={2} className="m-0 text-lg flex items-center gap-2">
+                  <History className="size-4" aria-hidden />
+                  {t("sra.recentRuns")}
                 </Typography.Title>
               </div>
               <div className="pt-0">
                 {history.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">No recent accessions.</p>
+                  <p className="text-sm text-muted-foreground">{t("sra.noRecentRuns")}</p>
                 ) : (
                   <div className="space-y-1">
                     {history.map((acc) => (
-                      <button
+                      <Button
                         key={acc}
+                        type="text"
+                        block
                         onClick={() => pickRun(acc)}
-                        className={`w-full text-left px-2 py-1.5 rounded-md text-xs font-mono hover:bg-muted transition-colors flex items-center justify-between ${acc === activeRun ? "bg-primary/10 text-primary" : ""}`}
+                        className={`h-auto justify-between px-3 py-2.5 text-left font-mono text-sm ${
+                          acc === activeRun ? "bg-primary/10 text-primary" : ""
+                        }`}
                       >
                         <span>{acc}</span>
-                        <ChevronRight className="size-3 opacity-50" />
-                      </button>
+                        <ChevronRight className="size-3 opacity-50" aria-hidden />
+                      </Button>
                     ))}
-                    <button
+                    <Button
+                      type="text"
+                      block
+                      danger
                       onClick={onClearHistory}
-                      className="w-full mt-2 text-[11px] text-muted-foreground hover:text-destructive flex items-center gap-1 justify-center py-1"
+                      icon={<Trash2 className="size-4" aria-hidden />}
+                      className="mt-2 h-auto py-2 text-muted-foreground"
                     >
-                      <Trash2 className="size-3" /> Clear history
-                    </button>
+                      {t("sra.clearHistory")}
+                    </Button>
                   </div>
                 )}
               </div>
@@ -277,35 +287,58 @@ function SraBrowser() {
           <FadeUp delay={0.2}>
             <Card>
               <div className="pb-3">
-                <Typography.Title className="text-sm flex items-center gap-2">
-                  <Dna className="size-4" />
-                  Curated SRA Runs
+                <Typography.Title level={2} className="m-0 text-lg flex items-center gap-2">
+                  <Dna className="size-4" aria-hidden />
+                  {t("sra.curatedTitle")}
                 </Typography.Title>
-                <Typography.Text className="text-xs">
-                  Glycine max (soybean) sequencing runs — current default species
+                <Typography.Text className="text-sm text-muted-foreground">
+                  {t("sra.curatedDescription")}
                 </Typography.Text>
               </div>
               <div className="pt-0">
                 {samplesQuery.isLoading && (
                   <div className="space-y-2">
-                    {[1, 2, 3].map((i) => <Skeleton key={i} className="h-8 w-full" />)}
+                    {[1, 2, 3].map((i) => <Skeleton key={i} className="h-10 w-full" />)}
                   </div>
                 )}
-                {samplesQuery.data?.samples && (
-                  <div className="space-y-1 max-h-80 overflow-y-auto">
-                    {samplesQuery.data.samples.map((s) => (
-                      <button
-                        key={s.Run}
-                        onClick={() => pickRun(s.Run)}
-                        className={`w-full text-left px-2 py-2 rounded-md hover:bg-muted transition-colors text-xs ${s.Run === activeRun ? "bg-primary/10 text-primary" : ""}`}
-                      >
-                        <div className="font-mono font-medium">{s.Run}</div>
-                        <div className="text-[11px] text-muted-foreground truncate">
-                          {s.LibraryStrategy || "RNA-Seq"} · {s.release_date_short || "—"} · {formatBases(s.bases)}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
+                {samplesQuery.isError && (
+                  <Typography.Text type="secondary">{t("sra.samplesUnavailable")}</Typography.Text>
+                )}
+                {!samplesQuery.isLoading && !samplesQuery.isError && samples.length === 0 && (
+                  <Empty description={t("sra.noCuratedRuns")} />
+                )}
+                {samples.length > 0 && (
+                  <>
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-sm">
+                      <Typography.Text type="secondary">
+                        {t("sra.sampleCount", { count: samples.length })}
+                      </Typography.Text>
+                      {hasLongSampleList && (
+                        <Typography.Text type="secondary">{t("sra.scrollCue")}</Typography.Text>
+                      )}
+                    </div>
+                    <div
+                      data-testid="curated-sra-runs-list"
+                      className={`space-y-1 ${hasLongSampleList ? "max-h-80 overflow-y-auto pr-1" : ""}`}
+                    >
+                      {samples.map((s) => (
+                        <Button
+                          key={s.Run}
+                          type="text"
+                          block
+                          onClick={() => pickRun(s.Run)}
+                          className={`h-auto px-3 py-3 text-left text-sm ${
+                            s.Run === activeRun ? "bg-primary/10 text-primary" : ""
+                          }`}
+                        >
+                          <div className="font-mono font-semibold">{s.Run}</div>
+                          <div className="mt-1 break-words text-xs text-muted-foreground">
+                            {s.LibraryStrategy || "RNA-Seq"} · {s.release_date_short || "—"} · {formatBases(s.bases)}
+                          </div>
+                        </Button>
+                      ))}
+                    </div>
+                  </>
                 )}
               </div>
             </Card>
@@ -318,9 +351,9 @@ function SraBrowser() {
         <FadeUp delay={0.25} className="mt-8">
           <Card>
             <div>
-              <Typography.Title className="text-base">Rich Widget View</Typography.Title>
-              <Typography.Text className="text-xs">
-                Server-rendered widget with full run metadata (loaded via &lt;soymutdb-widget&gt; Web Component)
+              <Typography.Title level={2} className="m-0 text-lg">{t("sra.widgetTitle")}</Typography.Title>
+              <Typography.Text className="text-sm text-muted-foreground">
+                {t("sra.widgetDescription")}
               </Typography.Text>
             </div>
             <div>
@@ -343,11 +376,12 @@ function SraBrowser() {
 /* ------------------------------------------------------------------ */
 
 function RunDetails({ run, source, isCached }: { run: SraRunInfo; source?: string; isCached: boolean }) {
+  const { t } = useTranslation();
   const stats: { icon: React.ElementType; label: string; value: string }[] = [
-    { icon: Dna, label: "Bases", value: formatBases(run.bases) },
-    { icon: Microscope, label: "Spots", value: formatSpots(run.spots) },
-    { icon: HardDrive, label: "Size", value: formatSize(run.size_MB) },
-    { icon: Clock, label: "Avg Length", value: run.avgLength ? `${run.avgLength} bp` : "—" },
+    { icon: Dna, label: t("sra.stats.bases"), value: formatBases(run.bases) },
+    { icon: Microscope, label: t("sra.stats.spots"), value: formatSpots(run.spots) },
+    { icon: HardDrive, label: t("sra.stats.size"), value: formatSize(run.size_MB) },
+    { icon: Clock, label: t("sra.stats.averageLength"), value: run.avgLength ? `${run.avgLength} bp` : "—" },
   ];
 
   return (
@@ -357,22 +391,22 @@ function RunDetails({ run, source, isCached }: { run: SraRunInfo; source?: strin
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <Typography.Title className="font-mono text-xl">{run.Run}</Typography.Title>
-                {isCached && <Tag variant="outlined" className="text-[10px]">cached</Tag>}
-                {source === "fallback" && <Tag className="text-[10px]">offline</Tag>}
-                {source === "stub" && <Tag color="red" className="text-[10px]">stub</Tag>}
+                <Typography.Title level={2} className="m-0 font-mono text-xl">{run.Run}</Typography.Title>
+                {isCached && <Tag variant="outlined" className="text-xs">{t("sra.status.cached")}</Tag>}
+                {source === "fallback" && <Tag className="text-xs">{t("sra.status.offline")}</Tag>}
+                {source === "stub" && <Tag color="red" className="text-xs">{t("sra.status.stub")}</Tag>}
               </div>
               <Typography.Text>
-                {run.ScientificName || run.SampleName || "SRA sequencing run"}
+                {run.ScientificName || run.SampleName || t("sra.defaultRunName")}
               </Typography.Text>
             </div>
             <a
               href={run.sra_url}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+              className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
             >
-              Open in NCBI SRA <ExternalLink className="size-3" />
+              {t("sra.openInNcbi")} <ExternalLink className="size-4" aria-hidden />
             </a>
           </div>
         </div>
@@ -381,8 +415,8 @@ function RunDetails({ run, source, isCached }: { run: SraRunInfo; source?: strin
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {stats.map((s) => (
               <div key={s.label} className="rounded-lg border bg-muted/30 p-3">
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
-                  <s.icon className="size-3.5" />
+                <div className="flex items-center gap-1.5 text-sm text-muted-foreground mb-1">
+                  <s.icon className="size-3.5" aria-hidden />
                   {s.label}
                 </div>
                 <div className="font-mono font-semibold text-sm">{s.value}</div>
@@ -392,18 +426,18 @@ function RunDetails({ run, source, isCached }: { run: SraRunInfo; source?: strin
 
           {/* Detail rows */}
           <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-sm">
-            <DetailRow label="Experiment" value={run.Experiment} mono />
-            <DetailRow label="BioProject" value={run.BioProject} mono />
-            <DetailRow label="BioSample" value={run.BioSample} mono />
-            <DetailRow label="Sample" value={run.Sample || run.SampleName} mono />
-            <DetailRow label="Platform" value={[run.Platform, run.Model].filter(Boolean).join(" — ")} />
-            <DetailRow label="Strategy" value={run.LibraryStrategy} />
-            <DetailRow label="Source" value={run.LibrarySource} />
-            <DetailRow label="Selection" value={run.LibrarySelection} />
-            <DetailRow label="Layout" value={run.LibraryLayout} />
-            <DetailRow label="Center" value={run.CenterName} />
-            <DetailRow label="Released" value={run.release_date_short || (run.ReleaseDate ? run.ReleaseDate.slice(0, 10) : "—")} />
-            <DetailRow label="TaxID" value={run.TaxID} mono />
+            <DetailRow label={t("sra.fields.experiment")} value={run.Experiment} mono />
+            <DetailRow label={t("sra.fields.bioProject")} value={run.BioProject} mono />
+            <DetailRow label={t("sra.fields.bioSample")} value={run.BioSample} mono />
+            <DetailRow label={t("sra.fields.sample")} value={run.Sample || run.SampleName} mono />
+            <DetailRow label={t("sra.fields.platform")} value={[run.Platform, run.Model].filter(Boolean).join(" — ")} />
+            <DetailRow label={t("sra.fields.strategy")} value={run.LibraryStrategy} />
+            <DetailRow label={t("sra.fields.source")} value={run.LibrarySource} />
+            <DetailRow label={t("sra.fields.selection")} value={run.LibrarySelection} />
+            <DetailRow label={t("sra.fields.layout")} value={run.LibraryLayout} />
+            <DetailRow label={t("sra.fields.center")} value={run.CenterName} />
+            <DetailRow label={t("sra.fields.released")} value={run.release_date_short || (run.ReleaseDate ? run.ReleaseDate.slice(0, 10) : "—")} />
+            <DetailRow label={t("sra.fields.taxId")} value={run.TaxID} mono />
           </dl>
 
           {run.download_path && (
@@ -414,8 +448,8 @@ function RunDetails({ run, source, isCached }: { run: SraRunInfo; source?: strin
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 text-sm text-primary hover:underline"
               >
-                <Download className="size-4" />
-                Download data from NCBI
+                <Download className="size-4" aria-hidden />
+                {t("sra.downloadData")}
               </a>
             </div>
           )}
@@ -428,8 +462,8 @@ function RunDetails({ run, source, isCached }: { run: SraRunInfo; source?: strin
 function DetailRow({ label, value, mono }: { label: string; value?: string; mono?: boolean }) {
   return (
     <div className="flex gap-3 py-1 border-b border-border/50 last:border-0">
-      <dt className="text-muted-foreground w-24 shrink-0 text-xs pt-0.5">{label}</dt>
-      <dd className={`flex-1 min-w-0 ${mono ? "font-mono text-xs" : "text-sm"}`}>
+      <dt className="text-muted-foreground w-32 shrink-0 text-sm pt-0.5">{label}</dt>
+      <dd className={`flex-1 min-w-0 text-sm ${mono ? "font-mono" : ""}`}>
         {value && value.trim() ? value : <span className="text-muted-foreground/60">—</span>}
       </dd>
     </div>

@@ -150,7 +150,7 @@ function AnalyticsComponent() {
     <div className="container-prose section-rhythm">
       {demo ? (
         <div className="mb-6 rounded-lg border-2 border-amber-500 bg-amber-100 px-4 py-3 text-sm font-semibold text-amber-950 dark:bg-amber-950/40 dark:text-amber-100" role="status">
-          Demo mode is enabled. The charts below use synthetic example data and are not database measurements.
+          {t("analytics.demoNotice")}
         </div>
       ) : null}
       <p className="eyebrow">{t("analytics.title")}</p>
@@ -160,13 +160,13 @@ function AnalyticsComponent() {
         <AnalyticsCard title={t("analytics.chromosomeDensity")} description={t("analytics.totalByChromosome")} loading={!demo && densityQuery.isLoading} error={!demo && densityQuery.isError} onRetry={() => void densityQuery.refetch()}>
           <React.Suspense fallback={<ChartFallback />}><ChromosomeDensityChart data={density.map((d) => ({ chromosome: d.chromosome, variantCount: d.variant_count }))} /></React.Suspense>
         </AnalyticsCard>
-        <AnalyticsCard title={t("analytics.variantTypes")} description="SNP / Indel / SV distribution" loading={!demo && (variantTypeQuery.isLoading || statsQuery.isLoading)} error={!demo && variantTypeQuery.isError && statsQuery.isError} onRetry={() => { void variantTypeQuery.refetch(); void statsQuery.refetch(); }}>
+        <AnalyticsCard title={t("analytics.variantTypes")} description={t("analytics.variantTypesDescription")} loading={!demo && (variantTypeQuery.isLoading || statsQuery.isLoading)} error={!demo && variantTypeQuery.isError && statsQuery.isError} onRetry={() => { void variantTypeQuery.refetch(); void statsQuery.refetch(); }}>
           <React.Suspense fallback={<ChartFallback />}><VariantTypeChart data={variantTypeData} /></React.Suspense>
         </AnalyticsCard>
-        <AnalyticsCard title={t("analytics.impactSummary")} description="Variant count by predicted impact" loading={!demo && impactQuery.isLoading} error={!demo && impactQuery.isError} onRetry={() => void impactQuery.refetch()}>
+        <AnalyticsCard title={t("analytics.impactSummary")} description={t("analytics.impactDescription")} loading={!demo && impactQuery.isLoading} error={!demo && impactQuery.isError} onRetry={() => void impactQuery.refetch()}>
           <React.Suspense fallback={<ChartFallback />}><ImpactDistribution data={impactData} /></React.Suspense>
         </AnalyticsCard>
-        <AnalyticsCard title="Release Trend" description="Cumulative variant count over releases" loading={!demo && trendQuery.isLoading} error={!demo && trendQuery.isError} onRetry={() => void trendQuery.refetch()}>
+        <AnalyticsCard title={t("analytics.discoveryTrend")} description={t("analytics.trendDescription")} loading={!demo && trendQuery.isLoading} error={!demo && trendQuery.isError} onRetry={() => void trendQuery.refetch()}>
           <React.Suspense fallback={<ChartFallback />}><ReleaseTrend data={trendData} /></React.Suspense>
         </AnalyticsCard>
       </div>
@@ -175,9 +175,10 @@ function AnalyticsComponent() {
 }
 
 function AnalyticsCard({ title, description, loading, error, onRetry, children }: { title: string; description: string; loading: boolean; error: boolean; onRetry: () => void; children: React.ReactNode }) {
+  const { t } = useTranslation();
   return (
     <Card title={<><Typography.Title level={5}>{title}</Typography.Title><Typography.Text type="secondary">{description}</Typography.Text></>}>
-      {loading ? <ChartFallback /> : error ? <div className="flex h-72 flex-col items-center justify-center gap-3 rounded-lg border border-dashed text-center"><p className="text-sm text-destructive">Live data unavailable.</p><Button htmlType="button" type="default" size="small" onClick={onRetry}>Retry</Button></div> : children}
+      {loading ? <ChartFallback /> : error ? <div className="flex h-72 flex-col items-center justify-center gap-3 rounded-lg border border-dashed text-center"><p className="text-sm text-destructive">{t("analytics.liveDataUnavailable")}</p><Button htmlType="button" type="default" size="small" onClick={onRetry}>{t("common.retry")}</Button></div> : children}
     </Card>
   );
 }

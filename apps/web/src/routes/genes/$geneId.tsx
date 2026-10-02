@@ -34,12 +34,16 @@ import {
   getGeneExpression,
   getGeneHomologs,
   getReleaseId,
+  listTestDataPreviewMutationSitesForGene,
   type ExpressionRecord,
   type HomologRecord,
+  type TestDataPreviewMutationSite,
 } from "@soymutdb/api-client";
+import { GeneGenomeView } from "../../components/gene-genome-view";
+import { GeneSeedRequestEntry } from "../../components/gene-seed-request-entry";
 import { FadeUp, ScaleIn } from "../../components/route-motion";
 import { buildJbrowseLocusUrl } from "../../lib/deployment";
-import { formatPosition, formatMb } from "../../lib/format";
+import { formatPosition } from "../../lib/format";
 import { queryKeys } from "../../lib/query-keys";
 import { SITE_VARIANT } from "../../lib/site-variant";
 
@@ -87,6 +91,30 @@ function GeneDetailComponent() {
   });
 
   const gene = geneQuery.data;
+
+  // Local-only unpublished test-data preview. The operator asked for these
+  // columns (line / mutation-site key / chromosome / position / confidence /
+  // gene / feature / availability) to be visible on this page. The endpoint is
+  // loopback-only and gated by `local_test_preview_enabled`, so a 404 is the
+  // normal answer outside a local preview; `retry: false` plus an error check
+  // keeps the section hidden instead of surfacing a stray error card.
+  // Keyed on the gene, not on its coordinate interval: a share of the source
+  // rows sit up- or downstream of the gene's own start/end (the source `feature`
+  // column carries that offset), so an interval query silently drops them. This
+  // is the same lookup the search result table uses, so both pages agree.
+  const mutationSitesQuery = useQuery({
+    queryKey: ["test-data-preview-mutation-sites", gene?.gene_id ?? null],
+    queryFn: () => listTestDataPreviewMutationSitesForGene(gene!.gene_id, 1000),
+    enabled: Boolean(gene?.gene_id),
+    retry: false,
+  });
+  const mutationSites = mutationSitesQuery.data ?? [];
+  /** Gates the seed-request entry: no obtainable material, no entry. */
+  const availableSiteCount = React.useMemo(
+    () => mutationSites.filter((site) => site.available).length,
+    [mutationSites],
+  );
+
   const expressions = React.useMemo(
     () => expressionQuery.data?.expressions ?? [],
     [expressionQuery.data],
@@ -157,6 +185,69 @@ function GeneDetailComponent() {
     { title: t("genes.homologs.source"), dataIndex: "source", key: "source" },
   ];
 
+  // Columns exactly as the operator specified, in order: mutation system
+  // (line parent + position), chromosome, position, confidence, gene, feature,
+  // availability, then the three homolog accessions from the same source row.
+  const mutationSiteColumns: TableColumnsType<TestDataPreviewMutationSite> = [
+    {
+      title: t("genes.mutationSites.siteKey", { defaultValue: "突变体系（株系母+位置）" }),
+      dataIndex: "source_site_key",
+      key: "source_site_key",
+      render: (_, row) => <span className="font-mono text-xs">{row.source_site_key}</span>,
+    },
+    {
+      title: t("genes.mutationSites.chromosome", { defaultValue: "染色体号" }),
+      dataIndex: "chromosome",
+      key: "chromosome",
+      render: (_, row) => <span className="font-mono text-xs">{row.chromosome}</span>,
+    },
+    {
+      title: t("genes.mutationSites.position", { defaultValue: "位点" }),
+      dataIndex: "position",
+      key: "position",
+      align: "right",
+      render: (_, row) => <span className="font-mono text-xs">{formatPosition(row.position)}</span>,
+    },
+    {
+      title: t("genes.mutationSites.confidence", { defaultValue: "可信度" }),
+      dataIndex: "confidence",
+      key: "confidence",
+      // The API types this as "H" | "L", while the table constraint also allows
+      // "M"; compare through a string so either arrives without a type error.
+      render: (_, row) => {
+        const grade = String(row.confidence);
+        return (
+          <Tag color={grade === "H" ? "green" : grade === "M" ? "gold" : "default"}>
+            {grade === "H" ? "高" : grade === "M" ? "中" : "低"}
+          </Tag>
+        );
+      },
+    },
+    {
+      title: t("genes.mutationSites.geneId", { defaultValue: "基因号" }),
+      dataIndex: "gene_id",
+      key: "gene_id",
+      render: (_, row) => <span className="font-mono text-xs">{row.gene_id}</span>,
+    },
+    {
+      title: t("genes.mutationSites.feature", { defaultValue: "特征" }),
+      dataIndex: "feature",
+      key: "feature",
+      render: (_, row) => <span className="font-mono text-xs">{row.feature}</span>,
+    },
+    {
+      title: t("genes.mutationSites.available", { defaultValue: "可获得" }),
+      dataIndex: "available",
+      key: "available",
+      render: (_, row) => (
+        <Tag color={row.available ? "green" : "default"}>{row.available ? "是" : "否"}</Tag>
+      ),
+    },
+    // The W82_V2 / W82_V4 / DN53_V1 homolog accessions are deliberately NOT
+    // columns here either: they are alternate identifiers for the same locus,
+    // used by search, not fields to read off the page.
+  ];
+
   return (
     <div className="container-prose section-rhythm">
       <Link
@@ -225,44 +316,11 @@ function GeneDetailComponent() {
                 label: t("genes.tabs.overview"),
                 children: (
                   <>
+                    {/* The genome-annotation cards (assembly location, biotype/
+                        source/annotation, transcript structure) were removed at
+                        the operator's request: this page is driven by the table
+                        they upload, not by the GFF3 annotation file. */}
                     <div className="grid gap-4 lg:grid-cols-3">
-                    <ScaleIn>
-                      <Card title={<span className="text-base">{t("genes.genomicLocation")}</span>}>
-                        <Descriptions
-                          size="small"
-                          column={1}
-                          items={[
-                            {
-                              key: "chromosome",
-                              label: t("genes.chromosomeLabel"),
-                              children: <span className="font-mono">{gene.chromosome}</span>,
-                            },
-                            {
-                              key: "position",
-                              label: t("genes.position"),
-                              children: (
-                                <span className="font-mono">
-                                  {formatPosition(gene.start_pos)}–{formatPosition(gene.end_pos)}
-                                </span>
-                              ),
-                            },
-                            {
-                              key: "length",
-                              label: "Length",
-                              children: (
-                                <span className="font-mono">{formatMb(gene.end_pos - gene.start_pos)}</span>
-                              ),
-                            },
-                            {
-                              key: "strand",
-                              label: t("genes.strand"),
-                              children: <span className="font-mono">{gene.strand}</span>,
-                            },
-                          ]}
-                        />
-                      </Card>
-                    </ScaleIn>
-
                     <ScaleIn delay={80}>
                       <Card title={<span className="text-base">{t("genes.variantSummary")}</span>}>
                         <Descriptions
@@ -319,60 +377,62 @@ function GeneDetailComponent() {
                       </Card>
                     </ScaleIn>
 
-                    <ScaleIn delay={160}>
-                      <Card title={<span className="text-base">{t("genes.generalInfo")}</span>}>
-                        <Descriptions
+                  </div>
+
+                    {/* Simplified genome view: the gene body, its transcripts
+                        and the operator's mutation sites in one SVG. This sits
+                        alongside — never replaces — the full JBrowse 2 browser,
+                        which stays reachable at /search/gbrowse and via the
+                        "open in browser" action in the header. */}
+                    <ScaleIn delay={200}>
+                      <GeneGenomeView
+                        className="mt-4"
+                        gene={gene}
+                        mutationSites={mutationSites}
+                        assemblyLabel={jbrowseAssembly ?? assembly ?? undefined}
+                      />
+                    </ScaleIn>
+
+                    {/* Local-only unpublished test-data preview. Rendered only
+                        when the loopback-gated preview endpoint answers, so a
+                        build without the local preview behaves exactly as
+                        before and never shows an empty or erroring card. */}
+                    {mutationSites.length > 0 ? (
+                      <Card
+                        className="mt-4"
+                        data-testid="gene-mutation-sites"
+                        title={t("genes.mutationSitesTitle", { defaultValue: "突变位点" })}
+                        extra={
+                          <Tag color="orange">
+                            {t("genes.unpublishedPreview", { defaultValue: "未发布预览" })}
+                          </Tag>
+                        }
+                      >
+                        <Table<TestDataPreviewMutationSite>
+                          rowKey="source_site_key"
                           size="small"
-                          column={1}
-                          items={[
-                            {
-                              key: "biotype",
-                              label: "Biotype",
-                              children: <span className="font-mono">{gene.biotype}</span>,
-                            },
-                            {
-                              key: "source",
-                              label: "Source",
-                              children: <span className="font-mono">{gene.source ?? "—"}</span>,
-                            },
-                            {
-                              key: "annotation",
-                              label: "Annotation",
-                              children: <span className="font-mono" data-testid="gene-assembly-context">{jbrowseAssembly ?? assembly ?? "—"}</span>,
-                            },
-                          ]}
+                          dataSource={mutationSites}
+                          columns={mutationSiteColumns}
+                          pagination={
+                            mutationSites.length > 20
+                              ? { pageSize: 20, showSizeChanger: false }
+                              : false
+                          }
+                          scroll={{ x: 900 }}
                         />
                       </Card>
-                    </ScaleIn>
-                  </div>
-                  {gene.transcripts?.length ? (
-                    <Card className="mt-4" data-testid="gene-transcript-structure" title={t("genes.structureTitle", { defaultValue: "Gene structure" })}>
-                      <div className="space-y-3">
-                        {gene.transcripts.map((transcript) => (
-                          <div key={transcript.id} data-testid={`gene-transcript-${transcript.id}`} className="rounded-lg border p-3">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <span className="font-mono text-sm">{transcript.name ?? transcript.id}</span>
-                              <span className="text-xs text-muted-foreground">
-                                {transcript.start.toLocaleString()}–{transcript.end.toLocaleString()} · {transcript.strand}
-                                {transcript.is_canonical ? " · canonical" : ""}
-                              </span>
-                            </div>
-                            <div className="mt-2 flex h-3 items-center gap-1" aria-label="Exons">
-                              {transcript.exons.map((exon) => (
-                                <span
-                                  key={exon.id}
-                                  data-testid="gene-transcript-exon"
-                                  className="h-3 min-w-2 rounded-sm bg-primary"
-                                  style={{ flex: Math.max(1, exon.end - exon.start + 1) }}
-                                  title={`${exon.start.toLocaleString()}–${exon.end.toLocaleString()}`}
-                                />
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </Card>
                     ) : null}
+
+                    {/* Seed request: only meaningful when the gene has material
+                        flagged obtainable, which the component checks itself.
+                        In-page card, not a route; the form is a link away. */}
+                    <ScaleIn delay={250}>
+                      <GeneSeedRequestEntry
+                        className="mt-4"
+                        geneId={gene.gene_id ?? geneId}
+                        availableSiteCount={availableSiteCount}
+                      />
+                    </ScaleIn>
                   </>
                 ),
               },

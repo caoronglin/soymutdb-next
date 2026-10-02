@@ -1,20 +1,19 @@
-import { createFileRoute, Link, Outlet, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import {
   ArrowRightOutlined as ArrowRight,
   DeploymentUnitOutlined as Dna,
   ExperimentOutlined as Beaker,
   FileTextOutlined as FileText,
-  GlobalOutlined as Globe2,
   SearchOutlined as SearchIcon,
 } from "@ant-design/icons";
-import { Card, Empty, Input, Skeleton, Tag } from "@/lib/antd";
+import { Button, Card, Empty, Input, Skeleton, Tag } from "@/lib/antd";
 import {
   getReleaseId,
   globalSearch,
   internalSearch,
-  type FederatedSearchResponse,
   type InternalSearchResponse,
   type SearchResponse,
   type SearchResult,
@@ -23,9 +22,6 @@ import {
 import { FadeUp } from "../components/route-motion";
 import { queryKeys } from "../lib/query-keys";
 import { SITE_VARIANT } from "../lib/site-variant";
-import { safeExternalUrl } from "../lib/url-safety";
-
-const EXTERNAL_SOURCES = ["ncbi", "uniprot", "ensembl", "ebi"];
 
 /** Result types the API accepts; unknown `?types=` values are ignored. */
 const SEARCH_RESULT_TYPES: readonly SearchResultType[] = [
@@ -48,7 +44,6 @@ export interface SearchRouteParams {
   cursor?: string;
   limit?: number;
   assembly?: string;
-  external?: boolean;
 }
 
 export const Route = createFileRoute("/search")({
@@ -59,21 +54,14 @@ export const Route = createFileRoute("/search")({
     cursor: search.cursor ? String(search.cursor) : undefined,
     limit: search.limit ? Number(search.limit) : undefined,
     assembly: search.assembly ? String(search.assembly) : undefined,
-    external: search.external === "1" || search.external === 1 || search.external === true,
   }),
 });
 
-function isFederated(
-  data: SearchResponse | FederatedSearchResponse | InternalSearchResponse,
-): data is FederatedSearchResponse {
-  return "sources" in data;
-}
-
-function isCatalogSearch(data: SearchResponse | FederatedSearchResponse | InternalSearchResponse): data is SearchResponse {
+function isCatalogSearch(data: SearchResponse | InternalSearchResponse): data is SearchResponse {
   return "results" in data;
 }
 
-function isInternalDirectory(data: SearchResponse | FederatedSearchResponse | InternalSearchResponse): data is InternalSearchResponse {
+function isInternalDirectory(data: SearchResponse | InternalSearchResponse): data is InternalSearchResponse {
   return "mutants" in data || "genes" in data;
 }
 
@@ -113,7 +101,8 @@ const RESULT_ICONS: Record<string, typeof Dna> = {
 };
 
 function SearchComponent() {
-  const { q, types, cursor, limit, external, assembly } = Route.useSearch();
+  const { t } = useTranslation();
+  const { q, types, cursor, limit, assembly } = Route.useSearch();
   // URL values are free-form strings; only the known result types may be sent.
   const selectedTypes = React.useMemo<SearchResultType[] | undefined>(() => {
     if (!types || types.length === 0) return undefined;
@@ -124,16 +113,16 @@ function SearchComponent() {
   }, [types]);
   const navigate = useNavigate();
   const [input, setInput] = React.useState(q ?? "");
-  const [externalInput, setExternalInput] = React.useState(Boolean(external));
 
   React.useEffect(() => setInput(q ?? ""), [q]);
-  React.useEffect(() => setExternalInput(Boolean(external)), [external]);
 
   const releaseId = getReleaseId();
   const internalSite = SITE_VARIANT === "internal";
   const resultLimit = limit ?? 20;
   const releaseNumber = releaseId && /^\d+$/.test(releaseId) ? Number(releaseId) : undefined;
-  const query = useQuery<SearchResponse | FederatedSearchResponse | InternalSearchResponse>({
+  // Federated (external-source) search is retired permanently: the portal only
+  // ever queries its own catalogue or the internal directory.
+  const query = useQuery<SearchResponse | InternalSearchResponse>({
     queryKey: queryKeys.search.global({
       query: q,
       // The narrowed selection keys the cache, so an all-unknown `?types=`
@@ -144,7 +133,6 @@ function SearchComponent() {
       assemblyId: assembly,
       releaseId,
       siteVariant: SITE_VARIANT,
-      federated: !internalSite && Boolean(external),
     }),
     queryFn: () =>
       internalSite
@@ -156,25 +144,37 @@ function SearchComponent() {
             limit: resultLimit,
             assembly_id: assembly ? Number(assembly) : undefined,
             release_id: releaseNumber,
-            sources: external ? EXTERNAL_SOURCES : undefined,
           }),
     enabled: Boolean(q?.trim()),
     staleTime: 60_000,
   });
 
-  const submit = (event: React.FormEvent) => {
-    event.preventDefault();
-    const next = input.trim();
-    navigate({ to: "/search", search: {
+  const runSearch = (raw: string) => {
+    const next = raw.trim();
+    void navigate({ to: "/search", search: {
       q: next || undefined, types: undefined, cursor: undefined,
-      assembly: undefined, external: next && !internalSite ? externalInput : false, limit: next ? 20 : undefined,
+      assembly: undefined, limit: next ? 20 : undefined,
     } });
   };
+
+  // `/search` is the portal search page; every route beneath it (`/search/genes`,
+  // `/search/location`, `/search/blast`, …) is a standalone tool page with its own
+  // heading, form and result table. Rendering the portal hero and the global search
+  // box for those children contradicts the approved reference structure and pushes
+  // each tool's own form below a full screen of unrelated content.
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const isPortalSearchPage = pathname === "/search" || pathname === "/search/";
+  if (!isPortalSearchPage) {
+    return (
+      <div className="container-prose section-rhythm">
+        <Outlet />
+      </div>
+    );
+  }
 
   const data = query.data;
   const catalog = data && isCatalogSearch(data) ? data : undefined;
   const directory = data && isInternalDirectory(data) ? data : undefined;
-  const federated = data && isFederated(data) ? data : undefined;
   const results = catalog?.results ?? (directory ? normalizeInternalResults(directory) : []);
   const totalCount = catalog?.total_count ?? directory?.total_count ?? null;
   const isRefreshing = Boolean(data) && query.isFetching;
@@ -182,63 +182,44 @@ function SearchComponent() {
   return (
     <div className="container-prose section-rhythm">
       <FadeUp>
-        <p className="eyebrow">Search</p>
-        <h1 className="mt-2 font-display text-4xl font-semibold tracking-tight">Discover SoyMutDB</h1>
-        <p className="mt-3 max-w-2xl text-muted-foreground">Search genes, variants, mutant lines, publications, and connected external sources.</p>
+        <p className="eyebrow">{t("nav.search")}</p>
+        <h1 className="mt-2 font-display text-4xl font-semibold tracking-tight">{t("search.heroTitle")}</h1>
+        <p className="mt-3 max-w-2xl text-muted-foreground">{t("search.portalDescription")}</p>
       </FadeUp>
 
-      <form onSubmit={submit} className="mt-10 space-y-3" role="search">
-        <div className="relative">
-          <SearchIcon className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" aria-hidden />
-          <Input type="search" role="searchbox" value={input} onChange={(event) => setInput(event.target.value)} placeholder="Search genes, variants, publications…" aria-label="Search" className="h-12 pl-12" />
-        </div>
-        {!internalSite ? (
-          <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
-            <input data-testid="external-source-toggle" type="checkbox" checked={externalInput} onChange={(event) => setExternalInput(event.target.checked)} />
-            <Globe2 className="size-4" aria-hidden /> Search external sources (NCBI · UniProt · Ensembl · EBI)
-          </label>
-        ) : null}
-      </form>
+      {/* antd's native search input: the built-in enter button replaces the
+          hand-rolled form + button pair, and the retired external-source
+          toggle no longer sits under it. */}
+      <div className="mt-10" role="search">
+        <Input.Search
+          size="large"
+          allowClear
+          enterButton
+          value={input}
+          onChange={(event) => setInput(event.target.value)}
+          onSearch={runSearch}
+          placeholder={t("search.portalPlaceholder")}
+          aria-label={t("common.search")}
+          data-testid="search-portal-input"
+        />
+      </div>
 
-      {!q ? <div className="mt-12"><Empty image={<SearchIcon style={{ fontSize: 40, color: "var(--muted-foreground)" }} />} description={<><p className="font-medium">Start with a search</p><p className="text-sm text-muted-foreground">Enter a gene, variant, or publication to explore the database.</p></>} /></div> : null}
-      {q && query.isError ? <Card className="mt-10 border-destructive/40"><div className="flex flex-wrap items-center justify-between gap-3 p-5"><div><p className="font-medium">Search failed</p><p className="text-sm text-muted-foreground">Request ID: {(query.error as { request_id?: string })?.request_id ?? "unavailable"}</p></div><button type="button" className="rounded-md border px-3 py-2 text-sm" onClick={() => query.refetch()}>Retry</button></div></Card> : null}
+      {!q ? <div className="mt-12"><Empty image={<SearchIcon style={{ fontSize: 40, color: "var(--muted-foreground)" }} />} description={<><p className="font-medium">{t("search.emptyPromptTitle")}</p><p className="text-sm text-muted-foreground">{t("search.emptyPromptDescription")}</p></>} /></div> : null}
+      {q && query.isError ? <Card className="mt-10 border-destructive/40"><div className="flex flex-wrap items-center justify-between gap-3 p-5"><div><p className="font-medium">{t("search.errorTitle")}</p><p className="text-sm text-muted-foreground">{t("common.requestId")}: {(query.error as { request_id?: string })?.request_id ?? t("common.notAvailable")}</p></div><Button onClick={() => void query.refetch()}>{t("common.retry")}</Button></div></Card> : null}
       {q && query.isLoading && !data ? <div data-testid="search-results" className="mt-10 grid gap-3">{Array.from({ length: 5 }, (_, index) => <Skeleton key={index} className="h-20 w-full" />)}</div> : null}
 
-      {(catalog || directory) ? <section data-testid="search-results" className="mt-10" aria-label="Search results">
-        <div className="mb-4 flex items-center justify-between text-sm text-muted-foreground"><span>Results for <span className="font-mono text-foreground">“{q}”</span>{isRefreshing ? " · refreshing" : ""}</span>{totalCount !== null ? <span>{totalCount} results</span> : null}</div>
-        {results.length === 0 ? <Empty image={<SearchIcon style={{ fontSize: 40, color: "var(--muted-foreground)" }} />} description={<><p className="font-medium">No matches</p><p className="text-sm text-muted-foreground">No records matched this query. Try a broader term.</p></>} /> : <div className="grid gap-3">{results.map((result) => <ResultRow key={`${result.type}-${result.id}-${result.internal_id ?? "public"}`} result={result} />)}</div>}
+      {(catalog || directory) ? <section data-testid="search-results" className="mt-10" aria-label={t("search.resultsAria")}>
+        <div className="mb-4 flex items-center justify-between text-sm text-muted-foreground"><span>{t("search.resultsFor")} <span className="font-mono text-foreground">“{q}”</span>{isRefreshing ? <span> · {t("search.refreshing")}</span> : null}</span>{totalCount !== null ? <span>{t("search.resultCount", { count: totalCount })}</span> : null}</div>
+        {results.length === 0 ? <Empty image={<SearchIcon style={{ fontSize: 40, color: "var(--muted-foreground)" }} />} description={<><p className="font-medium">{t("search.noResults")}</p><p className="text-sm text-muted-foreground">{t("search.noMatchesDescription")}</p></>} /> : <div className="grid gap-3">{results.map((result) => <ResultRow key={`${result.type}-${result.id}-${result.internal_id ?? "public"}`} result={result} />)}</div>}
       </section> : null}
-
-      {federated ? <section data-testid="search-results" className="mt-10" aria-label="External search results"><div className="mb-4 text-sm text-muted-foreground">External results for <span className="font-mono text-foreground">“{q}”</span></div><div className="grid gap-6">{federated.sources.map((source) => <div key={source.source}><div className="mb-2 flex items-center gap-2"><h2 className="font-display font-semibold uppercase">{source.source}</h2><Tag>{source.status}</Tag><span className="text-xs text-muted-foreground">{source.health}</span></div>{source.error ? <p className="mb-2 text-sm text-muted-foreground">{source.error}</p> : null}{source.hits.length ? <div className="grid gap-2">{source.hits.map((hit, index) => <ExternalSearchHit key={`${hit.id ?? hit.title}-${index}`} hit={hit} />)}</div> : <p className="text-sm text-muted-foreground">No results from this source.</p>}</div>)}</div></section> : null}
 
       <div className="mt-14 pb-10"><Outlet /></div>
     </div>
   );
 }
 
-type FederatedHit = FederatedSearchResponse["sources"][number]["hits"][number];
-
-function ExternalSearchHit({ hit }: { hit: FederatedHit }) {
-  const url = safeExternalUrl(hit.url);
-  return (
-    <a
-      href={url}
-      aria-disabled={!url}
-      tabIndex={url ? undefined : -1}
-      data-testid={url ? "search-result-row" : "search-result-disabled"}
-      data-url={url}
-      className={`flex items-center gap-3 rounded-lg border p-4 ${url ? "transition-colors hover:border-primary" : "cursor-not-allowed opacity-60"}`}
-    >
-      <div className="min-w-0 flex-1">
-        <p className="font-medium">{hit.title}</p>
-        {hit.snippet ? <p className="mt-1 truncate text-sm text-muted-foreground">{hit.snippet}</p> : null}
-      </div>
-      <ArrowRight className="size-4 shrink-0" aria-hidden />
-    </a>
-  );
-}
-
-function CopyIdentifier({ value, label }: { value: string; label: string }) {
+function CopyIdentifier({ value }: { value: string }) {
+  const { t } = useTranslation();
   const [copied, setCopied] = React.useState(false);
   const copy = async () => {
     if (!navigator.clipboard) return;
@@ -247,18 +228,19 @@ function CopyIdentifier({ value, label }: { value: string; label: string }) {
     window.setTimeout(() => setCopied(false), 1200);
   };
   return (
-    <button type="button" className="rounded border px-1.5 py-0.5 text-[10px]" onClick={() => void copy()}>
-      {copied ? "Copied" : label}
-    </button>
+    <Button size="small" onClick={() => void copy()}>
+      {copied ? t("common.copied") : t("common.copy")}
+    </Button>
   );
 }
 
 function ResultRow({ result }: { result: SearchResult }) {
+  const { t } = useTranslation();
   const Icon = RESULT_ICONS[result.type] ?? FileText;
   const publicId = result.public_id ?? result.id;
   const context = [
     result.assembly,
-    result.release_id != null ? `release ${result.release_id}` : undefined,
+    result.release_id != null ? `${t("search.releaseLabel")} ${result.release_id}` : undefined,
     result.match_type,
     result.source,
   ].filter(Boolean).join(" · ");
@@ -282,7 +264,7 @@ function ResultRow({ result }: { result: SearchResult }) {
             {SITE_VARIANT === "internal" && result.internal_id ? (
               <span className="flex items-center gap-1" data-testid="search-internal-id">
                 <code className="font-mono text-xs text-muted-foreground">{result.internal_id}</code>
-                <CopyIdentifier value={result.internal_id} label="Copy" />
+                <CopyIdentifier value={result.internal_id} />
               </span>
             ) : null}
           </div>
@@ -293,5 +275,5 @@ function ResultRow({ result }: { result: SearchResult }) {
       </div>
     </Card>
   );
-  return result.url ? <Link to={result.url} className="block" aria-label={`View ${result.name ?? publicId}`}>{content}</Link> : <div tabIndex={-1}>{content}</div>;
+  return result.url ? <Link to={result.url} className="block" aria-label={t("search.viewResult", { name: result.name ?? publicId })}>{content}</Link> : <div tabIndex={-1}>{content}</div>;
 }

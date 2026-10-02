@@ -8,6 +8,7 @@
 import * as React from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { SearchOutlined, CloseOutlined, DeploymentUnitOutlined, ArrowRightOutlined, ControlOutlined as CmdIcon } from "@ant-design/icons";
+import { Button, Input, type InputRef } from "@/lib/antd";
 import { cn } from "../lib/cn";
 
 interface QuickAction {
@@ -33,7 +34,8 @@ export function CommandPalette() {
   const [query, setQuery] = React.useState("");
   const [activeIndex, setActiveIndex] = React.useState(0);
   const navigate = useNavigate();
-  const inputRef = React.useRef<HTMLInputElement>(null);
+  // antd's Input exposes its own imperative handle (`focus`/`blur`).
+  const inputRef = React.useRef<InputRef>(null);
 
   const resetPalette = React.useCallback(() => {
     setQuery("");
@@ -141,9 +143,9 @@ export function CommandPalette() {
         {/* Search input */}
         <div className="flex items-center gap-3 border-b px-4 py-3">
           <SearchOutlined className="size-5 shrink-0 text-muted-foreground" aria-hidden />
-          <input
+          <Input
             ref={inputRef}
-            type="search"
+            variant="borderless"
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
@@ -151,33 +153,33 @@ export function CommandPalette() {
             }}
             onKeyDown={handleKeyDown}
             placeholder="Search pages, genes, variants…"
-            className="h-9 flex-1 bg-transparent text-base outline-none placeholder:text-muted-foreground"
+            className="h-9 flex-1 text-base"
             aria-label="Search"
           />
           <kbd>ESC</kbd>
-          <button
-            type="button"
+          <Button
+            type="text"
+            shape="circle"
             onClick={closePalette}
-            className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
             aria-label="Close"
-          >
-            <CloseOutlined className="size-4" aria-hidden />
-          </button>
+            icon={<CloseOutlined className="size-4" aria-hidden />}
+          />
         </div>
 
         {/* Results */}
         <div className="max-h-[50vh] overflow-y-auto p-2">
           {/* Search submission option */}
           {query.trim() && (
-            <button
-              type="button"
+            <Button
+              type="text"
+              block
               onClick={() => {
                 closePalette();
-                navigate({ to: "/search", search: { q: query.trim() } } as never);
+                void navigate({ to: "/search", search: { q: query.trim() } });
               }}
               className={cn(
-                "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors",
-                activeIndex === 0 ? "bg-accent text-accent-foreground" : "hover:bg-accent/50",
+                "h-auto justify-start gap-3 px-3 py-2.5 text-left text-sm",
+                activeIndex === 0 && "bg-accent text-accent-foreground",
               )}
             >
               <SearchOutlined className="size-4 shrink-0 text-muted-foreground" aria-hidden />
@@ -185,7 +187,7 @@ export function CommandPalette() {
                 Search for <span className="font-semibold">&ldquo;{query.trim()}&rdquo;</span>
               </span>
               <ArrowRightOutlined className="size-3.5 text-muted-foreground" aria-hidden />
-            </button>
+            </Button>
           )}
 
           {/* Quick actions */}
@@ -193,13 +195,14 @@ export function CommandPalette() {
             const idx = i + (query.trim() ? 1 : 0);
             const Icon = action.icon;
             return (
-              <button
+              <Button
                 key={action.id}
-                type="button"
+                type="text"
+                block
                 onClick={() => handleSelect(action)}
                 className={cn(
-                  "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors",
-                  activeIndex === idx ? "bg-accent text-accent-foreground" : "hover:bg-accent/50",
+                  "h-auto justify-start gap-3 px-3 py-2.5 text-left text-sm",
+                  activeIndex === idx && "bg-accent text-accent-foreground",
                 )}
               >
                 <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
@@ -210,7 +213,7 @@ export function CommandPalette() {
                   )}
                 </span>
                 <ArrowRightOutlined className="size-3.5 text-muted-foreground" aria-hidden />
-              </button>
+              </Button>
             );
           })}
 

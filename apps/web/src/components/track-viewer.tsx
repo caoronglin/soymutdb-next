@@ -17,6 +17,8 @@
  *   - Data fetching is scheduled with requestIdleCallback and debounced per view
  */
 import * as React from "react";
+import { ZoomInOutlined, ZoomOutOutlined } from "@ant-design/icons";
+import { Button } from "@/lib/antd";
 import { cn } from "@/lib/cn";
 import { useAnimation } from "../lib/animation-context";
 import { formatPosition, formatMb, CHROMOSOME_LENGTHS_BP } from "../lib/format";
@@ -657,22 +659,22 @@ export function TrackViewer({
             {loading && <span className="text-primary animate-pulse">…loading</span>}
           </div>
           <div className="flex items-center gap-1">
-            <button
-              type="button"
+            <Button
+              type="text"
+              size="small"
               onClick={zoomIn}
-              className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               aria-label="Zoom in"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35M11 8v6M8 11h6"/></svg>
-            </button>
-            <button
-              type="button"
+              title="Zoom in"
+              icon={<ZoomInOutlined />}
+            />
+            <Button
+              type="text"
+              size="small"
               onClick={zoomOut}
-              className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               aria-label="Zoom out"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35M8 11h6"/></svg>
-            </button>
+              title="Zoom out"
+              icon={<ZoomOutOutlined />}
+            />
           </div>
         </div>
       )}

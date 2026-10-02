@@ -83,7 +83,7 @@ export const PORTAL_ROUTES: readonly PortalRouteDefinition[] = [
     componentKey: "search",
     meta: {
       title: "Search — SoyMutDB",
-      description: "Search genes, variants, mutant lines, publications, and federated sources.",
+      description: "Search genes, variants, mutant lines, and publications.",
       prerender: true,
       sitemap: true,
     },
