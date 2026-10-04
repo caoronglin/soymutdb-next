@@ -26,6 +26,12 @@ vi.mock("@tanstack/react-router", () => ({
 }));
 
 vi.mock("@tanstack/react-query", () => ({
+  // The route components now build their assembly reads through
+  // `assembliesQueryOptions()`, which wraps the options object in the real
+  // `queryOptions()` helper. Pass it through so the page under test hands this
+  // mock the same `{ queryKey, enabled }` shape it always did.
+  queryOptions: <T,>(options: T): T => options,
+  infiniteQueryOptions: <T,>(options: T): T => options,
   useQuery: (options: { queryKey: readonly unknown[]; enabled?: boolean }) => {
     runtime.queries.push({ queryKey: options.queryKey, enabled: options.enabled });
     const key = options.queryKey;

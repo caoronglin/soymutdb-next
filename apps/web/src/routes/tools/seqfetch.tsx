@@ -1,3 +1,4 @@
+import { assembliesQueryOptions } from "../../lib/query-options";
 /**
  * SeqFetch tool — batch gene FASTA extraction, or single region extraction.
  *
@@ -15,9 +16,8 @@ import * as React from "react";
 import { DeploymentUnitOutlined, CaretRightOutlined, DownloadOutlined, LoadingOutlined, RedoOutlined } from "@ant-design/icons";
 import { Breadcrumb, Button, Card, Empty, Input, Result, Select, Tabs, Tag, Typography } from "@/lib/antd";
 import { useToast } from "../../lib/toast";
-import { queryKeys } from "../../lib/query-keys";
 import { getReleaseId } from "@soymutdb/api-client";
-import { seqFetchGenes, seqFetchRegion, getAssemblies, type SeqFetchResponse } from "./api";
+import { seqFetchGenes, seqFetchRegion, type SeqFetchResponse } from "./api";
 import { SITE_VARIANT } from "../../lib/site-variant";
 
 export const Route = createFileRoute("/tools/seqfetch")({
@@ -56,13 +56,11 @@ function SeqFetchInner() {
   const [end, setEnd] = React.useState("");
   const [fieldErrors, setFieldErrors] = React.useState<Record<string, string>>({});
   const [result, setResult] = React.useState<SeqFetchResponse | null>(null);
-  const releaseId = getReleaseId();
 
-  const assembliesQuery = useQuery({
-    queryKey: queryKeys.assemblies.list({ releaseId, siteVariant: SITE_VARIANT }),
-    queryFn: getAssemblies,
-    staleTime: 30 * 60 * 1000,
-  });
+  const assembliesQuery = useQuery(assembliesQueryOptions({
+    releaseId: getReleaseId(),
+    siteVariant: SITE_VARIANT,
+  }));
 
   // Preselect the default assembly when the list arrives.
   React.useEffect(() => {

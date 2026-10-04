@@ -1,3 +1,4 @@
+import { assembliesQueryOptions } from "../../lib/query-options";
 /**
  * Variants index route — advanced filter + cursor-based pagination.
  *
@@ -24,7 +25,6 @@ import {
 } from "@/lib/antd";
 import {
   createVariantExport,
-  getAssemblies,
   getReleaseId,
   searchVariants,
   type VariantImpact,
@@ -73,11 +73,10 @@ function VariantsComponent() {
   ]);
   const prevCursor = cursorStack.length > 1 ? cursorStack[cursorStack.length - 2] : undefined;
   const atFirstPage = search.cursor == null;
-  const assembliesQuery = useQuery({
-    queryKey: ["assemblies", getReleaseId(), SITE_VARIANT],
-    queryFn: getAssemblies,
-    staleTime: 30 * 60 * 1000,
-  });
+  const assembliesQuery = useQuery(assembliesQueryOptions({
+    releaseId: getReleaseId(),
+    siteVariant: SITE_VARIANT,
+  }));
   const assemblies = assembliesQuery.data ?? [];
   const defaultAssembly = assemblies.find((assembly) => assembly.is_default);
   const assemblyResolution = search.assembly

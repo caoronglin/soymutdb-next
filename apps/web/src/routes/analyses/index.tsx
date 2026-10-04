@@ -10,6 +10,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { ExperimentOutlined, ScanOutlined, ArrowRightOutlined, FolderOpenOutlined } from "@ant-design/icons";
 import { Breadcrumb, Button, Result, Skeleton, Tag, Typography } from "@/lib/antd";
 import { getAnalysis, type AnalysesJobResponse, type AnalysisJobStatus } from "@soymutdb/api-client";
@@ -59,6 +60,7 @@ function statusLabel(status: AnalysisJobStatus): string {
 }
 
 function AnalysesIndexComponent() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
 
   const jobsQuery = useQuery({
@@ -143,18 +145,18 @@ function AnalysesIndexComponent() {
     <div className="container-prose section-rhythm">
       <ResearcherGate>
         <header className="flex flex-col gap-4">
-          <Breadcrumb items={[{ title: "Analyze" }]} />
+          <Breadcrumb items={[{ title: t("analyses.title") }]} />
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-start gap-3.5">
               <span className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-border bg-card shadow-sm">
                 <FolderOpenOutlined className="size-5" aria-hidden />
               </span>
               <div>
-                <Typography.Title level={2} style={{ margin: 0 }}>
-                  Analyze
+                <Typography.Title level={2} className="mb-0">
+                  {t("analyses.title")}
                 </Typography.Title>
                 <Typography.Paragraph type="secondary" style={{ margin: 0, maxWidth: "52rem" }}>
-                  Run RNA-seq quality control (fastp) and single-cell clustering (scanpy) pipelines on your uploaded data. Jobs run asynchronously; results appear here once finished.
+                  {t("analyses.indexIntro")}
                 </Typography.Paragraph>
               </div>
             </div>
@@ -165,7 +167,7 @@ function AnalysesIndexComponent() {
                 icon={<ExperimentOutlined aria-hidden />}
                 onClick={() => navigate({ to: "/analyses/fastp" })}
               >
-                New fastp job
+                {t("analyses.newFastp")}
               </Button>
               <Button
                 size="small"
@@ -173,7 +175,7 @@ function AnalysesIndexComponent() {
                 icon={<ScanOutlined aria-hidden />}
                 onClick={() => navigate({ to: "/analyses/scanpy" })}
               >
-                New scanpy job
+                {t("analyses.newScanpy")}
               </Button>
             </div>
           </div>
@@ -185,11 +187,11 @@ function AnalysesIndexComponent() {
           ) : jobsQuery.isError ? (
             <Result
               status="error"
-              title="Could not load analysis jobs"
-              subTitle="The jobs service is unavailable. Please try again shortly."
+              title={t("analyses.jobsErrorTitle")}
+              subTitle={t("analyses.jobsErrorHint")}
               extra={
                 <Button type="primary" onClick={() => void jobsQuery.refetch()}>
-                  Try again
+                  {t("common.retry")}
                 </Button>
               }
             />

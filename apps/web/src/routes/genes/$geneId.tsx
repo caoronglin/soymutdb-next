@@ -1,3 +1,4 @@
+import { assembliesQueryOptions } from "../../lib/query-options";
 /**
  * Gene detail route — full gene information with tabbed sections for
  * overview, expression data, and homologs.
@@ -29,7 +30,6 @@ import {
   type TableColumnsType,
 } from "@/lib/antd";
 import {
-  getAssemblies,
   getGene,
   getGeneExpression,
   getGeneHomologs,
@@ -65,11 +65,10 @@ function GeneDetailComponent() {
   const { geneId } = Route.useParams();
   const { assembly } = Route.useSearch();
   const releaseId = getReleaseId();
-  const assembliesQuery = useQuery({
-    queryKey: ["assemblies", releaseId, SITE_VARIANT],
-    queryFn: getAssemblies,
-    staleTime: 30 * 60 * 1000,
-  });
+  const assembliesQuery = useQuery(assembliesQueryOptions({
+    releaseId: getReleaseId(),
+    siteVariant: SITE_VARIANT,
+  }));
   const selectedAssembly = assembliesQuery.data?.find(
     (candidate) => String(candidate.id) === String(assembly),
   );

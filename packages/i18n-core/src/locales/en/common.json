@@ -715,7 +715,10 @@
     "pagination": "Pagination",
     "tableOfContents": "Table of contents",
     "noRouteFor": "No route for {{path}}.",
-    "backToHome": "Back to home"
+    "backToHome": "Back to home",
+    "working": {
+      "working": "Working…"
+    }
   },
   "footer": {
     "description": "Comprehensive multi-species mutant database for functional genomics research",
@@ -2167,16 +2170,192 @@
     "fastp": {
       "title": "fastp — read QC",
       "subtitle": "Trim and quality-filter FASTQ reads",
-      "files": "FASTQ files (single-end: 1 file, paired-end: R1 then R2)"
+      "files": "FASTQ files (single-end: 1 file, paired-end: R1 then R2)",
+      "subtitleLong": {
+        "subtitleLong": "Trim adapters and filter low-quality reads from FASTQ files. Results include a HTML report plus per-run statistics."
+      },
+      "inputFiles": {
+        "inputFiles": "Input files"
+      },
+      "pairedHint": {
+        "pairedHint": "Single-end: one FASTQ file. Paired-end: select R1 and R2 together (R1 first)."
+      },
+      "qualityCutoff": {
+        "qualityCutoff": "Quality cutoff (phred)"
+      },
+      "threads": {
+        "threads": "Threads"
+      },
+      "howItWorks": {
+        "howItWorks": "How it works"
+      },
+      "howStep1": {
+        "howStep1": "Files are uploaded directly to object storage via a pre-signed URL (up to 500 MB each)."
+      },
+      "howStep2": {
+        "howStep2": "A fastp job is queued; you are taken to the result page which refreshes automatically."
+      },
+      "howStep3": {
+        "howStep3": "When finished, the HTML report and summary statistics are available."
+      },
+      "parameters": {
+        "parameters": "Parameters"
+      },
+      "paramTrim": {
+        "paramTrim": "— bases trimmed from read 5′/3′ ends."
+      },
+      "paramQuality": {
+        "paramQuality": "— base quality cutoff (phred score, 0–40; default 15)."
+      },
+      "paramThreads": {
+        "paramThreads": "— CPU threads for the pipeline (1–64)."
+      },
+      "paramNameTrim": {
+        "paramNameTrim": "trim_front1 / trim_tail1"
+      },
+      "paramNameQuality": {
+        "paramNameQuality": "quality_phred"
+      },
+      "paramNameThreads": {
+        "paramNameThreads": "thread"
+      }
     },
     "scanpy": {
       "title": "scanpy — single cell",
       "subtitle": "Filter, select highly variable genes, reduce dimensions and cluster",
       "files": "AnnData .h5ad file",
-      "useHvg": "Select highly variable genes"
+      "useHvg": "Select highly variable genes",
+      "subtitleLong": {
+        "subtitleLong": "Quality-filter, normalise and cluster a single-cell expression matrix (.h5ad). Results include a UMAP projection, cluster sizes and marker genes."
+      },
+      "inputData": {
+        "inputData": "Input data"
+      },
+      "inputHint": {
+        "inputHint": "One AnnData file in .h5ad format (raw counts or normalised matrix)."
+      },
+      "paramNameMinGene": {
+        "paramNameMinGene": "min_genes"
+      },
+      "paramNameMinCell": {
+        "paramNameMinCell": "min_cells"
+      },
+      "paramNameTop": {
+        "paramNameTop": "n_top_genes"
+      },
+      "resolution": {
+        "resolution": "Resolution"
+      },
+      "useHvgLong": {
+        "useHvgLong": "Use highly variable genes (HVG) before PCA"
+      },
+      "howItWorks": {
+        "howItWorks": "How it works"
+      },
+      "howStep1": {
+        "howStep1": "The .h5ad file is uploaded directly to object storage via a pre-signed URL (max 500 MB)."
+      },
+      "howStep2": {
+        "howStep2": "A scanpy job is queued: filtering → HVG → PCA → Leiden clustering → UMAP."
+      },
+      "howStep3": {
+        "howStep3": "The result page refreshes automatically and shows the UMAP plot, cluster sizes and marker genes."
+      },
+      "parameters": {
+        "parameters": "Parameters"
+      },
+      "paramNameMin": {
+        "paramNameMin": "min_genes / min_cells"
+      },
+      "paramMin": {
+        "paramMin": "— minimum genes per cell and cells per gene after filtering."
+      },
+      "paramTop": {
+        "paramTop": "— HVGs kept for PCA when “use HVG” is enabled."
+      },
+      "paramNameResolution": {
+        "paramNameResolution": "resolution"
+      },
+      "paramResolution": {
+        "paramResolution": "— Leiden clustering resolution (0.1–10; higher = more clusters)."
+      }
     },
     "job": {
-      "title": "Analysis job"
+      "title": "Analysis job",
+      "breadcrumb": "Job",
+      "titleSuffix": "job",
+      "toolFastp": "fastp",
+      "toolScanpy": "scanpy",
+      "loading": "Loading job…",
+      "loadErrorTitle": "Could not load this job",
+      "loadErrorHint": "The job may have been removed, or the job service is unavailable.",
+      "statusSucceeded": "Succeeded",
+      "statusFailed": "Failed",
+      "summary": "Job {{id}}… · submitted {{submitted}}",
+      "stateQueued": "Job queued — waiting for a worker…",
+      "statePending": "Job pending…",
+      "stateRunning": "Job running — this can take a few minutes…",
+      "polling": "This page refreshes automatically every {{seconds}}s. You can leave and come back later.",
+      "failedTitle": "Job failed",
+      "noErrorMessage": "No error message provided.",
+      "resubmit": "Re-submit a {{tool}} job",
+      "totalReads": "Total reads",
+      "totalBases": "Total bases",
+      "q30Bases": "Q30 bases",
+      "duplication": "Duplication",
+      "htmlReport": "fastp HTML report",
+      "preparingReport": "Preparing report…",
+      "reportUnavailable": "Report unavailable at the moment — try again later.",
+      "umapProjection": "UMAP projection",
+      "loadingUmap": "Loading UMAP…",
+      "umapUnavailable": "UMAP unavailable.",
+      "umapAlt": "Scanpy UMAP projection coloured by cluster",
+      "clusterSizes": "Cluster sizes",
+      "noClusterSizes": "No cluster size data in the result.",
+      "topMarkers": "Top marker genes",
+      "noMarkerGenes": "No marker gene data in the result.",
+      "downloads": "Downloads",
+      "markersCsv": "markers.csv",
+      "annotatedH5ad": "annotated .h5ad",
+      "statusLine": "Job status: {{status}}."
+    },
+    "indexIntro": {
+      "indexIntro": "Run RNA-seq quality control (fastp) and single-cell clustering (scanpy) pipelines on your uploaded data. Jobs run asynchronously; results appear here once finished."
+    },
+    "newFastp": {
+      "newFastp": "New fastp job"
+    },
+    "newScanpy": {
+      "newScanpy": "New scanpy job"
+    },
+    "jobsErrorTitle": {
+      "jobsErrorTitle": "Could not load analysis jobs"
+    },
+    "jobsErrorHint": {
+      "jobsErrorHint": "The jobs service is unavailable. Please try again shortly."
+    },
+    "submitting": {
+      "submitting": "Submitting job…"
+    },
+    "uploading": {
+      "uploading": "Uploading to object storage…"
+    },
+    "selectFilesFirst": {
+      "selectFilesFirst": "Select files first"
+    },
+    "selectFileFirst": {
+      "selectFileFirst": "Select a file first"
+    },
+    "upload": {
+      "pairedHint": "Paired-end: select R1 and R2 together (order: R1 first, R2 second)",
+      "removeFile": "Remove {{name}}",
+      "empty": "No file selected yet.",
+      "ariaLabelSingle": "Upload {{format}} file",
+      "ariaLabelMulti": "Upload {{format}} files",
+      "dropHereSingle": "Drag & drop {{format}} file here",
+      "dropHereMulti": "Drag & drop {{format}} files here",
+      "browseHintSingle": "or click to browse · {{extensions}} · max {{maxSize}} per file",
+      "browseHintMulti": "or click to browse · {{extensions}} · max {{maxSize}} per file · up to {{maxFiles}} files"
     }
   },
   "sra": {

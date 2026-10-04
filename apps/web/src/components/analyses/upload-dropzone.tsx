@@ -8,6 +8,7 @@
  */
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { CloudUploadOutlined, CloseOutlined, FileOutlined as FileIcon, WarningOutlined } from "@ant-design/icons";
 import { Button, Tag } from "@/lib/antd";
 import { cn } from "@/lib/cn";
@@ -57,6 +58,7 @@ export function UploadDropzone({
   pairedHint = false,
   className,
 }: UploadDropzoneProps) {
+  const { t } = useTranslation();
   const { error: toastError } = useToast();
   const inputRef = React.useRef<HTMLInputElement | null>(null);
   const [dragging, setDragging] = React.useState(false);
@@ -111,7 +113,7 @@ export function UploadDropzone({
         role="button"
         tabIndex={disabled ? -1 : 0}
         aria-disabled={disabled}
-        aria-label={`Upload ${formatLabel} file${maxFiles > 1 ? "s" : ""}`}
+        aria-label={t(maxFiles > 1 ? "analyses.upload.ariaLabelMulti" : "analyses.upload.ariaLabelSingle", { format: formatLabel })}
         onClick={() => !disabled && inputRef.current?.click()}
         onKeyDown={(e) => {
           if (!disabled && (e.key === "Enter" || e.key === " ")) {
@@ -144,15 +146,18 @@ export function UploadDropzone({
         <CloudUploadOutlined className={cn("size-8", dragging ? "text-primary" : "text-muted-foreground")} aria-hidden />
         <div>
           <p className="text-sm font-medium text-foreground">
-            Drag &amp; drop {formatLabel} file{maxFiles > 1 ? "s" : ""} here
+            {t(maxFiles > 1 ? "analyses.upload.dropHereMulti" : "analyses.upload.dropHereSingle", { format: formatLabel })}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            or click to browse · {extensions.join(" / ")} · max {formatBytes(maxSizeBytes)} per file
-            {maxFiles > 1 ? ` · up to ${maxFiles} files` : ""}
+            {t(maxFiles > 1 ? "analyses.upload.browseHintMulti" : "analyses.upload.browseHintSingle", {
+              extensions: extensions.join(" / "),
+              maxSize: formatBytes(maxSizeBytes),
+              maxFiles,
+            })}
           </p>
           {pairedHint && maxFiles === 2 ? (
             <p className="mt-1 text-xs text-muted-foreground/80">
-              Paired-end: select R1 and R2 together (order: R1 first, R2 second)
+              {t("analyses.upload.pairedHint")}
             </p>
           ) : null}
         </div>
@@ -190,7 +195,7 @@ export function UploadDropzone({
               <Button
                 htmlType="button"
                 type="text"
-                aria-label={`Remove ${f.name}`}
+                aria-label={t("analyses.upload.removeFile", { name: f.name })}
                 disabled={disabled}
                 onClick={() => onFilesChange(files.filter((_, fi) => fi !== i))}
                 className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -202,7 +207,7 @@ export function UploadDropzone({
       ) : (
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <WarningOutlined className="size-3.5" aria-hidden />
-          No file selected yet.
+          {t("analyses.upload.empty")}
         </p>
       )}
     </div>

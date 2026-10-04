@@ -33,6 +33,7 @@ from ...core.ratelimit import login_rate_limiter
 from ...core.security import (
     RoleName,
     create_access_token,
+    effective_roles,
     hash_password,
     validate_password_strength,
     verify_password,
@@ -380,6 +381,7 @@ def _user_to_response(user: User) -> UserResponse:
         is_active=user.is_active,
         is_superuser=user.is_superuser,
         role_name=user.role_rel.name if user.role_rel else None,
+        effective_roles=effective_roles(get_user_roles(user)),
         organization_id=user.organization_id,
         joined_at=user.joined_at,
         last_login_at=user.last_login_at,

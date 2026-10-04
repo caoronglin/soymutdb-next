@@ -41,6 +41,26 @@ export interface ReleaseListParams {
   page_size?: number;
 }
 
+/** The release the public surface currently serves (`active_release` singleton). */
+export interface ActiveRelease {
+  /** null before the first publish. */
+  release_id: string | null;
+  version: string | null;
+  published_at: string | null;
+}
+
+/**
+ * Read the active release pointer.
+ *
+ * Safe to call while the tab is pinned to an older release: the endpoint does
+ * not depend on `get_release_context`, it reads the `active_release` singleton
+ * directly, so a stale `X-SoyMutDB-Release` header cannot make it report the
+ * release the caller already knows.
+ */
+export function getActiveRelease(): Promise<ActiveRelease> {
+  return http.get<ActiveRelease>("/releases/active");
+}
+
 export function getReleases(params: ReleaseListParams = {}): Promise<ReleaseSummary[]> {
   return http.get<ReleaseSummary[]>("/releases", { params });
 }

@@ -1,3 +1,4 @@
+import { assembliesQueryOptions } from "../../lib/query-options";
 /**
  * Primer design — second-level catalog of the /search portal (PPTX V2).
  *
@@ -35,10 +36,9 @@ import {
   ExperimentOutlined,
   ReloadOutlined,
 } from "@ant-design/icons";
-import { getAssemblies, getReleaseId, seqFetchRegion } from "@soymutdb/api-client";
+import { getReleaseId, seqFetchRegion } from "@soymutdb/api-client";
 import { FadeUp } from "../../components/route-motion";
 import { SOYBEAN_CHROMOSOMES } from "../../lib/format";
-import { queryKeys } from "../../lib/query-keys";
 import { SITE_VARIANT } from "../../lib/site-variant";
 import {
   designPrimerPair,
@@ -59,13 +59,11 @@ function PrimerComponent() {
   const [pairs, setPairs] = React.useState<PrimerPair[] | null>(null);
   const [source, setSource] = React.useState<{ assembly?: string; region?: string; length: number } | null>(null);
   const [error, setError] = React.useState<string | null>(null);
-  const releaseId = getReleaseId();
 
-  const assembliesQuery = useQuery({
-    queryKey: queryKeys.assemblies.list({ releaseId, siteVariant: SITE_VARIANT }),
-    queryFn: getAssemblies,
-    staleTime: 30 * 60 * 1000,
-  });
+  const assembliesQuery = useQuery(assembliesQueryOptions({
+    releaseId: getReleaseId(),
+    siteVariant: SITE_VARIANT,
+  }));
   const assemblies = React.useMemo(() => assembliesQuery.data ?? [], [assembliesQuery.data]);
 
   React.useEffect(() => {

@@ -1,3 +1,6 @@
+import { getReleaseId } from "@soymutdb/api-client";
+import { SITE_VARIANT } from "../../lib/site-variant";
+import { assembliesQueryOptions } from "../../lib/query-options";
 /**
  * ExpPattern tool — gene × condition expression matrix with optional row
  * clustering, rendered as an ECharts heatmap (lazy-loaded via useECharts)
@@ -29,7 +32,7 @@ import {
 } from "@/lib/antd";
 import { useToast } from "../../lib/toast";
 import { useECharts } from "../../lib/use-echarts";
-import { getAssemblies, runExpPattern, type ExpPatternResponse } from "./api";
+import { runExpPattern, type ExpPatternResponse } from "./api";
 
 export const Route = createFileRoute("/tools/exppattern")({
   component: ExpPatternComponent,
@@ -69,11 +72,10 @@ function ExpPatternInner() {
   const [fieldErrors, setFieldErrors] = React.useState<Record<string, string>>({});
   const [result, setResult] = React.useState<ExpPatternResponse | null>(null);
   const [assemblyId, setAssemblyId] = React.useState("");
-  const assembliesQuery = useQuery({
-    queryKey: ["tools", "assemblies"],
-    queryFn: getAssemblies,
-    staleTime: 30 * 60 * 1000,
-  });
+  const assembliesQuery = useQuery(assembliesQueryOptions({
+    releaseId: getReleaseId(),
+    siteVariant: SITE_VARIANT,
+  }));
   const assemblies = React.useMemo(() => assembliesQuery.data ?? [], [assembliesQuery.data]);
 
   React.useEffect(() => {

@@ -14,10 +14,10 @@ import { registry, SERVICES } from "./lib/di";
 import { bus } from "./lib/event-bus";
 import {
   clearLegacyTokens,
-  onAuthLogout,
-  restoreSession,
   setReleaseId,
 } from "@soymutdb/api-client";
+import { SessionProvider } from "./lib/session-context";
+import { ReleaseScopeProvider } from "./lib/release-scope";
 import { resolveAppUrl } from "./lib/deployment";
 import { registerServiceWorker } from "./lib/service-worker";
 import {
@@ -34,16 +34,11 @@ const DesignSystemProvider = React.lazy(() =>
 
 clearLegacyTokens();
 setReleaseId(import.meta.env.VITE_SOYMUTDB_RELEASE_ID);
-void restoreSession();
 initI18nOnce();
 
-onAuthLogout(() => {
-  if (typeof window === "undefined") return;
-  const base = import.meta.env.BASE_URL;
-  const loginPath = `${base}login`;
-  if (window.location.pathname === loginPath || window.location.pathname.startsWith(`${loginPath}/`)) return;
-  window.location.href = resolveAppUrl(base, "/login");
-});
+// The boot refresh moved into <SessionProvider> so its result is reactive and
+// joins the transport's existing single flight. Firing `restoreSession()` here
+// would start a second, unobservable attempt (H-08).
 
 registry.register(SERVICES.EVENT_BUS, () => bus);
 registry.register(SERVICES.I18N, initI18nOnce);
@@ -122,16 +117,23 @@ export default function ReactApp() {
   return (
     <React.StrictMode>
       <QueryClientProvider client={queryClient}>
-        <ThemeProvider>
-          <AnimationProvider>
-            <React.Suspense fallback={<RouterProvider router={router} />}>
-              <DesignSystemProvider>
-                <AppReadySignal />
-                <RouterProvider router={router} />
-              </DesignSystemProvider>
-            </React.Suspense>
-          </AnimationProvider>
-        </ThemeProvider>
+        <SessionProvider queryClient={queryClient}>
+          {/* Outermost of the app providers: a release switch must invalidate
+              every release-scoped query, and the session provider's personal
+              reads ride on the same QueryClient. */}
+          <ReleaseScopeProvider queryClient={queryClient}>
+          <ThemeProvider>
+            <AnimationProvider>
+              <React.Suspense fallback={<RouterProvider router={router} />}>
+                <DesignSystemProvider>
+                  <AppReadySignal />
+                  <RouterProvider router={router} />
+                </DesignSystemProvider>
+              </React.Suspense>
+            </AnimationProvider>
+          </ThemeProvider>
+          </ReleaseScopeProvider>
+        </SessionProvider>
       </QueryClientProvider>
     </React.StrictMode>
   );

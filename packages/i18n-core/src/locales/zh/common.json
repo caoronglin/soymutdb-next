@@ -715,7 +715,10 @@
     "pagination": "分页",
     "tableOfContents": "目录",
     "noRouteFor": "没有匹配 {{path}} 的路由。",
-    "backToHome": "返回首页"
+    "backToHome": "返回首页",
+    "working": {
+      "working": "处理中…"
+    }
   },
   "footer": {
     "description": "用于功能基因组学研究的综合性多物种突变体数据库",
@@ -2167,16 +2170,192 @@
     "fastp": {
       "title": "fastp — 读段质控",
       "subtitle": "对 FASTQ 读段进行修剪与质量过滤",
-      "files": "FASTQ 文件（单端：1 个文件；双端：先 R1 后 R2）"
+      "files": "FASTQ 文件（单端：1 个文件；双端：先 R1 后 R2）",
+      "subtitleLong": {
+        "subtitleLong": "修剪接头并过滤 FASTQ 文件中的低质量读段。结果包含 HTML 报告与每次运行的统计信息。"
+      },
+      "inputFiles": {
+        "inputFiles": "输入文件"
+      },
+      "pairedHint": {
+        "pairedHint": "单端：一个 FASTQ 文件。双端：请同时选择 R1 与 R2（先 R1 后 R2）。"
+      },
+      "qualityCutoff": {
+        "qualityCutoff": "质量阈值（phred）"
+      },
+      "threads": {
+        "threads": "线程数"
+      },
+      "howItWorks": {
+        "howItWorks": "工作原理"
+      },
+      "howStep1": {
+        "howStep1": "文件通过预签名 URL 直接上传到对象存储（每个不超过 500 MB）。"
+      },
+      "howStep2": {
+        "howStep2": "fastp 任务进入队列，随后跳转到自动刷新的结果页。"
+      },
+      "howStep3": {
+        "howStep3": "完成后可查看 HTML 报告与汇总统计。"
+      },
+      "parameters": {
+        "parameters": "参数"
+      },
+      "paramTrim": {
+        "paramTrim": "— 从读段 5′/3′ 端修剪的碱基数。"
+      },
+      "paramQuality": {
+        "paramQuality": "— 碱基质量阈值（phred 分数，0–40；默认 15）。"
+      },
+      "paramThreads": {
+        "paramThreads": "— 流程使用的 CPU 线程数（1–64）。"
+      },
+      "paramNameTrim": {
+        "paramNameTrim": "trim_front1 / trim_tail1"
+      },
+      "paramNameQuality": {
+        "paramNameQuality": "quality_phred"
+      },
+      "paramNameThreads": {
+        "paramNameThreads": "thread"
+      }
     },
     "scanpy": {
       "title": "scanpy — 单细胞",
       "subtitle": "过滤、选择高变基因、降维与聚类",
       "files": "AnnData .h5ad 文件",
-      "useHvg": "选择高变基因"
+      "useHvg": "选择高变基因",
+      "subtitleLong": {
+        "subtitleLong": "对单细胞表达矩阵（.h5ad）进行质量过滤、标准化与聚类。结果包含 UMAP 投影、聚类规模与标志基因。"
+      },
+      "inputData": {
+        "inputData": "输入数据"
+      },
+      "inputHint": {
+        "inputHint": "一个 .h5ad 格式的 AnnData 文件（原始计数或标准化矩阵）。"
+      },
+      "paramNameMinGene": {
+        "paramNameMinGene": "min_genes"
+      },
+      "paramNameMinCell": {
+        "paramNameMinCell": "min_cells"
+      },
+      "paramNameTop": {
+        "paramNameTop": "n_top_genes"
+      },
+      "resolution": {
+        "resolution": "分辨率"
+      },
+      "useHvgLong": {
+        "useHvgLong": "在 PCA 之前使用高变基因（HVG）"
+      },
+      "howItWorks": {
+        "howItWorks": "工作原理"
+      },
+      "howStep1": {
+        "howStep1": ".h5ad 文件通过预签名 URL 直接上传到对象存储（最大 500 MB）。"
+      },
+      "howStep2": {
+        "howStep2": "scanpy 任务进入队列：过滤 → HVG → PCA → Leiden 聚类 → UMAP。"
+      },
+      "howStep3": {
+        "howStep3": "结果页自动刷新，展示 UMAP 图、聚类规模与标志基因。"
+      },
+      "parameters": {
+        "parameters": "参数"
+      },
+      "paramNameMin": {
+        "paramNameMin": "min_genes / min_cells"
+      },
+      "paramMin": {
+        "paramMin": "— 过滤后每个细胞的最少基因数与每个基因的最少细胞数。"
+      },
+      "paramTop": {
+        "paramTop": "— 启用“使用 HVG”后用于 PCA 的高变基因数。"
+      },
+      "paramNameResolution": {
+        "paramNameResolution": "resolution"
+      },
+      "paramResolution": {
+        "paramResolution": "— Leiden 聚类分辨率（0.1–10；数值越大聚类越多）。"
+      }
     },
     "job": {
-      "title": "分析任务"
+      "title": "分析任务",
+      "breadcrumb": "任务",
+      "titleSuffix": "任务",
+      "toolFastp": "fastp",
+      "toolScanpy": "scanpy",
+      "loading": "正在加载任务…",
+      "loadErrorTitle": "无法加载该任务",
+      "loadErrorHint": "该任务可能已被删除，或任务服务暂不可用。",
+      "statusSucceeded": "成功",
+      "statusFailed": "失败",
+      "summary": "任务 {{id}}… · 提交于 {{submitted}}",
+      "stateQueued": "任务已排队 — 等待工作进程…",
+      "statePending": "任务待处理…",
+      "stateRunning": "任务运行中 — 可能需要几分钟…",
+      "polling": "本页每 {{seconds}} 秒自动刷新，你可以稍后返回查看。",
+      "failedTitle": "任务失败",
+      "noErrorMessage": "未提供错误信息。",
+      "resubmit": "重新提交 {{tool}} 任务",
+      "totalReads": "总读段数",
+      "totalBases": "总碱基数",
+      "q30Bases": "Q30 碱基数",
+      "duplication": "重复率",
+      "htmlReport": "fastp HTML 报告",
+      "preparingReport": "正在准备报告…",
+      "reportUnavailable": "报告暂不可用 — 请稍后重试。",
+      "umapProjection": "UMAP 投影",
+      "loadingUmap": "正在加载 UMAP…",
+      "umapUnavailable": "UMAP 暂不可用。",
+      "umapAlt": "按聚类着色的 scanpy UMAP 投影",
+      "clusterSizes": "聚类规模",
+      "noClusterSizes": "结果中没有聚类规模数据。",
+      "topMarkers": "主要标志基因",
+      "noMarkerGenes": "结果中没有标志基因数据。",
+      "downloads": "下载",
+      "markersCsv": "markers.csv",
+      "annotatedH5ad": "annotated .h5ad",
+      "statusLine": "任务状态：{{status}}。"
+    },
+    "indexIntro": {
+      "indexIntro": "对上传的数据运行 RNA-seq 读段质控（fastp）与单细胞聚类（scanpy）流程。任务异步执行，完成后在此显示结果。"
+    },
+    "newFastp": {
+      "newFastp": "新建 fastp 任务"
+    },
+    "newScanpy": {
+      "newScanpy": "新建 scanpy 任务"
+    },
+    "jobsErrorTitle": {
+      "jobsErrorTitle": "无法加载分析任务"
+    },
+    "jobsErrorHint": {
+      "jobsErrorHint": "任务服务暂不可用，请稍后重试。"
+    },
+    "submitting": {
+      "submitting": "正在提交任务…"
+    },
+    "uploading": {
+      "uploading": "正在上传到对象存储…"
+    },
+    "selectFilesFirst": {
+      "selectFilesFirst": "请先选择文件"
+    },
+    "selectFileFirst": {
+      "selectFileFirst": "请先选择一个文件"
+    },
+    "upload": {
+      "pairedHint": "双端：请同时选择 R1 与 R2（顺序：先 R1 后 R2）",
+      "removeFile": "移除 {{name}}",
+      "empty": "尚未选择文件。",
+      "ariaLabelSingle": "上传 {{format}} 文件",
+      "ariaLabelMulti": "上传 {{format}} 文件",
+      "dropHereSingle": "将 {{format}} 文件拖放到此处",
+      "dropHereMulti": "将 {{format}} 文件拖放到此处",
+      "browseHintSingle": "或点击浏览 · {{extensions}} · 每个文件最大 {{maxSize}}",
+      "browseHintMulti": "或点击浏览 · {{extensions}} · 每个文件最大 {{maxSize}} · 最多 {{maxFiles}} 个文件"
     }
   },
   "sra": {

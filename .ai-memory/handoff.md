@@ -1,4 +1,81 @@
-# Handoff 检查点 — 2026-09-26（多 Wave 执行后）
+# Handoff 检查点 — 2026-10-02（审计后优化实施轮 W0/W1/W2/W3）
+
+## 已完成（带证据）
+
+### W0 基线
+HEAD `9b63ddd416c86757d9a80b70e72cfeb785791de4`；`main`；32 项脏状态（23 改 + 9 未跟踪）全部保留。
+Node 24.19.0 / pnpm 12.5.1 / Python 3.14.6 / uv 0.11.33；**Docker、psql、pg_isready、pgcli、ant 全部缺失**；无 `DATABASE_URL`。
+证据：`docs/aegis/baseline/2026-10-02-w0-rebaseline.md` §8。
+
+### W1 守卫维护（完成）
+- `check_web_query_keys.py` 括号配平扫描（修嵌套括号假阳性）；新增 `scripts/test_web_query_keys_guard.py` 7 tests。
+- `check_admin_content_architecture.py` 偏好键注册表 + 校验器包裹放行；负例扩到 29 tests。
+- `navigation-render.test.tsx` 改用共享 `mockTranslation`；`__root.tsx` `menuItemRender` 改 `<Link>`（既有批准方案 §3.1）。
+- `python3 -m pytest scripts -q` → **313 passed / 1 skipped**，exit 0。
+
+### W2 assembly（主体完成）
+10 个消费点统一工厂；新增 `apps/web/src/lib/assemblies-query-options.test.ts` 6 tests（真实 QueryClient）。
+消融：删 `releaseId` / 删 `assertAssemblyRelease` 各自翻转。web typecheck exit 0，web tests 131 passed。
+
+### W3 会话与权限（主体完成）
+- `session.ts` 重构为纯五态状态机（11 tests）；新增 `session-context.tsx` 并接入 `react-app.tsx`。
+- `use-current-user.ts` 以 `enabled: canQueryPersonal` 门控；hook 级实测匿名 0 次 `/auth/me`；账号切换按 `sessionId` 隔离。
+- 修 api-client 并发缺陷：新增 `auth-concurrency.test.ts` 3 tests（stale 401 重试 / 不误发登出 / unsafe 不重放）。
+
+### W4-P1 analyses 模块 i18n（完成）
+6 个文件硬编码文案 116 → 0，`check_visible_i18n_react` 命中文件 39 → 33；新增 89 个 en/zh 键。
+补`packages/i18n-core` 键对等守卫（此前缺失）；新增 `analyses-i18n.test.ts`（真实 i18next 解析）与
+`researcher-gate.test.tsx`（en/zh 组件渲染）。
+修正自建测试缺陷：漏 `cleanup()` 造成顺序依赖 flake，连跑 4 轮稳定后重新取证消融。
+
+### W3 加法式能力字段 `/auth/me.effective_roles`（完成）
+后端 `effective_roles()` 复用 `_ROLE_GRANTS`（不新建第二权威源）；`UserResponse` 加法式字段。
+`test_me_capabilities.py` 20 passed（Docker-free，真实 HTTP）；`use-current-user.test.ts` 7 passed。
+消融 ×2。**附带消除既存红灯** `check:contract` exit 1 → 0。
+契约债已量化：重生成 diff +2114/-416 中，**828 路径是 HEAD 既存债，本轮增量仅 3 路径**。
+
+### W2 运行时 release 切换（完成，用户确认场景存在）
+后端 `GET /api/v1/releases/active`（读既有 `active_release` 单例，路由在 `/{release_id}` 之前）。
+传输 `setReleaseId` 变更通知 + `subscribeToRelease`。web `lib/release-scope.tsx`：
+60s 轮询 + visibilitychange，切换时按 `RELEASE_SCOPED_PREFIXES` 精确丢弃并 refetch。
+测试 7 + 7 passed；消融 ×2。
+**自测抓到**：首版用无过滤 `refetchQueries()` 会连非 release 缓存一起重取，已改谓词形式。
+**自测抓到**：`isReleaseScopedKey` 结构嗅探不可靠（release 槽位位置不一），改为显式声明前缀。
+
+### 行尾事故与修复（务必知悉）
+编辑工具把 `auth.py` 混合行尾统一成 CRLF（噪声 109 行）。处置：`git checkout --` 回 HEAD 字节 →
+字节级补丁重做 → 现 diff 14 行、行尾保真。**后续改 Python 混合行尾文件须用字节级补丁，勿用编辑工具**。
+
+## 相关文件
+
+修改：`scripts/check_web_query_keys.py`、`scripts/check_admin_content_architecture.py`、
+`apps/admin/src/routes/__root.tsx`、`apps/admin/src/regression/navigation-render.test.tsx`、
+`apps/web/src/lib/session.ts`、`apps/web/src/lib/use-current-user.ts`、`apps/web/src/lib/react-app.tsx`、
+`apps/web/src/lib/query-options.ts`、`apps/web/src/routes/search/primer.tsx`、
+`apps/web/src/routes/tools/seqfetch.tsx`、`apps/web/src/routes/search/tool-pages.test.tsx`、
+`packages/api-client/src/auth.ts`、`docs/aegis/INDEX.md`、`docs/aegis/plans/2026-10-02-audited-optimization-execution.md`
+
+新增：`apps/web/src/lib/session-context.tsx`、`apps/web/src/lib/session.test.ts`、
+`apps/web/src/lib/assemblies-query-options.test.ts`、`apps/web/src/ablation/session-gate.test.tsx`（重写）、
+`packages/api-client/src/auth-concurrency.test.ts`、`scripts/test_web_query_keys_guard.py`
+
+## 未完成 / 阻塞
+
+- **API 测试同命令两次结果不一致**：`37 passed / 21 errors` vs `58 passed / 0 error`。**原因未查清**，
+  疑似与该轮导出的 `PYTHONPATH` / `NODE_OPTIONS` 有关，**未经证实**，不得当作偶发。
+- **全量 `eslint src` SIGABRT（exit 134）**，改动目录定向 lint 为 0，未查因未修。
+- `check_visible_i18n_react` 仍 exit 1（33 个文件），其余页面未开始。
+
+- **运行时 release 切换不存在**：`applyDeploymentRelease` 零调用方，`getReleaseId()` 非响应式。禁宣称已通。
+- **既存红灯（未修）**：`check_visible_i18n_react.mjs` exit 1（39 文件，R-12）；`check:contract` exit 1（契约债，两操作数均未改，可判定非本轮引入）。
+- **W4–W7 未开始**；W6 受阻于无 psql/pgcli/独立测试库；W7 受阻于无 Docker/部署目标。
+- 研究者能力目前靠前端镜像后端 grants 表；长期正解是 `/auth/me` 加法式能力字段（需重生成 OpenAPI 与客户端）。
+
+## 阻塞与前置
+
+无浏览器 / 无 Docker / 无数据库，因此 E2E、镜像构建、pgcli A/B 全部标未验证，不计通过。
+
+---
 
 ## 已完成（带证据）
 

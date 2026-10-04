@@ -9,6 +9,7 @@
 
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { ExperimentOutlined, LoadingOutlined, CaretRightOutlined, RedoOutlined, InfoCircleOutlined } from "@ant-design/icons";
 import { Breadcrumb, Button, Card, Input, Typography } from "@/lib/antd";
 import { UploadDropzone } from "../../components/analyses/upload-dropzone";
@@ -54,6 +55,7 @@ function validateParam(
 }
 
 function FastpComponent() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [files, setFiles] = React.useState<File[]>([]);
   const [params, setParams] = React.useState<FastpParams>(DEFAULT_PARAMS);
@@ -88,12 +90,12 @@ function FastpComponent() {
     <div className="container-prose section-rhythm">
       <ResearcherGate>
         <header className="flex flex-col gap-4">
-          <Breadcrumb items={[{ title: "Analyze", href: "/analyses" }, { title: "fastp" }]} />
+          <Breadcrumb items={[{ title: t("analyses.title"), href: "/analyses" }, { title: "fastp" }]} />
           <div className="flex items-start gap-3.5">
             <span className="flex size-11 items-center justify-center rounded-xl border bg-card shadow-sm"><ExperimentOutlined /></span>
             <div>
-              <Typography.Title level={2} style={{ margin: 0 }}>fastp QC</Typography.Title>
-              <Typography.Paragraph type="secondary" style={{ margin: 0 }}>Trim adapters and filter low-quality reads from FASTQ files. Results include a HTML report plus per-run statistics.</Typography.Paragraph>
+              <Typography.Title level={2} style={{ margin: 0 }}>{t("analyses.fastp.title")}</Typography.Title>
+              <Typography.Paragraph type="secondary" style={{ margin: 0 }}>{t("analyses.fastp.subtitleLong")}</Typography.Paragraph>
             </div>
           </div>
         </header>
@@ -103,10 +105,10 @@ function FastpComponent() {
             <div className="mb-6">
               <Typography.Title level={4} className="flex items-center gap-2">
                 <ExperimentOutlined className="size-5 text-primary" aria-hidden />
-                Input files
+                {t("analyses.fastp.inputFiles")}
               </Typography.Title>
               <Typography.Paragraph type="secondary">
-                Single-end: one FASTQ file. Paired-end: select R1 and R2 together (R1 first).
+                {t("analyses.fastp.pairedHint")}
               </Typography.Paragraph>
             </div>
             <div className="grid gap-6">
@@ -156,7 +158,7 @@ function FastpComponent() {
                   ) : null}
                 </div>
                 <div className="grid gap-2">
-                  <label htmlFor="quality_phred">Quality cutoff (phred)</label>
+                  <label htmlFor="quality_phred">{t("analyses.fastp.qualityCutoff")}</label>
                   <Input
                     id="quality_phred"
                     type="number"
@@ -173,7 +175,7 @@ function FastpComponent() {
                   ) : null}
                 </div>
                 <div className="grid gap-2">
-                  <label htmlFor="thread">Threads</label>
+                  <label htmlFor="thread">{t("analyses.fastp.threads")}</label>
                   <Input
                     id="thread"
                     type="number"
@@ -197,12 +199,12 @@ function FastpComponent() {
                     {upload.phase === "submitting" ? (
                       <>
                         <LoadingOutlined className="size-4 animate-spin" aria-hidden />
-                        Submitting job…
+                        {t("analyses.submitting")}
                       </>
                     ) : (
                       <>
                         <LoadingOutlined className="size-4 animate-spin" aria-hidden />
-                        Uploading to object storage… {upload.progress}%
+                        {t("analyses.uploading")} {upload.progress}%
                       </>
                     )}
                   </div>
@@ -234,7 +236,7 @@ function FastpComponent() {
                   ) : (
                     <CaretRightOutlined className="size-4" aria-hidden />
                   )}
-                  {files.length === 0 ? "Select files first" : upload.busy ? "Working…" : "Submit job"}
+                  {files.length === 0 ? t("analyses.selectFilesFirst") : upload.busy ? t("common.working") : t("analyses.submit")}
                 </Button>
                 <Button
                   htmlType="button"
@@ -248,7 +250,7 @@ function FastpComponent() {
                   }}
                 >
                   <RedoOutlined className="size-4" aria-hidden />
-                  Reset
+                  {t("common.reset")}
                 </Button>
               </div>
             </div>
@@ -259,14 +261,14 @@ function FastpComponent() {
               <div className="mb-6">
                 <Typography.Title level={4} className="flex items-center gap-2 text-sm">
                   <InfoCircleOutlined className="size-4 text-primary" aria-hidden />
-                  How it works
+                  {t("analyses.fastp.howItWorks")}
                 </Typography.Title>
               </div>
               <div className="text-sm leading-relaxed text-muted-foreground">
                 <ol className="list-decimal space-y-2 pl-4">
-                  <li>Files are uploaded directly to object storage via a pre-signed URL (up to 500 MB each).</li>
-                  <li>A fastp job is queued; you are taken to the result page which refreshes automatically.</li>
-                  <li>When finished, the HTML report and summary statistics are available.</li>
+                  <li>{t("analyses.fastp.howStep1")}</li>
+                  <li>{t("analyses.fastp.howStep2")}</li>
+                  <li>{t("analyses.fastp.howStep3")}</li>
                 </ol>
               </div>
             </Card>
@@ -274,21 +276,21 @@ function FastpComponent() {
               <div className="mb-6">
                 <Typography.Title level={4} className="flex items-center gap-2 text-sm">
                   <ExperimentOutlined className="size-4 text-primary" aria-hidden />
-                  Parameters
+                  {t("analyses.fastp.parameters")}
                 </Typography.Title>
               </div>
               <div className="text-sm leading-relaxed text-muted-foreground">
                 <p>
-                  <span className="font-medium text-foreground">trim_front1 / trim_tail1</span> — bases trimmed
-                  from read 5′/3′ ends.
+                  <span className="font-medium text-foreground">{t("analyses.fastp.paramNameTrim")}</span>{" "}
+                  {t("analyses.fastp.paramTrim")}
                 </p>
                 <p className="mt-2">
-                  <span className="font-medium text-foreground">quality_phred</span> — base quality cutoff
-                  (phred score, 0–40; default 15).
+                  <span className="font-medium text-foreground">{t("analyses.fastp.paramNameQuality")}</span>{" "}
+                  {t("analyses.fastp.paramQuality")}
                 </p>
                 <p className="mt-2">
-                  <span className="font-medium text-foreground">thread</span> — CPU threads for the pipeline
-                  (1–64).
+                  <span className="font-medium text-foreground">{t("analyses.fastp.paramNameThreads")}</span>{" "}
+                  {t("analyses.fastp.paramThreads")}
                 </p>
               </div>
             </Card>

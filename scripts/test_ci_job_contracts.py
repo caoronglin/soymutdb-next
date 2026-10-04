@@ -401,6 +401,12 @@ def _is_executable(script: str) -> bool:
 class DeliveryArchitectureTests(unittest.TestCase):
     """The CNB pipeline is authoritative and the GitHub workflows mirror it."""
 
+    def test_image_verifier_runs_copy_guard_before_building(self) -> None:
+        script = (ROOT / "scripts/build-release-image.sh").read_text(encoding="utf-8")
+        guard = "bash scripts/check-dockerfile-copy.sh"
+        self.assertIn(guard, script)
+        self.assertLess(script.index(guard), script.index('step "Build release images'))
+
     def test_cnb_pipeline_exists_and_declares_the_delivery_jobs(self) -> None:
         self.assertTrue(CNB_CONFIG.is_file(), "missing .cnb.yml")
         push = _pipeline_names("main", "push")

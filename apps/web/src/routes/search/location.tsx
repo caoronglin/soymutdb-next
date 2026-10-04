@@ -1,3 +1,4 @@
+import { assembliesQueryOptions, assemblyChromosomesQueryOptions } from "../../lib/query-options";
 /**
  * Physical location search — second-level catalog of the /search portal.
  *
@@ -30,8 +31,6 @@ import {
 import { SearchOutlined } from "@ant-design/icons";
 import {
   searchTestDataPreviewMutationSites,
-  getAssemblies,
-  getAssemblyChromosomes,
   getReleaseId,
   type TestDataPreviewMutationSite,
   type AssemblyInfo,
@@ -39,7 +38,6 @@ import {
 import { FadeUp } from "../../components/route-motion";
 import { formatNumber } from "../../lib/format";
 import { buildJbrowseLocusUrl } from "../../lib/deployment";
-import { queryKeys } from "../../lib/query-keys";
 import { SITE_VARIANT } from "../../lib/site-variant";
 import { resolveSearchAssembly } from "../../lib/search-assembly";
 
@@ -83,11 +81,10 @@ function LocationSearchComponent() {
   const [end, setEnd] = React.useState<number | null>(null);
   const [submitted, setSubmitted] = React.useState<RegionQuery | null>(null);
 
-  const assembliesQuery = useQuery({
-    queryKey: queryKeys.assemblies.list({ releaseId, siteVariant: SITE_VARIANT }),
-    queryFn: getAssemblies,
-    staleTime: 30 * 60 * 1000,
-  });
+  const assembliesQuery = useQuery(assembliesQueryOptions({
+    releaseId: getReleaseId(),
+    siteVariant: SITE_VARIANT,
+  }));
   const assemblies = React.useMemo(() => assembliesQuery.data ?? [], [assembliesQuery.data]);
   const selectedAssembly: AssemblyInfo | undefined = assemblies.find(
     (a) => String(a.id) === String(assemblyId),
@@ -101,12 +98,10 @@ function LocationSearchComponent() {
     if (def) setAssemblyId(String(def.id));
   }, [assemblies, assemblyId, urlAssembly]);
 
-  const chromosomesQuery = useQuery({
-    queryKey: queryKeys.assemblies.chromosomes(assemblyId, { releaseId, siteVariant: SITE_VARIANT }),
-    queryFn: () => getAssemblyChromosomes(assemblyId!),
-    enabled: Boolean(assemblyId),
-    staleTime: 30 * 60 * 1000,
-  });
+  const chromosomesQuery = useQuery(assemblyChromosomesQueryOptions({
+    releaseId, siteVariant: SITE_VARIANT,
+    assemblyId: selectedAssembly ? assemblyId : undefined,
+  }));
   const chromosomes = React.useMemo(
     () => chromosomesQuery.data ?? [],
     [chromosomesQuery.data],

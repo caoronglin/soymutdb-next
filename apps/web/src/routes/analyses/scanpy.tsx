@@ -8,6 +8,7 @@
 
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { ScanOutlined, LoadingOutlined, CaretRightOutlined, RedoOutlined, InfoCircleOutlined } from "@ant-design/icons";
 import { Breadcrumb, Button, Card, Checkbox, Input, Typography } from "@/lib/antd";
 import { UploadDropzone } from "../../components/analyses/upload-dropzone";
@@ -53,6 +54,7 @@ function validateParam(
 }
 
 function ScanpyComponent() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [files, setFiles] = React.useState<File[]>([]);
   const [params, setParams] = React.useState<ScanpyParams>(DEFAULT_PARAMS);
@@ -88,12 +90,12 @@ function ScanpyComponent() {
     <div className="container-prose section-rhythm">
       <ResearcherGate>
         <header className="flex flex-col gap-4">
-          <Breadcrumb items={[{ title: "Analyze", href: "/analyses" }, { title: "scanpy" }]} />
+          <Breadcrumb items={[{ title: t("analyses.title"), href: "/analyses" }, { title: "scanpy" }]} />
           <div className="flex items-start gap-3.5">
             <span className="flex size-11 items-center justify-center rounded-xl border bg-card shadow-sm"><ScanOutlined /></span>
             <div>
-              <Typography.Title level={2} style={{ margin: 0 }}>scanpy clustering</Typography.Title>
-              <Typography.Paragraph type="secondary" style={{ margin: 0 }}>Quality-filter, normalise and cluster a single-cell expression matrix (.h5ad). Results include a UMAP projection, cluster sizes and marker genes.</Typography.Paragraph>
+              <Typography.Title level={2} style={{ margin: 0 }}>{t("analyses.scanpy.title")}</Typography.Title>
+              <Typography.Paragraph type="secondary" style={{ margin: 0 }}>{t("analyses.scanpy.subtitleLong")}</Typography.Paragraph>
             </div>
           </div>
         </header>
@@ -103,10 +105,10 @@ function ScanpyComponent() {
             <div className="mb-6">
               <Typography.Title level={4} className="flex items-center gap-2">
                 <ScanOutlined className="size-5 text-primary" aria-hidden />
-                Input data
+                {t("analyses.scanpy.inputData")}
               </Typography.Title>
               <Typography.Paragraph type="secondary">
-                One AnnData file in .h5ad format (raw counts or normalised matrix).
+                {t("analyses.scanpy.inputHint")}
               </Typography.Paragraph>
             </div>
             <div className="grid gap-6">
@@ -121,7 +123,7 @@ function ScanpyComponent() {
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="grid gap-2">
-                  <label htmlFor="min_genes">min_genes</label>
+                  <label htmlFor="min_genes">{t("analyses.scanpy.paramNameMinGene")}</label>
                   <Input
                     id="min_genes"
                     type="number"
@@ -138,7 +140,7 @@ function ScanpyComponent() {
                   ) : null}
                 </div>
                 <div className="grid gap-2">
-                  <label htmlFor="min_cells">min_cells</label>
+                  <label htmlFor="min_cells">{t("analyses.scanpy.paramNameMinCell")}</label>
                   <Input
                     id="min_cells"
                     type="number"
@@ -155,7 +157,7 @@ function ScanpyComponent() {
                   ) : null}
                 </div>
                 <div className="grid gap-2">
-                  <label htmlFor="n_top_genes">n_top_genes</label>
+                  <label htmlFor="n_top_genes">{t("analyses.scanpy.paramNameTop")}</label>
                   <Input
                     id="n_top_genes"
                     type="number"
@@ -172,7 +174,7 @@ function ScanpyComponent() {
                   ) : null}
                 </div>
                 <div className="grid gap-2">
-                  <label htmlFor="resolution">Resolution</label>
+                  <label htmlFor="resolution">{t("analyses.scanpy.resolution")}</label>
                   <Input
                     id="resolution"
                     type="number"
@@ -195,7 +197,7 @@ function ScanpyComponent() {
                 onChange={(e) => setUseHvg(e.target.checked)}
                 disabled={upload.busy}
               >
-                Use highly variable genes (HVG) before PCA
+                {t("analyses.scanpy.useHvgLong")}
               </Checkbox>
 
               {upload.busy ? (
@@ -204,12 +206,12 @@ function ScanpyComponent() {
                     {upload.phase === "submitting" ? (
                       <>
                         <LoadingOutlined className="size-4 animate-spin" aria-hidden />
-                        Submitting job…
+                        {t("analyses.submitting")}
                       </>
                     ) : (
                       <>
                         <LoadingOutlined className="size-4 animate-spin" aria-hidden />
-                        Uploading to object storage… {upload.progress}%
+                        {t("analyses.uploading")} {upload.progress}%
                       </>
                     )}
                   </div>
@@ -241,7 +243,7 @@ function ScanpyComponent() {
                   ) : (
                     <CaretRightOutlined className="size-4" aria-hidden />
                   )}
-                  {files.length === 0 ? "Select a file first" : upload.busy ? "Working…" : "Submit job"}
+                  {files.length === 0 ? t("analyses.selectFileFirst") : upload.busy ? t("common.working") : t("analyses.submit")}
                 </Button>
                 <Button
                   htmlType="button"
@@ -256,7 +258,7 @@ function ScanpyComponent() {
                   }}
                 >
                   <RedoOutlined className="size-4" aria-hidden />
-                  Reset
+                  {t("common.reset")}
                 </Button>
               </div>
             </div>
@@ -267,14 +269,14 @@ function ScanpyComponent() {
               <div className="mb-6">
                 <Typography.Title level={4} className="flex items-center gap-2 text-sm">
                   <InfoCircleOutlined className="size-4 text-primary" aria-hidden />
-                  How it works
+                  {t("analyses.scanpy.howItWorks")}
                 </Typography.Title>
               </div>
               <div className="text-sm leading-relaxed text-muted-foreground">
                 <ol className="list-decimal space-y-2 pl-4">
-                  <li>The .h5ad file is uploaded directly to object storage via a pre-signed URL (max 500 MB).</li>
-                  <li>A scanpy job is queued: filtering → HVG → PCA → Leiden clustering → UMAP.</li>
-                  <li>The result page refreshes automatically and shows the UMAP plot, cluster sizes and marker genes.</li>
+                  <li>{t("analyses.scanpy.howStep1")}</li>
+                  <li>{t("analyses.scanpy.howStep2")}</li>
+                  <li>{t("analyses.scanpy.howStep3")}</li>
                 </ol>
               </div>
             </Card>
@@ -282,21 +284,21 @@ function ScanpyComponent() {
               <div className="mb-6">
                 <Typography.Title level={4} className="flex items-center gap-2 text-sm">
                   <ScanOutlined className="size-4 text-primary" aria-hidden />
-                  Parameters
+                  {t("analyses.scanpy.parameters")}
                 </Typography.Title>
               </div>
               <div className="text-sm leading-relaxed text-muted-foreground">
                 <p>
-                  <span className="font-medium text-foreground">min_genes / min_cells</span> — minimum genes
-                  per cell and cells per gene after filtering.
+                  <span className="font-medium text-foreground">{t("analyses.scanpy.paramNameMin")}</span>{" "}
+                  {t("analyses.scanpy.paramMin")}
                 </p>
                 <p className="mt-2">
-                  <span className="font-medium text-foreground">n_top_genes</span> — HVGs kept for PCA when
-                  “use HVG” is enabled.
+                  <span className="font-medium text-foreground">{t("analyses.scanpy.paramNameTop")}</span>{" "}
+                  {t("analyses.scanpy.paramTop")}
                 </p>
                 <p className="mt-2">
-                  <span className="font-medium text-foreground">resolution</span> — Leiden clustering
-                  resolution (0.1–10; higher = more clusters).
+                  <span className="font-medium text-foreground">{t("analyses.scanpy.paramNameResolution")}</span>{" "}
+                  {t("analyses.scanpy.paramResolution")}
                 </p>
               </div>
             </Card>

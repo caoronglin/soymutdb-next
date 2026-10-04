@@ -1,3 +1,6 @@
+import { getReleaseId } from "@soymutdb/api-client";
+import { SITE_VARIANT } from "../../lib/site-variant";
+import { assembliesQueryOptions } from "../../lib/query-options";
 /**
  * Enrichment tool — GO/KEGG enrichment with two analysis modes.
  *
@@ -22,7 +25,7 @@ import { Breadcrumb, Button, Card, Empty, Input, Result, Select, Tabs, Tag, Typo
 import { useToast } from "@/lib/toast";
 import { DataTable } from "../../components/data-table";
 import { useECharts } from "../../lib/use-echarts";
-import { getAssemblies, runEnrichment } from "./api";
+import { runEnrichment } from "./api";
 import type {
   EnrichmentResponse,
   EnrichmentGseaResponse,
@@ -143,11 +146,10 @@ function EnrichmentComponent() {
   const [result, setResult] = React.useState<EnrichmentResult | null>(null);
   const [chartView, setChartView] = React.useState<"bubble" | "bar">("bubble");
   const [assemblyId, setAssemblyId] = React.useState("");
-  const assembliesQuery = useQuery({
-    queryKey: ["tools", "assemblies"],
-    queryFn: getAssemblies,
-    staleTime: 30 * 60 * 1000,
-  });
+  const assembliesQuery = useQuery(assembliesQueryOptions({
+    releaseId: getReleaseId(),
+    siteVariant: SITE_VARIANT,
+  }));
   const assemblies = React.useMemo(() => assembliesQuery.data ?? [], [assembliesQuery.data]);
 
   React.useEffect(() => {

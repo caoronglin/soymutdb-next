@@ -1,3 +1,4 @@
+import { assembliesQueryOptions } from "../../lib/query-options";
 /**
  * JBrowse 2 — a transfer page: pick a genome version, then open the JBrowse 2
  * browser (/browser?assembly=...) in a new tab.
@@ -8,10 +9,9 @@ import { useTranslation } from "react-i18next";
 import * as React from "react";
 import { Button, Card, Form, Select, Tag, Typography } from "@/lib/antd";
 import { GlobalOutlined } from "@ant-design/icons";
-import { getAssemblies, getReleaseId } from "@soymutdb/api-client";
+import { getReleaseId } from "@soymutdb/api-client";
 import { FadeUp } from "../../components/route-motion";
 import { buildJbrowseLocusUrl } from "../../lib/deployment";
-import { queryKeys } from "../../lib/query-keys";
 import { SITE_VARIANT } from "../../lib/site-variant";
 
 export const Route = createFileRoute("/search/gbrowse")({
@@ -25,11 +25,10 @@ function GbrowseComponent() {
   const [assemblyId, setAssemblyId] = React.useState<string | undefined>(undefined);
   const releaseId = getReleaseId();
 
-  const assembliesQuery = useQuery({
-    queryKey: queryKeys.assemblies.list({ releaseId, siteVariant: SITE_VARIANT }),
-    queryFn: getAssemblies,
-    staleTime: 30 * 60 * 1000,
-  });
+  const assembliesQuery = useQuery(assembliesQueryOptions({
+    releaseId: getReleaseId(),
+    siteVariant: SITE_VARIANT,
+  }));
   const assemblies = React.useMemo(() => assembliesQuery.data ?? [], [assembliesQuery.data]);
   const selectedAssembly = assemblies.find((a) => String(a.id) === String(assemblyId));
 

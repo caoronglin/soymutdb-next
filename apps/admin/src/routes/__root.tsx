@@ -2,7 +2,7 @@ import * as React from "react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { AdminHeader } from "../components/admin-header";
-import { useRouterState } from "@tanstack/react-router";
+import { Link, useRouterState } from "@tanstack/react-router";
 import { ProLayout } from "../lib/antd";
 import { NAV_SECTIONS } from "../components/admin-sidebar";
 
@@ -76,7 +76,9 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       route={proRoute}
       headerRender={false}
       menuItemRender={(item, dom) =>
-        item.path ? <a href={item.path}>{dom}</a> : dom
+        // Client-side navigation: an <a href> reloads the whole document on
+        // every sidebar click (2026-10-01 admin Pro migration §3.1).
+        item.path ? <Link to={item.path}>{dom}</Link> : dom
       }
       breadcrumbRender={false}
       contentStyle={{ padding: 24, minHeight: "calc(100vh - 56px)" }}

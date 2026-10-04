@@ -8,7 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.database import get_db
 from ...models.content import Release, ReleaseStatus
-from ...schemas.content import ReleaseResponse
+from ...models.data_publishing import ActiveRelease
+from ...schemas.content import ActiveReleaseResponse, ReleaseResponse
 from ...services.cache import get_or_set
 
 router = APIRouter(prefix="/releases", tags=["releases"])
@@ -42,6 +43,34 @@ async def _load_releases(
         stmt = stmt.where(Release.status == status)
     result = await db.execute(stmt)
     return [_to_response(r).model_dump(mode="json") for r in result.scalars().all()]
+
+
+@router.get("/active", response_model=ActiveReleaseResponse)
+async def get_active_release(
+    db: AsyncSession = Depends(get_db),
+) -> ActiveReleaseResponse:
+    """Report the release the public surface currently serves.
+
+    Declared before ``/{release_id}`` so the literal path is not captured by
+    the id route. Reads the same ``active_release`` singleton that
+    ``services.release_context.resolve_release_context`` resolves against — this
+    endpoint adds no second source of truth, only a way for a client to
+    notice a switch that happened after its page was built.
+
+    Returns an empty response (both fields null) before the first publish;
+    that is an answer, not an error.
+    """
+    row = await db.get(ActiveRelease, 1)
+    if row is None or row.release_id is None:
+        return ActiveReleaseResponse()
+    release = await db.get(Release, row.release_id)
+    if release is None:
+        return ActiveReleaseResponse()
+    return ActiveReleaseResponse(
+        release_id=str(release.id),
+        version=release.version,
+        published_at=release.published_at,
+    )
 
 
 @router.get("/{release_id}", response_model=ReleaseResponse)

@@ -9,6 +9,11 @@
 #
 # Usage: bash scripts/check-dockerfile-copy.sh
 # Exit 0 = all COPY sources exist; exit 1 = one or more missing.
+#
+# A failure names the exact statement, not just the file:
+#   MISSING COPY source: <dockerfile>:<line> (context <dir>) -> <source>
+# so "the package was deleted" and "the Dockerfile still copies it" are two
+# facts the reader can check without re-counting lines by hand.
 # =============================================================================
 set -u
 
@@ -36,11 +41,17 @@ while IFS='|' read -r image_name image_context image_dockerfile; do
   # Walk COPY lines, joining backslash continuations.
   # Skip multi-stage `--from=<stage>` sources and `.` / `./` destinations.
   line=""
+  line_no=0
+  stmt_line=0
   while IFS= read -r raw || [ -n "$raw" ]; do
+    line_no=$((line_no + 1))
     if [ -n "$line" ]; then
       line="$line $raw"
     else
       line="$raw"
+      # Physical line the statement STARTS on, so a `COPY ... \\`-continued
+      # multi-line source is reported against its first line.
+      stmt_line="$line_no"
     fi
     # Backslash continuation → keep accumulating.
     if [[ "$line" == *\\ ]]; then
@@ -72,7 +83,7 @@ while IFS='|' read -r image_name image_context image_dockerfile; do
 
     # Source may be `dir/` (dir exists) or a file, resolved against the context.
     if [ ! -e "${context_dir}/$src" ]; then
-      echo "MISSING COPY source: ${image_dockerfile} (context ${image_context}) -> $src"
+      echo "MISSING COPY source: ${image_dockerfile}:${stmt_line} (context ${image_context}) -> $src"
       fail=1
     fi
   done < "$df"

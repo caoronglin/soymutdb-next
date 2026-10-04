@@ -94,6 +94,24 @@ describe("i18n core", () => {
     }
     expect(offences).toEqual([]);
   });
+
+  it("keeps en and zh in exact key parity", () => {
+    // A key added to one catalog only is invisible until a reader switches
+    // language, so the gap surfaces as raw key text on a page. Every leaf in
+    // one catalog must have a sibling in the other — no extras either way.
+    const leaves = (value: unknown, prefix: string, out: Map<string, string>): Map<string, string> => {
+      for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+        const path = prefix ? `${prefix}.${key}` : key;
+        if (child && typeof child === "object") leaves(child, path, out);
+        else out.set(path, String(child));
+      }
+      return out;
+    };
+    const en = leaves(catalogs.en, "", new Map());
+    const zh = leaves(catalogs.zh, "", new Map());
+    expect([...en.keys()].filter((key) => !zh.has(key))).toEqual([]);
+    expect([...zh.keys()].filter((key) => !en.has(key))).toEqual([]);
+  });
 });
 
 

@@ -79,6 +79,12 @@ class UserResponse(BaseModel):
     is_active: bool
     is_superuser: bool
     role_name: str | None = None
+    # Additive (2026-10-02): the roles this session actually satisfies,
+    # expanded from `core.security._ROLE_GRANTS`. Clients must read
+    # authorization from here or from the API's own 403, never from a
+    # private copy of the role table. An empty list means "no grants",
+    # not "unknown".
+    effective_roles: list[str] = Field(default_factory=list)
     organization_id: int | None = None
     joined_at: datetime
     last_login_at: datetime | None = None

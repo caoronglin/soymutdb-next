@@ -16,7 +16,6 @@ COPY packages/i18n/package.json packages/i18n/package.json
 COPY packages/ui-react/package.json packages/ui-react/package.json
 COPY packages/query-keys/package.json packages/query-keys/package.json
 COPY packages/charts/package.json packages/charts/package.json
-COPY packages/ui-vue/package.json packages/ui-vue/package.json
 COPY packages/genome-view-model/package.json packages/genome-view-model/package.json
 COPY packages/genome-data/package.json packages/genome-data/package.json
 COPY packages/genome-view/package.json packages/genome-view/package.json

@@ -33,6 +33,24 @@ class ReleaseResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ActiveReleaseResponse(BaseModel):
+    """The published release the public surface currently serves.
+
+    Additive (2026-10-02). The portal pins its release at build time from
+    ``VITE_SOYMUTDB_RELEASE_ID``; a long-lived tab therefore keeps
+    requesting an older release after an operator publishes. This endpoint
+    exposes the ``active_release`` pointer the rest of the API already
+    resolves against, so the client can drop release-scoped caches.
+
+    ``release_id`` is null while no release is published. The release id is
+    already embedded in the served page, so this discloses nothing new.
+    """
+
+    release_id: str | None = None
+    version: str | None = None
+    published_at: datetime | None = None
+
+
 class ReleaseCreate(BaseModel):
     version: str = Field(..., pattern=r"^\d+\.\d+(\.\d+)?$")
     name: str = Field(..., min_length=1, max_length=255)

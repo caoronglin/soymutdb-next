@@ -12,9 +12,9 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import jwt
 from argon2 import PasswordHasher, Type
 from argon2.exceptions import InvalidHashError, VerifyMismatchError
-import jwt
 from jwt import InvalidTokenError
 
 from .compat import StrEnum
@@ -168,6 +168,27 @@ def has_role(user_roles: list[str], required: RoleName) -> bool:
         if required in _ROLE_GRANTS[assigned_role]:
             return True
     return False
+
+
+def effective_roles(user_roles: list[str]) -> list[str]:
+    """Every role the given assignments grant, transitively over ``_ROLE_GRANTS``.
+
+    ``has_role`` answers one question; a client needs the whole answer so it
+    does not have to keep a private copy of the grant table. That copy is how
+    the portal came to deny curator and content_editor a capability the server
+    already grants them: the front-end list held only the two names it knew
+    about. Exposing the expansion of the *caller's own* session grants no
+    access the API has not already decided on.
+    """
+    granted: set[RoleName] = set()
+    for role_name in user_roles:
+        try:
+            assigned_role = RoleName(role_name)
+        except ValueError:
+            continue
+        granted |= _ROLE_GRANTS[assigned_role]
+    # Stable order: the enum's least-to-most-privileged declaration order.
+    return [role.value for role in RoleName if role in granted]
 
 
 def require_admin_roles(user_roles: list[str]) -> None:

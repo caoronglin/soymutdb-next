@@ -1,3 +1,4 @@
+import { assembliesQueryOptions } from "../../lib/query-options";
 /**
  * Gene ID search — second-level catalog of the /search portal.
  *
@@ -18,7 +19,6 @@ import * as React from "react";
 import { Alert, Button, Empty, Flex, Input, Select, Table, Tag, Typography, type TableColumnsType } from "@/lib/antd";
 import { SearchOutlined } from "@ant-design/icons";
 import {
-  getAssemblies,
   getReleaseId,
   listTestDataPreviewMutationSitesForGene,
   searchGenes,
@@ -92,11 +92,10 @@ function GeneIdSearchComponent() {
   const [geneIdsRaw, setGeneIdsRaw] = React.useState(() => urlQ ?? "");
   const [page, setPage] = React.useState(1);
 
-  const assembliesQuery = useQuery({
-    queryKey: queryKeys.assemblies.list({ releaseId: getReleaseId(), siteVariant: SITE_VARIANT }),
-    queryFn: getAssemblies,
-    staleTime: 30 * 60 * 1000,
-  });
+  const assembliesQuery = useQuery(assembliesQueryOptions({
+    releaseId: getReleaseId(),
+    siteVariant: SITE_VARIANT,
+  }));
   const assemblies = assembliesQuery.data;
 
   const [assemblyId, setAssemblyId] = React.useState<string | undefined>(undefined);

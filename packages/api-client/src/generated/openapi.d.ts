@@ -86,7 +86,8 @@ export interface paths {
          *     across workers and instances without changing the authentication flow.
          *
          *     The refresh token is set as an HttpOnly cookie scoped to ``/api/v1/auth``
-         *     and is **not** included in the JSON response body.
+         *     and is **not** included in the JSON response body.  Requests without a
+         *     trusted Origin/Referer are rejected (CSRF defence).
          */
         post: operations["login_api_v1_auth_login_post"];
         delete?: never;
@@ -270,6 +271,37 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/genes/region-structure": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Region Structure
+         * @description Every gene in a coordinate window, with its modelled structure.
+         *
+         *     This is what the portal's own genome view needs in order to show a locus
+         *     rather than a gene: the genes that overlap the window, each with its
+         *     transcripts and their typed ``cds`` / ``utr5`` / ``utr3`` segments. Before
+         *     this endpoint the only genome picture the API could produce was centred on
+         *     one gene (``/{gene_id}/genome-view.svg``), so "what surrounds this insertion
+         *     site" had no answer.
+         *
+         *     Declared **before** ``/{gene_id}`` on purpose: FastAPI matches routes in
+         *     declaration order, and the parameterised route would otherwise swallow
+         *     ``region-structure`` as a gene accession and 404.
+         */
+        get: operations["get_region_structure_api_v1_genes_region_structure_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/genes/{gene_id}": {
         parameters: {
             query?: never;
@@ -290,6 +322,34 @@ export interface paths {
          *     always receives a structured response.
          */
         get: operations["get_gene_api_v1_genes__gene_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/genes/{gene_id}/genome-view.svg": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Gene Genome View
+         * @description Serve the gene's genome picture as a finished SVG.
+         *
+         *     Rendering this on the server removes the track layout from first paint and
+         *     turns the picture into an ordinary cacheable image: the browser (and any
+         *     shared cache) can reuse it across visits, and the gene page still shows a
+         *     picture before its JavaScript has run.
+         *
+         *     Window defaults to the gene body plus a quarter-span flank, matching the
+         *     portal component. ``start``/``end`` override it for a zoomed request.
+         */
+        get: operations["get_gene_genome_view_api_v1_genes__gene_id__genome_view_svg_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -553,6 +613,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/preview/test-data/mutation-sites/by-gene": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Preview Mutation Sites For Gene
+         * @description Return the source mutation-site rows attached to one exact gene ID.
+         *
+         *     The catalogue's result tables use this so a searched gene shows the
+         *     operator's own table rows, including the up/downstream ones that a
+         *     coordinate-interval query would miss.
+         */
+        get: operations["preview_mutation_sites_for_gene_api_v1_preview_test_data_mutation_sites_by_gene_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/preview/test-data/mutation-sites/{source_site_key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Preview Update Mutation Site
+         * @description Update the operator-editable fields of one source mutation-site row.
+         *
+         *     `available` is the only field the operator maintains by hand; the rest of
+         *     the row is the uploaded table's content and is replaced on the next import.
+         *     A re-import carries the stored `available` value forward.
+         */
+        patch: operations["preview_update_mutation_site_api_v1_preview_test_data_mutation_sites__source_site_key__patch"];
+        trace?: never;
+    };
     "/api/v1/variants": {
         parameters: {
             query?: never;
@@ -563,6 +671,12 @@ export interface paths {
         /**
          * List Variants
          * @description Search variants with filters and cursor pagination (limit ≤ 200).
+         *
+         *     The mutant-line filter takes a **public** identifier. It is resolved to the
+         *     line's internal key inside the resolved published release, so a numeric or
+         *     otherwise internal value is rejected instead of being bound to ClickHouse as
+         *     if it were a surrogate (which previously matched nothing, or silently
+         *     nothing, depending on the value).
          */
         get: operations["list_variants_api_v1_variants_get"];
         put?: never;
@@ -669,17 +783,17 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Global search (JSON or HTML fragment)
-         * @description Global search endpoint.
+         * Global search across the SoyMutDB catalogue
+         * @description Search the published SoyMutDB catalogue.
          *
-         *     Returns JSON (public SoyMutDB search) when the client sends
-         *     ``Accept: application/json`` or ``?format=json``.  Otherwise returns a
-         *     sanitized HTML fragment built from federated external search results.
+         *     Federated external search (NCBI / UniProt / Ensembl / EMBL-EBI) is retired
+         *     permanently: the ``sources`` parameter, the ``format``/``Accept`` content
+         *     negotiation and the sanitized HTML-fragment response are all gone, so this
+         *     endpoint always answers with JSON catalogue results.
          *
-         *     An explicit ``release_id`` query parameter is the request's release
-         *     scope and is used verbatim (published or not), so two releases can never
-         *     share a cache entry or response. Without it the active published release
-         *     is resolved.
+         *     The release query/header pin is resolved through the published release
+         *     context dependency; draft and otherwise unavailable release ids are
+         *     rejected, and without a pin the active published release is selected.
          */
         get: operations["global_search_api_v1_search_get"];
         put?: never;
@@ -699,7 +813,7 @@ export interface paths {
         };
         /**
          * Suggest
-         * @description Autocomplete suggestions (internal DB only, release-scoped).
+         * @description Autocomplete suggestions scoped to the requested published release.
          */
         get: operations["suggest_api_v1_search_suggest_get"];
         put?: never;
@@ -744,10 +858,11 @@ export interface paths {
         };
         /**
          * Dashboard Stats
-         * @description High-level database statistics for the dashboard.
+         * @description High-level database statistics for the resolved published release.
          *
          *     Read-hot aggregation cached in Redis (default TTL) via cache-aside;
-         *     a Redis failure degrades to a direct aggregation.
+         *     a Redis failure degrades to a direct aggregation. The cache key carries the
+         *     release so one release's aggregate is never served for another.
          */
         get: operations["dashboard_stats_api_v1_stats_dashboard_get"];
         put?: never;
@@ -787,7 +902,10 @@ export interface paths {
         };
         /**
          * Variant Type Distribution
-         * @description Variant type distribution (SNP/INS/DEL/MNV/SV).
+         * @description Variant type distribution (SNP/INS/DEL/MNV/SV) for a published release.
+         *
+         *     The ClickHouse aggregate is bound to the resolved release; previously it
+         *     scanned every release's facts.
          */
         get: operations["variant_type_distribution_api_v1_stats_variant_types_get"];
         put?: never;
@@ -809,8 +927,9 @@ export interface paths {
          * Variant type summary (name/value)
          * @description Variant type distribution as ``[{name, value}]`` for charts.
          *
-         *     Aggregated from the PostgreSQL ``variant_summaries`` table.  Zero-count
-         *     buckets are omitted so charts can fall back to other data sources.
+         *     Aggregated from the PostgreSQL ``variant_summaries`` table, scoped to the
+         *     resolved published release. Zero-count buckets are omitted so charts can
+         *     fall back to other data sources.
          */
         get: operations["variant_type_summary_api_v1_stats_summary_variant_types_get"];
         put?: never;
@@ -830,7 +949,7 @@ export interface paths {
         };
         /**
          * Variant counts by predicted impact
-         * @description Variant counts grouped by impact class (HIGH/MODERATE/LOW/MODIFIER).
+         * @description Variant counts grouped by impact class, scoped to the published release.
          */
         get: operations["impact_summary_api_v1_stats_summary_impact_get"];
         put?: never;
@@ -877,10 +996,12 @@ export interface paths {
         };
         /**
          * Cumulative variant discovery trend
-         * @description Cumulative variant counts across published releases.
+         * @description Cumulative variant counts across *published* releases.
          *
          *     Each published release contributes ``new_variants`` (= its recorded
-         *     ``variant_count``) and a running cumulative total.
+         *     ``variant_count``) and a running cumulative total. Draft and rolled-back
+         *     releases are excluded, and the trend is anchored on the resolved published
+         *     release rather than an arbitrary caller-supplied id.
          */
         get: operations["discovery_trend_api_v1_stats_discovery_trend_get"];
         put?: never;
@@ -900,12 +1021,16 @@ export interface paths {
         };
         /**
          * Per-release statistics
-         * @description Statistics per release (version, date, variant/gene/line counts).
+         * @description Statistics per *published* release (version, date, counts).
          *
-         *     Read-hot query cached in Redis (default TTL) keyed by ``only_active``;
-         *     a Redis failure degrades to a direct query.  An empty release list is
-         *     cached as well (anti-penetration) so a freshly seeded database does not
-         *     re-run the query on every request.
+         *     Public callers may only see releases that reached a published state:
+         *     previously the default (``only_active=false``) listed every release,
+         *     including drafts and rolled-back ones. A rollback is deliberately excluded
+         *     because its counts no longer describe the served data.
+         *
+         *     Read-hot query cached in Redis (default TTL); a Redis failure degrades to a
+         *     direct query. An empty release list is cached as well (anti-penetration) so
+         *     a freshly seeded database does not re-run the query on every request.
          */
         get: operations["release_statistics_api_v1_stats_releases_get"];
         put?: never;
@@ -925,7 +1050,7 @@ export interface paths {
         };
         /**
          * Mutant lines grouped by mutagen
-         * @description Number of mutant lines per mutagen (real PostgreSQL aggregation).
+         * @description Number of mutant lines per mutagen, scoped to the published release.
          */
         get: operations["mutagen_statistics_api_v1_stats_mutagens_get"];
         put?: never;
@@ -945,13 +1070,14 @@ export interface paths {
         };
         /**
          * Chromosome Density
-         * @description Variant density across a chromosome.
+         * @description Variant density across a chromosome in the published release.
          *
          *     Density is computed entirely from the ClickHouse projection, so an
          *     unavailable projection is reported as capability-unavailable (503). The
          *     response model also requires a concrete ``chromosome_length``: fabricating
          *     ``0`` here would both violate the contract and present an empty chromosome
-         *     as a real result.
+         *     as a real result. The query is bound to the resolved release, so bins can
+         *     never mix drafts into a published density.
          */
         get: operations["chromosome_density_api_v1_stats_density_get"];
         put?: never;
@@ -971,7 +1097,10 @@ export interface paths {
         };
         /**
          * List Blast Databases
-         * @description List active BLAST databases.
+         * @description List active BLAST databases in the resolved published release.
+         *
+         *     Database lives outside the release boundary: the list previously included
+         *     the databases of draft releases, whose underlying data is not published.
          */
         get: operations["list_blast_databases_api_v1_blast_databases_get"];
         put?: never;
@@ -998,6 +1127,9 @@ export interface paths {
         /**
          * Submit Blast Job
          * @description Submit a BLAST job (requires researcher role or higher).
+         *
+         *     The target database is resolved inside the published release, so a job can
+         *     never search another release's (including unreleased) database.
          */
         post: operations["submit_blast_job_api_v1_blast_jobs_post"];
         delete?: never;
@@ -1213,12 +1345,14 @@ export interface paths {
         };
         /**
          * Get Jbrowse Config
-         * @description Return JBrowse 2 configuration (assembly + tracks) for the standalone browser.
+         * @description Return a release- and assembly-scoped JBrowse 2 configuration.
          *
-         *     Queries the database for tracks belonging to the requested assembly and
-         *     converts them to JBrowse track format. If no tracks are found or the
-         *     database is empty, an empty tracks array is returned — the frontend
-         *     JBrowse app has built-in default tracks as a fallback.
+         *     The release dependency accepts only a published release (or the active
+         *     published pointer).  ``assembly_id`` is intentionally required: an
+         *     assembly name is not a stable identity across release namespaces and must
+         *     never be used to select tracks.  Anonymous responses contain public tracks
+         *     only and may be shared; authenticated responses can include project/private
+         *     tracks and are therefore marked private and non-cacheable.
          */
         get: operations["get_jbrowse_config_api_v1_tracks_jbrowse_config_get"];
         put?: never;
@@ -1263,6 +1397,9 @@ export interface paths {
          *     Public tracks are accessible to any authenticated user.
          *     Private/project tracks require ownership, ``track_manager``, or
          *     ``administrator`` role.
+         *
+         *     The URL is a capability: it is always returned ``private, no-store`` so no
+         *     browser or proxy retains it.
          */
         get: operations["get_signed_url_api_v1_tracks__track_id__signed_url_get"];
         put?: never;
@@ -1288,6 +1425,35 @@ export interface paths {
          *     Redis failure degrades to a direct query.
          */
         get: operations["list_releases_api_v1_releases_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/releases/active": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Active Release
+         * @description Report the release the public surface currently serves.
+         *
+         *     Declared before ``/{release_id}`` so the literal path is not captured by
+         *     the id route. Reads the same ``active_release`` singleton that
+         *     ``services.release_context.resolve_release_context`` resolves against — this
+         *     endpoint adds no second source of truth, only a way for a client to
+         *     notice a switch that happened after its page was built.
+         *
+         *     Returns an empty response (both fields null) before the first publish;
+         *     that is an answer, not an error.
+         */
+        get: operations["get_active_release_api_v1_releases_active_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1405,7 +1571,11 @@ export interface paths {
         };
         /**
          * List Inventory
-         * @description List seed inventory.
+         * @description List seed inventory for the resolved published release.
+         *
+         *     Rows are bound to a released mutant line; the previous version listed every
+         *     lot in the table, including drafts and other releases, and identified the
+         *     line by its internal key.
          */
         get: operations["list_inventory_api_v1_seeds_inventory_get"];
         put?: never;
@@ -1416,7 +1586,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/seeds/inventory/{inventory_id}": {
+    "/api/v1/seeds/inventory/{seed_lot}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1425,9 +1595,12 @@ export interface paths {
         };
         /**
          * Get Inventory
-         * @description Get seed inventory detail.
+         * @description Get a seed lot by its public lot label within the published release.
+         *
+         *     The inventory row's persistence key is not a locator: a request for it (or
+         *     for a lot outside the release) returns the same not-found response.
          */
-        get: operations["get_inventory_api_v1_seeds_inventory__inventory_id__get"];
+        get: operations["get_inventory_api_v1_seeds_inventory__seed_lot__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1452,6 +1625,9 @@ export interface paths {
         /**
          * Create Seed Request
          * @description Submit a seed request (open to all).
+         *
+         *     The requested line is addressed by its public identifier and must exist in
+         *     the resolved published release; a numeric/internal value is refused.
          */
         post: operations["create_seed_request_api_v1_seeds_requests_post"];
         delete?: never;
@@ -1494,6 +1670,32 @@ export interface paths {
          * @description Submit a seed request contact (open to all; no authentication).
          */
         post: operations["create_seed_request_api_v1_seed_requests_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/seed-requests/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Public seed-request demand per gene (counts only)
+         * @description Report how many requests reference each gene ID.
+         *
+         *     Anonymous on purpose: the gene page renders "N requests" beside the seed
+         *     request entry as a demand signal. The payload is counts only — no requester
+         *     name, institution, email, timestamp or status ever leaves
+         *     ``/admin/seed-requests``, so this cannot be turned into an enumeration of
+         *     who asked for what.
+         */
+        get: operations["seed_request_stats_api_v1_seed_requests_stats_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1630,15 +1832,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/content/publications/{publication_id}": {
+    "/api/v1/content/publications/{doi}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Get Publication */
-        get: operations["get_publication_api_v1_content_publications__publication_id__get"];
+        /**
+         * Get Publication
+         * @description Get one publication by its DOI.
+         *
+         *     ``doi`` is the publication's own scholarly identifier (it contains ``/``, so
+         *     the route uses a path converter). The persistence key is not a locator: a
+         *     numeric value returns the same not-found response as an unknown DOI, so the
+         *     endpoint is not an existence oracle for internal ids.
+         */
+        get: operations["get_publication_api_v1_content_publications__doi__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1693,7 +1903,11 @@ export interface paths {
         };
         /**
          * List Downloads
-         * @description List downloadable files.
+         * @description List downloadable files belonging to the resolved published release.
+         *
+         *     ``download_files.release_id`` is nullable, and the list previously selected
+         *     every row — including drafts and files not (yet) bound to any release. Both
+         *     are excluded here, so a file only appears once its release is published.
          */
         get: operations["list_downloads_api_v1_content_downloads_get"];
         put?: never;
@@ -1713,10 +1927,13 @@ export interface paths {
         };
         /**
          * Get Download Url
-         * @description Generate a pre-signed download URL for a file.
+         * @description Generate a download URL for a file in the resolved published release.
          *
-         *     If the file URL is an S3 path (``s3://bucket/key``) a pre-signed URL is
-         *     generated.  Otherwise the file URL is returned directly.
+         *     The file must be bound to the resolved release: an id from a draft release
+         *     (or an unbound row) is not a valid locator. If the stored location is an S3
+         *     path a pre-signed URL is minted; a plain HTTP(S) location is returned
+         *     as-is; anything else is refused rather than handed to the client as a
+         *     download target.
          */
         get: operations["get_download_url_api_v1_content_downloads__file_id__url_get"];
         put?: never;
@@ -3748,6 +3965,10 @@ export interface paths {
         /**
          * List Libraries
          * @description Paginated list of expression libraries with optional filters.
+         *
+         *     Only libraries whose assembly belongs to the resolved published release are
+         *     returned. ``assembly_id`` narrows within that release; an id from another
+         *     release simply yields no rows rather than widening the scope.
          */
         get: operations["list_libraries_api_v1_expression_libraries_get"];
         put?: never;
@@ -3758,7 +3979,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/expression/libraries/{library_id}": {
+    "/api/v1/expression/libraries/{public_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -3767,9 +3988,12 @@ export interface paths {
         };
         /**
          * Get Library
-         * @description Get a single expression library with full detail.
+         * @description Get a single expression library by its public sample identifier.
+         *
+         *     The persistence key is not a locator: a request for it (or for a library in
+         *     an unpublished release) returns the same not-found response.
          */
-        get: operations["get_library_api_v1_expression_libraries__library_id__get"];
+        get: operations["get_library_api_v1_expression_libraries__public_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3789,8 +4013,11 @@ export interface paths {
          * Get Gene Expression
          * @description Get a bounded, keyset-paginated expression slice for a gene.
          *
-         *     ``gene_id`` is the assembly-scoped accession; when it exists in
-         *     multiple assemblies, ``assembly_id`` is required.
+         *     ``gene_id`` is the assembly-scoped accession; when it exists in multiple
+         *     assemblies within the published release, ``assembly_id`` is required.
+         *     ``library`` accepts the public sample identifier. The cursor is opaque and
+         *     bound to the release and every filter, so it cannot be replayed against a
+         *     different release or filter set.
          *
          *     Complete data exports must use the asynchronous export path rather than
          *     materialising every matching library in an API worker.
@@ -3813,7 +4040,11 @@ export interface paths {
         };
         /**
          * Search Expression
-         * @description Search expression data rows, joined with library info, with pagination.
+         * @description Search expression rows, joined with library info, within the release.
+         *
+         *     Every row is bound to a library whose assembly belongs to the resolved
+         *     published release; when ``gene_id`` is given the library must additionally
+         *     share that gene's assembly.
          */
         get: operations["search_expression_api_v1_expression_search_get"];
         put?: never;
@@ -3835,8 +4066,8 @@ export interface paths {
          * Get Gene Homologs
          * @description Get a bounded, keyset-paginated homolog slice for a specific gene.
          *
-         *     ``gene_id`` is the assembly-scoped accession; when it exists in
-         *     multiple assemblies, ``assembly_id`` is required.
+         *     ``gene_id`` is the assembly-scoped accession; when it exists in multiple
+         *     assemblies *within the published release*, ``assembly_id`` is required.
          *
          *     Empty pages remain a successful response because a gene may simply not
          *     have annotated homologs.
@@ -3860,6 +4091,9 @@ export interface paths {
         /**
          * Search Homologs
          * @description Search homolog records with optional filters and pagination.
+         *
+         *     Every row is scoped to the resolved published release, including when no
+         *     ``gene_id`` is supplied.
          */
         get: operations["search_homologs_api_v1_homologs_search_get"];
         put?: never;
@@ -4050,10 +4284,13 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List curated SRA samples (default species: soybean)
-         * @description Return a small curated list of SRA runs for the current default species
-         *     (soybean, Glycine max) for demo / quick-load purposes.  This is static data
-         *     bundled with the backend.
+         * List bundled demo SRA samples
+         * @description Return the bundled curated SRA runs, in explicit demo mode only.
+         *
+         *     This endpoint is static fixture data, not a release-scoped query, so it is
+         *     disabled unless ``SOYMUTDB_DEMO_FIXTURES_ENABLED=true``. Otherwise it
+         *     returned fabricated soybean/Zea records in production builds where a client
+         *     would reasonably treat them as database contents.
          */
         get: operations["list_soybean_samples_api_v1_sra_samples_get"];
         put?: never;
@@ -4306,6 +4543,27 @@ export interface components {
             content_zh?: string | null;
         };
         /**
+         * ActiveReleaseResponse
+         * @description The published release the public surface currently serves.
+         *
+         *     Additive (2026-10-02). The portal pins its release at build time from
+         *     ``VITE_SOYMUTDB_RELEASE_ID``; a long-lived tab therefore keeps
+         *     requesting an older release after an operator publishes. This endpoint
+         *     exposes the ``active_release`` pointer the rest of the API already
+         *     resolves against, so the client can drop release-scoped caches.
+         *
+         *     ``release_id`` is null while no release is published. The release id is
+         *     already embedded in the served page, so this discloses nothing new.
+         */
+        ActiveReleaseResponse: {
+            /** Release Id */
+            release_id?: string | null;
+            /** Version */
+            version?: string | null;
+            /** Published At */
+            published_at?: string | null;
+        };
+        /**
          * AdminDashboardSeries
          * @description Time series data for the admin dashboard charts.
          */
@@ -4389,6 +4647,72 @@ export interface components {
             plugins: {
                 [key: string]: components["schemas"]["AdminPluginResponse"];
             };
+        };
+        /**
+         * AdminPublicationListResponse
+         * @description Admin list: items carry the persistence key the CRUD routes address by.
+         */
+        AdminPublicationListResponse: {
+            /** Items */
+            items?: components["schemas"]["AdminPublicationResponse"][];
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+            /**
+             * Page
+             * @default 1
+             */
+            page: number;
+            /**
+             * Page Size
+             * @default 20
+             */
+            page_size: number;
+        };
+        /**
+         * AdminPublicationResponse
+         * @description Admin projection: adds the persistence key the admin routes address by.
+         *
+         *     The public DTO deliberately has no ``id`` (publications are located by DOI),
+         *     but ``PUT``/``DELETE /admin/publications/{id}`` operate on the key, so the
+         *     authenticated management surface needs it. Admin-only, never served
+         *     anonymously.
+         */
+        AdminPublicationResponse: {
+            /** Title */
+            title: string;
+            /** Title Zh */
+            title_zh?: string | null;
+            /** Authors */
+            authors: string;
+            /** Authors Zh */
+            authors_zh?: string | null;
+            /** Journal */
+            journal?: string | null;
+            /** Year */
+            year?: number | null;
+            /** Doi */
+            doi?: string | null;
+            /** Pmid */
+            pmid?: string | null;
+            /** Abstract */
+            abstract?: string | null;
+            /** Abstract Zh */
+            abstract_zh?: string | null;
+            /**
+             * Is Featured
+             * @default false
+             */
+            is_featured: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Id */
+            id: string;
         };
         /**
          * AdminSiteBrandResponse
@@ -4610,6 +4934,8 @@ export interface components {
             assembly_version?: string | null;
             /** Assembly Is Default */
             assembly_is_default?: boolean | null;
+            /** Release Id */
+            release_id?: number | null;
         };
         /** BlastHit */
         BlastHit: {
@@ -4698,6 +5024,10 @@ export interface components {
             error_message?: string | null;
             /** Result Url */
             result_url?: string | null;
+            /** Release Id */
+            release_id?: number | null;
+            /** Assembly Name */
+            assembly_name?: string | null;
         };
         /**
          * BlastJobStatus
@@ -5749,27 +6079,6 @@ export interface components {
                 [key: string]: boolean;
             };
         };
-        /**
-         * FieldError
-         * @description Field-level validation error for 422 responses.
-         */
-        FieldError: {
-            /**
-             * Field
-             * @description Dot-joined request field path, e.g. ``query.chromosome``.
-             */
-            field: string;
-            /**
-             * Message
-             * @description Human-readable validation message.
-             */
-            message: string;
-            /**
-             * Type
-             * @description Pydantic error type identifier (e.g. ``string_type``).
-             */
-            type: string;
-        };
         /** FieldMappingItem */
         FieldMappingItem: {
             /** Source Field */
@@ -5895,15 +6204,15 @@ export interface components {
             strand: components["schemas"]["Strand"];
             /** Description */
             description?: string | null;
-            /** Transcripts */
-            transcripts?: components["schemas"]["TranscriptResponse"][];
-            /** Aliases */
-            aliases?: string[];
             /**
              * Variant Count
              * @default 0
              */
             variant_count: number;
+            /** Transcripts */
+            transcripts?: components["schemas"]["TranscriptResponse"][];
+            /** Aliases */
+            aliases?: string[];
             /** Created At */
             created_at?: string | null;
             /** Updated At */
@@ -5973,6 +6282,11 @@ export interface components {
             strand: components["schemas"]["Strand"];
             /** Description */
             description?: string | null;
+            /**
+             * Variant Count
+             * @default 0
+             */
+            variant_count: number;
         };
         /**
          * GenotypeMatrix
@@ -7832,6 +8146,12 @@ export interface components {
             feature: string;
             /** Available */
             available: boolean;
+            /** Gene V2 */
+            gene_v2?: string | null;
+            /** Gene V4 */
+            gene_v4?: string | null;
+            /** Gene Dn53 */
+            gene_dn53?: string | null;
         };
         /** PreviewMutationSiteSearchResponse */
         PreviewMutationSiteSearchResponse: {
@@ -7872,6 +8192,14 @@ export interface components {
             limit: number;
             /** Items */
             items: components["schemas"]["PreviewMutationSiteItem"][];
+        };
+        /**
+         * PreviewMutationSiteUpdate
+         * @description Operator-editable fields of one source mutation-site row.
+         */
+        PreviewMutationSiteUpdate: {
+            /** Available */
+            available: boolean;
         };
         /** PreviewRequest */
         PreviewRequest: {
@@ -7918,6 +8246,21 @@ export interface components {
             };
             databases?: components["schemas"]["DatabaseCapabilitiesResponse"];
         };
+        /**
+         * PublicPageDefinitionResponse
+         * @description Public payload for a published definition without persistence metadata.
+         */
+        PublicPageDefinitionResponse: {
+            /** Route */
+            route: string;
+            /** Version */
+            version: number;
+            status: components["schemas"]["PageDefinitionStatusEnum"];
+            /** Definition */
+            definition: {
+                [key: string]: unknown;
+            };
+        };
         /** PublicationCreate */
         PublicationCreate: {
             /** Title */
@@ -7945,6 +8288,17 @@ export interface components {
              * @default false
              */
             is_featured: boolean;
+        };
+        /** PublicationListResponse */
+        PublicationListResponse: {
+            /** Items */
+            items: components["schemas"]["app__schemas__publication__PublicationResponse"][];
+            /** Total */
+            total: number;
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
         };
         /** PublicationManifestResponse */
         PublicationManifestResponse: {
@@ -7974,6 +8328,8 @@ export interface components {
             release_id: number;
             /** Page Definition Version */
             page_definition_version?: number | null;
+            /** Build Artifact Url */
+            build_artifact_url?: string | null;
         };
         /** PublicationRollbackRequest */
         PublicationRollbackRequest: {
@@ -8096,6 +8452,88 @@ export interface components {
              * @default 0
              */
             p99: number;
+        };
+        /**
+         * RegionGeneResponse
+         * @description A gene overlapping the window, with every transcript it models.
+         */
+        RegionGeneResponse: {
+            /** Gene Id */
+            gene_id: string;
+            /** Name */
+            name?: string | null;
+            /** Chromosome */
+            chromosome: string;
+            /** Start */
+            start: number;
+            /** End */
+            end: number;
+            /** Start Pos */
+            start_pos: number;
+            /** End Pos */
+            end_pos: number;
+            strand: components["schemas"]["Strand"];
+            /**
+             * Biotype
+             * @default protein_coding
+             */
+            biotype: string;
+            /** Transcripts */
+            transcripts?: components["schemas"]["RegionTranscriptResponse"][];
+        };
+        /**
+         * RegionStructureResponse
+         * @description The answer to "what is in this window".
+         */
+        RegionStructureResponse: {
+            /** Assembly Id */
+            assembly_id: number;
+            /** Assembly Name */
+            assembly_name: string;
+            /** Assembly Version */
+            assembly_version: string;
+            /** Chromosome */
+            chromosome: string;
+            /** Chromosome Length */
+            chromosome_length: number;
+            /** Start */
+            start: number;
+            /** End */
+            end: number;
+            /** Genes */
+            genes?: components["schemas"]["RegionGeneResponse"][];
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated: boolean;
+        };
+        /**
+         * RegionTranscriptResponse
+         * @description A transcript with its structure, inside one coordinate window.
+         */
+        RegionTranscriptResponse: {
+            /** Id */
+            id: string;
+            /** Name */
+            name?: string | null;
+            /**
+             * Biotype
+             * @default mRNA
+             */
+            biotype: string;
+            /** Start */
+            start: number;
+            /** End */
+            end: number;
+            strand: components["schemas"]["Strand"];
+            /**
+             * Is Canonical
+             * @default false
+             */
+            is_canonical: boolean;
+            /** Parts */
+            parts?: components["schemas"]["TranscriptPartResponse"][];
         };
         /** RegistryResponse */
         RegistryResponse: {
@@ -8275,12 +8713,18 @@ export interface components {
          * @enum {string}
          */
         SearchResultType: "gene" | "variant" | "mutant_line" | "phenotype" | "publication";
-        /** SeedInventoryResponse */
+        /**
+         * SeedInventoryResponse
+         * @description Public seed-inventory projection.
+         *
+         *     ``seed_lot`` is the public locator (the lot label the collection uses) and
+         *     ``mutant_line_public_id`` is the line's public identifier. The inventory row
+         *     id and the mutant line's internal key are persistence details and are not
+         *     part of the external contract.
+         */
         SeedInventoryResponse: {
-            /** Id */
-            id: string;
-            /** Mutant Line Id */
-            mutant_line_id: string;
+            /** Mutant Line Public Id */
+            mutant_line_public_id: string;
             /** Seed Lot */
             seed_lot: string;
             /** Quantity Grams */
@@ -8305,6 +8749,21 @@ export interface components {
             updated_at: string;
         };
         /**
+         * SeedRequestGeneCount
+         * @description Aggregate demand for one gene ID.
+         *
+         *     Deliberately carries no requester, timestamp or status: the public gene page
+         *     shows "how many people asked for this material", which is demand signal, not
+         *     personal data. Anything that could identify a requester stays behind
+         *     ``/admin/seed-requests``.
+         */
+        SeedRequestGeneCount: {
+            /** Gene Id */
+            gene_id: string;
+            /** Requests */
+            requests: number;
+        };
+        /**
          * SeedRequestListResponse
          * @description Paginated admin listing of seed request contacts.
          */
@@ -8317,6 +8776,16 @@ export interface components {
             page: number;
             /** Page Size */
             page_size: number;
+        };
+        /**
+         * SeedRequestStatsResponse
+         * @description Public aggregate counts keyed by gene ID.
+         */
+        SeedRequestStatsResponse: {
+            /** Items */
+            items: components["schemas"]["SeedRequestGeneCount"][];
+            /** Total Requests */
+            total_requests: number;
         };
         /**
          * SeqFetchRequest
@@ -9092,6 +9561,26 @@ export interface components {
              */
             expires_in: number;
         };
+        /**
+         * TranscriptPartResponse
+         * @description One typed segment of a transcript.
+         *
+         *     ``kind`` is the vocabulary the renderers already speak — the portal's
+         *     ``packages/genome-view`` places ``cds`` / ``utr5`` / ``utr3`` boxes and the
+         *     server-side SVG renderer draws the same four. Exposing the database's
+         *     ``part_type`` verbatim would put that mapping in every client.
+         */
+        TranscriptPartResponse: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "cds" | "utr5" | "utr3";
+            /** Start */
+            start: number;
+            /** End */
+            end: number;
+        };
         /** TranscriptResponse */
         TranscriptResponse: {
             /** Id */
@@ -9223,6 +9712,8 @@ export interface components {
             is_superuser: boolean;
             /** Role Name */
             role_name?: string | null;
+            /** Effective Roles */
+            effective_roles?: string[];
             /** Organization Id */
             organization_id?: number | null;
             /**
@@ -9255,74 +9746,6 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
-        };
-        /**
-         * ValidationErrorResponse
-         * @description 422 response: unified envelope plus field-level ``errors``.
-         */
-        ValidationErrorResponse: {
-            error: components["schemas"]["ErrorDetail"];
-            /**
-             * Request Id
-             * @description Correlation id (also echoed in the ``X-Request-ID`` header).
-             */
-            request_id: string;
-            /**
-             * Status Code
-             * @description HTTP status code.
-             */
-            status_code: number;
-            /**
-             * Errors
-             * @description Field-level validation errors (sanitised; no internal structure exposed).
-             */
-            errors?: components["schemas"]["FieldError"][];
-            $defs: {
-                /**
-                 * ErrorDetail
-                 * @description Machine-readable error detail (inside the ``error`` envelope).
-                 */
-                ErrorDetail: {
-                    /**
-                     * Code
-                     * @description Stable machine-readable error code, e.g. ``not_found``.
-                     */
-                    code: string;
-                    /**
-                     * Message
-                     * @description Human-readable error message.
-                     */
-                    message: string;
-                    /**
-                     * Details
-                     * @description Optional structured context (never contains secrets or stack traces).
-                     */
-                    details?: {
-                        [key: string]: unknown;
-                    };
-                };
-                /**
-                 * FieldError
-                 * @description Field-level validation error for 422 responses.
-                 */
-                FieldError: {
-                    /**
-                     * Field
-                     * @description Dot-joined request field path, e.g. ``query.chromosome``.
-                     */
-                    field: string;
-                    /**
-                     * Message
-                     * @description Human-readable validation message.
-                     */
-                    message: string;
-                    /**
-                     * Type
-                     * @description Pydantic error type identifier (e.g. ``string_type``).
-                     */
-                    type: string;
-                };
-            };
         };
         /**
          * VariantDetail
@@ -9769,30 +10192,16 @@ export interface components {
          * @enum {string}
          */
         app__models__seed_request__SeedRequestStatus: "pending" | "approved" | "rejected" | "fulfilled";
-        /** PublicationListResponse */
-        app__schemas__content__PublicationListResponse: {
-            /** Items */
-            items?: components["schemas"]["app__schemas__content__PublicationResponse"][];
-            /**
-             * Total
-             * @default 0
-             */
-            total: number;
-            /**
-             * Page
-             * @default 1
-             */
-            page: number;
-            /**
-             * Page Size
-             * @default 20
-             */
-            page_size: number;
-        };
-        /** PublicationResponse */
+        /**
+         * PublicationResponse
+         * @description Public publication projection.
+         *
+         *     The persistence key is not part of the contract: a publication is addressed
+         *     by its DOI (``/content/publications/{doi}``), which is the identifier the
+         *     scholarly record itself uses. Rows without a DOI are still listed but have
+         *     no detail locator.
+         */
         app__schemas__content__PublicationResponse: {
-            /** Id */
-            id: string;
             /** Title */
             title: string;
             /** Title Zh */
@@ -9824,17 +10233,6 @@ export interface components {
              */
             created_at: string;
         };
-        /** PublicationListResponse */
-        app__schemas__publication__PublicationListResponse: {
-            /** Items */
-            items: components["schemas"]["app__schemas__publication__PublicationResponse"][];
-            /** Total */
-            total: number;
-            /** Page */
-            page: number;
-            /** Page Size */
-            page_size: number;
-        };
         /** PublicationResponse */
         app__schemas__publication__PublicationResponse: {
             /** Id */
@@ -9851,6 +10249,8 @@ export interface components {
             manifest_digest?: string | null;
             /** Artifact Url */
             artifact_url?: string | null;
+            /** Build Artifact Url */
+            build_artifact_url?: string | null;
             /** Remote Id */
             remote_id?: string | null;
             /** Previous Publication Id */
@@ -9874,8 +10274,8 @@ export interface components {
         };
         /** SeedRequestCreate */
         app__schemas__seed__SeedRequestCreate: {
-            /** Mutant Line Id */
-            mutant_line_id: string;
+            /** Mutant Line Public Id */
+            mutant_line_public_id: string;
             /** Quantity Grams */
             quantity_grams: number;
             /** Requester Name */
@@ -9892,12 +10292,18 @@ export interface components {
             /** Agrees To Terms */
             agrees_to_terms: boolean;
         };
-        /** SeedRequestResponse */
+        /**
+         * SeedRequestResponse
+         * @description Public seed-request projection: the line is identified publicly.
+         *
+         *     ``id`` is the request's own opaque UUID (it is the requester's tracking
+         *     handle), never the line's internal key.
+         */
         app__schemas__seed__SeedRequestResponse: {
             /** Id */
             id: string;
-            /** Mutant Line Id */
-            mutant_line_id: string;
+            /** Mutant Line Public Id */
+            mutant_line_public_id: string;
             status: components["schemas"]["app__schemas__seed__SeedRequestStatus"];
             /** Quantity Requested */
             quantity_requested?: number | null;
@@ -9991,6 +10397,95 @@ export interface components {
          */
         app__schemas__seed_request__SeedRequestUpdate: {
             status: components["schemas"]["app__models__seed_request__SeedRequestStatus"];
+        };
+        /**
+         * FieldError
+         * @description Field-level validation error for 422 responses.
+         */
+        FieldError: {
+            /**
+             * Field
+             * @description Dot-joined request field path, e.g. ``query.chromosome``.
+             */
+            field: string;
+            /**
+             * Message
+             * @description Human-readable validation message.
+             */
+            message: string;
+            /**
+             * Type
+             * @description Pydantic error type identifier (e.g. ``string_type``).
+             */
+            type: string;
+        };
+        /**
+         * ValidationErrorResponse
+         * @description 422 response: unified envelope plus field-level ``errors``.
+         */
+        ValidationErrorResponse: {
+            error: components["schemas"]["ErrorDetail"];
+            /**
+             * Request Id
+             * @description Correlation id (also echoed in the ``X-Request-ID`` header).
+             */
+            request_id: string;
+            /**
+             * Status Code
+             * @description HTTP status code.
+             */
+            status_code: number;
+            /**
+             * Errors
+             * @description Field-level validation errors (sanitised; no internal structure exposed).
+             */
+            errors?: components["schemas"]["FieldError"][];
+            $defs: {
+                /**
+                 * ErrorDetail
+                 * @description Machine-readable error detail (inside the ``error`` envelope).
+                 */
+                ErrorDetail: {
+                    /**
+                     * Code
+                     * @description Stable machine-readable error code, e.g. ``not_found``.
+                     */
+                    code: string;
+                    /**
+                     * Message
+                     * @description Human-readable error message.
+                     */
+                    message: string;
+                    /**
+                     * Details
+                     * @description Optional structured context (never contains secrets or stack traces).
+                     */
+                    details?: {
+                        [key: string]: unknown;
+                    };
+                };
+                /**
+                 * FieldError
+                 * @description Field-level validation error for 422 responses.
+                 */
+                FieldError: {
+                    /**
+                     * Field
+                     * @description Dot-joined request field path, e.g. ``query.chromosome``.
+                     */
+                    field: string;
+                    /**
+                     * Message
+                     * @description Human-readable validation message.
+                     */
+                    message: string;
+                    /**
+                     * Type
+                     * @description Pydantic error type identifier (e.g. ``string_type``).
+                     */
+                    type: string;
+                };
+            };
         };
     };
     responses: never;
@@ -10426,6 +10921,8 @@ export interface operations {
                 limit?: number;
                 page?: number | null;
                 page_size?: number | null;
+                sort_by?: string;
+                sort_dir?: string;
                 release_id?: number | null;
             };
             header?: {
@@ -10443,6 +10940,54 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GeneListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_region_structure_api_v1_genes_region_structure_get: {
+        parameters: {
+            query: {
+                assembly_id: number;
+                chromosome: string;
+                start: number;
+                end: number;
+                /** @description Include CDS/UTR segments. False returns gene bodies only. */
+                include_parts?: boolean;
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegionStructureResponse"];
                 };
             };
             /** @description Validation Error */
@@ -10488,6 +11033,55 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GeneDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_gene_genome_view_api_v1_genes__gene_id__genome_view_svg_get: {
+        parameters: {
+            query?: {
+                assembly_id?: number | null;
+                width?: number;
+                start?: number | null;
+                end?: number | null;
+                include?: string;
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path: {
+                gene_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/svg+xml": unknown;
                 };
             };
             /** @description Validation Error */
@@ -10972,6 +11566,91 @@ export interface operations {
             };
         };
     };
+    preview_mutation_sites_for_gene_api_v1_preview_test_data_mutation_sites_by_gene_get: {
+        parameters: {
+            query: {
+                gene_id: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreviewMutationSiteItem"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    preview_update_mutation_site_api_v1_preview_test_data_mutation_sites__source_site_key__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_site_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PreviewMutationSiteUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreviewMutationSiteItem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     list_variants_api_v1_variants_get: {
         parameters: {
             query?: {
@@ -10982,7 +11661,8 @@ export interface operations {
                 ref?: string | null;
                 alt?: string | null;
                 gene_id?: string | null;
-                mutant_line_id?: string | null;
+                /** @description Public mutant-line identifier (e.g. SM7QF3Z9P2A). Resolved to the line's internal key server-side; a numeric/internal id is rejected. */
+                mutant_line_public_id?: string | null;
                 variant_type?: components["schemas"]["VariantType"] | null;
                 consequence?: components["schemas"]["ConsequenceType"] | null;
                 impact?: components["schemas"]["ImpactLevel"] | null;
@@ -11218,18 +11898,13 @@ export interface operations {
             query: {
                 query: string;
                 types?: components["schemas"]["SearchResultType"][] | null;
-                /** @description External sources to query (comma-separated): ncbi,uniprot,ensembl,ebi */
-                sources?: string[] | null;
                 cursor?: string | null;
                 limit?: number;
                 assembly_id?: number | null;
-                /** @description Explicit release scope. Used verbatim (published or not); defaults to the active published release. */
                 release_id?: number | null;
-                /** @description 'json' or 'html' */
-                format?: string | null;
             };
             header?: {
-                accept?: string | null;
+                "X-SoyMutDB-Release"?: number | null;
             };
             path?: never;
             cookie?: never;
@@ -11270,8 +11945,11 @@ export interface operations {
             query: {
                 q: string;
                 limit?: number;
+                release_id?: number | null;
             };
-            header?: never;
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -11351,8 +12029,12 @@ export interface operations {
     };
     dashboard_stats_api_v1_stats_dashboard_get: {
         parameters: {
-            query?: never;
-            header?: never;
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -11373,7 +12055,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
             /** @description Internal Server Error */
@@ -11429,8 +12111,11 @@ export interface operations {
         parameters: {
             query?: {
                 assembly?: string | null;
+                release_id?: number | null;
             };
-            header?: never;
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -11470,7 +12155,9 @@ export interface operations {
             query?: {
                 release_id?: number | null;
             };
-            header?: never;
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -11510,7 +12197,9 @@ export interface operations {
             query?: {
                 release_id?: number | null;
             };
-            header?: never;
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -11550,7 +12239,9 @@ export interface operations {
             query?: {
                 release_id?: number | null;
             };
-            header?: never;
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -11591,7 +12282,9 @@ export interface operations {
                 days?: number;
                 release_id?: number | null;
             };
-            header?: never;
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -11628,9 +12321,7 @@ export interface operations {
     };
     release_statistics_api_v1_stats_releases_get: {
         parameters: {
-            query?: {
-                only_active?: boolean;
-            };
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
@@ -11652,7 +12343,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -11671,7 +12362,9 @@ export interface operations {
             query?: {
                 release_id?: number | null;
             };
-            header?: never;
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -11713,8 +12406,11 @@ export interface operations {
                 assembly: string;
                 chromosome: string;
                 bin_size?: number;
+                release_id?: number | null;
             };
-            header?: never;
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -11751,8 +12447,12 @@ export interface operations {
     };
     list_blast_databases_api_v1_blast_databases_get: {
         parameters: {
-            query?: never;
-            header?: never;
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -11773,7 +12473,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
             /** @description Internal Server Error */
@@ -11831,8 +12531,12 @@ export interface operations {
     };
     submit_blast_job_api_v1_blast_jobs_post: {
         parameters: {
-            query?: never;
-            header?: never;
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -12247,11 +12951,14 @@ export interface operations {
     };
     get_jbrowse_config_api_v1_tracks_jbrowse_config_get: {
         parameters: {
-            query?: {
-                /** @description Assembly name */
-                assembly?: string;
+            query: {
+                /** @description Explicit assembly identity scoped to the selected release */
+                assembly_id: number;
+                release_id?: number | null;
             };
-            header?: never;
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -12397,6 +13104,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_active_release_api_v1_releases_active_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActiveReleaseResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -12631,9 +13376,13 @@ export interface operations {
     list_inventory_api_v1_seeds_inventory_get: {
         parameters: {
             query?: {
-                mutant_line_id?: number | null;
+                /** @description Public mutant-line identifier (e.g. SM7K3ZQ9P2AX). */
+                mutant_line_public_id?: string | null;
+                release_id?: number | null;
             };
-            header?: never;
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -12668,12 +13417,16 @@ export interface operations {
             };
         };
     };
-    get_inventory_api_v1_seeds_inventory__inventory_id__get: {
+    get_inventory_api_v1_seeds_inventory__seed_lot__get: {
         parameters: {
-            query?: never;
-            header?: never;
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
             path: {
-                inventory_id: number;
+                seed_lot: string;
             };
             cookie?: never;
         };
@@ -12750,8 +13503,12 @@ export interface operations {
     };
     create_seed_request_api_v1_seeds_requests_post: {
         parameters: {
-            query?: never;
-            header?: never;
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -12876,6 +13633,47 @@ export interface operations {
             };
         };
     };
+    seed_request_stats_api_v1_seed_requests_stats_get: {
+        parameters: {
+            query?: {
+                /** @description Comma-separated gene IDs. At most MAX_GENE_IDS distinct values are counted; the rest are ignored rather than rejected, so a page can send a whole result set without branching. */
+                gene_ids?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeedRequestStatsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     list_seed_requests_api_v1_admin_seed_requests_get: {
         parameters: {
             query?: {
@@ -12967,6 +13765,7 @@ export interface operations {
             query?: {
                 release_id?: number | null;
                 page_definition_version?: number | null;
+                variant?: components["schemas"]["SiteVariant"];
             };
             header?: never;
             path?: never;
@@ -13125,12 +13924,12 @@ export interface operations {
             };
         };
     };
-    get_publication_api_v1_content_publications__publication_id__get: {
+    get_publication_api_v1_content_publications__doi__get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                publication_id: number;
+                doi: string;
             };
             cookie?: never;
         };
@@ -13247,8 +14046,11 @@ export interface operations {
         parameters: {
             query?: {
                 category?: string | null;
+                release_id?: number | null;
             };
-            header?: never;
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -13285,8 +14087,12 @@ export interface operations {
     };
     get_download_url_api_v1_content_downloads__file_id__url_get: {
         parameters: {
-            query?: never;
-            header?: never;
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
             path: {
                 file_id: number;
             };
@@ -13749,7 +14555,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PageDefinitionVersionResponse"];
+                    "application/json": components["schemas"]["PublicPageDefinitionResponse"];
                 };
             };
             /** @description Validation Error */
@@ -16294,7 +17100,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["app__schemas__publication__PublicationListResponse"];
+                    "application/json": components["schemas"]["PublicationListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -16421,7 +17227,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["app__schemas__content__PublicationListResponse"];
+                    "application/json": components["schemas"]["AdminPublicationListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -16463,7 +17269,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["app__schemas__content__PublicationResponse"];
+                    "application/json": components["schemas"]["AdminPublicationResponse"];
                 };
             };
             /** @description Validation Error */
@@ -16507,7 +17313,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["app__schemas__content__PublicationResponse"];
+                    "application/json": components["schemas"]["AdminPublicationResponse"];
                 };
             };
             /** @description Validation Error */
@@ -18456,8 +19262,11 @@ export interface operations {
                 tissue?: string | null;
                 treatment?: string | null;
                 assembly_id?: number | null;
+                release_id?: number | null;
             };
-            header?: never;
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -18494,12 +19303,16 @@ export interface operations {
             };
         };
     };
-    get_library_api_v1_expression_libraries__library_id__get: {
+    get_library_api_v1_expression_libraries__public_id__get: {
         parameters: {
-            query?: never;
-            header?: never;
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
             path: {
-                library_id: number;
+                public_id: string;
             };
             cookie?: never;
         };
@@ -18542,14 +19355,17 @@ export interface operations {
                 assembly_id?: number | null;
                 tissue?: string | null;
                 treatment?: string | null;
-                library_id?: number | null;
+                library?: string | null;
                 min_fpkm?: number | null;
                 max_fpkm?: number | null;
-                /** @description Exclusive ExpressionData.id cursor. */
-                cursor?: number | null;
+                /** @description Opaque cursor returned by a previous page. */
+                cursor?: string | null;
                 limit?: number;
+                release_id?: number | null;
             };
-            header?: never;
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
             path: {
                 gene_id: string;
             };
@@ -18593,15 +19409,18 @@ export interface operations {
             query?: {
                 gene_id?: string | null;
                 assembly_id?: number | null;
-                library_id?: number | null;
+                library?: string | null;
                 tissue?: string | null;
                 treatment?: string | null;
                 min_fpkm?: number | null;
                 max_fpkm?: number | null;
                 page?: number;
                 page_size?: number;
+                release_id?: number | null;
             };
-            header?: never;
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -18642,11 +19461,14 @@ export interface operations {
         parameters: {
             query?: {
                 assembly_id?: number | null;
-                /** @description Exclusive GeneHomolog.id keyset cursor. */
+                /** @description Opaque cursor returned by a previous page. */
                 cursor?: string | null;
                 limit?: number;
+                release_id?: number | null;
             };
-            header?: never;
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
             path: {
                 gene_id: string;
             };
@@ -18695,10 +19517,13 @@ export interface operations {
                 /** @description Offset page; ignored when cursor is supplied. */
                 page?: number;
                 page_size?: number;
-                /** @description Exclusive GeneHomolog.id keyset cursor. */
+                /** @description Opaque cursor from a previous page. */
                 cursor?: string | null;
+                release_id?: number | null;
             };
-            header?: never;
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };

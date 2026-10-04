@@ -9,6 +9,9 @@ Repository-wide document entry point: [docs/README.md](../README.md); superseded
 1. [Current baseline (2026-10-01)](baseline/2026-10-01-react-only-baseline.md) — the dual baseline to read before non-trivial changes.
 2. [Current project status](../dev/project-status.md) — what is green, what is red, and which numbers were actually measured.
 3. [Integration view of every design and plan](../3.9升级优化文档.md) — where the pieces line up and where they conflict.
+4. [2026-10-02 design-draft audit](../dev/design-audit-2026-10-02.md) — evidence-grade corrections to the 2026-10-02 optimization/ablation drafts; read before executing them.
+5. [Audited optimization execution plan](plans/2026-10-02-audited-optimization-execution.md) — 18 hard constraints, W0–W7 scope and acceptance gates. W0–W3 done (incl. runtime release switch and the additive `/auth/me` capability field); W4 partially done; W5–W7 not started. Progress table in §3.9, evidence in the [2026-10-02 rebaseline](baseline/2026-10-02-w0-rebaseline.md) §8.
+6. [New-conversation execution prompt](../dev/execute-audited-optimization-prompt.md) — complete and compact handoff instructions for starting implementation.
 
 ## Baselines
 
@@ -33,6 +36,14 @@ Repository-wide document entry point: [docs/README.md](../README.md); superseded
 | [Ontology PostgreSQL control plane](../superpowers/specs/2026-07-15-ontology-postgresql-control-plane-design.md) | 本体控制平面 | 待实施计划审核 |
 | [Vue genome view design](../superpowers/specs/2026-09-26-vue-genome-view-design.md) | — | **整份作废**，仅作历史审计；其前端描述与现状相反 |
 
+## Unregistered working drafts (not authority)
+
+The 2026-10-02 optimization / ablation design drafts (total design, functional ablation, database, auth + WeCom, UI audit)
+live under `.validation/docopt-2026-10-02/`, which is excluded by `.gitignore`.
+They are retained as historical evidence only. Their conclusions are superseded by
+[the corrected audit](../dev/design-audit-2026-10-02.md) and the
+[execution plan](plans/2026-10-02-audited-optimization-execution.md); do not execute the old drafts as written.
+
 ## Plans
 
 | Plan | Slice | Status |
@@ -44,6 +55,7 @@ Repository-wide document entry point: [docs/README.md](../README.md); superseded
 | [Public portal UI quality remediation](plans/2026-09-28-portal-ui-quality-remediation.md) | Task 1–5 | 部分完成；可见文案守卫仍为红 |
 | [Admin-editable footer, search, typography](plans/2026-09-28-admin-editable-footer-search-font.md) | Task 0–5 | Task 1 部分完成，Task 2–5 未开始 |
 | [Admin Pro v6 migration (official sub-page pattern)](plans/2026-10-01-admin-pro-migration.md) | A1–A6 | 待执行；A5 可并行 |
+| [Audited global optimization](plans/2026-10-02-audited-optimization-execution.md) | H-01–H-18 / W0–W7 | W0–W3 已完成（运行时 release 切换与 `/auth/me` 能力字段均已落地并有消融）；W4 进行中（analyses 模块已清零，其余 33 文件未开始）；W5–W7 未开始；外部服务与发布另过前置门槛 |
 
 ## Work records
 
@@ -64,3 +76,5 @@ Repository-wide document entry point: [docs/README.md](../README.md); superseded
 | 2026-10-01 | baseline | `docs/aegis/baseline/2026-10-01-react-only-baseline.md` | Current dual baseline; supersedes the 2026-09-28 snapshot |
 | 2026-10-01 | plan | `docs/aegis/plans/2026-10-01-admin-pro-migration.md` | Admin migration to the official sub-page pattern |
 | 2026-10-01 | work | `.ai-memory/20261001/daily.md` | Contract realignment, admin migration docs, three new guards |
+| 2026-10-02 | audit | `docs/dev/design-audit-2026-10-02.md` | 10 findings on the 2026-10-02 design drafts; D-01/D-08/D-10 withdraw prior claims (CI wiring, 100x speedup, 9/9 ablation) |
+| 2026-10-02 | fix | `AGENTS.md` | pnpm pin 11.21.0 -> 12.5.1 to match `package.json` / `.cnb.yml` |

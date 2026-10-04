@@ -22,6 +22,7 @@ import {
   fetchVariantTypeSummary,
   getAssemblies,
   getAssemblyChromosomes,
+  getReleaseId,
   getTableView,
   getDownloadFiles,
   getGene,
@@ -54,15 +55,37 @@ export interface DeploymentContext {
   siteVariant: SiteVariant;
 }
 
-/**
- * Assembly metadata is global reference data: it does not vary by release or
- * site variant, so the key intentionally carries neither (plan §14 scopes the
- * biological reads, not the reference catalogue).
- */
-export function assembliesQueryOptions() {
+// The transport owns release pinning. A retained query must not populate an
+// old cache key after its release header changes.
+function assertAssemblyRelease(context: DeploymentContext) {
+  if (context.releaseId !== getReleaseId()) {
+    throw new Error("Assembly query release differs from transport release");
+  }
+}
+
+/** null keeps active-release semantics; all() is invalidation only. */
+export function assembliesQueryOptions(context: DeploymentContext) {
   return queryOptions({
-    queryKey: queryKeys.assemblies.all(),
-    queryFn: () => getAssemblies(),
+    queryKey: queryKeys.assemblies.list(context),
+    queryFn: () => {
+      assertAssemblyRelease(context);
+      return getAssemblies();
+    },
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function assemblyChromosomesQueryOptions(
+  context: DeploymentContext & { assemblyId: string | number | undefined },
+) {
+  return queryOptions({
+    queryKey: queryKeys.assemblies.chromosomes(context.assemblyId, context),
+    queryFn: () => {
+      assertAssemblyRelease(context);
+      if (context.assemblyId == null) throw new Error("Assembly is unresolved");
+      return getAssemblyChromosomes(context.assemblyId);
+    },
+    enabled: context.assemblyId != null,
     staleTime: 5 * 60_000,
   });
 }
@@ -274,15 +297,7 @@ export function tableViewQueryOptions(
   });
 }
 
-/** Chromosome metadata is reference data scoped to one assembly. */
-export function assemblyChromosomesQueryOptions(context: { assemblyId: string | null }) {
-  return queryOptions({
-    queryKey: ["assemblies", context.assemblyId, "chromosomes"],
-    queryFn: () => getAssemblyChromosomes(context.assemblyId!),
-    enabled: Boolean(context.assemblyId),
-    staleTime: 30 * 60_000,
-  });
-}
+/** Chromosome metadata is release/site scoped; see assemblyChromosomesQueryOptions. */
 
 export function geneExpressionQueryOptions(
   context: DeploymentContext & { geneId: string; assemblyId?: string; enabled?: boolean },

@@ -10,6 +10,9 @@
 | 现在到底是什么状态（门禁数字、红灯、缺口） | [`dev/project-status.md`](dev/project-status.md) |
 | 改代码前的双基线、需求判据、七维复审 | [`aegis/baseline/2026-10-01-react-only-baseline.md`](aegis/baseline/2026-10-01-react-only-baseline.md) |
 | 全部设计与计划的整合视图与待决项 | [`3.9升级优化文档.md`](3.9升级优化文档.md) |
+| 2026-10-02 优化/消融设计草稿的审计结论与执行前修订项 | [`dev/design-audit-2026-10-02.md`](dev/design-audit-2026-10-02.md) |
+| 审计后全局优化的硬性约束、施工顺序与阶段验收 | [`aegis/plans/2026-10-02-audited-optimization-execution.md`](aegis/plans/2026-10-02-audited-optimization-execution.md) |
+| 在新对话开始实施的完整提示词 | [`dev/execute-audited-optimization-prompt.md`](dev/execute-audited-optimization-prompt.md) |
 | 生物信息学核心契约（身份、assembly、双站、缓存、测试矩阵） | [`dev/database-core-contract.md`](dev/database-core-contract.md) |
 | 架构、状态机、接口契约、CI 与部署 | [`dev/architecture-and-deployment.md`](dev/architecture-and-deployment.md) |
 | 数据导入、Release 与恢复的操作手册 | [`ops/README.md`](ops/README.md) |
@@ -35,6 +38,7 @@
 统一在 [`aegis/INDEX.md`](aegis/INDEX.md) 登记（含状态与所属领域）：
 
 - [`aegis/plans/2026-10-01-admin-pro-migration.md`](aegis/plans/2026-10-01-admin-pro-migration.md) — 管理后台 Pro 迁移 A1–A6（待执行，A5 可并行）
+- [`aegis/plans/2026-10-02-audited-optimization-execution.md`](aegis/plans/2026-10-02-audited-optimization-execution.md) — 审计后总方案（待执行；H-01–H-18、W0–W7；按既有专项计划逐页落地）
 - [`aegis/plans/2026-09-28-admin-editable-footer-search-font.md`](aegis/plans/2026-09-28-admin-editable-footer-search-font.md) — 页脚/搜索/字体 Task 0–5（Task 1 部分完成）
 - [`aegis/plans/2026-09-28-portal-ui-quality-remediation.md`](aegis/plans/2026-09-28-portal-ui-quality-remediation.md) — 门户 UI 整改（部分完成，守卫仍为红）
 - [`aegis/plans/2026-09-27-react-pro-v6-replatform.md`](aegis/plans/2026-09-27-react-pro-v6-replatform.md) — 前端栈迁移（已完成栈，Pro 组件体系未落地）
@@ -64,5 +68,7 @@
 2. 新文档必须登记进 [`aegis/INDEX.md`](aegis/INDEX.md)，并在本页入口表里给出「回答什么问题」；
 3. 被取代的文档**移到归档**（加横幅 + 登记到 [`ARCHIVE.md`](ARCHIVE.md)），**不要直接删除**——删除会切断审计链，
    而本项目的多条契约要求「变更可见、有继任者」；
-4. 文档与代码冲突时，先判定谁是错的：代码错就修代码并在文档标注日期，文档错就改文档。
+4. **性能/安全类结论必须标注证据等级**：`单次计时`、`查询计划`、`单测通过` 都不等于 `端到端已验证`；缺证据就写「未验证」，不得把方向性判断写成量化结论（依据：[`dev/design-audit-2026-10-02.md`](dev/design-audit-2026-10-02.md) D-08 / D-10）；
+5. **间接调用即已接线**：判断「某守卫/脚本是否在 CI 中」必须沿 `job → 共享脚本 → 守卫` 逐跳核对，只搜 job 文件会得出「零调用方」的错误结论（同上 D-01）；
+6. 文档与代码冲突时，先判定谁是错的：代码错就修代码并在文档标注日期，文档错就改文档。
    **不允许文档单方面描述未发生的事**（这条是本项目吃过亏的：状态文档曾长期写着「三端均为 Vue 3」）。

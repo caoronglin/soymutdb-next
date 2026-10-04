@@ -6,6 +6,31 @@
 > **本版相对 2026-09-26 版的实质更正**：三个应用全部是 React 19 + Umi Max 4 + antd 6 + ProComponents v3；
 > Vue 已完全退役（0 残留）；上版「三端均为 Vue 3」的表述已作废。旧计数与旧结论一律以本版为准。
 
+> **2026-10-02 实施轮更正**（证据见 [`aegis/baseline/2026-10-02-w0-rebaseline.md` §8](../aegis/baseline/2026-10-02-w0-rebaseline.md)）：
+> - 审计后方案 W0–W3 **已实施完成**：守卫维护、assembly 作用域与**运行时 release 切换**、
+>   五态会话状态机（匿名零个人请求）、`/auth/me` 加法式 `effective_roles` 能力字段。
+>   消融证据 14 组，全部「对照通过 → 单因素变异 → 真实路径翻转 → 恢复复跑」。
+> - **既有红灯变化**：可见文案守卫 39 → **33** 个文件；`check:contract` **exit 1 → exit 0**；
+>   侧栏整页刷新（第 3 条）已修。仍未消除：可见文案守卫仍 exit 1。
+> - **撤回旧结论 3 条**（本轮实跑复核）：`check_web_query_keys.py` 的 9 条红是守卫正则假阳性而非源码缺陷；
+>   前一轮 W2 改动**未通过 typecheck**（重复实现 + 残留未用变量）；未跟踪的 `navigation-render.test.tsx`
+>   从未真正执行过，其暴露的 `<a href>` 才是真实漂移。
+> - **本轮发现但未解决**：API 测试同命令两次结果不一致（21 errors vs 0），原因未查清，已登记不当作已完成。
+
+> **2026-10-02 审计更正**（详见 [`design-audit-2026-10-02.md`](design-audit-2026-10-02.md)）：
+> - 本页「已知红灯」第 6 条（`AGENTS.md` pnpm pin 漂移）**已修复**：`AGENTS.md:58,90` 已改为 `12.5.1`，与 `package.json` / `.cnb.yml` 一致。
+> - 执行依据更新为 [审计后总方案](../aegis/plans/2026-10-02-audited-optimization-execution.md)：18 条硬约束、W0–W7 与逐阶段验收；
+>   [新对话提示词](execute-audited-optimization-prompt.md) 已登记。本次只改文档，业务修复仍待实施。
+>   `session.ts` 尚无业务调用，应先按现有认证协调层重设计；不是直接接线该布尔门控就结束。
+> - 同日对 2026-10-02 的优化/消融设计草稿做了独立审计，撤回了三项结论：
+>   「守卫未接 CI」（实为已通过 `ci-job-steps.sh` 间接接入）、「数据库 ≈100× 单因素加速」（非单因素、比较层级不一致）、
+>   「9/9 GUARD-ACTIVE」（F9 所测模块尚未接线）。**本页原有的门禁数字与红灯清单不受影响**，
+>   它们均在本轮实跑复现过。
+> - 仍然成立的真实缺陷：`apps/jbrowse/Dockerfile:19` 引用已删除的 `packages/ui-vue`（镜像构建必失败）；
+>   `check_admin_content_architecture.py` 扫描 gitignored 的 `.umi*/` 产生永久误报；
+>   `check_web_query_keys.py` 扫描已空的 `apps/web/src/views/`（Vue 退役遗留）。
+> - `apps/api` 消融 149 项与 `pytest scripts` 275 项本轮复跑仍全绿，**未受审计影响**。
+
 ## 一句话
 
 技术栈迁移与 Vue 退役已完成并可复跑；**真实缺口集中在三处**——管理后台的 Pro 业务组件体系（6 个页面仍是裸 antd `Table`、
@@ -46,12 +71,12 @@
 
 | # | 红灯 | 证据 | 归属 |
 | --- | --- | --- | --- |
-| 1 | 可见文案守卫 exit 1，**39 个文件** | `node scripts/check_visible_i18n_react.mjs` | `docs/aegis/plans/2026-10-01-admin-pro-migration.md` A5 |
+| 1 | 可见文案守卫 exit 1，**33 个文件**（2026-10-02 由 39 降；analyses 模块 6 文件已清零） | `node scripts/check_visible_i18n_react.mjs` | `docs/aegis/plans/2026-10-01-admin-pro-migration.md` A5 |
 | 2 | 6 个 admin 页面仍是裸 antd `Table`；`ProDescriptions` 0 处、`ProCard` 0 处 | 逐项 grep | 同上 A2/A3 |
-| 3 | `ProLayout.menuItemRender` 用 `<a href>`，侧栏点击整页刷新 | `apps/admin/src/routes/__root.tsx` | 同上 A1 |
+| 3 | ~~`ProLayout.menuItemRender` 用 `<a href>`，侧栏点击整页刷新~~ | `apps/admin/src/routes/__root.tsx` | ✅ **2026-10-02 已修**：改用 TanStack `<Link>`（该规范 §3.1 早已批准），`navigation-render.test.tsx` 组件级覆盖 + 消融翻转 |
 | 4 | API 全量 pytest OOM（EXIT=137 @ ~47%） | 实跑 | 新增待办：分片或降内存跑法需写进 `scripts/verify-backend-tests.sh` |
 | 5 | `Makefile:197` lint 目标指向不存在的 `apps/api/src`（代码在 `apps/api/app`） | 实读 | 工具链缺陷，等修 |
-| 6 | `AGENTS.md:58,90` 写 pnpm `11.21.0`，仓库实际 `12.5.1` | 实读 | 文档漂移，等修 |
+| 6 | ~~`AGENTS.md:58,90` 写 pnpm `11.21.0`，仓库实际 `12.5.1`~~ | 实读 | ✅ **2026-10-02 已修**：改为 `12.5.1` |
 | 7 | 15 个 API 测试依赖 testcontainers，本机无 Docker | 实跑 | **SKIPPED ≠ PASS** |
 | 8 | 随 Vue 退役丢失的契约覆盖：admin 会话（`lib/auth-context.tsx`）、web 动效可访问性（`lib/motion-*.ts`）、页面定义 href 安全校验 | 对比 Vue 树被删的三个测试文件 | 本轮已补两项（导航可达性、门面导出），会话与动效仍缺 |
 

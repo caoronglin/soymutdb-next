@@ -26,6 +26,7 @@ import {
     setAuthTokens,
     clearAuth,
     getAccessToken,
+    getAuthGeneration,
     withRetry,
     type RequestOptions,
 } from "./client";
@@ -62,7 +63,13 @@ type LogoutHandler = () => void;
 
 const logoutHandlers = new Set<LogoutHandler>();
 let logoutEmitted = false;
-let refreshInFlight: Promise<boolean> | null = null;
+export type SessionRefreshResult =
+    | { status: "authenticated"; generation: number }
+    | { status: "anonymous"; generation: number }
+    | { status: "error"; generation: number; error: unknown }
+    | { status: "superseded"; generation: number };
+
+let refreshInFlight: { generation: number; promise: Promise<SessionRefreshResult> } | null = null;
 
 /**
  * Register a handler invoked when the session dies (refresh failure while
@@ -102,50 +109,58 @@ export function clearLegacyTokens(): void {
     }
 }
 
-async function performRefresh(): Promise<boolean> {
+async function performRefresh(generation: number): Promise<SessionRefreshResult> {
     try {
         const res = await request<RefreshResponse>(AUTH_REFRESH_PATH, {
             method: "POST",
-            // The refresh token lives in the HttpOnly cookie — never send a
-            // (possibly stale) Bearer header with the refresh call.
             auth: false,
             withCredentials: true,
             timeoutMs: TimeoutPresets.CRITICAL,
         });
-        if (res && typeof res.access_token === "string" && res.access_token) {
-            logoutEmitted = false;
-            setAuthTokens(res.access_token);
-            return true;
+        if (generation !== getAuthGeneration()) {
+            return { status: "superseded", generation: getAuthGeneration() };
         }
-        clearAuth();
-        return false;
-    } catch {
-        // Covers the refresh endpoint's own 401 (rotated/replayed family) and
-        // any network failure. Never recurses into another refresh.
-        clearAuth();
-        return false;
+        if (!res || typeof res.access_token !== "string" || !res.access_token) {
+            throw new ApiError("Invalid refresh response", 502, "INVALID_REFRESH_RESPONSE");
+        }
+        logoutEmitted = false;
+        setAuthTokens(res.access_token);
+        return { status: "authenticated", generation: getAuthGeneration() };
+    } catch (error) {
+        if (generation !== getAuthGeneration()) {
+            return { status: "superseded", generation: getAuthGeneration() };
+        }
+        if (error instanceof ApiError && error.status === 401) {
+            clearAuth();
+            return { status: "anonymous", generation: getAuthGeneration() };
+        }
+        return { status: "error", generation, error };
     }
 }
 
-/**
- * Single-flight refresh: concurrent callers share one in-flight attempt.
- * Clears in-memory auth on failure. Does NOT emit the logout event — the
- * caller decides (requests do, boot-time restore does not).
- */
-export function refreshAccessToken(): Promise<boolean> {
-    if (!refreshInFlight) {
-        refreshInFlight = performRefresh().finally(() => {
-            refreshInFlight = null;
+/** Single-flight within one session generation; stale flights never alter a new session. */
+export function refreshAccessTokenResult(): Promise<SessionRefreshResult> {
+    const generation = getAuthGeneration();
+    if (!refreshInFlight || refreshInFlight.generation !== generation) {
+        const flight = { generation, promise: null! as Promise<SessionRefreshResult> };
+        flight.promise = performRefresh(generation).finally(() => {
+            if (refreshInFlight === flight) refreshInFlight = null;
         });
+        refreshInFlight = flight;
     }
-    return refreshInFlight;
+    return refreshInFlight.promise;
 }
 
-/**
- * Boot-time session restore: attempts a refresh from the HttpOnly cookie so
- * a reload keeps the session alive. Failure yields anonymous state (no logout
- * event — the user had no session in this page load yet).
- */
+/** Compatibility API: only an authenticated result maps to true. */
+export async function refreshAccessToken(): Promise<boolean> {
+    return (await refreshAccessTokenResult()).status === "authenticated";
+}
+
+/** Boot restore distinguishes an absent cookie from transport/service errors. No logout event. */
+export function restoreSessionResult(): Promise<SessionRefreshResult> {
+    return refreshAccessTokenResult();
+}
+
 export function restoreSession(): Promise<boolean> {
     return refreshAccessToken();
 }
@@ -199,17 +214,37 @@ export async function authRequest<T>(
     const canRetry = isRetrySafeMethod(method);
 
     const exec = async (): Promise<T> => {
+        const generation = getAuthGeneration();
+        const hadToken = getAccessToken() != null;
         try {
             return await request<T>(path, secured);
         } catch (err) {
             if (err instanceof ApiError && err.status === 401 && !isRefreshEndpoint(path)) {
-                // Read before the refresh clears in-memory auth: this is what
-                // separates "session died" from "there was never a session".
-                const hadToken = getAccessToken() != null;
-                const refreshed = await refreshAccessToken();
-                if (refreshed) {
-                    if (canRetry) return await request<T>(path, secured);
-                } else if (hadToken) {
+                // A 401 answered for an older credential is stale, not a dead
+                // session: a sibling request may have refreshed while this one
+                // was in flight. Re-issue once with the current token instead
+                // of surfacing a 401 for a session that is still alive. Unsafe
+                // methods are never replayed (H-06), so they still throw.
+                if (generation !== getAuthGeneration()) {
+                    if (canRetry && getAccessToken() != null) {
+                        return await request<T>(path, secured);
+                    }
+                    throw err;
+                }
+                const result = await refreshAccessTokenResult();
+                if (result.status === "error") throw result.error;
+                if (result.status === "authenticated" && canRetry) {
+                    return await request<T>(path, secured);
+                }
+                // A superseded flight means someone else owns the transition;
+                // re-read rather than decide from a stale snapshot.
+                if (result.status === "superseded") {
+                    if (canRetry && getAccessToken() != null) {
+                        return await request<T>(path, secured);
+                    }
+                    throw err;
+                }
+                if (result.status === "anonymous" && hadToken) {
                     emitLogoutOnce();
                 }
             }
@@ -235,15 +270,30 @@ export async function authRequestBlob(
     const canRetry = isRetrySafeMethod(method);
 
     const exec = async (): Promise<Blob> => {
+        const generation = getAuthGeneration();
+        const hadToken = getAccessToken() != null;
         try {
             return await requestBlob(path, secured);
         } catch (err) {
             if (err instanceof ApiError && err.status === 401 && !isRefreshEndpoint(path)) {
-                const hadToken = getAccessToken() != null;
-                const refreshed = await refreshAccessToken();
-                if (refreshed) {
-                    if (canRetry) return await requestBlob(path, secured);
-                } else if (hadToken) {
+                if (generation !== getAuthGeneration()) {
+                    if (canRetry && getAccessToken() != null) {
+                        return await requestBlob(path, secured);
+                    }
+                    throw err;
+                }
+                const result = await refreshAccessTokenResult();
+                if (result.status === "error") throw result.error;
+                if (result.status === "authenticated" && canRetry) {
+                    return await requestBlob(path, secured);
+                }
+                if (result.status === "superseded") {
+                    if (canRetry && getAccessToken() != null) {
+                        return await requestBlob(path, secured);
+                    }
+                    throw err;
+                }
+                if (result.status === "anonymous" && hadToken) {
                     emitLogoutOnce();
                 }
             }

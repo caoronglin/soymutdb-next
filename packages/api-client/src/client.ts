@@ -16,6 +16,12 @@
 
 /** In-memory access token (module singleton; never written to storage). */
 let accessToken: string | null = null;
+let authGeneration = 0;
+
+/** Invalidates asynchronous auth work after every token write or clear. */
+export function getAuthGeneration(): number {
+    return authGeneration;
+}
 
 /**
  * Release id pinned by the current static page (Phase 3).
@@ -28,7 +34,32 @@ let releaseId: string | null = null;
 
 /** Set the pinned release id for dynamic requests (from bootstrap data). */
 export function setReleaseId(value: string | number | null | undefined): void {
+    const previous = releaseId;
     releaseId = value != null && value !== "" ? String(value) : null;
+    if (releaseId === previous) return;
+    for (const listener of [...releaseListeners]) {
+        listener(releaseId, previous);
+    }
+}
+
+/** Notified whenever the pinned release changes; used to drop release-scoped caches. */
+export type ReleaseListener = (next: string | null, previous: string | null) => void;
+const releaseListeners = new Set<ReleaseListener>();
+
+/**
+ * Subscribe to release switches.
+ *
+ * The pinned release used to be a write-only module variable: a page that
+ * built with `VITE_SOYMUTDB_RELEASE_ID` kept sending that value long after
+ * an operator published a new release, and nothing in the app could notice.
+ * Listeners run only on an actual change, so a re-pin of the same id is not
+ * an invalidation event.
+ */
+export function subscribeToRelease(listener: ReleaseListener): () => void {
+    releaseListeners.add(listener);
+    return () => {
+        releaseListeners.delete(listener);
+    };
 }
 
 /** Return the currently pinned release id, if any. */
@@ -175,11 +206,13 @@ export function getAccessToken(): string | null {
  * argument (legacy callers) is accepted but ignored.
  */
 export function setAuthTokens(accessTokenValue: string, _refreshToken?: string): void {
+    authGeneration += 1;
     accessToken = accessTokenValue || null;
 }
 
 /** Clear the in-memory access token. */
 export function clearAuth(): void {
+    authGeneration += 1;
     accessToken = null;
 }
 

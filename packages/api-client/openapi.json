@@ -156,7 +156,7 @@
           "auth"
         ],
         "summary": "Login",
-        "description": "Authenticate and return an access token (refresh token via cookie).\n\nLogin attempts are limited through the shared Redis-backed fixed-window\nlimiter before credential verification. This keeps the limit consistent\nacross workers and instances without changing the authentication flow.\n\nThe refresh token is set as an HttpOnly cookie scoped to ``/api/v1/auth``\nand is **not** included in the JSON response body.",
+        "description": "Authenticate and return an access token (refresh token via cookie).\n\nLogin attempts are limited through the shared Redis-backed fixed-window\nlimiter before credential verification. This keeps the limit consistent\nacross workers and instances without changing the authentication flow.\n\nThe refresh token is set as an HttpOnly cookie scoped to ``/api/v1/auth``\nand is **not** included in the JSON response body.  Requests without a\ntrusted Origin/Referer are rejected (CSRF defence).",
         "operationId": "login_api_v1_auth_login_post",
         "requestBody": {
           "content": {
@@ -733,6 +733,26 @@
             }
           },
           {
+            "name": "sort_by",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "gene_id",
+              "title": "Sort By"
+            }
+          },
+          {
+            "name": "sort_dir",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "asc",
+              "title": "Sort Dir"
+            }
+          },
+          {
             "name": "release_id",
             "in": "query",
             "required": false,
@@ -774,6 +794,138 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/GeneListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-idempotent": true
+      }
+    },
+    "/api/v1/genes/region-structure": {
+      "get": {
+        "tags": [
+          "genes"
+        ],
+        "summary": "Get Region Structure",
+        "description": "Every gene in a coordinate window, with its modelled structure.\n\nThis is what the portal's own genome view needs in order to show a locus\nrather than a gene: the genes that overlap the window, each with its\ntranscripts and their typed ``cds`` / ``utr5`` / ``utr3`` segments. Before\nthis endpoint the only genome picture the API could produce was centred on\none gene (``/{gene_id}/genome-view.svg``), so \"what surrounds this insertion\nsite\" had no answer.\n\nDeclared **before** ``/{gene_id}`` on purpose: FastAPI matches routes in\ndeclaration order, and the parameterised route would otherwise swallow\n``region-structure`` as a gene accession and 404.",
+        "operationId": "get_region_structure_api_v1_genes_region_structure_get",
+        "parameters": [
+          {
+            "name": "assembly_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Assembly Id"
+            }
+          },
+          {
+            "name": "chromosome",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "title": "Chromosome"
+            }
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Start"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "End"
+            }
+          },
+          {
+            "name": "include_parts",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Include CDS/UTR segments. False returns gene bodies only.",
+              "default": true,
+              "title": "Include Parts"
+            },
+            "description": "Include CDS/UTR segments. False returns gene bodies only."
+          },
+          {
+            "name": "release_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegionStructureResponse"
                 }
               }
             }
@@ -880,6 +1032,163 @@
                   "$ref": "#/components/schemas/GeneDetail"
                 }
               }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-idempotent": true
+      }
+    },
+    "/api/v1/genes/{gene_id}/genome-view.svg": {
+      "get": {
+        "tags": [
+          "genes"
+        ],
+        "summary": "Get Gene Genome View",
+        "description": "Serve the gene's genome picture as a finished SVG.\n\nRendering this on the server removes the track layout from first paint and\nturns the picture into an ordinary cacheable image: the browser (and any\nshared cache) can reuse it across visits, and the gene page still shows a\npicture before its JavaScript has run.\n\nWindow defaults to the gene body plus a quarter-span flank, matching the\nportal component. ``start``/``end`` override it for a zoomed request.",
+        "operationId": "get_gene_genome_view_api_v1_genes__gene_id__genome_view_svg_get",
+        "parameters": [
+          {
+            "name": "gene_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Gene Id"
+            }
+          },
+          {
+            "name": "assembly_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Assembly Id"
+            }
+          },
+          {
+            "name": "width",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 4000,
+              "minimum": 200,
+              "default": 1200,
+              "title": "Width"
+            }
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End"
+            }
+          },
+          {
+            "name": "include",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(all|gene|sites)$",
+              "default": "all",
+              "title": "Include"
+            }
+          },
+          {
+            "name": "release_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "image/svg+xml": {}
             }
           },
           "422": {
@@ -1644,13 +1953,148 @@
         "x-idempotent": true
       }
     },
+    "/api/v1/preview/test-data/mutation-sites/by-gene": {
+      "get": {
+        "tags": [
+          "local-test-preview"
+        ],
+        "summary": "Preview Mutation Sites For Gene",
+        "description": "Return the source mutation-site rows attached to one exact gene ID.\n\nThe catalogue's result tables use this so a searched gene shows the\noperator's own table rows, including the up/downstream ones that a\ncoordinate-interval query would miss.",
+        "operationId": "preview_mutation_sites_for_gene_api_v1_preview_test_data_mutation_sites_by_gene_get",
+        "parameters": [
+          {
+            "name": "gene_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "title": "Gene Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000,
+              "minimum": 1,
+              "default": 1000,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PreviewMutationSiteItem"
+                  },
+                  "title": "Response Preview Mutation Sites For Gene Api V1 Preview Test Data Mutation Sites By Gene Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-idempotent": true
+      }
+    },
+    "/api/v1/preview/test-data/mutation-sites/{source_site_key}": {
+      "patch": {
+        "tags": [
+          "local-test-preview"
+        ],
+        "summary": "Preview Update Mutation Site",
+        "description": "Update the operator-editable fields of one source mutation-site row.\n\n`available` is the only field the operator maintains by hand; the rest of\nthe row is the uploaded table's content and is replaced on the next import.\nA re-import carries the stored `available` value forward.",
+        "operationId": "preview_update_mutation_site_api_v1_preview_test_data_mutation_sites__source_site_key__patch",
+        "parameters": [
+          {
+            "name": "source_site_key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Source Site Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewMutationSiteUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewMutationSiteItem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/variants": {
       "get": {
         "tags": [
           "variants"
         ],
         "summary": "List Variants",
-        "description": "Search variants with filters and cursor pagination (limit \u2264 200).",
+        "description": "Search variants with filters and cursor pagination (limit \u2264 200).\n\nThe mutant-line filter takes a **public** identifier. It is resolved to the\nline's internal key inside the resolved published release, so a numeric or\notherwise internal value is rejected instead of being bound to ClickHouse as\nif it were a surrogate (which previously matched nothing, or silently\nnothing, depending on the value).",
         "operationId": "list_variants_api_v1_variants_get",
         "parameters": [
           {
@@ -1772,7 +2216,7 @@
             }
           },
           {
-            "name": "mutant_line_id",
+            "name": "mutant_line_public_id",
             "in": "query",
             "required": false,
             "schema": {
@@ -1784,8 +2228,10 @@
                   "type": "null"
                 }
               ],
-              "title": "Mutant Line Id"
-            }
+              "description": "Public mutant-line identifier (e.g. SM7QF3Z9P2A). Resolved to the line's internal key server-side; a numeric/internal id is rejected.",
+              "title": "Mutant Line Public Id"
+            },
+            "description": "Public mutant-line identifier (e.g. SM7QF3Z9P2A). Resolved to the line's internal key server-side; a numeric/internal id is rejected."
           },
           {
             "name": "variant_type",
@@ -2378,8 +2824,8 @@
         "tags": [
           "search"
         ],
-        "summary": "Global search (JSON or HTML fragment)",
-        "description": "Global search endpoint.\n\nReturns JSON (public SoyMutDB search) when the client sends\n``Accept: application/json`` or ``?format=json``.  Otherwise returns a\nsanitized HTML fragment built from federated external search results.\n\nAn explicit ``release_id`` query parameter is the request's release\nscope and is used verbatim (published or not), so two releases can never\nshare a cache entry or response. Without it the active published release\nis resolved.",
+        "summary": "Global search across the SoyMutDB catalogue",
+        "description": "Search the published SoyMutDB catalogue.\n\nFederated external search (NCBI / UniProt / Ensembl / EMBL-EBI) is retired\npermanently: the ``sources`` parameter, the ``format``/``Accept`` content\nnegotiation and the sanitized HTML-fragment response are all gone, so this\nendpoint always answers with JSON catalogue results.\n\nThe release query/header pin is resolved through the published release\ncontext dependency; draft and otherwise unavailable release ids are\nrejected, and without a pin the active published release is selected.",
         "operationId": "global_search_api_v1_search_get",
         "parameters": [
           {
@@ -2411,27 +2857,6 @@
               ],
               "title": "Types"
             }
-          },
-          {
-            "name": "sources",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "External sources to query (comma-separated): ncbi,uniprot,ensembl,ebi",
-              "title": "Sources"
-            },
-            "description": "External sources to query (comma-separated): ncbi,uniprot,ensembl,ebi"
           },
           {
             "name": "cursor",
@@ -2492,43 +2917,24 @@
                   "type": "null"
                 }
               ],
-              "description": "Explicit release scope. Used verbatim (published or not); defaults to the active published release.",
               "title": "Release Id"
-            },
-            "description": "Explicit release scope. Used verbatim (published or not); defaults to the active published release."
+            }
           },
           {
-            "name": "format",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "'json' or 'html'",
-              "title": "Format"
-            },
-            "description": "'json' or 'html'"
-          },
-          {
-            "name": "accept",
+            "name": "X-SoyMutDB-Release",
             "in": "header",
             "required": false,
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "integer",
+                  "minimum": 1
                 },
                 {
                   "type": "null"
                 }
               ],
-              "title": "Accept"
+              "title": "X-Soymutdb-Release"
             }
           }
         ],
@@ -2573,7 +2979,7 @@
           "search"
         ],
         "summary": "Suggest",
-        "description": "Autocomplete suggestions (internal DB only, release-scoped).",
+        "description": "Autocomplete suggestions scoped to the requested published release.",
         "operationId": "suggest_api_v1_search_suggest_get",
         "parameters": [
           {
@@ -2597,6 +3003,40 @@
               "minimum": 1,
               "default": 5,
               "title": "Limit"
+            }
+          },
+          {
+            "name": "release_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
             }
           }
         ],
@@ -2719,8 +3159,44 @@
           "stats"
         ],
         "summary": "Dashboard Stats",
-        "description": "High-level database statistics for the dashboard.\n\nRead-hot aggregation cached in Redis (default TTL) via cache-aside;\na Redis failure degrades to a direct aggregation.",
+        "description": "High-level database statistics for the resolved published release.\n\nRead-hot aggregation cached in Redis (default TTL) via cache-aside;\na Redis failure degrades to a direct aggregation. The cache key carries the\nrelease so one release's aggregate is never served for another.",
         "operationId": "dashboard_stats_api_v1_stats_dashboard_get",
+        "parameters": [
+          {
+            "name": "release_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2737,7 +3213,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -2805,7 +3281,7 @@
           "stats"
         ],
         "summary": "Variant Type Distribution",
-        "description": "Variant type distribution (SNP/INS/DEL/MNV/SV).",
+        "description": "Variant type distribution (SNP/INS/DEL/MNV/SV) for a published release.\n\nThe ClickHouse aggregate is bound to the resolved release; previously it\nscanned every release's facts.",
         "operationId": "variant_type_distribution_api_v1_stats_variant_types_get",
         "parameters": [
           {
@@ -2822,6 +3298,40 @@
                 }
               ],
               "title": "Assembly"
+            }
+          },
+          {
+            "name": "release_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
             }
           }
         ],
@@ -2866,7 +3376,7 @@
           "stats"
         ],
         "summary": "Variant type summary (name/value)",
-        "description": "Variant type distribution as ``[{name, value}]`` for charts.\n\nAggregated from the PostgreSQL ``variant_summaries`` table.  Zero-count\nbuckets are omitted so charts can fall back to other data sources.",
+        "description": "Variant type distribution as ``[{name, value}]`` for charts.\n\nAggregated from the PostgreSQL ``variant_summaries`` table, scoped to the\nresolved published release. Zero-count buckets are omitted so charts can\nfall back to other data sources.",
         "operationId": "variant_type_summary_api_v1_stats_summary_variant_types_get",
         "parameters": [
           {
@@ -2876,13 +3386,31 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "integer"
+                  "type": "integer",
+                  "minimum": 1
                 },
                 {
                   "type": "null"
                 }
               ],
               "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
             }
           }
         ],
@@ -2931,7 +3459,7 @@
           "stats"
         ],
         "summary": "Variant counts by predicted impact",
-        "description": "Variant counts grouped by impact class (HIGH/MODERATE/LOW/MODIFIER).",
+        "description": "Variant counts grouped by impact class, scoped to the published release.",
         "operationId": "impact_summary_api_v1_stats_summary_impact_get",
         "parameters": [
           {
@@ -2941,13 +3469,31 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "integer"
+                  "type": "integer",
+                  "minimum": 1
                 },
                 {
                   "type": "null"
                 }
               ],
               "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
             }
           }
         ],
@@ -3006,13 +3552,31 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "integer"
+                  "type": "integer",
+                  "minimum": 1
                 },
                 {
                   "type": "null"
                 }
               ],
               "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
             }
           }
         ],
@@ -3061,7 +3625,7 @@
           "stats"
         ],
         "summary": "Cumulative variant discovery trend",
-        "description": "Cumulative variant counts across published releases.\n\nEach published release contributes ``new_variants`` (= its recorded\n``variant_count``) and a running cumulative total.",
+        "description": "Cumulative variant counts across *published* releases.\n\nEach published release contributes ``new_variants`` (= its recorded\n``variant_count``) and a running cumulative total. Draft and rolled-back\nreleases are excluded, and the trend is anchored on the resolved published\nrelease rather than an arbitrary caller-supplied id.",
         "operationId": "discovery_trend_api_v1_stats_discovery_trend_get",
         "parameters": [
           {
@@ -3083,13 +3647,31 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "integer"
+                  "type": "integer",
+                  "minimum": 1
                 },
                 {
                   "type": "null"
                 }
               ],
               "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
             }
           }
         ],
@@ -3138,30 +3720,18 @@
           "stats"
         ],
         "summary": "Per-release statistics",
-        "description": "Statistics per release (version, date, variant/gene/line counts).\n\nRead-hot query cached in Redis (default TTL) keyed by ``only_active``;\na Redis failure degrades to a direct query.  An empty release list is\ncached as well (anti-penetration) so a freshly seeded database does not\nre-run the query on every request.",
+        "description": "Statistics per *published* release (version, date, counts).\n\nPublic callers may only see releases that reached a published state:\npreviously the default (``only_active=false``) listed every release,\nincluding drafts and rolled-back ones. A rollback is deliberately excluded\nbecause its counts no longer describe the served data.\n\nRead-hot query cached in Redis (default TTL); a Redis failure degrades to a\ndirect query. An empty release list is cached as well (anti-penetration) so\na freshly seeded database does not re-run the query on every request.",
         "operationId": "release_statistics_api_v1_stats_releases_get",
-        "parameters": [
-          {
-            "name": "only_active",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "boolean",
-              "default": false,
-              "title": "Only Active"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/ReleaseSummary"
                   },
+                  "type": "array",
                   "title": "Response Release Statistics Api V1 Stats Releases Get"
                 }
               }
@@ -3172,7 +3742,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -3197,7 +3767,7 @@
           "stats"
         ],
         "summary": "Mutant lines grouped by mutagen",
-        "description": "Number of mutant lines per mutagen (real PostgreSQL aggregation).",
+        "description": "Number of mutant lines per mutagen, scoped to the published release.",
         "operationId": "mutagen_statistics_api_v1_stats_mutagens_get",
         "parameters": [
           {
@@ -3207,13 +3777,31 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "integer"
+                  "type": "integer",
+                  "minimum": 1
                 },
                 {
                   "type": "null"
                 }
               ],
               "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
             }
           }
         ],
@@ -3262,7 +3850,7 @@
           "stats"
         ],
         "summary": "Chromosome Density",
-        "description": "Variant density across a chromosome.\n\nDensity is computed entirely from the ClickHouse projection, so an\nunavailable projection is reported as capability-unavailable (503). The\nresponse model also requires a concrete ``chromosome_length``: fabricating\n``0`` here would both violate the contract and present an empty chromosome\nas a real result.",
+        "description": "Variant density across a chromosome in the published release.\n\nDensity is computed entirely from the ClickHouse projection, so an\nunavailable projection is reported as capability-unavailable (503). The\nresponse model also requires a concrete ``chromosome_length``: fabricating\n``0`` here would both violate the contract and present an empty chromosome\nas a real result. The query is bound to the resolved release, so bins can\nnever mix drafts into a published density.",
         "operationId": "chromosome_density_api_v1_stats_density_get",
         "parameters": [
           {
@@ -3294,6 +3882,40 @@
               "minimum": 1000,
               "default": 1000000,
               "title": "Bin Size"
+            }
+          },
+          {
+            "name": "release_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
             }
           }
         ],
@@ -3338,18 +3960,54 @@
           "blast"
         ],
         "summary": "List Blast Databases",
-        "description": "List active BLAST databases.",
+        "description": "List active BLAST databases in the resolved published release.\n\nDatabase lives outside the release boundary: the list previously included\nthe databases of draft releases, whose underlying data is not published.",
         "operationId": "list_blast_databases_api_v1_blast_databases_get",
+        "parameters": [
+          {
+            "name": "release_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
+                  "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/BlastDatabaseResponse"
                   },
-                  "type": "array",
                   "title": "Response List Blast Databases Api V1 Blast Databases Get"
                 }
               }
@@ -3360,7 +4018,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -3385,11 +4043,47 @@
           "blast"
         ],
         "summary": "Submit Blast Job",
-        "description": "Submit a BLAST job (requires researcher role or higher).",
+        "description": "Submit a BLAST job (requires researcher role or higher).\n\nThe target database is resolved inside the published release, so a job can\nnever search another release's (including unreleased) database.",
         "operationId": "submit_blast_job_api_v1_blast_jobs_post",
         "security": [
           {
             "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "release_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
+            }
           }
         ],
         "requestBody": {
@@ -4123,7 +4817,7 @@
           "tracks"
         ],
         "summary": "Get Jbrowse Config",
-        "description": "Return JBrowse 2 configuration (assembly + tracks) for the standalone browser.\n\nQueries the database for tracks belonging to the requested assembly and\nconverts them to JBrowse track format. If no tracks are found or the\ndatabase is empty, an empty tracks array is returned \u2014 the frontend\nJBrowse app has built-in default tracks as a fallback.",
+        "description": "Return a release- and assembly-scoped JBrowse 2 configuration.\n\nThe release dependency accepts only a published release (or the active\npublished pointer).  ``assembly_id`` is intentionally required: an\nassembly name is not a stable identity across release namespaces and must\nnever be used to select tracks.  Anonymous responses contain public tracks\nonly and may be shared; authenticated responses can include project/private\ntracks and are therefore marked private and non-cacheable.",
         "operationId": "get_jbrowse_config_api_v1_tracks_jbrowse_config_get",
         "security": [
           {
@@ -4132,16 +4826,50 @@
         ],
         "parameters": [
           {
-            "name": "assembly",
+            "name": "assembly_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Explicit assembly identity scoped to the selected release",
+              "title": "Assembly Id"
+            },
+            "description": "Explicit assembly identity scoped to the selected release"
+          },
+          {
+            "name": "release_id",
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "description": "Assembly name",
-              "default": "Wm82v4.0",
-              "title": "Assembly"
-            },
-            "description": "Assembly name"
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
+            }
           }
         ],
         "responses": {
@@ -4248,7 +4976,7 @@
           "tracks"
         ],
         "summary": "Get Signed Url",
-        "description": "Get a signed URL for a track file (RBAC-enforced).\n\nPublic tracks are accessible to any authenticated user.\nPrivate/project tracks require ownership, ``track_manager``, or\n``administrator`` role.",
+        "description": "Get a signed URL for a track file (RBAC-enforced).\n\nPublic tracks are accessible to any authenticated user.\nPrivate/project tracks require ownership, ``track_manager``, or\n``administrator`` role.\n\nThe URL is a capability: it is always returned ``private, no-store`` so no\nbrowser or proxy retains it.",
         "operationId": "get_signed_url_api_v1_tracks__track_id__signed_url_get",
         "security": [
           {
@@ -4348,6 +5076,49 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-idempotent": true
+      }
+    },
+    "/api/v1/releases/active": {
+      "get": {
+        "tags": [
+          "releases"
+        ],
+        "summary": "Get Active Release",
+        "description": "Report the release the public surface currently serves.\n\nDeclared before ``/{release_id}`` so the literal path is not captured by\nthe id route. Reads the same ``active_release`` singleton that\n``services.release_context.resolve_release_context`` resolves against \u2014 this\nendpoint adds no second source of truth, only a way for a client to\nnotice a switch that happened after its page was built.\n\nReturns an empty response (both fields null) before the first publish;\nthat is an answer, not an error.",
+        "operationId": "get_active_release_api_v1_releases_active_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActiveReleaseResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -4835,23 +5606,59 @@
           "seeds"
         ],
         "summary": "List Inventory",
-        "description": "List seed inventory.",
+        "description": "List seed inventory for the resolved published release.\n\nRows are bound to a released mutant line; the previous version listed every\nlot in the table, including drafts and other releases, and identified the\nline by its internal key.",
         "operationId": "list_inventory_api_v1_seeds_inventory_get",
         "parameters": [
           {
-            "name": "mutant_line_id",
+            "name": "mutant_line_public_id",
             "in": "query",
             "required": false,
             "schema": {
               "anyOf": [
                 {
-                  "type": "integer"
+                  "type": "string"
                 },
                 {
                   "type": "null"
                 }
               ],
-              "title": "Mutant Line Id"
+              "description": "Public mutant-line identifier (e.g. SM7K3ZQ9P2AX).",
+              "title": "Mutant Line Public Id"
+            },
+            "description": "Public mutant-line identifier (e.g. SM7K3ZQ9P2AX)."
+          },
+          {
+            "name": "release_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
             }
           }
         ],
@@ -4894,22 +5701,56 @@
         "x-idempotent": true
       }
     },
-    "/api/v1/seeds/inventory/{inventory_id}": {
+    "/api/v1/seeds/inventory/{seed_lot}": {
       "get": {
         "tags": [
           "seeds"
         ],
         "summary": "Get Inventory",
-        "description": "Get seed inventory detail.",
-        "operationId": "get_inventory_api_v1_seeds_inventory__inventory_id__get",
+        "description": "Get a seed lot by its public lot label within the published release.\n\nThe inventory row's persistence key is not a locator: a request for it (or\nfor a lot outside the release) returns the same not-found response.",
+        "operationId": "get_inventory_api_v1_seeds_inventory__seed_lot__get",
         "parameters": [
           {
-            "name": "inventory_id",
+            "name": "seed_lot",
             "in": "path",
             "required": true,
             "schema": {
-              "type": "integer",
-              "title": "Inventory Id"
+              "type": "string",
+              "title": "Seed Lot"
+            }
+          },
+          {
+            "name": "release_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
             }
           }
         ],
@@ -4954,8 +5795,44 @@
           "seeds"
         ],
         "summary": "Create Seed Request",
-        "description": "Submit a seed request (open to all).",
+        "description": "Submit a seed request (open to all).\n\nThe requested line is addressed by its public identifier and must exist in\nthe resolved published release; a numeric/internal value is refused.",
         "operationId": "create_seed_request_api_v1_seeds_requests_post",
+        "parameters": [
+          {
+            "name": "release_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
+            }
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -5189,6 +6066,64 @@
         }
       }
     },
+    "/api/v1/seed-requests/stats": {
+      "get": {
+        "tags": [
+          "seed-requests"
+        ],
+        "summary": "Public seed-request demand per gene (counts only)",
+        "description": "Report how many requests reference each gene ID.\n\nAnonymous on purpose: the gene page renders \"N requests\" beside the seed\nrequest entry as a demand signal. The payload is counts only \u2014 no requester\nname, institution, email, timestamp or status ever leaves\n``/admin/seed-requests``, so this cannot be turned into an enumeration of\nwho asked for what.",
+        "operationId": "seed_request_stats_api_v1_seed_requests_stats_get",
+        "parameters": [
+          {
+            "name": "gene_ids",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 8192,
+              "description": "Comma-separated gene IDs. At most MAX_GENE_IDS distinct values are counted; the rest are ignored rather than rejected, so a page can send a whole result set without branching.",
+              "default": "",
+              "title": "Gene Ids"
+            },
+            "description": "Comma-separated gene IDs. At most MAX_GENE_IDS distinct values are counted; the rest are ignored rather than rejected, so a page can send a whole result set without branching."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeedRequestStatsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-idempotent": true
+      }
+    },
     "/api/v1/admin/seed-requests": {
       "get": {
         "tags": [
@@ -5355,6 +6290,11 @@
         "summary": "Content Snapshot",
         "description": "Public content snapshot for static builds (E2-2).\n\nFrozen contract in ``docs/design/static-content-richtext-2026-08.md``\n\u00a74.1: schema_version/generated_at/news{source_total,included_total,\ntruncated,items}/news_detail{slug: detail|null}/about/publications.\n\nRelease-aware: pass ``release_id`` (and optionally\n``page_definition_version``) to build an immutable, release-pinned\nsnapshot whose cache key differs by release.  Without an explicit\n``release_id`` the mutable active-release alias is served, for interactive\npublic reads only.\n\nAggregation is cached in Redis for 60 s (cache.py); the response carries\nan ETag so build-time fetchers can short-circuit with 304.",
         "operationId": "content_snapshot_api_v1_content_snapshot_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "release_id",
@@ -5388,6 +6328,15 @@
                 }
               ],
               "title": "Page Definition Version"
+            }
+          },
+          {
+            "name": "variant",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/SiteVariant",
+              "default": "external"
             }
           }
         ],
@@ -5603,21 +6552,22 @@
         "x-idempotent": true
       }
     },
-    "/api/v1/content/publications/{publication_id}": {
+    "/api/v1/content/publications/{doi}": {
       "get": {
         "tags": [
           "content"
         ],
         "summary": "Get Publication",
-        "operationId": "get_publication_api_v1_content_publications__publication_id__get",
+        "description": "Get one publication by its DOI.\n\n``doi`` is the publication's own scholarly identifier (it contains ``/``, so\nthe route uses a path converter). The persistence key is not a locator: a\nnumeric value returns the same not-found response as an unknown DOI, so the\nendpoint is not an existence oracle for internal ids.",
+        "operationId": "get_publication_api_v1_content_publications__doi__get",
         "parameters": [
           {
-            "name": "publication_id",
+            "name": "doi",
             "in": "path",
             "required": true,
             "schema": {
-              "type": "integer",
-              "title": "Publication Id"
+              "type": "string",
+              "title": "Doi"
             }
           }
         ],
@@ -5762,7 +6712,7 @@
           "content"
         ],
         "summary": "List Downloads",
-        "description": "List downloadable files.",
+        "description": "List downloadable files belonging to the resolved published release.\n\n``download_files.release_id`` is nullable, and the list previously selected\nevery row \u2014 including drafts and files not (yet) bound to any release. Both\nare excluded here, so a file only appears once its release is published.",
         "operationId": "list_downloads_api_v1_content_downloads_get",
         "parameters": [
           {
@@ -5779,6 +6729,40 @@
                 }
               ],
               "title": "Category"
+            }
+          },
+          {
+            "name": "release_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
             }
           }
         ],
@@ -5827,7 +6811,7 @@
           "content"
         ],
         "summary": "Get Download Url",
-        "description": "Generate a pre-signed download URL for a file.\n\nIf the file URL is an S3 path (``s3://bucket/key``) a pre-signed URL is\ngenerated.  Otherwise the file URL is returned directly.",
+        "description": "Generate a download URL for a file in the resolved published release.\n\nThe file must be bound to the resolved release: an id from a draft release\n(or an unbound row) is not a valid locator. If the stored location is an S3\npath a pre-signed URL is minted; a plain HTTP(S) location is returned\nas-is; anything else is refused rather than handed to the client as a\ndownload target.",
         "operationId": "get_download_url_api_v1_content_downloads__file_id__url_get",
         "parameters": [
           {
@@ -5837,6 +6821,40 @@
             "schema": {
               "type": "integer",
               "title": "File Id"
+            }
+          },
+          {
+            "name": "release_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
             }
           }
         ],
@@ -6589,7 +7607,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PageDefinitionVersionResponse"
+                  "$ref": "#/components/schemas/PublicPageDefinitionResponse"
                 }
               }
             }
@@ -10760,7 +11778,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/app__schemas__publication__PublicationListResponse"
+                  "$ref": "#/components/schemas/PublicationListResponse"
                 }
               }
             }
@@ -10992,7 +12010,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/app__schemas__content__PublicationListResponse"
+                  "$ref": "#/components/schemas/AdminPublicationListResponse"
                 }
               }
             }
@@ -11048,7 +12066,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/app__schemas__content__PublicationResponse"
+                  "$ref": "#/components/schemas/AdminPublicationResponse"
                 }
               }
             }
@@ -11116,7 +12134,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/app__schemas__content__PublicationResponse"
+                  "$ref": "#/components/schemas/AdminPublicationResponse"
                 }
               }
             }
@@ -13973,7 +14991,7 @@
           "expression"
         ],
         "summary": "List Libraries",
-        "description": "Paginated list of expression libraries with optional filters.",
+        "description": "Paginated list of expression libraries with optional filters.\n\nOnly libraries whose assembly belongs to the resolved published release are\nreturned. ``assembly_id`` narrows within that release; an id from another\nrelease simply yields no rows rather than widening the scope.",
         "operationId": "list_libraries_api_v1_expression_libraries_get",
         "parameters": [
           {
@@ -14046,6 +15064,40 @@
               ],
               "title": "Assembly Id"
             }
+          },
+          {
+            "name": "release_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
+            }
           }
         ],
         "responses": {
@@ -14085,22 +15137,56 @@
         "x-idempotent": true
       }
     },
-    "/api/v1/expression/libraries/{library_id}": {
+    "/api/v1/expression/libraries/{public_id}": {
       "get": {
         "tags": [
           "expression"
         ],
         "summary": "Get Library",
-        "description": "Get a single expression library with full detail.",
-        "operationId": "get_library_api_v1_expression_libraries__library_id__get",
+        "description": "Get a single expression library by its public sample identifier.\n\nThe persistence key is not a locator: a request for it (or for a library in\nan unpublished release) returns the same not-found response.",
+        "operationId": "get_library_api_v1_expression_libraries__public_id__get",
         "parameters": [
           {
-            "name": "library_id",
+            "name": "public_id",
             "in": "path",
             "required": true,
             "schema": {
-              "type": "integer",
-              "title": "Library Id"
+              "type": "string",
+              "title": "Public Id"
+            }
+          },
+          {
+            "name": "release_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
             }
           }
         ],
@@ -14112,7 +15198,7 @@
                 "schema": {
                   "type": "object",
                   "additionalProperties": true,
-                  "title": "Response Get Library Api V1 Expression Libraries  Library Id  Get"
+                  "title": "Response Get Library Api V1 Expression Libraries  Public Id  Get"
                 }
               }
             }
@@ -14147,7 +15233,7 @@
           "expression"
         ],
         "summary": "Get Gene Expression",
-        "description": "Get a bounded, keyset-paginated expression slice for a gene.\n\n``gene_id`` is the assembly-scoped accession; when it exists in\nmultiple assemblies, ``assembly_id`` is required.\n\nComplete data exports must use the asynchronous export path rather than\nmaterialising every matching library in an API worker.",
+        "description": "Get a bounded, keyset-paginated expression slice for a gene.\n\n``gene_id`` is the assembly-scoped accession; when it exists in multiple\nassemblies within the published release, ``assembly_id`` is required.\n``library`` accepts the public sample identifier. The cursor is opaque and\nbound to the release and every filter, so it cannot be replayed against a\ndifferent release or filter set.\n\nComplete data exports must use the asynchronous export path rather than\nmaterialising every matching library in an API worker.",
         "operationId": "get_gene_expression_api_v1_expression_genes__gene_id__expression_get",
         "parameters": [
           {
@@ -14208,19 +15294,19 @@
             }
           },
           {
-            "name": "library_id",
+            "name": "library",
             "in": "query",
             "required": false,
             "schema": {
               "anyOf": [
                 {
-                  "type": "integer"
+                  "type": "string"
                 },
                 {
                   "type": "null"
                 }
               ],
-              "title": "Library Id"
+              "title": "Library"
             }
           },
           {
@@ -14264,17 +15350,16 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "integer",
-                  "minimum": 1
+                  "type": "string"
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "Exclusive ExpressionData.id cursor.",
+              "description": "Opaque cursor returned by a previous page.",
               "title": "Cursor"
             },
-            "description": "Exclusive ExpressionData.id cursor."
+            "description": "Opaque cursor returned by a previous page."
           },
           {
             "name": "limit",
@@ -14286,6 +15371,40 @@
               "minimum": 1,
               "default": 100,
               "title": "Limit"
+            }
+          },
+          {
+            "name": "release_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
             }
           }
         ],
@@ -14332,7 +15451,7 @@
           "expression"
         ],
         "summary": "Search Expression",
-        "description": "Search expression data rows, joined with library info, with pagination.",
+        "description": "Search expression rows, joined with library info, within the release.\n\nEvery row is bound to a library whose assembly belongs to the resolved\npublished release; when ``gene_id`` is given the library must additionally\nshare that gene's assembly.",
         "operationId": "search_expression_api_v1_expression_search_get",
         "parameters": [
           {
@@ -14368,19 +15487,19 @@
             }
           },
           {
-            "name": "library_id",
+            "name": "library",
             "in": "query",
             "required": false,
             "schema": {
               "anyOf": [
                 {
-                  "type": "integer"
+                  "type": "string"
                 },
                 {
                   "type": "null"
                 }
               ],
-              "title": "Library Id"
+              "title": "Library"
             }
           },
           {
@@ -14471,6 +15590,40 @@
               "default": 50,
               "title": "Page Size"
             }
+          },
+          {
+            "name": "release_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
+            }
           }
         ],
         "responses": {
@@ -14516,7 +15669,7 @@
           "homologs"
         ],
         "summary": "Get Gene Homologs",
-        "description": "Get a bounded, keyset-paginated homolog slice for a specific gene.\n\n``gene_id`` is the assembly-scoped accession; when it exists in\nmultiple assemblies, ``assembly_id`` is required.\n\nEmpty pages remain a successful response because a gene may simply not\nhave annotated homologs.",
+        "description": "Get a bounded, keyset-paginated homolog slice for a specific gene.\n\n``gene_id`` is the assembly-scoped accession; when it exists in multiple\nassemblies *within the published release*, ``assembly_id`` is required.\n\nEmpty pages remain a successful response because a gene may simply not\nhave annotated homologs.",
         "operationId": "get_gene_homologs_api_v1_homologs_genes__gene_id__homologs_get",
         "parameters": [
           {
@@ -14557,10 +15710,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Exclusive GeneHomolog.id keyset cursor.",
+              "description": "Opaque cursor returned by a previous page.",
               "title": "Cursor"
             },
-            "description": "Exclusive GeneHomolog.id keyset cursor."
+            "description": "Opaque cursor returned by a previous page."
           },
           {
             "name": "limit",
@@ -14572,6 +15725,40 @@
               "minimum": 1,
               "default": 100,
               "title": "Limit"
+            }
+          },
+          {
+            "name": "release_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
             }
           }
         ],
@@ -14618,7 +15805,7 @@
           "homologs"
         ],
         "summary": "Search Homologs",
-        "description": "Search homolog records with optional filters and pagination.",
+        "description": "Search homolog records with optional filters and pagination.\n\nEvery row is scoped to the resolved published release, including when no\n``gene_id`` is supplied.",
         "operationId": "search_homologs_api_v1_homologs_search_get",
         "parameters": [
           {
@@ -14723,10 +15910,44 @@
                   "type": "null"
                 }
               ],
-              "description": "Exclusive GeneHomolog.id keyset cursor.",
+              "description": "Opaque cursor from a previous page.",
               "title": "Cursor"
             },
-            "description": "Exclusive GeneHomolog.id keyset cursor."
+            "description": "Opaque cursor from a previous page."
+          },
+          {
+            "name": "release_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
+            }
           }
         ],
         "responses": {
@@ -15252,8 +16473,8 @@
         "tags": [
           "sra"
         ],
-        "summary": "List curated SRA samples (default species: soybean)",
-        "description": "Return a small curated list of SRA runs for the current default species\n(soybean, Glycine max) for demo / quick-load purposes.  This is static data\nbundled with the backend.",
+        "summary": "List bundled demo SRA samples",
+        "description": "Return the bundled curated SRA runs, in explicit demo mode only.\n\nThis endpoint is static fixture data, not a release-scoped query, so it is\ndisabled unless ``SOYMUTDB_DEMO_FIXTURES_ENABLED=true``. Otherwise it\nreturned fabricated soybean/Zea records in production builds where a client\nwould reasonably treat them as database contents.",
         "operationId": "list_soybean_samples_api_v1_sra_samples_get",
         "responses": {
           "200": {
@@ -16228,6 +17449,47 @@
         "title": "AboutContentResponse",
         "description": "Editable \"About us\" content backed by ``system_settings``."
       },
+      "ActiveReleaseResponse": {
+        "properties": {
+          "release_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release Id"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          }
+        },
+        "type": "object",
+        "title": "ActiveReleaseResponse",
+        "description": "The published release the public surface currently serves.\n\nAdditive (2026-10-02). The portal pins its release at build time from\n``VITE_SOYMUTDB_RELEASE_ID``; a long-lived tab therefore keeps\nrequesting an older release after an operator publishes. This endpoint\nexposes the ``active_release`` pointer the rest of the API already\nresolves against, so the client can drop release-scoped caches.\n\n``release_id`` is null while no release is published. The release id is\nalready embedded in the served page, so this discloses nothing new."
+      },
       "AdminDashboardSeries": {
         "properties": {
           "import_throughput": {
@@ -16367,6 +17629,158 @@
           "plugins"
         ],
         "title": "AdminPluginsResponse"
+      },
+      "AdminPublicationListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AdminPublicationResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "default": 0
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page",
+            "default": 1
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size",
+            "default": 20
+          }
+        },
+        "type": "object",
+        "title": "AdminPublicationListResponse",
+        "description": "Admin list: items carry the persistence key the CRUD routes address by."
+      },
+      "AdminPublicationResponse": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "title_zh": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title Zh"
+          },
+          "authors": {
+            "type": "string",
+            "title": "Authors"
+          },
+          "authors_zh": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authors Zh"
+          },
+          "journal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Journal"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "doi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doi"
+          },
+          "pmid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pmid"
+          },
+          "abstract": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Abstract"
+          },
+          "abstract_zh": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Abstract Zh"
+          },
+          "is_featured": {
+            "type": "boolean",
+            "title": "Is Featured",
+            "default": false
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "id": {
+            "type": "string",
+            "title": "Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "authors",
+          "created_at",
+          "id"
+        ],
+        "title": "AdminPublicationResponse",
+        "description": "Admin projection: adds the persistence key the admin routes address by.\n\nThe public DTO deliberately has no ``id`` (publications are located by DOI),\nbut ``PUT``/``DELETE /admin/publications/{id}`` operate on the key, so the\nauthenticated management surface needs it. Admin-only, never served\nanonymously."
       },
       "AdminSiteBrandResponse": {
         "properties": {
@@ -16952,6 +18366,17 @@
               }
             ],
             "title": "Assembly Is Default"
+          },
+          "release_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release Id"
           }
         },
         "type": "object",
@@ -17187,6 +18612,28 @@
               }
             ],
             "title": "Result Url"
+          },
+          "release_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release Id"
+          },
+          "assembly_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assembly Name"
           }
         },
         "type": "object",
@@ -19526,33 +20973,6 @@
         "type": "object",
         "title": "FeatureUpdateRequest"
       },
-      "FieldError": {
-        "description": "Field-level validation error for 422 responses.",
-        "properties": {
-          "field": {
-            "description": "Dot-joined request field path, e.g. ``query.chromosome``.",
-            "title": "Field",
-            "type": "string"
-          },
-          "message": {
-            "description": "Human-readable validation message.",
-            "title": "Message",
-            "type": "string"
-          },
-          "type": {
-            "description": "Pydantic error type identifier (e.g. ``string_type``).",
-            "title": "Type",
-            "type": "string"
-          }
-        },
-        "required": [
-          "field",
-          "message",
-          "type"
-        ],
-        "title": "FieldError",
-        "type": "object"
-      },
       "FieldMappingItem": {
         "properties": {
           "source_field": {
@@ -19979,6 +21399,12 @@
             ],
             "title": "Description"
           },
+          "variant_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Variant Count",
+            "default": 0
+          },
           "transcripts": {
             "items": {
               "$ref": "#/components/schemas/TranscriptResponse"
@@ -19992,12 +21418,6 @@
             },
             "type": "array",
             "title": "Aliases"
-          },
-          "variant_count": {
-            "type": "integer",
-            "minimum": 0.0,
-            "title": "Variant Count",
-            "default": 0
           },
           "created_at": {
             "anyOf": [
@@ -20194,6 +21614,12 @@
               }
             ],
             "title": "Description"
+          },
+          "variant_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Variant Count",
+            "default": 0
           }
         },
         "type": "object",
@@ -25039,6 +26465,39 @@
           "available": {
             "type": "boolean",
             "title": "Available"
+          },
+          "gene_v2": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gene V2"
+          },
+          "gene_v4": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gene V4"
+          },
+          "gene_dn53": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gene Dn53"
           }
         },
         "type": "object",
@@ -25128,6 +26587,20 @@
         ],
         "title": "PreviewMutationSiteSearchResponse"
       },
+      "PreviewMutationSiteUpdate": {
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "title": "Available"
+          }
+        },
+        "type": "object",
+        "required": [
+          "available"
+        ],
+        "title": "PreviewMutationSiteUpdate",
+        "description": "Operator-editable fields of one source mutation-site row."
+      },
       "PreviewRequest": {
         "properties": {
           "definition": {
@@ -25212,6 +26685,35 @@
         },
         "type": "object",
         "title": "PublicCapabilitiesResponse"
+      },
+      "PublicPageDefinitionResponse": {
+        "properties": {
+          "route": {
+            "type": "string",
+            "title": "Route"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PageDefinitionStatusEnum"
+          },
+          "definition": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Definition"
+          }
+        },
+        "type": "object",
+        "required": [
+          "route",
+          "version",
+          "status",
+          "definition"
+        ],
+        "title": "PublicPageDefinitionResponse",
+        "description": "Public payload for a published definition without persistence metadata."
       },
       "PublicationCreate": {
         "properties": {
@@ -25333,6 +26835,37 @@
         ],
         "title": "PublicationCreate"
       },
+      "PublicationListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/app__schemas__publication__PublicationResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "PublicationListResponse"
+      },
       "PublicationManifestResponse": {
         "properties": {
           "id": {
@@ -25394,6 +26927,18 @@
               }
             ],
             "title": "Page Definition Version"
+          },
+          "build_artifact_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2048
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Build Artifact Url"
           }
         },
         "type": "object",
@@ -25748,6 +27293,192 @@
         ],
         "title": "QueryLatencyPoint",
         "description": "Daily query-latency percentiles (ms)."
+      },
+      "RegionGeneResponse": {
+        "properties": {
+          "gene_id": {
+            "type": "string",
+            "title": "Gene Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "chromosome": {
+            "type": "string",
+            "title": "Chromosome"
+          },
+          "start": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Start"
+          },
+          "end": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "End"
+          },
+          "start_pos": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Start Pos"
+          },
+          "end_pos": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "End Pos"
+          },
+          "strand": {
+            "$ref": "#/components/schemas/Strand"
+          },
+          "biotype": {
+            "type": "string",
+            "title": "Biotype",
+            "default": "protein_coding"
+          },
+          "transcripts": {
+            "items": {
+              "$ref": "#/components/schemas/RegionTranscriptResponse"
+            },
+            "type": "array",
+            "title": "Transcripts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "gene_id",
+          "chromosome",
+          "start",
+          "end",
+          "start_pos",
+          "end_pos",
+          "strand"
+        ],
+        "title": "RegionGeneResponse",
+        "description": "A gene overlapping the window, with every transcript it models."
+      },
+      "RegionStructureResponse": {
+        "properties": {
+          "assembly_id": {
+            "type": "integer",
+            "title": "Assembly Id"
+          },
+          "assembly_name": {
+            "type": "string",
+            "title": "Assembly Name"
+          },
+          "assembly_version": {
+            "type": "string",
+            "title": "Assembly Version"
+          },
+          "chromosome": {
+            "type": "string",
+            "title": "Chromosome"
+          },
+          "chromosome_length": {
+            "type": "integer",
+            "title": "Chromosome Length"
+          },
+          "start": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Start"
+          },
+          "end": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "End"
+          },
+          "genes": {
+            "items": {
+              "$ref": "#/components/schemas/RegionGeneResponse"
+            },
+            "type": "array",
+            "title": "Genes"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "assembly_id",
+          "assembly_name",
+          "assembly_version",
+          "chromosome",
+          "chromosome_length",
+          "start",
+          "end"
+        ],
+        "title": "RegionStructureResponse",
+        "description": "The answer to \"what is in this window\"."
+      },
+      "RegionTranscriptResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "biotype": {
+            "type": "string",
+            "title": "Biotype",
+            "default": "mRNA"
+          },
+          "start": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Start"
+          },
+          "end": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "End"
+          },
+          "strand": {
+            "$ref": "#/components/schemas/Strand"
+          },
+          "is_canonical": {
+            "type": "boolean",
+            "title": "Is Canonical",
+            "default": false
+          },
+          "parts": {
+            "items": {
+              "$ref": "#/components/schemas/TranscriptPartResponse"
+            },
+            "type": "array",
+            "title": "Parts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "start",
+          "end",
+          "strand"
+        ],
+        "title": "RegionTranscriptResponse",
+        "description": "A transcript with its structure, inside one coordinate window."
       },
       "RegistryResponse": {
         "properties": {
@@ -26184,13 +27915,9 @@
       },
       "SeedInventoryResponse": {
         "properties": {
-          "id": {
+          "mutant_line_public_id": {
             "type": "string",
-            "title": "Id"
-          },
-          "mutant_line_id": {
-            "type": "string",
-            "title": "Mutant Line Id"
+            "title": "Mutant Line Public Id"
           },
           "seed_lot": {
             "type": "string",
@@ -26258,14 +27985,33 @@
         },
         "type": "object",
         "required": [
-          "id",
-          "mutant_line_id",
+          "mutant_line_public_id",
           "seed_lot",
           "quantity_grams",
           "created_at",
           "updated_at"
         ],
-        "title": "SeedInventoryResponse"
+        "title": "SeedInventoryResponse",
+        "description": "Public seed-inventory projection.\n\n``seed_lot`` is the public locator (the lot label the collection uses) and\n``mutant_line_public_id`` is the line's public identifier. The inventory row\nid and the mutant line's internal key are persistence details and are not\npart of the external contract."
+      },
+      "SeedRequestGeneCount": {
+        "properties": {
+          "gene_id": {
+            "type": "string",
+            "title": "Gene Id"
+          },
+          "requests": {
+            "type": "integer",
+            "title": "Requests"
+          }
+        },
+        "type": "object",
+        "required": [
+          "gene_id",
+          "requests"
+        ],
+        "title": "SeedRequestGeneCount",
+        "description": "Aggregate demand for one gene ID.\n\nDeliberately carries no requester, timestamp or status: the public gene page\nshows \"how many people asked for this material\", which is demand signal, not\npersonal data. Anything that could identify a requester stays behind\n``/admin/seed-requests``."
       },
       "SeedRequestListResponse": {
         "properties": {
@@ -26298,6 +28044,28 @@
         ],
         "title": "SeedRequestListResponse",
         "description": "Paginated admin listing of seed request contacts."
+      },
+      "SeedRequestStatsResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SeedRequestGeneCount"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total_requests": {
+            "type": "integer",
+            "title": "Total Requests"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total_requests"
+        ],
+        "title": "SeedRequestStatsResponse",
+        "description": "Public aggregate counts keyed by gene ID."
       },
       "SeqFetchRequest": {
         "properties": {
@@ -28350,6 +30118,37 @@
         "title": "TokenResponse",
         "description": "Token pair returned after successful authentication.\n\nOnly the access token is returned in JSON.  The refresh token is\ndelivered exclusively through the HttpOnly refresh cookie and never\nappears in any response body."
       },
+      "TranscriptPartResponse": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "cds",
+              "utr5",
+              "utr3"
+            ],
+            "title": "Kind"
+          },
+          "start": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Start"
+          },
+          "end": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "End"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "start",
+          "end"
+        ],
+        "title": "TranscriptPartResponse",
+        "description": "One typed segment of a transcript.\n\n``kind`` is the vocabulary the renderers already speak \u2014 the portal's\n``packages/genome-view`` places ``cds`` / ``utr5`` / ``utr3`` boxes and the\nserver-side SVG renderer draws the same four. Exposing the database's\n``part_type`` verbatim would put that mapping in every client."
+      },
       "TranscriptResponse": {
         "properties": {
           "id": {
@@ -28624,6 +30423,13 @@
             ],
             "title": "Role Name"
           },
+          "effective_roles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Effective Roles"
+          },
           "organization_id": {
             "anyOf": [
               {
@@ -28717,95 +30523,6 @@
           "type"
         ],
         "title": "ValidationError"
-      },
-      "ValidationErrorResponse": {
-        "$defs": {
-          "ErrorDetail": {
-            "description": "Machine-readable error detail (inside the ``error`` envelope).",
-            "properties": {
-              "code": {
-                "description": "Stable machine-readable error code, e.g. ``not_found``.",
-                "title": "Code",
-                "type": "string"
-              },
-              "message": {
-                "description": "Human-readable error message.",
-                "title": "Message",
-                "type": "string"
-              },
-              "details": {
-                "additionalProperties": true,
-                "description": "Optional structured context (never contains secrets or stack traces).",
-                "title": "Details",
-                "type": "object"
-              }
-            },
-            "required": [
-              "code",
-              "message"
-            ],
-            "title": "ErrorDetail",
-            "type": "object"
-          },
-          "FieldError": {
-            "description": "Field-level validation error for 422 responses.",
-            "properties": {
-              "field": {
-                "description": "Dot-joined request field path, e.g. ``query.chromosome``.",
-                "title": "Field",
-                "type": "string"
-              },
-              "message": {
-                "description": "Human-readable validation message.",
-                "title": "Message",
-                "type": "string"
-              },
-              "type": {
-                "description": "Pydantic error type identifier (e.g. ``string_type``).",
-                "title": "Type",
-                "type": "string"
-              }
-            },
-            "required": [
-              "field",
-              "message",
-              "type"
-            ],
-            "title": "FieldError",
-            "type": "object"
-          }
-        },
-        "description": "422 response: unified envelope plus field-level ``errors``.",
-        "properties": {
-          "error": {
-            "$ref": "#/components/schemas/ErrorDetail"
-          },
-          "request_id": {
-            "description": "Correlation id (also echoed in the ``X-Request-ID`` header).",
-            "title": "Request Id",
-            "type": "string"
-          },
-          "status_code": {
-            "description": "HTTP status code.",
-            "title": "Status Code",
-            "type": "integer"
-          },
-          "errors": {
-            "description": "Field-level validation errors (sanitised; no internal structure exposed).",
-            "items": {
-              "$ref": "#/components/schemas/FieldError"
-            },
-            "title": "Errors",
-            "type": "array"
-          }
-        },
-        "required": [
-          "error",
-          "request_id",
-          "status_code"
-        ],
-        "title": "ValidationErrorResponse",
-        "type": "object"
       },
       "VariantDetail": {
         "properties": {
@@ -30017,40 +31734,8 @@
         "title": "SeedRequestStatus",
         "description": "Lifecycle of a contact-style seed request."
       },
-      "app__schemas__content__PublicationListResponse": {
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/app__schemas__content__PublicationResponse"
-            },
-            "type": "array",
-            "title": "Items"
-          },
-          "total": {
-            "type": "integer",
-            "title": "Total",
-            "default": 0
-          },
-          "page": {
-            "type": "integer",
-            "title": "Page",
-            "default": 1
-          },
-          "page_size": {
-            "type": "integer",
-            "title": "Page Size",
-            "default": 20
-          }
-        },
-        "type": "object",
-        "title": "PublicationListResponse"
-      },
       "app__schemas__content__PublicationResponse": {
         "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
           "title": {
             "type": "string",
             "title": "Title"
@@ -30160,43 +31845,12 @@
         },
         "type": "object",
         "required": [
-          "id",
           "title",
           "authors",
           "created_at"
         ],
-        "title": "PublicationResponse"
-      },
-      "app__schemas__publication__PublicationListResponse": {
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/app__schemas__publication__PublicationResponse"
-            },
-            "type": "array",
-            "title": "Items"
-          },
-          "total": {
-            "type": "integer",
-            "title": "Total"
-          },
-          "page": {
-            "type": "integer",
-            "title": "Page"
-          },
-          "page_size": {
-            "type": "integer",
-            "title": "Page Size"
-          }
-        },
-        "type": "object",
-        "required": [
-          "items",
-          "total",
-          "page",
-          "page_size"
-        ],
-        "title": "PublicationListResponse"
+        "title": "PublicationResponse",
+        "description": "Public publication projection.\n\nThe persistence key is not part of the contract: a publication is addressed\nby its DOI (``/content/publications/{doi}``), which is the identifier the\nscholarly record itself uses. Rows without a DOI are still listed but have\nno detail locator."
       },
       "app__schemas__publication__PublicationResponse": {
         "properties": {
@@ -30250,6 +31904,17 @@
               }
             ],
             "title": "Artifact Url"
+          },
+          "build_artifact_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Build Artifact Url"
           },
           "remote_id": {
             "anyOf": [
@@ -30331,9 +31996,9 @@
       },
       "app__schemas__seed__SeedRequestCreate": {
         "properties": {
-          "mutant_line_id": {
+          "mutant_line_public_id": {
             "type": "string",
-            "title": "Mutant Line Id"
+            "title": "Mutant Line Public Id"
           },
           "quantity_grams": {
             "type": "number",
@@ -30371,7 +32036,7 @@
         },
         "type": "object",
         "required": [
-          "mutant_line_id",
+          "mutant_line_public_id",
           "quantity_grams",
           "requester_name",
           "requester_email",
@@ -30387,9 +32052,9 @@
             "type": "string",
             "title": "Id"
           },
-          "mutant_line_id": {
+          "mutant_line_public_id": {
             "type": "string",
-            "title": "Mutant Line Id"
+            "title": "Mutant Line Public Id"
           },
           "status": {
             "$ref": "#/components/schemas/app__schemas__seed__SeedRequestStatus"
@@ -30464,7 +32129,7 @@
         "type": "object",
         "required": [
           "id",
-          "mutant_line_id",
+          "mutant_line_public_id",
           "status",
           "requester_name",
           "requester_email",
@@ -30472,7 +32137,8 @@
           "purpose",
           "created_at"
         ],
-        "title": "SeedRequestResponse"
+        "title": "SeedRequestResponse",
+        "description": "Public seed-request projection: the line is identified publicly.\n\n``id`` is the request's own opaque UUID (it is the requester's tracking\nhandle), never the line's internal key."
       },
       "app__schemas__seed__SeedRequestStatus": {
         "type": "string",
@@ -30677,6 +32343,122 @@
         ],
         "title": "SeedRequestUpdate",
         "description": "Admin status update payload."
+      },
+      "FieldError": {
+        "description": "Field-level validation error for 422 responses.",
+        "properties": {
+          "field": {
+            "description": "Dot-joined request field path, e.g. ``query.chromosome``.",
+            "title": "Field",
+            "type": "string"
+          },
+          "message": {
+            "description": "Human-readable validation message.",
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "description": "Pydantic error type identifier (e.g. ``string_type``).",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "message",
+          "type"
+        ],
+        "title": "FieldError",
+        "type": "object"
+      },
+      "ValidationErrorResponse": {
+        "$defs": {
+          "ErrorDetail": {
+            "description": "Machine-readable error detail (inside the ``error`` envelope).",
+            "properties": {
+              "code": {
+                "description": "Stable machine-readable error code, e.g. ``not_found``.",
+                "title": "Code",
+                "type": "string"
+              },
+              "message": {
+                "description": "Human-readable error message.",
+                "title": "Message",
+                "type": "string"
+              },
+              "details": {
+                "additionalProperties": true,
+                "description": "Optional structured context (never contains secrets or stack traces).",
+                "title": "Details",
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "title": "ErrorDetail",
+            "type": "object"
+          },
+          "FieldError": {
+            "description": "Field-level validation error for 422 responses.",
+            "properties": {
+              "field": {
+                "description": "Dot-joined request field path, e.g. ``query.chromosome``.",
+                "title": "Field",
+                "type": "string"
+              },
+              "message": {
+                "description": "Human-readable validation message.",
+                "title": "Message",
+                "type": "string"
+              },
+              "type": {
+                "description": "Pydantic error type identifier (e.g. ``string_type``).",
+                "title": "Type",
+                "type": "string"
+              }
+            },
+            "required": [
+              "field",
+              "message",
+              "type"
+            ],
+            "title": "FieldError",
+            "type": "object"
+          }
+        },
+        "description": "422 response: unified envelope plus field-level ``errors``.",
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorDetail"
+          },
+          "request_id": {
+            "description": "Correlation id (also echoed in the ``X-Request-ID`` header).",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "status_code": {
+            "description": "HTTP status code.",
+            "title": "Status Code",
+            "type": "integer"
+          },
+          "errors": {
+            "description": "Field-level validation errors (sanitised; no internal structure exposed).",
+            "items": {
+              "$ref": "#/components/schemas/FieldError"
+            },
+            "title": "Errors",
+            "type": "array"
+          }
+        },
+        "required": [
+          "error",
+          "request_id",
+          "status_code"
+        ],
+        "title": "ValidationErrorResponse",
+        "type": "object"
       }
     },
     "securitySchemes": {

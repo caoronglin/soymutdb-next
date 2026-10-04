@@ -15,6 +15,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { ExperimentOutlined, ScanOutlined, LoadingOutlined, CheckCircleOutlined, CloseCircleOutlined, DownloadOutlined, FileTextOutlined, DatabaseOutlined } from "@ant-design/icons";
 import { Breadcrumb, Button, Card, Result, Spin, Statistic, Tag, Typography } from "@/lib/antd";
 import { getAnalysis, getAnalysisDownload, type AnalysesJobResponse } from "@soymutdb/api-client";
@@ -77,17 +78,18 @@ function fmtInt(v: number | undefined): string {
 // ---------------------------------------------------------------------------
 
 function StatusBadge({ job }: { job: AnalysesJobResponse }) {
+  const { t } = useTranslation();
   if (job.status === "succeeded") {
     return (
       <Tag color="success" className="gap-1 uppercase">
-        <CheckCircleOutlined className="size-3" aria-hidden /> Succeeded
+        <CheckCircleOutlined className="size-3" aria-hidden /> {t("analyses.job.statusSucceeded")}
       </Tag>
     );
   }
   if (job.status === "failed") {
     return (
       <Tag color="error" className="gap-1 uppercase">
-        <CloseCircleOutlined className="size-3" aria-hidden /> Failed
+        <CloseCircleOutlined className="size-3" aria-hidden /> {t("analyses.job.statusFailed")}
       </Tag>
     );
   }
@@ -102,6 +104,7 @@ function StatusBadge({ job }: { job: AnalysesJobResponse }) {
 }
 
 function JobResultComponent() {
+  const { t } = useTranslation();
   const { jobId } = Route.useParams();
   const navigate = useNavigate();
 
@@ -191,13 +194,13 @@ function JobResultComponent() {
       <div className="container-prose section-rhythm">
         <ResearcherGate>
           <header className="flex flex-col gap-4">
-            <Breadcrumb items={[{ title: <Link to="/analyses">Analyze</Link> }, { title: "Job" }]} />
+            <Breadcrumb items={[{ title: <Link to="/analyses">{t("analyses.title")}</Link> }, { title: t("analyses.job.breadcrumb") }]} />
             <div className="flex items-start gap-3.5">
               <span className="flex size-11 items-center justify-center rounded-xl border bg-card shadow-sm"><ExperimentOutlined className="size-5" aria-hidden /></span>
-              <Typography.Title level={2} style={{ margin: 0 }}>Analysis job</Typography.Title>
+              <Typography.Title level={2} style={{ margin: 0 }}>{t("analyses.job.title")}</Typography.Title>
             </div>
           </header>
-          <Spin tip="Loading job…" className="py-24" />
+          <Spin tip={t("analyses.job.loading")} className="py-24" />
         </ResearcherGate>
       </div>
     );
@@ -208,19 +211,19 @@ function JobResultComponent() {
       <div className="container-prose section-rhythm">
         <ResearcherGate>
           <header className="flex flex-col gap-4">
-            <Breadcrumb items={[{ title: <Link to="/analyses">Analyze</Link> }, { title: "Job" }]} />
+            <Breadcrumb items={[{ title: <Link to="/analyses">{t("analyses.title")}</Link> }, { title: t("analyses.job.breadcrumb") }]} />
             <div className="flex items-start gap-3.5">
               <span className="flex size-11 items-center justify-center rounded-xl border bg-card shadow-sm"><ExperimentOutlined className="size-5" aria-hidden /></span>
-              <Typography.Title level={2} style={{ margin: 0 }}>Analysis job</Typography.Title>
+              <Typography.Title level={2} style={{ margin: 0 }}>{t("analyses.job.title")}</Typography.Title>
             </div>
           </header>
           <Result
             status="error"
-            title="Could not load this job"
-            subTitle="The job may have been removed, or the job service is unavailable."
+            title={t("analyses.job.loadErrorTitle")}
+            subTitle={t("analyses.job.loadErrorHint")}
             extra={
               <Button type="primary" onClick={() => void jobQuery.refetch()}>
-                Retry
+                {t("common.retry")}
               </Button>
             }
           />
@@ -236,7 +239,7 @@ function JobResultComponent() {
     <div className="container-prose section-rhythm">
       <ResearcherGate>
         <header className="flex flex-col gap-4">
-          <Breadcrumb items={[{ title: <Link to="/analyses">Analyze</Link> }, { title: job.job_id.slice(0, 8) }]} />
+          <Breadcrumb items={[{ title: <Link to="/analyses">{t("analyses.title")}</Link> }, { title: job.job_id.slice(0, 8) }]} />
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-start gap-3.5">
               <span className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-border bg-card shadow-sm">
@@ -244,10 +247,10 @@ function JobResultComponent() {
               </span>
               <div>
                 <Typography.Title level={2} style={{ margin: 0 }}>
-                  {isFastp ? "fastp" : "scanpy"} job
+                  {isFastp ? t("analyses.job.toolFastp") : t("analyses.job.toolScanpy")} {t("analyses.job.titleSuffix")}
                 </Typography.Title>
                 <Typography.Paragraph type="secondary" style={{ margin: 0 }}>
-                  Job {job.job_id.slice(0, 8)}… · submitted {formatDate(job.created_at)}
+                  {t("analyses.job.summary", { id: job.job_id.slice(0, 8), submitted: formatDate(job.created_at) })}
                 </Typography.Paragraph>
               </div>
             </div>
@@ -261,9 +264,9 @@ function JobResultComponent() {
               <LoadingOutlined className="size-5 animate-spin text-primary" aria-hidden />
               <div>
                 <p className="text-sm font-medium">
-                  {job.status === "queued" ? "Job queued — waiting for a worker…" : job.status === "pending" ? "Job pending…" : "Job running — this can take a few minutes…"}
+                  {job.status === "queued" ? t("analyses.job.stateQueued") : job.status === "pending" ? t("analyses.job.statePending") : t("analyses.job.stateRunning")}
                 </p>
-                <p className="text-xs text-muted-foreground">This page refreshes automatically every {POLL_INTERVAL_MS / 1000}s. You can leave and come back later.</p>
+                <p className="text-xs text-muted-foreground">{t("analyses.job.polling", { seconds: POLL_INTERVAL_MS / 1000 })}</p>
               </div>
             </div>
           </Card>
@@ -275,17 +278,17 @@ function JobResultComponent() {
             title={
               <span className="flex items-center gap-2 text-destructive">
                 <CloseCircleOutlined className="size-5" aria-hidden />
-                Job failed
+                {t("analyses.job.failedTitle")}
               </span>
             }
           >
             <div className="gap-4" style={{ display: "grid", gap: 16 }}>
               <pre className="overflow-x-auto rounded-lg border bg-muted/40 p-4 font-mono text-xs leading-relaxed whitespace-pre-wrap">
-                {job.error_message ?? "No error message provided."}
+                {job.error_message ?? t("analyses.job.noErrorMessage")}
               </pre>
               <div>
                 <Button size="small" variant="outlined" onClick={() => navigate({ to: retryTo })}>
-                  Re-submit a {isFastp ? "fastp" : "scanpy"} job
+                  {t("analyses.job.resubmit", { tool: isFastp ? t("analyses.job.toolFastp") : t("analyses.job.toolScanpy") })}
                 </Button>
               </div>
             </div>
@@ -297,10 +300,10 @@ function JobResultComponent() {
             {isFastp ? (
               <>
                 <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                  <Card><Statistic title="Total reads" value={fmtInt(fastpStats.reads)} /></Card>
-                  <Card><Statistic title="Total bases" value={fmtInt(fastpStats.bases)} /></Card>
-                  <Card><Statistic title="Q30 bases" value={percent(fastpStats.q30)} /></Card>
-                  <Card><Statistic title="Duplication" value={percent(fastpStats.duplication)} /></Card>
+                  <Card><Statistic title={t("analyses.job.totalReads")} value={fmtInt(fastpStats.reads)} /></Card>
+                  <Card><Statistic title={t("analyses.job.totalBases")} value={fmtInt(fastpStats.bases)} /></Card>
+                  <Card><Statistic title={t("analyses.job.q30Bases")} value={percent(fastpStats.q30)} /></Card>
+                  <Card><Statistic title={t("analyses.job.duplication")} value={percent(fastpStats.duplication)} /></Card>
                 </div>
 
                 {fastpHtmlKey ? (
@@ -309,20 +312,20 @@ function JobResultComponent() {
                     title={
                       <span className="flex items-center gap-2 text-sm">
                         <FileTextOutlined className="size-4 text-primary" aria-hidden />
-                        fastp HTML report
+                        {t("analyses.job.htmlReport")}
                       </span>
                     }
                   >
                     <div>
                       {fastpHtml.isLoading ? (
-                        <Spin tip="Preparing report…" className="py-16" />
+                        <Spin tip={t("analyses.job.preparingReport")} className="py-16" />
                       ) : fastpHtml.error || !fastpHtml.data ? (
                         <p className="py-10 text-center text-sm text-muted-foreground">
-                          Report unavailable at the moment — try again later.
+                          {t("analyses.job.reportUnavailable")}
                         </p>
                       ) : (
                         <iframe
-                          title="fastp HTML report"
+                          title={t("analyses.job.htmlReport")}
                           src={fastpHtml.data.download_url}
                           sandbox=""
                           className="h-[75vh] w-full rounded-lg border bg-white"
@@ -340,19 +343,19 @@ function JobResultComponent() {
                     title={
                       <span className="flex items-center gap-2 text-sm">
                         <ScanOutlined className="size-4 text-primary" aria-hidden />
-                        UMAP projection
+                        {t("analyses.job.umapProjection")}
                       </span>
                     }
                   >
                     <div>
                       {umap.isLoading ? (
-                        <Spin tip="Loading UMAP…" className="py-16" />
+                        <Spin tip={t("analyses.job.loadingUmap")} className="py-16" />
                       ) : umap.error || !umap.data ? (
-                        <p className="py-10 text-center text-sm text-muted-foreground">UMAP unavailable.</p>
+                        <p className="py-10 text-center text-sm text-muted-foreground">{t("analyses.job.umapUnavailable")}</p>
                       ) : (
                         <img
                           src={umap.data.download_url}
-                          alt="Scanpy UMAP projection coloured by cluster"
+                          alt={t("analyses.job.umapAlt")}
                           className="mx-auto max-h-[70vh] w-auto max-w-full rounded-lg border bg-white"
                         />
                       )}
@@ -365,7 +368,7 @@ function JobResultComponent() {
                     title={
                       <span className="flex items-center gap-2 text-sm">
                         <DatabaseOutlined className="size-4 text-primary" aria-hidden />
-                        Cluster sizes
+                        {t("analyses.job.clusterSizes")}
                       </span>
                     }
                   >
@@ -380,7 +383,7 @@ function JobResultComponent() {
                           ariaLabel="Cluster sizes"
                         />
                       ) : (
-                        <p className="py-6 text-center text-sm text-muted-foreground">No cluster size data in the result.</p>
+                        <p className="py-6 text-center text-sm text-muted-foreground">{t("analyses.job.noClusterSizes")}</p>
                       )}
                     </div>
                   </Card>
@@ -389,7 +392,7 @@ function JobResultComponent() {
                     title={
                       <span className="flex items-center gap-2 text-sm">
                         <ScanOutlined className="size-4 text-primary" aria-hidden />
-                        Top marker genes
+                        {t("analyses.job.topMarkers")}
                       </span>
                     }
                   >
@@ -408,7 +411,7 @@ function JobResultComponent() {
                           ariaLabel="Top marker genes"
                         />
                       ) : (
-                        <p className="py-6 text-center text-sm text-muted-foreground">No marker gene data in the result.</p>
+                        <p className="py-6 text-center text-sm text-muted-foreground">{t("analyses.job.noMarkerGenes")}</p>
                       )}
                     </div>
                   </Card>
@@ -420,7 +423,7 @@ function JobResultComponent() {
                     title={
                       <span className="flex items-center gap-2 text-sm">
                         <DownloadOutlined className="size-4 text-primary" aria-hidden />
-                        Downloads
+                        {t("analyses.job.downloads")}
                       </span>
                     }
                   >
@@ -433,7 +436,7 @@ function JobResultComponent() {
                           onClick={() => markersCsv.data && window.open(markersCsv.data.download_url, "_blank", "noopener")}
                         >
                           <DownloadOutlined className="size-4" aria-hidden />
-                          markers.csv
+                          {t("analyses.job.markersCsv")}
                         </Button>
                       ) : null}
                       {annotatedKey ? (
@@ -444,7 +447,7 @@ function JobResultComponent() {
                           onClick={() => annotated.data && window.open(annotated.data.download_url, "_blank", "noopener")}
                         >
                           <DownloadOutlined className="size-4" aria-hidden />
-                          annotated .h5ad
+                          {t("analyses.job.annotatedH5ad")}
                         </Button>
                       ) : null}
                     </div>
@@ -456,7 +459,7 @@ function JobResultComponent() {
         ) : null}
 
         {!ACTIVE_STATUSES.has(job.status) && job.status !== "succeeded" && job.status !== "failed" ? (
-          <p className="mt-8 text-center text-sm text-muted-foreground">Job status: {job.status}.</p>
+          <p className="mt-8 text-center text-sm text-muted-foreground">{t("analyses.job.statusLine", { status: job.status })}</p>
         ) : null}
       </ResearcherGate>
     </div>
