@@ -465,6 +465,44 @@ apps/api/app/schemas/auth.py      : 7 处
 
 **若要根治**：为仓库加 `.gitattributes` 统一行尾策略，属于独立的仓库级变更，需单独决策，本轮未做。
 
+### 8-M. W6 实验框架（已搭建，无库环境下可自证；**未跑过真实 A/B**）
+
+用户 2026-10-02 指示「先搭建框架」。框架与判据已就位，**任何真实测量都还没做**。
+
+| 文件 | 内容 |
+| --- | --- |
+| `scripts/db_ab_experiment.py` | 单因素 A/B 计划、隔离拒绝、EXPLAIN 根层读数、交替轮次、比较与报告 |
+| `scripts/test_db_ab_experiment.py` | **37 passed** |
+
+**结构性地堵住 D-08 的三条方法学缺陷**（不是靠文档提醒）：
+
+1. **统计信息对称**：`Arm.analyse` 默认 `ANALYZE`，`plan_rounds` 每轮对**两个臂都执行**。
+   测试断言 ANALYZE 语句数为 `轮次 × 臂数`（对称性而非总数）。
+2. **只读根层**：`extract_run` 读根节点的 `Execution Time` / `Planning Time` / buffer 计数；
+   没有 `Execution Time`（即没开 ANALYZE）直接拒绝，不再可能拿子节点数字对比。
+3. **交替 + 重复**：`rounds < 5` 直接拒绝构造计划；`Comparison.is_decisive` 还要求
+   两臂**计划形状相同**且**结果基数相同**且样本数 ≥5，否则不出结论。
+   报告强制打印 median / min / max / spread / 样本数，不接受单次计时。
+
+**隔离（H-09）真的会拒绝，且有负例**：
+
+| 拒绝项 | 负例测试 |
+| --- | --- |
+| 非 `soymutdb_abtest_*` 库名 | `soymutdb` / `postgres` / `prod` / 空 / `abtest` 全部拒绝 |
+| `pg_terminate_backend` / `pg_cancel_backend` / `ALTER SYSTEM` / `pg_reload_conf` / `DROP DATABASE` / `VACUUM FULL` / `REINDEX DATABASE` | 含注释混淆（`-- x\nSELECT 1; pg_cancel_backend(1)`、`ALTER /* x */ SYSTEM`）均拒绝 |
+| 计划中夹带危险语句 | **执行前**即拒绝，`execute` 未被调用任何一次 |
+
+**消融（真实翻转，md5 已恢复）**：
+移除库名隔离门 → **7 failed**；移除 5 轮下限 → **1 failed**；移除 ANALYZE 要求 → **1 failed**；
+恢复后 37 passed。
+
+**刻意不做的**：框架**不 import 任何数据库驱动**——只做计划、拒绝与比较，
+`execute` 由调用方注入。这样在本机（无 psql/pgcli/Docker）仍可导入并测试全部判据，
+而真实测量留到具备独立测试库时再跑。
+
+**仍缺的前置**：命名独立测试库的来源（schema 快照）、真实查询集、真实 A/B 运行、
+索引迁移的升级/回退演练。**未取得任何性能结论。**
+
 ### 8-L. 本轮未解 / 待查（不得当作已完成）
 
 1. **API 测试间歇性 `Threading failure`（已定位：宿主线程容量，非代码缺陷）**
