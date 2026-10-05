@@ -10,7 +10,7 @@ Repository-wide document entry point: [docs/README.md](../README.md); superseded
 2. [Current project status](../dev/project-status.md) — what is green, what is red, and which numbers were actually measured.
 3. [Integration view of every design and plan](../3.9升级优化文档.md) — where the pieces line up and where they conflict.
 4. [2026-10-02 design-draft audit](../dev/design-audit-2026-10-02.md) — evidence-grade corrections to the 2026-10-02 optimization/ablation drafts; read before executing them.
-5. [Audited optimization execution plan](plans/2026-10-02-audited-optimization-execution.md) — 18 hard constraints, W0–W7 scope and acceptance gates. W0–W3 done (incl. runtime release switch and the additive `/auth/me` capability field); W4 partially done; W5–W7 not started. Progress table in §3.9, evidence in the [2026-10-02 rebaseline](baseline/2026-10-02-w0-rebaseline.md) §8.
+5. [Audited optimization execution plan](plans/2026-10-02-audited-optimization-execution.md) — 18 hard constraints, W0–W7 scope and acceptance gates. **W0–W4 complete** (incl. runtime release switch, additive `/auth/me` capability field, and the visible-copy guard at zero files), **W6 harness ready but never run against a live database**; W5 and W7 not started. Progress table in §3.9; per-stage evidence and a consolidated current state in the [2026-10-02 rebaseline](baseline/2026-10-02-w0-rebaseline.md) §8–§9.
 6. [New-conversation execution prompt](../dev/execute-audited-optimization-prompt.md) — complete and compact handoff instructions for starting implementation.
 
 ## Baselines

@@ -1,7 +1,8 @@
 # 审计后全局优化执行方案
 
 - 日期：2026-10-02。
-- 状态：**W0、W1 完成；W2、W3 完成**（含运行时 release 切换与 `/auth/me` 加法式能力字段）；**W4 进行中**：analyses 模块 6 文件零硬编码（i18n 守卫 39→33），其余页面未开始；**W6 框架已就位（未跑实测）**；**W5、W7 未开始**。
+- 状态：**W0–W3 完成；W4 完成（i18n 守卫清零 + 真实浏览器验证）；W6 框架就位但未跑实测；W5、W7 未开始（受阻于前置）**。
+  本轮共 **5 个提交**已推送到 `origin/main`（`gh` 可用，CNB 远端 `cnb` 仍无凭据）。
   实施结果与更正记录见 [W0 重新基线记录 §8](../baseline/2026-10-02-w0-rebaseline.md)。
   本次修改只交付文档，不把计划当作上线结果。
 - 范围：门户与管理端、登录和权限、查询作用域、企业微信、数据库、交付与消融。
@@ -149,16 +150,25 @@ manifest 包含 Git SHA、各应用镜像/静态制品 digest、schema 版本、
 | W1 交付阻断与守卫 | ✅ | 6 守卫 exit 0；`pytest scripts` 313 passed/1 skipped；`check-dockerfile-copy` 负例翻转 |
 | W2 assembly 作用域 | ✅ | 10 消费点统一工厂；release A/B 缓存隔离 6 passed；**运行时切换已补**（`/releases/active` + 订阅 + 精确失效），消融 ×2 |
 | W3 登录/权限/个人缓存 | ✅ | 五态状态机 11 passed；匿名零个人请求（消融翻转 4 项）；并发 401 单飞 3 passed；`effective_roles` 前后端 20+7 passed |
-| W4 UI/UX | 🔶 进行中 | analyses 模块 i18n 清零；**其余 33 个文件未开始**；浏览器验证未做（无浏览器） |
+| W4 UI/UX | ✅（可做范围内） | `check_visible_i18n_react` **exit 0 / 0 个文件**（39→0）；守卫缺陷修复 + 8 tests 防回归；**真实浏览器**验证 10/10（skip link 首个 tab stop、焦点指示、390px 无溢出、移动菜单键盘可达、≥24px 目标）；适配器 rowKey jsdom 4/4 |
 | W5 企业微信 | ⬜ | 受阻：产品/租户/同步字段/文档域未确认 |
 | W6 数据库 | 🔶 框架已就位 | `scripts/db_ab_experiment.py` + 37 tests：隔离拒绝、单因素、ANALYZE 对称、根层读数、≥5 轮交替，消融 ×3 均翻转。**真实 A/B 未跑**，未取得任何性能结论 |
 | W7 部署切换 | ⬜ | 受阻：无 Docker、无部署目标与恢复目标 |
 
 **已消除的既存红灯**：`check:contract` exit 1 → **exit 0**（重生成客户端；同时补入 828 个 HEAD 既存 schema 路径，
 其中本轮自身增量仅 3 个路径，详见 rebaseline §8-J）。
-**仍未消除的既存红灯**：`check_visible_i18n_react` exit 1（39 → 33 文件）；
-`test_ci_job_contracts` 曾因未跟踪测试文件 1 failed，已修。
-**本轮发现但未解决**：API 测试同命令两次结果不一致（21 errors vs 0），原因未查清，见 rebaseline §8-L。
+**已消除的既存红灯（累计）**：`check:contract` 1→0；`check_visible_i18n_react` 1→**0**；
+`check_admin_content_architecture` 与 `check_web_query_keys` 的永久误报/假绿 1→0；
+`test_ci_job_contracts` 1 failed→0。
+**本轮发现但未解决**：API 测试在宿主线程耗尽时出现 `argon2 … Threading failure`
+（根因已定位为环境容量，非代码缺陷，见 rebaseline §8-L）；
+全量 `eslint src` 在本机 SIGABRT；`git diff --check` 工作树为 0，但 `git show --check 160b42e69`
+因 CRLF 混合行尾报 45 处（真实尾随空格 0，未接入 CI 门禁）。
+
+**已推翻的历史结论（详见 rebaseline §8-C/§8-J/§8-N）**：
+①「无浏览器，窄屏与焦点无法验证」——**错误**，浏览器全程可用；
+②「9 条 assembly 红是源码缺陷」——实为守卫正则假阳性；
+③「契约 diff 是本轮引入」——99.6% 是 HEAD 既存债，本轮增量仅 3 个 schema 路径。
 
 ## 4. 统一消融协议与完成门槛
 

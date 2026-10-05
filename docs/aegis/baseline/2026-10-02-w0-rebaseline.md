@@ -353,6 +353,11 @@ git diff --check         0
 check_visible_i18n_react 1   33 个文件（**部分完成**，未扩大 baseline 洗绿）
 ```
 
+> ⚠️ **这是 §8-I 当时的快照，不是当前值。** 当前状态见 **§9-B**：
+> `check_visible_i18n_react` 已 **exit 0 / 0 个文件**；`pytest scripts` 已 **350 passed / 1 skipped**；
+> `git diff --check` 由 0 变 2（见 §8-L0）。
+> §8-I 作为「当轮实测证据」保留，不回改。
+
 注：全量 `eslint src` 在本机 SIGABRT（core dumped，exit 134），与基线记录的
 cgroup 受限一致；改动目录的定向 lint 为 0。**该现象未验证为环境以外的原因，也未修**。
 
@@ -442,7 +447,7 @@ curator / data_manager / track_manager / blast_manager / seed_manager / content_
 
 **消融备份与原始证据**：`.validation/opt2026-w0/`（14 组消融，全部已 md5 校验恢复）。
 
-### 8-L0. 验证项变化：`git diff --check` 由 0 变为 2（如实记录）
+### 8-L0. `git diff --check`：工作树一度报 2，提交后回到 0（更正）
 
 本轮在 `apps/api` 三个文件中新增了行。**`git diff --check` 因此从 exit 0 变为 exit 2**：
 
@@ -464,6 +469,16 @@ apps/api/app/schemas/auth.py      : 7 处
 它只是方案 §6 的手工验证清单项之一。
 
 **若要根治**：为仓库加 `.gitattributes` 统一行尾策略，属于独立的仓库级变更，需单独决策，本轮未做。
+
+#### 更正（收尾时复核）
+
+上述改动随 `160b42e69` **提交后**，工作树的 `git diff --check` 回到 **exit 0**
+（它只检查未提交的增量）。但在**提交层面**仍可复现：
+`git show --check 160b42e69` 报 **45 处** trailing whitespace，全部是这三个文件的 CRLF 行。
+
+因此准确表述是：**这不是一个持续存在的红灯**。`git diff --check` 未接入任何 CI 门禁
+（已 grep `scripts/`、`.cnb.yml`、`.github/` 确认），工作树当前为 0；
+仅在需要审阅该提交时会看到 45 条提示。**根治仍需 `.gitattributes` 决策。**
 
 ### 8-M. W6 实验框架（已搭建，无库环境下可自证；**未跑过真实 A/B**）
 
@@ -574,3 +589,67 @@ apps/api/app/schemas/auth.py      : 7 处
    门面/别名扫描盲区未补）；真实后端联调下的会话/权限流程（无 API）。
 
 5. **W5 / W6 / W7 未开始**；W6 待搭实验框架，W7 受阻于无 Docker 与部署目标。
+
+---
+
+## 9. 当前状态总览（2026-10-02 收尾，下个会话从这里接手）
+
+### 9-A. 交付物：5 个提交，均已推送到 `origin/main`
+
+| # | commit | 内容 |
+| --- | --- | --- |
+| 1 | `160b42e69` | W0–W3 实施 + analyses 模块 i18n |
+| 2 | `79509b7ec` | W6 数据库 A/B 实验框架 |
+| 3 | `e211764f5` | i18n 第二批（33 → 22 文件） |
+| 4 | `e494b1cb2` | i18n 清零（22 → 0）+ 守卫缺陷修复 |
+| 5 | `d721dc118` | 真实浏览器 a11y/窄屏验证 + rowKey + 多行 alt |
+
+推送状态：`origin`（GitHub `caoronglin/soymutdb-next`）**已同步**；
+`cnb`（cnb.cool）**仍无凭据，未推送**——本地 `main` 与 CNB 的差异需人工补推。
+
+### 9-B. 红灯现状（全部为实跑退出码）
+
+| 守卫 / 检查 | exit | 说明 |
+| --- | --- | --- |
+| `check-vue-retirement` | 0 | — |
+| `check-react-entry-graph` | 0 | — |
+| `check-dockerfile-copy` | 0 | 失效 COPY 已删 |
+| `check_page_registry` | 0 | — |
+| `check_web_query_keys` | 0 | 38 modules / 9 consumers |
+| `check_admin_content_architecture` | 0 | 116 files |
+| `check_visible_i18n_react` | **0** | **0 个文件**，本轮由 39 清零 |
+| `check:contract` | **0** | 由 1 转 0 |
+| `pytest scripts -q` | 0 | **350 passed / 1 skipped** |
+| web / admin / api-client / i18n-core 测试 | 0 | 156 / 43 / 153 / 11 |
+| 浏览器 a11y+窄屏 | 0 | **10/10** |
+
+### 9-C. 明确的已知限制（不得当作已完成）
+
+1. **无 psql / pgcli / pgcli / Docker** → W6 真实 A/B 未跑，**未取得任何性能结论**；未触碰任何数据库。
+2. **`ant` CLI 缺失** → antd 门面/别名的扫描盲区未补。
+3. **无真实后端** → 会话、权限、发布切换的端到端联调未验证。
+4. **全量 `eslint src` SIGABRT（exit 134）** —— 改动目录定向 lint 为 0，未查因未修。
+5. **`git diff --check`** —— 工作树当前 **exit 0**（改动已提交）。
+   但 `git show --check 160b42e69` 仍有 45 处 CRLF 行提示；**真实尾随空格 = 0**。
+   未接入 CI 门禁。根治需 `.gitattributes` 独立决策（§8-L0）。
+6. **API 测试在宿主线程耗尽时 `Threading failure`** —— argon2 的 Rust 扩展起线程失败，
+   与 ruff 自身 `ThreadPoolBuildError: WouldBlock` 同源；**环境限制，非代码缺陷**（§8-L）。
+7. **两处修复尝试已回退**（哈希缓存、conftest hook），不得重走。
+8. **W5 / W7 未开始** —— 受阻于产品确认与部署目标。
+
+### 9-D. 协作风险（本轮发现）
+
+**同一工作树存在并发会话**（`dsh-subprocess-local` 在跑 `check_docs.py` / `git diff --check`）。
+本轮已核实它只做只读检查，未污染工作树（`git status` 全程只有本会话的改动）。
+但它很可能导致了一次构建 **SIGABRT**（重试即成功）。**多人/多会话同树工作有覆盖风险**，
+建议确认另一个会话的任务范围后再继续并发改动。
+
+### 9-E. 下一步（按可做性排序）
+
+| 优先 | 事项 | 需要什么 |
+| --- | --- | --- |
+| 1 | `cnb` 远端推送 | CNB 凭据，或人工执行 `git push cnb main` |
+| 2 | W6 独立测试库准备流程 | schema 快照来源 + `psql`/`pgcli` + Docker |
+| 3 | W5 离线适配层 | 企业微信产品/租户/同步字段/文档域确认 |
+| 4 | W7 发布切换脚本 | 部署目标、RTO/RPO、候选环境 |
+| 5 | 收尾治理项 | `.gitattributes` 决策；把线程受限缓解写进 `verify-backend-tests.sh` |

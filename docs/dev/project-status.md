@@ -31,6 +31,17 @@
 >   `check_web_query_keys.py` 扫描已空的 `apps/web/src/views/`（Vue 退役遗留）。
 > - `apps/api` 消融 149 项与 `pytest scripts` 275 项本轮复跑仍全绿，**未受审计影响**。
 
+> **2026-10-02 实施轮：可做范围已完成**（证据见
+> [`aegis/baseline/2026-10-02-w0-rebaseline.md`](../aegis/baseline/2026-10-02-w0-rebaseline.md) §8–§9）
+>
+> - W0–W3 完成，W4 可做范围完成，W6 框架就位；5 个提交已推 `origin/main`，`cnb` 远端仍待凭据。
+> - **本页红灯已清 4 项**：`check:contract`、可见文案守卫（39 → **0** 文件）、
+>   admin 架构守卫误报、query-key 守卫假绿。
+> - **更正一条错误结论**：此前记为「无浏览器，窄屏与焦点无法验证」——**浏览器全程可用**
+>   （playwright + chromium），现已实跑 10/10 通过，消融翻转 10/10 → 9/10。
+> - **仍受阻**：无 psql/pgcli/Docker（数据库实测未跑）、无 `ant` CLI、无真实后端、
+>   企业微信与部署目标未确认。**未取得任何性能结论，未做过任何生产变更。**
+
 ## 一句话
 
 技术栈迁移与 Vue 退役已完成并可复跑；**真实缺口集中在三处**——管理后台的 Pro 业务组件体系（6 个页面仍是裸 antd `Table`、
