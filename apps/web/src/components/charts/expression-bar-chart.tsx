@@ -2,6 +2,7 @@
  * ExpressionBarChart — grouped bar chart of mean FPKM by tissue and treatment.
  * Lazy-loaded via React.lazy in routes that use it.
  */
+import { useTranslation } from "react-i18next";
 import { useMemo } from "react";
 import type { EChartsOption } from "echarts";
 import { useECharts } from "../../lib/use-echarts";
@@ -13,7 +14,8 @@ export interface ExpressionBarChartProps {
   className?: string;
 }
 
-export function ExpressionBarChart({ data, className }: ExpressionBarChartProps) {
+export function ExpressionBarChart({ data, className }: ExpressionBarChartProps) {  const { t } = useTranslation();
+
   // Group once so series construction does not repeatedly scan all input rows.
   const { treatments, tissues, valuesByTreatment } = useMemo(() => {
     const treatmentSet = new Set<string>();
@@ -97,14 +99,14 @@ export function ExpressionBarChart({ data, className }: ExpressionBarChartProps)
         ref={ref}
         className="h-72 w-full"
         role="img"
-        aria-label="Expression bar chart grouped by tissue and treatment"
+        aria-label={t("charts.expressionBarTitle")}
       />
       {loading ? (
         <div className="skeleton-pulse absolute inset-0 rounded-lg bg-muted/40" aria-hidden />
       ) : null}
       {data.length === 0 && !loading ? <Empty className="absolute inset-0 flex items-center justify-center" image={Empty.PRESENTED_IMAGE_SIMPLE} /> : null}
       <figcaption className="sr-only">
-        Mean FPKM by tissue and treatment:{" "}
+        {t("charts.expressionBarDescription")} {" "}
         {data.map((d) => `${d.tissue} ${d.treatment} ${d.mean_fpkm.toFixed(2)}`).join(", ")}.
       </figcaption>
     </figure>

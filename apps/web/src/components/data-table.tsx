@@ -9,6 +9,7 @@
  * hand-rolled `<table>`.
  */
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { cn } from "../lib/cn";
 import { Empty, Table, type TableColumnsType, type TableProps } from "@/lib/antd";
 
@@ -92,7 +93,8 @@ export function DataTable<T>({
   responsive = false,
   ariaLabel,
   className,
-}: DataTableProps<T>) {
+}: DataTableProps<T>) {  const { t } = useTranslation();
+
   const antdColumns: TableColumnsType<T> = React.useMemo(
     () =>
       columns.map((column, index) => {
@@ -194,7 +196,7 @@ export function DataTable<T>({
 
       {/* antd has no built-in compact card fallback below the md breakpoint. */}
       {responsive && !loading && data.length > 0 ? (
-        <ul className="grid gap-3 md:hidden" aria-label={`${ariaLabel ?? "Data table"} compact view`}>
+        <ul className="grid gap-3 md:hidden" aria-label={t("dataTable.compactView", { label: ariaLabel ?? t("dataTable.title") })}>
           {data.map((row, ri) => {
             const primary = columns.find((column) => column.primary) ?? columns[0];
             return (

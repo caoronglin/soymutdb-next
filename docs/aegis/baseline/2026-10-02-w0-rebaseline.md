@@ -532,10 +532,19 @@ apps/api/app/schemas/auth.py      : 7 处
    若要在 CI 固化，应写进 `scripts/verify-backend-tests.sh`，本轮未做。
 2. **全量 `eslint src` 在本机 SIGABRT（exit 134，core dumped）**，与基线记录的 cgroup 受限一致；
    改动目录定向 lint 为 0。**未验证为环境以外的原因，也未修**。
-3. **`check_visible_i18n_react` 仍 exit 1**：39 → **22** 个文件。已完成 analyses 模块（6）与本轮第二批（12：
-   `genome-browser-widget` / `site-header` / `chromosome-hero` / `command-palette` / `track-viewer` /
-   `relationship-graph` / `publications` / `login` / `news/$slug` / `error-boundary` / `__root` / `fluid-hero`）。
-   **未开始**：`animation-control` / `csv-viewer` / `release-trend` / `expression-heatmap` 等图表与查看器组件。
-4. **W4 其余项未开始**：`site-header` / `command-palette` 建议与 W3 公开页不跳转一起收口；
-   浏览器窄屏与键盘焦点、antd 多行 `alt`、适配器 `rowKey` 均**未验证**（无浏览器）。
+3. ~~`check_visible_i18n_react` 仍 exit 1~~ → **已关闭：exit 0，0 个文件**。
+   39 → 33（analyses 模块 6 个）→ 22（第二批 12 个）→ **0**。
+   期间发现并修掉一处**守卫缺陷**：守卫对**任何函数调用的实参**做可见性检查，
+   于是 `renderInline(text, `bq-${key}`)` 里的 React key 前缀被判成文案（usage guide 4 处）。
+   唯一"修法"竟是把 React key 塞进翻译目录——这正是基线 §2.2 禁止的"让守卫变绿"。
+   处置：**窄修**（模板字面量实参不再按可见文案检查，字面量实参仍检查，因为那通常是
+   `get(key, "Home")` 这类可见兜底），并补 `scripts/test_visible_i18n_react_guard.mjs`
+   **6 tests** 证明未削弱：JSX 硬编码、可见属性、`t(key,{defaultValue})`、
+   字面量兜底实参、可见模板文本 **仍全部被报出**；守卫加 `--root` 以便对合成源码树测试
+   （CI 不传该参数，扫描面不变）。
+   消融：撤销该豁免 → 守卫 11→**12** 翻转、测试 6→**5** 翻转；恢复后复跑通过。
+
+4. **W4 其余项仍未开始**：i18n 虽已清零，但 `site-header` / `command-palette` 与 W3 公开页
+   不跳转的合并收口、浏览器窄屏与键盘焦点、antd 多行 `alt`、适配器 `rowKey`
+   均**未验证**（无浏览器）。
 5. **W5 / W6 / W7 未开始**；W6 待搭实验框架，W7 受阻于无 Docker 与部署目标。

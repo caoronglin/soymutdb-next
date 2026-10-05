@@ -3,6 +3,7 @@
  * Mounted in the site header. Persists to localStorage.
  */
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { CrownOutlined, CheckOutlined, DashboardOutlined, StopOutlined, SunOutlined } from "@ant-design/icons";
 import { Button } from "@/lib/antd";
 import { cn } from "@/lib/cn";
@@ -21,6 +22,7 @@ const OPTIONS: ReadonlyArray<{
     ];
 
 export function AnimationControl() {
+  const { t } = useTranslation();
     const { preference, intensity, decisionReason, setIntensity } = useAnimation();
     const [open, setOpen] = React.useState(false);
     const popoverRef = React.useRef<HTMLDivElement | null>(null);
@@ -56,7 +58,7 @@ export function AnimationControl() {
                 ref={buttonRef}
                 type="text"
                 icon={<CrownOutlined className="size-4" aria-hidden />}
-                aria-label="Animation settings"
+                aria-label={t("animation.settings")}
                 aria-haspopup="dialog"
                 aria-expanded={open}
                 onClick={() => setOpen((v) => !v)}
@@ -65,20 +67,20 @@ export function AnimationControl() {
                 <div
                     ref={popoverRef}
                     role="dialog"
-                    aria-label="Animation settings"
+                    aria-label={t("animation.settings")}
                     className="absolute right-0 top-full z-50 mt-2 w-72 origin-top-right rounded-xl border bg-popover p-2 text-popover-foreground shadow-lg"
                     style={{
                         animation: "fade-down 160ms cubic-bezier(0.16, 1, 0.3, 1)",
                     }}
                 >
                     <div className="px-3 py-2">
-                        <p className="font-display text-sm font-semibold">Motion</p>
+                        <p className="font-display text-sm font-semibold">{t("animation.motion")}</p>
                         <p className="text-xs text-muted-foreground">
                             {decisionReason === "reduced-motion"
-                                ? "Reduced motion is on (OS setting)."
+                                ? t("animation.reducedMotionOs")
                                 : preference !== intensity
-                                  ? `Session adjusted to ${intensity}.`
-                                  : "Tune animation intensity."}
+                                  ? t("animation.sessionAdjustedTo", { mode: intensity })
+                                  : t("animation.tuneHint")}
                         </p>
                     </div>
                     <div className="mt-1 grid gap-1">

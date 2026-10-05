@@ -1,6 +1,7 @@
 /**
  * ChromosomeDensityChart — bar chart of variant count per chromosome.
  */
+import { useTranslation } from "react-i18next";
 import type { EChartsOption } from "echarts";
 import { useECharts } from "../../lib/use-echarts";
 import { Empty } from "@/lib/antd";
@@ -11,7 +12,8 @@ export interface ChromosomeDensityChartProps {
   className?: string;
 }
 
-export function ChromosomeDensityChart({ data, className }: ChromosomeDensityChartProps) {
+export function ChromosomeDensityChart({ data, className }: ChromosomeDensityChartProps) {  const { t } = useTranslation();
+
   const option: EChartsOption = {
     tooltip: {
       trigger: "axis",
@@ -65,11 +67,11 @@ export function ChromosomeDensityChart({ data, className }: ChromosomeDensityCha
 
   return (
     <figure className={cn("relative", className)}>
-      <div ref={ref} className="h-72 w-full" role="img" aria-label="Variant density by chromosome bar chart" />
+      <div ref={ref} className="h-72 w-full" role="img" aria-label={t("charts.densityTitle")} />
       {loading ? <div className="skeleton-pulse absolute inset-0 rounded-lg bg-muted/40" aria-hidden /> : null}
       {data.length === 0 && !loading ? <Empty className="absolute inset-0 flex items-center justify-center" image={Empty.PRESENTED_IMAGE_SIMPLE} /> : null}
       <figcaption className="sr-only">
-        Variant density across 20 chromosomes. {data.map((d) => `${d.chromosome}: ${d.variantCount.toLocaleString()}`).join(", ")}.
+        {t("charts.densityDescription", { values: data.map((d) => `${d.chromosome}: ${d.variantCount.toLocaleString()}`).join(", ") })}
       </figcaption>
     </figure>
   );

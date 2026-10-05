@@ -239,7 +239,12 @@
     "assemblyHint": "Select an assembly to view expression and homolog records.",
     "resultsAria": "Gene results",
     "exonLabel": "exon",
-    "exonTooltip": "{{name}} exon {{interval}}"
+    "exonTooltip": "{{name}} exon {{interval}}",
+    "effectBreakdown": "Effect breakdown for this gene",
+    "seedRequest": {
+      "availableHint": "{{count}} mutant sites on this gene are marked available",
+      "availableCount": "{{count}} available sites"
+    }
   },
   "variants": {
     "title": "Variant Search",
@@ -490,7 +495,10 @@
     "alignmentLength": "Alignment length",
     "recentJobs": "Recent jobs",
     "hitsAria": "BLAST hits",
-    "desc": "Search sequence alignments against a published reference genome."
+    "desc": "Search sequence alignments against a published reference genome.",
+    "defaultTag": "Default",
+    "referencePlaceholder": "Select a reference sequence type",
+    "submitFailed": "Failed to submit: {{message}}"
   },
   "releases": {
     "title": "Data Releases",
@@ -555,7 +563,9 @@
     "pages": "{{count}} pages",
     "tooManyPages": "Only the first 200 pages are rendered in preview.",
     "fitWidth": "Fit width",
-    "title": "File preview"
+    "title": "File preview",
+    "downloadOnly": "Download-only preview",
+    "undecodable": "This compressed, unknown, or binary format is not decoded in the browser."
   },
   "docs": {
     "title": "Documentation",
@@ -727,7 +737,7 @@
     "all": "All",
     "yes": "Yes",
     "no": "No",
-    "unknown": "Unknown",
+    "unknown": "unknown",
     "notAvailable": "N/A",
     "selectAll": "Select All",
     "deselectAll": "Deselect All",
@@ -841,7 +851,7 @@
       "assemblyPlaceholder": "Select a genome version",
       "geneId": "Gene ID",
       "geneIdPlaceholder": "One gene ID per line, e.g. Glyma.01G000100",
-      "geneIdHint": "Multiple gene IDs are supported — one per line.",
+      "geneIdHint": "Enter one gene ID per line (commas and spaces also work); Enter submits, Shift+Enter adds a line.",
       "submit": "Search",
       "resultsFor": "Results for",
       "noResults": "No genes found",
@@ -1889,7 +1899,8 @@
     "faq6": {
       "q": "How often is the data updated?",
       "a": "Release versions and publication dates are announced on the News and Downloads pages. SoyMutDB does not promise a fixed release cadence on this Help page."
-    }
+    },
+    "supportEmail": "support@soymutdb.org"
   },
   "tools": {
     "title": "Tools",
@@ -2050,7 +2061,7 @@
       "genesHint": "e.g. Glyma.01G000100",
       "clusterLabel": "Cluster rows",
       "scaleLabel": "Scaling",
-      "scaleZscore": "Z-score",
+      "scaleZscore": "z-score",
       "scaleNone": "None",
       "submit": "Build heatmap",
       "summaryTitle": "Summary",
@@ -2058,7 +2069,7 @@
       "clusteringBadge": "Hierarchical clustering",
       "heatmapTitle": "Expression heatmap",
       "heatmapDesc": "Rows are genes, columns are conditions.",
-      "heatmapAria": "Expression heatmap",
+      "heatmapAria": "{{genes}} genes × {{conditions}} conditions",
       "matrixTitle": "Expression matrix",
       "matrixDesc": "Raw values with missing entries as null.",
       "geneCol": "Gene",
@@ -2093,7 +2104,8 @@
       "errorAssemblyRequired": "Select an assembly.",
       "errorGenesRequired": "Enter at least one gene ID.",
       "errorGenesMaxUnique": "Enter no more than {{max}} unique gene IDs.",
-      "releaseLabel": "Release"
+      "releaseLabel": "Release",
+      "scaleRawFpkm": "raw FPKM"
     },
     "cardSubtitle": "Extract assembly-scoped reference sequences for gene lists or genomic regions.",
     "seqfetchCard": "Download FASTA for up to 200 genes or one 1-based inclusive region from a selected assembly.",
@@ -2530,5 +2542,36 @@
   },
   "a11y": {
     "skipToContent": "Skip to content"
+  },
+  "genomeView": {
+    "window": "Window {{start}}–{{end}} ({{flank}} bp up/downstream) · assembly {{assembly}}",
+    "geneCount": "{{variants}} genes"
+  },
+  "dataTable": {
+    "title": "Data table",
+    "compactView": "{{label}} compact view"
+  },
+  "animation": {
+    "settings": "Animation settings",
+    "reducedMotionOs": "Reduced motion is on (OS setting).",
+    "sessionAdjustedTo": "Session adjusted to {{mode}}."
+  },
+  "csv": {
+    "noData": "No data to display",
+    "showingRows": "Showing {{shown}} of {{total}} rows"
+  },
+  "charts": {
+    "densityTitle": "Variant density by chromosome bar chart",
+    "densityDescription": "Variant density across 20 chromosomes: {{values}}.",
+    "expressionBarTitle": "Expression bar chart grouped by tissue and treatment",
+    "expressionBarDescription": "Mean FPKM by tissue and treatment:",
+    "impactTitle": "Variant impact distribution bar chart",
+    "impactDescription": "Impact distribution: {{values}}.",
+    "variantTypeTitle": "Variant type distribution donut chart",
+    "variantTypeDescription": "Variant type distribution: {{values}}.",
+    "heatmapTitle": "Expression heatmap of FPKM values across genes and libraries",
+    "heatmapDescription": "Expression heatmap: {{points}} data points across {{genes}} genes and {{libraries}} libraries.",
+    "releaseTrendTitle": "Release trend area chart",
+    "releaseTrendDescription": "Variant accumulation over {{releases}} releases. Latest cumulative total: {{total}}."
   }
 }

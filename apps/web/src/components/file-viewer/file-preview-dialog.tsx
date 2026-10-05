@@ -403,10 +403,10 @@ function DownloadOnlyState({ url, name }: { url: string; name: string }) {
   const { t } = useTranslation();
   return (
     <div className="rl-preview-empty">
-      <p>{t("fileViewer.downloadOnly", { defaultValue: "Download-only preview" })}</p>
+      <p>{t("fileViewer.downloadOnly", { defaultValue: t("fileViewer.downloadOnly") })}</p>
       <p className="rl-preview-empty-sub">
         {t("fileViewer.downloadOnlyHint", {
-          defaultValue: "This compressed, unknown, or binary format is not decoded in the browser.",
+          defaultValue: t("fileViewer.undecodable"),
         })}
       </p>
       <a

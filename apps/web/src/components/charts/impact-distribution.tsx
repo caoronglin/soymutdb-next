@@ -2,6 +2,7 @@
  * ImpactDistribution — horizontal bar chart of variant impact severity.
  * Uses the semantic impact color tokens (high/moderate/low/modifier).
  */
+import { useTranslation } from "react-i18next";
 import type { EChartsOption } from "echarts";
 import { useECharts } from "../../lib/use-echarts";
 import { Empty } from "@/lib/antd";
@@ -19,7 +20,8 @@ const IMPACT_COLORS: Record<string, string> = {
   MODIFIER: "var(--impact-modifier)",
 };
 
-export function ImpactDistribution({ data, className }: ImpactDistributionProps) {
+export function ImpactDistribution({ data, className }: ImpactDistributionProps) {  const { t } = useTranslation();
+
   const ordered = ["HIGH", "MODERATE", "LOW", "MODIFIER"]
     .map((impact) => data.find((d) => d.impact === impact))
     .filter((d): d is { impact: "HIGH" | "MODERATE" | "LOW" | "MODIFIER"; count: number } => Boolean(d));
@@ -65,11 +67,11 @@ export function ImpactDistribution({ data, className }: ImpactDistributionProps)
 
   return (
     <figure className={cn("relative", className)}>
-      <div ref={ref} className="h-64 w-full" role="img" aria-label="Variant impact distribution bar chart" />
+      <div ref={ref} className="h-64 w-full" role="img" aria-label={t("charts.impactTitle")} />
       {loading ? <div className="skeleton-pulse absolute inset-0 rounded-lg bg-muted/40" aria-hidden /> : null}
       {ordered.length === 0 && !loading ? <Empty className="absolute inset-0 flex items-center justify-center" image={Empty.PRESENTED_IMAGE_SIMPLE} /> : null}
       <figcaption className="sr-only">
-        Impact distribution: {ordered.map((d) => `${d.impact} ${d.count.toLocaleString()}`).join(", ")}.
+        {t("charts.impactDescription", { values: ordered.map((d) => `${d.impact} ${d.count.toLocaleString()}`).join(", ") })}
       </figcaption>
     </figure>
   );

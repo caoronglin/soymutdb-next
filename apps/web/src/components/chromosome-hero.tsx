@@ -67,7 +67,7 @@ interface TooltipData {
 }
 
 export function ChromosomeHero({ data, assembly, onSelectChromosome, className }: ChromosomeHeroProps) {
-  const { t: tr } = useTranslation();
+  const { t } = useTranslation();
   const { reduced, intensity } = useAnimation();
   const points = React.useMemo(() => resolveDensity(data), [data]);
   const maxCount = React.useMemo(() => Math.max(...points.map((p) => p.variantCount), 1), [points]);
@@ -183,7 +183,7 @@ export function ChromosomeHero({ data, assembly, onSelectChromosome, className }
   if (points.length === 0) {
     return (
       <div className={cn("flex min-h-64 items-center justify-center rounded-lg border border-dashed text-center text-sm text-muted-foreground", className)} role="status">
-        {tr("home.variantDensityUnavailable")}
+        {t("home.variantDensityUnavailable")}
       </div>
     );
   }
@@ -194,12 +194,12 @@ export function ChromosomeHero({ data, assembly, onSelectChromosome, className }
         <div
           className="grid grid-cols-5 gap-x-6 gap-y-6 sm:grid-cols-10 md:grid-cols-[repeat(20,minmax(0,1fr))]"
           role="group"
-          aria-label={tr("home.chromosomeHeroLabel")}
+          aria-label={t("home.chromosomeHeroLabel")}
         >
           {points.map((point) => {
             const lengthBp = point.lengthBp ?? CHROMOSOME_LENGTHS_BP[point.chromosome] ?? 50_000_000;
-            const t = point.variantCount / maxCount;
-            const bodyColor = densityColor(t);
+            const densityRatio = point.variantCount / maxCount;
+            const bodyColor = densityColor(densityRatio);
             const isFocused = focusedChr === point.chromosome;
             const heightScale = 0.4 + (lengthBp / 62_465_519) * 0.6;
             const svgH = CHROM_H * heightScale;
@@ -229,7 +229,7 @@ export function ChromosomeHero({ data, assembly, onSelectChromosome, className }
                   onFocus={() => setFocusedChr(point.chromosome)}
                   onBlur={() => setFocusedChr(null)}
                   onClick={() => handleChromosomeClick(point)}
-                  aria-label={tr("home.chromosomeBandAria", {
+                  aria-label={t("home.chromosomeBandAria", {
                   chromosome: point.chromosome,
                   length: formatMb(lengthBp),
                   variants: point.variantCount.toLocaleString(),
@@ -251,7 +251,7 @@ export function ChromosomeHero({ data, assembly, onSelectChromosome, className }
                         <rect x="0" y="0" width={CHROM_W} height={svgH} rx={CHROM_R} ry={CHROM_R} />
                       </clipPath>
                       <linearGradient id={`chrom-grad-${point.chromosome}`} x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={densityColor(Math.min(1, t * 1.1))} />
+                        <stop offset="0%" stopColor={densityColor(Math.min(1, densityRatio * 1.1))} />
                         <stop offset="100%" stopColor={bodyColor} />
                       </linearGradient>
                     </defs>
@@ -286,7 +286,7 @@ export function ChromosomeHero({ data, assembly, onSelectChromosome, className }
                             onClick={(e) => { e.stopPropagation(); handleBandClick(point, band); }}
                             className={cn("cursor-pointer transition-[filter] duration-150", !isCentromere && "hover:brightness-125")}
                             role="button"
-                            aria-label={tr("home.bandAria", { chromosome: point.chromosome, band: band.name })}
+                            aria-label={t("home.bandAria", { chromosome: point.chromosome, band: band.name })}
                           />
                         );
                       })}
@@ -359,7 +359,7 @@ export function ChromosomeHero({ data, assembly, onSelectChromosome, className }
             {formatMb(hovered.lengthBp)} · {hovered.geneDensity}
           </div>
           <div className="mt-0.5 font-mono tabular-nums">
-            {tr("home.variantCount", {
+            {t("home.variantCount", {
               variants: hovered.variantCount.toLocaleString(),
             })}
           </div>
@@ -381,31 +381,31 @@ export function ChromosomeHero({ data, assembly, onSelectChromosome, className }
                 <p className="text-xs text-muted-foreground">
                   {formatMb(hovered.lengthBp)} ·{" "}
                   <span className="font-mono tabular-nums">{hovered.variantCount.toLocaleString()}</span>{" "}
-                  {tr("home.variantsLabel")} · {hovered.geneDensity}
+                  {t("home.variantsLabel")} · {hovered.geneDensity}
                 </p>
               </div>
             </div>
             <span className="inline-flex items-center gap-1 text-xs font-medium text-primary">
-              {tr("home.openInBrowser")}
+              {t("home.openInBrowser")}
               <ExportOutlined className="size-3" aria-hidden />
             </span>
           </div>
         ) : (
           <p className="text-xs text-muted-foreground">
-            {tr("home.heroInstructions")}
+            {t("home.heroInstructions")}
           </p>
         )}
       </div>
 
       {/* Density legend */}
       <div className="mt-4 flex items-center justify-end gap-2 text-[10px] text-muted-foreground">
-        <span>{tr("home.lowDensity")}</span>
+        <span>{t("home.lowDensity")}</span>
         <span className="flex h-2 w-24 overflow-hidden rounded-full" aria-hidden>
-          {[0.8, 0.6, 0.4, 0.2, 0].map((t) => (
-            <span key={t} className="flex-1" style={{ backgroundColor: densityColor(t) }} />
+          {[0.8, 0.6, 0.4, 0.2, 0].map((densityRatio) => (
+            <span key={densityRatio} className="flex-1" style={{ backgroundColor: densityColor(densityRatio) }} />
           ))}
         </span>
-        <span>{tr("home.highDensity")}</span>
+        <span>{t("home.highDensity")}</span>
       </div>
     </div>
   );

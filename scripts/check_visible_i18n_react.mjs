@@ -183,7 +183,15 @@ function visibleStrings(node, output) {
       NON_VISIBLE_STRING_METHODS.has(node.expression.name.text)
     ) return;
     for (const argument of node.arguments) {
-      if (!ts.isArrowFunction(argument) && !ts.isFunctionExpression(argument)) visibleStrings(argument, output);
+      if (ts.isArrowFunction(argument) || ts.isFunctionExpression(argument)) continue;
+      // A template argument builds a composite string for programmatic use —
+      // a React key prefix, a selector, a formatted label handed to a helper.
+      // `renderInline(text, `bq-${key}`)` is not user-facing copy, and flagging
+      // it pushed the fix towards putting a key in the translation catalog.
+      // Literal arguments are still inspected: those are usually visible
+      // fallbacks such as `get("nav.home", "Home")`.
+      if (ts.isTemplateExpression(argument)) continue;
+      visibleStrings(argument, output);
     }
     return;
   }
@@ -472,7 +480,12 @@ function main() {
   const update = args.includes("--update-baseline");
   const baselineOption = args.indexOf("--baseline");
   const baselinePath = baselineOption >= 0 ? path.resolve(args[baselineOption + 1]) : BASELINE_PATH;
-  const hitsByFile = collect();
+  // `--root` exists so the guard's behaviour can be exercised against a
+  // synthetic tree by scripts/test_visible_i18n_react_guard.mjs. CI invokes
+  // the guard with no arguments, so the scanned tree is unchanged there.
+  const rootOption = args.indexOf("--root");
+  const scanRoot = rootOption >= 0 ? path.resolve(args[rootOption + 1]) : ROOT;
+  const hitsByFile = collect(scanRoot);
   const counts = countsFor(hitsByFile);
 
   if (update) {

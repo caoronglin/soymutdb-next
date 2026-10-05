@@ -2,6 +2,7 @@
  * VariantTypeChart — donut chart of variant type distribution.
  * Lazy-loaded via React.lazy in routes that use it.
  */
+import { useTranslation } from "react-i18next";
 import type { EChartsOption } from "echarts";
 import { useECharts } from "../../lib/use-echarts";
 import { Empty } from "@/lib/antd";
@@ -12,7 +13,8 @@ export interface VariantTypeChartProps {
   className?: string;
 }
 
-export function VariantTypeChart({ data, className }: VariantTypeChartProps) {
+export function VariantTypeChart({ data, className }: VariantTypeChartProps) {  const { t } = useTranslation();
+
   const total = data.reduce((sum, d) => sum + d.value, 0);
   const option: EChartsOption = {
     tooltip: {
@@ -75,11 +77,11 @@ export function VariantTypeChart({ data, className }: VariantTypeChartProps) {
 
   return (
     <figure className={cn("relative", className)}>
-      <div ref={ref} className="h-72 w-full" role="img" aria-label="Variant type distribution donut chart" />
+      <div ref={ref} className="h-72 w-full" role="img" aria-label={t("charts.variantTypeTitle")} />
       {loading ? <div className="skeleton-pulse absolute inset-0 rounded-lg bg-muted/40" aria-hidden /> : null}
       {data.length === 0 && !loading ? <Empty className="absolute inset-0 flex items-center justify-center" image={Empty.PRESENTED_IMAGE_SIMPLE} /> : null}
       <figcaption className="sr-only">
-        Variant type distribution: {data.map((d) => `${d.name} ${d.value.toLocaleString()}`).join(", ")}.
+        {t("charts.variantTypeDescription", { values: data.map((d) => `${d.name} ${d.value.toLocaleString()}`).join(", ") })}
       </figcaption>
     </figure>
   );

@@ -304,7 +304,7 @@ function ExpPatternInner() {
               <div className="grid gap-3">
                 <div className="flex flex-wrap gap-2">
                   <Tag>{t("tools.exppattern.clusteringBadge", { method: result.clustering })}</Tag>
-                  <Tag>{result.scale === "zscore" ? "z-score" : "raw FPKM"}</Tag>
+                  <Tag>{result.scale === "zscore" ? t("tools.exppattern.scaleZscore") : t("tools.exppattern.scaleRawFpkm")}</Tag>
                   {isLarge ? <Tag>{t("tools.exppattern.largeBadge")}</Tag> : null}
                 </div>
                 {result.missing_genes.length > 0 ? (
@@ -517,7 +517,7 @@ function ExpPatternHeatmap({ result }: { result: ExpPatternResponse }) {
         <div className="skeleton-pulse absolute inset-0 rounded-lg bg-muted/40" aria-hidden />
       ) : null}
       <figcaption className="sr-only">
-        {t("tools.exppattern.heatmapAria")}: {result.genes.length} genes × {result.conditions.length} conditions.
+        {t("tools.exppattern.heatmapAria", { genes: result.genes.length, conditions: result.conditions.length })}
       </figcaption>
     </figure>
   );

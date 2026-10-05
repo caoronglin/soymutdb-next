@@ -525,9 +525,7 @@ function GeneIdSearchComponent() {
             </Button>
           </Flex>
           <Typography.Text type="secondary" className="mt-2 block text-xs">
-            {get("search.genes.geneIdHint", t("search.genes.geneIdHint", {
-              defaultValue: "支持多个基因 ID，每行一个（或用逗号、空格分隔）；Enter 提交，Shift+Enter 换行。",
-            }))}
+            {get("search.genes.geneIdHint", t("search.genes.geneIdHint"))}
           </Typography.Text>
           {assembliesQuery.isError || (urlAssembly && assemblies && !urlAssemblyInfo) ? (
             <Alert

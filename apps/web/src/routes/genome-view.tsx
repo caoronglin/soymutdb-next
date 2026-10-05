@@ -257,7 +257,6 @@ function LocusGenomeViewPage() {
         {structure ? (
           <Typography.Paragraph type="secondary" className="mt-2">
             {t("genomeView.window", {
-              defaultValue: "窗口 {{start}}–{{end}}（上下游各 {{flank}} bp）· 组装 {{assembly}}",
               start: formatNumber(structure.start),
               end: formatNumber(structure.end),
               flank: formatNumber(flank),
@@ -300,8 +299,7 @@ function LocusGenomeViewPage() {
               </Tag>
               <Typography.Text type="secondary" className="text-xs">
                 {t("genomeView.geneCount", {
-                  defaultValue: "{{count}} 个基因",
-                  count: structure?.genes.length ?? 0,
+                  variants: structure?.genes.length ?? 0,
                 })}
               </Typography.Text>
             </Flex>

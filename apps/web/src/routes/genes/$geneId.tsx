@@ -500,7 +500,7 @@ function GeneDetailComponent() {
             <Card.Meta
               title={<span className="text-base">{t("genes.geneVariants")}</span>}
               description={
-                <Typography.Text type="secondary">Effect breakdown for this gene</Typography.Text>
+                <Typography.Text type="secondary">{t("genes.effectBreakdown")}</Typography.Text>
               }
             />
             <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">

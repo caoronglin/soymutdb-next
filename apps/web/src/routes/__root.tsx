@@ -55,7 +55,7 @@ function RootComponent() {
   return (
     <SiteContentProvider>
       <ErrorBoundary>
-        <a href="#main" className="skip-link">Skip to content</a>
+        <a href="#main" className="skip-link">{t("a11y.skipToContent")}</a>
         <div className="flex min-h-screen flex-col">
           <SiteHeader />
           <main id="main" className="flex-1">

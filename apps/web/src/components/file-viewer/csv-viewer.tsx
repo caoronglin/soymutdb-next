@@ -5,6 +5,7 @@
  * bounded body height and the header that stays put while scrolling are the
  * table's own `scroll` behaviour now, rather than a hand-rolled sticky <th>.
  */
+import { useTranslation } from "react-i18next";
 import { useMemo } from "react";
 import { Table, type TableColumnsType } from "@/lib/antd";
 
@@ -19,7 +20,8 @@ const BODY_HEIGHT = 384;
 
 type CsvRow = Record<string, string>;
 
-export function CsvViewer({ content, delimiter = "," }: CsvViewerProps) {
+export function CsvViewer({ content, delimiter = "," }: CsvViewerProps) {  const { t } = useTranslation();
+
   const { headers, rows, totalRows, truncated } = useMemo(() => {
     const lines = content.split("\n").filter((l) => l.trim().length > 0);
     if (lines.length === 0) {
@@ -67,7 +69,7 @@ export function CsvViewer({ content, delimiter = "," }: CsvViewerProps) {
   if (headers.length === 0) {
     return (
       <div className="p-4 text-center text-sm text-muted-foreground">
-        No data to display
+        {t("csv.noData")}
       </div>
     );
   }
@@ -76,7 +78,7 @@ export function CsvViewer({ content, delimiter = "," }: CsvViewerProps) {
     <div>
       {truncated && (
         <div className="mb-2 rounded-md bg-muted px-3 py-1.5 text-xs text-muted-foreground">
-          Showing {MAX_ROWS} of {totalRows} rows
+          {t("csv.showingRows", { shown: MAX_ROWS, total: totalRows })}
         </div>
       )}
       <Table<CsvRow>

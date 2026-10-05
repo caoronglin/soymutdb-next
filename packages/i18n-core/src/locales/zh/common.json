@@ -239,7 +239,12 @@
     "assemblyHint": "请选择组装以查看表达与同源记录。",
     "resultsAria": "基因结果",
     "exonLabel": "外显子",
-    "exonTooltip": "{{name}} 外显子 {{interval}}"
+    "exonTooltip": "{{name}} 外显子 {{interval}}",
+    "effectBreakdown": "该基因的效应分布",
+    "seedRequest": {
+      "availableHint": "该基因有 {{count}} 个突变位点标记为可获得",
+      "availableCount": "{{count}} 个可获得位点"
+    }
   },
   "variants": {
     "title": "变异搜索",
@@ -490,7 +495,10 @@
     "alignmentLength": "比对长度",
     "recentJobs": "最近任务",
     "hitsAria": "BLAST 命中",
-    "desc": "对已发布的参考基因组进行序列比对搜索。"
+    "desc": "对已发布的参考基因组进行序列比对搜索。",
+    "defaultTag": "默认",
+    "referencePlaceholder": "选择参考序列类型",
+    "submitFailed": "提交失败：{{message}}"
   },
   "releases": {
     "title": "数据版本",
@@ -555,7 +563,9 @@
     "pages": "{{count}} 页",
     "tooManyPages": "预览仅渲染前 200 页。",
     "fitWidth": "适应宽度",
-    "title": "文件预览"
+    "title": "文件预览",
+    "downloadOnly": "仅支持下载的预览",
+    "undecodable": "浏览器无法解析该压缩、未知或二进制格式。"
   },
   "docs": {
     "title": "文档",
@@ -841,7 +851,7 @@
       "assemblyPlaceholder": "请选择基因组版本",
       "geneId": "基因 ID",
       "geneIdPlaceholder": "每行一个基因 ID，例如 Glyma.01G000100",
-      "geneIdHint": "支持多个基因 ID，每行一个。",
+      "geneIdHint": "每行输入一个基因 ID（也可用逗号、空格分隔）；Enter 提交，Shift+Enter 换行。",
       "submit": "搜索",
       "resultsFor": "搜索结果",
       "noResults": "未找到基因",
@@ -1889,7 +1899,8 @@
     "faq6": {
       "q": "数据多久更新一次？",
       "a": "新版本与发布日期会在新闻和下载页面公布。本帮助页面不承诺固定更新周期。"
-    }
+    },
+    "supportEmail": "support@soymutdb.org"
   },
   "tools": {
     "title": "工具",
@@ -2050,7 +2061,7 @@
       "genesHint": "例如 Glyma.01G000100",
       "clusterLabel": "行聚类",
       "scaleLabel": "标准化",
-      "scaleZscore": "Z 分数",
+      "scaleZscore": "z-score",
       "scaleNone": "无",
       "submit": "生成热图",
       "summaryTitle": "概览",
@@ -2058,7 +2069,7 @@
       "clusteringBadge": "层次聚类",
       "heatmapTitle": "表达热图",
       "heatmapDesc": "行代表基因，列代表条件。",
-      "heatmapAria": "表达热图",
+      "heatmapAria": "{{genes}} 个基因 × {{conditions}} 个条件",
       "matrixTitle": "表达矩阵",
       "matrixDesc": "原始值，缺失项为 null。",
       "geneCol": "基因",
@@ -2093,7 +2104,8 @@
       "errorAssemblyRequired": "请选择组装。",
       "errorGenesRequired": "请至少输入一个基因 ID。",
       "errorGenesMaxUnique": "唯一基因 ID 不得超过 {{max}} 个。",
-      "releaseLabel": "发布版本"
+      "releaseLabel": "发布版本",
+      "scaleRawFpkm": "原始 FPKM"
     },
     "cardSubtitle": "按组装从基因列表或基因组区域提取参考序列。",
     "seqfetchCard": "从选定组装下载最多 200 个基因或 1 个 1-based 闭区间的 FASTA。",
@@ -2530,5 +2542,36 @@
   },
   "a11y": {
     "skipToContent": "跳到主要内容"
+  },
+  "genomeView": {
+    "window": "窗口 {{start}}–{{end}}（上下游各 {{flank}} bp）· 组装 {{assembly}}",
+    "geneCount": "{{variants}} 个基因"
+  },
+  "dataTable": {
+    "title": "数据表",
+    "compactView": "{{label}} 紧凑视图"
+  },
+  "animation": {
+    "settings": "动画设置",
+    "reducedMotionOs": "系统已开启减弱动态效果（操作系统设置）。",
+    "sessionAdjustedTo": "本次会话已调整为 {{mode}}。"
+  },
+  "csv": {
+    "noData": "没有可显示的数据",
+    "showingRows": "显示 {{total}} 行中的 {{shown}} 行"
+  },
+  "charts": {
+    "densityTitle": "按染色体展示变异密度的柱状图",
+    "densityDescription": "20 条染色体的变异密度：{{values}}。",
+    "expressionBarTitle": "按组织与处理分组的表达量柱状图",
+    "expressionBarDescription": "按组织与处理的平均 FPKM：",
+    "impactTitle": "变异影响分布柱状图",
+    "impactDescription": "影响分布：{{values}}。",
+    "variantTypeTitle": "变异类型分布环形图",
+    "variantTypeDescription": "变异类型分布：{{values}}。",
+    "heatmapTitle": "基因与文库之间 FPKM 表达量热图",
+    "heatmapDescription": "表达量热图：{{genes}} 个基因、{{libraries}} 个文库，共 {{points}} 个数据点。",
+    "releaseTrendTitle": "版本趋势面积图",
+    "releaseTrendDescription": "{{releases}} 个版本间的变异累积。最新累计总数：{{total}}。"
   }
 }

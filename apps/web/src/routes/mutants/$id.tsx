@@ -65,7 +65,7 @@ function MutantDetail() {
           <p className="eyebrow">{t("mutants.eyebrow")}</p>
           <h1 className="mt-2 font-display text-4xl font-semibold tracking-tight">{line.name}</h1>
           <p className="mt-2 font-mono text-sm text-muted-foreground" data-public-id={line.public_id}>
-            {t("mutantLines.lineId", { defaultValue: "Public ID" })}: {line.public_id}
+            {t("mutantLines.lineId")}: {line.public_id}
           </p>
         </div>
         <section className="mt-8" aria-labelledby="mutant-line-details">

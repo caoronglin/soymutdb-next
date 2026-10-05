@@ -2,6 +2,7 @@
  * ExpressionHeatmap — heatmap of FPKM values across genes and libraries.
  * Lazy-loaded via React.lazy in routes that use it.
  */
+import { useTranslation } from "react-i18next";
 import { useMemo } from "react";
 import type { EChartsOption } from "echarts";
 import { useECharts } from "../../lib/use-echarts";
@@ -13,7 +14,8 @@ export interface ExpressionHeatmapProps {
   className?: string;
 }
 
-export function ExpressionHeatmap({ data, className }: ExpressionHeatmapProps) {
+export function ExpressionHeatmap({ data, className }: ExpressionHeatmapProps) {  const { t } = useTranslation();
+
   const { genes, libraries, seriesData, maxFpkm } = useMemo(() => {
     const geneSet = new Set<string>();
     const libSet = new Set<string>();
@@ -116,15 +118,14 @@ export function ExpressionHeatmap({ data, className }: ExpressionHeatmapProps) {
         ref={ref}
         className="h-80 w-full"
         role="img"
-        aria-label="Expression heatmap of FPKM values across genes and libraries"
+        aria-label={t("charts.heatmapTitle")}
       />
       {loading ? (
         <div className="skeleton-pulse absolute inset-0 rounded-lg bg-muted/40" aria-hidden />
       ) : null}
       {data.length === 0 && !loading ? <Empty className="absolute inset-0 flex items-center justify-center" image={Empty.PRESENTED_IMAGE_SIMPLE} /> : null}
       <figcaption className="sr-only">
-        Expression heatmap: {data.length} data points across {genes.length} genes and{" "}
-        {libraries.length} libraries.
+        {t("charts.heatmapDescription", { points: data.length, genes: genes.length, libraries: libraries.length })}
       </figcaption>
     </figure>
   );

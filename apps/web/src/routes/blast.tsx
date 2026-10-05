@@ -209,7 +209,7 @@ function BlastComponent() {
                   <span className="text-xs text-muted-foreground">· {d.assembly_name}</span>
                 ) : null}
                 {d.assembly_is_default ? (
-                  <Tag className="m-0 text-[9px] uppercase">Default</Tag>
+                  <Tag className="m-0 text-[9px] uppercase">{t("blast.defaultTag")}</Tag>
                 ) : null}
               </span>
             ),
@@ -566,9 +566,7 @@ function BlastComponent() {
                 size="large"
                 value={form.database}
                 onChange={(v) => setForm((f) => ({ ...f, database: v }))}
-                placeholder={get("blast.databasePlaceholder", t("blast.databasePlaceholder", {
-                  defaultValue: "Select a reference sequence type",
-                }))}
+                placeholder={t("blast.referencePlaceholder")}
                 options={databaseOptions}
               />
             </Form.Item>
@@ -639,7 +637,7 @@ function BlastComponent() {
                 <Alert
                   type="error"
                   showIcon
-                  title={get("ui.errorRetry", `Failed to submit: ${(submitMutation.error as Error).message}`)}
+                  title={get("ui.errorRetry", t("blast.submitFailed", { message: (submitMutation.error as Error).message }))}
                 />
               </Form.Item>
             ) : null}

@@ -83,7 +83,7 @@ function HelpComponent() {
             <Typography.Text>{t("help.contactDesc")}</Typography.Text>
           </div>
           <div className="mt-4">
-            <p className="text-sm text-muted-foreground">{t("help.emailPrefix")} <span className="font-mono text-foreground">support@soymutdb.org</span> {t("help.emailSuffix")}</p>
+            <p className="text-sm text-muted-foreground">{t("help.emailPrefix")} <span className="font-mono text-foreground">{t("help.supportEmail")}</span> {t("help.emailSuffix")}</p>
           </div>
         </Card>
       </Stagger>
@@ -101,10 +101,10 @@ function HelpComponent() {
               ghost
               items={FAQS.map((faq, i) => ({
                 key: String(i),
-                label: <span className="font-medium">{get("help.faq" + (i + 1) + ".q", t("help.faq" + (i + 1) + ".q", { defaultValue: faq.q }))}</span>,
+                label: <span className="font-medium">{get(`help.faq${i + 1}.q`, faq.q)}</span>,
                 children: (
                   <p className="text-sm text-muted-foreground">
-                    {get("help.faq" + (i + 1) + ".a", t("help.faq" + (i + 1) + ".a", { defaultValue: faq.a }))}
+                    {get(`help.faq${i + 1}.a`, faq.a)}
                   </p>
                 ),
               }))}

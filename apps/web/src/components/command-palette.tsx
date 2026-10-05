@@ -31,7 +31,7 @@ const QUICK_ACTIONS: QuickAction[] = [
 ];
 
 export function CommandPalette() {
-  const { t: tr } = useTranslation();
+  const { t } = useTranslation();
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
   const [activeIndex, setActiveIndex] = React.useState(0);
@@ -136,7 +136,7 @@ export function CommandPalette() {
       onClick={closePalette}
       role="dialog"
       aria-modal="true"
-      aria-label={tr("commandPalette.label")}
+      aria-label={t("commandPalette.label")}
     >
       <div
         className="search-modal-panel w-full max-w-xl overflow-hidden rounded-2xl border bg-popover shadow-2xl"
@@ -154,16 +154,16 @@ export function CommandPalette() {
               setActiveIndex(0);
             }}
             onKeyDown={handleKeyDown}
-            placeholder={tr("commandPalette.placeholder")}
+            placeholder={t("commandPalette.placeholder")}
             className="h-9 flex-1 text-base"
-            aria-label={tr("commandPalette.inputLabel")}
+            aria-label={t("commandPalette.inputLabel")}
           />
           <kbd>ESC</kbd>
           <Button
             type="text"
             shape="circle"
             onClick={closePalette}
-            aria-label={tr("common.close")}
+            aria-label={t("common.close")}
             icon={<CloseOutlined className="size-4" aria-hidden />}
           />
         </div>
@@ -186,7 +186,7 @@ export function CommandPalette() {
             >
               <SearchOutlined className="size-4 shrink-0 text-muted-foreground" aria-hidden />
               <span className="flex-1">
-                {tr("commandPalette.searchingFor")}{" "}
+                {t("commandPalette.searchingFor")}{" "}
                 <span className="font-semibold">&ldquo;{query.trim()}&rdquo;</span>
               </span>
               <ArrowRightOutlined className="size-3.5 text-muted-foreground" aria-hidden />
@@ -222,7 +222,7 @@ export function CommandPalette() {
 
           {filtered.length === 0 && !query.trim() ? null : filtered.length === 0 && query.trim() ? (
             <p className="px-3 py-6 text-center text-sm text-muted-foreground">
-              {tr("commandPalette.noResults", { query: query.trim() })}
+              {t("commandPalette.noResults", { query: query.trim() })}
             </p>
           ) : null}
         </div>
@@ -230,11 +230,11 @@ export function CommandPalette() {
         {/* Footer hint */}
         <div className="flex items-center justify-between border-t px-4 py-2 text-xs text-muted-foreground">
           <div className="flex items-center gap-3">
-            <span className="flex items-center gap-1"><kbd>↑</kbd><kbd>↓</kbd> {tr("commandPalette.hintNavigate")}</span>
-            <span className="flex items-center gap-1"><kbd>↵</kbd> {tr("commandPalette.hintSelect")}</span>
+            <span className="flex items-center gap-1"><kbd>↑</kbd><kbd>↓</kbd> {t("commandPalette.hintNavigate")}</span>
+            <span className="flex items-center gap-1"><kbd>↵</kbd> {t("commandPalette.hintSelect")}</span>
           </div>
           <span className="flex items-center gap-1">
-            <CmdIcon className="size-3" aria-hidden />{tr("commandPalette.hintOpen")}
+            <CmdIcon className="size-3" aria-hidden />{t("commandPalette.hintOpen")}
           </span>
         </div>
       </div>

@@ -77,14 +77,10 @@ export function GeneSeedRequestEntry({
             </Button>
           </Link>
           <Tooltip
-            title={t("genes.seedRequest.availableHint", {
-              defaultValue: "该基因有 {{count}} 个突变位点标记为可获得",
-              count: availableSiteCount,
-            })}
+            title={t("genes.seedRequest.availableHint", { count: availableSiteCount })}
           >
             <Tag color="green">
               {t("genes.seedRequest.availableCount", {
-                defaultValue: "{{count}} 个可获得位点",
                 count: availableSiteCount,
               })}
             </Tag>
