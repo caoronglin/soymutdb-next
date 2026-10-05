@@ -79,6 +79,7 @@
 | 6 | ~~`AGENTS.md:58,90` 写 pnpm `11.21.0`，仓库实际 `12.5.1`~~ | 实读 | ✅ **2026-10-02 已修**：改为 `12.5.1` |
 | 7 | 15 个 API 测试依赖 testcontainers，本机无 Docker | 实跑 | **SKIPPED ≠ PASS** |
 | 8 | 随 Vue 退役丢失的契约覆盖：admin 会话（`lib/auth-context.tsx`）、web 动效可访问性（`lib/motion-*.ts`）、页面定义 href 安全校验 | 对比 Vue 树被删的三个测试文件 | 本轮已补两项（导航可达性、门面导出），会话与动效仍缺 |
+| 9 | ~~「无浏览器，窄屏/焦点无法验证」~~ | `node e2e/verify-a11y-and-layout.mjs` | ✅ **2026-10-02 更正并完成**：playwright + chromium 实测可用，10/10 通过（skip link 为首个 tab stop、焦点指示可见、390px 无横向溢出、移动菜单可键盘打开）；消融翻转 10/10→9/10 |
 
 ## 已完成并留证（要点）
 

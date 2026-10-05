@@ -99,6 +99,38 @@ check("a React key prefix passed as a template argument is not copy", () => {
   assert(out.code === 0, `expected exit 0 for a key prefix, got ${out.code}: ${out.stderr}`);
 });
 
+check("a hardcoded alt spread across lines is still reported", () => {
+  // The 2026-10-02 audit recorded that a line-oriented <img> scan missed a
+  // multi-line alt. The guard is AST-based; this pins that the multi-line
+  // shape is still caught, because the fix must not regress to line matching.
+  const out = run({
+    "card.tsx": `export default function Card() {
+  return (
+    <img
+      src="/a.png"
+      alt="A descriptive alternative text
+           that wraps across lines"
+    />
+  );
+}
+`,
+  });
+  assert(out.code === 1, `expected exit 1 for a multi-line alt, got ${out.code}`);
+  assert(out.stderr.includes("alternative text"), `expected the alt copy to be named, got: ${out.stderr}`);
+});
+
+check("a dynamic alt expression is not reported as copy", () => {
+  // `alt={item.cover_alt_text ?? title}` is data, not copy; flagging it would
+  // push the developer to invent a translation key for user content.
+  const out = run({
+    "card.tsx": `export default function Card({ item, title }: { item: { alt: string }; title: string }) {
+  return <img src="/a.png" alt={item.alt ?? title} />;
+}
+`,
+  });
+  assert(out.code === 0, `expected exit 0 for a dynamic alt, got ${out.code}: ${out.stderr}`);
+});
+
 check("a template rendered as visible JSX text is still copy", () => {
   const out = run({
     "page.tsx": `export default function P({ n }: { n: number }) {\n` +

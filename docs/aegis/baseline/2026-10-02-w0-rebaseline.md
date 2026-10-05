@@ -544,7 +544,33 @@ apps/api/app/schemas/auth.py      : 7 处
    （CI 不传该参数，扫描面不变）。
    消融：撤销该豁免 → 守卫 11→**12** 翻转、测试 6→**5** 翻转；恢复后复跑通过。
 
-4. **W4 其余项仍未开始**：i18n 虽已清零，但 `site-header` / `command-palette` 与 W3 公开页
-   不跳转的合并收口、浏览器窄屏与键盘焦点、antd 多行 `alt`、适配器 `rowKey`
-   均**未验证**（无浏览器）。
+4. **W4 浏览器验证：本轮已做（更正此前「无浏览器」的结论）**
+
+   上一轮 W0 记录「Chromium launch 成功」，而本会话前半段沿用了「无浏览器」。
+   **该沿用是错的**：`e2e/node_modules` 的 playwright 与
+   `~/.cache/ms-playwright/chromium-*` 均可用，实测 `chromium.launch()` 成功。
+   更正后完成四项此前未验证的内容：
+
+   | 项 | 结论 | 证据层级 |
+   | --- | --- | --- |
+   | 多行 `alt` | 守卫是 **AST** 实现，多行硬编码 alt **能被抓到**；动态 `alt={expr}` 不误报 | 守卫测试 8/8 |
+   | 适配器 `rowKey` | 调用点不传时适配器**确实有默认值**（非未定义键），但回落是**索引**；页内稳定、跨页不稳定 | jsdom 渲染 4/4 |
+   | 键盘焦点 | skip link 是**第一个 tab stop**、Enter 后焦点到 `<main>`、聚焦时可见、导航链接有焦点指示 | **真实浏览器** 10/10 |
+   | 窄屏 | 390px **无横向溢出**；移动菜单可键盘打开并呈现带链接的导航；导航点击目标 ≥24px | **真实浏览器** 10/10 |
+
+   新增 `e2e/verify-a11y-and-layout.mjs`（10 项），跑在**本地生产产物**上
+   （`apps/web/dist/external` + `e2e/static-server.mjs`），不是 dev server。
+
+   **消融（真实翻转）**：把两处 skip link 都设为 `tabIndex={-1}` → 重建 → **10/10 变 9/10**，
+   指名 "the skip link is the first tab stop and moves focus to main"；恢复后 10/10，md5 一致。
+
+   **过程中两次自纠（如实记录）**：
+   ① 断言用英文选择器 `button[aria-label*="menu"]`，而产物**默认 zh**（标签是「打开菜单」），
+   导致「菜单不可达」的假失败——改为结构化选择器 `header button[aria-expanded]`；
+   ② 首轮变异只改了源码中的**第一处** skip link（文件里共两处，首页渲染的是第二处），
+   检查未翻转——**差点误判为 GUARD-INERT**，补齐两处后才真正翻转。
+
+   **仍未验证**：antd 组件库自身的行为（`antd` CLI 在本机 MISSING，
+   门面/别名扫描盲区未补）；真实后端联调下的会话/权限流程（无 API）。
+
 5. **W5 / W6 / W7 未开始**；W6 待搭实验框架，W7 受阻于无 Docker 与部署目标。
