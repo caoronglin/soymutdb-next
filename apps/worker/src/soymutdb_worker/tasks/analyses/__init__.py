@@ -9,7 +9,6 @@ Imported eagerly so ``include=["soymutdb_worker.tasks.analyses", ...]`` in
 ``main.py`` (added by W1-A) registers the tasks at worker startup.
 """
 
-from . import fastp
-from . import scanpy
+from . import fastp, scanpy
 
 __all__ = ["fastp", "scanpy"]

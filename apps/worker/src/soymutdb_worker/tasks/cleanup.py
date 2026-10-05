@@ -7,10 +7,9 @@ worker local storage.  Runs on a periodic schedule via Celery Beat.
 from __future__ import annotations
 
 import logging
-import os
 import shutil
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from celery import Task
@@ -41,7 +40,7 @@ def cleanup_expired_blast_jobs(self: Task) -> dict:
     logger.info("Cleaning up expired BLAST jobs")
 
     bucket = get_setting("S3_BLAST_BUCKET", "blast-dbs")
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=BLAST_RESULT_RETENTION_HOURS)
+    cutoff = datetime.now(UTC) - timedelta(hours=BLAST_RESULT_RETENTION_HOURS)
     deleted = 0
 
     objects = list_objects(f"{bucket}/blast-results/")
@@ -49,7 +48,7 @@ def cleanup_expired_blast_jobs(self: Task) -> dict:
         last_modified = obj.get("LastModified")
         if last_modified is not None:
             if last_modified.tzinfo is None:
-                last_modified = last_modified.replace(tzinfo=timezone.utc)
+                last_modified = last_modified.replace(tzinfo=UTC)
             if last_modified < cutoff:
                 key = obj["Key"]
                 delete_object(f"{bucket}/{key}")
