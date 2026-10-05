@@ -141,6 +141,13 @@ main:
         # PyYAML/uv itself.
         - name: Dependency governance
           script: bash scripts/ci-job-steps.sh run dependency-governance
+        # W6. This is a REPRODUCIBILITY gate, not a benchmark: it asserts the
+        # harness replays and that the two arms return the same rows with one
+        # factor changed. CI timings are shared-container noise and must never
+        # be quoted as a performance result — see scripts/verify-db-ab-harness.sh.
+        - name: Database A/B harness (reproducibility gate)
+          image: python:3.14
+          script: bash scripts/ci-job-steps.sh run db-ab
 
   # ---------------------------------------------------------------------------
   # main — verify, then prove the images, the projections and the MCP transport
@@ -219,6 +226,13 @@ main:
         # PyYAML/uv itself.
         - name: Dependency governance
           script: bash scripts/ci-job-steps.sh run dependency-governance
+        # W6. This is a REPRODUCIBILITY gate, not a benchmark: it asserts the
+        # harness replays and that the two arms return the same rows with one
+        # factor changed. CI timings are shared-container noise and must never
+        # be quoted as a performance result — see scripts/verify-db-ab-harness.sh.
+        - name: Database A/B harness (reproducibility gate)
+          image: python:3.14
+          script: bash scripts/ci-job-steps.sh run db-ab
         - name: Build the checksummed Pages artifact
           image: node:24.19.0
           # Both scripts carry a bash shebang and bootstrap their own container

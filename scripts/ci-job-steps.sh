@@ -175,6 +175,7 @@ JOBS=(
   dependency-governance
   compose-acceptance
   clickhouse-migration
+  db-ab
   mcp-e2e
   image-build
   release
@@ -423,6 +424,18 @@ compose_acceptance_run() {
   for profile_set in "${profile_sets[@]}"; do
     COMPOSE_PROFILES="${profile_set}" docker compose -f docker-compose.yml config --quiet
   done
+}
+
+# -----------------------------------------------------------------------------
+# db-ab — W6 harness reproducibility gate (explicitly NOT a performance gate)
+#
+# The body lives in a checked-in script so CNB and the GitHub mirror execute
+# identical bytes; see scripts/verify-db-ab-harness.sh for why the timings this
+# produces must never be quoted as a result.
+# -----------------------------------------------------------------------------
+db_ab_run() {
+  api_install
+  bash "${REPO_ROOT}/scripts/verify-db-ab-harness.sh"
 }
 
 # -----------------------------------------------------------------------------

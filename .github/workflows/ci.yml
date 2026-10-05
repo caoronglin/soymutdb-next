@@ -196,8 +196,12 @@ jobs:
           python scripts/install_python_workspace.py \
             --venv apps/api/.venv --upgrade-pip --expect-version "3.14" "apps/api[dev]"
 
-      - name: Ruff (baseline failing — non-blocking)
-        continue-on-error: true
+      # Ruff was red from a Makefile path bug (`apps/api/src` never existed,
+      # so the API was never linted) plus 334 pre-existing findings. All of it
+      # is fixed, so this is a blocking gate now — if it goes red, it is a new
+      # finding rather than the old baseline. The Makefile fix is what made the
+      # difference visible in the first place.
+      - name: Ruff (blocking)
         working-directory: apps/api
         run: .venv/bin/ruff check app
 
@@ -208,6 +212,27 @@ jobs:
       # SOYMUTDB_RUN_POSTGRES_INTEGRATION=1 itself.
       - name: Backend verification (scripts/verify-backend-tests.sh)
         run: bash scripts/verify-backend-tests.sh
+
+  # ---------------------------------------------------------------------------
+  # W6 — database A/B harness reproducibility gate (NOT a performance benchmark)
+  # ---------------------------------------------------------------------------
+  db-ab:
+    name: Database A/B harness (reproducibility gate)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Python 3.14
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.14"
+
+      - name: Run the W6 harness gate
+        run: bash scripts/ci-job-steps.sh run db-ab
 
   # ---------------------------------------------------------------------------
   # Job 3 — Machine dependency evidence and dependency-health gates

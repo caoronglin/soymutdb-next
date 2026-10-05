@@ -314,9 +314,35 @@ class Comparison:
         return self.control.median_ms / self.treatment.median_ms
 
     @property
+    def stable_shape(self) -> bool:
+        """Each arm kept exactly one plan shape across all of its own rounds.
+
+        This is the comparability test an experiment actually needs. `same_plan`
+        demands the two arms be *identical*, which is correct for an experiment
+        that varies statistics or cache state and wrong for one that varies the
+        plan itself: an index treatment is supposed to turn a Seq Scan into an
+        Index Scan, so `same_plan` is false by construction and no index
+        experiment could ever clear it.
+
+        What a drift looks like — one arm producing Seq Scan on round 1 and
+        Bitmap Index Scan on round 4 — is a shape that is not constant *within*
+        that arm, and that is a genuine fault: the candidate changed, or the
+        optimiser re-evaluated on new statistics mid-run.
+        """
+        return (
+            len(self.control.plan_signatures) == 1
+            and len(self.treatment.plan_signatures) == 1
+        )
+
+    @property
     def is_decisive(self) -> bool:
         """A verdict is only reportable when the arms are actually comparable."""
-        return self.same_plan and self.same_rows and self.control.samples >= 5 and self.treatment.samples >= 5
+        return (
+            self.stable_shape
+            and self.same_rows
+            and self.control.samples >= 5
+            and self.treatment.samples >= 5
+        )
 
 
 def summarise(name: str, rows: Iterable[Round]) -> ArmSummary:
@@ -372,14 +398,31 @@ def render_report(plan: ExperimentPlan, rows: Sequence[Round]) -> str:
         "",
         f"- Speedup (median ratio): "
         f"{result.speedup:.1f}x" if result.speedup else "- Speedup: n/a",
-        f"- Same plan shape: {result.same_plan}",
+        f"- Each arm held one plan shape: {result.stable_shape}",
+        f"- Arms share a plan shape: {result.same_plan}",
         f"- Same result cardinality: {result.same_rows}",
         f"- Decisive: {result.is_decisive}",
+    ]
+    if not result.same_plan and result.stable_shape:
+        lines += [
+            "",
+            "The arms do **not** share a plan shape, and that is the point of this "
+            "run: the treatment changed how the database executes the query. The "
+            "ratio above therefore compares two different access paths, not two "
+            "measurements of the same one. It is reportable, but only as a "
+            "statement about this fixture.",
+        ]
+    lines += [
         "",
         "### Evidence grade",
         "",
         "This is a **query-level** measurement on an isolated copy. It is not an",
         "end-to-end improvement, and an index shipped on this basis still needs a",
         "migration with upgrade/downgrade coverage plus traffic evidence.",
+        "",
+        "A ratio is only as stable as the smaller arm. When the treatment median is",
+        "a few hundredths of a millisecond, ordinary scheduling noise moves it by",
+        "enough to swing the ratio by tens of percent between runs. Re-run the whole",
+        "experiment at least three times and report the spread, not one number.",
     ]
     return "\n".join(lines)

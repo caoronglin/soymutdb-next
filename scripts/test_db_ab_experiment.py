@@ -274,6 +274,18 @@ class TestComparison:
                 )
         return rows
 
+    def _two_shaped_rows(self) -> list[ab.Round]:
+        """Rows whose arms differ from each other but never from themselves."""
+        return [
+            row.__class__(
+                **{
+                    **row.__dict__,
+                    "plan_signature": "Seq Scan" if row.arm == "control" else "Bitmap Index Scan",
+                }
+            )
+            for row in self._rows(4.0, 2.0)
+        ]
+
     def test_reports_median_and_sample_count(self) -> None:
         built = plan()
         result = ab.compare(built, self._rows(4.0, 2.0))
@@ -283,12 +295,53 @@ class TestComparison:
         assert result.speedup == pytest.approx(2.0)
         assert result.is_decisive
 
-    def test_a_plan_change_between_arms_makes_the_result_not_decisive(self) -> None:
+    def test_a_shape_that_drifts_within_one_arm_makes_the_result_not_decisive(self) -> None:
+        """Drift *inside* one arm is a real fault, and must stay non-decisive.
+
+        This case used to be named "a plan change between arms", because the
+        gate then compared the two arms to each other. A cross-arm difference is
+        the normal result of an index experiment; a mid-run change within a
+        single arm is not — it means the candidate, the statistics or the
+        optimiser moved underneath the measurement. Only the second one is
+        disqualifying.
+        """
         rows = self._rows(4.0, 2.0)
         rows[0] = rows[0].__class__(**{**rows[0].__dict__, "plan_signature": "Seq Scan"})
         result = ab.compare(plan(), rows)
-        assert not result.same_plan
+        assert not result.stable_shape
         assert not result.is_decisive
+
+    def test_an_index_experiment_is_decisive_although_its_arms_differ(self) -> None:
+        """The treatment is *supposed* to change the plan; that difference is the effect.
+
+        Cross-arm shape equality can never hold for an index experiment, so
+        requiring it would leave this whole class of measurement permanently
+        undecidable. Comparability is per arm: each arm must hold one shape
+        across all of its own rounds.
+        """
+        result = ab.compare(plan(), self._two_shaped_rows())
+        assert not result.same_plan
+        assert result.stable_shape
+        assert result.same_rows
+        assert result.is_decisive
+
+    def test_report_names_a_cross_arm_shape_difference_as_the_measured_effect(self) -> None:
+        report = ab.render_report(plan(), self._two_shaped_rows())
+        assert "do **not** share a plan shape" in report
+        assert "different access paths" in report
+
+    def test_a_shrinking_treatment_median_must_not_be_quoted_from_one_run(self) -> None:
+        """The report has to warn about ratio instability, not just print the ratio.
+
+        Measured W6 runs of the same fixture and the same configuration produced
+        ratios of 219x, 269x and 326x. The control median barely moved; the
+        treatment median sat around 0.04 ms, so ordinary noise dominated the
+        denominator. Printing one ratio invites exactly the claim the audit
+        retracted, so the stability caveat ships with every report.
+        """
+        report = ab.render_report(plan(), self._rows(4.0, 0.04))
+        assert "at least three times" in report
+        assert "spread" in report
 
     def test_different_result_cardinality_makes_the_result_not_decisive(self) -> None:
         rows = self._rows(4.0, 2.0)
