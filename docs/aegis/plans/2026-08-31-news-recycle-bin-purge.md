@@ -1,5 +1,9 @@
 # Administrator news recycle bin and permanent purge
 
+> **状态（2026-10-05 补记）**：功能已落地——`apps/admin/src/routes/news/trash.tsx`
+> 与 `app/api/v1/admin_news.py` 的 trash/purge 路径均在树内。但无验收记录，且本次
+> 未核对「有界不可变审计」的保留期限是否已实装。按「代码在 ≠ 已验收」处理。
+
 ## Goal
 Implement the approved administrator recycle bin for soft-deleted news and immediate permanent purge while preserving a bounded immutable audit record. The existing news DELETE operation remains a content-editor soft delete and response-compatible 204.
 

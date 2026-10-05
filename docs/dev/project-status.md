@@ -90,7 +90,7 @@
 | 4 | API 全量 pytest OOM（EXIT=137 @ ~47%） | 实跑 | 新增待办：分片或降内存跑法需写进 `scripts/verify-backend-tests.sh` |
 | 5 | `Makefile:197` lint 目标指向不存在的 `apps/api/src`（代码在 `apps/api/app`） | 实读 | 工具链缺陷，等修 |
 | 6 | ~~`AGENTS.md:58,90` 写 pnpm `11.21.0`，仓库实际 `12.5.1`~~ | 实读 | ✅ **2026-10-02 已修**：改为 `12.5.1` |
-| 7 | 15 个 API 测试依赖 testcontainers，本机无 Docker | 实跑 | **SKIPPED ≠ PASS** |
+| 7 | ~~「15 个 API 测试依赖 testcontainers，无 Docker 必然 SKIPPED」~~ | `grep -rlE '^\s*(import\|from)\s+testcontainers' apps/api/tests` | ✅ **2026-10-05 更正为错账**：真正 import testcontainers 的只有 `tests/conftest.py` **1 个**文件；其余 14 处 grep 命中是注释里的**否定句**（`no docker / no testcontainers`）。「SKIPPED ≠ PASS」的告诫仍成立，但受影响面远小于原记 |
 | 8 | 随 Vue 退役丢失的契约覆盖：admin 会话、web 动效可访问性、页面定义 href 安全校验 | 对比 Vue 树被删的三个测试文件 | **已补两项**（导航可达性、门面导出）；W3 补 admin/web 会话（`lib/session.test.ts` 11 tests + `session-context.tsx`）；href 安全已有 `regression/url-safety.test.ts`（scheme 校验）。**仅剩动效**：`lib/motion/` 只有 `ticker.ts`、**0 个测试**，`motion-policy.ts`/`motion-prefs.ts` 亦无 |
 | 9 | ~~「无浏览器，窄屏/焦点无法验证」~~ | `node e2e/verify-a11y-and-layout.mjs` | ✅ **2026-10-02 更正并完成**：playwright + chromium 实测可用，10/10 通过（skip link 为首个 tab stop、焦点指示可见、390px 无横向溢出、移动菜单可键盘打开）；消融翻转 10/10→9/10 |
 
@@ -150,11 +150,17 @@ pnpm --filter @soymutdb/api-client run check:contract                # exit 0 / 
 HOME=$PWD/.validation/home ./node_modules/.bin/antd lint apps/admin/src
 HOME=$PWD/.validation/home ./node_modules/.bin/antd info Table
 
-# 后端（需要一个**空**的本地库；全量在本机会 OOM，建议分片）
+# 后端。两个变量缺一不可，2026-10-05 实测：
+#  (1) PYTHONPATH 必须是**仓库根绝对路径**。不设时 tests/a0 报 ModuleNotFoundError: tools
+#      并中断整个 collect（1851 collected / 1 error）；设对后 1896 collected / 0 error。
+#      相对路径 "$PWD/.." 与不设**完全等价**，无效。门禁 verify-backend-tests.sh:76 本来就设了。
+#  (2) 跑 DB 相关用例要 SOYMUTDB_TEST_DATABASE_URL；缺它时消融 20 个用例报连接错误。
 cd apps/api
-SOYMUTDB_TEST_DATABASE_URL='postgresql+asyncpg://soymutdb@127.0.0.1:55432/<empty-db>' \
-  .venv/bin/python -m pytest tests --ignore=tests/a0 -q
-SOYMUTDB_TEST_DATABASE_URL='postgresql+asyncpg://soymutdb@127.0.0.1:55432/<empty-db>' \
-  .venv/bin/python -m pytest tests/test_ablation_*.py -q     # 149 passed
-.venv/bin/python -m pytest tests/test_me_capabilities.py tests/test_active_release_endpoint.py -q   # 27 passed，无需 DB
+export PYTHONPATH="/mnt/data02/T25ronglin/code/web"
+export SOYMUTDB_TEST_DATABASE_URL='postgresql+asyncpg://soymutdb@127.0.0.1:55432/soymutdb'
+.venv/bin/python -m pytest tests --collect-only -q          # 1896 collected, 0 error
+.venv/bin/python -m pytest tests/test_ablation_*.py -q     # 149 passed
+.venv/bin/python -m pytest tests/test_me_capabilities.py \
+                  tests/test_active_release_endpoint.py -q  # 27 passed，无需 DB
+# 全量在本机 OOM（EXIT=137 @ ~47%），需分片或降内存跑法，见「已知红灯」第 4 条
 ```

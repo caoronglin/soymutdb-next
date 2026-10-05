@@ -1,5 +1,9 @@
 # P0 public mutant discovery plan
 
+> **状态（2026-10-05 补记）**：无验收记录。代码侧存在 `discovery` 相关 schema
+> 字段（`app/schemas/search.py`、`app/schemas/analytics.py`），但本次未逐条核对计划
+> 的验收项，**不据此宣称完成**。需要一次对照计划逐项验证并补记录。
+
 ## Parent
 - Roadmap: docs/aegis/work/2026-08-31-soymutdb-optimization/80-mutant-core-capability-roadmap.md.
 - Scope is existing canonical public mutant data only; no new biological schema, no fake lineage/phenotype semantics, no CMS work.

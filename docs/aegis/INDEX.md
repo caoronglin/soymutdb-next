@@ -55,7 +55,7 @@ They are retained as historical evidence only. Their conclusions are superseded 
 | [Public portal UI quality remediation](plans/2026-09-28-portal-ui-quality-remediation.md) | Task 1–5 | 部分完成；**可见文案守卫已于 2026-10-02 清零（exit 0 / 0 文件）** |
 | [Admin-editable footer, search, typography](plans/2026-09-28-admin-editable-footer-search-font.md) | Task 0–5 | Task 1 部分完成，Task 2–5 未开始 |
 | [Admin Pro v6 migration (official sub-page pattern)](plans/2026-10-01-admin-pro-migration.md) | A1–A6 | 待执行；A5 可并行。**实测缺口比计划记的更重**：8 个页面用裸 `Table`（非 6），`ProDescriptions`/`ProCard` 仍 0 处 |
-| [Audited global optimization](plans/2026-10-02-audited-optimization-execution.md) | H-01–H-18 / W0–W7 | **W0–W4 已完成**（运行时 release 切换、`/auth/me.effective_roles`、可见文案守卫 0 文件、真实浏览器 10/10）；W6 框架就位但**未跑实测、无性能结论**；W5/W7 未开始（受阻于产品确认与部署目标） |
+| [Audited global optimization](plans/2026-10-02-audited-optimization-execution.md) | H-01–H-18 / W0–W7 | **W0–W4 已完成**（运行时 release 切换、`/auth/me.effective_roles`、可见文案守卫 0 文件、真实浏览器 10/10）；W6 框架就位、本机实跑 exit 0（但比值 49% 波动，**无性能结论**）；W5 离线合同与本地策略已落地（**无出站调用**，未确认清单见 wecom/README.md）；W7 未开始（受阻于部署目标确认） |
 
 ## Work records
 

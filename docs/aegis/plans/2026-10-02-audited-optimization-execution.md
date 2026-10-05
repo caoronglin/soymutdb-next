@@ -151,7 +151,7 @@ manifest 包含 Git SHA、各应用镜像/静态制品 digest、schema 版本、
 | W2 assembly 作用域 | ✅ | 10 消费点统一工厂；release A/B 缓存隔离 6 passed；**运行时切换已补**（`/releases/active` + 订阅 + 精确失效），消融 ×2 |
 | W3 登录/权限/个人缓存 | ✅ | 五态状态机 11 passed；匿名零个人请求（消融翻转 4 项）；并发 401 单飞 3 passed；`effective_roles` 前后端 20+7 passed |
 | W4 UI/UX | ✅（可做范围内） | `check_visible_i18n_react` **exit 0 / 0 个文件**（39→0）；守卫缺陷修复 + 8 tests 防回归；**真实浏览器**验证 10/10（skip link 首个 tab stop、焦点指示、390px 无溢出、移动菜单键盘可达、≥24px 目标）；适配器 rowKey jsdom 4/4 |
-| W5 企业微信 | ⬜ | 受阻：产品/租户/同步字段/文档域未确认 |
+| W5 企业微信 | 🔶 离线合同与本地策略已落地 | `apps/worker/src/soymutdb_worker/wecom/`：`policy.py` 字段白名单＋个人信息单独批准、租户绑定、凭据脱敏、退避；`outbox.py` 事务 outbox、幂等键、版本护栏（乱序不回写旧版本）、死信、人工重放、对账；`smartsheet.py` 按官方文档实现单元格线格式（typed segment／毫秒时间戳串／关联 ID 数组）、四个只读字段过滤、`errcode` 判定；`token.py` access_token 缓存＋单飞刷新。**无任何出站调用**：四项传输协议为 Protocol，未绑定时抛 `IntegrationUnverified`。仍未确认：租户凭据、可信 IP、回调加解密方案、收集表/表单字段映射、文档搜索接口（无官方搜索端点）、逐文档 ACL 模型。待确认清单见包内 `README.md` |
 | W6 数据库 | 🔶 框架已就位 | `scripts/db_ab_experiment.py` + 37 tests：隔离拒绝、单因素、ANALYZE 对称、根层读数、≥5 轮交替，消融 ×3 均翻转。**真实 A/B 未跑**，未取得任何性能结论 |
 | W7 部署切换 | ⬜ | 受阻：无 Docker、无部署目标与恢复目标 |
 

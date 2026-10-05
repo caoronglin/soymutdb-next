@@ -1,5 +1,9 @@
 # News revisions and Beijing-time scheduling implementation plan
 
+> **状态（2026-10-05 补记）**：修订模型已落地——`app/models/content.py:201`
+> `news_article_revisions` 表含 `(article_id, version)` 唯一约束与索引。计划强调
+> 「不得静默 last-write-wins、需显式过渡策略」，**该策略本次未验证**。
+
 ## Basis and readiness
 - Approved design: `docs/aegis/work/2026-08-31-soymutdb-optimization/70-news-revisions-scheduling-design.md`.
 - Baseline owners: `apps/api/app/models/content.py`, `services/news_service.py`, `api/v1/admin_news.py`, `schemas/news.py`, `models/outbox.py`, `services/outbox_service.py`, and `packages/api-client/src/admin-news.ts`.
