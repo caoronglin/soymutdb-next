@@ -38,9 +38,9 @@
 统一在 [`aegis/INDEX.md`](aegis/INDEX.md) 登记（含状态与所属领域）：
 
 - [`aegis/plans/2026-10-01-admin-pro-migration.md`](aegis/plans/2026-10-01-admin-pro-migration.md) — 管理后台 Pro 迁移 A1–A6（待执行，A5 可并行）
-- [`aegis/plans/2026-10-02-audited-optimization-execution.md`](aegis/plans/2026-10-02-audited-optimization-execution.md) — 审计后总方案（待执行；H-01–H-18、W0–W7；按既有专项计划逐页落地）
+- [`aegis/plans/2026-10-02-audited-optimization-execution.md`](aegis/plans/2026-10-02-audited-optimization-execution.md) — 审计后总方案（H-01–H-18、W0–W7；**W0–W4 已完成，W6 仅框架**；阶段证据见 [rebaseline](aegis/baseline/2026-10-02-w0-rebaseline.md) §8–§9）
 - [`aegis/plans/2026-09-28-admin-editable-footer-search-font.md`](aegis/plans/2026-09-28-admin-editable-footer-search-font.md) — 页脚/搜索/字体 Task 0–5（Task 1 部分完成）
-- [`aegis/plans/2026-09-28-portal-ui-quality-remediation.md`](aegis/plans/2026-09-28-portal-ui-quality-remediation.md) — 门户 UI 整改（部分完成，守卫仍为红）
+- [`aegis/plans/2026-09-28-portal-ui-quality-remediation.md`](aegis/plans/2026-09-28-portal-ui-quality-remediation.md) — 门户 UI 整改（部分完成；**可见文案守卫已清零**，窄屏/焦点已在真实浏览器验证）
 - [`aegis/plans/2026-09-27-react-pro-v6-replatform.md`](aegis/plans/2026-09-27-react-pro-v6-replatform.md) — 前端栈迁移（已完成栈，Pro 组件体系未落地）
 - [`aegis/plans/2026-08-31-*.md`](aegis/plans/) — 新闻回收站、修订排程、突变体发现 P0
 

@@ -11,7 +11,19 @@
 | W4 UI/UX | ✅ | i18n 守卫 **39 → 0 文件**；真实浏览器 **10/10**；rowKey 4/4；多行 alt 已覆盖 |
 | W6 框架 | 🔶 | `db_ab_experiment.py` + 37 tests；消融 ×3；**未跑实测，无性能结论** |
 
-提交（全部已推 `origin/main`）：`160b42e69` `79509b7ec` `e211764f5` `e494b1cb2` `d721dc118`
+提交（全部已推 `origin/main`，`git rev-list --count origin/main..HEAD` = 0）：
+`160b42e69` `79509b7ec` `e211764f5` `e494b1cb2` `d721dc118` `67b55a51e`
+
+## 复核陷阱（2026-10-05 独立复核实测，勿重踩）
+
+- **`check:contract` 必须带 BLAS 变量**：`OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1`。
+  缺失时脚本导入 SciPy → OpenBLAS 开 64 线程被 cgroup 拒（`pthread_create failed for thread 50 of 64`），
+  以 **exit 1** 结束，**极易误判为契约漂移**。补上后同一命令 exit 0 / PASS。
+  连同 `GOMAXPROCS=1 RAYON_NUM_THREADS=1 UV_THREADPOOL_SIZE=1` 共 5 个变量。
+- **admin 裸 `Table` 计数必须用 `<Table\b`**，不能用 `<Table[ />]`：JSX 多写作 `<Table\n  columns=…`，
+  同行匹配只命中 2 个，真实值是 **8 个**。以 2 为据会漏掉 6 个页面的 A2/A3 迁移量。
+- 2026-10-05 全门禁复跑：i18n 守卫 0 文件、pytest scripts **350** passed/1 skipped、web **29/156**、
+  admin 7/43、api-client 28/153 + `check:contract` exit 0、vue/entry-graph/dockerfile-copy 全 exit 0。
 
 ## 相关文件
 
@@ -24,9 +36,15 @@ assemblies-query-options.test.ts,release-scope.tsx,release-scope.test.tsx,analys
 `apps/api/tests/{test_me_capabilities.py,test_active_release_endpoint.py}`、
 `packages/api-client/src/auth-concurrency.test.ts`
 
+## 消融场景表（14/14 翻转）
+
+`scripts/run_ablations.py` 生成 `docs/aegis/ablations-2026-10-02.md`。
+可复跑、串行、字节级恢复并校验和；未运行场景（F-01 数据库实测、F-02 构建产物层）
+必须随行给出原因。跑器自身曾有陈旧 `.pyc` 导致幻觉「未翻转」，已修。
+
 ## 未完成 / 阻塞
 
-- **`cnb` 远端未推送**（cnb.cool 无凭据）。`origin` 已同步到 `d721dc118`。
+- **`cnb` 远端未推送**（cnb.cool 无凭据）。`origin` 已同步到 `67b55a51e`（实测 in-sync）。
 - **无 psql / pgcli / Docker** → 数据库实测未跑，**无任何性能结论**。
 - **`ant` CLI 缺失** → antd 门面/别名扫描盲区未补。
 - **无真实后端** → 会话/权限/发布切换端到端未验证。

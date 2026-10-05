@@ -1,4 +1,4 @@
-# SoyMutDB 项目状态（2026-10-01 实跑核对）
+# SoyMutDB 项目状态（2026-10-05 实跑复核）
 
 > 单一状态视图。执行日志见 `.ai-memory/`，逐项设计与计划见 `docs/superpowers/specs/` 与 `docs/aegis/plans/`，
 > 整合视图见 `docs/3.9升级优化文档.md`。本页只回答「现在是什么状态」，且每一条都带本机实跑证据。
@@ -34,7 +34,7 @@
 > **2026-10-02 实施轮：可做范围已完成**（证据见
 > [`aegis/baseline/2026-10-02-w0-rebaseline.md`](../aegis/baseline/2026-10-02-w0-rebaseline.md) §8–§9）
 >
-> - W0–W3 完成，W4 可做范围完成，W6 框架就位；5 个提交已推 `origin/main`，`cnb` 远端仍待凭据。
+> - W0–W3 完成，W4 可做范围完成，W6 框架就位；自 `9b63ddd41` 起共 6 个提交，均已推 `origin/main`（`cnb` 远端仍待凭据）。
 > - **本页红灯已清 4 项**：`check:contract`、可见文案守卫（39 → **0** 文件）、
 >   admin 架构守卫误报、query-key 守卫假绿。
 > - **更正一条错误结论**：此前记为「无浏览器，窄屏与焦点无法验证」——**浏览器全程可用**
@@ -44,27 +44,29 @@
 
 ## 一句话
 
-技术栈迁移与 Vue 退役已完成并可复跑；**真实缺口集中在三处**——管理后台的 Pro 业务组件体系（6 个页面仍是裸 antd `Table`、
-详情页无 `ProDescriptions`）、公共门户可见文案守卫为红（39 个文件）、以及后端若干 mock 测试未跟上 release fail-closed 契约。
-本机质量门禁（前端逐包 + `scripts` 契约 275 项 + API 消融 149 项）全绿；后端全量 pytest 在本机会被 OOM kill，
-没有可信的全量数字 —— 这本身就是一条待办。
+技术栈迁移与 Vue 退役已完成并可复跑；**真实缺口只剩两处**——管理后台的 Pro 业务组件体系
+（8 个页面仍是裸 antd `Table`、`ProDescriptions`/`ProCard` 全仓 0 处），以及后端若干 mock 测试未跟上 release fail-closed 契约。
+本机质量门禁 2026-10-05 复核**全绿**（前端逐包 + `scripts` 契约 350 项 + API 消融 149 项 + 可见文案守卫 0 文件）；
+后端全量 pytest 在本机会被 OOM kill，没有可信的全量数字 —— 这本身就是一条待办。
 
-## 技术栈现状（实跑）
+## 技术栈现状（2026-10-05 实跑）
 
 | 应用 | 框架 | 单测 | typecheck |
 | --- | --- | --- | --- |
-| `apps/web` | React 19 + Umi Max 4 + antd 6 | **20 files / 99 tests** | exit 0 |
-| `apps/admin` | 同上 + ProLayout | **6 files / 41 tests**（本轮 3/19 → 6/41） | exit 0 |
+| `apps/web` | React 19 + Umi Max 4 + antd 6 | **29 files / 156 tests** | exit 0 |
+| `apps/admin` | 同上 + ProLayout | **7 files / 43 tests** | exit 0 |
 | `apps/jbrowse` | React + JBrowse 2 | 40 pass | exit 0 |
-| `packages/api-client` | — | 27 files / 150 tests | — |
-| 其他包 | genome-view 43 · genome-data 121 · genome-view-model 23 · shared 49 · charts 5 · query-keys 11 · i18n-core 10 | 全绿 | — |
-| `scripts`（Python 契约） | — | **275 passed / 1 skipped** | — |
-| `apps/api` 消融 | — | **16 files / 149 passed / 0 failed** | — |
+| `packages/api-client` | — | 28 files / 153 tests；`check:contract` **exit 0** | — |
+| 其他包 | genome-view 43 · genome-data 121 · genome-view-model 23 · shared 49 · charts 5 · query-keys 11 · i18n-core 11 | 全绿 | — |
+| `scripts`（Python 契约） | — | **350 passed / 1 skipped** | — |
+| `apps/api` 消融 | — | 16 files / 149 passed / 0 failed | — |
+| `apps/api` 新增端点 | `test_me_capabilities` + `test_active_release_endpoint` | **27 passed**（Docker-free，真实 HTTP） | — |
 | `apps/api` 全量 | — | **无法在本机跑完**：约 47% 处被 OOM kill（EXIT=137） | — |
 | `apps/worker` | — | 本机 `multiprocessing` spawn 失败，未取得数字 | — |
 
 环境：`Node 24.19.0`（符合 pin）、`pnpm 12.5.1`、`Python 3.14.6`；本机 cgroup 受限，任何构建/测试都必须
-`GOMAXPROCS=1 RAYON_NUM_THREADS=1 UV_THREADPOOL_SIZE=1`，否则 turbo/vitest/rayon 因线程耗尽直接崩溃。
+`GOMAXPROCS=1 RAYON_NUM_THREADS=1 UV_THREADPOOL_SIZE=1 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1`，
+否则 turbo/vitest/rayon 因线程耗尽直接崩溃。
 
 ## 本轮修掉的真实缺陷（都是工作树里长期存在的契约漂移）
 
@@ -83,13 +85,13 @@
 | # | 红灯 | 证据 | 归属 |
 | --- | --- | --- | --- |
 | 1 | ~~可见文案守卫 exit 1，39 个文件~~ | `node scripts/check_visible_i18n_react.mjs` | ✅ **2026-10-02 已修**：**exit 0，0 个文件**；R-12 关闭。同时修了守卫一处缺陷（React key 前缀被误判为文案），补 6 tests 防回归 |
-| 2 | 6 个 admin 页面仍是裸 antd `Table`；`ProDescriptions` 0 处、`ProCard` 0 处 | 逐项 grep | 同上 A2/A3 |
+| 2 | **8 个** admin 页面仍是裸 antd `Table`；`ProDescriptions` 0 处、`ProCard` 0 处 | `grep -rlE '<Table\b' apps/admin/src/routes --include=*.tsx` → `releases` `preview-test-data` `instances` `audit` `news/index` `news/trash` `table-views`（2 处）`content/static-page-migration-report` | 同上 A2/A3。**复核陷阱**：用 `<Table[ />]` 扫只命中 2 个——JSX 多写成 `<Table\n  columns=…`，同行匹配会漏；必须用 `<Table\b`。`ProTable` 目前只存在于门面 `components/data-table.tsx` |
 | 3 | ~~`ProLayout.menuItemRender` 用 `<a href>`，侧栏点击整页刷新~~ | `apps/admin/src/routes/__root.tsx` | ✅ **2026-10-02 已修**：改用 TanStack `<Link>`（该规范 §3.1 早已批准），`navigation-render.test.tsx` 组件级覆盖 + 消融翻转 |
 | 4 | API 全量 pytest OOM（EXIT=137 @ ~47%） | 实跑 | 新增待办：分片或降内存跑法需写进 `scripts/verify-backend-tests.sh` |
 | 5 | `Makefile:197` lint 目标指向不存在的 `apps/api/src`（代码在 `apps/api/app`） | 实读 | 工具链缺陷，等修 |
 | 6 | ~~`AGENTS.md:58,90` 写 pnpm `11.21.0`，仓库实际 `12.5.1`~~ | 实读 | ✅ **2026-10-02 已修**：改为 `12.5.1` |
 | 7 | 15 个 API 测试依赖 testcontainers，本机无 Docker | 实跑 | **SKIPPED ≠ PASS** |
-| 8 | 随 Vue 退役丢失的契约覆盖：admin 会话（`lib/auth-context.tsx`）、web 动效可访问性（`lib/motion-*.ts`）、页面定义 href 安全校验 | 对比 Vue 树被删的三个测试文件 | 本轮已补两项（导航可达性、门面导出），会话与动效仍缺 |
+| 8 | 随 Vue 退役丢失的契约覆盖：admin 会话、web 动效可访问性、页面定义 href 安全校验 | 对比 Vue 树被删的三个测试文件 | **已补两项**（导航可达性、门面导出）；W3 补 admin/web 会话（`lib/session.test.ts` 11 tests + `session-context.tsx`）；href 安全已有 `regression/url-safety.test.ts`（scheme 校验）。**仅剩动效**：`lib/motion/` 只有 `ticker.ts`、**0 个测试**，`motion-policy.ts`/`motion-prefs.ts` 亦无 |
 | 9 | ~~「无浏览器，窄屏/焦点无法验证」~~ | `node e2e/verify-a11y-and-layout.mjs` | ✅ **2026-10-02 更正并完成**：playwright + chromium 实测可用，10/10 通过（skip link 为首个 tab stop、焦点指示可见、390px 无横向溢出、移动菜单可键盘打开）；消融翻转 10/10→9/10 |
 
 ## 已完成并留证（要点）
@@ -114,7 +116,11 @@
   任何重新解析锁文件的操作必须临时 `--registry=https://registry.npmjs.org/`，`--frozen-lockfile` 不受影响。
 - **本地测试库需为空**：复用的 `soymutdb_*` 库在被强杀的会话后会残留数据；本轮已把角色种子改为幂等，
   但整表残留仍需人工清理或换库。
-- **可写隔离 Admin 环境缺失**：截图视觉验收、Admin save→公共渲染 E2E、响应式运行时检查全部 pending。
+- **可写隔离 Admin 环境缺失**：截图视觉验收、Admin save→公共渲染 E2E 仍 pending。
+  （「响应式运行时检查」一项已由 `e2e/verify-a11y-and-layout.mjs` 在真实浏览器上完成，见「已知红灯」第 9 条。）
+- **BLAS 线程数必须显式压到 1**：`check:contract` 会导入后端 FastAPI → SciPy → OpenBLAS，OpenBLAS 默认开 64 线程，
+  在本机 cgroup 下 `pthread_create failed for thread 50 of 64`，脚本以 exit 1 结束。
+  **这不是契约漂移**：补 `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1` 后同一命令 exit 0 / PASS。照本页旧的三变量 export 抄命令会得到假红灯。
 
 ## 待决策（不自行拍板）
 
@@ -124,18 +130,21 @@ v4↔v5 映射展示规则、生产对象存储选择、主导航口径、Gene I
 ## 复现
 
 ```bash
-# 前端（逐包；本机比 turbo 稳）
-export GOMAXPROCS=1 RAYON_NUM_THREADS=1 UV_THREADPOOL_SIZE=1
+# 前端（逐包；本机比 turbo 稳）。五个变量缺一不可，见「环境阻碍」的 BLAS 说明。
+export GOMAXPROCS=1 RAYON_NUM_THREADS=1 UV_THREADPOOL_SIZE=1 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1
 for p in @soymutdb/api-client @soymutdb/charts @soymutdb/genome-data @soymutdb/genome-view \
          @soymutdb/genome-view-model @soymutdb/i18n-core @soymutdb/query-keys @soymutdb/shared \
          @soymutdb/web @soymutdb/admin @soymutdb/jbrowse; do
   pnpm --filter "$p" run lint && pnpm --filter "$p" run typecheck && pnpm --filter "$p" run test
 done
 
-# 交付与平台契约
-python3 -m pytest scripts -q
-node scripts/check-react-entry-graph.mjs && node scripts/check-vue-retirement.mjs
-node scripts/check_visible_i18n_react.mjs     # 当前 exit 1，见「已知红灯」第 1 条
+# 交付与平台契约（2026-10-05 实跑：全绿）
+python3 -m pytest scripts -q                                        # 350 passed / 1 skipped
+node scripts/check-react-entry-graph.mjs                            # exit 0
+node scripts/check-vue-retirement.mjs                               # exit 0
+bash scripts/check-dockerfile-copy.sh                               # exit 0
+node scripts/check_visible_i18n_react.mjs                           # exit 0，0 个文件
+pnpm --filter @soymutdb/api-client run check:contract                # exit 0 / PASS（务必带 BLAS 变量）
 
 # antd CLI（需要 HOME 可写）
 HOME=$PWD/.validation/home ./node_modules/.bin/antd lint apps/admin/src
@@ -147,4 +156,5 @@ SOYMUTDB_TEST_DATABASE_URL='postgresql+asyncpg://soymutdb@127.0.0.1:55432/<empty
   .venv/bin/python -m pytest tests --ignore=tests/a0 -q
 SOYMUTDB_TEST_DATABASE_URL='postgresql+asyncpg://soymutdb@127.0.0.1:55432/<empty-db>' \
   .venv/bin/python -m pytest tests/test_ablation_*.py -q     # 149 passed
+.venv/bin/python -m pytest tests/test_me_capabilities.py tests/test_active_release_endpoint.py -q   # 27 passed，无需 DB
 ```

@@ -52,10 +52,10 @@ They are retained as historical evidence only. Their conclusions are superseded 
 | [Administrator news recycle bin and permanent purge](plans/2026-08-31-news-recycle-bin-purge.md) | Task 1–5 | 已交付 |
 | [News revisions and Beijing-time scheduling](plans/2026-08-31-news-revisions-scheduling.md) | Task 1–6 | 仅 Task 1 的 schema 子集落地 |
 | [React + Ant Design Pro v6 replatform](plans/2026-09-27-react-pro-v6-replatform.md) | W1–W4 | 栈迁移完成，Pro 组件体系未落地 |
-| [Public portal UI quality remediation](plans/2026-09-28-portal-ui-quality-remediation.md) | Task 1–5 | 部分完成；可见文案守卫仍为红 |
+| [Public portal UI quality remediation](plans/2026-09-28-portal-ui-quality-remediation.md) | Task 1–5 | 部分完成；**可见文案守卫已于 2026-10-02 清零（exit 0 / 0 文件）** |
 | [Admin-editable footer, search, typography](plans/2026-09-28-admin-editable-footer-search-font.md) | Task 0–5 | Task 1 部分完成，Task 2–5 未开始 |
-| [Admin Pro v6 migration (official sub-page pattern)](plans/2026-10-01-admin-pro-migration.md) | A1–A6 | 待执行；A5 可并行 |
-| [Audited global optimization](plans/2026-10-02-audited-optimization-execution.md) | H-01–H-18 / W0–W7 | W0–W3 已完成（运行时 release 切换与 `/auth/me` 能力字段均已落地并有消融）；W4 进行中（analyses 模块已清零，其余 33 文件未开始）；W5–W7 未开始；外部服务与发布另过前置门槛 |
+| [Admin Pro v6 migration (official sub-page pattern)](plans/2026-10-01-admin-pro-migration.md) | A1–A6 | 待执行；A5 可并行。**实测缺口比计划记的更重**：8 个页面用裸 `Table`（非 6），`ProDescriptions`/`ProCard` 仍 0 处 |
+| [Audited global optimization](plans/2026-10-02-audited-optimization-execution.md) | H-01–H-18 / W0–W7 | **W0–W4 已完成**（运行时 release 切换、`/auth/me.effective_roles`、可见文案守卫 0 文件、真实浏览器 10/10）；W6 框架就位但**未跑实测、无性能结论**；W5/W7 未开始（受阻于产品确认与部署目标） |
 
 ## Work records
 
