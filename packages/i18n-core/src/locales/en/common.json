@@ -15,7 +15,7 @@
     "news": "News",
     "seedRequest": "Seed Request",
     "about": "About",
-    "language": "Toggle Language",
+    "language": "Language",
     "theme": "Toggle Theme",
     "quickSearch": "Quick search",
     "repository": "Source repository",
@@ -39,10 +39,13 @@
     "tools": "Tools",
     "primaryNavigation": "Primary navigation",
     "mobileNavigation": "Mobile navigation",
-    "openMenu": "Open navigation menu",
-    "closeMenu": "Close navigation menu",
+    "openMenu": "Open menu",
+    "closeMenu": "Close menu",
     "switchLanguage": "Switch language",
-    "internalBadge": "Internal"
+    "internalBadge": "Internal",
+    "primaryLabel": "Primary navigation",
+    "quickSearchLabel": "Quick search (Cmd+K)",
+    "searchPlaceholder": "Search…"
   },
   "home": {
     "subtitle": "Soybean mutant database",
@@ -102,7 +105,18 @@
     "resourceGuide": "User guide",
     "resourceGuideDesc": "Quick start and search help.",
     "resourcePublications": "Publications",
-    "resourcePublicationsDesc": "SoyMutDB-related literature."
+    "resourcePublicationsDesc": "SoyMutDB-related literature.",
+    "variantDensityUnavailable": "Variant density data unavailable.",
+    "chromosomeHeroLabel": "Soybean chromosomes (default species) — click to open in genome browser",
+    "chromosomeBandAria": "{{chromosome}} — {{length}}, {{variants}} variants. Open in genome browser.",
+    "bandAria": "{{chromosome}} {{band}} band",
+    "variantCount": "{{variants}} variants",
+    "variantsLabel": "variants",
+    "openInBrowser": "Open in browser",
+    "heroInstructions": "Hover a chromosome to inspect variant density; click a band to navigate to that region.",
+    "lowDensity": "Low density",
+    "highDensity": "High density",
+    "featuredHero": "featured hero"
   },
   "genes": {
     "title": "Gene Search",
@@ -326,7 +340,7 @@
     "allMutagens": "All Mutagens",
     "results": "Search Results",
     "noResults": "No matching mutant lines found",
-    "lineId": "Line ID",
+    "lineId": "Public ID",
     "lineName": "Line Name",
     "mutagenLabel": "Mutagen",
     "ecotypeLabel": "Ecotype",
@@ -370,7 +384,7 @@
   "browser": {
     "title": "Genome Browser",
     "subtitle": "Explore mutations in genomic context",
-    "loading": "Loading genome browser...",
+    "loading": "Loading genome browser…",
     "selectTracks": "Select Tracks",
     "tracks": "Tracks",
     "location": "Location",
@@ -395,7 +409,7 @@
     "activeTracks_plural": "{{count}} active tracks",
     "showTracks": "Show track panel",
     "hideTracks": "Hide track panel",
-    "unavailable": "Genome browser is unavailable for this plugin/assembly.",
+    "unavailable": "JBrowse unavailable. Using linear view.",
     "minimalUnavailableTitle": "Genome browser unavailable in minimal deployment",
     "minimalUnavailableDescription": "This web-only deployment does not include JBrowse. Run the demo deployment mode to publish the interactive genome browser.",
     "locus": "Locus",
@@ -407,7 +421,14 @@
     "loadError": "The genome browser failed to load.",
     "iframeTitle": "SoyMutDB genome browser (JBrowse 2)",
     "contextMissingTitle": "Genome browser context unavailable",
-    "contextMissingDescription": "Choose an explicit assembly and published release before opening JBrowse."
+    "contextMissingDescription": "Choose an explicit assembly and published release before opening JBrowse.",
+    "openFullBrowser": "Open in full browser",
+    "frameTitle": "Genome browser — {{position}}",
+    "linearViewLabel": "Linear genome view: {{position}}",
+    "densityHistogram": "Gene density histogram",
+    "requiresJavaScript": "Interactive genome view requires JavaScript.",
+    "openJbrowse": "Open JBrowse",
+    "tooltipCounts": "{{position}} — {{count}} variants"
   },
   "blast": {
     "title": "BLAST Search",
@@ -533,7 +554,8 @@
     "docxTooLarge": "This DOCX is too large to preview — download it instead.",
     "pages": "{{count}} pages",
     "tooManyPages": "Only the first 200 pages are rendered in preview.",
-    "fitWidth": "Fit width"
+    "fitWidth": "Fit width",
+    "title": "File preview"
   },
   "docs": {
     "title": "Documentation",
@@ -564,7 +586,9 @@
     "forgotPassword": "Forgot password?",
     "rememberMe": "Remember me",
     "welcomeBack": "Welcome back",
-    "loginUnavailable": "Unable to sign in right now. Please try again."
+    "loginUnavailable": "Unable to sign in. Please try again.",
+    "invalidCredentials": "Invalid email or password.",
+    "emailPlaceholder": "you@example.org"
   },
   "auth": {
     "login": "Login",
@@ -652,7 +676,7 @@
     "backToList": "Back to List"
   },
   "common": {
-    "loading": "Loading...",
+    "loading": "…loading",
     "error": "Error",
     "errorDescription": "An unexpected error occurred while loading this page.",
     "success": "Success",
@@ -718,7 +742,12 @@
     "backToHome": "Back to home",
     "working": {
       "working": "Working…"
-    }
+    },
+    "home": "SoyMutDB home",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "resetView": "Reset view",
+    "tryAgain": "Try again"
   },
   "footer": {
     "description": "Comprehensive multi-species mutant database for functional genomics research",
@@ -1765,7 +1794,10 @@
     "prevPage": "Previous",
     "nextPage": "Next",
     "emptyCategory": "No articles in this category yet.",
-    "unavailable": "This article is unavailable."
+    "unavailable": "This article is unavailable.",
+    "externalSource": "Original source",
+    "sourceWechat": "WeChat",
+    "sourceXmol": "X-MOL"
   },
   "about": {
     "title": "About SoyMutDB",
@@ -1780,8 +1812,13 @@
     "journal": "Journal",
     "year": "Year",
     "doi": "DOI",
-    "viewPaper": "View Paper",
-    "noPublications": "No publications available"
+    "viewPaper": "View paper {{doi}}",
+    "noPublications": "No publications available",
+    "description": "Peer-reviewed publications that cite SoyMutDB. Managed by the platform administrators from the Admin console.",
+    "loadError": "Publications unavailable",
+    "loadErrorDesc": "The publications list could not be retrieved from the backend. Please try again later.",
+    "empty": "No publications have been published yet.",
+    "doiLabel": "DOI:"
   },
   "help": {
     "title": "Help Center",
@@ -2097,7 +2134,9 @@
     "help": {
       "label": "Help & Documentation",
       "description": "User guides & tutorials"
-    }
+    },
+    "searchingFor": "Search for",
+    "noResults": "No results for \"{{query}}\""
   },
   "seedRequest": {
     "title": "Seed Request",
@@ -2140,7 +2179,8 @@
     "selectedGenes": "Genes entered",
     "availableGenes": "Searchable genes",
     "availableReleases": "Available releases",
-    "analysisPrivacy": "Only public-release aggregates are shown. Requests are reviewed by an administrator; contact details are never sent to the group bot."
+    "analysisPrivacy": "Only public-release aggregates are shown. Requests are reviewed by an administrator; contact details are never sent to the group bot.",
+    "emailPlaceholder": "you@example.org"
   },
   "notifications": {
     "title": "Notifications",
@@ -2468,5 +2508,27 @@
         "SMDB-00012": "Elevated stearic acid in seeds"
       }
     }
+  },
+  "brand": {
+    "mut": "Mut",
+    "soy": "Soy",
+    "db": "DB"
+  },
+  "ontology": {
+    "unavailable": "Ontology relationship graph is unavailable.",
+    "empty": "No ontology relationships found.",
+    "graphLabel": "Ontology relationship graph",
+    "truncationNotice": "Graph is limited to {{nodes}} nodes and {{edges}} relationships."
+  },
+  "site": {
+    "internalBadgeTitle": "Private internal site artifact",
+    "internalBadge": "Internal"
+  },
+  "errorBoundary": {
+    "title": "Something went wrong",
+    "description": "An unexpected error occurred while rendering this section."
+  },
+  "a11y": {
+    "skipToContent": "Skip to content"
   }
 }

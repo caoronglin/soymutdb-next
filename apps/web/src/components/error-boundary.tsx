@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { WarningOutlined, ReloadOutlined } from "@ant-design/icons";
 import { Button } from "@/lib/antd";
 
@@ -43,6 +44,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
 }
 
 function DefaultFallback({ error, onReset }: { error: Error; onReset: () => void }) {
+    const { t } = useTranslation();
     return (
         <div
             role="alert"
@@ -51,13 +53,13 @@ function DefaultFallback({ error, onReset }: { error: Error; onReset: () => void
             <div className="mb-4 flex size-12 items-center justify-center rounded-full bg-destructive/10">
                 <WarningOutlined className="size-6 text-destructive" aria-hidden />
             </div>
-            <h2 className="font-display text-xl font-semibold">Something went wrong</h2>
+            <h2 className="font-display text-xl font-semibold">{t("errorBoundary.title")}</h2>
             <p className="mt-2 text-sm text-muted-foreground">
-                {error.message || "An unexpected error occurred while rendering this section."}
+                {error.message || t("errorBoundary.description")}
             </p>
             <Button onClick={onReset} className="mt-6" type="primary">
                 <ReloadOutlined className="size-4" aria-hidden />
-                Try again
+                {t("common.tryAgain")}
             </Button>
         </div>
     );

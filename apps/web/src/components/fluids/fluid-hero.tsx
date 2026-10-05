@@ -7,6 +7,7 @@
  * the fluid renders a single static frame.
  */
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { Button, Space, Typography } from "@/lib/antd";
 import { useAnimation } from "@/lib/animation-context";
 import { FluidGradient, type FluidGradientProps } from "./fluid-gradient";
@@ -35,11 +36,12 @@ export function FluidHero({
   onSecondary,
   gradientProps,
   className,
-}: FluidHeroProps) {
+}: FluidHeroProps) {  const { t } = useTranslation();
+
   const { reduced } = useAnimation();
 
   return (
-    <section className={className} aria-label="featured hero">
+    <section className={className} aria-label={t("home.featuredHero")}>
       <FluidGradient
         reduced={reduced}
         {...gradientProps}

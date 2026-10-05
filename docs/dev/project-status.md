@@ -71,7 +71,7 @@
 
 | # | 红灯 | 证据 | 归属 |
 | --- | --- | --- | --- |
-| 1 | 可见文案守卫 exit 1，**33 个文件**（2026-10-02 由 39 降；analyses 模块 6 文件已清零） | `node scripts/check_visible_i18n_react.mjs` | `docs/aegis/plans/2026-10-01-admin-pro-migration.md` A5 |
+| 1 | 可见文案守卫 exit 1，**22 个文件**（2026-10-02 由 39 降；analyses 模块与第二批 12 个文件已清零） | `node scripts/check_visible_i18n_react.mjs` | `docs/aegis/plans/2026-10-01-admin-pro-migration.md` A5 |
 | 2 | 6 个 admin 页面仍是裸 antd `Table`；`ProDescriptions` 0 处、`ProCard` 0 处 | 逐项 grep | 同上 A2/A3 |
 | 3 | ~~`ProLayout.menuItemRender` 用 `<a href>`，侧栏点击整页刷新~~ | `apps/admin/src/routes/__root.tsx` | ✅ **2026-10-02 已修**：改用 TanStack `<Link>`（该规范 §3.1 早已批准），`navigation-render.test.tsx` 组件级覆盖 + 消融翻转 |
 | 4 | API 全量 pytest OOM（EXIT=137 @ ~47%） | 实跑 | 新增待办：分片或降内存跑法需写进 `scripts/verify-backend-tests.sh` |

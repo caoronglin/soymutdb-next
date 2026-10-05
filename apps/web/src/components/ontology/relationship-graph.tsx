@@ -7,6 +7,7 @@
  */
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import {
   ontologyApi,
@@ -127,6 +128,7 @@ export function OntologyRelationshipGraph({
   maxNodes,
   maxEdges,
 }: OntologyRelationshipGraphProps) {
+  const { t } = useTranslation();
   const hostRef = React.useRef<HTMLDivElement>(null);
   const [rendererError, setRendererError] = React.useState(false);
   const limits = React.useMemo(
@@ -217,19 +219,19 @@ export function OntologyRelationshipGraph({
   if (query.isError || rendererError) {
     return (
       <div role="alert" className="rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
-        Ontology relationship graph is unavailable.
+        {t("ontology.unavailable")}
       </div>
     );
   }
   if (!elements || elements.nodes.length === 0) {
-    return <div className="rounded-xl border p-4 text-sm text-muted-foreground">No ontology relationships found.</div>;
+    return <div className="rounded-xl border p-4 text-sm text-muted-foreground">{t("ontology.empty")}</div>;
   }
 
   return (
-    <section aria-label="Ontology relationship graph" className="rounded-xl border bg-card p-3">
+    <section aria-label={t("ontology.graphLabel")} className="rounded-xl border bg-card p-3">
       {elements.truncated ? (
         <p className="mb-2 text-xs text-muted-foreground">
-          Graph is limited to {limits.maxNodes} nodes and {limits.maxEdges} relationships.
+          {t("ontology.truncationNotice", { nodes: limits.maxNodes, edges: limits.maxEdges })}
         </p>
       ) : null}
       <div ref={hostRef} data-testid="ontology-relationship-graph" className="h-72 w-full" />

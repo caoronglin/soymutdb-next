@@ -8,6 +8,7 @@
  * SSR-friendly: renders static content immediately; JS enhances interactivity.
  */
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { ExportOutlined } from "@ant-design/icons";
 import { cn } from "@/lib/cn";
 import { useAnimation } from "../lib/animation-context";
@@ -66,6 +67,7 @@ interface TooltipData {
 }
 
 export function ChromosomeHero({ data, assembly, onSelectChromosome, className }: ChromosomeHeroProps) {
+  const { t: tr } = useTranslation();
   const { reduced, intensity } = useAnimation();
   const points = React.useMemo(() => resolveDensity(data), [data]);
   const maxCount = React.useMemo(() => Math.max(...points.map((p) => p.variantCount), 1), [points]);
@@ -181,7 +183,7 @@ export function ChromosomeHero({ data, assembly, onSelectChromosome, className }
   if (points.length === 0) {
     return (
       <div className={cn("flex min-h-64 items-center justify-center rounded-lg border border-dashed text-center text-sm text-muted-foreground", className)} role="status">
-        Variant density data unavailable.
+        {tr("home.variantDensityUnavailable")}
       </div>
     );
   }
@@ -192,7 +194,7 @@ export function ChromosomeHero({ data, assembly, onSelectChromosome, className }
         <div
           className="grid grid-cols-5 gap-x-6 gap-y-6 sm:grid-cols-10 md:grid-cols-[repeat(20,minmax(0,1fr))]"
           role="group"
-          aria-label="Soybean chromosomes (default species) — click to open in genome browser"
+          aria-label={tr("home.chromosomeHeroLabel")}
         >
           {points.map((point) => {
             const lengthBp = point.lengthBp ?? CHROMOSOME_LENGTHS_BP[point.chromosome] ?? 50_000_000;
@@ -227,7 +229,11 @@ export function ChromosomeHero({ data, assembly, onSelectChromosome, className }
                   onFocus={() => setFocusedChr(point.chromosome)}
                   onBlur={() => setFocusedChr(null)}
                   onClick={() => handleChromosomeClick(point)}
-                  aria-label={`${point.chromosome} — ${formatMb(lengthBp)}, ${point.variantCount.toLocaleString()} variants. Open in genome browser.`}
+                  aria-label={tr("home.chromosomeBandAria", {
+                  chromosome: point.chromosome,
+                  length: formatMb(lengthBp),
+                  variants: point.variantCount.toLocaleString(),
+                })}
                 >
                   <svg
                     width={CHROM_W}
@@ -280,7 +286,7 @@ export function ChromosomeHero({ data, assembly, onSelectChromosome, className }
                             onClick={(e) => { e.stopPropagation(); handleBandClick(point, band); }}
                             className={cn("cursor-pointer transition-[filter] duration-150", !isCentromere && "hover:brightness-125")}
                             role="button"
-                            aria-label={`${point.chromosome} ${band.name} band`}
+                            aria-label={tr("home.bandAria", { chromosome: point.chromosome, band: band.name })}
                           />
                         );
                       })}
@@ -353,7 +359,9 @@ export function ChromosomeHero({ data, assembly, onSelectChromosome, className }
             {formatMb(hovered.lengthBp)} · {hovered.geneDensity}
           </div>
           <div className="mt-0.5 font-mono tabular-nums">
-            {hovered.variantCount.toLocaleString()} variants
+            {tr("home.variantCount", {
+              variants: hovered.variantCount.toLocaleString(),
+            })}
           </div>
         </div>
       )}
@@ -372,31 +380,32 @@ export function ChromosomeHero({ data, assembly, onSelectChromosome, className }
                 <p className="font-mono text-sm font-medium">{hovered.chromosome}</p>
                 <p className="text-xs text-muted-foreground">
                   {formatMb(hovered.lengthBp)} ·{" "}
-                  <span className="font-mono tabular-nums">{hovered.variantCount.toLocaleString()}</span> variants · {hovered.geneDensity}
+                  <span className="font-mono tabular-nums">{hovered.variantCount.toLocaleString()}</span>{" "}
+                  {tr("home.variantsLabel")} · {hovered.geneDensity}
                 </p>
               </div>
             </div>
             <span className="inline-flex items-center gap-1 text-xs font-medium text-primary">
-              Open in browser
+              {tr("home.openInBrowser")}
               <ExportOutlined className="size-3" aria-hidden />
             </span>
           </div>
         ) : (
           <p className="text-xs text-muted-foreground">
-            Hover a chromosome to inspect variant density; click a band to navigate to that region.
+            {tr("home.heroInstructions")}
           </p>
         )}
       </div>
 
       {/* Density legend */}
       <div className="mt-4 flex items-center justify-end gap-2 text-[10px] text-muted-foreground">
-        <span>Low density</span>
+        <span>{tr("home.lowDensity")}</span>
         <span className="flex h-2 w-24 overflow-hidden rounded-full" aria-hidden>
           {[0.8, 0.6, 0.4, 0.2, 0].map((t) => (
             <span key={t} className="flex-1" style={{ backgroundColor: densityColor(t) }} />
           ))}
         </span>
-        <span>High density</span>
+        <span>{tr("home.highDensity")}</span>
       </div>
     </div>
   );

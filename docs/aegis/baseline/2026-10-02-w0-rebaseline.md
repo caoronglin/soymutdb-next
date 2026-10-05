@@ -532,7 +532,10 @@ apps/api/app/schemas/auth.py      : 7 处
    若要在 CI 固化，应写进 `scripts/verify-backend-tests.sh`，本轮未做。
 2. **全量 `eslint src` 在本机 SIGABRT（exit 134，core dumped）**，与基线记录的 cgroup 受限一致；
    改动目录定向 lint 为 0。**未验证为环境以外的原因，也未修**。
-3. **`check_visible_i18n_react` 仍 exit 1**：39 → 33 个文件（analyses 模块 6 个已清零），其余 33 个未开始。
+3. **`check_visible_i18n_react` 仍 exit 1**：39 → **22** 个文件。已完成 analyses 模块（6）与本轮第二批（12：
+   `genome-browser-widget` / `site-header` / `chromosome-hero` / `command-palette` / `track-viewer` /
+   `relationship-graph` / `publications` / `login` / `news/$slug` / `error-boundary` / `__root` / `fluid-hero`）。
+   **未开始**：`animation-control` / `csv-viewer` / `release-trend` / `expression-heatmap` 等图表与查看器组件。
 4. **W4 其余项未开始**：`site-header` / `command-palette` 建议与 W3 公开页不跳转一起收口；
    浏览器窄屏与键盘焦点、antd 多行 `alt`、适配器 `rowKey` 均**未验证**（无浏览器）。
 5. **W5 / W6 / W7 未开始**；W6 待搭实验框架，W7 受阻于无 Docker 与部署目标。

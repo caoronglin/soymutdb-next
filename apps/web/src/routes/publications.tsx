@@ -91,7 +91,7 @@ function PublicationsComponent() {
           {t("publications.subtitle")}
         </h1>
         <p className="mt-3 max-w-2xl text-sm text-muted-foreground">
-          {t("publications.description", { defaultValue: "Peer-reviewed publications that cite SoyMutDB. Managed by the platform administrators from the Admin console." })}
+          {t("publications.description")}
         </p>
       </FadeUp>
 
@@ -108,13 +108,13 @@ function PublicationsComponent() {
           type="error"
           showIcon
           className="mt-8"
-          title={t("publications.loadError", { defaultValue: "Publications unavailable" })}
-          description={t("publications.loadErrorDesc", { defaultValue: "The publications list could not be retrieved from the backend. Please try again later." })}
+          title={t("publications.loadError")}
+          description={t("publications.loadErrorDesc")}
         />
       ) : items.length === 0 ? (
         <Empty
           className="mt-16"
-          description={t("publications.empty", { defaultValue: "No publications have been published yet." })}
+          description={t("publications.empty")}
         />
       ) : (
         <Stagger className="mt-10 grid gap-4">
@@ -143,7 +143,7 @@ function PublicationsComponent() {
                         {pub.journal ? <Tag className="font-mono">{pub.journal}</Tag> : null}
                         {pub.year ? <span className="font-mono text-muted-foreground">{pub.year}</span> : null}
                         {pub.doi ? (
-                          <span className="font-mono text-muted-foreground">DOI: {pub.doi}</span>
+                          <span className="font-mono text-muted-foreground">{t("publications.doiLabel")} {pub.doi}</span>
                         ) : null}
                       </div>
                     </div>
@@ -154,7 +154,7 @@ function PublicationsComponent() {
                         href={`https://doi.org/${pub.doi}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        aria-label={t("publications.viewPaper", { defaultValue: "View paper {{doi}}", doi: pub.doi })}
+                        aria-label={t("publications.viewPaper", { doi: pub.doi })}
                       >
                         <ExternalLink className="size-4" aria-hidden />
                       </Button>

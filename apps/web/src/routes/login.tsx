@@ -94,8 +94,8 @@ function LoginComponent() {
     } catch (error) {
       setSubmissionError(
         error instanceof ApiError && (error.status === 401 || error.status === 403)
-          ? t("loginPage.invalidCredentials", { defaultValue: "Invalid email or password." })
-          : t("loginPage.loginUnavailable", { defaultValue: "Unable to sign in. Please try again." }),
+          ? t("loginPage.invalidCredentials")
+          : t("loginPage.loginUnavailable"),
       );
     } finally {
       setSubmitting(false);
@@ -126,7 +126,7 @@ function LoginComponent() {
             <Dna className="size-5" aria-hidden />
           </span>
           <span className="font-display text-lg font-semibold tracking-tight">
-            Soy<span className="text-primary-foreground/70">Mut</span>DB
+            {t("brand.soy")}<span className="text-primary-foreground/70">{t("brand.mut")}</span>{t("brand.db")}
           </span>
         </Link>
 
@@ -174,12 +174,12 @@ function LoginComponent() {
       <main className="flex flex-col bg-background">
         {/* Mobile logo */}
         <div className="flex items-center justify-between p-6 lg:hidden">
-          <Link to="/" className="flex items-center gap-2" aria-label="SoyMutDB home">
+          <Link to="/" className="flex items-center gap-2" aria-label={t("common.home")}>
             <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
               <Dna className="size-5" aria-hidden />
             </span>
             <span className="font-display text-lg font-semibold tracking-tight">
-              Soy<span className="text-primary">Mut</span>DB
+              {t("brand.soy")}<span className="text-primary">{t("brand.mut")}</span>{t("brand.db")}
             </span>
           </Link>
           <Link
@@ -214,7 +214,7 @@ function LoginComponent() {
                       required
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      placeholder="you@example.org"
+                      placeholder={t("loginPage.emailPlaceholder")}
                     />
                   </div>
                   <div className="grid gap-2">

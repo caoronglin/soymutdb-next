@@ -191,7 +191,7 @@ function SeedRequestComponent() {
                 { type: "email", message: t("seedRequest.errorEmailFormat") },
               ]}
             >
-              <Input placeholder="you@example.org" />
+              <Input placeholder={t("seedRequest.emailPlaceholder")} />
             </Form.Item>
           </div>
 

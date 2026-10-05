@@ -15,7 +15,7 @@
     "news": "新闻",
     "seedRequest": "种子申请",
     "about": "关于我们",
-    "language": "切换语言",
+    "language": "语言",
     "theme": "切换主题",
     "quickSearch": "快速搜索",
     "repository": "源代码仓库",
@@ -39,10 +39,13 @@
     "tools": "工具",
     "primaryNavigation": "主导航",
     "mobileNavigation": "移动端导航",
-    "openMenu": "打开导航菜单",
-    "closeMenu": "关闭导航菜单",
+    "openMenu": "打开菜单",
+    "closeMenu": "关闭菜单",
     "switchLanguage": "切换语言",
-    "internalBadge": "内网"
+    "internalBadge": "内网",
+    "primaryLabel": "主导航",
+    "quickSearchLabel": "快速搜索（Cmd+K）",
+    "searchPlaceholder": "搜索…"
   },
   "home": {
     "subtitle": "大豆突变体数据库",
@@ -102,7 +105,18 @@
     "resourceGuide": "使用指南",
     "resourceGuideDesc": "快速上手与检索帮助。",
     "resourcePublications": "文献 / 出版物",
-    "resourcePublicationsDesc": "SoyMutDB 相关文献。"
+    "resourcePublicationsDesc": "SoyMutDB 相关文献。",
+    "variantDensityUnavailable": "变异密度数据不可用。",
+    "chromosomeHeroLabel": "大豆染色体（默认物种）— 点击以打开基因组浏览器",
+    "chromosomeBandAria": "{{chromosome}} — {{length}}，{{variants}} 个变异。在基因组浏览器中打开。",
+    "bandAria": "{{chromosome}} {{band}} 片段",
+    "variantCount": "{{variants}} 个变异",
+    "variantsLabel": "个变异",
+    "openInBrowser": "在浏览器中打开",
+    "heroInstructions": "悬停染色体以查看变异密度；点击片段可导航到该区间。",
+    "lowDensity": "低密度",
+    "highDensity": "高密度",
+    "featuredHero": "特色焦点"
   },
   "genes": {
     "title": "基因搜索",
@@ -326,7 +340,7 @@
     "allMutagens": "所有诱变剂",
     "results": "搜索结果",
     "noResults": "未找到匹配的突变系",
-    "lineId": "系 ID",
+    "lineId": "公开 ID",
     "lineName": "系名称",
     "mutagenLabel": "诱变剂",
     "ecotypeLabel": "生态型",
@@ -370,7 +384,7 @@
   "browser": {
     "title": "基因组浏览器",
     "subtitle": "在基因组上下文中浏览突变",
-    "loading": "正在加载基因组浏览器...",
+    "loading": "正在加载基因组浏览器…",
     "selectTracks": "选择轨道",
     "tracks": "轨道",
     "location": "位置",
@@ -395,7 +409,7 @@
     "activeTracks_plural": "{{count}} 个活动轨道",
     "showTracks": "显示轨道面板",
     "hideTracks": "隐藏轨道面板",
-    "unavailable": "此插件或装配未提供可用的基因组浏览器。",
+    "unavailable": "JBrowse 不可用，已切换为线性视图。",
     "minimalUnavailableTitle": "最小化部署未包含基因组浏览器",
     "minimalUnavailableDescription": "此仅含 Web 的部署不包含 JBrowse。请使用 demo 部署模式发布交互式基因组浏览器。",
     "locus": "位点",
@@ -407,7 +421,14 @@
     "loadError": "基因组浏览器加载失败。",
     "iframeTitle": "SoyMutDB 基因组浏览器（JBrowse 2）",
     "contextMissingTitle": "基因组浏览器上下文不可用",
-    "contextMissingDescription": "打开 JBrowse 前，请选择明确的基因组组装版本和已发布的数据版本。"
+    "contextMissingDescription": "打开 JBrowse 前，请选择明确的基因组组装版本和已发布的数据版本。",
+    "openFullBrowser": "在完整浏览器中打开",
+    "frameTitle": "基因组浏览器 — {{position}}",
+    "linearViewLabel": "线性基因组视图：{{position}}",
+    "densityHistogram": "基因密度直方图",
+    "requiresJavaScript": "交互式基因组视图需要启用 JavaScript。",
+    "openJbrowse": "打开 JBrowse",
+    "tooltipCounts": "{{position}} — {{count}} 个变异"
   },
   "blast": {
     "title": "BLAST 搜索",
@@ -533,7 +554,8 @@
     "docxTooLarge": "该 DOCX 文件过大，无法预览 — 请直接下载。",
     "pages": "{{count}} 页",
     "tooManyPages": "预览仅渲染前 200 页。",
-    "fitWidth": "适应宽度"
+    "fitWidth": "适应宽度",
+    "title": "文件预览"
   },
   "docs": {
     "title": "文档",
@@ -564,7 +586,9 @@
     "forgotPassword": "忘记密码？",
     "rememberMe": "记住我",
     "welcomeBack": "欢迎回来",
-    "loginUnavailable": "暂时无法登录，请稍后重试。"
+    "loginUnavailable": "暂时无法登录，请稍后重试。",
+    "invalidCredentials": "Invalid email or password.",
+    "emailPlaceholder": "you@example.org"
   },
   "auth": {
     "login": "登录",
@@ -652,7 +676,7 @@
     "backToList": "返回列表"
   },
   "common": {
-    "loading": "加载中...",
+    "loading": "…加载中",
     "error": "错误",
     "errorDescription": "加载此页面时发生意外错误。",
     "success": "成功",
@@ -718,7 +742,12 @@
     "backToHome": "返回首页",
     "working": {
       "working": "处理中…"
-    }
+    },
+    "home": "SoyMutDB 首页",
+    "zoomIn": "放大",
+    "zoomOut": "缩小",
+    "resetView": "重置视图",
+    "tryAgain": "重试"
   },
   "footer": {
     "description": "用于功能基因组学研究的综合性多物种突变体数据库",
@@ -1765,7 +1794,10 @@
     "prevPage": "上一页",
     "nextPage": "下一页",
     "emptyCategory": "该分类暂无文章。",
-    "unavailable": "该文章暂不可用。"
+    "unavailable": "该文章暂不可用。",
+    "externalSource": "Original source",
+    "sourceWechat": "微信",
+    "sourceXmol": "X-MOL"
   },
   "about": {
     "title": "关于我们",
@@ -1781,7 +1813,12 @@
     "year": "年份",
     "doi": "DOI",
     "viewPaper": "查看论文",
-    "noPublications": "暂无文献"
+    "noPublications": "暂无文献",
+    "description": "Peer-reviewed publications that cite SoyMutDB. Managed by the platform administrators from the Admin console.",
+    "loadError": "Publications unavailable",
+    "loadErrorDesc": "The publications list could not be retrieved from the backend. Please try again later.",
+    "empty": "No publications have been published yet.",
+    "doiLabel": "DOI："
   },
   "help": {
     "title": "帮助中心",
@@ -2071,8 +2108,8 @@
     "results": "结果",
     "empty": "未找到与“{{query}}”匹配的结果",
     "searchLabel": "搜索“{{query}}”",
-    "hintNavigate": "移动",
-    "hintSelect": "选择",
+    "hintNavigate": "选择",
+    "hintSelect": "打开",
     "hintOpen": "打开",
     "browser": {
       "label": "打开基因组浏览器",
@@ -2097,7 +2134,9 @@
     "help": {
       "label": "帮助与文档",
       "description": "使用指南与教程"
-    }
+    },
+    "searchingFor": "搜索",
+    "noResults": "没有找到“{{query}}”的结果"
   },
   "seedRequest": {
     "title": "种子申请",
@@ -2140,7 +2179,8 @@
     "selectedGenes": "已填写基因",
     "availableGenes": "可检索基因",
     "availableReleases": "可用版本",
-    "analysisPrivacy": "仅显示公开发布的汇总统计。提交后由管理员人工审核，联系信息不会发送到群机器人。"
+    "analysisPrivacy": "仅显示公开发布的汇总统计。提交后由管理员人工审核，联系信息不会发送到群机器人。",
+    "emailPlaceholder": "you@example.org"
   },
   "notifications": {
     "title": "消息通知",
@@ -2468,5 +2508,27 @@
         "SMDB-00012": "种子硬脂酸含量升高"
       }
     }
+  },
+  "brand": {
+    "mut": "Mut",
+    "soy": "Soy",
+    "db": "DB"
+  },
+  "ontology": {
+    "unavailable": "本体关系图不可用。",
+    "empty": "未找到本体关系。",
+    "graphLabel": "本体关系图",
+    "truncationNotice": "图已限制为 {{nodes}} 个节点与 {{edges}} 条关系。"
+  },
+  "site": {
+    "internalBadgeTitle": "私有内部站点制品",
+    "internalBadge": "内部"
+  },
+  "errorBoundary": {
+    "title": "出现了一些问题",
+    "description": "渲染此部分时发生了意外错误。"
+  },
+  "a11y": {
+    "skipToContent": "跳到主要内容"
   }
 }

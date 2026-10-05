@@ -2,6 +2,7 @@
  * Root layout — Header + Outlet + Footer.
  */
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { Outlet, createRootRouteWithContext, useRouterState } from "@tanstack/react-router";
 import type { QueryClient } from "@tanstack/react-query";
 import { SiteHeader } from "../components/site-header";
@@ -29,6 +30,7 @@ function isStandaloneRoute(pathname: string): boolean {
 }
 
 function RootComponent() {
+  const { t } = useTranslation();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { intensity } = useAnimation();
   const standalone = isStandaloneRoute(pathname);
@@ -40,7 +42,7 @@ function RootComponent() {
     return (
       <SiteContentProvider>
         <ErrorBoundary>
-          <a href="#main" className="skip-link">Skip to content</a>
+          <a href="#main" className="skip-link">{t("a11y.skipToContent")}</a>
           <main id="main" className="flex-1">
             {allowRouteMotion ? <React.Suspense fallback={null}><RouteMotionRuntime /></React.Suspense> : null}
             <Outlet />

@@ -19,6 +19,7 @@
  * not the full /browser route (which has its own embed).
  */
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { ZoomInOutlined, ZoomOutOutlined, ExpandOutlined, ExportOutlined, LoadingOutlined, AimOutlined, ExclamationCircleOutlined } from "@ant-design/icons";
 import { cn } from "@/lib/cn";
 import { Button } from "@/lib/antd";
@@ -110,6 +111,7 @@ export function GenomeBrowserWidget({
   height = 400,
   className,
 }: GenomeBrowserWidgetProps) {
+  const { t } = useTranslation();
   const { reduced } = useAnimation();
   const [region, setRegion] = React.useState<Region>({
     chromosome: initialChr,
@@ -310,22 +312,22 @@ export function GenomeBrowserWidget({
             <Button
               type="text"
               onClick={zoomIn}
-              aria-label="Zoom in"
-              title="Zoom in"
+              aria-label={t("common.zoomIn")}
+              title={t("common.zoomIn")}
               icon={<ZoomInOutlined className="size-4" />}
             />
             <Button
               type="text"
               onClick={zoomOut}
-              aria-label="Zoom out"
-              title="Zoom out"
+              aria-label={t("common.zoomOut")}
+              title={t("common.zoomOut")}
               icon={<ZoomOutOutlined className="size-4" />}
             />
             <Button
               type="text"
               onClick={resetView}
-              aria-label="Reset view"
-              title="Reset view"
+              aria-label={t("common.resetView")}
+              title={t("common.resetView")}
               icon={<ExpandOutlined className="size-4" />}
             />
             {effectiveMode === "iframe" && (
@@ -334,8 +336,8 @@ export function GenomeBrowserWidget({
                 target="_blank"
                 rel="noopener noreferrer"
                 className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                aria-label="Open in full browser"
-                title="Open in full browser"
+                aria-label={t("browser.openFullBrowser")}
+                title={t("browser.openFullBrowser")}
               >
                 <ExportOutlined className="size-4" />
               </a>
@@ -350,25 +352,25 @@ export function GenomeBrowserWidget({
             {!iframeLoaded && !iframeError && (
               <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-muted/50">
                 <LoadingOutlined className="size-6 animate-spin text-primary" aria-hidden />
-                <p className="mt-2 text-xs text-muted-foreground">Loading genome browser…</p>
+                <p className="mt-2 text-xs text-muted-foreground">{t("browser.loading")}</p>
               </div>
             )}
             {iframeError && (
               <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-card p-4 text-center">
                 <ExclamationCircleOutlined className="size-8 text-muted-foreground" />
-                <p className="mt-2 text-xs text-muted-foreground">JBrowse unavailable. Using linear view.</p>
+                <p className="mt-2 text-xs text-muted-foreground">{t("browser.unavailable")}</p>
                 <Button
                   size="small"
                   className="mt-2"
                   onClick={() => { iframeLoadedRef.current = false; setIframeError(false); setIframeLoaded(false); }}
                 >
-                  Retry
+                  {t("common.retry")}
                 </Button>
               </div>
             )}
             <iframe
               src={jbrowseSrc}
-              title={`Genome browser — ${positionLabel}`}
+              title={t("browser.frameTitle", { position: positionLabel })}
               className="h-full w-full border-0"
               sandbox="allow-scripts allow-same-origin allow-forms"
               loading="lazy"
@@ -382,7 +384,7 @@ export function GenomeBrowserWidget({
             className="flex h-full cursor-grab flex-col active:cursor-grabbing select-none"
             style={{ touchAction: "none" }}
             role="img"
-            aria-label={`Linear genome view: ${positionLabel}`}
+            aria-label={t("browser.linearViewLabel", { position: positionLabel })}
           >
             {/* Coordinate ruler */}
             <div className="relative h-6 border-b bg-muted/20 px-1">
@@ -442,7 +444,7 @@ export function GenomeBrowserWidget({
                 className="h-full w-full"
                 viewBox={`0 0 ${histogram.length} 100`}
                 preserveAspectRatio="none"
-                aria-label="Gene density histogram"
+                aria-label={t("browser.densityHistogram")}
               >
                 {histogram.map((bin, i) => {
                   const h = (bin.count / maxCount) * 90;
@@ -477,7 +479,7 @@ export function GenomeBrowserWidget({
                   className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full rounded border bg-popover px-2 py-1 font-mono text-[10px] shadow"
                   style={{ left: hoveredBin.x, top: hoveredBin.y - 4 }}
                 >
-                  {formatPosition(hoveredBin.position)} — {hoveredBin.count} variants
+                  {t("browser.tooltipCounts", { position: formatPosition(hoveredBin.position), count: hoveredBin.count })}
                 </div>
               )}
             </div>
@@ -492,9 +494,9 @@ export function GenomeBrowserWidget({
             {/* No-JS fallback notice */}
             <noscript>
               <div className="absolute inset-0 flex items-center justify-center bg-card text-xs text-muted-foreground">
-                Interactive genome view requires JavaScript.{" "}
+                {t("browser.requiresJavaScript")}{" "}
                 <a href={fullBrowserHref} className="underline">
-                  Open JBrowse
+                  {t("browser.openJbrowse")}
                 </a>
                 .
               </div>

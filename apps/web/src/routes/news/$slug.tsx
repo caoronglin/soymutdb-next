@@ -213,7 +213,7 @@ function NewsDetailComponent() {
           {article.source_url ? (
             <aside className="mt-6 rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
               <span className="font-medium text-foreground">
-                {t("news.externalSource", { defaultValue: "Original source" })}:
+                {t("news.externalSource")}:
               </span>{" "}
               <a
                 href={article.source_url}
@@ -221,7 +221,7 @@ function NewsDetailComponent() {
                 rel="noopener noreferrer"
                 className="link-underline break-all text-primary hover:text-primary/80"
               >
-                {article.source_platform === "wechat" ? "WeChat" : "X-MOL"}
+                {article.source_platform === "wechat" ? t("news.sourceWechat") : t("news.sourceXmol")}
               </a>
               {article.source_published_at ? (
                 <span className="ml-2">{formatDate(article.source_published_at)}</span>

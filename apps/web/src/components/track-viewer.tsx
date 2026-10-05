@@ -17,6 +17,7 @@
  *   - Data fetching is scheduled with requestIdleCallback and debounced per view
  */
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { ZoomInOutlined, ZoomOutOutlined } from "@ant-design/icons";
 import { Button } from "@/lib/antd";
 import { cn } from "@/lib/cn";
@@ -136,6 +137,7 @@ export function TrackViewer({
   showControls = true,
   className,
 }: TrackViewerProps) {
+  const { t } = useTranslation();
   const { reduced } = useAnimation();
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const offscreenRef = React.useRef<OffscreenCanvas | null>(null);
@@ -656,23 +658,23 @@ export function TrackViewer({
           <div className="flex items-center gap-2 font-mono text-[10px] tabular-nums text-muted-foreground">
             <span>{externalRegion.chromosome}:{formatPosition(externalRegion.start)}-{formatPosition(externalRegion.end)}</span>
             <span className="text-muted-foreground/60">({formatMb(externalRegion.end - externalRegion.start)})</span>
-            {loading && <span className="text-primary animate-pulse">…loading</span>}
+            {loading && <span className="text-primary animate-pulse">{t("common.loading")}</span>}
           </div>
           <div className="flex items-center gap-1">
             <Button
               type="text"
               size="small"
               onClick={zoomIn}
-              aria-label="Zoom in"
-              title="Zoom in"
+              aria-label={t("common.zoomIn")}
+              title={t("common.zoomIn")}
               icon={<ZoomInOutlined />}
             />
             <Button
               type="text"
               size="small"
               onClick={zoomOut}
-              aria-label="Zoom out"
-              title="Zoom out"
+              aria-label={t("common.zoomOut")}
+              title={t("common.zoomOut")}
               icon={<ZoomOutOutlined />}
             />
           </div>

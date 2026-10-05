@@ -238,20 +238,20 @@ export function SiteHeader() {
         <Link
           to="/"
           className="flex shrink-0 items-center gap-2 rounded-md outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring"
-          aria-label="SoyMutDB home"
+          aria-label={t("common.home")}
         >
           <span className="flex size-8 items-center justify-center rounded-lg bg-gradient-to-br from-[var(--primary-gradient-start)] to-[var(--primary-gradient-end)] text-primary-foreground shadow-sm">
             <DeploymentUnitOutlined className="size-5" aria-hidden />
           </span>
           <span className="font-display text-lg font-semibold tracking-tight">
-            Soy<span className="text-gradient">Mut</span>DB
+            {t("brand.soy")}<span className="text-gradient">{t("brand.mut")}</span>{t("brand.db")}
           </span>
           {IS_INTERNAL_SITE ? (
             <span
               className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-700 dark:text-amber-300"
-              title="Private internal site artifact"
+              title={t("site.internalBadgeTitle")}
             >
-              Internal
+              {t("site.internalBadge")}
             </span>
           ) : null}
         </Link>
@@ -260,7 +260,7 @@ export function SiteHeader() {
         <nav
           ref={navRef}
           className="mx-auto hidden items-center gap-1 lg:flex"
-          aria-label="Primary navigation"
+          aria-label={t("nav.primaryLabel")}
         >
           {NAV_GROUPS.map((group) => {
             if (group.to) {
@@ -362,13 +362,13 @@ export function SiteHeader() {
           {/* Search (desktop) — triggers command palette */}
           <Button
             onClick={openPalette}
-            aria-label="Quick search (Cmd+K)"
+            aria-label={t("nav.quickSearchLabel")}
             className="hidden h-9 items-center gap-2.5 rounded-lg border-input/70 bg-muted/40 px-3 text-sm text-muted-foreground shadow-sm hover:border-border hover:bg-muted/70 hover:text-foreground md:flex md:w-44 lg:w-56"
           >
             <SearchOutlined className="size-4 shrink-0" aria-hidden />
             <span className="min-w-0 flex-1 truncate text-left">
               <span className="hidden lg:inline">{t("home.searchPlaceholder")}</span>
-              <span className="lg:hidden">Search…</span>
+              <span className="lg:hidden">{t("nav.searchPlaceholder")}</span>
             </span>
             <span className="ml-auto flex shrink-0 items-center gap-1" aria-hidden>
               <kbd className="hidden sm:inline-flex">⌘</kbd>
@@ -398,7 +398,7 @@ export function SiteHeader() {
             <Button
               type="text"
               size="small"
-              aria-label={mobileOpen ? "Close menu" : "Open menu"}
+              aria-label={mobileOpen ? t("nav.closeMenu") : t("nav.openMenu")}
               aria-expanded={mobileOpen}
               aria-controls="mobile-nav"
               onClick={() => setMobileOpen((v) => !v)}
@@ -428,7 +428,7 @@ export function SiteHeader() {
             </form>
 
             {/* Sectioned two-level nav (mirrors the desktop groups) */}
-            <nav aria-label="Primary navigation" className="flex flex-col">
+            <nav aria-label={t("nav.primaryLabel")} className="flex flex-col">
               {NAV_GROUPS.map((group) => {
                 if (group.to) {
                   return (
@@ -507,6 +507,7 @@ function LanguageSwitcher({
   current: SupportedLanguage;
   onChange: (lang: SupportedLanguage) => void;
 }) {
+  const { t } = useTranslation();
   const ref = React.useRef<HTMLDivElement | null>(null);
   // Outside-click dismissal, which antd's `Dropdown` would otherwise provide.
   React.useEffect(() => {
@@ -530,7 +531,7 @@ function LanguageSwitcher({
       <Button
         type="text"
         size="small"
-        aria-label="Language"
+        aria-label={t("nav.language")}
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen(!open)}
