@@ -77,6 +77,7 @@ async def test_list_mutant_lines_reports_postgres_variant_summary_counts(
                 alt="T",
                 variant_type=VariantType.SNP,
                 mutant_line_id=counted_line.id,
+                release_id=published_release.id,
             ),
             VariantSummary(
                 assembly_id=assembly.id,
@@ -86,6 +87,7 @@ async def test_list_mutant_lines_reports_postgres_variant_summary_counts(
                 alt="C",
                 variant_type=VariantType.SNP,
                 mutant_line_id=counted_line.id,
+                release_id=published_release.id,
             ),
         ]
     )
