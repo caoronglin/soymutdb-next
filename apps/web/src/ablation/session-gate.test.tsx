@@ -51,7 +51,7 @@ vi.mock("../lib/api", () => ({
   },
 }));
 
-import { SessionProvider, useSession } from "../lib/session-context";
+import { SessionProvider } from "../lib/session-context";
 import { useCurrentUser, useIsResearcher } from "../lib/use-current-user";
 
 function Probe() {
