@@ -20,19 +20,21 @@ import {
   Alert,
   App,
   Button,
-  Card,
   Checkbox,
   Empty,
   Form,
   Input,
+  PageContainer,
+  ProCard,
+  ProTable,
   Select,
   Skeleton,
   Space,
   Switch,
-  Table,
   Tag,
-  Typography,
+  type ProColumns,
 } from "@/lib/antd";
+import { PRO_LIST_SHELL } from "../components/pro-table-shell";
 import { PlusOutlined, SaveOutlined, DeleteOutlined, StarOutlined } from "@ant-design/icons";
 import {
   TABLE_KINDS,
@@ -233,356 +235,372 @@ export default function TableViewsPage() {
     setDraftActions(template.actions);
   }
 
-  return (
-    <div className="space-y-6 p-6">
-      <Typography.Title level={3} style={{ margin: 0 }}>
-        表格模板 / Table view templates
-      </Typography.Title>
-      <Alert
-        type="info"
-        showIcon
-        title="列顺序、显隐与操作按钮都在此配置；跨组装同源列（W82_V2 / W82_V4 / DN53_V1）默认关闭，按需添加。"
-        description="保存为模板后立即生效：门户按物种、站点变体与 release 解析这一列集合。"
-      />
-
-      <Card
-        size="small"
-        title="选择表 / Table"
-        extra={
-          <Space>
-            <Select
-              value={kind}
-              style={{ width: 220 }}
-              options={TABLE_KINDS.map((value) => ({ value, label: KIND_LABELS[value] }))}
-              onChange={(value: TableKind) => setKind(value)}
-            />
-            <Select
-              value={species}
-              style={{ width: 160 }}
-              options={[
-                { value: "Glycine max", label: "Glycine max" },
-                { value: "Zea mays", label: "Zea mays" },
-              ]}
-              onChange={(value: string) => setSpecies(value)}
-            />
-            <Select
-              value={siteVariant}
-              style={{ width: 140 }}
-              options={[
-                { value: "external", label: "external" },
-                { value: "internal", label: "internal" },
-              ]}
-              onChange={(value: "external" | "internal") => setSiteVariant(value)}
-            />
-          </Space>
-        }
-      >
-        {templatesQuery.isLoading ? (
-          <Skeleton active />
-        ) : templates.length === 0 ? (
-          <Empty description="该表还没有模板，正在使用内置默认列。" />
-        ) : (
-          <Table<TableViewTemplate>
-            rowKey="id"
-            size="small"
-            dataSource={templates}
-            pagination={false}
-            columns={[
-              {
-                title: "名称",
-                dataIndex: "name",
-                key: "name",
-                render: (name: string) => <span className="font-medium">{name}</span>,
-              },
-              {
-                title: "物种 / 变体",
-                key: "scope",
-                render: (_, row) => (
-                  <Space size={4}>
-                    <Tag>{row.species}</Tag>
-                    <Tag color={row.site_variant === "internal" ? "gold" : "blue"}>
-                      {row.site_variant}
-                    </Tag>
-                    {row.release_id ? <Tag>release {row.release_id}</Tag> : <Tag>all releases</Tag>}
-                  </Space>
-                ),
-              },
-              {
-                title: "列",
-                key: "columns",
-                render: (_, row) => (
-                  <span className="font-mono text-xs">
-                    {row.columns
-                      .filter((column) => column.visible)
-                      .map((column) => column.key)
-                      .join(", ")}
-                  </span>
-                ),
-              },
-              {
-                title: "默认",
-                key: "is_default",
-                render: (_, row) => (row.is_default ? <Tag color="green">default</Tag> : null),
-              },
-              {
-                title: "操作",
-                key: "actions",
-                render: (_, row) => (
-                  <Space>
-                    <Button size="small" onClick={() => startEdit(row)}>
-                      编辑
-                    </Button>
-                    {row.is_default ? null : (
-                      <Button
-                        size="small"
-                        icon={<StarOutlined />}
-                        loading={promoteMutation.isPending}
-                        onClick={() => promoteMutation.mutate(row.id)}
-                      >
-                        设为默认
-                      </Button>
-                    )}
-                    <Button
-                      size="small"
-                      danger
-                      icon={<DeleteOutlined />}
-                      onClick={() => deleteMutation.mutate(row.id)}
-                    >
-                      删除
-                    </Button>
-                  </Space>
-                ),
-              },
-            ]}
-          />
-        )}
-      </Card>
-
-      <Card size="small" title={editingId ? "编辑模板 / Edit template" : "新建模板 / New template"}>
-        <Form layout="vertical" onFinish={() => saveMutation.mutate()}>
-          <Form.Item label="名称" required>
-            <Input
-              value={draftName}
-              placeholder="例如：突变位点（含同源列）"
-              onChange={(event) => setDraftName(event.target.value)}
-            />
-          </Form.Item>
-          <Form.Item label="列（按显示顺序；勾选控制显隐）">
-            <div className="grid gap-2 sm:grid-cols-2">
-              {draftColumns.map((column, index) => (
-                <Space key={column.key} size={8}>
-                  <Checkbox
-                    checked={column.visible}
-                    onChange={(event) =>
-                      setDraftColumns((previous) =>
-                        previous.map((item, position) =>
-                          position === index ? { ...item, visible: event.target.checked } : item,
-                        ),
-                      )
-                    }
-                  />
-                  <span className="text-sm">{column.label_zh}</span>
-                  <Button
-                    size="small"
-                    type="text"
-                    disabled={index === 0}
-                    onClick={() =>
-                      setDraftColumns((previous) => {
-                        const next = [...previous];
-                        const [moved] = next.splice(index, 1);
-                        next.splice(index - 1, 0, moved);
-                        return next;
-                      })
-                    }
-                  >
-                    ↑
-                  </Button>
-                  <Button
-                    size="small"
-                    type="text"
-                    disabled={index === draftColumns.length - 1}
-                    onClick={() =>
-                      setDraftColumns((previous) => {
-                        const next = [...previous];
-                        const [moved] = next.splice(index, 1);
-                        next.splice(index + 1, 0, moved);
-                        return next;
-                      })
-                    }
-                  >
-                    ↓
-                  </Button>
-                  <Button
-                    size="small"
-                    type="text"
-                    danger
-                    onClick={() =>
-                      setDraftColumns((previous) => previous.filter((_, position) => position !== index))
-                    }
-                  >
-                    ×
-                  </Button>
-                </Space>
-              ))}
-            </div>
-          </Form.Item>
-          <Form.Item label="添加列">
-            <Space wrap>
-              {candidates
-                .filter((column) => !selectedKeys.has(column.key))
-                .map((column) => (
-                  <Button
-                    key={column.key}
-                    size="small"
-                    onClick={() =>
-                      setDraftColumns((previous) => [
-                        ...previous,
-                        { key: column.key, label_zh: column.label, label_en: column.label, visible: true },
-                      ])
-                    }
-                  >
-                    + {column.label}
-                  </Button>
-                ))}
-            </Space>
-          </Form.Item>
-          <Form.Item label="尾部操作">
-            <Space>
-              <Switch
-                checked={draftActions.jbrowse}
-                checkedChildren="JBrowse 2"
-                unCheckedChildren="JBrowse 2"
-                onChange={(checked) => setDraftActions((previous) => ({ ...previous, jbrowse: checked }))}
-              />
-              <Switch
-                checked={draftActions.genome_preview}
-                checkedChildren="基因预览"
-                unCheckedChildren="基因预览"
-                onChange={(checked) =>
-                  setDraftActions((previous) => ({ ...previous, genome_preview: checked }))
-                }
-              />
-            </Space>
-          </Form.Item>
-          <Form.Item label="Release（留空=全部 release）">
-            <Input
-              value={editingReleaseId}
-              placeholder="留空表示发布级默认"
-              onChange={(event) => setEditingReleaseId(event.target.value)}
-            />
-          </Form.Item>
-          <Space>
+  // Both tables on this screen are editor surfaces, not read-only reports: every
+  // row carries its own write action (edit / promote / delete / enable / unregister).
+  // `editable: false` keeps ProTable's own cell editor out so the page's explicit
+  // buttons remain the only mutation path.
+  const templateColumns: ProColumns<TableViewTemplate>[] = [
+    {
+      title: "名称",
+      dataIndex: "name",
+      key: "name",
+      editable: false,
+      render: (name) => <span className="font-medium">{name}</span>,
+    },
+    {
+      title: "物种 / 变体",
+      key: "scope",
+      editable: false,
+      render: (_, row) => (
+        <Space size={4}>
+          <Tag>{row.species}</Tag>
+          <Tag color={row.site_variant === "internal" ? "gold" : "blue"}>
+            {row.site_variant}
+          </Tag>
+          {row.release_id ? <Tag>release {row.release_id}</Tag> : <Tag>all releases</Tag>}
+        </Space>
+      ),
+    },
+    {
+      title: "列",
+      key: "columns",
+      editable: false,
+      render: (_, row) => (
+        <span className="font-mono text-xs">
+          {row.columns
+            .filter((column) => column.visible)
+            .map((column) => column.key)
+            .join(", ")}
+        </span>
+      ),
+    },
+    {
+      title: "默认",
+      key: "is_default",
+      editable: false,
+      render: (_, row) => (row.is_default ? <Tag color="green">default</Tag> : null),
+    },
+    {
+      title: "操作",
+      key: "actions",
+      editable: false,
+      render: (_, row) => (
+        <Space>
+          <Button size="small" onClick={() => startEdit(row)}>
+            编辑
+          </Button>
+          {row.is_default ? null : (
             <Button
-              type="primary"
-              htmlType="submit"
-              icon={<SaveOutlined />}
-              loading={saveMutation.isPending}
-              disabled={draftColumns.length === 0}
+              size="small"
+              icon={<StarOutlined />}
+              loading={promoteMutation.isPending}
+              onClick={() => promoteMutation.mutate(row.id)}
             >
-              保存模板
+              设为默认
             </Button>
-            <Button onClick={startNew} icon={<PlusOutlined />}>
-              新建
-            </Button>
-          </Space>
-        </Form>
-      </Card>
+          )}
+          <Button
+            size="small"
+            danger
+            icon={<DeleteOutlined />}
+            onClick={() => deleteMutation.mutate(row.id)}
+          >
+            删除
+          </Button>
+        </Space>
+      ),
+    },
+  ];
 
-      <Card size="small" title="多物种实例 / Species instances">
+  const instanceColumns: ProColumns<SpeciesInstance>[] = [
+    { title: "code", dataIndex: "code", key: "code", editable: false, render: (code) => <code>{code}</code> },
+    { title: "名称", dataIndex: "name", key: "name", editable: false },
+    { title: "物种", dataIndex: "species", key: "species", editable: false },
+    { title: "API", dataIndex: "api_base_url", key: "api_base_url", editable: false, render: (url) => <code>{url}</code> },
+    {
+      title: "本地",
+      key: "is_local",
+      editable: false,
+      render: (_, row) => (row.is_local ? <Tag color="green">local</Tag> : null),
+    },
+    {
+      title: "操作",
+      key: "actions",
+      editable: false,
+      render: (_, row) => (
+        <Space>
+          <Switch
+            size="small"
+            checked={row.is_enabled}
+            onChange={(checked) =>
+              updateSpeciesInstance(row.id, { is_enabled: checked }).then(() =>
+                queryClient.invalidateQueries({ queryKey: ["admin", "species-instances"] }),
+              )
+            }
+          />
+          <Button
+            size="small"
+            danger
+            icon={<DeleteOutlined />}
+            onClick={() =>
+              deleteSpeciesInstance(row.id).then(() =>
+                queryClient.invalidateQueries({ queryKey: ["admin", "species-instances"] }),
+              )
+            }
+          >
+            删除
+          </Button>
+        </Space>
+      ),
+    },
+  ];
+
+  return (
+    <PageContainer title="表格模板 / Table view templates">
+      <div className="space-y-6">
         <Alert
           type="info"
           showIcon
-          title="一个管理面板可管理多个物种库：在此登记每个实例的 API / JBrowse / 门户地址，数据仍留在各自实例内。"
-          style={{ marginBottom: 12 }}
+          title="列顺序、显隐与操作按钮都在此配置；跨组装同源列（W82_V2 / W82_V4 / DN53_V1）默认关闭，按需添加。"
+          description="保存为模板后立即生效：门户按物种、站点变体与 release 解析这一列集合。"
         />
-        {instancesQuery.isLoading ? (
-          <Skeleton active />
-        ) : (
-          <Table<SpeciesInstance>
-            rowKey="id"
-            size="small"
-            dataSource={instances}
-            pagination={false}
-            columns={[
-              { title: "code", dataIndex: "code", key: "code", render: (code: string) => <code>{code}</code> },
-              { title: "名称", dataIndex: "name", key: "name" },
-              { title: "物种", dataIndex: "species", key: "species" },
-              { title: "API", dataIndex: "api_base_url", key: "api_base_url", render: (url: string) => <code>{url}</code> },
-              {
-                title: "本地",
-                key: "is_local",
-                render: (_, row) => (row.is_local ? <Tag color="green">local</Tag> : null),
-              },
-              {
-                title: "操作",
-                key: "actions",
-                render: (_, row) => (
-                  <Space>
-                    <Switch
-                      size="small"
-                      checked={row.is_enabled}
-                      onChange={(checked) =>
-                        updateSpeciesInstance(row.id, { is_enabled: checked }).then(() =>
-                          queryClient.invalidateQueries({ queryKey: ["admin", "species-instances"] }),
+
+        <ProCard
+          size="small"
+          title="选择表 / Table"
+          extra={
+            <Space>
+              <Select
+                value={kind}
+                style={{ width: 220 }}
+                options={TABLE_KINDS.map((value) => ({ value, label: KIND_LABELS[value] }))}
+                onChange={(value: TableKind) => setKind(value)}
+              />
+              <Select
+                value={species}
+                style={{ width: 160 }}
+                options={[
+                  { value: "Glycine max", label: "Glycine max" },
+                  { value: "Zea mays", label: "Zea mays" },
+                ]}
+                onChange={(value: string) => setSpecies(value)}
+              />
+              <Select
+                value={siteVariant}
+                style={{ width: 140 }}
+                options={[
+                  { value: "external", label: "external" },
+                  { value: "internal", label: "internal" },
+                ]}
+                onChange={(value: "external" | "internal") => setSiteVariant(value)}
+              />
+            </Space>
+          }
+        >
+          {templatesQuery.isLoading ? (
+            <Skeleton active />
+          ) : templates.length === 0 ? (
+            <Empty description="该表还没有模板，正在使用内置默认列。" />
+          ) : (
+            <ProTable<TableViewTemplate>
+              {...PRO_LIST_SHELL}
+              rowKey="id"
+              size="small"
+              dataSource={templates}
+              pagination={false}
+              columns={templateColumns}
+            />
+          )}
+        </ProCard>
+
+        <ProCard size="small" title={editingId ? "编辑模板 / Edit template" : "新建模板 / New template"}>
+          <Form layout="vertical" onFinish={() => saveMutation.mutate()}>
+            <Form.Item label="名称" required>
+              <Input
+                value={draftName}
+                placeholder="例如：突变位点（含同源列）"
+                onChange={(event) => setDraftName(event.target.value)}
+              />
+            </Form.Item>
+            <Form.Item label="列（按显示顺序；勾选控制显隐）">
+              <div className="grid gap-2 sm:grid-cols-2">
+                {draftColumns.map((column, index) => (
+                  <Space key={column.key} size={8}>
+                    <Checkbox
+                      checked={column.visible}
+                      onChange={(event) =>
+                        setDraftColumns((previous) =>
+                          previous.map((item, position) =>
+                            position === index ? { ...item, visible: event.target.checked } : item,
+                          ),
                         )
                       }
                     />
+                    <span className="text-sm">{column.label_zh}</span>
                     <Button
                       size="small"
-                      danger
-                      icon={<DeleteOutlined />}
+                      type="text"
+                      disabled={index === 0}
                       onClick={() =>
-                        deleteSpeciesInstance(row.id).then(() =>
-                          queryClient.invalidateQueries({ queryKey: ["admin", "species-instances"] }),
-                        )
+                        setDraftColumns((previous) => {
+                          const next = [...previous];
+                          const [moved] = next.splice(index, 1);
+                          next.splice(index - 1, 0, moved);
+                          return next;
+                        })
                       }
                     >
-                      删除
+                      ↑
+                    </Button>
+                    <Button
+                      size="small"
+                      type="text"
+                      disabled={index === draftColumns.length - 1}
+                      onClick={() =>
+                        setDraftColumns((previous) => {
+                          const next = [...previous];
+                          const [moved] = next.splice(index, 1);
+                          next.splice(index + 1, 0, moved);
+                          return next;
+                        })
+                      }
+                    >
+                      ↓
+                    </Button>
+                    <Button
+                      size="small"
+                      type="text"
+                      danger
+                      onClick={() =>
+                        setDraftColumns((previous) => previous.filter((_, position) => position !== index))
+                      }
+                    >
+                      ×
                     </Button>
                   </Space>
-                ),
-              },
-            ]}
-          />
-        )}
-
-        <Form
-          form={instanceForm}
-          layout="vertical"
-          className="mt-4"
-          initialValues={{ is_local: false }}
-          onFinish={(values: InstanceFormValues) => instanceMutation.mutate(values)}
-        >
-          <Space wrap align="start">
-            <Form.Item name="code" label="code" rules={[{ required: true }]}>
-              <Input placeholder="soy" />
+                ))}
+              </div>
             </Form.Item>
-            <Form.Item name="name" label="名称" rules={[{ required: true }]}>
-              <Input placeholder="Soybean" />
+            <Form.Item label="添加列">
+              <Space wrap>
+                {candidates
+                  .filter((column) => !selectedKeys.has(column.key))
+                  .map((column) => (
+                    <Button
+                      key={column.key}
+                      size="small"
+                      onClick={() =>
+                        setDraftColumns((previous) => [
+                          ...previous,
+                          { key: column.key, label_zh: column.label, label_en: column.label, visible: true },
+                        ])
+                      }
+                    >
+                      + {column.label}
+                    </Button>
+                  ))}
+              </Space>
             </Form.Item>
-            <Form.Item name="species" label="物种" rules={[{ required: true }]}>
-              <Input placeholder="Glycine max" />
+            <Form.Item label="尾部操作">
+              <Space>
+                <Switch
+                  checked={draftActions.jbrowse}
+                  checkedChildren="JBrowse 2"
+                  unCheckedChildren="JBrowse 2"
+                  onChange={(checked) => setDraftActions((previous) => ({ ...previous, jbrowse: checked }))}
+                />
+                <Switch
+                  checked={draftActions.genome_preview}
+                  checkedChildren="基因预览"
+                  unCheckedChildren="基因预览"
+                  onChange={(checked) =>
+                    setDraftActions((previous) => ({ ...previous, genome_preview: checked }))
+                  }
+                />
+              </Space>
             </Form.Item>
-            <Form.Item name="api_base_url" label="API origin" rules={[{ required: true }]}>
-              <Input placeholder="https://api.example.org" />
+            <Form.Item label="Release（留空=全部 release）">
+              <Input
+                value={editingReleaseId}
+                placeholder="留空表示发布级默认"
+                onChange={(event) => setEditingReleaseId(event.target.value)}
+              />
             </Form.Item>
-            <Form.Item name="jbrowse_base_url" label="JBrowse origin">
-              <Input placeholder="https://jbrowse.example.org" />
-            </Form.Item>
-            <Form.Item name="portal_base_url" label="Portal origin">
-              <Input placeholder="https://portal.example.org" />
-            </Form.Item>
-            <Form.Item name="is_local" label="本机实例" valuePropName="checked">
-              <Switch />
-            </Form.Item>
-            <Form.Item label=" ">
-              <Button type="primary" htmlType="submit" icon={<PlusOutlined />} loading={instanceMutation.isPending}>
-                登记实例
+            <Space>
+              <Button
+                type="primary"
+                htmlType="submit"
+                icon={<SaveOutlined />}
+                loading={saveMutation.isPending}
+                disabled={draftColumns.length === 0}
+              >
+                保存模板
               </Button>
-            </Form.Item>
-          </Space>
-        </Form>
-      </Card>
-    </div>
+              <Button onClick={startNew} icon={<PlusOutlined />}>
+                新建
+              </Button>
+            </Space>
+          </Form>
+        </ProCard>
+
+        <ProCard size="small" title="多物种实例 / Species instances">
+          <Alert
+            type="info"
+            showIcon
+            title="一个管理面板可管理多个物种库：在此登记每个实例的 API / JBrowse / 门户地址，数据仍留在各自实例内。"
+            style={{ marginBottom: 12 }}
+          />
+          {instancesQuery.isLoading ? (
+            <Skeleton active />
+          ) : (
+            <ProTable<SpeciesInstance>
+              {...PRO_LIST_SHELL}
+              rowKey="id"
+              size="small"
+              dataSource={instances}
+              pagination={false}
+              columns={instanceColumns}
+            />
+          )}
+
+          <Form
+            form={instanceForm}
+            layout="vertical"
+            className="mt-4"
+            initialValues={{ is_local: false }}
+            onFinish={(values: InstanceFormValues) => instanceMutation.mutate(values)}
+          >
+            <Space wrap align="start">
+              <Form.Item name="code" label="code" rules={[{ required: true }]}>
+                <Input placeholder="soy" />
+              </Form.Item>
+              <Form.Item name="name" label="名称" rules={[{ required: true }]}>
+                <Input placeholder="Soybean" />
+              </Form.Item>
+              <Form.Item name="species" label="物种" rules={[{ required: true }]}>
+                <Input placeholder="Glycine max" />
+              </Form.Item>
+              <Form.Item name="api_base_url" label="API origin" rules={[{ required: true }]}>
+                <Input placeholder="https://api.example.org" />
+              </Form.Item>
+              <Form.Item name="jbrowse_base_url" label="JBrowse origin">
+                <Input placeholder="https://jbrowse.example.org" />
+              </Form.Item>
+              <Form.Item name="portal_base_url" label="Portal origin">
+                <Input placeholder="https://portal.example.org" />
+              </Form.Item>
+              <Form.Item name="is_local" label="本机实例" valuePropName="checked">
+                <Switch />
+              </Form.Item>
+              <Form.Item label=" ">
+                <Button type="primary" htmlType="submit" icon={<PlusOutlined />} loading={instanceMutation.isPending}>
+                  登记实例
+                </Button>
+              </Form.Item>
+            </Space>
+          </Form>
+        </ProCard>
+      </div>
+    </PageContainer>
   );
 }

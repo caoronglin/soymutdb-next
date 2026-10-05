@@ -8,7 +8,7 @@ import {
   type SiteBrandingPatch,
   type SiteVariant,
 } from "@soymutdb/api-client";
-import { Alert, Button, Card, Form, Input, PageContainer, Space, Typography } from "@/lib/antd";
+import { Alert, Button, Form, Input, PageContainer, ProCard, Space, Typography } from "@/lib/antd";
 import { useTranslation } from "react-i18next";
 
 const VARIANTS: readonly SiteVariant[] = ["external", "internal"];
@@ -114,7 +114,7 @@ export default function SiteBrandSettingsPage() {
       ]}
     >
       {query.isPending ? (
-        <Card loading data-testid="brand-loading" />
+        <ProCard loading data-testid="brand-loading" />
       ) : query.isError ? (
         <Alert
           type="error"
@@ -124,7 +124,7 @@ export default function SiteBrandSettingsPage() {
           action={<Button size="small" onClick={() => void query.refetch()} data-testid="brand-retry">{t("common.retry")}</Button>}
         />
       ) : (
-        <Card className="max-w-2xl">
+        <ProCard className="max-w-2xl">
           <Form<BrandFormValues>
             form={form}
             layout="vertical"
@@ -188,7 +188,7 @@ export default function SiteBrandSettingsPage() {
               {saveMutation.isPending ? t("common.loading") : t("common.save")}
             </Button>
           </Form>
-        </Card>
+        </ProCard>
       )}
     </PageContainer>
   );

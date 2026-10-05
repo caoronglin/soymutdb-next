@@ -3,7 +3,7 @@
  */
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { App, Card } from "../../lib/antd";
+import { App, PageContainer, ProCard } from "../../lib/antd";
 import { useRouter } from "@tanstack/react-router";
 import { createNews } from "@soymutdb/api-client";
 import { NewsForm, type NewsFormValues } from "../../components/news-form";
@@ -48,15 +48,17 @@ export default function NewsNewPage() {
   };
 
   return (
-    <div className="route-fade-in mx-auto max-w-3xl">
-      <Card title={t("admin.news.createNew")}>
-        <NewsForm
-          initialValues={{ status: "draft", featured_sort: 0, carousel_sort: 0 }}
-          onSubmit={handleSubmit}
-          onCancel={() => router.navigate({ to: "/news" })}
-          submitting={submitting}
-        />
-      </Card>
-    </div>
+    <PageContainer title={t("admin.news.createNew")}>
+      <div className="mx-auto max-w-3xl">
+        <ProCard>
+          <NewsForm
+            initialValues={{ status: "draft", featured_sort: 0, carousel_sort: 0 }}
+            onSubmit={handleSubmit}
+            onCancel={() => router.navigate({ to: "/news" })}
+            submitting={submitting}
+          />
+        </ProCard>
+      </div>
+    </PageContainer>
   );
 }

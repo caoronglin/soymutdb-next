@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { http } from "@soymutdb/api-client";
-import { Alert, Badge, Button, Card, Input, Select, Typography } from "@/lib/antd";
+import { Alert, Badge, Button, Input, ProCard, Select, Typography } from "@/lib/antd";
 import { ConfirmDialog } from "../../components/confirm-dialog";
 import { DataTable, type DataTableColumn } from "../../components/data-table";
 import { contentKeys } from "./query-keys";
@@ -316,7 +316,7 @@ export function PagesTab({ PageFormDialog, VersionHistoryDialog, VersionDetail }
 
   return (
     <div className="space-y-4">
-      <Card>
+      <ProCard>
         <div className="pb-3">
           <Typography.Title level={5} className="flex items-center gap-2 text-sm">
             <FileTextOutlined className="size-4 text-primary" />
@@ -328,7 +328,7 @@ export function PagesTab({ PageFormDialog, VersionHistoryDialog, VersionDetail }
             {t("admin.content.staticPagesDesc", { defaultValue: "Manage static pages (e.g. About, Help, FAQ). Each edit creates a version snapshot that can be reviewed and restored." })}
           </p>
         </div>
-      </Card>
+      </ProCard>
 
       <StaticPageMigrationReport />
 

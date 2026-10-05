@@ -20,15 +20,19 @@ import { InstanceContextBadge } from "./instance-context-badge";
 interface AdminHeaderProps {
   /** Mobile sidebar toggle. */
   onToggleSidebar?: () => void;
-  /** Current page title. */
-  title?: string;
 }
 
 /**
- * Admin top bar with mobile sidebar toggle, page title, theme/language
+ * Admin top bar with mobile sidebar toggle, theme/language
  * switches, notification dropdown, and user menu.
+ *
+ * It deliberately has no `title` prop. The shell used to resolve a page name
+ * from a path-keyed map and render it here, which put a second `<h1>` above the
+ * `PageContainer` header every migrated page already renders. The page name now
+ * belongs to the page; this bar carries only the global controls that are
+ * genuinely shell-level (2026-10-01 admin Pro migration §3.1).
  */
-export function AdminHeader({ onToggleSidebar, title }: AdminHeaderProps) {
+export function AdminHeader({ onToggleSidebar }: AdminHeaderProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -68,9 +72,6 @@ export function AdminHeader({ onToggleSidebar, title }: AdminHeaderProps) {
         </Button>
       ) : null}
 
-      {title ? (
-        <h1 className="font-serif text-lg font-semibold">{title}</h1>
-      ) : null}
       <InstanceContextBadge />
 
       <div className="ml-auto flex items-center gap-1">

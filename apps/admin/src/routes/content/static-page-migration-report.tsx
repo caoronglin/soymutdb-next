@@ -4,13 +4,14 @@ import { http } from "@soymutdb/api-client";
 import {
   Alert,
   Button,
-  Card,
+  ProCard,
+  ProTable,
   Space,
-  Table,
   Tag,
   Typography,
-  type TableColumnsType,
+  type ProColumns,
 } from "@/lib/antd";
+import { PRO_LIST_SHELL } from "../../components/pro-table-shell";
 
 interface MigrationItem {
   static_page_id: number;
@@ -35,17 +36,26 @@ const OUTCOME_COLOR: Record<MigrationItem["outcome"], string> = {
   invalid: "red",
 };
 
-const migrationColumns: TableColumnsType<MigrationItem> = [
+/**
+ * `editable: false` on every column is load-bearing, not decoration: this is a
+ * dry-run report (design §3.4 — "只读页面不得出现可编辑控件"). ProTable's cell
+ * editor is opt-in per column, and this page is the one place where an edit
+ * affordance would be actively wrong — the report is a snapshot of a validation
+ * run, not a record the operator may change.
+ */
+const migrationColumns: ProColumns<MigrationItem>[] = [
   {
     title: "Legacy slug",
     dataIndex: "slug",
     key: "slug",
+    editable: false,
     render: (_, row) => <span className="font-mono text-xs">{row.slug}</span>,
   },
   {
     title: "Draft route",
     dataIndex: "route",
     key: "route",
+    editable: false,
     render: (_, row) => <span className="font-mono text-xs">{row.route}</span>,
   },
   {
@@ -53,12 +63,14 @@ const migrationColumns: TableColumnsType<MigrationItem> = [
     dataIndex: "outcome",
     key: "outcome",
     width: 120,
+    editable: false,
     render: (_, row) => <Tag color={OUTCOME_COLOR[row.outcome]}>{row.outcome}</Tag>,
   },
   {
     title: "Message",
     dataIndex: "message",
     key: "message",
+    editable: false,
     render: (_, row) => (
       <Typography.Text type={row.message ? undefined : "secondary"}>
         {row.message ?? "Ready for a draft migration."}
@@ -75,7 +87,7 @@ export function StaticPageMigrationReport() {
 
   const report = preview.data;
   return (
-    <Card className="border-dashed">
+    <ProCard className="border-dashed">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <Typography.Title level={5} className="mb-1 text-sm">
@@ -109,7 +121,8 @@ export function StaticPageMigrationReport() {
             Dry run: {report.created} ready, {report.skipped} already mapped, {report.invalid} needs
             review.
           </Typography.Text>
-          <Table<MigrationItem>
+          <ProTable<MigrationItem>
+            {...PRO_LIST_SHELL}
             size="small"
             bordered
             rowKey="static_page_id"
@@ -120,7 +133,7 @@ export function StaticPageMigrationReport() {
           />
         </Space>
       ) : null}
-    </Card>
+    </ProCard>
   );
 }
 

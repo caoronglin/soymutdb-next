@@ -2,7 +2,7 @@ import { ReadOutlined, FileTextOutlined } from "@ant-design/icons";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { useRouterState } from "@tanstack/react-router";
-import { Typography } from "@/lib/antd";
+import { PageContainer, Typography } from "@/lib/antd";
 import { PagesTab } from "./content/pages-tab";
 import { PageFormDialog } from "./content/page-form-dialog";
 import { VersionHistoryDialog } from "./content/version-history-dialog";
@@ -37,53 +37,56 @@ export default function ContentPage() {
   const [tab, setTab] = React.useState<ContentType>("page");
 
   return (
-    <div className="space-y-6">
-      <div><Typography.Title level={2}>{t("admin.content.title", { defaultValue: "Content Management" })}</Typography.Title><Typography.Text type="secondary">{t("admin.content.subtitle", { defaultValue: "Manage static pages, news articles, and publications with full version history." })}</Typography.Text></div>
-
-      {isLegacyRoute ? (
-        <>
-          <div className="rounded-lg border border-border bg-muted/30 px-4 py-3">
-            <span className="mr-2 rounded-full bg-muted px-2 py-1 text-xs font-medium">Legacy Pages</span>
-            <Typography.Text type="secondary">
-              Existing pages remain editable. The migration preview below is read-only and proposes draft candidates only.
-            </Typography.Text>
-          </div>
-          <StaticPageMigrationReport />
-        </>
-      ) : (
-        <>
-          <div className="flex items-center gap-1 border-b border-border">
-            {(Object.keys(TYPE_CONFIG) as ContentType[]).map((typeKey) => {
-              const Icon = TYPE_CONFIG[typeKey].icon;
-              return (
-                <button
-                  key={typeKey}
-                  type="button"
-                  onClick={() => setTab(typeKey)}
-                  className={`flex items-center gap-1.5 border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
-                    tab === typeKey
-                      ? "border-primary text-primary"
-                      : "border-transparent text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  <Icon className="size-3.5" />
-                  {t(`admin.content.type_${typeKey}`, { defaultValue: TYPE_CONFIG[typeKey].label })}
-                </button>
-              );
-            })}
-          </div>
-          {tab === "page" && (
-            <PagesTab
-              PageFormDialog={PageFormDialog}
-              VersionHistoryDialog={VersionHistoryDialog}
-              VersionDetail={VersionDetail}
-            />
-          )}
-          {tab === "news" && <NewsPublicationTab type="news" />}
-          {tab === "publication" && <NewsPublicationTab type="publication" />}
-        </>
-      )}
-    </div>
+    <PageContainer
+      title={t("admin.content.title", { defaultValue: "Content Management" })}
+      subTitle={t("admin.content.subtitle", { defaultValue: "Manage static pages, news articles, and publications with full version history." })}
+    >
+      <div className="space-y-6">
+        {isLegacyRoute ? (
+          <>
+            <div className="rounded-lg border border-border bg-muted/30 px-4 py-3">
+              <span className="mr-2 rounded-full bg-muted px-2 py-1 text-xs font-medium">Legacy Pages</span>
+              <Typography.Text type="secondary">
+                Existing pages remain editable. The migration preview below is read-only and proposes draft candidates only.
+              </Typography.Text>
+            </div>
+            <StaticPageMigrationReport />
+          </>
+        ) : (
+          <>
+            <div className="flex items-center gap-1 border-b border-border">
+              {(Object.keys(TYPE_CONFIG) as ContentType[]).map((typeKey) => {
+                const Icon = TYPE_CONFIG[typeKey].icon;
+                return (
+                  <button
+                    key={typeKey}
+                    type="button"
+                    onClick={() => setTab(typeKey)}
+                    className={`flex items-center gap-1.5 border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+                      tab === typeKey
+                        ? "border-primary text-primary"
+                        : "border-transparent text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <Icon className="size-3.5" />
+                    {t(`admin.content.type_${typeKey}`, { defaultValue: TYPE_CONFIG[typeKey].label })}
+                  </button>
+                );
+              })}
+            </div>
+            {tab === "page" && (
+              <PagesTab
+                PageFormDialog={PageFormDialog}
+                VersionHistoryDialog={VersionHistoryDialog}
+                VersionDetail={VersionDetail}
+              />
+            )}
+            {tab === "news" && <NewsPublicationTab type="news" />}
+            {tab === "publication" && <NewsPublicationTab type="publication" />}
+          </>
+        )}
+      </div>
+    </PageContainer>
   );
 }
 

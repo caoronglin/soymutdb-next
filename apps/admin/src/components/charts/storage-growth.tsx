@@ -3,7 +3,7 @@ import * as echarts from "echarts";
 import { useTranslation } from "react-i18next";
 import { cn } from "../../lib/cn";
 import { formatFileSize } from "../../lib/format";
-import { Card, Empty } from "@/lib/antd";
+import { Empty, ProCard } from "@/lib/antd";
 export interface StorageGrowthDataPoint {
   date: string;
   bytes: number;
@@ -91,12 +91,12 @@ export function StorageGrowthChart({ data, className }: StorageGrowthChartProps)
   }, [data, t]);
 
   return (
-    <Card className={cn(className)} title={t("admin.charts.storageGrowth", { defaultValue: "Storage Growth" })}>
+    <ProCard className={cn(className)} title={t("admin.charts.storageGrowth", { defaultValue: "Storage Growth" })}>
         <div className="relative">
           <div ref={chartRef} className="h-64 w-full" role="img" aria-label={t("admin.charts.storageGrowthAria", { defaultValue: "Storage growth chart" })} />
           {data.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("admin.charts.noData", { defaultValue: "No chart data" })} /> : null}
       </div>
-    </Card>
+    </ProCard>
   );
 }
 

@@ -12,19 +12,20 @@ import { formatDate } from "@soymutdb/shared/format";
 import {
   Alert,
   Button,
-  Card,
   Form,
   Input,
   PageContainer,
+  ProCard,
+  ProTable,
   Space,
   Switch,
-  Table,
   Tag,
   Typography,
-  type TableColumnsType,
+  type ProColumns,
 } from "@/lib/antd";
 import { useTranslation } from "react-i18next";
 import { ADMIN_INSTANCES_QUERY_KEY, useInstanceContext } from "../lib/instance-context-react";
+import { PRO_LIST_SHELL } from "../components/pro-table-shell";
 
 interface InstanceFormValues {
   code: string;
@@ -179,11 +180,15 @@ export default function SpeciesInstancesPage() {
     return t("common.unknown");
   };
 
-  const columns: TableColumnsType<SpeciesInstance> = [
+  // `editable: false` on every column: this list is driven by the row action
+  // buttons below, each of which has its own confirmation and cache-invalidation
+  // path. ProTable's inline cell editor would bypass both.
+  const columns: ProColumns<SpeciesInstance>[] = [
     {
       title: t("admin.instances.name"),
       dataIndex: "name",
       key: "name",
+      editable: false,
       render: (_value, instance) => (
         <Space orientation="vertical" size={2}>
           <Typography.Text strong>{instance.name}</Typography.Text>
@@ -196,16 +201,17 @@ export default function SpeciesInstancesPage() {
         </Space>
       ),
     },
-    { title: t("admin.instances.species"), dataIndex: "species", key: "species" },
+    { title: t("admin.instances.species"), dataIndex: "species", key: "species", editable: false },
     {
       title: t("admin.instances.apiUrl"),
       dataIndex: "api_base_url",
       key: "api_base_url",
-      render: (value: string, instance) => {
+      editable: false,
+      render: (_value, instance) => {
         const portal = safeUrl(instance.portal_base_url ?? instance.site_url);
         return (
           <Space orientation="vertical" size={2}>
-            <Typography.Text code copyable>{value}</Typography.Text>
+            <Typography.Text code copyable>{instance.api_base_url}</Typography.Text>
             {portal ? (
               <a
                 href={portal}
@@ -224,9 +230,10 @@ export default function SpeciesInstancesPage() {
       title: t("admin.instances.connection"),
       dataIndex: "connection_state",
       key: "connection_state",
-      render: (state: SpeciesInstance["connection_state"]) => (
-        <Tag color={state === "healthy" ? "green" : state === "unhealthy" ? "red" : "default"}>
-          {stateLabel(state)}
+      editable: false,
+      render: (_value, instance) => (
+        <Tag color={instance.connection_state === "healthy" ? "green" : instance.connection_state === "unhealthy" ? "red" : "default"}>
+          {stateLabel(instance.connection_state)}
         </Tag>
       ),
     },
@@ -234,11 +241,13 @@ export default function SpeciesInstancesPage() {
       title: t("admin.instances.lastChecked"),
       dataIndex: "last_checked_at",
       key: "last_checked_at",
-      render: (value: string | null) => value ? formatDate(value) : "—",
+      editable: false,
+      render: (_value, instance) => instance.last_checked_at ? formatDate(instance.last_checked_at) : "—",
     },
     {
       title: t("common.actions"),
       key: "actions",
+      editable: false,
       render: (_value, instance) => (
         <Space wrap size={[4, 4]}>
           <Button size="small" data-testid={`instance-edit-${instance.id}`} onClick={() => openEdit(instance)}>
@@ -295,7 +304,7 @@ export default function SpeciesInstancesPage() {
       ]}
     >
       <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
-        <Card size="small">
+        <ProCard size="small">
           <Space orientation="vertical" size={6}>
             <Space wrap>
               <Typography.Text>{t("admin.instances.context")}: </Typography.Text>
@@ -311,13 +320,13 @@ export default function SpeciesInstancesPage() {
               {t("admin.instances.apiInvariant")}
             </Typography.Text>
           </Space>
-        </Card>
+        </ProCard>
 
         {noticeMessage ? <Alert type="success" showIcon title={noticeMessage} data-testid="instances-notice" /> : null}
         {errorMessage ? <Alert type="error" showIcon title={errorMessage} role="alert" data-testid="instances-error" /> : null}
 
         {editorOpen ? (
-          <Card
+          <ProCard
             title={editingId === null ? t("admin.instances.create") : t("admin.instances.edit")}
             extra={editingId !== null ? <Typography.Text code>#{editingId}</Typography.Text> : null}
             data-testid="instance-editor"
@@ -383,7 +392,7 @@ export default function SpeciesInstancesPage() {
                 </Button>
               </Space>
             </Form>
-          </Card>
+          </ProCard>
         ) : null}
 
         {deleteTarget ? (
@@ -417,7 +426,7 @@ export default function SpeciesInstancesPage() {
         ) : null}
 
         {query.isPending ? (
-          <Card loading data-testid="instances-loading" />
+          <ProCard loading data-testid="instances-loading" />
         ) : query.isError ? (
           <Alert
             type="error"
@@ -427,11 +436,12 @@ export default function SpeciesInstancesPage() {
             action={<Button size="small" onClick={() => void query.refetch()} data-testid="instances-retry">{t("common.retry")}</Button>}
           />
         ) : instances.length === 0 ? (
-          <Card><Typography.Text type="secondary" data-testid="instances-empty">{t("admin.instances.empty")}</Typography.Text></Card>
+          <ProCard><Typography.Text type="secondary" data-testid="instances-empty">{t("admin.instances.empty")}</Typography.Text></ProCard>
         ) : (
-          <Card>
+          <ProCard>
             <div data-testid="instances-table">
-              <Table<SpeciesInstance>
+              <ProTable<SpeciesInstance>
+                {...PRO_LIST_SHELL}
                 rowKey="id"
                 dataSource={instances}
                 columns={columns}
@@ -441,7 +451,7 @@ export default function SpeciesInstancesPage() {
                 onRow={() => ({ "data-testid": "instance-row" } as React.HTMLAttributes<HTMLTableRowElement>)}
               />
             </div>
-          </Card>
+          </ProCard>
         )}
       </Space>
     </PageContainer>

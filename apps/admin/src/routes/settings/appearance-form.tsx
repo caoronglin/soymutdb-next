@@ -2,7 +2,7 @@ import { BgColorsOutlined, SaveOutlined } from "@ant-design/icons";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { http } from "@soymutdb/api-client";
-import { Button, Card, ColorPicker, Typography } from "@/lib/antd";
+import { Button, ColorPicker, ProCard, Typography } from "@/lib/antd";
 import {
   ANTD_PRIMARY_HEX,
   isValidAdminPrimaryColor,
@@ -39,7 +39,7 @@ export function AppearanceSettingsForm() {
   });
 
   return (
-    <Card>
+    <ProCard>
       <div className="space-y-4">
         <div>
           <Typography.Title level={5} className="flex items-center gap-2 text-base">
@@ -76,6 +76,6 @@ export function AppearanceSettingsForm() {
         {saveMutation.isError ? <p role="alert" className="text-destructive">Unable to save appearance settings.</p> : null}
         {saveMutation.isSuccess ? <p role="status" className="text-success">Appearance saved.</p> : null}
       </div>
-    </Card>
+    </ProCard>
   );
 }

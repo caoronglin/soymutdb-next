@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import type * as echarts from "echarts";
 import { useTranslation } from "react-i18next";
 import { cn } from "../../lib/cn";
-import { Card, Empty } from "@/lib/antd";
+import { Empty, ProCard } from "@/lib/antd";
 export interface QueryLatencyDataPoint {
   date: string;
   p50: number;
@@ -99,12 +99,12 @@ export function QueryLatencyChart({ data, className }: QueryLatencyChartProps) {
   }, [data, t]);
 
   return (
-    <Card className={cn(className)} title={t("admin.charts.queryLatency", { defaultValue: "Query Latency (P50 / P95 / P99)" })}>
+    <ProCard className={cn(className)} title={t("admin.charts.queryLatency", { defaultValue: "Query Latency (P50 / P95 / P99)" })}>
         <div className="relative">
           <div ref={chartRef} className="h-64 w-full" role="img" aria-label={t("admin.charts.queryLatencyAria", { defaultValue: "Query latency percentiles chart" })} />
           {data.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("admin.charts.noData", { defaultValue: "No chart data" })} /> : null}
       </div>
-    </Card>
+    </ProCard>
   );
 }
 

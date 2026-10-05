@@ -2,7 +2,7 @@ import { GlobalOutlined, SaveOutlined } from "@ant-design/icons";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { http } from "@soymutdb/api-client";
-import { Button, Card, Input, Select, Typography } from "@/lib/antd";
+import { Button, Input, ProCard, Select, Typography } from "@/lib/antd";
 
 type GeneralSettings = Record<string, unknown>;
 
@@ -39,7 +39,7 @@ export function SiteSettingsForm() {
   });
 
   return (
-    <Card>
+    <ProCard>
       <div className="space-y-4">
         <div>
           <Typography.Title level={5} className="flex items-center gap-2 text-base">
@@ -80,6 +80,6 @@ export function SiteSettingsForm() {
         {saveMutation.isError ? <p role="alert" className="text-destructive">Unable to save site settings.</p> : null}
         {saveMutation.isSuccess ? <p role="status" className="text-success">Site information saved.</p> : null}
       </div>
-    </Card>
+    </ProCard>
   );
 }

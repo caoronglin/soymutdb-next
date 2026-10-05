@@ -5,7 +5,7 @@
  */
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { App, Button, Card, Space, Spin, Typography } from "../../lib/antd";
+import { App, Button, PageContainer, ProCard, Spin, Typography } from "../../lib/antd";
 import { EyeOutlined } from "@ant-design/icons";
 import { useParams, useRouter } from "@tanstack/react-router";
 import dayjs from "dayjs";
@@ -125,48 +125,46 @@ export default function NewsEditPage() {
 
   if (error || !detail) {
     return (
-      <div className="route-fade-in mx-auto max-w-3xl">
-        <Card>
-          <Typography.Paragraph type="danger">
-            {error ?? t("admin.news.empty")}
-          </Typography.Paragraph>
-          <Button onClick={goBack}>{t("admin.news.backToList")}</Button>
-        </Card>
-      </div>
+      <PageContainer>
+        <div className="route-fade-in mx-auto max-w-3xl">
+          <ProCard>
+            <Typography.Paragraph type="danger">
+              {error ?? t("admin.news.empty")}
+            </Typography.Paragraph>
+            <Button onClick={goBack}>{t("admin.news.backToList")}</Button>
+          </ProCard>
+        </div>
+      </PageContainer>
     );
   }
 
   return (
-    <div className="route-fade-in mx-auto max-w-3xl">
-      <Card
-        title={
-          <Space>
-            <span>{t("admin.news.edit")}</span>
-            <Typography.Text type="secondary" className="text-sm">
-              #{detail.id}
-            </Typography.Text>
-          </Space>
-        }
-        extra={
-          <Button icon={<EyeOutlined />} onClick={() => setPreviewOpen(true)}>
-            {t("admin.news.actions.preview")}
-          </Button>
-        }
-      >
-        <NewsForm
-          key={detail.id}
-          initialValues={toFormValues(detail)}
-          onSubmit={handleSubmit}
-          onCancel={goBack}
-          submitting={submitting}
-        />
-      </Card>
+    <PageContainer
+      title={t("admin.news.edit")}
+      subTitle={`#${detail.id}`}
+      extra={[
+        <Button key="preview" icon={<EyeOutlined />} onClick={() => setPreviewOpen(true)}>
+          {t("admin.news.actions.preview")}
+        </Button>,
+      ]}
+    >
+      <div className="route-fade-in mx-auto max-w-3xl">
+        <ProCard>
+          <NewsForm
+            key={detail.id}
+            initialValues={toFormValues(detail)}
+            onSubmit={handleSubmit}
+            onCancel={goBack}
+            submitting={submitting}
+          />
+        </ProCard>
 
-      <NewsPreviewModal
-        open={previewOpen}
-        article={{ id: detail.id, slug: detail.slug }}
-        onClose={() => setPreviewOpen(false)}
-      />
-    </div>
+        <NewsPreviewModal
+          open={previewOpen}
+          article={{ id: detail.id, slug: detail.slug }}
+          onClose={() => setPreviewOpen(false)}
+        />
+      </div>
+    </PageContainer>
   );
 }

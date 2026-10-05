@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { adminSettingsApi, type SettingsHistoryItem } from "@soymutdb/api-client";
-import { Button, Card, Input, Select, Typography } from "@/lib/antd";
+import { Button, Input, ProCard, Select, Typography } from "@/lib/antd";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 
 export interface SettingsHistorySection {
@@ -39,7 +39,7 @@ export function SettingsRevisionHistory({ sections }: { sections: SettingsHistor
   if (!sections.length) return null;
   const currentVersion = historyQuery.data?.current_version ?? 0;
   return (
-    <Card className="border-dashed">
+    <ProCard className="border-dashed">
       <div className="space-y-4">
         <div>
           <Typography.Title level={5}>{t("admin.settings.revision.title", { defaultValue: "Revision history" })}</Typography.Title>
@@ -90,6 +90,6 @@ export function SettingsRevisionHistory({ sections }: { sections: SettingsHistor
           {rollbackMutation.error ? <p role="alert" className="mt-2 text-sm text-destructive">{t("admin.settings.revision.restoreError", { defaultValue: "Unable to restore this revision. Refresh history and retry if the version changed." })}</p> : null}
         </ConfirmDialog>
       ) : null}
-    </Card>
+    </ProCard>
   );
 }

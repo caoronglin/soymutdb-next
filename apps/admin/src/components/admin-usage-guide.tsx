@@ -1,5 +1,5 @@
 import { ApiOutlined, BookOutlined, DatabaseOutlined, InfoCircleOutlined } from "@ant-design/icons";
-import { Card, Collapse, Tag, Typography } from "../lib/antd";
+import { Collapse, ProCard, Tag, Typography } from "../lib/antd";
 import { useTranslation } from "react-i18next";
 
 export interface AdminUsageGuideItem {
@@ -96,7 +96,7 @@ export function AdminUsageGuide({
   }));
 
   return (
-    <Card className="border-primary/20 bg-primary/[0.03]" size="small">
+    <ProCard className="border-primary/20 bg-primary/[0.03]" size="small">
       <div className="mb-3 flex items-start gap-3">
         <BookOutlined className="mt-1 text-primary" aria-hidden />
         <div className="min-w-0">
@@ -117,7 +117,7 @@ export function AdminUsageGuide({
         defaultActiveKey={defaultActiveKey}
         items={collapseItems}
       />
-    </Card>
+    </ProCard>
   );
 }
 

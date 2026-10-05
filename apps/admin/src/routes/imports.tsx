@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { CloudUploadOutlined, FileExcelOutlined, DatabaseOutlined, RedoOutlined, CloseCircleOutlined, CheckCircleOutlined, LoadingOutlined, DownloadOutlined } from "@ant-design/icons";
-import { Badge, Button, Input, Modal, Select, Typography } from "@/lib/antd";
+import { Badge, Button, Input, Modal, PageContainer, Select, Typography } from "@/lib/antd";
 import { StatCard } from "../components/stat-card";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -698,446 +698,451 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
   // -----------------------------------------------------------------------
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-wrap items-start justify-between gap-4"><div><Typography.Title level={2}>{t("admin.importPage.title")}</Typography.Title><Typography.Text type="secondary">{t("admin.importPage.subtitle")}</Typography.Text></div><Button type="primary" onClick={openUploadDialog} disabled={!capabilitiesQuery.isSuccess} icon={<CloudUploadOutlined aria-hidden />} aria-label={t("admin.importPage.newImport")}>{t("admin.importPage.newImport")}</Button></div>
-
-      {capabilitiesQuery.isPending ? (
-        <p role="status" className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
-          Loading import capabilities…
-        </p>
-      ) : null}
-      {capabilitiesQuery.isError ? (
-        <p
-          role="alert"
-          aria-label={t("admin.importPage.capabilitiesUnavailable")}
-          className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
-        >
-          Unable to load import capabilities. Import actions remain unavailable.
-        </p>
-      ) : null}
-      {capabilitiesQuery.isSuccess && moduleImportState === "disabled" ? (
-        <p className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
-          Module imports are disabled.
-        </p>
-      ) : null}
-
-      {/* Module template download */}
-      <div className="rounded-lg border bg-card p-4">
-        <div className="mb-3 flex items-center gap-2">
-          <DatabaseOutlined className="size-4 text-muted-foreground" />
-          <span className="text-sm font-medium">{t("admin.importPage.templateDownload")}</span>
-        </div>
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="space-y-1.5">
-            <label htmlFor="template-module-key">{t("admin.importPage.moduleKey")}</label>
-            <Input
-              id="template-module-key"
-              value={templateModuleKey}
-              onChange={(e) => setTemplateModuleKey(e.target.value)}
-              className="w-40"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <label htmlFor="template-format">{t("admin.importPage.format")}</label>
-            <Select value={templateFormat} onChange={setTemplateFormat}>
-
-
-                {MODULE_TEMPLATE_FORMATS.map((f) => (
-                  <Select.Option
-                    key={f.value}
-                    value={f.value}
-                    disabled={f.value === "xlsx" && !xlsxImportEnabled}
-                  >
-                    {f.label}
-                  </Select.Option>
-                ))}
-
-            </Select>
-          </div>
-          <Button
-            type="default"
-            size="small"
-            onClick={handleTemplateDownload}
-            disabled={
-              templateDownloading ||
-              !templateModuleKey.trim() ||
-              !moduleImportEnabled
-            }
-          >
-            {templateDownloading ? (
-              <LoadingOutlined className="size-4 animate-spin" />
-            ) : (
-              <DownloadOutlined className="size-4" />
-            )}
-            DownloadOutlined
-          </Button>
-        </div>
-        {templateError ? (
-          <p className="mt-2 text-sm text-destructive">{templateError}</p>
+    <PageContainer
+      title={t("admin.importPage.title")}
+      subTitle={t("admin.importPage.subtitle")}
+      extra={[
+        <Button key="new-import" type="primary" onClick={openUploadDialog} disabled={!capabilitiesQuery.isSuccess} icon={<CloudUploadOutlined aria-hidden />} aria-label={t("admin.importPage.newImport")}>{t("admin.importPage.newImport")}</Button>,
+      ]}
+    >
+      <div className="space-y-6">
+        {capabilitiesQuery.isPending ? (
+          <p role="status" className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
+            Loading import capabilities…
+          </p>
         ) : null}
-        <p className="mt-2 text-xs text-muted-foreground">
-          Starter template for a module schema (genes). Format: TSV / CSV / XLSX.
-          {" "}{xlsxImportState === "disabled" ? "XLSX is currently disabled by an administrator." : ""}
-        </p>
-      </div>
+        {capabilitiesQuery.isError ? (
+          <p
+            role="alert"
+            aria-label={t("admin.importPage.capabilitiesUnavailable")}
+            className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
+          >
+            Unable to load import capabilities. Import actions remain unavailable.
+          </p>
+        ) : null}
+        {capabilitiesQuery.isSuccess && moduleImportState === "disabled" ? (
+          <p className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
+            Module imports are disabled.
+          </p>
+        ) : null}
 
-      {/* Stats */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Total Tasks" value={stats.total} icon={<DatabaseOutlined className="size-5" />} />
-        <StatCard
-          label="Running"
-          value={stats.running}
-          icon={<LoadingOutlined className={cn("size-5", stats.running > 0 && "animate-spin")} />}
-        />
-        <StatCard label="Completed" value={stats.completed} icon={<CheckCircleOutlined className="size-5" />} />
-        <StatCard label="Failed" value={stats.failed} icon={<CloseCircleOutlined className="size-5" />} />
-      </div>
-
-      {resumeDraftId ? (
-        <section aria-labelledby="resume-draft-heading" className="rounded-lg border border-primary/30 bg-primary/5 p-4">
-          <Typography.Title id="resume-draft-heading" level={5} className="!mb-1">{t("admin.importPage.resumeDraft")}</Typography.Title>
-          {resumeDraftQuery.isPending ? <Typography.Text type="secondary">{t("admin.importPage.loadingDraft")}</Typography.Text> : null}
-          {resumeDraftQuery.isError ? <Typography.Text type="danger">{t("admin.importPage.draftUnavailable")}</Typography.Text> : null}
-          {resumeDraftQuery.data ? (
-            <div className="text-sm">
-              <Typography.Text strong>{resumeDraftQuery.data.filename}</Typography.Text>
-              <Typography.Text type="secondary" className="ml-2">{resumeDraftQuery.data.status} · {resumeDraftQuery.data.row_count} rows · {resumeDraftQuery.data.column_count} columns · {resumeDraftQuery.data.field_mapping.length} mapped fields</Typography.Text>
-              <ImportDraftEditor
-                draft={resumeDraftQuery.data}
-                onUpdated={() => {
-                  void resumeDraftQuery.refetch();
-                  void draftsQuery.refetch();
-                }}
+        {/* Module template download */}
+        <div className="rounded-lg border bg-card p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <DatabaseOutlined className="size-4 text-muted-foreground" />
+            <span className="text-sm font-medium">{t("admin.importPage.templateDownload")}</span>
+          </div>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="space-y-1.5">
+              <label htmlFor="template-module-key">{t("admin.importPage.moduleKey")}</label>
+              <Input
+                id="template-module-key"
+                value={templateModuleKey}
+                onChange={(e) => setTemplateModuleKey(e.target.value)}
+                className="w-40"
               />
             </div>
-          ) : null}
-        </section>
-      ) : null}
-
-      <section aria-labelledby="import-drafts-heading" className="rounded-lg border p-4">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <Typography.Title id="import-drafts-heading" level={5} className="!mb-0">{t("admin.importPage.savedDrafts")}</Typography.Title>
-            <Typography.Text type="secondary">{t("admin.importPage.savedDraftsHint")}</Typography.Text>
-          </div>
-          <Button size="small" onClick={() => draftsQuery.refetch()} loading={draftsQuery.isFetching}>{t("common.retry")}</Button>
-        </div>
-        {draftsQuery.isError ? <Typography.Text type="danger">{t("admin.importPage.savedDraftsUnavailable")}</Typography.Text> : null}
-        {draftsQuery.data?.length ? (
-          <ul className="mt-3 space-y-2" aria-label={t("admin.importPage.savedDrafts")}>
-            {draftsQuery.data.map((draft) => (
-              <li key={draft.id} className="flex items-center justify-between gap-3 rounded border p-2">
-                <div>
-                  <Typography.Text strong>{draft.filename}</Typography.Text>
-                  <Typography.Text type="secondary" className="ml-2 text-xs">{draft.status} · {draft.row_count} rows · {draft.column_count} columns</Typography.Text>
-                </div>
-                <Button size="small" href={`/imports?draft=${encodeURIComponent(draft.id)}`}>{t("admin.importPage.resume")}</Button>
-              </li>
-            ))}
-          </ul>
-        ) : !draftsQuery.isLoading ? <Typography.Text type="secondary">{t("admin.importPage.noDrafts")}</Typography.Text> : null}
-      </section>
-
-      {/* Search */}
-      <Input
-        placeholder={t("admin.importPage.searchPlaceholder")}
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        className="max-w-xs"
-      />
-
-      {/* Table */}
-      <DataTable
-        columns={columns}
-        data={tasks}
-        rowKey={(t) => String(t.id)}
-        loading={isLoading}
-        page={page}
-        pageSize={20}
-        total={data?.total ?? 0}
-        onPageChange={setPage}
-        emptyTitle="No import tasks"
-        emptyDescription="Submit a new import to get started."
-      />
-
-      {/* CloudUploadOutlined dialog */}
-      <Modal open={showUpload} onCancel={() => setShowUpload(false)}>
-        <div>
-          <div>
-            <Typography.Title level={5}>{t("admin.importPage.newImport")}</Typography.Title>
-            <Typography.Text type="secondary">
-              CloudUploadOutlined a local file (browser-direct to object storage) or reference
-              an already-uploaded S3 object.
-            </Typography.Text>
-          </div>
-
-          <div className="space-y-4 py-2">
-            {/* Import type */}
             <div className="space-y-1.5">
-              <label htmlFor="import-type">{t("admin.importPage.importType")}</label>
-              <Select
-                aria-label={t("admin.importPage.importType")}
-                value={uploadType}
-                onChange={(v) => setUploadType(v as ImportType)}
-              >
+              <label htmlFor="template-format">{t("admin.importPage.format")}</label>
+              <Select value={templateFormat} onChange={setTemplateFormat}>
 
 
-                  {AVAILABLE_SUBMISSION_IMPORT_TYPES.map((type) => (
+                  {MODULE_TEMPLATE_FORMATS.map((f) => (
                     <Select.Option
-                      key={type}
-                      value={type}
-                      disabled={!moduleImportEnabled}
+                      key={f.value}
+                      value={f.value}
+                      disabled={f.value === "xlsx" && !xlsxImportEnabled}
                     >
-                      {TYPE_LABELS[type]}
+                      {f.label}
                     </Select.Option>
                   ))}
 
               </Select>
             </div>
-
-            <div className="space-y-1.5">
-              <label htmlFor="import-data-set-id">{t("admin.importPage.datasetId")}</label>
-              <Input
-                id="import-data-set-id"
-                type="number"
-                min="1"
-                inputMode="numeric"
-                placeholder={t("admin.importPage.datasetIdPlaceholder")}
-                value={uploadDataSetId}
-                onChange={(e) => setUploadDataSetId(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                Required. This binds the import and its object key to one data set.
-              </p>
-            </div>
-
-            {/* CloudUploadOutlined mode */}
-            <div className="space-y-1.5">
-              <label htmlFor="import-mode">{t("admin.importPage.source")}</label>
-              <Select
-                value={effectiveUploadMode}
-                onChange={(v) => setUploadMode(v as "local" | "s3")}
-              >
-
-
-                  <Select.Option value="local" disabled={!localUploadEnabled}>{t("admin.importPage.localFile")}</Select.Option>
-                  <Select.Option value="s3">{t("admin.importPage.s3Uri")}</Select.Option>
-
-              </Select>
-            </div>
-
-            {effectiveUploadMode === "local" ? (
-              <div className="space-y-1.5">
-                <label>{t("admin.importPage.file")}</label>
-                <FileDropInput
-                  file={uploadFile}
-                  onSelect={(f) => {
-                    setUploadFile(f);
-                    setUploadFilename(f.name);
-                    setUploadError(null);
-                    invalidatePreview();
-                  }}
-                  accept=".txt,.tsv,.csv,.xlsx"
-                />
-                {uploadFile ? (
-                  <p className="text-xs text-muted-foreground">
-                    {uploadFile.name} · {formatBytes(uploadFile.size)}
-                    {uploadType === "module_tsv" ? " · format " + extensionOf(uploadFile.name).toUpperCase() : ""}
-                  </p>
-                ) : null}
-                {uploading ? (
-                  <div className="space-y-1" role="progressbar" aria-valuenow={uploadProgress} aria-valuemin={0} aria-valuemax={100}>
-                    <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                      <div
-                        className="h-full rounded-full bg-primary transition-all"
-                        style={{ width: `${uploadProgress}%` }}
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground">{t("admin.importPage.uploading")} {uploadProgress}%</p>
-                  </div>
-                ) : null}
-              </div>
-            ) : (
-              <>
-                {/* Filename */}
-                <div className="space-y-1.5">
-                  <label htmlFor="import-filename">{t("admin.importPage.filename")}</label>
-                  <Input
-                    id="import-filename"
-                    placeholder={
-                      uploadType === "module_tsv"
-                        ? "e.g. genes.tsv / genes.txt / genes.csv / genes.xlsx"
-                        : "e.g. expression_data.csv"
-                    }
-                    value={uploadFilename}
-                    onChange={(e) => {
-                      setUploadFilename(e.target.value);
-                      setUploadError(null);
-                    }}
-                  />
-                </div>
-
-                {/* S3 file path */}
-                <div className="space-y-1.5">
-                  <label htmlFor="import-filepath">{t("admin.importPage.s3FilePath")}</label>
-                  <Input
-                    id="import-filepath"
-                    placeholder={t("admin.importPage.s3FilePathPlaceholder")}
-                    value={uploadFilePath}
-                    onChange={(e) => setUploadFilePath(e.target.value)}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    The S3 URI where the file has already been uploaded.
-                  </p>
-                </div>
-              </>
-            )}
-
-            {/* Module-specific fields */}
-            {uploadType === "module_tsv" ? (
-              <>
-                <div className="space-y-1.5">
-                  <label htmlFor="import-release-id">{t("admin.importPage.releaseId")}</label>
-                  <Input
-                    id="import-release-id"
-                    type="number"
-                    min="1"
-                    inputMode="numeric"
-                    placeholder={t("admin.importPage.releaseIdPlaceholder")}
-                    value={uploadReleaseId}
-                    onChange={(e) => setUploadReleaseId(e.target.value)}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Required. Module rows are immutable within one existing release.
-                  </p>
-                </div>
-                <div className="space-y-1.5">
-                  <label htmlFor="import-module-key">{t("admin.importPage.moduleKey")}</label>
-                  <Input
-                    id="import-module-key"
-                    placeholder={t("admin.importPage.moduleKeyPlaceholder")}
-                    value={uploadModuleKey}
-                    onChange={(e) => {
-                      setUploadModuleKey(e.target.value);
-                      invalidatePreview();
-                    }}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Server-owned schema key. Supports .tsv / .txt / .csv / .xlsx.
-                  </p>
-                </div>
-                {effectiveUploadMode === "s3" ? (
-                  <div className="space-y-1.5">
-                    <label htmlFor="import-checksum">{t("admin.importPage.checksum")}</label>
-                    <Input
-                      id="import-checksum"
-                      placeholder={t("admin.importPage.checksumPlaceholder")}
-                      value={uploadChecksum}
-                      onChange={(e) => setUploadChecksum(e.target.value)}
-                    />
-                  </div>
-                ) : null}
-                <div className="space-y-1.5">
-                  <Button
-                    htmlType="button"
-                    type="default"
-                    size="small"
-                    disabled={!uploadFile || uploadType !== "module_tsv"}
-                    onClick={checkPreview}
-                  >
-                    {previewState?.status === "checking" ? (
-                      <LoadingOutlined className="size-3.5 animate-spin" />
-                    ) : null}
-                    Preview
-                  </Button>
-                  {previewState?.status === "unavailable" ? (
-                    <p className="text-xs text-muted-foreground">
-                      {previewState.reason}
-                    </p>
-                  ) : null}
-                  {previewState?.status === "available" ? (
-                    <div className="space-y-2 rounded-md border border-border p-3">
-                      <p className="text-xs text-muted-foreground">
-                        Validated {previewState.rowCount} row{previewState.rowCount === 1 ? "" : "s"}
-                        {previewState.truncated ? "; only the first 100 rows are shown." : "."}
-                        {" "}This preview is read-only; edits are not included in the import.
-                      </p>
-                      {!previewState.validation.ok ? (
-                        <p className="text-xs text-destructive">
-                          {previewState.validation.errorCount} validation error{previewState.validation.errorCount === 1 ? "" : "s"}
-                          {previewState.validation.errors[0]
-                            ? `: ${previewState.validation.errors[0].message}`
-                            : "."}
-                        </p>
-                      ) : null}
-                      {previewState.rows.length > 0 && previewState.headers.length > 0 ? (
-                        <ImportPreviewTable
-                          ariaLabel="Validated module preview"
-                          columns={previewState.headers}
-                          rows={previewState.rows}
-                          rowKey={(row, index) => `${index}:${String(row.gene_id ?? row.id ?? "row")}`}
-                          editable={false}
-                          height={240}
-                        />
-                      ) : (
-                        <p className="text-xs text-muted-foreground">No valid preview rows were found.</p>
-                      )}
-                    </div>
-                  ) : null}
-                </div>
-              </>
-            ) : null}
-
-            {uploadError ? (
-              <p className="text-sm text-destructive">{uploadError}</p>
-            ) : null}
-          </div>
-
-          <div>
             <Button
               type="default"
-              onClick={() => setShowUpload(false)}
-              disabled={submitMutation.isPending}
-            >
-              Cancel
-            </Button>
-            <Button
-              aria-label="Submit Import"
-              onClick={handleUploadSubmit}
+              size="small"
+              onClick={handleTemplateDownload}
               disabled={
-                submitMutation.isPending ||
-                uploading ||
-                !capabilitiesQuery.isSuccess ||
-                (effectiveUploadMode === "local"
-                  ? !uploadFile
-                  : !uploadFilename.trim() || !uploadFilePath.trim())
+                templateDownloading ||
+                !templateModuleKey.trim() ||
+                !moduleImportEnabled
               }
             >
-              {submitMutation.isPending ? (
-                <>
-                  <LoadingOutlined className="size-4 animate-spin" />
-                  Submitting…
-                </>
+              {templateDownloading ? (
+                <LoadingOutlined className="size-4 animate-spin" />
               ) : (
-                <>
-                  <CloudUploadOutlined className="size-4" />
-                  Submit Import
-                </>
+                <DownloadOutlined className="size-4" />
               )}
+              DownloadOutlined
             </Button>
           </div>
-
-          {submitMutation.isError ? (
-            <p className="text-sm text-destructive">
-              {submitMutation.error instanceof Error
-                ? submitMutation.error.message
-                : "Failed to submit import task."}
-            </p>
+          {templateError ? (
+            <p className="mt-2 text-sm text-destructive">{templateError}</p>
           ) : null}
+          <p className="mt-2 text-xs text-muted-foreground">
+            Starter template for a module schema (genes). Format: TSV / CSV / XLSX.
+            {" "}{xlsxImportState === "disabled" ? "XLSX is currently disabled by an administrator." : ""}
+          </p>
         </div>
-      </Modal>
-    </div>
+
+        {/* Stats */}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard label="Total Tasks" value={stats.total} icon={<DatabaseOutlined className="size-5" />} />
+          <StatCard
+            label="Running"
+            value={stats.running}
+            icon={<LoadingOutlined className={cn("size-5", stats.running > 0 && "animate-spin")} />}
+          />
+          <StatCard label="Completed" value={stats.completed} icon={<CheckCircleOutlined className="size-5" />} />
+          <StatCard label="Failed" value={stats.failed} icon={<CloseCircleOutlined className="size-5" />} />
+        </div>
+
+        {resumeDraftId ? (
+          <section aria-labelledby="resume-draft-heading" className="rounded-lg border border-primary/30 bg-primary/5 p-4">
+            <Typography.Title id="resume-draft-heading" level={5} className="!mb-1">{t("admin.importPage.resumeDraft")}</Typography.Title>
+            {resumeDraftQuery.isPending ? <Typography.Text type="secondary">{t("admin.importPage.loadingDraft")}</Typography.Text> : null}
+            {resumeDraftQuery.isError ? <Typography.Text type="danger">{t("admin.importPage.draftUnavailable")}</Typography.Text> : null}
+            {resumeDraftQuery.data ? (
+              <div className="text-sm">
+                <Typography.Text strong>{resumeDraftQuery.data.filename}</Typography.Text>
+                <Typography.Text type="secondary" className="ml-2">{resumeDraftQuery.data.status} · {resumeDraftQuery.data.row_count} rows · {resumeDraftQuery.data.column_count} columns · {resumeDraftQuery.data.field_mapping.length} mapped fields</Typography.Text>
+                <ImportDraftEditor
+                  draft={resumeDraftQuery.data}
+                  onUpdated={() => {
+                    void resumeDraftQuery.refetch();
+                    void draftsQuery.refetch();
+                  }}
+                />
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+
+        <section aria-labelledby="import-drafts-heading" className="rounded-lg border p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <Typography.Title id="import-drafts-heading" level={5} className="!mb-0">{t("admin.importPage.savedDrafts")}</Typography.Title>
+              <Typography.Text type="secondary">{t("admin.importPage.savedDraftsHint")}</Typography.Text>
+            </div>
+            <Button size="small" onClick={() => draftsQuery.refetch()} loading={draftsQuery.isFetching}>{t("common.retry")}</Button>
+          </div>
+          {draftsQuery.isError ? <Typography.Text type="danger">{t("admin.importPage.savedDraftsUnavailable")}</Typography.Text> : null}
+          {draftsQuery.data?.length ? (
+            <ul className="mt-3 space-y-2" aria-label={t("admin.importPage.savedDrafts")}>
+              {draftsQuery.data.map((draft) => (
+                <li key={draft.id} className="flex items-center justify-between gap-3 rounded border p-2">
+                  <div>
+                    <Typography.Text strong>{draft.filename}</Typography.Text>
+                    <Typography.Text type="secondary" className="ml-2 text-xs">{draft.status} · {draft.row_count} rows · {draft.column_count} columns</Typography.Text>
+                  </div>
+                  <Button size="small" href={`/imports?draft=${encodeURIComponent(draft.id)}`}>{t("admin.importPage.resume")}</Button>
+                </li>
+              ))}
+            </ul>
+          ) : !draftsQuery.isLoading ? <Typography.Text type="secondary">{t("admin.importPage.noDrafts")}</Typography.Text> : null}
+        </section>
+
+        {/* Search */}
+        <Input
+          placeholder={t("admin.importPage.searchPlaceholder")}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="max-w-xs"
+        />
+
+        {/* Table */}
+        <DataTable
+          columns={columns}
+          data={tasks}
+          rowKey={(t) => String(t.id)}
+          loading={isLoading}
+          page={page}
+          pageSize={20}
+          total={data?.total ?? 0}
+          onPageChange={setPage}
+          emptyTitle="No import tasks"
+          emptyDescription="Submit a new import to get started."
+        />
+
+        {/* CloudUploadOutlined dialog */}
+        <Modal open={showUpload} onCancel={() => setShowUpload(false)}>
+          <div>
+            <div>
+              <Typography.Title level={5}>{t("admin.importPage.newImport")}</Typography.Title>
+              <Typography.Text type="secondary">
+                CloudUploadOutlined a local file (browser-direct to object storage) or reference
+                an already-uploaded S3 object.
+              </Typography.Text>
+            </div>
+
+            <div className="space-y-4 py-2">
+              {/* Import type */}
+              <div className="space-y-1.5">
+                <label htmlFor="import-type">{t("admin.importPage.importType")}</label>
+                <Select
+                  aria-label={t("admin.importPage.importType")}
+                  value={uploadType}
+                  onChange={(v) => setUploadType(v as ImportType)}
+                >
+
+
+                    {AVAILABLE_SUBMISSION_IMPORT_TYPES.map((type) => (
+                      <Select.Option
+                        key={type}
+                        value={type}
+                        disabled={!moduleImportEnabled}
+                      >
+                        {TYPE_LABELS[type]}
+                      </Select.Option>
+                    ))}
+
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label htmlFor="import-data-set-id">{t("admin.importPage.datasetId")}</label>
+                <Input
+                  id="import-data-set-id"
+                  type="number"
+                  min="1"
+                  inputMode="numeric"
+                  placeholder={t("admin.importPage.datasetIdPlaceholder")}
+                  value={uploadDataSetId}
+                  onChange={(e) => setUploadDataSetId(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Required. This binds the import and its object key to one data set.
+                </p>
+              </div>
+
+              {/* CloudUploadOutlined mode */}
+              <div className="space-y-1.5">
+                <label htmlFor="import-mode">{t("admin.importPage.source")}</label>
+                <Select
+                  value={effectiveUploadMode}
+                  onChange={(v) => setUploadMode(v as "local" | "s3")}
+                >
+
+
+                    <Select.Option value="local" disabled={!localUploadEnabled}>{t("admin.importPage.localFile")}</Select.Option>
+                    <Select.Option value="s3">{t("admin.importPage.s3Uri")}</Select.Option>
+
+                </Select>
+              </div>
+
+              {effectiveUploadMode === "local" ? (
+                <div className="space-y-1.5">
+                  <label>{t("admin.importPage.file")}</label>
+                  <FileDropInput
+                    file={uploadFile}
+                    onSelect={(f) => {
+                      setUploadFile(f);
+                      setUploadFilename(f.name);
+                      setUploadError(null);
+                      invalidatePreview();
+                    }}
+                    accept=".txt,.tsv,.csv,.xlsx"
+                  />
+                  {uploadFile ? (
+                    <p className="text-xs text-muted-foreground">
+                      {uploadFile.name} · {formatBytes(uploadFile.size)}
+                      {uploadType === "module_tsv" ? " · format " + extensionOf(uploadFile.name).toUpperCase() : ""}
+                    </p>
+                  ) : null}
+                  {uploading ? (
+                    <div className="space-y-1" role="progressbar" aria-valuenow={uploadProgress} aria-valuemin={0} aria-valuemax={100}>
+                      <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                        <div
+                          className="h-full rounded-full bg-primary transition-all"
+                          style={{ width: `${uploadProgress}%` }}
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground">{t("admin.importPage.uploading")} {uploadProgress}%</p>
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <>
+                  {/* Filename */}
+                  <div className="space-y-1.5">
+                    <label htmlFor="import-filename">{t("admin.importPage.filename")}</label>
+                    <Input
+                      id="import-filename"
+                      placeholder={
+                        uploadType === "module_tsv"
+                          ? "e.g. genes.tsv / genes.txt / genes.csv / genes.xlsx"
+                          : "e.g. expression_data.csv"
+                      }
+                      value={uploadFilename}
+                      onChange={(e) => {
+                        setUploadFilename(e.target.value);
+                        setUploadError(null);
+                      }}
+                    />
+                  </div>
+
+                  {/* S3 file path */}
+                  <div className="space-y-1.5">
+                    <label htmlFor="import-filepath">{t("admin.importPage.s3FilePath")}</label>
+                    <Input
+                      id="import-filepath"
+                      placeholder={t("admin.importPage.s3FilePathPlaceholder")}
+                      value={uploadFilePath}
+                      onChange={(e) => setUploadFilePath(e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      The S3 URI where the file has already been uploaded.
+                    </p>
+                  </div>
+                </>
+              )}
+
+              {/* Module-specific fields */}
+              {uploadType === "module_tsv" ? (
+                <>
+                  <div className="space-y-1.5">
+                    <label htmlFor="import-release-id">{t("admin.importPage.releaseId")}</label>
+                    <Input
+                      id="import-release-id"
+                      type="number"
+                      min="1"
+                      inputMode="numeric"
+                      placeholder={t("admin.importPage.releaseIdPlaceholder")}
+                      value={uploadReleaseId}
+                      onChange={(e) => setUploadReleaseId(e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Required. Module rows are immutable within one existing release.
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label htmlFor="import-module-key">{t("admin.importPage.moduleKey")}</label>
+                    <Input
+                      id="import-module-key"
+                      placeholder={t("admin.importPage.moduleKeyPlaceholder")}
+                      value={uploadModuleKey}
+                      onChange={(e) => {
+                        setUploadModuleKey(e.target.value);
+                        invalidatePreview();
+                      }}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Server-owned schema key. Supports .tsv / .txt / .csv / .xlsx.
+                    </p>
+                  </div>
+                  {effectiveUploadMode === "s3" ? (
+                    <div className="space-y-1.5">
+                      <label htmlFor="import-checksum">{t("admin.importPage.checksum")}</label>
+                      <Input
+                        id="import-checksum"
+                        placeholder={t("admin.importPage.checksumPlaceholder")}
+                        value={uploadChecksum}
+                        onChange={(e) => setUploadChecksum(e.target.value)}
+                      />
+                    </div>
+                  ) : null}
+                  <div className="space-y-1.5">
+                    <Button
+                      htmlType="button"
+                      type="default"
+                      size="small"
+                      disabled={!uploadFile || uploadType !== "module_tsv"}
+                      onClick={checkPreview}
+                    >
+                      {previewState?.status === "checking" ? (
+                        <LoadingOutlined className="size-3.5 animate-spin" />
+                      ) : null}
+                      Preview
+                    </Button>
+                    {previewState?.status === "unavailable" ? (
+                      <p className="text-xs text-muted-foreground">
+                        {previewState.reason}
+                      </p>
+                    ) : null}
+                    {previewState?.status === "available" ? (
+                      <div className="space-y-2 rounded-md border border-border p-3">
+                        <p className="text-xs text-muted-foreground">
+                          Validated {previewState.rowCount} row{previewState.rowCount === 1 ? "" : "s"}
+                          {previewState.truncated ? "; only the first 100 rows are shown." : "."}
+                          {" "}This preview is read-only; edits are not included in the import.
+                        </p>
+                        {!previewState.validation.ok ? (
+                          <p className="text-xs text-destructive">
+                            {previewState.validation.errorCount} validation error{previewState.validation.errorCount === 1 ? "" : "s"}
+                            {previewState.validation.errors[0]
+                              ? `: ${previewState.validation.errors[0].message}`
+                              : "."}
+                          </p>
+                        ) : null}
+                        {previewState.rows.length > 0 && previewState.headers.length > 0 ? (
+                          <ImportPreviewTable
+                            ariaLabel="Validated module preview"
+                            columns={previewState.headers}
+                            rows={previewState.rows}
+                            rowKey={(row, index) => `${index}:${String(row.gene_id ?? row.id ?? "row")}`}
+                            editable={false}
+                            height={240}
+                          />
+                        ) : (
+                          <p className="text-xs text-muted-foreground">No valid preview rows were found.</p>
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
+                </>
+              ) : null}
+
+              {uploadError ? (
+                <p className="text-sm text-destructive">{uploadError}</p>
+              ) : null}
+            </div>
+
+            <div>
+              <Button
+                type="default"
+                onClick={() => setShowUpload(false)}
+                disabled={submitMutation.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                aria-label="Submit Import"
+                onClick={handleUploadSubmit}
+                disabled={
+                  submitMutation.isPending ||
+                  uploading ||
+                  !capabilitiesQuery.isSuccess ||
+                  (effectiveUploadMode === "local"
+                    ? !uploadFile
+                    : !uploadFilename.trim() || !uploadFilePath.trim())
+                }
+              >
+                {submitMutation.isPending ? (
+                  <>
+                    <LoadingOutlined className="size-4 animate-spin" />
+                    Submitting…
+                  </>
+                ) : (
+                  <>
+                    <CloudUploadOutlined className="size-4" />
+                    Submit Import
+                  </>
+                )}
+              </Button>
+            </div>
+
+            {submitMutation.isError ? (
+              <p className="text-sm text-destructive">
+                {submitMutation.error instanceof Error
+                  ? submitMutation.error.message
+                  : "Failed to submit import task."}
+              </p>
+            ) : null}
+          </div>
+        </Modal>
+      </div>
+    </PageContainer>
   );
 }
 

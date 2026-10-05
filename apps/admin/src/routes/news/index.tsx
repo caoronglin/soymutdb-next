@@ -13,16 +13,17 @@ import {
   Button,
   Form,
   Input,
+  PageContainer,
+  ProTable,
   Select,
   Space,
-  Table,
   Tag,
-  Typography,
-  type TableColumnsType,
+  type ProColumns,
 } from "../../lib/antd";
 import { PlusOutlined } from "@ant-design/icons";
 import { useRouter } from "@tanstack/react-router";
 import dayjs from "dayjs";
+import { PRO_LIST_SHELL } from "../../components/pro-table-shell";
 import {
   deleteNews,
   listAdminNews,
@@ -154,17 +155,21 @@ export default function NewsListPage() {
     [modal, message, reload, t],
   );
 
-  const columns: TableColumnsType<NewsSummary> = [
+  // Read-only list. Row mutations go through the explicit action buttons and the
+  // `modal.confirm` in `confirmDelete`, so no column opts into ProTable's editor.
+  const columns: ProColumns<NewsSummary>[] = [
     {
       title: t("admin.news.columns.id"),
       dataIndex: "id",
       width: 64,
+      editable: false,
     },
     {
       title: t("admin.news.columns.title"),
       dataIndex: "title_en",
       ellipsis: true,
-      render: (_, record) =>
+      editable: false,
+      render: (_value, record) =>
         record.title_zh ? (
           <span>
             {record.title_en} <span className="text-muted-foreground">/ {record.title_zh}</span>
@@ -177,13 +182,15 @@ export default function NewsListPage() {
       title: t("admin.news.columns.category"),
       dataIndex: "category",
       width: 140,
-      render: (_, record) => record.category ?? "—",
+      editable: false,
+      render: (_value, record) => record.category ?? "—",
     },
     {
       title: t("admin.news.columns.status"),
       dataIndex: "status",
       width: 110,
-      render: (_, record) => (
+      editable: false,
+      render: (_value, record) => (
         <Tag color={STATUS_COLORS[record.status]}>
           {t(`admin.news.status.${record.status}`)}
         </Tag>
@@ -193,20 +200,23 @@ export default function NewsListPage() {
       title: t("admin.news.columns.publishedAt"),
       dataIndex: "published_at",
       width: 170,
-      render: (_, record) =>
+      editable: false,
+      render: (_value, record) =>
         record.published_at ? dayjs(record.published_at).format("YYYY-MM-DD HH:mm") : "—",
     },
     {
       title: t("admin.news.columns.featuredSort"),
       dataIndex: "featured_sort",
       width: 90,
+      editable: false,
       sorter: (a, b) => a.featured_sort - b.featured_sort,
     },
     {
       title: t("admin.news.columns.actions"),
       key: "option",
       width: 190,
-      render: (_, record) => (
+      editable: false,
+      render: (_value, record) => (
         <Space size="small">
           <Button
             type="link"
@@ -251,91 +261,99 @@ export default function NewsListPage() {
   };
 
   return (
-    <div className="route-fade-in">
-      <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <Space>
-            <Typography.Text strong>{t("admin.news.title")}</Typography.Text>
-          </Space>
-          <Space>
-            <Button onClick={() => router.navigate({ to: "/news/trash" })}>
-              {t("admin.news.trash.title")}
-            </Button>
-            <Button onClick={() => setReorderOpen(true)}>
-              {t("admin.news.actions.reorder")}
-            </Button>
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              onClick={() => router.navigate({ to: "/news/new" })}
-            >
-              {t("admin.news.createNew")}
-            </Button>
-          </Space>
-        </div>
+    <PageContainer
+      title={t("admin.news.title")}
+      extra={[
+        <Space key="news-actions">
+          <Button onClick={() => router.navigate({ to: "/news/trash" })}>
+            {t("admin.news.trash.title")}
+          </Button>
+          <Button onClick={() => setReorderOpen(true)}>
+            {t("admin.news.actions.reorder")}
+          </Button>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => router.navigate({ to: "/news/new" })}
+          >
+            {t("admin.news.createNew")}
+          </Button>
+        </Space>,
+      ]}
+    >
+      <div className="route-fade-in">
+        <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
+          <Form form={searchForm} layout="inline" onFinish={applyFilters}>
+            <Form.Item name="title_en" label={t("admin.news.columns.title")}>
+              <Input placeholder={t("admin.news.search.placeholder")} />
+            </Form.Item>
+            <Form.Item name="category" label={t("admin.news.columns.category")}>
+              <Input />
+            </Form.Item>
+            <Form.Item name="status" label={t("admin.news.columns.status")}>
+              <Select
+                allowClear
+                style={{ minWidth: 140 }}
+                options={([
+                  "draft",
+                  "published",
+                  "archived",
+                ] as const).map((status) => ({
+                  value: status,
+                  label: t(`admin.news.status.${status}`),
+                }))}
+              />
+            </Form.Item>
+            <Form.Item>
+              <Space>
+                <Button type="primary" htmlType="submit">
+                  {t("common.search")}
+                </Button>
+                <Button htmlType="button" onClick={resetFilters}>
+                  {t("common.reset")}
+                </Button>
+              </Space>
+            </Form.Item>
+          </Form>
 
-        <Form form={searchForm} layout="inline" onFinish={applyFilters}>
-          <Form.Item name="title_en" label={t("admin.news.columns.title")}>
-            <Input placeholder={t("admin.news.search.placeholder")} />
-          </Form.Item>
-          <Form.Item name="category" label={t("admin.news.columns.category")}>
-            <Input />
-          </Form.Item>
-          <Form.Item name="status" label={t("admin.news.columns.status")}>
-            <Select
-              allowClear
-              style={{ minWidth: 140 }}
-              options={([
-                "draft",
-                "published",
-                "archived",
-              ] as const).map((status) => ({
-                value: status,
-                label: t(`admin.news.status.${status}`),
-              }))}
-            />
-          </Form.Item>
-          <Form.Item>
-            <Space>
-              <Button type="primary" htmlType="submit">
-                {t("common.search")}
-              </Button>
-              <Button htmlType="button" onClick={resetFilters}>
-                {t("common.reset")}
-              </Button>
-            </Space>
-          </Form.Item>
-        </Form>
+          {/*
+            The pagination object is passed to ProTable untouched: `current` /
+            `pageSize` / `total` / `onChange` are the server-side contract with
+            `listAdminNews`, and ProTable hands the object straight to the antd
+            table. Nothing here turns this into client-side paging over a
+            pre-fetched array — the page only ever holds one server page.
+          */}
+          <ProTable<NewsSummary>
+            {...PRO_LIST_SHELL}
+            rowKey="id"
+            columns={columns}
+            dataSource={articles}
+            loading={loading}
+            pagination={{
+              current: requestParams.current,
+              pageSize: requestParams.pageSize,
+              total,
+              showSizeChanger: true,
+              onChange: (current, pageSize) => {
+                setLoading(true);
+                setRequestParams((params) => ({ ...params, current, pageSize }));
+              },
+            }}
+            locale={{ emptyText: t("admin.news.empty") }}
+          />
+        </Space>
 
-        <Table<NewsSummary>
-          rowKey="id"
-          columns={columns}
-          dataSource={articles}
-          loading={loading}
-          pagination={{
-            current: requestParams.current,
-            pageSize: requestParams.pageSize,
-            total,
-            showSizeChanger: true,
-            onChange: (current, pageSize) => {
-              setLoading(true);
-              setRequestParams((params) => ({ ...params, current, pageSize }));
-            },
-          }}
-          locale={{ emptyText: t("admin.news.empty") }}
+        <NewsPreviewModal
+          open={previewArticle !== null}
+          article={previewArticle}
+          onClose={() => setPreviewArticle(null)}
         />
-      </Space>
-
-      <NewsPreviewModal
-        open={previewArticle !== null}
-        article={previewArticle}
-        onClose={() => setPreviewArticle(null)}
-      />
-      <NewsReorderModal
-        open={reorderOpen}
-        onClose={() => setReorderOpen(false)}
-        onSaved={reload}
-      />
-    </div>
+        <NewsReorderModal
+          open={reorderOpen}
+          onClose={() => setReorderOpen(false)}
+          onSaved={reload}
+        />
+      </div>
+    </PageContainer>
   );
 }

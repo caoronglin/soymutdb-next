@@ -1,11 +1,12 @@
 import { SnippetsOutlined, DownloadOutlined, FilterOutlined, GlobalOutlined, RiseOutlined, TeamOutlined, DesktopOutlined, FileTextOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
-import { Badge, Button, Card, Input, Select, Table, Typography } from "@/lib/antd";
+import { Badge, Button, Input, PageContainer, ProCard, ProTable, Select, Typography, type ProColumns } from "@/lib/antd";
 import { StatCard } from "../components/stat-card";
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { http } from "@soymutdb/api-client";
 import { DataTable, type DataTableColumn } from "../components/data-table";
+import { PRO_LIST_SHELL } from "../components/pro-table-shell";
 import { formatNumber } from "../lib/format";
 import { buildAuditLogFilterParams } from "../lib/audit-params";
 
@@ -135,6 +136,44 @@ export default function AuditPage() {
     [ipDistribution],
   );
 
+  /**
+   * Columns for the IP distribution panel.
+   *
+   * This table used to be an antd `Table` fed hand-written `<thead>`/`<tbody>`
+   * children. Its data, the top-10 cap and both of its messages are unchanged;
+   * what moved is the loading presentation, which now comes from ProTable's own
+   * `loading` state instead of five hand-drawn placeholder rows, and the header
+   * styling, which ProTable owns. The empty state keeps the exact same string.
+   */
+  const ipColumns: ProColumns<AuditStats["ipDistribution"][number]>[] = [
+    {
+      title: t("admin.audit.ipAddress", { defaultValue: "IP Address" }),
+      dataIndex: "ip",
+      key: "ip",
+      editable: false,
+      render: (ip) => <span className="font-mono text-xs">{ip}</span>,
+    },
+    {
+      title: t("admin.audit.city", { defaultValue: "City" }),
+      dataIndex: "city",
+      key: "city",
+      editable: false,
+      render: (_value, row) => <span className="text-sm text-muted-foreground">{row.city ?? "—"}</span>,
+    },
+    {
+      title: t("admin.audit.accessCount", { defaultValue: "Access Count" }),
+      dataIndex: "count",
+      key: "count",
+      align: "right",
+      editable: false,
+      render: (_value, row) => (
+        <span className="inline-block">
+          <Badge color="default">{row.count.toLocaleString()}</Badge>
+        </span>
+      ),
+    },
+  ];
+
   const handleExportCsv = async () => {
     setExporting(true);
     try {
@@ -220,188 +259,167 @@ export default function AuditPage() {
   ], [t]);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4"><div><Typography.Title level={2}>{t("admin.audit.title", { defaultValue: "Audit Logs" })}</Typography.Title><Typography.Text type="secondary">{t("admin.audit.subtitle", { defaultValue: "Immutable record of all administrative actions. Filter and export for compliance." })}</Typography.Text></div><div className="flex gap-2"><Button onClick={handleExportCsv} disabled={exporting} icon={<DownloadOutlined />}>{exporting ? t("admin.audit.exporting", { defaultValue: "Exporting…" }) : t("admin.audit.exportCsv", { defaultValue: "Export CSV" })}</Button><Button onClick={handleExportPdf} icon={<FileTextOutlined />}>{t("admin.audit.exportPdf", { defaultValue: "Export PDF" })}</Button></div></div>
+    <PageContainer
+      title={t("admin.audit.title", { defaultValue: "Audit Logs" })}
+      subTitle={t("admin.audit.subtitle", { defaultValue: "Immutable record of all administrative actions. Filter and export for compliance." })}
+      extra={[
+        <div key="export" className="flex gap-2"><Button onClick={handleExportCsv} disabled={exporting} icon={<DownloadOutlined />}>{exporting ? t("admin.audit.exporting", { defaultValue: "Exporting…" }) : t("admin.audit.exportCsv", { defaultValue: "Export CSV" })}</Button><Button onClick={handleExportPdf} icon={<FileTextOutlined />}>{t("admin.audit.exportPdf", { defaultValue: "Export PDF" })}</Button></div>,
+      ]}
+    >
+      <div className="space-y-6">
 
-      {/* Immutability notice */}
-      <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-4 py-2.5 text-sm text-muted-foreground">
-        <SnippetsOutlined className="size-4 shrink-0 text-primary" />
-        <span>
-          {t("admin.audit.appendOnlyNote", { defaultValue: "Audit logs are append-only and tamper-evident. Records cannot be modified or deleted." })}
-        </span>
-      </div>
+        {/* Immutability notice */}
+        <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-4 py-2.5 text-sm text-muted-foreground">
+          <SnippetsOutlined className="size-4 shrink-0 text-primary" />
+          <span>
+            {t("admin.audit.appendOnlyNote", { defaultValue: "Audit logs are append-only and tamper-evident. Records cannot be modified or deleted." })}
+          </span>
+        </div>
 
-      {/* Statistics summary cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          label={t("admin.audit.totalLogins", { defaultValue: "Total Logins" })}
-          value={formatNumber(stats?.totalLogins ?? 0)}
-          icon={<SnippetsOutlined className="size-5" />}
-        />
-        <StatCard
-          label={t("admin.audit.totalActions", { defaultValue: "Total Actions" })}
-          value={formatNumber(stats?.totalActions ?? 0)}
-          icon={<RiseOutlined className="size-5" />}
-        />
-        <StatCard
-          label={t("admin.audit.uniqueIps", { defaultValue: "Unique IPs" })}
-          value={formatNumber(stats?.uniqueIps ?? 0)}
-          icon={<GlobalOutlined className="size-5" />}
-        />
-        <StatCard
-          label={t("admin.audit.activeUsers", { defaultValue: "Active Users" })}
-          value={typeof activeUsers === "number" ? formatNumber(activeUsers) : activeUsers}
-          icon={<TeamOutlined className="size-5" />}
-        />
-      </div>
-
-      {/* IP distribution + period selector */}
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <div className="flex-row items-center justify-between space-y-0">
-            <Typography.Title level={5} className="flex items-center gap-2 text-base">
-              <DesktopOutlined className="size-4 text-primary" />
-              {t("admin.audit.topIpsTitle", { defaultValue: "Top IP Addresses" })}
-            </Typography.Title>
-            <Badge color="default">
-              {t("admin.audit.topIpsCount", { count: stats?.ipDistribution?.length ?? 0, defaultValue: "{{count}} IPs" })}
-            </Badge>
-          </div>
-          <div>
-            <Table>
-              <thead>
-                <tr className="bg-muted/40 hover:bg-muted/40">
-                  <th>{t("admin.audit.ipAddress", { defaultValue: "IP Address" })}</th>
-                  <th>{t("admin.audit.city", { defaultValue: "City" })}</th>
-                  <th className="text-right">{t("admin.audit.accessCount", { defaultValue: "Access Count" })}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {statsLoading ? (
-                  Array.from({ length: 5 }).map((_, i) => (
-                    <tr key={`ip-skeleton-${i}`}>
-                      <td colSpan={3} className="py-3 text-xs text-muted-foreground">
-                        {t("admin.audit.loading", { defaultValue: "Loading…" })}
-                      </td>
-                    </tr>
-                  ))
-                ) : topIps.length === 0 ? (
-                  <tr>
-                    <td colSpan={3} className="py-6 text-center text-sm text-muted-foreground">
-                      {t("admin.audit.noIpData", { defaultValue: "No IP distribution data for this period." })}
-                    </td>
-                  </tr>
-                ) : (
-                  topIps.map((row) => (
-                    <tr key={row.ip}>
-                      <td>
-                        <span className="font-mono text-xs">{row.ip}</span>
-                      </td>
-                      <td className="text-sm text-muted-foreground">
-                        {row.city ?? "—"}
-                      </td>
-                      <td className="text-right">
-                        <Badge color="default">{row.count.toLocaleString()}</Badge>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </Table>
-          </div>
-        </Card>
-
-        {/* Period selector for stats */}
-        <Card>
-          <div>
-            <Typography.Title level={5} className="flex items-center gap-2 text-base">
-              <RiseOutlined className="size-4 text-primary" />
-              {t("admin.audit.statsPeriodTitle", { defaultValue: "Stats Period" })}
-            </Typography.Title>
-          </div>
-          <div>
-            <p className="mb-3 text-sm text-muted-foreground">
-              {t("admin.audit.statsPeriodDesc", { defaultValue: "Control the aggregation window for the summary cards and IP distribution." })}
-            </p>
-            <Select value={period} onChange={(v) => setPeriod(v as StatsPeriod)}>
-
-
-                <Select.Option value="day">{t("admin.audit.periodDay", { defaultValue: "Day" })}</Select.Option>
-                <Select.Option value="week">{t("admin.audit.periodWeek", { defaultValue: "Week" })}</Select.Option>
-                <Select.Option value="month">{t("admin.audit.periodMonth", { defaultValue: "Month" })}</Select.Option>
-
-            </Select>
-          </div>
-        </Card>
-      </div>
-
-      {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative">
-          <FilterOutlined className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder={t("admin.audit.searchPlaceholder", { defaultValue: "Search by actor, resource, or IP..." })}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="h-9 w-72 pl-8"
+        {/* Statistics summary cards */}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard
+            label={t("admin.audit.totalLogins", { defaultValue: "Total Logins" })}
+            value={formatNumber(stats?.totalLogins ?? 0)}
+            icon={<SnippetsOutlined className="size-5" />}
+          />
+          <StatCard
+            label={t("admin.audit.totalActions", { defaultValue: "Total Actions" })}
+            value={formatNumber(stats?.totalActions ?? 0)}
+            icon={<RiseOutlined className="size-5" />}
+          />
+          <StatCard
+            label={t("admin.audit.uniqueIps", { defaultValue: "Unique IPs" })}
+            value={formatNumber(stats?.uniqueIps ?? 0)}
+            icon={<GlobalOutlined className="size-5" />}
+          />
+          <StatCard
+            label={t("admin.audit.activeUsers", { defaultValue: "Active Users" })}
+            value={typeof activeUsers === "number" ? formatNumber(activeUsers) : activeUsers}
+            icon={<TeamOutlined className="size-5" />}
           />
         </div>
-        <Select value={actionFilter} onChange={setActionFilter}>
+
+        {/* IP distribution + period selector */}
+        <div className="grid gap-4 lg:grid-cols-3">
+          <ProCard className="lg:col-span-2">
+            <div className="flex-row items-center justify-between space-y-0">
+              <Typography.Title level={5} className="flex items-center gap-2 text-base">
+                <DesktopOutlined className="size-4 text-primary" />
+                {t("admin.audit.topIpsTitle", { defaultValue: "Top IP Addresses" })}
+              </Typography.Title>
+              <Badge color="default">
+                {t("admin.audit.topIpsCount", { count: stats?.ipDistribution?.length ?? 0, defaultValue: "{{count}} IPs" })}
+              </Badge>
+            </div>
+            <div>
+              <ProTable<AuditStats["ipDistribution"][number]>
+                {...PRO_LIST_SHELL}
+                rowKey="ip"
+                size="small"
+                columns={ipColumns}
+                dataSource={topIps}
+                loading={statsLoading}
+                pagination={false}
+                locale={{
+                  emptyText: t("admin.audit.noIpData", { defaultValue: "No IP distribution data for this period." }),
+                }}
+              />
+            </div>
+          </ProCard>
+
+          {/* Period selector for stats */}
+          <ProCard>
+            <div>
+              <Typography.Title level={5} className="flex items-center gap-2 text-base">
+                <RiseOutlined className="size-4 text-primary" />
+                {t("admin.audit.statsPeriodTitle", { defaultValue: "Stats Period" })}
+              </Typography.Title>
+            </div>
+            <div>
+              <p className="mb-3 text-sm text-muted-foreground">
+                {t("admin.audit.statsPeriodDesc", { defaultValue: "Control the aggregation window for the summary cards and IP distribution." })}
+              </p>
+              <Select value={period} onChange={(v) => setPeriod(v as StatsPeriod)}>
 
 
-            <Select.Option value="all">{t("admin.audit.actionAll", { defaultValue: "All Actions" })}</Select.Option>
-            <Select.Option value="create">{t("admin.audit.actionCreate", { defaultValue: "Create" })}</Select.Option>
-            <Select.Option value="update">{t("admin.audit.actionUpdate", { defaultValue: "Update" })}</Select.Option>
-            <Select.Option value="delete">{t("admin.audit.actionDelete", { defaultValue: "Delete" })}</Select.Option>
-            <Select.Option value="login">{t("admin.audit.actionLogin", { defaultValue: "Login" })}</Select.Option>
-            <Select.Option value="logout">{t("admin.audit.actionLogout", { defaultValue: "Logout" })}</Select.Option>
-            <Select.Option value="export">{t("admin.audit.actionExport", { defaultValue: "Export" })}</Select.Option>
-            <Select.Option value="role_change">{t("admin.audit.actionRoleChange", { defaultValue: "Role Change" })}</Select.Option>
+                  <Select.Option value="day">{t("admin.audit.periodDay", { defaultValue: "Day" })}</Select.Option>
+                  <Select.Option value="week">{t("admin.audit.periodWeek", { defaultValue: "Week" })}</Select.Option>
+                  <Select.Option value="month">{t("admin.audit.periodMonth", { defaultValue: "Month" })}</Select.Option>
 
-        </Select>
-        <div className="relative">
-          <GlobalOutlined className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder={t("admin.audit.ipFilterPlaceholder", { defaultValue: "Filter by IP address..." })}
-            value={ipFilter}
-            onChange={(e) => setIpFilter(e.target.value)}
-            className="h-9 w-44 pl-8"
-          />
+              </Select>
+            </div>
+          </ProCard>
         </div>
-        <div className="flex items-center gap-1.5">
-          <Input
-            type="date"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            className="h-9 w-40"
-            aria-label={t("admin.audit.startDateLabel", { defaultValue: "Start date" })}
-          />
-          <span className="text-xs text-muted-foreground">{t("admin.audit.dateRangeSeparator", { defaultValue: "to" })}</span>
-          <Input
-            type="date"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            className="h-9 w-40"
-            aria-label={t("admin.audit.endDateLabel", { defaultValue: "End date" })}
-          />
+
+        {/* Filters */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative">
+            <FilterOutlined className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder={t("admin.audit.searchPlaceholder", { defaultValue: "Search by actor, resource, or IP..." })}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-9 w-72 pl-8"
+            />
+          </div>
+          <Select value={actionFilter} onChange={setActionFilter}>
+
+
+              <Select.Option value="all">{t("admin.audit.actionAll", { defaultValue: "All Actions" })}</Select.Option>
+              <Select.Option value="create">{t("admin.audit.actionCreate", { defaultValue: "Create" })}</Select.Option>
+              <Select.Option value="update">{t("admin.audit.actionUpdate", { defaultValue: "Update" })}</Select.Option>
+              <Select.Option value="delete">{t("admin.audit.actionDelete", { defaultValue: "Delete" })}</Select.Option>
+              <Select.Option value="login">{t("admin.audit.actionLogin", { defaultValue: "Login" })}</Select.Option>
+              <Select.Option value="logout">{t("admin.audit.actionLogout", { defaultValue: "Logout" })}</Select.Option>
+              <Select.Option value="export">{t("admin.audit.actionExport", { defaultValue: "Export" })}</Select.Option>
+              <Select.Option value="role_change">{t("admin.audit.actionRoleChange", { defaultValue: "Role Change" })}</Select.Option>
+
+          </Select>
+          <div className="relative">
+            <GlobalOutlined className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder={t("admin.audit.ipFilterPlaceholder", { defaultValue: "Filter by IP address..." })}
+              value={ipFilter}
+              onChange={(e) => setIpFilter(e.target.value)}
+              className="h-9 w-44 pl-8"
+            />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="h-9 w-40"
+              aria-label={t("admin.audit.startDateLabel", { defaultValue: "Start date" })}
+            />
+            <span className="text-xs text-muted-foreground">{t("admin.audit.dateRangeSeparator", { defaultValue: "to" })}</span>
+            <Input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="h-9 w-40"
+              aria-label={t("admin.audit.endDateLabel", { defaultValue: "End date" })}
+            />
+          </div>
+          <Badge color="default">
+            {t("admin.audit.recordsCount", { count: data?.total ?? 0, defaultValue: "{{count}} records" })}
+          </Badge>
         </div>
-        <Badge color="default">
-          {t("admin.audit.recordsCount", { count: data?.total ?? 0, defaultValue: "{{count}} records" })}
-        </Badge>
+
+        <DataTable
+          columns={columns}
+          data={logs}
+          rowKey={(l) => l.id}
+          loading={isLoading}
+          page={page}
+          pageSize={50}
+          total={data?.total ?? 0}
+          onPageChange={setPage}
+          emptyTitle={t("admin.audit.emptyTitle", { defaultValue: "No audit records" })}
+          emptyDescription={t("admin.audit.emptyDescription", { defaultValue: "Audit log entries will appear here as actions are performed." })}
+        />
       </div>
-
-      <DataTable
-        columns={columns}
-        data={logs}
-        rowKey={(l) => l.id}
-        loading={isLoading}
-        page={page}
-        pageSize={50}
-        total={data?.total ?? 0}
-        onPageChange={setPage}
-        emptyTitle={t("admin.audit.emptyTitle", { defaultValue: "No audit records" })}
-        emptyDescription={t("admin.audit.emptyDescription", { defaultValue: "Audit log entries will appear here as actions are performed." })}
-      />
-    </div>
+    </PageContainer>
   );
 }

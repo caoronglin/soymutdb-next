@@ -5,7 +5,7 @@ import { Link } from "@tanstack/react-router";
 import { http } from "@soymutdb/api-client";
 import { fetchHomepageStats } from "@soymutdb/api-client";
 import { formatNumber } from "../lib/format";
-import { Alert, Button, Typography } from "@/lib/antd";
+import { Alert, Button, PageContainer } from "@/lib/antd";
 import { StatCard } from "../components/stat-card";
 import { lazy, Suspense } from "react";
 
@@ -62,120 +62,123 @@ export default function DashboardPage() {
   const storageData = dashboardSeries?.storage_growth ?? dashboardSeries?.storageGrowth ?? [];
 
   return (
-    <div className="space-y-6">
-      <div><Typography.Title level={2}>{t("admin.dashboard.systemOverview", { defaultValue: "System Overview" })}</Typography.Title><Typography.Text type="secondary">{t("admin.dashboard.metricsSubtitle", { defaultValue: "Real-time metrics for the SoyMutDB platform." })}</Typography.Text></div>
-
-      <section className="rounded-lg border border-primary/20 bg-primary/5 p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wider text-primary">{t("admin.dashboard.nextActions", { defaultValue: "Next actions" })}</p>
-            <h2 className="mt-1 text-lg font-semibold">{t("admin.dashboard.pipelineHeadline", { defaultValue: "Keep the data pipeline moving" })}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">{t("admin.dashboard.pipelineDesc", { defaultValue: "Start from the real operational workflows instead of decorative management pages." })}</p>
+    <PageContainer
+      title={t("admin.dashboard.systemOverview", { defaultValue: "System Overview" })}
+      subTitle={t("admin.dashboard.metricsSubtitle", { defaultValue: "Real-time metrics for the SoyMutDB platform." })}
+    >
+      <div className="space-y-6">
+        <section className="rounded-lg border border-primary/20 bg-primary/5 p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wider text-primary">{t("admin.dashboard.nextActions", { defaultValue: "Next actions" })}</p>
+              <h2 className="mt-1 text-lg font-semibold">{t("admin.dashboard.pipelineHeadline", { defaultValue: "Keep the data pipeline moving" })}</h2>
+              <p className="mt-1 text-sm text-muted-foreground">{t("admin.dashboard.pipelineDesc", { defaultValue: "Start from the real operational workflows instead of decorative management pages." })}</p>
+            </div>
+            <Link to="/resource-catalog" className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+              {t("admin.dashboard.openResourceCatalog", { defaultValue: "Open resource catalog" })} <ArrowRightOutlined className="size-4" aria-hidden />
+            </Link>
           </div>
-          <Link to="/resource-catalog" className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
-            {t("admin.dashboard.openResourceCatalog", { defaultValue: "Open resource catalog" })} <ArrowRightOutlined className="size-4" aria-hidden />
-          </Link>
+        </section>
+
+        {homepageStatsQuery.isError || dashboardStatsQuery.isError ? (
+          <Alert
+            type="error"
+            showIcon
+            title={t("admin.dashboard.metricsUnavailable", { defaultValue: "Dashboard metrics unavailable" })}
+            description={t("admin.dashboard.metricsUnavailableDesc", { defaultValue: "The API did not return a current metric snapshot; no placeholder values are shown." })}
+            action={
+              <Button
+                type="link"
+                size="small"
+                onClick={() => {
+                  void homepageStatsQuery.refetch();
+                  void dashboardStatsQuery.refetch();
+                }}
+              >
+                {t("admin.dashboard.retry", { defaultValue: "Retry" })}
+              </Button>
+            }
+          />
+        ) : null}
+
+        {/* Stat cards */}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard
+            label={t("admin.dashboard.totalTeam", { defaultValue: "Total Team" })}
+            value={dashboardStatsQuery.isPending ? "…" : dashboardStatsQuery.isError ? "—" : formatNumber(dashboardStats?.totalUsers ?? 0)}
+            icon={<TeamOutlined className="size-5" />}
+            trend={dashboardStats?.usersChange !== undefined
+              ? { value: `${dashboardStats.usersChange >= 0 ? "+" : ""}${dashboardStats.usersChange.toFixed(1)}%`, positive: dashboardStats.usersChange >= 0 }
+              : undefined}
+          />
+          <StatCard
+            label={t("admin.activeReleases", { defaultValue: "Active Releases" })}
+            value={homepageStatsQuery.isPending || dashboardStatsQuery.isPending ? "…" : homepageStatsQuery.isError || dashboardStatsQuery.isError ? "—" : formatNumber(homepageStats?.release_count ?? dashboardStats?.activeReleases ?? 0)}
+            icon={<BranchesOutlined className="size-5" />}
+            trend={dashboardStats?.releasesChange !== undefined
+              ? { value: `${dashboardStats.releasesChange >= 0 ? "+" : ""}${dashboardStats.releasesChange.toFixed(1)}%`, positive: dashboardStats.releasesChange >= 0 }
+              : undefined}
+          />
+          <StatCard
+            label={t("admin.totalVariants", { defaultValue: "Total Variants" })}
+            value={homepageStatsQuery.isPending || dashboardStatsQuery.isPending ? "…" : homepageStatsQuery.isError || dashboardStatsQuery.isError ? "—" : formatNumber(homepageStats?.total_variants ?? dashboardStats?.totalVariants ?? 0)}
+            icon={<AimOutlined className="size-5" />}
+            trend={dashboardStats?.variantsChange !== undefined
+              ? { value: `${dashboardStats.variantsChange >= 0 ? "+" : ""}${dashboardStats.variantsChange.toFixed(1)}%`, positive: dashboardStats.variantsChange >= 0 }
+              : undefined}
+          />
+          <StatCard
+            label={t("admin.dashboard.queryP95", { defaultValue: "Query P95" })}
+            value={dashboardStatsQuery.isPending ? "…" : dashboardStatsQuery.isError ? "—" : `${dashboardStats?.queryP95Ms ?? 0} ms`}
+            icon={<ClockCircleOutlined className="size-5" />}
+            trend={dashboardStats?.queryP95Change !== undefined
+              ? { value: `${dashboardStats.queryP95Change >= 0 ? "+" : ""}${dashboardStats.queryP95Change.toFixed(1)}%`, positive: dashboardStats.queryP95Change < 0 }
+              : undefined}
+          />
         </div>
-      </section>
 
-      {homepageStatsQuery.isError || dashboardStatsQuery.isError ? (
-        <Alert
-          type="error"
-          showIcon
-          title={t("admin.dashboard.metricsUnavailable", { defaultValue: "Dashboard metrics unavailable" })}
-          description={t("admin.dashboard.metricsUnavailableDesc", { defaultValue: "The API did not return a current metric snapshot; no placeholder values are shown." })}
-          action={
-            <Button
-              type="link"
-              size="small"
-              onClick={() => {
-                void homepageStatsQuery.refetch();
-                void dashboardStatsQuery.refetch();
-              }}
-            >
-              {t("admin.dashboard.retry", { defaultValue: "Retry" })}
-            </Button>
-          }
-        />
-      ) : null}
+        {/* Charts */}
+        {seriesError ? (
+          <Alert
+            type="error"
+            showIcon
+            title={t("admin.dashboard.trendUnavailable", {
+              defaultValue: "Dashboard trend data unavailable.",
+            })}
+            action={
+              <Button type="link" size="small" onClick={() => void refetchSeries()}>
+                {t("admin.dashboard.retry", { defaultValue: "Retry" })}
+              </Button>
+            }
+          />
+        ) : null}
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Suspense fallback={<ChartLoading />}><ImportThroughputChart data={seriesLoading ? [] : importData} /></Suspense>
+          <Suspense fallback={<ChartLoading />}><QueryLatencyChart data={seriesLoading ? [] : latencyData} /></Suspense>
+        </div>
 
-      {/* Stat cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          label={t("admin.dashboard.totalTeam", { defaultValue: "Total Team" })}
-          value={dashboardStatsQuery.isPending ? "…" : dashboardStatsQuery.isError ? "—" : formatNumber(dashboardStats?.totalUsers ?? 0)}
-          icon={<TeamOutlined className="size-5" />}
-          trend={dashboardStats?.usersChange !== undefined
-            ? { value: `${dashboardStats.usersChange >= 0 ? "+" : ""}${dashboardStats.usersChange.toFixed(1)}%`, positive: dashboardStats.usersChange >= 0 }
-            : undefined}
-        />
-        <StatCard
-          label={t("admin.activeReleases", { defaultValue: "Active Releases" })}
-          value={homepageStatsQuery.isPending || dashboardStatsQuery.isPending ? "…" : homepageStatsQuery.isError || dashboardStatsQuery.isError ? "—" : formatNumber(homepageStats?.release_count ?? dashboardStats?.activeReleases ?? 0)}
-          icon={<BranchesOutlined className="size-5" />}
-          trend={dashboardStats?.releasesChange !== undefined
-            ? { value: `${dashboardStats.releasesChange >= 0 ? "+" : ""}${dashboardStats.releasesChange.toFixed(1)}%`, positive: dashboardStats.releasesChange >= 0 }
-            : undefined}
-        />
-        <StatCard
-          label={t("admin.totalVariants", { defaultValue: "Total Variants" })}
-          value={homepageStatsQuery.isPending || dashboardStatsQuery.isPending ? "…" : homepageStatsQuery.isError || dashboardStatsQuery.isError ? "—" : formatNumber(homepageStats?.total_variants ?? dashboardStats?.totalVariants ?? 0)}
-          icon={<AimOutlined className="size-5" />}
-          trend={dashboardStats?.variantsChange !== undefined
-            ? { value: `${dashboardStats.variantsChange >= 0 ? "+" : ""}${dashboardStats.variantsChange.toFixed(1)}%`, positive: dashboardStats.variantsChange >= 0 }
-            : undefined}
-        />
-        <StatCard
-          label={t("admin.dashboard.queryP95", { defaultValue: "Query P95" })}
-          value={dashboardStatsQuery.isPending ? "…" : dashboardStatsQuery.isError ? "—" : `${dashboardStats?.queryP95Ms ?? 0} ms`}
-          icon={<ClockCircleOutlined className="size-5" />}
-          trend={dashboardStats?.queryP95Change !== undefined
-            ? { value: `${dashboardStats.queryP95Change >= 0 ? "+" : ""}${dashboardStats.queryP95Change.toFixed(1)}%`, positive: dashboardStats.queryP95Change < 0 }
-            : undefined}
-        />
+        <Suspense fallback={<ChartLoading />}><StorageGrowthChart data={seriesLoading ? [] : storageData} /></Suspense>
+
+        {/* Quick stats footer */}
+        <div className="grid gap-4 sm:grid-cols-3">
+          <StatCard
+            label={t("admin.dashboard.genes", { defaultValue: "Genes" })}
+            value={homepageStatsQuery.isPending ? "…" : homepageStatsQuery.isError ? "—" : (homepageStats?.gene_count ?? 0).toLocaleString()}
+            icon={<DeploymentUnitOutlined className="size-5" />}
+          />
+          <StatCard
+            label={t("admin.dashboard.mutantLines", { defaultValue: "Mutant Lines" })}
+            value={homepageStatsQuery.isPending ? "…" : homepageStatsQuery.isError ? "—" : (homepageStats?.mutant_line_count ?? 0).toLocaleString()}
+            icon={<ExperimentOutlined className="size-5" />}
+          />
+          <StatCard
+            label={t("admin.dashboard.seedAccessions", { defaultValue: "Seed Accessions" })}
+            value={homepageStatsQuery.isPending ? "…" : homepageStatsQuery.isError ? "—" : (homepageStats?.seed_accessions ?? 0).toLocaleString()}
+            icon={<ExperimentOutlined className="size-5" />}
+          />
+        </div>
       </div>
-
-      {/* Charts */}
-      {seriesError ? (
-        <Alert
-          type="error"
-          showIcon
-          title={t("admin.dashboard.trendUnavailable", {
-            defaultValue: "Dashboard trend data unavailable.",
-          })}
-          action={
-            <Button type="link" size="small" onClick={() => void refetchSeries()}>
-              {t("admin.dashboard.retry", { defaultValue: "Retry" })}
-            </Button>
-          }
-        />
-      ) : null}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Suspense fallback={<ChartLoading />}><ImportThroughputChart data={seriesLoading ? [] : importData} /></Suspense>
-        <Suspense fallback={<ChartLoading />}><QueryLatencyChart data={seriesLoading ? [] : latencyData} /></Suspense>
-      </div>
-
-      <Suspense fallback={<ChartLoading />}><StorageGrowthChart data={seriesLoading ? [] : storageData} /></Suspense>
-
-      {/* Quick stats footer */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <StatCard
-          label={t("admin.dashboard.genes", { defaultValue: "Genes" })}
-          value={homepageStatsQuery.isPending ? "…" : homepageStatsQuery.isError ? "—" : (homepageStats?.gene_count ?? 0).toLocaleString()}
-          icon={<DeploymentUnitOutlined className="size-5" />}
-        />
-        <StatCard
-          label={t("admin.dashboard.mutantLines", { defaultValue: "Mutant Lines" })}
-          value={homepageStatsQuery.isPending ? "…" : homepageStatsQuery.isError ? "—" : (homepageStats?.mutant_line_count ?? 0).toLocaleString()}
-          icon={<ExperimentOutlined className="size-5" />}
-        />
-        <StatCard
-          label={t("admin.dashboard.seedAccessions", { defaultValue: "Seed Accessions" })}
-          value={homepageStatsQuery.isPending ? "…" : homepageStatsQuery.isError ? "—" : (homepageStats?.seed_accessions ?? 0).toLocaleString()}
-          icon={<ExperimentOutlined className="size-5" />}
-        />
-      </div>
-    </div>
+    </PageContainer>
   );
 }
 

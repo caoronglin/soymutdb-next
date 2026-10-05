@@ -12,7 +12,7 @@ import { NAV_SECTIONS } from "../components/admin-sidebar";
 // test_ci_job_contracts (a new `t` every render re-fires every effect).
 vi.mock("react-i18next", async () => (await import("../test/mocks")).mockTranslation);
 vi.mock("../components/admin-header", () => ({
-  AdminHeader: ({ title }: { title: string }) => <header>{title}</header>,
+  AdminHeader: () => <header data-testid="shell-header" />,
 }));
 // Keep the production menuItemRender callback, with the real Router and Link.
 // Only the unrelated ProLayout presentation shell is replaced.
@@ -62,6 +62,18 @@ describe("admin root navigation rendering", () => {
       NAV_SECTIONS.flatMap((section) => section.items.map((item) => item.path)),
     );
     expect(document.querySelector('[data-header-render="false"]')).toBeTruthy();
-    expect(screen.getByRole("banner").textContent).toBe("Dashboard");
+  });
+
+  it("leaves the page name to the page, not the shell", async () => {
+    // The shell used to resolve a title from a path-keyed `PAGE_TITLES` map and
+    // render it in the top bar, duplicating the `PageContainer` heading every
+    // feature page already owns. A second authority for one page name is the
+    // divergence slice A1 removed, so the bar must stay title-free — including
+    // for the dashboard, whose "Dashboard" heading now comes from its own
+    // PageContainer. (2026-10-01 admin Pro migration §3.1)
+    await renderNavigation();
+    const header = screen.getByTestId("shell-header");
+    expect(header.textContent).toBe("");
+    expect(header.querySelector("h1")).toBeNull();
   });
 });

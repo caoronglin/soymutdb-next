@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import * as echarts from "echarts";
 import { useTranslation } from "react-i18next";
 import { cn } from "../../lib/cn";
-import { Card, Empty } from "@/lib/antd";
+import { Empty, ProCard } from "@/lib/antd";
 export interface ImportThroughputDataPoint {
   date: string;
   imported: number;
@@ -105,12 +105,12 @@ export function ImportThroughputChart({
   }, [data, t]);
 
   return (
-    <Card className={cn(className)} title={t("admin.charts.importThroughput", { defaultValue: "Import Throughput" })}>
+    <ProCard className={cn(className)} title={t("admin.charts.importThroughput", { defaultValue: "Import Throughput" })}>
         <div className="relative">
           <div ref={chartRef} className="h-64 w-full" role="img" aria-label={t("admin.charts.importThroughputAria", { defaultValue: "Import throughput chart" })} />
           {data.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("admin.charts.noData", { defaultValue: "No chart data" })} /> : null}
       </div>
-    </Card>
+    </ProCard>
   );
 }
 

@@ -1,5 +1,7 @@
+import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
+import { PageContainer } from "@/lib/antd";
 import SettingsPage from "../settings";
 import { SETTINGS_DOMAIN_META, type SettingsDomain } from "./domains";
 import { AppearanceSettingsForm } from "./appearance-form";
@@ -8,7 +10,18 @@ import { LocalizationSettingsForm } from "./localization-form";
 import { SecuritySettingsForm } from "./security-form";
 import { SettingsRevisionHistory } from "./revision-history";
 
-export function SettingsDomainPage({ domain }: { domain: SettingsDomain }) {
+interface SettingsDomainPageProps {
+  domain: SettingsDomain;
+  /**
+   * Extra sections this domain owns, rendered inside the same `PageContainer`.
+   * A domain with its own content (`integrations`) passes it here rather than
+   * rendering a second page wrapper beside this one, so the domain still has
+   * exactly one page header.
+   */
+  children?: ReactNode;
+}
+
+export function SettingsDomainPage({ domain, children }: SettingsDomainPageProps) {
   const { t } = useTranslation();
   const meta = SETTINGS_DOMAIN_META[domain];
   const title = t(`admin.settings.domains.${domain}.title`, { defaultValue: meta.title });
@@ -18,20 +31,26 @@ export function SettingsDomainPage({ domain }: { domain: SettingsDomain }) {
     label: t(`admin.settings.sections.${section.id}`, { defaultValue: section.label }),
   }));
   return (
-    <div className="space-y-4">
-      <nav aria-label={t("admin.settings.sectionsLabel", { defaultValue: "Settings sections" })} className="text-sm">
-        <Link to="/settings" className="text-primary hover:underline">
-          {t("admin.settings.overview", { defaultValue: "Settings overview" })}
-        </Link>
-      </nav>
-      <header>
-        <h1 className="text-2xl font-semibold">{title}</h1>
-        <p className="text-muted-foreground">{description}</p>
-      </header>
-      {domain === "appearance" ? <AppearanceSettingsForm /> : domain === "site" ? <SiteSettingsForm /> : domain === "localization" ? <LocalizationSettingsForm /> : domain === "security" ? <SecuritySettingsForm /> : <SettingsPage domain={domain} />}
-      {domain === "site" ? <p className="text-sm text-muted-foreground">Variant-specific site content remains available in the <Link to="/settings/legacy" className="text-primary hover:underline">complete settings form</Link> while its local editor is extracted.</p> : null}
-      {domain === "localization" ? <p className="text-sm text-muted-foreground">Site-variant content selection remains available in the <Link to="/settings/legacy" className="text-primary hover:underline">complete settings form</Link> while its editor is extracted.</p> : null}
-      <SettingsRevisionHistory sections={translatedSections} />
-    </div>
+    <PageContainer
+      title={title}
+      subTitle={description}
+      breadcrumb={{
+        items: [{
+          title: (
+            <Link to="/settings" className="text-primary hover:underline">
+              {t("admin.settings.overview", { defaultValue: "Settings overview" })}
+            </Link>
+          ),
+        }],
+      }}
+    >
+      <div className="space-y-4">
+        {domain === "appearance" ? <AppearanceSettingsForm /> : domain === "site" ? <SiteSettingsForm /> : domain === "localization" ? <LocalizationSettingsForm /> : domain === "security" ? <SecuritySettingsForm /> : <SettingsPage domain={domain} />}
+        {domain === "site" ? <p className="text-sm text-muted-foreground">Variant-specific site content remains available in the <Link to="/settings/legacy" className="text-primary hover:underline">complete settings form</Link> while its local editor is extracted.</p> : null}
+        {domain === "localization" ? <p className="text-sm text-muted-foreground">Site-variant content selection remains available in the <Link to="/settings/legacy" className="text-primary hover:underline">complete settings form</Link> while its editor is extracted.</p> : null}
+        {children}
+        <SettingsRevisionHistory sections={translatedSections} />
+      </div>
+    </PageContainer>
   );
 }

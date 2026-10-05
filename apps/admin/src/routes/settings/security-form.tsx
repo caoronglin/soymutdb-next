@@ -2,7 +2,7 @@ import { SafetyOutlined, SaveOutlined } from "@ant-design/icons";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { http } from "@soymutdb/api-client";
-import { Badge, Button, Card, Input, Typography } from "@/lib/antd";
+import { Badge, Button, Input, ProCard, Typography } from "@/lib/antd";
 
 type SecuritySettings = Record<string, unknown>;
 
@@ -41,7 +41,7 @@ export function SecuritySettingsForm() {
   });
 
   return (
-    <Card>
+    <ProCard>
       <div className="space-y-4">
         <div>
           <Typography.Title level={5} className="flex items-center gap-2 text-base">
@@ -66,6 +66,6 @@ export function SecuritySettingsForm() {
         {saveMutation.isError ? <p role="alert" className="text-destructive">Unable to save security settings.</p> : null}
         {saveMutation.isSuccess ? <p role="status" className="text-success">Security settings saved.</p> : null}
       </div>
-    </Card>
+    </ProCard>
   );
 }

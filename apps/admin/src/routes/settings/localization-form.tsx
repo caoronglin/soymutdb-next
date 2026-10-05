@@ -2,7 +2,7 @@ import { GlobalOutlined, SaveOutlined } from "@ant-design/icons";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { http } from "@soymutdb/api-client";
-import { Button, Card, Select, Typography } from "@/lib/antd";
+import { Button, ProCard, Select, Typography } from "@/lib/antd";
 
 type GeneralSettings = Record<string, unknown>;
 
@@ -27,7 +27,7 @@ export function LocalizationSettingsForm() {
   });
 
   return (
-    <Card>
+    <ProCard>
       <div className="space-y-4">
         <div>
           <Typography.Title level={5} className="flex items-center gap-2 text-base">
@@ -58,6 +58,6 @@ export function LocalizationSettingsForm() {
         {saveMutation.isError ? <p role="alert" className="text-destructive">Unable to save localization settings.</p> : null}
         {saveMutation.isSuccess ? <p role="status" className="text-success">Localization saved.</p> : null}
       </div>
-    </Card>
+    </ProCard>
   );
 }

@@ -1,13 +1,12 @@
 import { useTranslation } from "react-i18next";
-import { Alert, Card, Space, Tag, Typography } from "@/lib/antd";
+import { Alert, ProCard, Space, Tag, Typography } from "@/lib/antd";
 import { SettingsDomainPage } from "./section-page";
 
 export default function IntegrationsSettingsPage() {
   const { t } = useTranslation();
   return (
-    <div className="space-y-6">
-      <SettingsDomainPage domain="integrations" />
-      <Card title={t("admin.integrations.wecom.title", { defaultValue: "WeCom group bot" })}>
+    <SettingsDomainPage domain="integrations">
+      <ProCard title={t("admin.integrations.wecom.title", { defaultValue: "WeCom group bot" })}>
         <Space orientation="vertical" size="middle" className="w-full">
           <Typography.Paragraph type="secondary" className="mb-0">
             {t("admin.integrations.wecom.description", {
@@ -39,7 +38,7 @@ export default function IntegrationsSettingsPage() {
             })}
           </Typography.Text>
         </Space>
-      </Card>
-    </div>
+      </ProCard>
+    </SettingsDomainPage>
   );
 }

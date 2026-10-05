@@ -16,7 +16,8 @@ import {
   Switch,
   App,
   Button,
-  Card,
+  PageContainer,
+  ProCard,
   Typography,
   Tag,
   Empty,
@@ -260,98 +261,95 @@ export default function AdminPublicationsPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <Typography.Title level={2} className="!mb-1">
-            {t("admin.content.publication.title", { defaultValue: "Publications" })}
-          </Typography.Title>
-          <Typography.Text type="secondary">
-            {t("admin.content.publication.subtitle", { defaultValue: "Manage bilingual bibliography entries published to the public site." })}
-          </Typography.Text>
-        </div>
+    <PageContainer
+      title={t("admin.content.publication.title", { defaultValue: "Publications" })}
+      subTitle={t("admin.content.publication.subtitle", { defaultValue: "Manage bilingual bibliography entries published to the public site." })}
+      extra={[
         <Button
+          key="new-publication"
           type="primary"
           icon={<PlusOutlined />}
           onClick={() => { setEditing(emptyForm()); setFormOpen(true); }}
         >
           {t("admin.content.publication.new", { defaultValue: "New publication" })}
-        </Button>
-      </div>
+        </Button>,
+      ]}
+    >
+      <div className="space-y-6">
+        {listQuery.isError ? (
+          <Alert
+            type="error"
+            showIcon
+            title={t("admin.content.publication.loadError", { defaultValue: "Could not load publications" })}
+          />
+        ) : null}
 
-      {listQuery.isError ? (
-        <Alert
-          type="error"
-          showIcon
-          title={t("admin.content.publication.loadError", { defaultValue: "Could not load publications" })}
-        />
-      ) : null}
-
-      {listQuery.isPending ? (
-        <Skeleton active paragraph={{ rows: 4 }} />
-      ) : items.length === 0 ? (
-        <Empty description={t("admin.content.publication.empty", { defaultValue: "No publications yet" })} />
-      ) : (
-        <div className="grid gap-3">
-          {items.map((pub) => (
-            <Card key={pub.id} size="small">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <Typography.Text strong className="block">
-                    {pub.title_zh ? `${pub.title} / ${pub.title_zh}` : pub.title}
-                  </Typography.Text>
-                  <Typography.Text type="secondary" className="block text-xs">
-                    {pub.authors_zh ? `${pub.authors} / ${pub.authors_zh}` : pub.authors}
-                  </Typography.Text>
-                  <div className="mt-1 flex flex-wrap gap-1.5 text-xs">
-                    {pub.journal ? <Tag>{pub.journal}</Tag> : null}
-                    {pub.year ? <Tag color="blue">{pub.year}</Tag> : null}
-                    {pub.doi ? <Tag color="cyan">{pub.doi}</Tag> : null}
-                    {pub.is_featured ? <Tag color="gold">{t("admin.content.publication.featured", { defaultValue: "Featured" })}</Tag> : null}
+        {listQuery.isPending ? (
+          <Skeleton active paragraph={{ rows: 4 }} />
+        ) : items.length === 0 ? (
+          <Empty description={t("admin.content.publication.empty", { defaultValue: "No publications yet" })} />
+        ) : (
+          <div className="grid gap-3">
+            {items.map((pub) => (
+              <ProCard key={pub.id} size="small">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <Typography.Text strong className="block">
+                      {pub.title_zh ? `${pub.title} / ${pub.title_zh}` : pub.title}
+                    </Typography.Text>
+                    <Typography.Text type="secondary" className="block text-xs">
+                      {pub.authors_zh ? `${pub.authors} / ${pub.authors_zh}` : pub.authors}
+                    </Typography.Text>
+                    <div className="mt-1 flex flex-wrap gap-1.5 text-xs">
+                      {pub.journal ? <Tag>{pub.journal}</Tag> : null}
+                      {pub.year ? <Tag color="blue">{pub.year}</Tag> : null}
+                      {pub.doi ? <Tag color="cyan">{pub.doi}</Tag> : null}
+                      {pub.is_featured ? <Tag color="gold">{t("admin.content.publication.featured", { defaultValue: "Featured" })}</Tag> : null}
+                    </div>
+                  </div>
+                  <div className="flex gap-1">
+                    <Button
+                      type="text"
+                      size="small"
+                      icon={<EditOutlined />}
+                      onClick={() => { setEditing(fromPublication(pub)); setFormOpen(true); }}
+                      aria-label={t("admin.content.edit", { defaultValue: "Edit" })}
+                    />
+                    <Button
+                      type="text"
+                      size="small"
+                      danger
+                      icon={<DeleteOutlined />}
+                      onClick={() => setDeleteTarget({ id: pub.id, title: pub.title })}
+                      aria-label={t("admin.content.delete", { defaultValue: "Delete" })}
+                    />
                   </div>
                 </div>
-                <div className="flex gap-1">
-                  <Button
-                    type="text"
-                    size="small"
-                    icon={<EditOutlined />}
-                    onClick={() => { setEditing(fromPublication(pub)); setFormOpen(true); }}
-                    aria-label={t("admin.content.edit", { defaultValue: "Edit" })}
-                  />
-                  <Button
-                    type="text"
-                    size="small"
-                    danger
-                    icon={<DeleteOutlined />}
-                    onClick={() => setDeleteTarget({ id: pub.id, title: pub.title })}
-                    aria-label={t("admin.content.delete", { defaultValue: "Delete" })}
-                  />
-                </div>
-              </div>
-            </Card>
-          ))}
-        </div>
-      )}
+              </ProCard>
+            ))}
+          </div>
+        )}
 
-      <PublicationFormDialog
-        key={editing.id ?? "new"}
-        open={formOpen}
-        onClose={() => { setFormOpen(false); }}
-        initial={editing}
-        onSubmit={handleSubmit}
-        loading={createMutation.isPending || updateMutation.isPending}
-      />
+        <PublicationFormDialog
+          key={editing.id ?? "new"}
+          open={formOpen}
+          onClose={() => { setFormOpen(false); }}
+          initial={editing}
+          onSubmit={handleSubmit}
+          loading={createMutation.isPending || updateMutation.isPending}
+        />
 
-      <ConfirmDialog
-        open={Boolean(deleteTarget)}
-        onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
-        title={t("admin.content.publication.deleteTitle", { defaultValue: "Delete publication" })}
-        description={t("admin.content.publication.deleteConfirm", { defaultValue: "Delete \"{{title}}\"? This cannot be undone.", title: deleteTarget?.title ?? "" })}
-        confirmLabel={t("admin.content.delete", { defaultValue: "Delete" })}
-        severity="destructive"
-        loading={deleteMutation.isPending}
-        onConfirm={() => { if (deleteTarget) deleteMutation.mutate(deleteTarget.id); }}
-      />
-    </div>
+        <ConfirmDialog
+          open={Boolean(deleteTarget)}
+          onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
+          title={t("admin.content.publication.deleteTitle", { defaultValue: "Delete publication" })}
+          description={t("admin.content.publication.deleteConfirm", { defaultValue: "Delete \"{{title}}\"? This cannot be undone.", title: deleteTarget?.title ?? "" })}
+          confirmLabel={t("admin.content.delete", { defaultValue: "Delete" })}
+          severity="destructive"
+          loading={deleteMutation.isPending}
+          onConfirm={() => { if (deleteTarget) deleteMutation.mutate(deleteTarget.id); }}
+        />
+      </div>
+    </PageContainer>
   );
 }

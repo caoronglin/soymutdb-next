@@ -13,17 +13,18 @@ import * as React from "react";
 import {
   Alert,
   Button,
-  Card,
   Input,
   InputNumber,
   PageContainer,
+  ProCard,
+  ProTable,
   Space,
   Switch,
-  Table,
   Tag,
   Typography,
-  type TableColumnsType,
+  type ProColumns,
 } from "@/lib/antd";
+import { PRO_LIST_SHELL } from "../components/pro-table-shell";
 import {
   searchTestDataPreviewMutationSites,
   updateTestDataPreviewMutationSite,
@@ -93,20 +94,31 @@ export default function PreviewTestDataPage() {
     }
   };
 
-  const columns: TableColumnsType<TestDataPreviewMutationSite> = [
+  /**
+   * `editable: false` is the contract guard for this page (design §3.4).
+   *
+   * The single field an operator may write here is `available`; every other
+   * column is owned by the uploaded source table and is rewritten on the next
+   * import. ProTable's cell editor is opt-in per column and is the one default
+   * that would silently widen that contract, so no column opts in — the only
+   * write path stays the `Switch` in the `available` column's `render`.
+   */
+  const columns: ProColumns<TestDataPreviewMutationSite>[] = [
     {
       title: "突变体系（株系母+位置）",
       dataIndex: "source_site_key",
       key: "source_site_key",
+      editable: false,
       render: (_, row) => <span className="font-mono text-xs">{row.source_site_key}</span>,
     },
-    { title: "染色体号", dataIndex: "chromosome", key: "chromosome", width: 100 },
+    { title: "染色体号", dataIndex: "chromosome", key: "chromosome", width: 100, editable: false },
     {
       title: "位点",
       dataIndex: "position",
       key: "position",
       width: 120,
       align: "right",
+      editable: false,
       render: (_, row) => <span className="font-mono text-xs">{row.position.toLocaleString()}</span>,
     },
     {
@@ -114,6 +126,7 @@ export default function PreviewTestDataPage() {
       dataIndex: "confidence",
       key: "confidence",
       width: 90,
+      editable: false,
       render: (_, row) => (
         <Tag color={row.confidence === "H" ? "green" : "default"}>
           {row.confidence === "H" ? "高" : "低"}
@@ -124,12 +137,14 @@ export default function PreviewTestDataPage() {
       title: "基因号",
       dataIndex: "gene_id",
       key: "gene_id",
+      editable: false,
       render: (_, row) => <span className="font-mono text-xs">{row.gene_id}</span>,
     },
     {
       title: "特征",
       dataIndex: "feature",
       key: "feature",
+      editable: false,
       render: (_, row) => <span className="font-mono text-xs">{row.feature}</span>,
     },
     {
@@ -137,6 +152,7 @@ export default function PreviewTestDataPage() {
       dataIndex: "available",
       key: "available",
       width: 130,
+      editable: false,
       render: (_, row) => (
         <Space size={6}>
           <Switch
@@ -158,6 +174,7 @@ export default function PreviewTestDataPage() {
       ),
       dataIndex: field,
       key: field,
+      editable: false as const,
       render: (_: unknown, row: TestDataPreviewMutationSite) =>
         row[field] ? (
           <span className="font-mono text-xs">{row[field]}</span>
@@ -172,7 +189,7 @@ export default function PreviewTestDataPage() {
       title="测试数据预览"
       subTitle="本机上未发布的测试数据；「可获得」可在此修改，重新导入时会保留。"
     >
-      <Card>
+      <ProCard>
         <Space wrap align="center" size={12}>
           <span className="text-sm text-muted-foreground">染色体号</span>
           <Input
@@ -201,19 +218,20 @@ export default function PreviewTestDataPage() {
             查询
           </Button>
         </Space>
-      </Card>
+      </ProCard>
 
       {error ? (
         <Alert className="mt-4" type="error" showIcon title="加载失败" description={error} />
       ) : null}
 
       {applied ? (
-        <Card className="mt-4">
+        <ProCard className="mt-4">
           <Typography.Text type="secondary" className="text-sm">
             {applied.chromosome}:{applied.start.toLocaleString()}-
             {applied.end.toLocaleString()} · 共 {rows.length} 条
           </Typography.Text>
-          <Table<TestDataPreviewMutationSite>
+          <ProTable<TestDataPreviewMutationSite>
+            {...PRO_LIST_SHELL}
             className="mt-3"
             size="small"
             bordered
@@ -224,7 +242,7 @@ export default function PreviewTestDataPage() {
             scroll={{ x: "max-content" }}
             pagination={{ pageSize: 20, showSizeChanger: false }}
           />
-        </Card>
+        </ProCard>
       ) : null}
     </PageContainer>
   );
