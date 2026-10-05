@@ -6,9 +6,9 @@ The table name is hardcoded to ``variant_facts``.
 """
 
 from __future__ import annotations
-import math
 
 import functools
+import math
 import time
 from collections.abc import Awaitable, Callable
 from typing import Any, cast

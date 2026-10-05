@@ -64,7 +64,12 @@ class AnalysisJob(Base, TimestampMixin):
         nullable=True,
     )
     analysis_type: Mapped[str] = mapped_column(
-        Enum(AnalysisType, name="analysis_type_enum", create_constraint=True, values_callable=enum_values),
+        Enum(
+            AnalysisType,
+            name="analysis_type_enum",
+            create_constraint=True,
+            values_callable=enum_values,
+        ),
         nullable=False,
     )
     #: MinIO object keys of the uploaded inputs (always under ``analyses/``).
@@ -72,7 +77,12 @@ class AnalysisJob(Base, TimestampMixin):
     #: Whitelisted pipeline parameters (validated at the API boundary).
     params: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     status: Mapped[str] = mapped_column(
-        Enum(AnalysisJobStatus, name="analysis_job_status_enum", create_constraint=True, values_callable=enum_values),
+        Enum(
+            AnalysisJobStatus,
+            name="analysis_job_status_enum",
+            create_constraint=True,
+            values_callable=enum_values,
+        ),
         default=AnalysisJobStatus.QUEUED,
         server_default="queued",
         nullable=False,

@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import enum
 import uuid
 from datetime import datetime
-from typing import Optional
+from enum import StrEnum
 
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
@@ -14,7 +13,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from .base import Base, TimestampMixin
 
 
-class MediaAssetStatus(str, enum.Enum):
+class MediaAssetStatus(StrEnum):
     """Lifecycle state for an uploaded object."""
 
     PENDING = "pending"
@@ -47,11 +46,11 @@ class MediaAsset(Base, TimestampMixin):
     content_type: Mapped[str] = mapped_column(String(128), nullable=False)
     size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
     checksum_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
-    width: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    height: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    alt_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    caption: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    credit: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    width: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    height: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    alt_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    caption: Mapped[str | None] = mapped_column(Text, nullable=True)
+    credit: Mapped[str | None] = mapped_column(String(512), nullable=True)
     is_decorative: Mapped[bool] = mapped_column(
         default=False, server_default="false", nullable=False
     )
@@ -63,8 +62,8 @@ class MediaAsset(Base, TimestampMixin):
         ForeignKey("users.id", ondelete="RESTRICT"),
         nullable=False,
     )
-    verified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         Index("ix_media_assets_status_purpose", "status", "purpose"),

@@ -7,9 +7,8 @@ callable, NOT ``Depends(lambda: ...)``.
 from __future__ import annotations
 
 import uuid
-from typing import AsyncIterator
 
-from fastapi import Depends, Header, status
+from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...core.database import get_db
 from ...core.exceptions import AuthenticationError, AuthorizationError
 from ...core.security import RoleName, decode_token, has_role
-from ...models.auth import Role, User
+from ...models.auth import User
 
 bearer_scheme = HTTPBearer(auto_error=False)
 

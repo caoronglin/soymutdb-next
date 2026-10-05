@@ -1,4 +1,5 @@
-"""Admin endpoints: audit-log inspection, export, CDN config, and timeout config (administrator-only)."""
+"""Admin endpoints: audit-log inspection, export, CDN config, and timeout config \
+(administrator-only)."""
 
 from __future__ import annotations
 
@@ -7,10 +8,10 @@ import io
 import json
 import uuid
 from collections.abc import AsyncIterator
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import String, and_, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,7 +26,6 @@ from ...models.auth import AuditLog, User
 from ...models.content import Release, ReleaseStatus
 from ...models.data_publishing import ActiveRelease, DataSet, ReleaseDataSet
 from ...models.import_task import ImportTask, ImportTaskStatus
-from ...models.system_settings import SystemSetting
 from ...models.variant import VariantSummary
 from ...schemas.analytics import (
     AdminDashboardSeries,
@@ -59,7 +59,9 @@ def _require_admin(current_user: User) -> None:
     require_admin_roles(get_user_roles(current_user))
 
 
-def _release_to_dict(release: Release, datasets: list[DataSet], active_id: int | None) -> dict[str, Any]:
+def _release_to_dict(
+    release: Release, datasets: list[DataSet], active_id: int | None
+) -> dict[str, Any]:
     return {
         "id": release.id,
         "version": release.version,
@@ -79,7 +81,9 @@ def _release_to_dict(release: Release, datasets: list[DataSet], active_id: int |
     }
 
 
-async def _get_release(db: AsyncSession, release_id: int) -> tuple[Release, list[DataSet], int | None]:
+async def _get_release(
+    db: AsyncSession, release_id: int
+) -> tuple[Release, list[DataSet], int | None]:
     release = await db.scalar(select(Release).where(Release.id == release_id))
     if release is None:
         raise NotFoundError(f"Release {release_id} not found")
@@ -110,10 +114,14 @@ async def create_release(
     _require_admin(current_user)
     if await db.scalar(select(Release).where(Release.version == body.version)):
         raise ConflictError("Release version already exists")
-    datasets = list((await db.execute(select(DataSet).where(DataSet.id.in_(body.data_set_ids)))).scalars())
+    datasets = list(
+        (await db.execute(select(DataSet).where(DataSet.id.in_(body.data_set_ids)))).scalars()
+    )
     if len(datasets) != len(set(body.data_set_ids)):
         raise NotFoundError("One or more data sets were not found")
-    release = Release(version=body.version, name=body.name, description=body.description, assembly=body.assembly)
+    release = Release(
+        version=body.version, name=body.name, description=body.description, assembly=body.assembly
+    )
     db.add(release)
     await db.flush()
     for dataset in datasets:
@@ -129,7 +137,11 @@ async def create_release(
     )
     await db.commit()
     await db.refresh(release)
-    return _release_to_dict(release, datasets, await db.scalar(select(ActiveRelease.release_id).where(ActiveRelease.id == 1)))
+    return _release_to_dict(
+        release,
+        datasets,
+        await db.scalar(select(ActiveRelease.release_id).where(ActiveRelease.id == 1)),
+    )
 
 
 @router.post("/releases/{release_id}/validate")
@@ -160,7 +172,13 @@ async def ready_admin_release(
 ) -> dict[str, Any]:
     _require_admin(current_user)
     try:
-        await mark_release_ready(db, release_id=release_id, actor_id=current_user.id, manifest=body.manifest, readiness=body.readiness)
+        await mark_release_ready(
+            db,
+            release_id=release_id,
+            actor_id=current_user.id,
+            manifest=body.manifest,
+            readiness=body.readiness,
+        )
         await db.commit()
     except ReleaseNotReady as exc:
         await db.rollback()
@@ -180,7 +198,13 @@ async def publish_admin_release(
 ) -> dict[str, Any]:
     _require_admin(current_user)
     try:
-        await publish_release(db, release_id=release_id, actor_id=current_user.id, reason=body.reason, request_id=getattr(request.state, "request_id", None))
+        await publish_release(
+            db,
+            release_id=release_id,
+            actor_id=current_user.id,
+            reason=body.reason,
+            request_id=getattr(request.state, "request_id", None),
+        )
     except ReleaseNotReady as exc:
         await db.rollback()
         raise _release_failure(exc) from exc
@@ -199,7 +223,13 @@ async def rollback_admin_release(
 ) -> dict[str, Any]:
     _require_admin(current_user)
     try:
-        await rollback_release(db, release_id=release_id, actor_id=current_user.id, reason=body.reason, request_id=getattr(request.state, "request_id", None))
+        await rollback_release(
+            db,
+            release_id=release_id,
+            actor_id=current_user.id,
+            reason=body.reason,
+            request_id=getattr(request.state, "request_id", None),
+        )
     except ReleaseNotReady as exc:
         await db.rollback()
         raise _release_failure(exc) from exc
@@ -331,9 +361,9 @@ async def audit_log_stats(
     _require_admin(current_user)
 
     if start_date is None:
-        start_date = datetime.now(timezone.utc) - timedelta(days=30)
+        start_date = datetime.now(UTC) - timedelta(days=30)
     if end_date is None:
-        end_date = datetime.now(timezone.utc)
+        end_date = datetime.now(UTC)
 
     where_clause = and_(
         AuditLog.timestamp >= start_date,
@@ -568,7 +598,8 @@ async def export_audit_logs_excel(
         logs = result.scalars().all()
         if len(logs) > limit:
             raise ValidationError(
-                "XLSX export exceeds the requested limit; narrow filters or use the streaming CSV export."
+                "XLSX export exceeds the requested limit; narrow filters or use the "
+                "streaming CSV export."
             )
 
         wb = openpyxl.Workbook()
@@ -578,7 +609,9 @@ async def export_audit_logs_excel(
         # Header styling.
         header_font = Font(bold=True, color="FFFFFF")
         header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
-        headers = ["Timestamp", "Actor", "Action", "Resource", "Resource ID", "IP Address", "Details"]
+        headers = [
+            "Timestamp", "Actor", "Action", "Resource", "Resource ID", "IP Address", "Details"
+        ]
 
         for col_idx, header in enumerate(headers, start=1):
             cell = ws.cell(row=1, column=col_idx, value=header)
@@ -592,7 +625,11 @@ async def export_audit_logs_excel(
             ws.cell(row=row_idx, column=4, value=log.resource_type)
             ws.cell(row=row_idx, column=5, value=log.resource_id or "")
             ws.cell(row=row_idx, column=6, value=log.ip_address or "")
-            ws.cell(row=row_idx, column=7, value=json.dumps(log.new_value) if log.new_value is not None else "")
+            ws.cell(
+                row=row_idx,
+                column=7,
+                value=json.dumps(log.new_value) if log.new_value is not None else "",
+            )
 
         # Auto-adjust column widths.
         for col_idx, header in enumerate(headers, start=1):
@@ -679,7 +716,7 @@ async def admin_dashboard_stats(
     without a temporal source report 0.0.
     """
     _require_admin(current_user)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     since_30 = now - timedelta(days=30)
     since_60 = now - timedelta(days=60)
 
@@ -775,7 +812,7 @@ async def admin_dashboard_series(
     - ``storage_growth``: no reliable storage source exists yet — empty.
     """
     _require_admin(current_user)
-    since = datetime.now(timezone.utc) - timedelta(days=days)
+    since = datetime.now(UTC) - timedelta(days=days)
 
     import_stmt = (
         select(

@@ -6,8 +6,8 @@ PageLayouts define ordered collections of widgets for named pages.
 
 from __future__ import annotations
 
-import enum
-from typing import Any, Optional
+from enum import StrEnum
+from typing import Any
 
 from sqlalchemy import Enum, Integer, String, Text, text
 from sqlalchemy.dialects.postgresql import JSONB
@@ -16,7 +16,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from ..models.base import Base, TimestampMixin, enum_values
 
 
-class WidgetCategory(str, enum.Enum):
+class WidgetCategory(StrEnum):
     """High-level categorisation for widget admin UI."""
 
     HERO = "hero"
@@ -31,7 +31,7 @@ class WidgetCategory(str, enum.Enum):
     CUSTOM = "custom"
 
 
-class WidgetPermission(str, enum.Enum):
+class WidgetPermission(StrEnum):
     """Access level required to view a widget."""
 
     PUBLIC = "public"
@@ -56,15 +56,20 @@ class Widget(Base, TimestampMixin):
         String(128), unique=True, nullable=False, index=True
     )
     display_name: Mapped[str] = mapped_column(String(256), nullable=False)
-    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     category: Mapped[str] = mapped_column(
-        Enum(WidgetCategory, name="widget_category_enum", create_constraint=True, values_callable=enum_values),
+        Enum(
+            WidgetCategory,
+            name="widget_category_enum",
+            create_constraint=True,
+            values_callable=enum_values,
+        ),
         default=WidgetCategory.CUSTOM,
         server_default=WidgetCategory.CUSTOM.value,
         nullable=False,
     )
     template_path: Mapped[str] = mapped_column(String(512), nullable=False)
-    data_source: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    data_source: Mapped[str | None] = mapped_column(String(256), nullable=True)
     params_schema: Mapped[dict[str, Any]] = mapped_column(
         JSONB,
         default=dict,
@@ -81,7 +86,12 @@ class Widget(Base, TimestampMixin):
         nullable=False,
     )
     permissions: Mapped[str] = mapped_column(
-        Enum(WidgetPermission, name="widget_permission_enum", create_constraint=True, values_callable=enum_values),
+        Enum(
+            WidgetPermission,
+            name="widget_permission_enum",
+            create_constraint=True,
+            values_callable=enum_values,
+        ),
         default=WidgetPermission.PUBLIC,
         server_default=WidgetPermission.PUBLIC.value,
         nullable=False,
@@ -108,7 +118,7 @@ class PageLayout(Base, TimestampMixin):
     page_name: Mapped[str] = mapped_column(
         String(128), unique=True, nullable=False, index=True
     )
-    display_name: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    display_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
     widget_order: Mapped[list[str]] = mapped_column(
         JSONB,
         default=list,

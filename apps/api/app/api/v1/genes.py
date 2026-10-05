@@ -321,7 +321,9 @@ def _build_genome_view_tracks(
                         start=site.position,
                         end=site.position + 1,
                         kind="mutation",
-                        label=f"{site.mutant_line_name} · {'高' if site.confidence == 'H' else '低'}",
+                        label=(
+                            f"{site.mutant_line_name} · {'高' if site.confidence == 'H' else '低'}"
+                        ),
                     )
                     for site in sites
                 ),

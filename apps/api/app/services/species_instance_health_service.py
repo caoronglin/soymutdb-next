@@ -88,7 +88,9 @@ async def _probe_registered_peer(instance: SpeciesInstance) -> tuple[str, str | 
     timeout = httpx.Timeout(HEALTH_TIMEOUT_SECONDS, connect=1.0)
     try:
         async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
-            async with client.stream("GET", target_url, headers={"Accept": "application/json"}) as response:
+            async with client.stream(
+                "GET", target_url, headers={"Accept": "application/json"}
+            ) as response:
                 if response.is_redirect:
                     return "unhealthy", "redirect_rejected", True
                 if response.status_code != 200:

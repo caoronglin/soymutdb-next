@@ -46,7 +46,8 @@ settings = get_settings()
 # ---------------------------------------------------------------------------
 
 OPENAPI_DESCRIPTION = """
-SoyMutDB API — high-performance multi-species genomic variant platform (soybean currently the default species).
+SoyMutDB API — high-performance multi-species genomic variant platform
+(soybean currently the default species).
 
 ## Error contract
 
@@ -79,7 +80,10 @@ OPENAPI_TAGS = [
     {"name": "health", "description": "Liveness / readiness probes."},
     {"name": "auth", "description": "Registration, login, token refresh, logout, profile."},
     {"name": "stats", "description": "Public statistics and dashboard aggregates."},
-    {"name": "admin", "description": "Administrator-only operations (audit logs, config, dashboard)."},
+    {
+        "name": "admin",
+        "description": "Administrator-only operations (audit logs, config, dashboard).",
+    },
     {"name": "analytics", "description": "Behavioural analytics tracking and summaries."},
     {"name": "widgets", "description": "Dashboard widgets and layouts."},
 ]
@@ -181,7 +185,10 @@ def _build_openapi_schema(app: FastAPI) -> dict[str, Any]:
                 responses.setdefault(
                     "429",
                     {
-                        "description": "Rate limit exceeded; retry after the indicated number of seconds.",
+                        "description": (
+                            "Rate limit exceeded; retry after the indicated number of "
+                            "seconds."
+                        ),
                         "headers": {
                             "Retry-After": {
                                 "description": "Seconds until this login attempt may be retried.",

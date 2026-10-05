@@ -4,8 +4,8 @@ Provides DB-backed widget definitions, page layouts, Redis-cached HTML
 rendering with bleach sanitization, and public/admin FastAPI endpoints.
 """
 
-from .engine import WidgetEngine, render_error_fragment, sanitize_html
 from .cache import WidgetCache
+from .engine import WidgetEngine, render_error_fragment, sanitize_html
 from .models import PageLayout, Widget, WidgetCategory, WidgetPermission
 from .schemas import (
     LayoutResponse,

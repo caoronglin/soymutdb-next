@@ -13,8 +13,10 @@ from ...models.media import MediaAssetStatus
 from ...schemas.media import (
     MediaAssetListResponse,
     MediaAssetResponse,
-    MediaAssetStatus as MediaAssetStatusSchema,
     MediaAssetUpdateRequest,
+)
+from ...schemas.media import (
+    MediaAssetStatus as MediaAssetStatusSchema,
 )
 from ...services.media_service import (
     archive_media_asset,

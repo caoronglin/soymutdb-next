@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import TYPE_CHECKING
 
 from sqlalchemy import BigInteger, DateTime, ForeignKey, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
+
+if TYPE_CHECKING:
+    # SQLAlchemy resolves the forward reference below through the package
+    # namespace at mapper-configuration time, so the import is not needed at
+    # runtime. Naming it here keeps the annotation resolvable for ruff and mypy.
+    from .gene import Gene
 
 
 class GeneDataCache(Base):
@@ -29,7 +35,7 @@ class GeneDataCache(Base):
         nullable=False,
     )
 
-    gene: Mapped["Gene"] = relationship(back_populates="data_cache", lazy="joined")  # type: ignore  # noqa: F811
+    gene: Mapped[Gene] = relationship(back_populates="data_cache", lazy="joined")  # type: ignore  # noqa: F811
 
     def __repr__(self) -> str:
         return f"<GeneDataCache gene={self.gene_id!r}>"

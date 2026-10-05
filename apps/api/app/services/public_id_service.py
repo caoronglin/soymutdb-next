@@ -14,8 +14,8 @@ Issuance is the only sanctioned way to assign ``public_id`` values. Rules:
 
 from __future__ import annotations
 
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.public_ids import generate_public_id
 from ..models.variant import MutantLine

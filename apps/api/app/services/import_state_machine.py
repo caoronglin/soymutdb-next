@@ -15,7 +15,9 @@ IMPORT_TRANSITIONS: dict[ImportStatus, frozenset[ImportStatus]] = {
     ImportStatus.INGESTING: frozenset({ImportStatus.READY, ImportStatus.FAILED}),
     ImportStatus.READY: frozenset({ImportStatus.PUBLISHED, ImportStatus.FAILED}),
     ImportStatus.PUBLISHED: frozenset({ImportStatus.ROLLED_BACK}),
-    ImportStatus.FAILED: frozenset({ImportStatus.UPLOADING, ImportStatus.VALIDATING, ImportStatus.INGESTING}),
+    ImportStatus.FAILED: frozenset(
+        {ImportStatus.UPLOADING, ImportStatus.VALIDATING, ImportStatus.INGESTING}
+    ),
     ImportStatus.ROLLED_BACK: frozenset(),
 }
 
@@ -33,7 +35,11 @@ def assert_transition(current: ImportStatus, target: ImportStatus) -> None:
 
 async def transition_import(db: AsyncSession, *, import_task_id: int, target: ImportStatus,
                             actor_id, evidence: dict | None = None) -> ImportTask:
-    task = (await db.execute(select(ImportTask).where(ImportTask.id == import_task_id).with_for_update())).scalar_one()
+    task = (
+        await db.execute(
+            select(ImportTask).where(ImportTask.id == import_task_id).with_for_update()
+        )
+    ).scalar_one()
     current = ImportStatus(task.status)
     assert_transition(current, target)
     task.status = target.value

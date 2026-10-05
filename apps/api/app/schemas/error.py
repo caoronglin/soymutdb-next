@@ -40,7 +40,9 @@ class ErrorResponse(BaseModel):
     """Unified error envelope returned by every API error."""
 
     error: ErrorDetail
-    request_id: str = Field(..., description="Correlation id (also echoed in the ``X-Request-ID`` header).")
+    request_id: str = Field(
+        ..., description="Correlation id (also echoed in the ``X-Request-ID`` header)."
+    )
     status_code: int = Field(..., description="HTTP status code.")
 
 

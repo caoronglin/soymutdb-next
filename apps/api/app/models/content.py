@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import enum
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING, List, Optional
+from enum import StrEnum
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     BigInteger,
@@ -31,7 +31,7 @@ if TYPE_CHECKING:
     from .variant import MutantLine, VariantSummary
 
 
-class ReleaseStatus(str, enum.Enum):
+class ReleaseStatus(StrEnum):
     DRAFT = "draft"
     VALIDATED = "validated"
     READY = "ready"
@@ -48,8 +48,8 @@ class Release(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     version: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(256), nullable=False)
-    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    assembly_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    assembly_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     variant_count: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
     gene_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     mutant_line_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
@@ -64,24 +64,24 @@ class Release(Base, TimestampMixin):
         server_default="draft",
         nullable=False,
     )
-    published_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    published_by: Mapped[Optional[uuid.UUID]] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
-    approved_by: Mapped[Optional[uuid.UUID]] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
-    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    assembly: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    published_by: Mapped[uuid.UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
+    approved_by: Mapped[uuid.UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    assembly: Mapped[str | None] = mapped_column(String(128), nullable=True)
     manifest: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    active_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    rolled_back_at: Mapped[Optional[datetime]] = mapped_column(
+    active_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    rolled_back_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    assemblies: Mapped[List["Assembly"]] = relationship(back_populates="release", lazy="noload")
-    variant_summaries: Mapped[List["VariantSummary"]] = relationship(
+    assemblies: Mapped[list[Assembly]] = relationship(back_populates="release", lazy="noload")
+    variant_summaries: Mapped[list[VariantSummary]] = relationship(
         back_populates="release", lazy="noload"
     )
-    mutant_lines: Mapped[List["MutantLine"]] = relationship(back_populates="release", lazy="noload")
-    download_files: Mapped[List["DownloadFile"]] = relationship(
+    mutant_lines: Mapped[list[MutantLine]] = relationship(back_populates="release", lazy="noload")
+    download_files: Mapped[list[DownloadFile]] = relationship(
         back_populates="release", lazy="noload"
     )
 
@@ -91,7 +91,7 @@ class Release(Base, TimestampMixin):
         return f"<Release id={self.id} version={self.version!r} status={self.status}>"
 
 
-class NewsStatus(str, enum.Enum):
+class NewsStatus(StrEnum):
     DRAFT = "draft"
     PUBLISHED = "published"
     ARCHIVED = "archived"
@@ -110,57 +110,57 @@ class NewsArticle(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     title_en: Mapped[str] = mapped_column(String(512), nullable=False)
-    title_zh: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    title_zh: Mapped[str | None] = mapped_column(String(512), nullable=True)
     content_en: Mapped[str] = mapped_column(Text, nullable=False)
-    content_zh: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    content_zh: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Provenance is recorded only for a controlled external-source preview that
     # an editor explicitly applies and later saves as a normal CMS draft.
-    source_platform: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
-    source_url: Mapped[Optional[str]] = mapped_column(String(2048), nullable=True)
-    source_content_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    source_published_at: Mapped[Optional[datetime]] = mapped_column(
+    source_platform: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    source_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    source_content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    source_published_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    source_synced_at: Mapped[Optional[datetime]] = mapped_column(
+    source_synced_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     slug: Mapped[str] = mapped_column(String(256), unique=True, nullable=False, index=True)
-    category: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    category: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # cover_url remains for backwards compatibility; new editors should bind
     # cover_asset_id so the media library is the canonical source.
-    cover_asset_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+    cover_asset_id: Mapped[uuid.UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("media_assets.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
-    cover_url: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
-    cover_alt_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    cover_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    cover_alt_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     featured_sort: Mapped[int] = mapped_column(
         Integer, default=0, server_default="0", nullable=False
     )
-    carousel_group: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    carousel_group: Mapped[str | None] = mapped_column(String(64), nullable=True)
     carousel_sort: Mapped[int] = mapped_column(
         Integer, default=0, server_default="0", nullable=False
     )
     status: Mapped[str] = mapped_column(
         String(16), default="draft", server_default="draft", nullable=False
     )
-    visible_from: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    visible_to: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    visible_from: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    visible_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     is_published: Mapped[bool] = mapped_column(
         default=False, server_default="false", nullable=False
     )
-    published_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    author_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    author_id: Mapped[uuid.UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
     # Deleted records remain addressable only by the lifecycle restore path.
     # Keeping their slug reserves the canonical public URL and audit history.
-    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    deleted_by: Mapped[Optional[uuid.UUID]] = mapped_column(
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_by: Mapped[uuid.UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
@@ -172,7 +172,7 @@ class NewsArticle(Base, TimestampMixin):
         Integer, default=0, server_default="0", nullable=False
     )
 
-    author: Mapped[Optional["User"]] = relationship(
+    author: Mapped[User | None] = relationship(
         back_populates="articles", foreign_keys=[author_id], lazy="joined"
     )
 
@@ -190,7 +190,7 @@ class NewsArticle(Base, TimestampMixin):
         return f"<NewsArticle id={self.id} slug={self.slug!r} status={self.status}>"
 
 
-class NewsScheduleState(str, enum.Enum):
+class NewsScheduleState(StrEnum):
     PENDING = "pending"
     LEASED = "leased"
     COMPLETED = "completed"
@@ -208,7 +208,7 @@ class NewsArticleRevision(Base, TimestampMixin):
     )
     version: Mapped[int] = mapped_column(Integer, nullable=False)
     snapshot: Mapped[dict] = mapped_column(JSONB, nullable=False)
-    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
 
@@ -235,8 +235,8 @@ class NewsPublicationSchedule(Base, TimestampMixin):
         server_default="pending",
         nullable=False,
     )
-    leased_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    lease_expires_at: Mapped[Optional[datetime]] = mapped_column(
+    leased_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
 
@@ -257,15 +257,15 @@ class Publication(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     title: Mapped[str] = mapped_column(String(1024), nullable=False)
-    title_zh: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    title_zh: Mapped[str | None] = mapped_column(Text, nullable=True)
     authors: Mapped[str] = mapped_column(Text, nullable=False)
-    authors_zh: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    journal: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
-    year: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    doi: Mapped[Optional[str]] = mapped_column(String(256), nullable=True, unique=True)
-    pmid: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, unique=True)
-    abstract: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    abstract_zh: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    authors_zh: Mapped[str | None] = mapped_column(Text, nullable=True)
+    journal: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    doi: Mapped[str | None] = mapped_column(String(256), nullable=True, unique=True)
+    pmid: Mapped[str | None] = mapped_column(String(32), nullable=True, unique=True)
+    abstract: Mapped[str | None] = mapped_column(Text, nullable=True)
+    abstract_zh: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_featured: Mapped[bool] = mapped_column(default=False, server_default="false", nullable=False)
 
     __table_args__ = (Index("ix_pub_year", "year"),)
@@ -280,24 +280,24 @@ class StaticPage(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     slug: Mapped[str] = mapped_column(String(256), unique=True, nullable=False, index=True)
     title_en: Mapped[str] = mapped_column(String(512), nullable=False)
-    title_zh: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    title_zh: Mapped[str | None] = mapped_column(String(512), nullable=True)
     content_en: Mapped[str] = mapped_column(Text, nullable=False)
-    content_zh: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    content_zh: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(
         String(32), default="draft", server_default="draft", nullable=False
     )
-    author_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+    author_id: Mapped[uuid.UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
-    summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    category: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    category: Mapped[str | None] = mapped_column(String(64), nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
-    published_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    author: Mapped[Optional["User"]] = relationship(lazy="joined")
-    versions: Mapped[List["ContentVersion"]] = relationship(
+    author: Mapped[User | None] = relationship(lazy="joined")
+    versions: Mapped[list[ContentVersion]] = relationship(
         back_populates="page",
         lazy="noload",
         order_by="ContentVersion.version.desc()",
@@ -323,14 +323,14 @@ class ContentVersion(Base, TimestampMixin):
     )
     version: Mapped[int] = mapped_column(Integer, nullable=False)
     title_en: Mapped[str] = mapped_column(String(512), nullable=False)
-    title_zh: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    title_zh: Mapped[str | None] = mapped_column(String(512), nullable=True)
     content_en: Mapped[str] = mapped_column(Text, nullable=False)
-    content_zh: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    edited_by: Mapped[Optional[uuid.UUID]] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
-    edit_comment: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    content_zh: Mapped[str | None] = mapped_column(Text, nullable=True)
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    edited_by: Mapped[uuid.UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
+    edit_comment: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
-    page: Mapped["StaticPage"] = relationship(back_populates="versions", lazy="joined")
+    page: Mapped[StaticPage] = relationship(back_populates="versions", lazy="joined")
 
     __table_args__ = (Index("ix_content_version_page", "page_id", "version"),)
 
@@ -343,18 +343,18 @@ class DownloadFile(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(256), nullable=False)
-    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     file_url: Mapped[str] = mapped_column(String(2048), nullable=False)
-    file_size: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
-    category: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    release_id: Mapped[Optional[int]] = mapped_column(
+    file_size: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    category: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    release_id: Mapped[int | None] = mapped_column(
         ForeignKey("releases.id", ondelete="SET NULL"), nullable=True
     )
     download_count: Mapped[int] = mapped_column(
         Integer, default=0, server_default="0", nullable=False
     )
 
-    release: Mapped[Optional["Release"]] = relationship(
+    release: Mapped[Release | None] = relationship(
         back_populates="download_files", lazy="joined"
     )
 

@@ -109,7 +109,9 @@ def builtin_actions(kind: TableKind) -> TableActions:
     return BUILTIN_DEFAULT_ACTIONS[kind].model_copy(deep=True)
 
 
-def resolve_builtin(kind: TableKind, species: str, site_variant: str, release_id: int | None) -> ResolvedTableView:
+def resolve_builtin(
+    kind: TableKind, species: str, site_variant: str, release_id: int | None
+) -> ResolvedTableView:
     return ResolvedTableView(
         kind=kind,
         species=species,
@@ -237,7 +239,9 @@ async def create_template(
     # SQLAlchemy renders as `IS NOT NULL` — demoting every other template.
     await db.flush()
     if payload.is_default:
-        await _demote_other_defaults(db, template, payload.kind, payload.species, payload.site_variant)
+        await _demote_other_defaults(
+            db, template, payload.kind, payload.species, payload.site_variant
+        )
     await db.commit()
     await db.refresh(template)
     return template
@@ -259,7 +263,9 @@ async def update_template(
     if payload.is_default is not None:
         template.is_default = payload.is_default
         if payload.is_default:
-            await _demote_other_defaults(db, template, template.kind, template.species, template.site_variant)
+            await _demote_other_defaults(
+                db, template, template.kind, template.species, template.site_variant
+            )
     if payload.release_id is not None:
         template.release_id = payload.release_id
     if payload.notes is not None:

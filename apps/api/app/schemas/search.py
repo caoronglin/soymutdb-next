@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from ..core.compat import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
+
+from ..core.compat import StrEnum
 
 
 class SearchResultType(StrEnum):

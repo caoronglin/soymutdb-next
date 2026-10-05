@@ -183,7 +183,9 @@ def validate_import_draft_snapshot(
     would make the patches ambiguous, so reject every mismatch before an
     outbox event is created.
     """
-    draft_status = str(getattr(getattr(draft, "status", None), "value", getattr(draft, "status", "")))
+    draft_status = str(
+        getattr(getattr(draft, "status", None), "value", getattr(draft, "status", ""))
+    )
     if draft_status != "committed":
         raise ValidationError("Import draft must be committed before dispatch")
     if getattr(dataset_version, "dataset_id", None) != data_set_id:

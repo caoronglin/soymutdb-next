@@ -14,8 +14,8 @@ from ..core.settings_registry import get_setting_definition
 from ..core.site_variant import SiteVariant
 from ..models.media import MediaAsset, MediaAssetStatus
 from ..models.system_settings import SystemSetting
-from ..schemas.site import AdminSiteBrandResponse, SiteBrandPatchValues, SiteBrandValues
 from ..schemas.settings import SettingValue
+from ..schemas.site import AdminSiteBrandResponse, SiteBrandPatchValues, SiteBrandValues
 from . import settings_service
 
 _SAFE_ICON_TYPES = frozenset({"image/png", "image/jpeg", "image/webp"})

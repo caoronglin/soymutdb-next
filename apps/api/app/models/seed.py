@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import enum
 import uuid
 from datetime import date, datetime
-from typing import Optional
+from enum import StrEnum
 
 from sqlalchemy import (
     Date,
@@ -25,7 +24,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .base import Base, TimestampMixin, enum_values
 
 
-class SeedRequestStatus(str, enum.Enum):
+class SeedRequestStatus(StrEnum):
     PENDING = "pending"
     APPROVED = "approved"
     SHIPPED = "shipped"
@@ -42,12 +41,12 @@ class SeedInventory(Base, TimestampMixin):
     )
     seed_lot: Mapped[str] = mapped_column(String(128), nullable=False)
     quantity_grams: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
-    location: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
-    harvest_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
-    viability_pct: Mapped[Optional[float]] = mapped_column(
+    location: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    harvest_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    viability_pct: Mapped[float | None] = mapped_column(
         Numeric(5, 2), nullable=True
     )
-    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     mutant_line = relationship(
         "MutantLine", back_populates="seed_inventory", lazy="joined"
@@ -75,7 +74,7 @@ class SeedRequest(Base):
         ForeignKey("mutant_lines.id", ondelete="CASCADE"), nullable=False
     )
     purpose: Mapped[str] = mapped_column(Text, nullable=False)
-    quantity_requested: Mapped[Optional[float]] = mapped_column(
+    quantity_requested: Mapped[float | None] = mapped_column(
         Numeric(10, 2), nullable=True
     )
     status: Mapped[str] = mapped_column(
@@ -89,16 +88,16 @@ class SeedRequest(Base):
         server_default="pending",
         nullable=False,
     )
-    reviewer_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+    reviewer_id: Mapped[uuid.UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
-    reviewed_at: Mapped[Optional[datetime]] = mapped_column(
+    reviewed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    tracking_number: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
-    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    tracking_number: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

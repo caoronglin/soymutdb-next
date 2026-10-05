@@ -64,7 +64,10 @@ FEATURES: Final[dict[str, FeatureDefinition]] = {
         "imports.seed_data", False, True, "Enable Seed data imports (writer not yet closed)."
     ),
     "imports.expression_csv": FeatureDefinition(
-        "imports.expression_csv", False, True, "Enable Expression CSV imports (writer not yet closed)."
+        "imports.expression_csv",
+        False,
+        True,
+        "Enable Expression CSV imports (writer not yet closed).",
     ),
     "imports.homolog_csv": FeatureDefinition(
         "imports.homolog_csv", False, True, "Enable Homolog CSV imports (writer not yet closed)."

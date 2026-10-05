@@ -196,14 +196,14 @@ build-docker: ## Build Docker images
 
 lint: ## Run linters
 	@echo "$(CYAN)Linting Python...$(RESET)"
-	cd $(API_DIR) && ruff check src/
+	cd $(API_DIR) && ruff check app/
 	cd apps/worker && ruff check src/
 	@echo "$(CYAN)Linting TypeScript...$(RESET)"
 	pnpm --filter @soymutdb/web lint
 	pnpm --filter @soymutdb/admin lint
 
 lint-fix: ## Auto-fix lint issues
-	cd $(API_DIR) && ruff check --fix src/
+	cd $(API_DIR) && ruff check --fix app/
 	cd apps/worker && ruff check --fix src/
 
 typecheck: ## Run type checking

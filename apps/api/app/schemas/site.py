@@ -53,7 +53,7 @@ class SiteBrandPatchValues(BaseModel):
     icon_url: str | None = Field(default=None, max_length=2048)
 
     @model_validator(mode="after")
-    def _at_least_one_value(self) -> "SiteBrandPatchValues":
+    def _at_least_one_value(self) -> SiteBrandPatchValues:
         if not self.model_fields_set:
             raise ValueError("values must contain at least one brand field")
         for field in ("name_zh", "name_en"):

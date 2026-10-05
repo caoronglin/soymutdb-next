@@ -6,22 +6,18 @@ Fix vs. reference: ``VariantType`` enum is unified to SNP/INS/DEL/MNV/SV
 
 from __future__ import annotations
 
-import enum
-from datetime import datetime
-from typing import TYPE_CHECKING, List, Optional
+from enum import StrEnum
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     BigInteger,
     Boolean,
-    DateTime,
     Enum,
     ForeignKey,
     Index,
     Integer,
-    Numeric,
     String,
     Text,
-    func,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -34,7 +30,7 @@ if TYPE_CHECKING:
     from .seed import SeedInventory, SeedRequest
 
 
-class VariantType(str, enum.Enum):
+class VariantType(StrEnum):
     """Unified variant type enum: SNP / INS / DEL / MNV / SV."""
 
     SNP = "SNP"
@@ -44,14 +40,14 @@ class VariantType(str, enum.Enum):
     SV = "SV"
 
 
-class Impact(str, enum.Enum):
+class Impact(StrEnum):
     HIGH = "HIGH"
     MODERATE = "MODERATE"
     LOW = "LOW"
     MODIFIER = "MODIFIER"
 
 
-class Consequence(str, enum.Enum):
+class Consequence(StrEnum):
     MISSENSE = "missense_variant"
     NONSENSE = "stop_gained"
     SYNONYMOUS = "synonymous_variant"
@@ -89,37 +85,48 @@ class VariantSummary(Base):
     ref: Mapped[str] = mapped_column(String(4096), nullable=False)
     alt: Mapped[str] = mapped_column(String(4096), nullable=False)
     variant_type: Mapped[str] = mapped_column(
-        Enum(VariantType, name="variant_type_enum", create_constraint=True, values_callable=enum_values),
+        Enum(
+            VariantType,
+            name="variant_type_enum",
+            create_constraint=True,
+            values_callable=enum_values,
+        ),
         nullable=False,
     )
-    gene_id: Mapped[Optional[int]] = mapped_column(
+    gene_id: Mapped[int | None] = mapped_column(
         ForeignKey("genes.gene_pk", ondelete="SET NULL"), nullable=True,
         comment="FK to genes.gene_pk (surrogate)",
     )
-    consequence: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
-    impact: Mapped[Optional[str]] = mapped_column(
-        Enum(Impact, name="impact_enum", create_constraint=True, values_callable=enum_values), nullable=True
+    consequence: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    impact: Mapped[str | None] = mapped_column(
+        Enum(
+            Impact,
+            name="impact_enum",
+            create_constraint=True,
+            values_callable=enum_values,
+        ),
+        nullable=True,
     )
-    mutant_line_id: Mapped[Optional[int]] = mapped_column(
+    mutant_line_id: Mapped[int | None] = mapped_column(
         ForeignKey("mutant_lines.id", ondelete="SET NULL"), nullable=True
     )
-    release_id: Mapped[Optional[int]] = mapped_column(
+    release_id: Mapped[int | None] = mapped_column(
         ForeignKey("releases.id", ondelete="SET NULL"), nullable=True
     )
 
-    assembly: Mapped["Assembly"] = relationship(
+    assembly: Mapped[Assembly] = relationship(
         back_populates="variant_summaries", lazy="joined"
     )
-    chromosome: Mapped["Chromosome"] = relationship(
+    chromosome: Mapped[Chromosome] = relationship(
         back_populates="variant_summaries", lazy="joined"
     )
-    gene: Mapped[Optional["Gene"]] = relationship(
+    gene: Mapped[Gene | None] = relationship(
         back_populates="variant_summaries", lazy="joined"
     )
-    mutant_line: Mapped[Optional["MutantLine"]] = relationship(
+    mutant_line: Mapped[MutantLine | None] = relationship(
         back_populates="variant_summaries", lazy="joined"
     )
-    release: Mapped[Optional["Release"]] = relationship(
+    release: Mapped[Release | None] = relationship(
         back_populates="variant_summaries", lazy="noload"
     )
 
@@ -142,7 +149,7 @@ class MutantLine(Base, TimestampMixin, SoftDeleteMixin):
     # Stable public identifier for external URLs/search/citation. Never
     # derived from the persistence key (``id``) or the lab designation
     # (``name``). Nullable only while unpublished; publication requires it.
-    public_id: Mapped[Optional[str]] = mapped_column(
+    public_id: Mapped[str | None] = mapped_column(
         String(32), unique=True, nullable=True, index=True
     )
     name: Mapped[str] = mapped_column(
@@ -154,35 +161,35 @@ class MutantLine(Base, TimestampMixin, SoftDeleteMixin):
         server_default="Glycine max",
         nullable=False,
     )
-    cultivar: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
-    mutagen: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    mutagen_dose: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    generation: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
-    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    phenotype_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    image_urls: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
+    cultivar: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    mutagen: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    mutagen_dose: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    generation: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    phenotype_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    image_urls: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     is_public: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default="true", nullable=False
     )
-    release_id: Mapped[Optional[int]] = mapped_column(
+    release_id: Mapped[int | None] = mapped_column(
         ForeignKey("releases.id", ondelete="SET NULL"), nullable=True
     )
 
-    phenotypes: Mapped[List["Phenotype"]] = relationship(
+    phenotypes: Mapped[list[Phenotype]] = relationship(
         back_populates="mutant_line",
         lazy="selectin",
         cascade="all, delete-orphan",
     )
-    variant_summaries: Mapped[List["VariantSummary"]] = relationship(
+    variant_summaries: Mapped[list[VariantSummary]] = relationship(
         back_populates="mutant_line", lazy="noload"
     )
-    seed_inventory: Mapped[List["SeedInventory"]] = relationship(
+    seed_inventory: Mapped[list[SeedInventory]] = relationship(
         back_populates="mutant_line", lazy="noload"
     )
-    seed_requests: Mapped[List["SeedRequest"]] = relationship(
+    seed_requests: Mapped[list[SeedRequest]] = relationship(
         back_populates="mutant_line", lazy="noload"
     )
-    release: Mapped[Optional["Release"]] = relationship(
+    release: Mapped[Release | None] = relationship(
         back_populates="mutant_lines", lazy="noload"
     )
 
@@ -205,15 +212,15 @@ class Phenotype(Base, TimestampMixin):
     )
     trait_category: Mapped[str] = mapped_column(String(128), nullable=False)
     trait_name: Mapped[str] = mapped_column(String(256), nullable=False)
-    trait_value: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
-    unit: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    measurement_method: Mapped[Optional[str]] = mapped_column(
+    trait_value: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    unit: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    measurement_method: Mapped[str | None] = mapped_column(
         String(256), nullable=True
     )
-    image_url: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
-    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    image_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    mutant_line: Mapped["MutantLine"] = relationship(
+    mutant_line: Mapped[MutantLine] = relationship(
         back_populates="phenotypes", lazy="joined"
     )
 

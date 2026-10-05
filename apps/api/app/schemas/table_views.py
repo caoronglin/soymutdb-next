@@ -11,9 +11,9 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Literal
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-from urllib.parse import urlsplit
 
 SiteVariant = Literal["external", "internal"]
 ConnectionState = Literal["unknown", "healthy", "unhealthy", "disabled", "unconfigured"]
@@ -156,7 +156,7 @@ class SpeciesInstanceBase(BaseModel):
         return _validated_instance_url(value, allow_path=True)
 
     @model_validator(mode="after")
-    def _remote_api_requires_https(self) -> "SpeciesInstanceBase":
+    def _remote_api_requires_https(self) -> SpeciesInstanceBase:
         if not self.is_local and urlsplit(self.api_base_url).scheme != "https":
             raise ValueError("remote instance API origins must use HTTPS")
         return self
@@ -212,7 +212,7 @@ class SpeciesInstanceUpdate(BaseModel):
         return normalized
 
     @model_validator(mode="after")
-    def _remote_api_requires_https(self) -> "SpeciesInstanceUpdate":
+    def _remote_api_requires_https(self) -> SpeciesInstanceUpdate:
         if (
             self.api_base_url is not None
             and self.is_local is not True

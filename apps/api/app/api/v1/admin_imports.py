@@ -9,8 +9,8 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.database import get_db
-from ...core.features import IMPORT_TYPE_FEATURES, FeatureFlagService
 from ...core.exceptions import NotFoundError, ValidationError
+from ...core.features import IMPORT_TYPE_FEATURES, FeatureFlagService
 from ...core.security import require_admin_roles
 from ...core.task_dispatch import get_celery_client
 from ...models.auth import User
@@ -192,18 +192,51 @@ async def start_multipart_upload(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     _require_admin(current_user)
-    if body.type == "module_tsv" and not await FeatureFlagService.is_enabled(db, "imports.local_upload"):
+    if (
+        body.type == "module_tsv"
+        and not await FeatureFlagService.is_enabled(db, "imports.local_upload")
+    ):
         raise ValidationError("Local module uploads are currently disabled")
     data_set_id = body.data_set_id or 1
-    session = initiate_multipart_upload(data_set_id=data_set_id, filename=body.filename, content_type=body.content_type)
-    return {"upload_id": session.upload_id, "object_key": session.object_key, "parts": [{"part_number": n, "url": sign_multipart_part(object_key=session.object_key, upload_id=session.upload_id, part_number=n)} for n in range(1, body.part_count + 1)]}
+    session = initiate_multipart_upload(
+        data_set_id=data_set_id, filename=body.filename, content_type=body.content_type
+    )
+    return {
+        "upload_id": session.upload_id,
+        "object_key": session.object_key,
+        "parts": [
+            {
+                "part_number": n,
+                "url": sign_multipart_part(
+                    object_key=session.object_key,
+                    upload_id=session.upload_id,
+                    part_number=n,
+                ),
+            }
+            for n in range(1, body.part_count + 1)
+        ],
+    }
 
 
 @router.post("/uploads/multipart/{upload_id}/complete", status_code=status.HTTP_200_OK)
-async def finish_multipart_upload(upload_id: str, body: MultipartCompletePathRequest, current_user: User = Depends(get_current_user)) -> dict:
+async def finish_multipart_upload(
+    upload_id: str,
+    body: MultipartCompletePathRequest,
+    current_user: User = Depends(get_current_user),
+) -> dict:
     _require_admin(current_user)
-    completed = complete_multipart_upload(object_key=body.object_key, upload_id=upload_id, parts=[CompletedPart(p.part_number, p.etag) for p in body.parts], sha256=body.sha256)
-    return {"upload_id": completed.upload_id, "object_key": completed.object_key, "sha256": completed.sha256, "parts": [{"part_number": p.part_number, "etag": p.etag} for p in completed.parts]}
+    completed = complete_multipart_upload(
+        object_key=body.object_key,
+        upload_id=upload_id,
+        parts=[CompletedPart(p.part_number, p.etag) for p in body.parts],
+        sha256=body.sha256,
+    )
+    return {
+        "upload_id": completed.upload_id,
+        "object_key": completed.object_key,
+        "sha256": completed.sha256,
+        "parts": [{"part_number": p.part_number, "etag": p.etag} for p in completed.parts],
+    }
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -231,7 +264,9 @@ async def create_import(
     await _require_import_type_enabled(db, body.type)
 
     if body.type == "module_tsv":
-        if body.filename.lower().endswith(".xlsx") and not await FeatureFlagService.is_enabled(db, "imports.module_xlsx"):
+        if body.filename.lower().endswith(
+            ".xlsx"
+        ) and not await FeatureFlagService.is_enabled(db, "imports.module_xlsx"):
             raise ValidationError("XLSX module imports are currently disabled")
         if not body.module_key:
             raise ValidationError("module_key is required for module_tsv imports")

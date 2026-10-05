@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import enum
+from enum import StrEnum
 from typing import Any
 
 from sqlalchemy import Enum, ForeignKey, Integer, String
@@ -12,7 +12,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from .base import Base, TimestampMixin, enum_values
 
 
-class ImportStatus(str, enum.Enum):
+class ImportStatus(StrEnum):
     UPLOADING = "uploading"
     VALIDATING = "validating"
     INGESTING = "ingesting"
@@ -31,7 +31,9 @@ class DataSet(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     type: Mapped[str] = mapped_column(String(32), nullable=False)
     release_id: Mapped[int | None] = mapped_column(ForeignKey("releases.id", ondelete="SET NULL"))
-    source_objects: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False, default=list)
+    source_objects: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, nullable=False, default=list
+    )
     status: Mapped[ImportStatus] = mapped_column(
         Enum(ImportStatus, name="import_status_enum", values_callable=enum_values),
         nullable=False, server_default=ImportStatus.UPLOADING.value,
@@ -43,8 +45,12 @@ class DataSet(Base, TimestampMixin):
 class ReleaseDataSet(Base):
     __tablename__ = "release_data_sets"
 
-    release_id: Mapped[int] = mapped_column(ForeignKey("releases.id", ondelete="CASCADE"), primary_key=True)
-    data_set_id: Mapped[int] = mapped_column(ForeignKey("data_sets.id", ondelete="CASCADE"), primary_key=True)
+    release_id: Mapped[int] = mapped_column(
+        ForeignKey("releases.id", ondelete="CASCADE"
+    ), primary_key=True)
+    data_set_id: Mapped[int] = mapped_column(
+        ForeignKey("data_sets.id", ondelete="CASCADE"
+    ), primary_key=True)
 
 
 class ActiveRelease(Base):
@@ -58,7 +64,9 @@ class Provenance(Base, TimestampMixin):
     __tablename__ = "provenance"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    data_set_id: Mapped[int] = mapped_column(ForeignKey("data_sets.id", ondelete="CASCADE"), index=True)
+    data_set_id: Mapped[int] = mapped_column(
+        ForeignKey("data_sets.id", ondelete="CASCADE"
+    ), index=True)
     object_key: Mapped[str] = mapped_column(String(1024), nullable=False)
     checksum_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     source: Mapped[str] = mapped_column(String(1024), nullable=False)

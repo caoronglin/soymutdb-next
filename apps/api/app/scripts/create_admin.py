@@ -24,10 +24,9 @@ import argparse
 import asyncio
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.database import get_session_factory
 from ..core.security import (
@@ -60,7 +59,7 @@ async def create_admin(
 
     # 2. Hash password.
     password_hash = hash_password(password)
-    print(f"Password strength: OK (hashed with Argon2id)")
+    print("Password strength: OK (hashed with Argon2id)")
 
     # 3. Resolve ADMINISTRATOR role.
     factory = get_session_factory()
@@ -104,7 +103,7 @@ async def create_admin(
                 role_id=role.id,
                 is_active=True,
                 is_superuser=True,
-                joined_at=datetime.now(timezone.utc),
+                joined_at=datetime.now(UTC),
             )
             db.add(user)
             await db.flush()
@@ -119,7 +118,7 @@ async def create_admin(
                 resource_id=str(user.id),
                 new_value={"username": username, "email": email},
                 ip_address="127.0.0.1",
-                timestamp=datetime.now(timezone.utc),
+                timestamp=datetime.now(UTC),
             )
         )
         await db.commit()

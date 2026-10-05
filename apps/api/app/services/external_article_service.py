@@ -19,11 +19,12 @@ import hmac
 import json
 import re
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from html import escape
 from html.parser import HTMLParser
-from typing import Callable, Final
+from typing import Final
 from urllib.parse import urlsplit, urlunsplit
 
 import bleach
@@ -53,7 +54,22 @@ _ALLOWED_SOURCE_HOSTS: Final[dict[str, frozenset[str]]] = {
 }
 
 _VOID_TAGS: Final[frozenset[str]] = frozenset(
-    {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
+    {
+        "area",
+        "base",
+        "br",
+        "col",
+        "embed",
+        "hr",
+        "img",
+        "input",
+        "link",
+        "meta",
+        "param",
+        "source",
+        "track",
+        "wbr",
+    }
 )
 
 
@@ -194,7 +210,11 @@ def verify_external_article_preview_attestation(
 ) -> ExternalArticlePreviewAttestation:
     """Validate a preview attestation and return canonical source metadata."""
     invalid_message = "External article preview attestation is invalid"
-    if not isinstance(token, str) or not token or len(token) > _EXTERNAL_ARTICLE_PREVIEW_TOKEN_MAX_LENGTH:
+    if (
+        not isinstance(token, str)
+        or not token
+        or len(token) > _EXTERNAL_ARTICLE_PREVIEW_TOKEN_MAX_LENGTH
+    ):
         raise ValidationError(invalid_message)
     try:
         encoded_payload, encoded_signature = token.split(".", maxsplit=1)
@@ -322,7 +342,11 @@ class _MetadataCollector(HTMLParser):
             content = attributes.get("content", "").strip()
             if key in {"og:title", "twitter:title"} and content:
                 self._meta_titles.append(content)
-            if key in {"article:published_time", "og:published_time", "publishdate", "pubdate"} and content:
+            if (
+                key
+                in {"article:published_time", "og:published_time", "publishdate", "pubdate"}
+                and content
+            ):
                 self._meta_dates.append(content)
         elif lowered == "time":
             value = attributes.get("datetime", "").strip()
@@ -447,7 +471,9 @@ def _candidate_predicates(platform: str) -> tuple[Callable[[str, dict[str, str]]
     )
 
 
-def extract_external_article(platform: object, html: str, source_url: str) -> ExternalArticlePreview:
+def extract_external_article(
+    platform: object, html: str, source_url: str
+) -> ExternalArticlePreview:
     """Extract and sanitize a platform article from already-bounded HTML."""
 
     platform_value = _platform_value(platform)
@@ -477,7 +503,7 @@ def extract_external_article(platform: object, html: str, source_url: str) -> Ex
     if not fragment:
         raise ValidationError("No readable article content was found at the approved source URL")
 
-    fingerprint_input = f"{platform_value}\n{canonical_url}\n{fragment}".encode("utf-8")
+    fingerprint_input = f"{platform_value}\n{canonical_url}\n{fragment}".encode()
     return ExternalArticlePreview(
         platform=platform_value,
         source_url=canonical_url,

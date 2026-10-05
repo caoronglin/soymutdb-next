@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,11 +12,11 @@ from ...core.database import get_db
 from ...core.exceptions import AuthorizationError
 from ...core.security import RoleName, has_role
 from ...core.task_contract import BUILD_STATIC_PAGES_TASK
-from ...services.outbox_service import enqueue_task_event
 from ...models.auth import User
 from ...models.data_publishing import ActiveRelease
 from ...models.gene_data_cache import GeneDataCache
-from ...models.import_task import ImportTask, ImportTaskType, ImportTaskStatus
+from ...models.import_task import ImportTask, ImportTaskStatus, ImportTaskType
+from ...services.outbox_service import enqueue_task_event
 from .deps import get_current_user, get_user_roles
 
 router = APIRouter(prefix="/admin/build-static", tags=["admin-static"])

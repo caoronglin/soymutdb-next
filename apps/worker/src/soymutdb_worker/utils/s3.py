@@ -9,11 +9,11 @@ Provides:
 
 from __future__ import annotations
 
-import os
 import tempfile
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 import boto3
 from botocore.client import BaseClient
@@ -82,8 +82,9 @@ def stream_s3_file(s3_path: str, chunk_size: int = 8192) -> Iterator[Any]:
 def iter_s3_chunks(s3_path: str, chunk_size: int = 8192) -> Iterator[bytes]:
     """Yield chunks from an S3 object as bytes."""
     with stream_s3_file(s3_path, chunk_size=chunk_size) as body:
-        for chunk in body.iter_chunks(chunk_size=chunk_size):
-            yield chunk
+        # `yield from` is exactly equivalent here: the loop body was a bare
+        # `yield chunk`, with no try/finally, filtering or send/throw handling.
+        yield from body.iter_chunks(chunk_size=chunk_size)
 
 
 # ---------------------------------------------------------------------------

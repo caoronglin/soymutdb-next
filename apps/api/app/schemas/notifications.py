@@ -58,7 +58,7 @@ class MarkReadRequest(BaseModel):
     all: bool = False
 
     @model_validator(mode="after")
-    def _require_selector(self) -> "MarkReadRequest":
+    def _require_selector(self) -> MarkReadRequest:
         if not self.all and not self.ids:
             raise ValueError("Provide 'ids' or set 'all' to true")
         return self

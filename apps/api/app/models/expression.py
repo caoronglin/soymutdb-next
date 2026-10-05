@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import enum
-from typing import TYPE_CHECKING, List, Optional
+from enum import StrEnum
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     BigInteger,
@@ -15,7 +15,7 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base, TimestampMixin, enum_values
@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from .genomic import Assembly, Gene
 
 
-class TissueType(str, enum.Enum):
+class TissueType(StrEnum):
     """Tissue types for expression data (currently modelled on soybean)."""
 
     LEAF = "leaf"
@@ -38,7 +38,7 @@ class TissueType(str, enum.Enum):
     SHOOT_APEX = "shoot_apex"
 
 
-class TreatmentType(str, enum.Enum):
+class TreatmentType(StrEnum):
     """Experimental treatment conditions."""
 
     CONTROL = "control"
@@ -58,27 +58,37 @@ class ExpressionLibrary(Base, TimestampMixin):
     sample_id: Mapped[str] = mapped_column(String(128), nullable=False)
     library_name: Mapped[str] = mapped_column(String(256), nullable=False)
     tissue: Mapped[str] = mapped_column(
-        Enum(TissueType, name="expression_tissue_enum", create_constraint=True, values_callable=enum_values),
+        Enum(
+            TissueType,
+            name="expression_tissue_enum",
+            create_constraint=True,
+            values_callable=enum_values,
+        ),
         nullable=False,
     )
     treatment: Mapped[str] = mapped_column(
-        Enum(TreatmentType, name="expression_treatment_enum", create_constraint=True, values_callable=enum_values),
+        Enum(
+            TreatmentType,
+            name="expression_treatment_enum",
+            create_constraint=True,
+            values_callable=enum_values,
+        ),
         nullable=False,
     )
-    developmental_stage: Mapped[Optional[str]] = mapped_column(
+    developmental_stage: Mapped[str | None] = mapped_column(
         String(32), nullable=True
     )
-    study_ref: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
-    source: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    study_ref: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    source: Mapped[str | None] = mapped_column(String(128), nullable=True)
     assembly_id: Mapped[int] = mapped_column(
         ForeignKey("assemblies.id", ondelete="CASCADE"), nullable=False
     )
-    extra_metadata: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    extra_metadata: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
-    assembly: Mapped["Assembly"] = relationship(
+    assembly: Mapped[Assembly] = relationship(
         back_populates="expression_libraries", lazy="joined"
     )
-    expression_data: Mapped[List["ExpressionData"]] = relationship(
+    expression_data: Mapped[list[ExpressionData]] = relationship(
         back_populates="library",
         lazy="selectin",
         cascade="all, delete-orphan",
@@ -105,12 +115,12 @@ class ExpressionData(Base, TimestampMixin):
     library_id: Mapped[int] = mapped_column(
         ForeignKey("expression_libraries.id", ondelete="CASCADE"), nullable=False
     )
-    fpkm: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    tpm: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    raw_count: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    fpkm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    tpm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    raw_count: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
-    gene: Mapped["Gene"] = relationship(back_populates="expression_data", lazy="joined")
-    library: Mapped["ExpressionLibrary"] = relationship(
+    gene: Mapped[Gene] = relationship(back_populates="expression_data", lazy="joined")
+    library: Mapped[ExpressionLibrary] = relationship(
         back_populates="expression_data", lazy="joined"
     )
 

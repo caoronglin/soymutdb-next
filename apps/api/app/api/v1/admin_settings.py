@@ -23,11 +23,10 @@ from ...core.settings_registry import (
     registered_keys_for_section,
     validate_setting_update,
 )
-from ...core.site_variant import legacy_section_for_variant
+from ...core.site_variant import SiteVariant, legacy_section_for_variant
 from ...models.auth import User
 from ...models.system_settings import SystemSetting
 from ...schemas.error import ErrorResponse
-from ...schemas.site import AdminSiteBrandResponse, SiteBrandPatchRequest
 from ...schemas.settings import (
     SettingFieldSchema,
     SettingsDocumentResponse,
@@ -39,9 +38,9 @@ from ...schemas.settings import (
     SettingsValidateRequest,
     SettingsValidateResponse,
 )
+from ...schemas.site import AdminSiteBrandResponse, SiteBrandPatchRequest
 from ...services import settings_service
 from ...services.site_brand_service import get_site_brand_document, patch_site_brand
-from ...core.site_variant import SiteVariant
 from .deps import get_current_user, get_user_roles
 
 router = APIRouter(prefix="/admin/settings", tags=["admin-settings"])

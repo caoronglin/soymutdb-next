@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import enum
-from typing import TYPE_CHECKING, Optional
+from enum import StrEnum
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     Enum,
@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from .genomic import Gene
 
 
-class HomologType(str, enum.Enum):
+class HomologType(StrEnum):
     """Type of homology relationship."""
 
     ORTHOLOG = "ortholog"
@@ -39,12 +39,17 @@ class GeneHomolog(Base, TimestampMixin):
     homolog_species: Mapped[str] = mapped_column(String(128), nullable=False)
     homolog_gene_id: Mapped[str] = mapped_column(String(64), nullable=False)
     homolog_type: Mapped[str] = mapped_column(
-        Enum(HomologType, name="homolog_type_enum", create_constraint=True, values_callable=enum_values),
+        Enum(
+            HomologType,
+            name="homolog_type_enum",
+            create_constraint=True,
+            values_callable=enum_values,
+        ),
         nullable=False,
     )
-    source: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    source: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
-    gene: Mapped["Gene"] = relationship(back_populates="homologs", lazy="joined")
+    gene: Mapped[Gene] = relationship(back_populates="homologs", lazy="joined")
 
     __table_args__ = (
         UniqueConstraint(

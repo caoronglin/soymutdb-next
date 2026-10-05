@@ -19,8 +19,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...core.database import get_db
 from ...core.config import get_settings
+from ...core.database import get_db
 from ...core.security import RoleName
 from ...models.auth import User
 from ...schemas.media import MediaAssetCompleteRequest, MediaAssetResponse

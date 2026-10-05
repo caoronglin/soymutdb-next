@@ -19,7 +19,7 @@ from fastapi import APIRouter, Depends, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.database import get_db
-from ...core.exceptions import AuthorizationError, NotFoundError
+from ...core.exceptions import AuthorizationError
 from ...core.security import RoleName, has_role
 from ...models.auth import User
 from ...models.table_views import SpeciesInstance, TableViewTemplate
