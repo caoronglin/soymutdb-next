@@ -1,23 +1,41 @@
-"""WeCom group-robot delivery: disabled-by-default and best effort."""
+"""WeCom delivery via the official CLI: disabled-by-default and best effort.
+
+The transport is exercised through a fake ``WecomCli`` so these tests assert
+the module's own contract — disabled without configuration, silent on every
+failure, never raising — rather than the CLI's behaviour, which the CLI's own
+test suite owns. ``test_wecom_cli.py`` covers how a CLI result is interpreted.
+"""
 from __future__ import annotations
 
-import json
-
 from soymutdb_worker.utils import wecom_bot
+from soymutdb_worker.wecom.cli import CliResult
 
 
-class _Response:
-    def __init__(self, payload: dict):
-        self.payload = json.dumps(payload).encode()
+class _FakeCli:
+    """Records what would have been sent; never touches a subprocess."""
 
-    def __enter__(self):
-        return self
+    def __init__(self, result: CliResult, *, installed: bool = True) -> None:
+        self.result = result
+        self.installed = installed
+        self.sent: list[tuple[str, str]] = []
 
-    def __exit__(self, *_args):
-        return False
+    def is_installed(self) -> bool:
+        return self.installed
 
-    def read(self):
-        return self.payload
+    def send_markdown(self, chat_id: str, content: str) -> CliResult:
+        self.sent.append((chat_id, content))
+        return self.result
+
+
+def _wire(monkeypatch, cli: _FakeCli, chat_id: str = "chat-1") -> _FakeCli:
+    monkeypatch.setattr(wecom_bot, "_cli", cli)
+    monkeypatch.setattr(wecom_bot, "_warned_unusable", False)
+    monkeypatch.setattr(
+        wecom_bot,
+        "get_setting",
+        lambda name, default="": chat_id if name.endswith("CHAT_ID") else default,
+    )
+    return cli
 
 
 def test_format_table_is_readable_and_sanitizes_untrusted_cells():
@@ -29,46 +47,71 @@ def test_format_table_is_readable_and_sanitizes_untrusted_cells():
     assert "**rows：** 12" in text
 
 
-def test_missing_webhook_is_noop(monkeypatch):
-    monkeypatch.setattr(wecom_bot, "get_setting", lambda *_args: "")
-    def unexpected(*_args, **_kwargs):
-        raise AssertionError("must not make a network call when disabled")
-    monkeypatch.setattr(wecom_bot, "urlopen", unexpected)
+def test_an_overlong_summary_is_truncated_rather_than_rejected():
+    text = wecom_bot.format_table_message("t", [("k", "x" * 9000)])
+    assert len(text) <= 4096
+    assert "内容已截断" in text
+
+
+def test_missing_chat_id_is_a_noop(monkeypatch):
+    cli = _wire(monkeypatch, _FakeCli(CliResult(ok=True, exit_code=0)), chat_id="")
+
     assert wecom_bot.send_table("title", [("key", "value")]) is False
+    assert cli.sent == [], "must not invoke the CLI when the channel is disabled"
 
 
-def test_sends_wecom_markdown_and_accepts_errcode_zero(monkeypatch):
-    monkeypatch.setattr(
-        wecom_bot, "get_setting", lambda *_args: "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=secret"
-    )
-    captured = {}
-    def fake_urlopen(request, timeout):
-        captured["url"] = request.full_url
-        captured["body"] = json.loads(request.data)
-        captured["timeout"] = timeout
-        return _Response({"errcode": 0, "errmsg": "ok"})
-    monkeypatch.setattr(wecom_bot, "urlopen", fake_urlopen)
+def test_a_delivery_that_succeeds_returns_true(monkeypatch):
+    cli = _wire(monkeypatch, _FakeCli(CliResult(ok=True, exit_code=0)))
+
     assert wecom_bot.send_table("Seed request", [("gene count", 3)]) is True
-    assert captured["body"]["msgtype"] == "markdown"
-    assert "Seed request" in captured["body"]["markdown"]["content"]
-    assert captured["timeout"] <= 5
-    assert "secret" not in str(captured["body"])
+    assert len(cli.sent) == 1
+    chat_id, content = cli.sent[0]
+    assert chat_id == "chat-1"
+    assert "Seed request" in content
 
 
-def test_refuses_non_official_or_http_webhook(monkeypatch):
-    for url in ("http://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=x",
-                "https://example.com/webhook?key=x"):
-        monkeypatch.setattr(wecom_bot, "get_setting", lambda *_args, value=url: value)
-        assert wecom_bot.send_markdown("test") is False
+def test_a_missing_cli_degrades_instead_of_raising(monkeypatch):
+    cli = _wire(monkeypatch, _FakeCli(CliResult(ok=True, exit_code=0), installed=False))
+
+    assert wecom_bot.send_markdown("test") is False
+    assert cli.sent == [], "an uninstalled CLI must not receive a message"
 
 
-def test_nonzero_wecom_errcode_is_reported_as_failure(monkeypatch):
-    monkeypatch.setattr(
-        wecom_bot, "get_setting", lambda *_args: "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=x"
+def test_a_rejected_delivery_is_reported_as_failure(monkeypatch):
+    cli = _wire(
+        monkeypatch,
+        _FakeCli(CliResult(ok=False, exit_code=1, error_type="BackendError")),
     )
+
+    assert wecom_bot.send_markdown("test") is False
+    assert len(cli.sent) == 1
+
+
+def test_an_auth_failure_is_reported_as_failure(monkeypatch):
+    cli = _wire(
+        monkeypatch,
+        _FakeCli(CliResult(ok=False, exit_code=1, error_type="AuthError")),
+    )
+
+    assert wecom_bot.send_markdown("test") is False
+    assert len(cli.sent) == 1
+
+
+def test_the_retired_webhook_variable_no_longer_enables_the_channel(monkeypatch):
+    """A host still carrying the old setting must go quiet, not half-work.
+
+    Falling back to the webhook would keep two transports alive, which is the
+    duplicate-owner state this change exists to remove.
+    """
+    monkeypatch.setattr(wecom_bot, "_cli", _FakeCli(CliResult(ok=True, exit_code=0)))
     monkeypatch.setattr(
         wecom_bot,
-        "urlopen",
-        lambda *_args, **_kwargs: _Response({"errcode": 93000}),
+        "get_setting",
+        lambda name, default="": (
+            "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=secret"
+            if name.endswith("WEBHOOK")
+            else default
+        ),
     )
+
     assert wecom_bot.send_markdown("test") is False

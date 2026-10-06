@@ -185,12 +185,19 @@ class InboundEnvelope:
     Holds only what the transport can know for certain. Signature material and
     decryption keys stay in the receiving service and are never placed on this
     object, per the plan's rule that inbound and outbound keys do not share.
+
+    ``source_domain`` is the origin the request actually arrived from, kept
+    separate from ``source`` (which names the intake channel). The domain is
+    what ``check_source_domain`` compares against the tenant binding, so a
+    credential replayed from another origin is caught even when the tenant key
+    is correct.
     """
 
     submission_id: str
     tenant_key: str
     source: str
     received_at: datetime
+    source_domain: str = ""
     fields: dict[str, object] = field(default_factory=dict)
     idempotency_key: str = ""
 

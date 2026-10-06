@@ -4,6 +4,7 @@ See ``README.md`` in this package for what is implemented, what is deliberately
 unbound, and the confirmed official API contract.
 """
 
+from .cli import CliResult, WecomCli
 from .contracts import (
     BitableTransport,
     CallbackVerifier,
@@ -33,33 +34,11 @@ from .policy import (
     should_retry,
     summarise_refusals,
 )
-from .smartsheet import (
-    MAX_ROWS_PER_SHEET,
-    READ_ONLY_FIELD_TITLES,
-    SMARTSHEET_BASE,
-    TOKEN_PATH,
-    SmartsheetEncodingError,
-    decode_segments,
-    decode_text,
-    encode_batch,
-    encode_datetime,
-    encode_record,
-    encode_reference,
-    encode_text,
-    error_code,
-    error_message,
-    is_error_response,
-)
-from .token import CachedToken, TokenError, TokenProvider, TokenTransport
 
 __all__ = [
-    "MAX_ROWS_PER_SHEET",
-    "READ_ONLY_FIELD_TITLES",
-    "SMARTSHEET_BASE",
-    "TOKEN_PATH",
     "BitableTransport",
-    "CachedToken",
     "CallbackVerifier",
+    "CliResult",
     "DeliveryOutcome",
     "DocumentSearchTransport",
     "FieldWhitelist",
@@ -73,26 +52,13 @@ __all__ = [
     "OutboxStore",
     "PolicyRefusal",
     "ReconciliationFinding",
-    "SmartsheetEncodingError",
     "SubmissionDisposition",
     "TenantBinding",
-    "TokenError",
-    "TokenProvider",
-    "TokenTransport",
     "Unverified",
+    "WecomCli",
     "backoff_delay",
     "check_source_domain",
-    "decode_segments",
-    "decode_text",
     "decide_outbound_fields",
-    "encode_batch",
-    "encode_datetime",
-    "encode_record",
-    "encode_reference",
-    "encode_text",
-    "error_code",
-    "error_message",
-    "is_error_response",
     "project_outbound_payload",
     "reconcile",
     "redact",

@@ -38,7 +38,13 @@ class OutboundFieldDecision:
 
     @property
     def is_clean(self) -> bool:
-        return not self.refused
+        """True when nothing was refused, by either rule.
+
+        A personal-data refusal counts. It is a refusal of the same request,
+        and reading this as "the payload had no problems" would let a caller
+        treat an unapproved personal field as a clean bill of health.
+        """
+        return not self.refused and not self.refused_personal
 
 
 def decide_outbound_fields(
@@ -218,14 +224,21 @@ def should_retry(status: OutboundStatus, attempt: int, *, max_attempts: int) -> 
     return attempt < max_attempts
 
 
-def summarise_refusals(keys: Iterable[str], *, limit: int = 8) -> str:
-    """A bounded, sorted key list for an error message.
+# Field names reach this function from a decoded payload, so a newline in a key
+# would let the key forge an extra line in whatever log consumes the message.
+_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
 
-    Untrusted field names come from a payload, so they are truncated: an error
-    string that echoes an attacker-controlled list is a log-injection vector and
-    an unbounded one.
+
+def summarise_refusals(keys: Iterable[str], *, limit: int = 8) -> str:
+    """A bounded, log-safe key list for an error message.
+
+    Untrusted field names come from a payload, so they are handled two ways. The
+    list is truncated, because an error string echoing an unbounded
+    attacker-controlled list is a denial-of-service on the log pipeline. And
+    control characters are stripped, because a key containing a newline could
+    otherwise forge a second log entry — truncation alone never prevented that.
     """
-    ordered = sorted(keys)
+    ordered = sorted(_CONTROL_CHARS.sub(" ", key) for key in keys)
     if len(ordered) <= limit:
         return ", ".join(ordered)
     return f"{', '.join(ordered[:limit])} (+{len(ordered) - limit} more)"
