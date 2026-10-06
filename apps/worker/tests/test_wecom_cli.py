@@ -118,6 +118,44 @@ class TestRun:
         assert result.ok is True
         assert result.payload == {"status": "authorized"}
 
+    def test_the_real_unauthorised_envelope_is_recognised(self, monkeypatch):
+        """Captured verbatim from `@wecom/cli` 1.3.4 on an unauthorised host.
+
+        The envelope type is the shared fallback and the real cause is only in
+        the message, so a `type`-only check classifies a deployment that simply
+        needs `wecom-cli auth init` as an opaque backend failure.
+        """
+        observed = {
+            "error": {
+                "type": "UnknownError",
+                "code": 893999,
+                "message": (
+                    "AuthError: 该请求需要授权，请先运行 `wecom-cli auth init` "
+                    "登录 [code=893201]"
+                ),
+            }
+        }
+        cli = _cli(monkeypatch, _Completed(1, json.dumps(observed, ensure_ascii=False)))
+
+        result = cli.run(["message", "aibot", "send"])
+
+        assert result.ok is False
+        assert result.error_type == "UnknownError"
+        assert result.is_auth_failure is True
+
+    def test_a_genuine_backend_error_is_not_mistaken_for_an_auth_problem(self, monkeypatch):
+        cli = _cli(
+            monkeypatch,
+            _Completed(
+                1,
+                json.dumps(
+                    {"error": {"type": "UnknownError", "code": 893999, "message": "upstream 500"}}
+                ),
+            ),
+        )
+
+        assert cli.run(["message", "aibot", "send"]).is_auth_failure is False
+
     def test_a_structured_error_is_classified(self, monkeypatch):
         cli = _cli(
             monkeypatch,

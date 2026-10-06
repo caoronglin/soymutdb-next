@@ -43,6 +43,18 @@ _DEFAULT_TIMEOUT = 10.0
 _AUTH_ERROR_TYPES = frozenset({"AuthError", "UnauthorizedError"})
 _USAGE_EXIT_CODE = 2
 
+#: Observed from ``@wecom/cli`` 1.3.4 on an unauthorised host: the envelope type
+#: is the shared fallback `UnknownError` (893999) and the real cause survives
+#: only inside the message, which embeds the inner type and its own code:
+#:
+#:     {"error": {"type": "UnknownError", "code": 893999,
+#:                "message": "AuthError: 该请求需要授权，请先运行
+#:                            `wecom-cli auth init` 登录 [code=893201]"}}
+#:
+#: Matching on `type` alone would classify every unconfigured deployment as a
+#: generic failure, and the one instruction that fixes it would never be logged.
+_AUTH_MESSAGE_MARKERS = ("AuthError", "auth init", "需要授权")
+
 
 @dataclass(frozen=True)
 class CliResult:
@@ -61,8 +73,16 @@ class CliResult:
 
     @property
     def is_auth_failure(self) -> bool:
-        """True when the deployment lacks usable credentials."""
-        return self.error_type in _AUTH_ERROR_TYPES
+        """True when the deployment lacks usable credentials.
+
+        Checked against the message as well as the type, because the CLI wraps
+        an inner error in its own fallback envelope. See
+        ``_AUTH_MESSAGE_MARKERS`` for the shape actually observed.
+        """
+        if self.error_type in _AUTH_ERROR_TYPES:
+            return True
+        message = self.error_message or ""
+        return any(marker in message for marker in _AUTH_MESSAGE_MARKERS)
 
 
 class WecomCli:
