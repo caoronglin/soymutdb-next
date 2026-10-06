@@ -248,20 +248,38 @@ def resolve_engine(program: str, engine: str | None = None) -> str:
     raises instead of quietly falling back — a forced engine that silently
     becomes the other one is worse than an error, because the operator believes
     they tested DIAMOND.
+
+    Availability is part of this decision, not a later check. The caller derives
+    the parser and the output file's extension from the returned engine, so
+    resolving to DIAMOND here and discovering the binary is absent afterwards
+    would run BLAST while still parsing tabular output out of ``results.json``.
     """
     requested = (engine or BLAST_ENGINE).strip().lower()
     if requested == "auto":
-        return "diamond" if program in DIAMOND_PROGRAMS else "blast"
+        if program not in DIAMOND_PROGRAMS:
+            return "blast"
+        if not DIAMOND_BIN.exists():
+            logger.warning(
+                "DIAMOND not found at %s; running %s with BLAST. Install "
+                "diamond-aligner or set SOYMUTDB_DIAMOND_BIN to use it.",
+                DIAMOND_BIN,
+                program,
+            )
+            return "blast"
+        return "diamond"
     if requested not in {"blast", "diamond"}:
         raise ValueError(
             f"Unknown aligner {requested!r}; expected 'auto', 'blast' or 'diamond'"
         )
-    if requested == "diamond" and program not in DIAMOND_PROGRAMS:
-        raise ValueError(
-            f"DIAMOND does not implement {program!r}; "
-            f"supported: {sorted(DIAMOND_PROGRAMS)}. "
-            "Use BLAST_ENGINE=auto to fall back to BLAST for this program."
-        )
+    if requested == "diamond":
+        if program not in DIAMOND_PROGRAMS:
+            raise ValueError(
+                f"DIAMOND does not implement {program!r}; "
+                f"supported: {sorted(DIAMOND_PROGRAMS)}. "
+                "Use BLAST_ENGINE=auto to fall back to BLAST for this program."
+            )
+        if not DIAMOND_BIN.exists():
+            raise RuntimeError(f"DIAMOND binary not found: {DIAMOND_BIN}")
     return requested
 
 

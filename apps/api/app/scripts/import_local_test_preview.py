@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 from pathlib import Path
 
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -11,10 +12,15 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from ..core.config import get_settings
 from ..services.local_test_preview_import_service import import_local_test_preview
 
-DEFAULT_DATA_DIR = Path("/home/rlcao/下载/03_soymut")
+#: The sample data lives outside the repository, so there is no defensible
+#: default to hardcode: the previous value was one developer's home directory
+#: (including its localised characters), which made every other checkout fail
+#: with a bare "no such directory" instead of a usable instruction.
+DEFAULT_DATA_DIR_ENV = "SOYMUTDB_LOCAL_PREVIEW_DATA_DIR"
 
 
 def _parser() -> argparse.ArgumentParser:
+    default = os.environ.get(DEFAULT_DATA_DIR_ENV) or None
     parser = argparse.ArgumentParser(
         description=(
             "Import unpublished 03_soymut v6/a6 test data into a disposable "
@@ -24,8 +30,13 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--data-dir",
         type=Path,
-        default=DEFAULT_DATA_DIR,
-        help=f"test data directory (default: {DEFAULT_DATA_DIR})",
+        default=Path(default) if default else None,
+        required=default is None,
+        help=(
+            f"test data directory (default: ${DEFAULT_DATA_DIR_ENV})"
+            if default
+            else f"test data directory (required, or set ${DEFAULT_DATA_DIR_ENV})"
+        ),
     )
     parser.add_argument(
         "--database-url",

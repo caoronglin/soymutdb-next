@@ -718,12 +718,17 @@ def test_parse_diamond_tabular_accepts_an_empty_result(tmp_path) -> None:
     ],
 )
 def test_auto_engine_routes_each_program_to_the_one_that_implements_it(
-    program: str, expected: str
+    program: str, expected: str, tmp_path, monkeypatch
 ) -> None:
+    # Availability is pinned deliberately: this case is about which engine
+    # *implements* a program. Whether a missing binary downgrades the route is
+    # asserted separately in the engine-availability block below.
+    monkeypatch.setattr(blast_module, "DIAMOND_BIN", _installed(tmp_path))
     assert blast_module.resolve_engine(program, "auto") == expected
 
 
-def test_auto_is_the_default_engine() -> None:
+def test_auto_is_the_default_engine(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(blast_module, "DIAMOND_BIN", _installed(tmp_path))
     assert blast_module.BLAST_ENGINE == "auto"
     assert blast_module.resolve_engine("blastp") == "diamond"
     assert blast_module.resolve_engine("blastn") == "blast"
@@ -742,3 +747,57 @@ def test_explicit_blast_engine_always_wins() -> None:
 def test_unknown_engine_is_rejected() -> None:
     with pytest.raises(ValueError, match="Unknown aligner"):
         blast_module.resolve_engine("blastp", "clustal")
+
+
+# Engine availability
+# ---------------------------------------------------------------------------
+# DIAMOND landed in 2debd36aa touching only blast.py and its tests: the worker
+# image never gained the binary and no deployment file or doc ever mentioned
+# it. With the default BLAST_ENGINE=auto, `blastp` resolved to DIAMOND and then
+# raised "DIAMOND binary not found" on every job.
+#
+# The availability check has to live in resolve_engine, not in
+# run_blast_command: one decision drives the binary, the parser and the output
+# file's extension (see the task body), so a fallback taken later would leave
+# the parser expecting TSV from a file named results.json.
+
+
+def _installed(tmp_path) -> Path:
+    """A present DIAMOND binary, so a case can exercise routing rather than
+    the host's (absent) installation."""
+    binary = tmp_path / "diamond"
+    binary.touch()
+    return binary
+
+
+def test_auto_resolves_to_blast_when_diamond_is_not_installed(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(blast_module, "DIAMOND_BIN", tmp_path / "absent-diamond")
+
+    assert blast_module.resolve_engine("blastp") == "blast"
+
+
+def test_auto_still_prefers_diamond_when_it_is_installed(tmp_path, monkeypatch) -> None:
+    present = tmp_path / "diamond"
+    present.touch()
+    monkeypatch.setattr(blast_module, "DIAMOND_BIN", present)
+
+    assert blast_module.resolve_engine("blastp") == "diamond"
+
+
+def test_an_explicit_diamond_request_is_not_silently_downgraded(tmp_path, monkeypatch) -> None:
+    """A forced engine that quietly becomes the other one is worse than an error.
+
+    The operator believes they exercised DIAMOND; a fallback would hide that.
+    """
+    monkeypatch.setattr(blast_module, "DIAMOND_BIN", tmp_path / "absent-diamond")
+
+    with pytest.raises(RuntimeError, match="DIAMOND binary not found"):
+        blast_module.resolve_engine("blastp", "diamond")
+
+
+def test_nucleotide_programs_are_unaffected_by_diamond_availability(tmp_path, monkeypatch) -> None:
+    """blastn has no DIAMOND equivalent at all, so its route never depended on it."""
+    monkeypatch.setattr(blast_module, "DIAMOND_BIN", tmp_path / "absent-diamond")
+
+    for program in ("blastn", "tblastn", "tblastx"):
+        assert blast_module.resolve_engine(program) == "blast"
